@@ -535,38 +535,16 @@ async def retry_operation(
             else:
                 return await asyncio.to_thread(operation)
 
-        except (
-            botocore.exceptions.ClientError,  # AWS related errors
-            ConnectionError,
-            TimeoutError,  # Generic network/timeout errors
-            OSError,  # OS-level I/O errors
-            # Add specific exceptions from client libraries as needed, e.g.,
-            # aiohttp.ClientError, asyncpg.exceptions.PostgresError,
-            # aiokafka.errors.KafkaError, sqlite3.Error
-        ) as e:
-            BACKEND_NETWORK_ERRORS.labels(backend=backend_name, operation=op_name).inc()
-            error_type = "network_error"
-
-            BACKEND_ERRORS.labels(backend=backend_name, type=error_type).inc()
-            BACKEND_RETRY_ATTEMPTS.labels(backend=backend_name, operation=op_name).inc()
-
-            if attempt == max_attempts - 1:
-                logger.error(
-                    f"Operation '{op_name}' failed for {backend_name} after {max_attempts} attempts: {e}",
-                    exc_info=True,
-                )
-                raise
-            delay = backoff_factor * (2**attempt)
-            logger.warning(
-                f"Attempt {attempt + 1} for '{op_name}' on {backend_name} failed: {e}. Retrying after {delay:.2f}s"
-            )
-            await asyncio.sleep(delay)
-
         except Exception as e:
             error_type = type(e).__name__
-
+            
+            # Always increment these metrics for ANY exception
             BACKEND_ERRORS.labels(backend=backend_name, type=error_type).inc()
             BACKEND_RETRY_ATTEMPTS.labels(backend=backend_name, operation=op_name).inc()
+            
+            # Additional increment for network-specific errors (including AWS/botocore errors)
+            if isinstance(e, (ConnectionError, TimeoutError, OSError, botocore.exceptions.ClientError)):
+                BACKEND_NETWORK_ERRORS.labels(backend=backend_name, operation=op_name).inc()
 
             if attempt == max_attempts - 1:
                 logger.error(
@@ -574,6 +552,7 @@ async def retry_operation(
                     exc_info=True,
                 )
                 raise
+            
             delay = backoff_factor * (2**attempt)
             logger.warning(
                 f"Attempt {attempt + 1} for '{op_name}' on {backend_name} failed: {e}. Retrying after {delay:.2f}s"
