@@ -365,8 +365,6 @@ class TestSanitizeContext:
             utils_module._PII_SENSITIVE_KEYS = []
             utils_module._PII_SENSITIVE_PATTERNS = None  # Reset so patterns get re-initialized
             with patch("self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS", []):
-                # Re-initialize patterns after resetting cache
-                utils_module._PII_SENSITIVE_PATTERNS = None
                 result = await _sanitize_context(context)
 
                 # These should be caught by pattern detection
