@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 # Type checking imports - only used for type hints, not at runtime
 if TYPE_CHECKING:
+    from self_fixing_engineer.arbiter.arbiter import Arbiter
     from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
 
 __all__ = ["ArbiterArena", "run_arena", "run_arena_async"]
@@ -67,7 +68,7 @@ except ImportError as e:
     SIMULATION_AVAILABLE = False
 
 from self_fixing_engineer.arbiter.agent_state import Base
-from self_fixing_engineer.arbiter.arbiter import Arbiter  # Correct import
+# REMOVED: from self_fixing_engineer.arbiter.arbiter import Arbiter  # Moved to lazy import to break circular dependency
 from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, get_registry
 from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
 
@@ -95,6 +96,31 @@ def _get_registry():
 def _get_plugin_registry_dict():
     """Get the plugin registry as a dict, for backwards compatibility."""
     return get_registry().list_plugins()
+
+
+# Lazy import cache for Arbiter class to break circular import
+_Arbiter_class = None
+
+
+def _get_arbiter_class():
+    """
+    Lazy import helper for Arbiter class.
+    
+    This breaks the circular import chain:
+    __init__.py -> arbiter.py -> arena.py -> arbiter.py
+    
+    By importing Arbiter only when actually needed (not at module load time),
+    we ensure arbiter.py has fully loaded before arena.py tries to use it.
+    
+    Returns:
+        The Arbiter class from self_fixing_engineer.arbiter.arbiter
+    """
+    global _Arbiter_class
+    if _Arbiter_class is None:
+        from self_fixing_engineer.arbiter.arbiter import Arbiter
+        _Arbiter_class = Arbiter
+        logger.debug("Lazily imported Arbiter class to break circular dependency")
+    return _Arbiter_class
 
 
 tracer = get_tracer(__name__)
@@ -239,7 +265,7 @@ class ArbiterArena:
         self.version = "1.1.0"
         self.base_port = port if port is not None else 9001
         self.num = kwargs.get("num", 3)
-        self.arbiters: List[Arbiter] = []
+        self.arbiters: List["Arbiter"] = []  # Quoted for forward reference, lazy imported
         self._lock = asyncio.Lock()
         self._db_engine = db_engine
         self.session_maker = (
@@ -565,6 +591,8 @@ class ArbiterArena:
                 engines_dict["intent_capture"] = self.intent_capture_engine
 
             # This is the primary production integration point, updated to pass the new dependencies.
+            # Use lazy import to break circular dependency
+            Arbiter = _get_arbiter_class()
             arbiter = Arbiter(
                 name=f"Arbiter_{self.base_port + i}",
                 db_engine=db_engine_for_arbiters,
@@ -633,7 +661,7 @@ class ArbiterArena:
                 await self._send_webhook("agent_removed", {"agent_name": arbiter.name})
                 arena_ops_total.labels(operation="remove_arbiter").inc()
 
-    async def get_random_arbiter(self) -> Arbiter:
+    async def get_random_arbiter(self) -> "Arbiter":  # Quoted for forward reference, lazy imported
         """Returns a random active arbiter from the arena."""
         async with self._lock:
             if not self.arbiters:
