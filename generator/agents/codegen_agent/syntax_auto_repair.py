@@ -177,6 +177,12 @@ class SyntaxAutoRepair:
                     repaired_lines.append(line)
                     continue
                 
+                # Check if quotes are balanced (even count = balanced)
+                # If quotes are balanced, don't modify
+                if single_quotes % 2 == 0 and double_quotes % 2 == 0:
+                    repaired_lines.append(line)
+                    continue
+                
                 # Conservative repair: only if quotes are odd AND line doesn't end properly
                 modified = False
                 line_rstripped = line.rstrip()

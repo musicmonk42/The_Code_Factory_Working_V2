@@ -211,10 +211,10 @@ class TestHealthEndpoints:
         mock_request = Mock()
         response = await healthz(mock_request)
 
-        # Check response has required attributes and types
+        # Ensure properties are correct types
+        assert isinstance(response.text, str), f"Expected str, got {type(response.text)}"
+        assert isinstance(response.status, int), f"Expected int, got {type(response.status)}"
         assert response.status == 200
-        # Ensure text is a string, not a callable (avoids Mock object issues)
-        assert isinstance(response.text, str)
         assert response.text == "OK"
 
     @patch("generator.agents.testgen_agent.testgen_validator.web.Application")
