@@ -907,7 +907,11 @@ Please fix the issues and return valid {output_format} documentation that includ
 Return only the corrected documentation content.
 """
 
-                        correction_response = await call_ensemble_api(correction_prompt)
+                        correction_response = await call_ensemble_api(
+                            correction_prompt,
+                            models=[{"provider": "openai", "model": "gpt-4o"}],
+                            voting_strategy="majority",
+                        )
                         corrected_content = correction_response["content"]
 
                         # Re-validate corrected content

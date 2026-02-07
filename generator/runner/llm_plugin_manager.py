@@ -739,10 +739,19 @@ class LLMPluginManager:
                 except Exception:
                     # Metrics may be dummy/mocked; ignore failures.
                     pass
-                logger.error(
-                    f"Failed to load {py_file.name}: {e}",
-                    exc_info=True,
-                )
+                
+                # Downgrade missing API key errors to INFO since they're expected
+                # when only some providers are configured
+                from generator.runner.runner_errors import ConfigurationError
+                if isinstance(e, ConfigurationError):
+                    logger.info(
+                        f"Provider {py_file.name} not loaded (missing configuration): {e}"
+                    )
+                else:
+                    logger.error(
+                        f"Failed to load {py_file.name}: {e}",
+                        exc_info=True,
+                    )
                 # Cleanup partial state in all relevant registries.
                 for d in (self._loaded_modules, self.registry, sys.modules):
                     d.pop(modname, None)

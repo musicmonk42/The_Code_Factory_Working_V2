@@ -452,6 +452,13 @@ if is_production and not _is_test_environment:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     
+    # Reduce Presidio analyzer noise
+    logging.getLogger("presidio-analyzer").setLevel(logging.WARNING)
+    logging.getLogger("presidio_analyzer").setLevel(logging.WARNING)
+    
+    # Reduce LLM provider loading noise (missing API keys are expected)
+    logging.getLogger("runner").setLevel(logging.WARNING)
+    
     logger.info("Production log level configured: Root=WARNING, Server=INFO")
 else:
     # Development mode - keep INFO for better debugging
@@ -569,10 +576,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     
     try:
-        from server.services.omnicore_service import OmniCoreService
+        from server.services.omnicore_service import get_omnicore_service
         
-        # Get OmniCore service instance
-        omnicore_service = OmniCoreService()
+        # Get OmniCore service instance (singleton)
+        omnicore_service = get_omnicore_service()
         
         # Start message bus dispatcher tasks
         if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
@@ -623,6 +630,38 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             logger.warning("  Check REDIS_URL and ensure Redis is accessible")
     else:
         logger.info("Redis not configured (REDIS_URL not set)")
+    
+    # Create Redis RAG index if it doesn't exist (for codegen prompt enrichment)
+    if redis_url:
+        try:
+            import redis.asyncio as aioredis
+            from redis.commands.search.field import TextField, VectorField
+            from redis.commands.search.indexDefinition import IndexDefinition, IndexType
+            
+            r = aioredis.Redis.from_url(redis_url, socket_connect_timeout=5, socket_timeout=5)
+            try:
+                # Check if index already exists
+                await r.ft("rag_index").info()
+                logger.info("✓ Redis RAG index already exists")
+            except Exception:
+                # Create the index
+                try:
+                    schema = (
+                        TextField("content"),
+                        TextField("metadata"),
+                        VectorField("embedding", "FLAT", {"TYPE": "FLOAT32", "DIM": 384, "DISTANCE_METRIC": "COSINE"}),
+                    )
+                    definition = IndexDefinition(prefix=["rag:"], index_type=IndexType.HASH)
+                    await r.ft("rag_index").create_index(schema, definition=definition)
+                    logger.info("✓ Redis RAG index created successfully")
+                except Exception as idx_err:
+                    logger.warning(f"⚠ Could not create Redis RAG index: {idx_err}")
+                    logger.warning("  Codegen will work without RAG enrichment")
+            await r.aclose()
+        except ImportError:
+            logger.debug("Redis search module not available - RAG index not created")
+        except Exception as e:
+            logger.warning(f"⚠ Redis RAG index setup failed: {e}")
     
     # P2 FIX: Validate Database connection on startup (explicit query test)
     database_url = os.getenv("DATABASE_URL")
@@ -803,9 +842,29 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         if kafka_required:
             raise RuntimeError(f"Kafka validation failed and KAFKA_REQUIRED=true: {e}")
     
+    # Log consolidated security posture status
+    _security_warnings = []
+    if not os.getenv("AWS_REGION"):
+        _security_warnings.append("AWS KMS not configured (AWS_REGION not set) - using local encryption")
+    if not os.getenv("HASH_MANIFEST"):
+        _security_warnings.append("Plugin integrity checks disabled (HASH_MANIFEST not set)")
+    if os.getenv("AUDIT_CRYPTO_MODE", "software") == "dev":
+        _security_warnings.append("Audit crypto in DEV mode - not suitable for production")
+
+    if _security_warnings:
+        logger.warning("=" * 80)
+        logger.warning("SECURITY POSTURE SUMMARY")
+        logger.warning("=" * 80)
+        for warning in _security_warnings:
+            logger.warning(f"  ⚠ {warning}")
+        logger.warning("")
+        logger.warning("  To resolve, see SECURITY_CONFIGURATION.md")
+        logger.warning("  These are acceptable for development/staging environments.")
+        logger.warning("=" * 80)
+    
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
-        from server.utils.omnicore import get_omnicore_service
+        from server.services.omnicore_service import get_omnicore_service
         omnicore = get_omnicore_service()
         if omnicore:
             await omnicore.start_periodic_audit_flush()

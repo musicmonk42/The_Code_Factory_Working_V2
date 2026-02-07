@@ -1144,6 +1144,7 @@ if PLUGIN_AVAILABLE:
                         )
                         
                         response = await call_llm_api(
+                            response_format={"type": "json_object"},
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
@@ -1434,6 +1435,7 @@ else:
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
+                            response_format={"type": "json_object"},
                             # Removed cache_manager argument
                         )
                         
