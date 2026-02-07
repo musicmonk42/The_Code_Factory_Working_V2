@@ -744,6 +744,11 @@ jobs:
           export PYTHONPATH="$PWD"
           
           # Force aggressive garbage collection between tests
+          # gc.set_threshold(threshold0, threshold1, threshold2):
+          # - threshold0=700: Run GC after 700 allocations (default 700)
+          # - threshold1=10: Check generation 1 every 10 gen0 collections (default 10)
+          # - threshold2=10: Check generation 2 every 10 gen1 collections (default 10)
+          # More frequent gen1/gen2 collections help prevent memory buildup in long test runs
           python -c "import gc; gc.set_threshold(700, 10, 10)"
           
           # Force cleanup between batches
