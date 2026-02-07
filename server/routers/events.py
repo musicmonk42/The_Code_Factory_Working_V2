@@ -282,9 +282,26 @@ async def websocket_endpoint(websocket: WebSocket):
             def event_handler(message):
                 """Handle events from message bus and queue them for WebSocket."""
                 try:
+                    # Convert Message object to dict for WebSocket serialization
+                    if isinstance(message, dict):
+                        event_data = message
+                    else:
+                        # Message object from ShardedMessageBus
+                        try:
+                            payload = json.loads(message.payload) if isinstance(message.payload, str) else message.payload
+                        except (json.JSONDecodeError, TypeError):
+                            payload = {"raw_payload": str(message.payload)}
+                        event_data = {
+                            "topic": getattr(message, "topic", "unknown"),
+                            "message": payload.get("message", f"Event on {getattr(message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
+                            "data": payload,
+                            "trace_id": getattr(message, "trace_id", None),
+                            "timestamp": getattr(message, "timestamp", None),
+                        }
+                    
                     # Put event in queue (non-blocking)
                     if not event_queue.full():
-                        event_queue.put_nowait(message)
+                        event_queue.put_nowait(event_data)
                     else:
                         logger.warning("Event queue full, dropping event")
                 except Exception as e:
@@ -402,13 +419,31 @@ async def event_stream(
         def event_handler(message):
             """Handle events from message bus and queue them for SSE."""
             try:
+                # Convert Message object to dict for SSE serialization
+                if isinstance(message, dict):
+                    event_data = message
+                else:
+                    # Message object from ShardedMessageBus
+                    try:
+                        payload = json.loads(message.payload) if isinstance(message.payload, str) else message.payload
+                    except (json.JSONDecodeError, TypeError):
+                        payload = {"raw_payload": str(message.payload)}
+                    event_data = {
+                        "topic": getattr(message, "topic", "unknown"),
+                        "message": payload.get("message", f"Event on {getattr(message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
+                        "data": payload,
+                        "trace_id": getattr(message, "trace_id", None),
+                        "timestamp": getattr(message, "timestamp", None),
+                        "job_id": payload.get("job_id") if isinstance(payload, dict) else None,
+                    }
+                
                 # Filter by job_id if specified
-                if job_id and message.get("job_id") != job_id:
+                if job_id and event_data.get("job_id") != job_id:
                     return
                 
                 # Put event in queue (non-blocking)
                 if not event_queue.full():
-                    event_queue.put_nowait(message)
+                    event_queue.put_nowait(event_data)
                 else:
                     logger.warning("SSE event queue full, dropping event")
             except Exception as e:

@@ -47,6 +47,7 @@ from typing import Optional
 # These are the main module-level loggers in the application
 MANAGED_LOGGERS = [
     'generator',
+    'generator.agents.critique_agent',
     'arbiter', 
     'runner',
     'omnicore_engine',

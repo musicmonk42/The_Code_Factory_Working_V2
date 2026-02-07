@@ -9,6 +9,7 @@ observability, error handling, security, and cost estimation.
 """
 
 import asyncio
+import logging  # Added for response_format filtering
 import os  # <-- ADDED
 from typing import Any, AsyncGenerator, Dict, Optional, Union
 
@@ -32,8 +33,10 @@ try:
 except ImportError:
     HAS_TIKTOKEN = False
     tiktoken = None
-    Encoding = None
     get_encoding = None
+
+# Logger for the provider
+logger = logging.getLogger(__name__)
 
 
 class OpenAIProvider(LLMProvider):
@@ -120,6 +123,19 @@ class OpenAIProvider(LLMProvider):
             kwargs["base_url"] = self.custom_endpoint
         if self.custom_headers:
             kwargs["extra_headers"] = self.custom_headers
+
+        # Filter out response_format for models that don't support it
+        # Models that support response_format: gpt-4-turbo*, gpt-4o*, gpt-3.5-turbo-1106+
+        if "response_format" in kwargs:
+            model_supports_json = any(supported in model for supported in [
+                "gpt-4-turbo", "gpt-4o", "gpt-3.5-turbo-1106", "gpt-3.5-turbo-0125"
+            ])
+            if not model_supports_json:
+                logger.warning(
+                    f"Model '{model}' does not support response_format parameter. "
+                    f"Removing response_format to prevent API error."
+                )
+                kwargs.pop("response_format")
 
         try:
             if stream:
