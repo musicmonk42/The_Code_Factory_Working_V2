@@ -814,8 +814,8 @@ class LogBackend(abc.ABC):
                 else:
                     await self._perform_atomic_batch_write(batch_copy)
 
-                # CRITICAL FIX: Increment metrics AFTER successful write, OUTSIDE OpenTelemetry block
-                BACKEND_WRITES.labels(backend=backend_name).inc(len(batch_copy))
+                # REMOVED: BACKEND_WRITES increment (now done in _perform_atomic_batch_write)
+                # Keep only the latency metric
                 BACKEND_APPEND_LATENCY.labels(backend=backend_name).observe(
                     time.perf_counter() - start_time
                 )
@@ -878,6 +878,10 @@ class LogBackend(abc.ABC):
         async with self._atomic_context(prepared_entries=prepared_entries):
             # The yield in _atomic_context will handle the actual storage based on backend type
             pass
+        
+        # INCREMENT WRITE METRICS IMMEDIATELY AFTER SUCCESSFUL ATOMIC WRITE
+        # This ensures metrics are updated before any retry logic or exception handling
+        BACKEND_WRITES.labels(backend=self.__class__.__name__).inc(len(prepared_entries))
 
     async def _flush_batch_periodically(self):
         """Periodically flushes batch."""
