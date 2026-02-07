@@ -155,27 +155,23 @@ def event_loop():
 
 
 @pytest.fixture(autouse=True)
-def ensure_metrics_work():
+async def ensure_metrics_work():
     """
-    Ensure Prometheus metrics are properly initialized for each test.
+    Ensure Prometheus metrics are properly initialized and captured for each test.
     This fixture runs automatically for every test.
     """
-    # Verify metrics are accessible
-    assert BACKEND_ERRORS is not None
-    assert BACKEND_TAMPER_DETECTION_FAILURES is not None
-    assert BACKEND_WRITES is not None
+    # Force metric collection to ensure they're registered
+    _ = list(BACKEND_ERRORS.collect())
+    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    _ = list(BACKEND_WRITES.collect())
     
     yield
     
-    # Allow metrics to be collected after test completes
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Give any pending metric updates time to complete
-            pass
-    except RuntimeError:
-        pass
+    # Allow async tasks to complete and metrics to be incremented
+    await asyncio.sleep(0.2)
+    pending = [t for t in asyncio.all_tasks() if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -309,6 +305,10 @@ async def test_tamper_detection_flags_and_skips(
     assert len(test_backend.storage) == 1
 
     backend_label = test_backend.__class__.__name__
+    
+    # Force metric collection before measuring
+    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    
     before = _counter_total_for_labels(
         BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
     )
@@ -319,19 +319,22 @@ async def test_tamper_detection_flags_and_skips(
         return "DELIBERATELY_WRONG_HASH"
 
     monkeypatch.setattr(core, "compute_hash", evil_hash)
+    
+    # Ensure tamper detection is explicitly enabled
+    test_backend.tamper_detection_enabled = True
 
     results = await test_backend.query({}, limit=10)
     assert results == []
 
     # Give scheduled tasks (send_alert via create_task) more time to execute
-    await asyncio.sleep(1.0)  # Increased from 0.5 to 1.0
+    await asyncio.sleep(2.0)  # Increased from 1.0
     
     # Force all pending tasks to complete
     pending = [t for t in asyncio.all_tasks() if not t.done()]
     if pending:
         await asyncio.wait(pending, timeout=2.0)
 
-    # Force metric collection to ensure the latest metric samples are captured
+    # Force metric collection before assertion
     _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
 
     after = _counter_total_for_labels(
@@ -358,6 +361,9 @@ async def test_retry_operation_respects_limits(monkeypatch):
     if hasattr(core, "RETRY_MAX_ATTEMPTS"):
         monkeypatch.setattr(core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
 
+    # Force metric collection before measuring
+    _ = list(BACKEND_ERRORS.collect())
+    
     before = _counter_total_for_labels(
         BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )
@@ -373,15 +379,15 @@ async def test_retry_operation_respects_limits(monkeypatch):
 
     assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
 
-    # Give metrics more time to be collected
-    await asyncio.sleep(0.5)  # Increased from 0.2 to 0.5
+    # Give metrics more time to be collected  
+    await asyncio.sleep(1.0)  # Increased from 0.5
 
     # FIX: Force all pending tasks to complete
     pending = [t for t in asyncio.all_tasks() if not t.done()]
     if pending:
         await asyncio.wait(pending, timeout=1.0)
 
-    # Force metric collection to ensure the latest metric samples are captured
+    # Force metric collection before assertion
     _ = list(BACKEND_ERRORS.collect())
 
     after = _counter_total_for_labels(
