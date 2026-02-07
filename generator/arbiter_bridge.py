@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Arbiter Bridge Module - Generator-to-Arbiter Integration Facade.
 

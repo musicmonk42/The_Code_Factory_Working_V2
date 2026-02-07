@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Demonstration of the testgen rule-based fallback functionality.
 This script shows what the new feature produces.

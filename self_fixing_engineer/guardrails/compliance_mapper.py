@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # guardrails/compliance_mapper.py
 import argparse
 import asyncio

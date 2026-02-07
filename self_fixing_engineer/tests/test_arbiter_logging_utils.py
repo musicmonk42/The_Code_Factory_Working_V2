@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for logging_utils.py
 Tests PII redaction, structured logging, audit trails, and security features.

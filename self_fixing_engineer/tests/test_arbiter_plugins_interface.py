@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_interface.py
 from unittest.mock import Mock, patch
 

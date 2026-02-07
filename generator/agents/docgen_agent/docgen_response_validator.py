@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 docgen_response_validator.py
 MERGED FILE: Combines docgen_response_handler.py and docgen_validator.py.

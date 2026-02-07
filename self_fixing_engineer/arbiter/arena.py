@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # SFE_Code_Guardian/arena.py
 
 import asyncio

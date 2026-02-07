@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Unit tests for enhanced CircuitBreaker functionality in llm_client.py
 

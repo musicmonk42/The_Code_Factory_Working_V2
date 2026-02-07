@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_secrets.py
 """
 Comprehensive test suite for generator.audit_log.audit_crypto.secrets.py

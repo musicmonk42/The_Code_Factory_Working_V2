@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # checkpoint_exceptions.py
 """
 Custom exception handling module for the checkpoint management system.

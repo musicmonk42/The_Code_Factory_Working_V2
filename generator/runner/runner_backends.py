@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/backends.py
 # Execution backends for the runner system.
 # Provides isolated environments with robust setup, execution, health checks, and recovery,

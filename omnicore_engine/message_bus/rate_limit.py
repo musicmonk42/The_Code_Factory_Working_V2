@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/rate_limit.py
 """
 Rate Limiting components for the Sharded Message Bus.

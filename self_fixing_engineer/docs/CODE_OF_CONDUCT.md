@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # CODE OF CONDUCT
 
 ## Our Pledge

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # app/omnicore_engine/metrics.py
 """
 Prometheus metrics for OmniCore Omega Engine.

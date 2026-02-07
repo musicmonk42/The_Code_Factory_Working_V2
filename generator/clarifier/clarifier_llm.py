@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier_llm.py
 """
 LLM Provider implementations for the clarifier system.

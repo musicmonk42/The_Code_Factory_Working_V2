@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_aws_clients.py
 """
 Enterprise Production-Grade Test Suite for AWS CloudWatch SIEM Client

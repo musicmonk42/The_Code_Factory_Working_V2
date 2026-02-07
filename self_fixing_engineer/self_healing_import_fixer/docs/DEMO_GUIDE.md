@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Demo Guide: Building Your First Import Fix in SFE
 
 This guide helps a coder new to SFE set up and run a simple demo for the Self-Healing Import Fixer module. We'll create a buggy Python codebase, analyze it, fix import issues, and validate the results.

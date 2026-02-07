@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_agents.py
 import json
 from unittest.mock import AsyncMock, MagicMock, Mock, patch

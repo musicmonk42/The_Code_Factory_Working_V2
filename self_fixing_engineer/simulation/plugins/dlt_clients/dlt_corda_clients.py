@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Production-ready Corda DLT client using aiohttp against a REST gateway.
 

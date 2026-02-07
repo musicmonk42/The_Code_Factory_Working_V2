@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 

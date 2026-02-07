@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """Test lazy import functionality (PEP 562) for omnicore_engine package.
 
 This test module validates that the lazy import mechanism via __getattr__

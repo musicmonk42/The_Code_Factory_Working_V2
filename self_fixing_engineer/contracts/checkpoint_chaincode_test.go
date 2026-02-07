@@ -1,3 +1,5 @@
+// Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 // checkpoint_chaincode_test.go
 // Comprehensive unit tests for checkpoint_chaincode.go
 // This file includes tests for all chaincode functions, edge cases, validation, and error handling.

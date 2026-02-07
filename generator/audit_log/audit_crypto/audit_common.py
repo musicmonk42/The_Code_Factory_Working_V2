@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_common.py
 """
 Common utilities and classes for the audit_crypto module.

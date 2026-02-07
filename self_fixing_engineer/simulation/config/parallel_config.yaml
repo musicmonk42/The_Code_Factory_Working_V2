@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 backend_configs:
   aws_batch_job_definition: your-aws-batch-job-definition
   aws_batch_job_queue: your-aws-batch-queue

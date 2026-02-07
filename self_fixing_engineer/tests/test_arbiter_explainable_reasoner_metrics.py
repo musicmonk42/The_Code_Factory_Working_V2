@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_metrics.py
 # Comprehensive production-grade tests for metrics.py
 # Requires: pytest, unittest.mock, prometheus-client

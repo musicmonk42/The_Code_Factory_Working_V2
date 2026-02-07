@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 testgen_prompt.py: The intelligent core for the agentic testing system.
 

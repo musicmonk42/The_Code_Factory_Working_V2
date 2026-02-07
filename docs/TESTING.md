@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Testing Guide
 
 This guide explains how to run tests for The Code Factory Platform.

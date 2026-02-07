@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Platform API Server
 
  HTTP API for The Code Factory Platform, providing centralized access to all platform capabilities through OmniCore Engine.

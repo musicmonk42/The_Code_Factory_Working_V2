@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Clarifier Module
 Overview
 The Clarifier module is a production-ready system for clarifying ambiguous software requirements using a combination of Large Language Model (LLM) interactions, user prompting, and automated requirement updates. It is designed for highly regulated industries such as healthcare, finance, and aerospace, ensuring compliance with standards like HIPAA, GDPR, SOC 2, and FedRAMP. The module supports multiple user interaction channels (CLI, GUI, Web, Slack, Email, SMS, Voice), multilingual prompts, and robust security features including PII redaction, encryption, and tamper-proof audit logging.

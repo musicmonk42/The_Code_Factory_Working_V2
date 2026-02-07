@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import datetime
 import importlib.util  # For dynamic dependency checks
 import json

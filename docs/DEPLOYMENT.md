@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Platform - Deployment Guide
 
 This guide covers deploying the Code Factory Platform to various environments including cloud providers, Kubernetes, and on-premises infrastructure.

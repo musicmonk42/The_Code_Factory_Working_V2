@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Plugin Developer Handbook: Security \& Testing Edition  
 
 Self Fixing Engineer™  

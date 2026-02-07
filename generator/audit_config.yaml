@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 PROVIDER_TYPE: "software"
 DEFAULT_ALGO: "ed25519"
 KEY_ROTATION_INTERVAL_SECONDS: 86400

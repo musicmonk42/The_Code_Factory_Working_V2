@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Distributed Lock Utilities - Enterprise-Grade Distributed Locking
 =================================================================

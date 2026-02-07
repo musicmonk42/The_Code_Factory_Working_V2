@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_runner_config.py
 # Updated for 2025 refactor – full coverage, audit-ready, production-grade
 

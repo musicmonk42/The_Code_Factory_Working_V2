@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_event_bus.py
 """
 Complete test suite for event_bus module with proper cleanup.

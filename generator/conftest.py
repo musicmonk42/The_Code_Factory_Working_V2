@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """Pytest configuration for generator tests.
 
 This module provides pytest configuration and fixtures for generator tests,

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # -*- coding: utf-8 -*-
 """
 DLT E2E (mocks-only) – production-minded and offline-safe.

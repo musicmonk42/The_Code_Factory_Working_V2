@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/engines.py
 Tests engine registry, plugin service, and OmniCoreOmega orchestrator.

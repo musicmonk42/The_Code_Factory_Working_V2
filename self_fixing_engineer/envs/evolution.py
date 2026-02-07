@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Enhanced Genetic Algorithm Configuration Optimizer
 This module provides a production-ready genetic algorithm for optimizing

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_audit_log.py
 import asyncio
 import base64

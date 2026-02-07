@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Testing – Arbiter (Self-Fixing Engineer)
 
 ## Overview

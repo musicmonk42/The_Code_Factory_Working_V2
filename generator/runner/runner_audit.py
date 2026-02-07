@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/runner_audit.py
 """
 World-Class Audit Event Logging Module - Secure, Chained, Cryptographically Signed.

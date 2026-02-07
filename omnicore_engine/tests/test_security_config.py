@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/security_config.py
 Tests enterprise security configuration and compliance validation.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Workflow Chart 1: MD File Input to Final Product
 
 ## Overview

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Production-ready Hyperledger Fabric DLT client implementation.
 

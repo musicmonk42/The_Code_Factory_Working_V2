@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Production Security Deployment Guide for OmniCore Engine
 
 ## Overview

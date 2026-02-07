@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Checkpoint module for the Mesh framework.
 Provides checkpoint management, persistence, and recovery capabilities.

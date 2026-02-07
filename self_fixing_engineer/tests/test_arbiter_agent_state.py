@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive tests for agent_state.py
 Uses import hooks to properly isolate the module from its dependencies

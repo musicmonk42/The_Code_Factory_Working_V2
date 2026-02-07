@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Unified configuration for AI README-to-App Generator
 # This config file is validated on load against a Pydantic schema.
 # Invalid configs will raise errors with details.

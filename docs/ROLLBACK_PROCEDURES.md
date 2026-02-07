@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Rollback Procedures
 
 This document outlines procedures for rolling back deployments and changes in the Code Factory platform.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier_prioritizer.py
 """
 Prioritization strategies for ambiguities in requirements clarification.

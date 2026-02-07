@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Compatibility layer for retry decorator.
 Provides a retry decorator interface compatible with the 'retry' package,

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Clarifier Module for Ambiguity Detection and Resolution.
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/llm_client.py
 """
 UNIFIED LLM CLIENT (2025 Production Edition) — PLUGIN ORCHESTRATOR + ENHANCED FEATURES

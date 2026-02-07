@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Plugins System
 
 A secure, extensible framework for building, loading, and running plugins in orchestration and simulation platforms. The system is designed for **production-readiness**, **security**, and **flexibility**—enabling integration of messaging, notifications, event processing, storage, and runtime extensions.

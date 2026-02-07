@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 generator_plugin_wrapper.py – Centralized Plugin Registration for README-to-App Code Generator
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_anthropic_adapter.py
 import time
 from typing import Any, Dict

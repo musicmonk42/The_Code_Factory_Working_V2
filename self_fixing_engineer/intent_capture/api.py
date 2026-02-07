@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # api.py - Enterprise-Grade AI Agent API (Upgraded 2025)
 #
 # Version: 2.0.0

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for mesh_adapter.py - Multi-backend pub/sub adapter.
 

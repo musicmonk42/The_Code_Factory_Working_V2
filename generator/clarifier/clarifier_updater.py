@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier_updater.py
 # Fully production-ready requirements updater with schema evolution, LLM inference,
 # PII redaction, conflict resolution, versioning, and comprehensive observability.

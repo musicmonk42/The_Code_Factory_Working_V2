@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive unit tests for server/middleware/arbiter_policy.py
 

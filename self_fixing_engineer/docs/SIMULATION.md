@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # 🧪 SIMULATION.md — Self Fixing Engineer™
 
 ---

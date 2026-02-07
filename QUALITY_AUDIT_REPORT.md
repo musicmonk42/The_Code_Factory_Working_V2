@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Quality Audit Report - New Files Assessment
 
 ## Executive Summary

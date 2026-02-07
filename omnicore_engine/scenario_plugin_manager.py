@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 DEPRECATED: This module is deprecated and will be removed in a future version.
 

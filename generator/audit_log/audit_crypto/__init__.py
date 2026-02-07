@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Export modules for easier importing
 from . import audit_common, audit_crypto_factory, audit_crypto_provider, secrets
 

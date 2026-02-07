@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/pip_audit_plugin.py
 
 import asyncio

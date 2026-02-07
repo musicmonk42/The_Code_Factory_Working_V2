@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for the Arbiter module.
 This uses extensive mocking to avoid external dependencies.

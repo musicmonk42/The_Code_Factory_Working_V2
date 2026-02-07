@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Secrets Management Guide
 
 This guide covers how to securely manage secrets in the Code Factory platform across different environments.

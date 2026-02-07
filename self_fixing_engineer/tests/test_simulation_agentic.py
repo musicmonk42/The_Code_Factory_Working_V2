@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import asyncio
 from unittest.mock import MagicMock, mock_open
 

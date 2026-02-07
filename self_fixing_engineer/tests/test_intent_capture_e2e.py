@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_e2e.py
 """
 Fixed E2E Test Suite - Works without external dependencies

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/array_backend.py
 Tests array operations across multiple computational backends.

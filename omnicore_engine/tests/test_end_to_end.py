@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import asyncio
 from io import BytesIO
 from unittest.mock import AsyncMock, Mock, patch

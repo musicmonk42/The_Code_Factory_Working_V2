@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Extensibility Guide
 
 This handbook guides engineers on **extending the AI README-to-App Code Generator** with new providers, output formats, validators, or features as of July 28, 2025.  

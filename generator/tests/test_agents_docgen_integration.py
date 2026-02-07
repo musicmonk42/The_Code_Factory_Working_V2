@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_docgen_integration.py
 Integration tests for the complete docgen_agent system.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Quick Start: Bootstrap Admin User
 
 This guide shows how to create the initial admin user for the Code Factory system.

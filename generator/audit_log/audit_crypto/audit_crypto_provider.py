@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_crypto_provider.py
 # Purpose: Defines abstract and concrete cryptographic providers (Software and HSM).
 # Contains the core cryptographic business logic for signing, verification, key generation, and rotation.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # CI/CD Pipeline Guide - Code Factory Platform
 
 This guide explains the CI/CD pipeline infrastructure for the Code Factory Platform.

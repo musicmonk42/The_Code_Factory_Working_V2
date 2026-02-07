@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Helm Deployment Guide for Code Factory
 
 This guide provides comprehensive instructions for deploying The Code Factory platform using Helm.

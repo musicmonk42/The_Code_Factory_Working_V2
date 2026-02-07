@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Security Policy
 
 The **AI README-to-App Code Generator** prioritizes security and compliance to deliver safe, reliable, and trustworthy deployment configuration generation. This document outlines our security posture, features, supported versions, and the process for responsible vulnerability disclosure as of **July 28, 2025**.

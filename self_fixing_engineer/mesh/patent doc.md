@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Patent Appendix: `mesh/checkpoint` Module – Comprehensive Technical, Security, and Compliance Disclosure
 
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/llm_client_providers/gemini_provider.py
 """
 gemini_provider.py

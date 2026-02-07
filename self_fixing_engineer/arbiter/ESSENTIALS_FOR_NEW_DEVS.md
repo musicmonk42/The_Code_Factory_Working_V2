@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 **Updates Made**:
 - Timestamp updated to September 10, 2025.
 - Added complete `requirements.txt` and Docker setup (Dockerfile, Docker Compose).

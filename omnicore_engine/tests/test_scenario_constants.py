@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/scenario_constants.py
 Tests scenario models and tracked dictionary functionality.

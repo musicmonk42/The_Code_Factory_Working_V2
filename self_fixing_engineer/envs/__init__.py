@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # envs/__init__.py
 """
 Enhanced Code Health and Evolution Modules

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Demo Guide: Building Your First Simulation in SFE
 
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/gremlin_chaos_plugin.py
 #
 # Production-grade Gremlin Chaos Plugin (HTTP-based)

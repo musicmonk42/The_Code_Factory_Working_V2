@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Demo Implementation Guide
 
 This handbook walks you through implementing the investor demo for the **AI README-to-App Code Generator**. The goal: generate a production-ready Dockerfile from a text description, validate it, and save it to disk, with investor-friendly console output via [rich](https://github.com/Textualize/rich).  

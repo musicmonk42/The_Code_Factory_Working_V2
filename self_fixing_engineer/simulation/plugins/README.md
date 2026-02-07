@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Self-Fixing Engineer (SFE) Plugins
 Overview
 The plugins directory contains modular plugins for the Self-Fixing Engineer (SFE) platform, enabling functionalities such as SIEM integration, DLT client interactions, workflow visualization, dependency auditing, security patch generation, and more. Each plugin is designed to integrate with the SFE core via the plugin_manager.py and can be configured for production or demo environments.

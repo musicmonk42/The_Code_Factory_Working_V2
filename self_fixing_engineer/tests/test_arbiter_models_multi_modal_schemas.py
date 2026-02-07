@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import json
 import logging
 from datetime import datetime, timedelta, timezone

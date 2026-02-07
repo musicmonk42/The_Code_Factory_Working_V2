@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # simulation/plugins/dlt_clients/dlt_simple_clients.py
 
 import asyncio

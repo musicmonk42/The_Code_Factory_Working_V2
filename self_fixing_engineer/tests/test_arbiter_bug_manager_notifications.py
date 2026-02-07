@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_notifications.py
 # Comprehensive production-grade tests for notifications.py
 # Requires: pytest, pytest-asyncio, aiohttp, tenacity

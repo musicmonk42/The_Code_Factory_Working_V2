@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_runner_backends.py
 # Updated for current runner_backends.py (2025 refactor)
 

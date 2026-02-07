@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Architecture of AI README-to-App Code Generator
 The AI README-to-App Code Generator is a modular, extensible platform for generating deployment configurations (e.g., Dockerfiles, Helm charts) from natural language inputs. This document outlines its architecture, highlighting key components, design principles, and scalability features as of July 28, 2025.
 Overview

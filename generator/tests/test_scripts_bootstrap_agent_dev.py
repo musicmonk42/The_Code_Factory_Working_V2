@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """Tests for bootstrap_agent_dev.py"""
 
 import os

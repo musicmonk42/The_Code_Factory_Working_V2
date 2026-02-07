@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/logging.py
 # World-class, gold-standard logging module for the runner system.
 # Provides structured, redaction, encrypted, and cryptographically signed logs,

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Railway Deployment Guide
 
 ## ✅ Updated for All Critical Fixes

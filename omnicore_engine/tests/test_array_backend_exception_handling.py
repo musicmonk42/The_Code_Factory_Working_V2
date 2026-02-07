@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test to ensure omnicore_engine.array_backend handles all types of exceptions
 during arbiter.config import, including NameError, AttributeError, etc.

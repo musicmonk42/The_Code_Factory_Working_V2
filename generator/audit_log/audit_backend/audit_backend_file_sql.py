@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_backends/audit_backend_file_sql.py
 import asyncio
 import base64  # Explicitly import base64

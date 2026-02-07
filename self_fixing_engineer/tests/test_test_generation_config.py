@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_config.py
 """Production-grade tests for config.py.
 Covers path safety, deep-merge behavior, immutability, defaults integrity,

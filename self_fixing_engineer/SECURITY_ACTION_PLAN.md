@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Security Remediation Action Plan
 
 **Priority:** IMMEDIATE  

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Multimodal Subpackage – Arbiter Plugins (Self-Fixing Engineer)
 
 ## Overview

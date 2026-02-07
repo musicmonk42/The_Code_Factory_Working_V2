@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # 🛡️ Security Policy, Audit, and Trust Model
 
 Self Fixing Engineer™ is designed for environments where security, auditability, and explainability are non-negotiable.  

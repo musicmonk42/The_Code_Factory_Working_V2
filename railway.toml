@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Railway.app deployment configuration for The Code Factory Platform
 # This configuration deploys the unified platform with all startup/runtime fixes
 # Documentation: https://docs.railway.app/deploy/railway-toml-file

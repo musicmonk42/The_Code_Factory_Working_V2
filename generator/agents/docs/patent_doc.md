@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Agents Module: Patent Lawyer–Grade Documentation
 
 

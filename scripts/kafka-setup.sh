@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Kafka Setup and Management Script for Code Factory Platform
 # This script manages Kafka and Zookeeper services, resolves DUPLICATE_BROKER_REGISTRATION errors,
 # and creates required topics for the Code Factory Platform.

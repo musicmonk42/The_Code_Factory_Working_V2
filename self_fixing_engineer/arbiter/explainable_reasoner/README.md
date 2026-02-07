@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Explainable Reasoner Package README
 Overview
 The Explainable Reasoner is a Python package for building an AI system that generates explainable responses using large language models (LLMs). It supports multimodal inputs, history management (SQLite/Postgres/Redis), auditing, metrics (Prometheus), prompt strategies, and adapters for providers like OpenAI, Gemini, and Anthropic. Designed for modularity, it's suitable for integration into FastAPI apps or as a standalone plugin.

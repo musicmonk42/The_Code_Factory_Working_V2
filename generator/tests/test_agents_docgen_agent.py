@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_docgen_agent.py
 Comprehensive tests for docgen_agent module.

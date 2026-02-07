@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Tests for the three platform startup issue fixes:
 1. NameError in arbiter.py (circular import)

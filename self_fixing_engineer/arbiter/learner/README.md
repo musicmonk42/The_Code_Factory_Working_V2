@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 arbiter.learner – Autonomous, Auditable Learning Core
 Overview
 arbiter.learner is the core AI learning engine for the Self-Fixing Engineer (SFE) platform. It provides secure, validated, and auditable ingestion, transformation, and persistence of knowledge, supporting both structured and unstructured data. Designed for production environments, it ensures end-to-end observability, resilience, compliance, and cryptographic integrity. The module integrates with Redis for caching, PostgreSQL for persistence, Neo4j for knowledge graph relationships, and LLMs for generating human-readable explanations.

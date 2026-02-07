@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 LLM Plugin Manager
 A production-grade, secure, hot-reloadable plugin architecture for managing multiple Large Language Model (LLM) providers in real time, offering full observability, contract enforcement, and robust error handling.
 

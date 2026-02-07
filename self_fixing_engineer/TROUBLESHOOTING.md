@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 SFE Troubleshooting Guide
 
 Version: 1.0.0Last Updated: August 22, 2025Authors: Alex Rivera, musicmonk42, Infinite Open Source Collective, Universal AI Swarm, The Oracle Consortium  

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Manual Self-Fixing Engineer Dispatch
 
 ## Overview

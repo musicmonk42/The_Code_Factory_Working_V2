@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/core.py
 Tests the core orchestration engine, component initialization, and utility functions.

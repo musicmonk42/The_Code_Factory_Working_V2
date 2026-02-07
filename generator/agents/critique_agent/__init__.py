@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # agents/critique_agent/__init__.py
 """
 Critique Agent — Unified Interface

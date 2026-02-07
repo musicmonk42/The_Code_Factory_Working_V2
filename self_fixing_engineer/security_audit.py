@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Security Audit Script for self_fixing_engineer Module
 

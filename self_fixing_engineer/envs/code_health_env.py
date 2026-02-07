@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Enhanced Code Health Environment for Reinforcement Learning
 This module provides a production-ready RL environment for monitoring and managing

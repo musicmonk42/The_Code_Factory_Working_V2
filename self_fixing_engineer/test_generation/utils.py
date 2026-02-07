@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 utils.py - Production-Ready Utility Functions for ATCO
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Production-hardened EVM (Ethereum-compatible) DLT client using web3.py.
 

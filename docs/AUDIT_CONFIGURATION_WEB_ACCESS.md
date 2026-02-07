@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Accessing Audit Configuration Through the Web UI
 
 ## Overview

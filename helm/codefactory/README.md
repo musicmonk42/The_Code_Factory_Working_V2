@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Helm Chart
 
 Official Helm chart for deploying The Code Factory - an AI-powered code generation platform.

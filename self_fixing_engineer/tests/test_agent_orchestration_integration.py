@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_integration.py
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock

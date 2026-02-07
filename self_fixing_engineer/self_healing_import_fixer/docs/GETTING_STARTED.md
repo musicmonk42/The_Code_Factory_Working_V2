@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Getting Started with the Self-Healing Import Fixer Module in Self-Fixing Engineer (SFE)
 
 Welcome! If you're completely new to Code Factory or the Self-Fixing Engineer (SFE) platform, this guide assumes no prior knowledge and walks you through the basics of the Self-Healing Import Fixer module. SFE is an autonomous AI platform for code analysis, repair, and evolution. This module focuses on fixing Python import and dependency issues automatically while ensuring compliance.

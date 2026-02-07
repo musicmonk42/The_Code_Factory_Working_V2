@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # File: omnicore_engine/fastapi_app.py
 import ast
 import os

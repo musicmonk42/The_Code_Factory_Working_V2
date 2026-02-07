@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # self_healing_import_fixer/analyzer/core_secrets.py
 
 """

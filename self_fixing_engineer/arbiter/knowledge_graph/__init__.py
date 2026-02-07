@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Knowledge Graph module for the Arbiter platform.
 Provides graph-based knowledge representation and querying capabilities.

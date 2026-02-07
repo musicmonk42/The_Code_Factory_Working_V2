@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_crypto_factory.py
 # Purpose: Initialization, configuration, metrics setup, provider factory, global state, fallback logic.
 #

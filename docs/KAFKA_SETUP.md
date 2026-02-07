@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Kafka Setup and Configuration Guide
 
 ## Quick Fix for DUPLICATE_BROKER_REGISTRATION Error

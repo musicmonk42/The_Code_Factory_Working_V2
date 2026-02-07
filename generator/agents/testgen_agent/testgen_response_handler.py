@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 testgen_response_handler.py: The Parser & Guard for the agentic testing system.
 

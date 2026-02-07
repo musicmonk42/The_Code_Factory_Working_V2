@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/runner/tests/test_runner_integration.py
 
 import tempfile

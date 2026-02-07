@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for mesh_policy.py - Policy management and enforcement.
 FIXED VERSION - All tests should pass on Windows/Unix

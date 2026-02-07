@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # simulation/tests/test_dlt_network_config_manager.py
 """
 Test suite for the DLT Network Config Manager module.

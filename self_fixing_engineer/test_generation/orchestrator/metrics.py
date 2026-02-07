@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import logging
 import os
 from typing import Any, Callable, Dict, List, Optional

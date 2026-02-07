@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_factory.py
 """
 Test suite for SIEM factory module.

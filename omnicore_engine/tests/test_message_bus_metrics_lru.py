@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_metrics_lru.py
 """
 Test suite for LRU eviction in mock metrics.

@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 
 echo "=== Checking for problematic patterns in test files ==="
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # config.py - Ultimate Hardened Production Version (Final 10/10 Readiness)
 #
 # Version: 2.0.0

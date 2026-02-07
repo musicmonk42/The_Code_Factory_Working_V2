@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Implementation Summary: New Requirements Completion
 
 **Date:** 2025-11-21  

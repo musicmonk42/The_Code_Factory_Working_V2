@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import asyncio
 import logging  # Import logging for the fixture fix
 from types import SimpleNamespace

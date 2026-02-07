@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/core.py
 # Core logic for the runner system.
 # Provides robust, extensible, and observable test execution,

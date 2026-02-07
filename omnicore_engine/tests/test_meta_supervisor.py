@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/meta_supervisor.py
 Tests the MetaSupervisor orchestration and optimization system.

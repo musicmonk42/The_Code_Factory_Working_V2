@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
   File "./.venv/Lib/site-packages/aenum/_py2.py", line 5
     raise exc, None, tb
              ^

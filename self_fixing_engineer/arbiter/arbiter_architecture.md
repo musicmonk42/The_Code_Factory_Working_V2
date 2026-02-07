@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 ```mermaid
 graph TD
     A[Arbiter] -->|Tasks| B[Arena]

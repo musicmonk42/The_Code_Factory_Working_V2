@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Clarifier Configuration Guide
 
 Confidential: This document is for internal use only and must not be shared without express permission from the project owner.

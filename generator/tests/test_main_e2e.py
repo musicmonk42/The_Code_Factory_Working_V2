@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_integration.py
 """
 Comprehensive integration tests for the AI README-to-App Generator.

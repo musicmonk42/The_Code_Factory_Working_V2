@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Self-Healing Code Analyzer
 
 The Enterprise Self-Healing Code Analyzer is a production-grade Python tool designed to automatically detect, analyze, and remediate architectural and dependency issues in Python codebases. Built with a focus on security, reliability, performance, and auditability, it is ideal for mission-critical enterprise environments. The system leverages static analysis, graph theory, and AI-driven remediation to ensure code quality, enforce architectural policies, and maintain dependency integrity.

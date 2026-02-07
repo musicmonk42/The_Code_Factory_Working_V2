@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # app/omnicore_engine/__init__.py
 """
 OmniCore Engine: Robust modular system for Legal Tender.

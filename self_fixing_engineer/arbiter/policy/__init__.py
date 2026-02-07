@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 from .circuit_breaker import (
     is_llm_policy_circuit_breaker_open,
     record_llm_policy_api_failure,

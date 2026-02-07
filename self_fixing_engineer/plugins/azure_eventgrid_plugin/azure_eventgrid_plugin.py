@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/azure_eventgrid_plugin/azure_eventgrid_plugin.py
 """
 azure_eventgrid_plugin.py

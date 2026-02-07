@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # D:\SFE\self_fixing_engineer\arbiter\plugins\llm_client.py
 import asyncio
 import atexit  # For cleanup of shared resources

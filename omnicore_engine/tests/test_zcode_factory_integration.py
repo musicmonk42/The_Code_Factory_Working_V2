@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

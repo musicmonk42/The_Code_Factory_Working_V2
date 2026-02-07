@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # File: metrics_helpers.py
 import logging
 from typing import Optional, Sequence

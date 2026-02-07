@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive unit tests for self_fixing_engineer/arbiter/audit_schema.py
 

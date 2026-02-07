@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/metrics.py
 Tests Prometheus metrics collection, InfluxDB fallback, and metric utilities.

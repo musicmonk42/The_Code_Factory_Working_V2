@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # self_fixing_engineer/exceptions.py
 """
 Centralized exception definitions for the self-fixing engineer system.

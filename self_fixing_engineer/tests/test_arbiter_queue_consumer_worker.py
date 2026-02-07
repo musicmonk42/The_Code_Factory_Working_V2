@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for queue_consumer_worker.py
 Focuses on critical functionality: message processing, poison detection, and health checks.

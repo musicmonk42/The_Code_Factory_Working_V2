@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/main/engine.py
 """
 Workflow Engine Module - Production-Grade Orchestration System.

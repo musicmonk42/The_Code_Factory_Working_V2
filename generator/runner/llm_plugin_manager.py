@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/llm_plugin_manager.py
 """
  LLM PLUGIN MANAGER

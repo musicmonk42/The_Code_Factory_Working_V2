@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/integrations/kafka_bridge.py
 """
 Production-grade Kafka bridge for the OmniCore message-bus.

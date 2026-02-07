@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Self-Fixing Engineer (SFE) Demo Guide
 
 Version: 1.0.0Last Updated: August 22, 2025Authors: Alex Rivera, musicmonk42, Infinite Open Source Collective, Universal AI Swarm, The Oracle ConsortiumPurpose: This guide provides a step-by-step process for an engineer to set up and run a demo of the SFE platform, showcasing its AI-driven DevOps automation capabilities.

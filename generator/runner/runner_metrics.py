@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/metrics.py
 # module for metrics collection, export, and anomaly-based alerting.
 # Integrates with Prometheus, external exporters (Datadog, CloudWatch), and provides

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 compliance_mapper.py - Enterprise-Grade Compliance Reporting Module
 

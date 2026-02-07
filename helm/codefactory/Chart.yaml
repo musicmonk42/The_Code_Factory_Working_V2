@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 apiVersion: v2
 name: codefactory
 description: A Helm chart for The Code Factory - AI-powered code generation platform

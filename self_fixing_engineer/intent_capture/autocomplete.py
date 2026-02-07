@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # autocomplete.py - Ultimate Hardened Production Version (Upgraded 2025 - Final)
 #
 # Version: 2.2.0

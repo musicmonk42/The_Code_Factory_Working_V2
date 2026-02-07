@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/siem_aws_clients.py
 
 import asyncio

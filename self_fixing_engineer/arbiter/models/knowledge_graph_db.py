@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Neo4j Knowledge Graph implementation for managing graph-based knowledge storage.
 """

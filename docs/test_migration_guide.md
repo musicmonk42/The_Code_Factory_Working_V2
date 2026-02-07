@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Test Configuration Migration Guide
 
 **Version**: 1.0  

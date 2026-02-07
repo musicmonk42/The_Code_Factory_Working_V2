@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Arbiter Integration Fix - Implementation Status
 
 ## Executive Summary

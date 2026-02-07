@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# 📘 Self Fixing Engineer™ — Platform Operations Handbook  
 
 Version: 1.0 | Proprietary \& Confidential | Last Updated: 2025-07-25

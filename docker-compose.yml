@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 services:
   # Redis for message bus and caching
   # SECURITY: Password authentication enabled even for development

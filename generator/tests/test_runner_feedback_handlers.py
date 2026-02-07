@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/runner/tests/test_feedback_handlers.py
 """
 Unit tests for feedback_handlers.py with >=90% coverage.

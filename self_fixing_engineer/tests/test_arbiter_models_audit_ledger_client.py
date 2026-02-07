@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive test suite for AuditLedgerClient
 Tests all major functionality with proper mocking and error handling

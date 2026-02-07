@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Integration test for Kafka setup
 # This script tests the kafka-setup.sh functionality without actually running Docker
 

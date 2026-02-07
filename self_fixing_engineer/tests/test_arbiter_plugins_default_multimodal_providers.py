@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_default_multimodal_providers.py
 import base64
 from unittest.mock import Mock, patch

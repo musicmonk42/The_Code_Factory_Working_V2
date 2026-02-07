@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Generator Docker Build - DEPRECATED
 
 **⚠️ IMPORTANT: This module's standalone Dockerfile has been deprecated.**

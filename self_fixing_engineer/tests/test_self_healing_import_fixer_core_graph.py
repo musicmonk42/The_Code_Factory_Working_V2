@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_core_graph.py - Test suite for ImportGraphAnalyzer
 Fixed version with import patching before module load

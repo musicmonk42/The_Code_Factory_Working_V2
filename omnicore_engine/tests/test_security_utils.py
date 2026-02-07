@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/security_utils.py
 Tests enterprise security utilities including crypto, auth, and validation.

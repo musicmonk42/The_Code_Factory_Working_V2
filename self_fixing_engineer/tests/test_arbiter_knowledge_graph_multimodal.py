@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for the MultiModal Processor module.
 Tests the abstract base class and DefaultMultiModalProcessor implementation.

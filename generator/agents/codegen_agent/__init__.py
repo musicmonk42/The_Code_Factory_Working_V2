@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/agents/codegen_agent/__init__.py
 """
 Codegen Agent - Code Generation Agent for the Code Factory Platform.

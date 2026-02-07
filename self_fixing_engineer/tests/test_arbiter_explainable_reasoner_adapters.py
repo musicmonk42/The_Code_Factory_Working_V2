@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_adapters.py
 # Comprehensive production-grade tests for adapters.py
 # Requires: pytest, pytest-asyncio, httpx (for real/mocked HTTP), unittest.mock

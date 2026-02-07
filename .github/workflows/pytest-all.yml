@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 name: Pytest All - Run All Tests
 
 # Runs ALL pytest tests in the repository together in a single invocation.

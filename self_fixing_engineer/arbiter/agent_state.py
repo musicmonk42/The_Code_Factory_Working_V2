@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 SQLAlchemy models for persisting agent state and metadata in the Arbiter system.
 

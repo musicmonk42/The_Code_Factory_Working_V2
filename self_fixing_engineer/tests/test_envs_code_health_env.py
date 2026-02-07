@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive Test Suite for CodeHealthEnv Module
 Tests all features including async handling, thread safety, memory management,

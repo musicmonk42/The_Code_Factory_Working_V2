@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_audit_ledger.py
 # Comprehensive production-grade tests for audit_ledger.py
 # Requires: pytest, pytest-asyncio, unittest.mock, httpx (for mocks)

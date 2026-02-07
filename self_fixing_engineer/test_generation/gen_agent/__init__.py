@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/gen_agent/__init__.py
 """
 Lightweight package initializer for gen_agent.

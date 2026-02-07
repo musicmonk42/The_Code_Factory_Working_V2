@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_docgen_response_validator.py
 Comprehensive tests for docgen_response_validator module.

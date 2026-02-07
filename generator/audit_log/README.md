@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Audit Log Module
 Overview
 The audit_log module is a comprehensive, secure audit logging system within the README to Code Generator project, part of The Code Factory. It provides robust logging, querying, and cryptographic operations for regulated industries such as finance, healthcare, and government, ensuring compliance with SOC2, PCI DSS, and HIPAA standards. The module supports multiple interfaces (REST API, gRPC, CLI) and storage backends (file-based, SQLite, cloud, streaming), with advanced features like PII redaction, cryptographic chaining, and observability.

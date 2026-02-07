@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 gRPC runner: production-ready async utilities for secure gRPC connectivity,
 plugin health checks, manifest validation, and Prometheus metrics.

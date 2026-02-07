@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Code Factory Platform Makefile
 # This file provides convenient commands for development, testing, and deployment
 

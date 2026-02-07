@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Procfile for Railway deployment
 # Updated with all critical fixes for event loop, config, and startup optimization
 # Railway injects the PORT environment variable at runtime

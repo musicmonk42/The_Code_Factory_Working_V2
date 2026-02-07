@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # System Overview
 
 This handbook provides a high-level overview of the **AI README-to-App Code Generator**, a platform that automates the generation of deployment configurations (e.g., Dockerfiles, Helm charts, Terraform scripts) from natural language inputs like READMEs or app descriptions.  

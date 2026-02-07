@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Maintenance Guide
 
 This handbook guides engineers on maintaining the **AI README-to-App Code Generator**, covering debugging, monitoring, and updating plugins to ensure reliability and performance as of July 28, 2025.  

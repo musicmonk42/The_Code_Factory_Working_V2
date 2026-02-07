@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/runner/tests/test_runner_app.py
 # Highly regulated industry-grade test suite for runner_app.py.
 # Provides comprehensive unit and integration tests for the RunnerApp TUI with strict

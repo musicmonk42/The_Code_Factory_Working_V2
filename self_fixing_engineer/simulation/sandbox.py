@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Multi-backend, multi-cloud, kernel-level secure sandbox runner for AI code simulation and audit.
 

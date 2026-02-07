@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_gemini_adapter.py
 import asyncio
 from typing import Any, Dict

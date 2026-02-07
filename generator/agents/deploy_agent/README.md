@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 {
   "languages": ["python", "javascript", "typescript", "go", "rust", "java"],
   "target_language": "auto",

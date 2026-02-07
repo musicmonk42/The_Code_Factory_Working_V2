@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_integration.py
 """
 Integration tests for the Clarifier system.

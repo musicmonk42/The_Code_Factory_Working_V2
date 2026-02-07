@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for fixer_ai.py - AI/LLM integration module for code refactoring suggestions.
 """

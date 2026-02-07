@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Agent Dependency Graph - Phased Parallel Loading System
 ========================================================

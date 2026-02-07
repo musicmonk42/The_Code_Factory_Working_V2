@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for fixer_ast.py - AST-based import resolution and cycle healing module.
 """

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # arbiter/policy/tests/test_circuit_breaker.py
 
 import asyncio

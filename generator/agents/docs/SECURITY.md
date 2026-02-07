@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Security Policy for README to Code Generator - Agents Module
 
 The agents module of the README to Code Generator project within The Code Factory is designed with security as a top priority, adhering to regulated industry standards such as SOC2, PCI DSS, and HIPAA. This document outlines the procedures for reporting security vulnerabilities and the measures in place to ensure secure operation.

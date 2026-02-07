@@ -1,3 +1,5 @@
+// Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.21;
 

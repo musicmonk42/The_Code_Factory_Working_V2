@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # simulation/simulation_module.py
 """
 Unified Simulation Module with performance optimizations and test compatibility.

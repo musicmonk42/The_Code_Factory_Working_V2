@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Troubleshooting Guide
 
 This guide helps you diagnose and resolve common issues with the Code Factory platform.

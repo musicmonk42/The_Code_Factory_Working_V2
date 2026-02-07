@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Arbiter Growth Module
 
 **Version:** 1.0.0 | **License:** Proprietary © 2025 Novatrax Labs

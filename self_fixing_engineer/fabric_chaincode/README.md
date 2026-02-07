@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Fabric Chaincode Module - Self-Fixing Engineer (SFE) 🚀  
 
 Fabric Chaincode v1.0.0 - The "Immutable Ledger" Edition  

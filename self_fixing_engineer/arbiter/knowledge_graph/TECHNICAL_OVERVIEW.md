@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Arbiter Knowledge Graph Submodule  
 
 \*A Full Technical "Soup-to-Nuts" Documentation\*

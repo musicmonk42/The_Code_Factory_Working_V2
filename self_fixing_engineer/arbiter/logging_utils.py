@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Production-grade logging utilities for the Arbiter platform.
 Provides PII redaction, structured logging, audit trails, and security features.

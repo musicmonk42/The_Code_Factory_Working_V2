@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Appendix: Import Fixer Submodule — Patent, Compliance, and Technical Disclosure
 
 

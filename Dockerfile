@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # syntax=docker/dockerfile:1.7
 # 
 # ==============================================================================

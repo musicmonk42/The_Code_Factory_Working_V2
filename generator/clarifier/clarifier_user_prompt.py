@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier_user_prompt.py - FIXED VERSION WITH LAZY INITIALIZATION
 import asyncio
 import json

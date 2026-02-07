@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import types
 
 import agents.codegen_agent.codegen_prompt as codegen_prompt

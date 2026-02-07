@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Self-Fixing Engineer: Compliance & Audit Guardrails
 
 A robust, enterprise-grade compliance and audit logging framework for secure, policy-driven AI and agent orchestration in self-healing systems.

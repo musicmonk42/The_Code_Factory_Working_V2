@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/plugin_event_handler.py
 Tests file system event handling for plugin hot-reloading.

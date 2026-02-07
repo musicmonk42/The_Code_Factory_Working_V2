@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_core_audit.py - Test Suite to Find Issues in core_audit.py
 This test suite is designed to expose what's actually broken in the module

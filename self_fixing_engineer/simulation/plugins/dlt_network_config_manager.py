@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/dlt_network_config_manager.py
 """
 A module for managing DLT (Distributed Ledger Technology) network configurations.

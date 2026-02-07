@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Arbiter: Self-Fixing, Policy-Aware, Multimodal AI System  
 
 \*\*Comprehensive Technical Disclosure for Patent Counsel\*\*  

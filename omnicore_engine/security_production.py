@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Advanced Security Configuration for OmniCore Engine Production Deployment
 

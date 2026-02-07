@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Generator Production Readiness Audit - FINAL REPORT
 **Date**: November 21, 2025  
 **Auditor**: GitHub Copilot Deep Dive Agent  

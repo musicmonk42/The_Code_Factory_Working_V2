@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Envs Module – Production-Ready RL & GA Optimization
 
 ## Overview

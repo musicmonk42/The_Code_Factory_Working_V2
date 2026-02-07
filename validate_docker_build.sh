@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Docker Build Validation Script for Code Factory Platform
 # This script validates that the unified Docker build works correctly
 #

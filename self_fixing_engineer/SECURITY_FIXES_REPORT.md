@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Security Fixes Implementation Report
 
 **Date:** 2025-11-21  

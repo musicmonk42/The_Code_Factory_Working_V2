@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # The file has been updated to incorporate the logic and features from the second utils.py file,
 # located in the plugins directory. This merge enhances the original file with advanced
 # provenance logging, robust error handling, and a more comprehensive summary function.
