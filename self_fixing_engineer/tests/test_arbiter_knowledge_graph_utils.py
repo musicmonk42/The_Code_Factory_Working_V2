@@ -349,6 +349,8 @@ class TestSanitizeContext:
     @pytest.mark.asyncio
     async def test_sanitize_with_pattern_detection(self):
         """Test sanitizing context with pattern detection only"""
+        import self_fixing_engineer.arbiter.knowledge_graph.utils as utils_module
+
         context = {
             "contact_info": "user@example.com",
             "phone": "555-123-4567",
@@ -356,30 +358,46 @@ class TestSanitizeContext:
         }
 
         # Clear PII_SENSITIVE_KEYS to test pattern detection
-        with patch("self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS", []):
-            with patch("self_fixing_engineer.arbiter.knowledge_graph.utils.PII_SENSITIVE_KEYS", []):
+        # Reset the cached values so they get re-initialized with empty keys
+        old_keys = utils_module._PII_SENSITIVE_KEYS
+        old_patterns = utils_module._PII_SENSITIVE_PATTERNS
+        try:
+            utils_module._PII_SENSITIVE_KEYS = []
+            utils_module._PII_SENSITIVE_PATTERNS = None  # Reset so patterns get re-initialized
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS", []):
                 result = await _sanitize_context(context)
 
                 # These should be caught by pattern detection
                 assert result["contact_info"] == "[PII_REDACTED_PATTERN_MATCH]"
                 assert result["phone"] == "[PII_REDACTED_PATTERN_MATCH]"
                 assert result["normal_field"] == "normal value"
+        finally:
+            utils_module._PII_SENSITIVE_KEYS = old_keys
+            utils_module._PII_SENSITIVE_PATTERNS = old_patterns
 
     @pytest.mark.asyncio
     async def test_sanitize_nested_context(self):
         """Test sanitizing nested context"""
+        import self_fixing_engineer.arbiter.knowledge_graph.utils as utils_module
+
         context = {"user": {"name": "John", "credentials": {"password": "secret"}}}
 
-        # Based on logs, 'name' is also in the default PII_SENSITIVE_KEYS
-        with patch(
-            "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
-            ["password", "name"],
-        ):
-            result = await _sanitize_context(context)
+        # Reset cached PII keys so Config.PII_SENSITIVE_KEYS patch takes effect
+        old_keys = utils_module._PII_SENSITIVE_KEYS
+        try:
+            utils_module._PII_SENSITIVE_KEYS = None
+            # Based on logs, 'name' is also in the default PII_SENSITIVE_KEYS
+            with patch(
+                "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
+                ["password", "name"],
+            ):
+                result = await _sanitize_context(context)
 
-            # Both name and password are redacted as keys
-            assert result["user"]["name"] == "[PII_REDACTED_KEY]"
-            assert result["user"]["credentials"]["password"] == "[PII_REDACTED_KEY]"
+                # Both name and password are redacted as keys
+                assert result["user"]["name"] == "[PII_REDACTED_KEY]"
+                assert result["user"]["credentials"]["password"] == "[PII_REDACTED_KEY]"
+        finally:
+            utils_module._PII_SENSITIVE_KEYS = old_keys
 
     @pytest.mark.asyncio
     async def test_sanitize_max_depth_exceeded(self):
@@ -552,6 +570,8 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_context_sanitization_flow(self):
         """Test complete context sanitization with all features"""
+        import self_fixing_engineer.arbiter.knowledge_graph.utils as utils_module
+
         context = {
             "user": {
                 "name": "John Doe",
@@ -563,25 +583,31 @@ class TestIntegration:
             "data": ["item1", "item2", "555-123-4567"],
         }
 
-        # Based on the logs, 'name' and 'email' are in the default PII_SENSITIVE_KEYS
-        with patch(
-            "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
-            ["password", "name", "email"],
-        ):
-            result = await _sanitize_context(
-                context, redact_keys=["ip"], max_size_bytes=10000
-            )
+        # Reset cached PII keys so Config.PII_SENSITIVE_KEYS patch takes effect
+        old_keys = utils_module._PII_SENSITIVE_KEYS
+        try:
+            utils_module._PII_SENSITIVE_KEYS = None
+            # Based on the logs, 'name' and 'email' are in the default PII_SENSITIVE_KEYS
+            with patch(
+                "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
+                ["password", "name", "email"],
+            ):
+                result = await _sanitize_context(
+                    context, redact_keys=["ip"], max_size_bytes=10000
+                )
 
-            # All fields in PII_SENSITIVE_KEYS are redacted as keys
-            assert result["user"]["name"] == "[PII_REDACTED_KEY]"
-            assert result["user"]["email"] == "[PII_REDACTED_KEY]"
-            assert result["user"]["password"] == "[PII_REDACTED_KEY]"
-            assert result["metadata"]["ip"] == "[REDACTED_CUSTOM_KEY]"
-            # Phone number is caught by pattern
-            assert result["data"][2] == "[PII_REDACTED_PATTERN_MATCH]"
+                # All fields in PII_SENSITIVE_KEYS are redacted as keys
+                assert result["user"]["name"] == "[PII_REDACTED_KEY]"
+                assert result["user"]["email"] == "[PII_REDACTED_KEY]"
+                assert result["user"]["password"] == "[PII_REDACTED_KEY]"
+                assert result["metadata"]["ip"] == "[REDACTED_CUSTOM_KEY]"
+                # Phone number is caught by pattern
+                assert result["data"][2] == "[PII_REDACTED_PATTERN_MATCH]"
 
-            # Check datetime conversion
-            assert isinstance(result["metadata"]["timestamp"], str)
+                # Check datetime conversion
+                assert isinstance(result["metadata"]["timestamp"], str)
+        finally:
+            utils_module._PII_SENSITIVE_KEYS = old_keys
 
     @pytest.mark.asyncio
     async def test_retry_with_metrics(self):

@@ -607,28 +607,30 @@ class TestKnowledgeGraphPerformance:
     @pytest.mark.asyncio
     async def test_memory_cleanup(self):
         """Test proper memory cleanup"""
-        # Create and destroy multiple agents
-        for i in range(10):
-            agent = CollaborativeAgent(
-                agent_id=f"cleanup_{i}",
-                session_id=f"cleanup_{i}",
-                llm_config={
-                    "provider": "openai",
-                    "model": "gpt-3.5-turbo",
-                    "api_key": "sk-" + "x" * 48,
-                },
-            )
+        with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI"):
+            with patch("self_fixing_engineer.arbiter.knowledge_graph.core.AuditLedgerClient"):
+                # Create and destroy multiple agents
+                for i in range(10):
+                    agent = CollaborativeAgent(
+                        agent_id=f"cleanup_{i}",
+                        session_id=f"cleanup_{i}",
+                        llm_config={
+                            "provider": "openai",
+                            "model": "gpt-3.5-turbo",
+                            "api_key": "sk-" + "x" * 48,
+                        },
+                    )
 
-            # Simulate some operations
-            agent.memory.save_context(
-                {"input": f"Question {i}"}, {"output": f"Answer {i}"}
-            )
+                    # Simulate some operations
+                    agent.memory.save_context(
+                        {"input": f"Question {i}"}, {"output": f"Answer {i}"}
+                    )
 
-            # Clear references
-            del agent
+                    # Clear references
+                    del agent
 
-        # If we get here without memory issues, test passes
-        assert True
+                # If we get here without memory issues, test passes
+                assert True
 
 
 class TestKnowledgeGraphSecurity:
@@ -657,6 +659,8 @@ class TestKnowledgeGraphSecurity:
     @pytest.mark.asyncio
     async def test_pii_redaction(self):
         """Test PII redaction in knowledge graph context"""
+        import self_fixing_engineer.arbiter.knowledge_graph.utils as utils_module
+
         context = {
             "user_email": "user@example.com",
             "phone": "555-123-4567",
@@ -664,16 +668,21 @@ class TestKnowledgeGraphSecurity:
             "graph_data": {"nodes": ["node1", "node2"], "password": "secret123"},
         }
 
-        with patch(
-            "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
-            ["password", "ssn"],
-        ):
-            sanitized = await _sanitize_context(context)
+        old_keys = utils_module._PII_SENSITIVE_KEYS
+        try:
+            utils_module._PII_SENSITIVE_KEYS = None
+            with patch(
+                "self_fixing_engineer.arbiter.knowledge_graph.utils.Config.PII_SENSITIVE_KEYS",
+                ["password", "ssn"],
+            ):
+                sanitized = await _sanitize_context(context)
 
-            # Check PII is redacted
-            assert "[PII_REDACTED" in str(sanitized["user_email"])
-            assert "[PII_REDACTED" in str(sanitized["phone"])
-            assert sanitized["graph_data"]["password"] == "[PII_REDACTED_KEY]"
+                # Check PII is redacted
+                assert "[PII_REDACTED" in str(sanitized["user_email"])
+                assert "[PII_REDACTED" in str(sanitized["phone"])
+                assert sanitized["graph_data"]["password"] == "[PII_REDACTED_KEY]"
+        finally:
+            utils_module._PII_SENSITIVE_KEYS = old_keys
 
 
 if __name__ == "__main__":
