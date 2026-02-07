@@ -768,7 +768,7 @@ class TestSplunkBackend:
 
     @pytest.mark.asyncio
     async def test_flush_fail_raises(
-        self, splunk_backend: SplunkBackend, mock_aiohttp, mock_send_alert
+        self, splunk_backend: SplunkBackend, mock_aiohttp
     ):
         """
         Test that SplunkBackend flush failure raises and does NOT enqueue to DLQ
@@ -783,6 +783,7 @@ class TestSplunkBackend:
         with patch(
             "generator.audit_log.audit_backend.audit_backend_core.retry_operation",
             new_callable=AsyncMock,
+            create=True,  # Create if missing for test isolation
         ) as mock_retry:
             mock_retry.side_effect = aiohttp.ClientError("HEC failure")
 
