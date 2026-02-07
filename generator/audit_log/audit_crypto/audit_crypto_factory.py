@@ -1060,12 +1060,13 @@ class CryptoProviderFactory:
     _instances: Dict[str, CryptoProvider] = {}
     
     # Thread-safe shutdown state management (class-level for shared state)
-    _shutdown_lock: Optional[threading.Lock] = None
+    # Initialize locks at class level to avoid race conditions
+    _shutdown_lock: threading.Lock = threading.Lock()
     _shutdown_initiated: bool = False
     _shutdown_timeout_seconds: float = float(os.getenv("AUDIT_CRYPTO_SHUTDOWN_TIMEOUT_SECONDS", "5.0"))
     
     # Thread-safe environment variable manipulation for dummy provider creation
-    _dummy_provider_creation_lock: Optional[threading.Lock] = None
+    _dummy_provider_creation_lock: threading.Lock = threading.Lock()
     
     # Maximum timeout for run_coroutine_threadsafe fallback strategy
     # This is capped lower than the main timeout because this approach is less reliable
@@ -1073,12 +1074,6 @@ class CryptoProviderFactory:
     _MAX_THREADSAFE_TIMEOUT_SECONDS: float = 2.0
 
     def __init__(self):
-        # Initialize thread-safe locks if not already initialized
-        if CryptoProviderFactory._shutdown_lock is None:
-            CryptoProviderFactory._shutdown_lock = threading.Lock()
-        if CryptoProviderFactory._dummy_provider_creation_lock is None:
-            CryptoProviderFactory._dummy_provider_creation_lock = threading.Lock()
-        
         # Register default providers
         self.register_provider("software", SoftwareCryptoProvider)
         if settings.HSM_ENABLED:
@@ -1450,18 +1445,17 @@ class CryptoProviderFactory:
     # Implements NIST SP 800-53 SI-2 (Flaw remediation)
     
     @classmethod
+    @classmethod
     def _get_shutdown_lock(cls) -> threading.Lock:
         """
-        Lazily initialize the shutdown lock to ensure thread safety.
+        Returns the shutdown lock for thread-safe shutdown operations.
         
-        Uses double-checked locking pattern for thread-safe lazy initialization.
-        This is safe in Python due to the GIL, but we use explicit locking for clarity.
+        Since the lock is now initialized at class level, this method
+        simply returns it without any lazy initialization logic.
         
         Returns:
             threading.Lock: A lock for shutdown synchronization.
         """
-        if cls._shutdown_lock is None:
-            cls._shutdown_lock = threading.Lock()
         return cls._shutdown_lock
 
     def close_all_providers(self) -> Dict[str, bool]:
