@@ -19,8 +19,9 @@ class TestArbiterBridgeInit:
         """Test initialization when all Arbiter services are available."""
         with patch('generator.arbiter_bridge.MessageQueueService') as mock_mqs, \
              patch('generator.arbiter_bridge.PolicyEngine') as mock_pe, \
-             patch('generator.arbiter_bridge.KnowledgeGraphDB') as mock_kg, \
-             patch('generator.arbiter_bridge.BugManager') as mock_bm:
+             patch('generator.arbiter_bridge.KnowledgeGraph') as mock_kg, \
+             patch('generator.arbiter_bridge.BugManager') as mock_bm, \
+             patch('generator.arbiter_bridge.HumanInLoop') as mock_hl:
             
             bridge = ArbiterBridge()
             
@@ -28,35 +29,31 @@ class TestArbiterBridgeInit:
             assert bridge.policy_engine is not None
             assert bridge.knowledge_graph is not None
             assert bridge.bug_manager is not None
-            assert bridge.available is True
+            assert bridge.human_in_loop is not None
+            assert bridge.enabled is True
 
-    def test_init_with_no_services_available(self):
-        """Test graceful degradation when no services available."""
-        with patch('generator.arbiter_bridge.MessageQueueService', None), \
-             patch('generator.arbiter_bridge.PolicyEngine', None), \
-             patch('generator.arbiter_bridge.KnowledgeGraphDB', None), \
-             patch('generator.arbiter_bridge.BugManager', None):
-            
-            bridge = ArbiterBridge()
-            
-            assert bridge.message_queue is None
-            assert bridge.policy_engine is None
-            assert bridge.knowledge_graph is None
-            assert bridge.bug_manager is None
-            assert bridge.available is False
-
-    def test_init_with_partial_services(self):
-        """Test initialization with some services available."""
-        with patch('generator.arbiter_bridge.MessageQueueService') as mock_mqs, \
-             patch('generator.arbiter_bridge.PolicyEngine', None), \
-             patch('generator.arbiter_bridge.KnowledgeGraphDB', None), \
-             patch('generator.arbiter_bridge.BugManager', None):
-            
-            bridge = ArbiterBridge()
-            
-            assert bridge.message_queue is not None
-            assert bridge.policy_engine is None
-            assert bridge.available is True  # At least one service available
+    def test_init_with_provided_services(self):
+        """Test initialization with provided service instances."""
+        mock_pe = MagicMock()
+        mock_mqs = MagicMock()
+        mock_bm = MagicMock()
+        mock_kg = MagicMock()
+        mock_hl = MagicMock()
+        
+        bridge = ArbiterBridge(
+            policy_engine=mock_pe,
+            message_queue=mock_mqs,
+            bug_manager=mock_bm,
+            knowledge_graph=mock_kg,
+            human_in_loop=mock_hl
+        )
+        
+        assert bridge.policy_engine is mock_pe
+        assert bridge.message_queue is mock_mqs
+        assert bridge.bug_manager is mock_bm
+        assert bridge.knowledge_graph is mock_kg
+        assert bridge.human_in_loop is mock_hl
+        assert bridge.enabled is True
 
 
 class TestCheckPolicy:
