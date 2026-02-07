@@ -866,14 +866,31 @@ class AgentLoader:
                     
                     logger.info("=" * 80)
                     
+                except asyncio.CancelledError:
+                    logger.warning("Agent loading cancelled (SIGTERM received during startup)")
+                    self._loading_completed = True
+                    self._loading_error = "Cancelled during startup"
+                    raise  # Re-raise so task.cancelled() returns True
                 except Exception as e:
                     logger.error(f"Error during background agent loading: {e}", exc_info=True)
                     self._loading_error = str(e)
                     self._loading_completed = True  # Mark as completed even on error
         
+        # Define done callback for exception logging
+        def _on_loading_done(task: asyncio.Task):
+            try:
+                exc = task.exception()
+                if exc is not None:
+                    logger.error(f"Background agent loading task failed with unhandled exception: {exc}", exc_info=exc)
+            except asyncio.CancelledError:
+                logger.info("Background agent loading task was cancelled (likely SIGTERM)")
+            except asyncio.InvalidStateError:
+                pass  # Task not done yet (shouldn't happen in done callback)
+        
         # Create the background task - must be in async context
         try:
             self._loading_task = asyncio.create_task(load_agents_async())
+            self._loading_task.add_done_callback(_on_loading_done)
             logger.info("✓ Background agent loading task created with startup lock protection")
         except RuntimeError as e:
             # Not in an async context - this is an error
