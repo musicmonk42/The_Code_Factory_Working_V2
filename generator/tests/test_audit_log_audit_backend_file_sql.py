@@ -42,6 +42,25 @@ import pytest
 import pytest_asyncio
 from prometheus_client import REGISTRY
 
+# --- FIX: Clear Prometheus registry to prevent conflicts ---
+def _clear_prometheus_registry():
+    """
+    Clear all collectors from the Prometheus registry.
+    This prevents conflicts when multiple test modules dynamically load
+    audit_backend_core.py, which registers metrics on import.
+    """
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            # Collector might not be registered, ignore
+            pass
+
+# Clear registry before loading audit_backend_core to ensure clean state
+_clear_prometheus_registry()
+# --- END FIX ---
+
 # --- Package Shim ---
 REPO_ROOT = Path(__file__).resolve().parents[2]  # .../The_Code_Factory_Working_V2
 PKG_ROOT = REPO_ROOT / "generator" / "audit_log" / "audit_backend"
@@ -189,6 +208,30 @@ def event_loop():
     loop = asyncio.new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest.fixture(autouse=True)
+def ensure_metrics_work():
+    """
+    Ensure Prometheus metrics are properly initialized for each test.
+    This fixture runs automatically for every test.
+    """
+    # Verify metrics are accessible
+    assert BACKEND_ERRORS is not None
+    assert BACKEND_TAMPER_DETECTION_FAILURES is not None
+    assert BACKEND_WRITES is not None
+    
+    yield
+    
+    # Allow metrics to be collected after test completes
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Give any pending metric updates time to complete
+            pass
+    except RuntimeError:
+        pass
 
 
 @pytest_asyncio.fixture(autouse=True)
