@@ -88,13 +88,19 @@ def _create_simple_mock(module_name, attributes=None, submodules=None):
         attributes: Dict of attributes to add to the module
         submodules: List of submodule names to create
     """
-    if module_name in sys.modules:
-        return  # Already loaded, don't override
-    
-    # Create mock module
     import importlib.machinery
     import importlib.util
     
+    # If module already exists, update it with new attributes instead of returning early
+    if module_name in sys.modules:
+        mock = sys.modules[module_name]
+        # Add new attributes to the existing module
+        if attributes:
+            for attr_name, attr_value in attributes.items():
+                setattr(mock, attr_name, attr_value)
+        return
+    
+    # Create mock module
     spec = importlib.machinery.ModuleSpec(
         name=module_name,
         loader=None,
