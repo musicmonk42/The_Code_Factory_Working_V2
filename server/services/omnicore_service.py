@@ -68,7 +68,7 @@ try:
         except (AttributeError, KeyError):
             pass
         try:
-            return Counter(name, description, labelnames)
+            return Counter(name, description, labelnames=labelnames)
         except ValueError as e:
             if "Duplicated timeseries" in str(e):
                 existing = REGISTRY._names_to_collectors.get(name)
@@ -86,7 +86,7 @@ try:
         except (AttributeError, KeyError):
             pass
         try:
-            return Histogram(name, description, labelnames)
+            return Histogram(name, description, labelnames=labelnames)
         except ValueError as e:
             if "Duplicated timeseries" in str(e):
                 existing = REGISTRY._names_to_collectors.get(name)
