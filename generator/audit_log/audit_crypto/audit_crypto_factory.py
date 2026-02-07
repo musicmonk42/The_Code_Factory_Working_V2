@@ -1064,12 +1064,21 @@ class CryptoProviderFactory:
     _shutdown_initiated: bool = False
     _shutdown_timeout_seconds: float = float(os.getenv("AUDIT_CRYPTO_SHUTDOWN_TIMEOUT_SECONDS", "5.0"))
     
+    # Thread-safe environment variable manipulation for dummy provider creation
+    _dummy_provider_creation_lock: Optional[threading.Lock] = None
+    
     # Maximum timeout for run_coroutine_threadsafe fallback strategy
     # This is capped lower than the main timeout because this approach is less reliable
     # during shutdown when the event loop may not be processing tasks properly
     _MAX_THREADSAFE_TIMEOUT_SECONDS: float = 2.0
 
     def __init__(self):
+        # Initialize thread-safe locks if not already initialized
+        if CryptoProviderFactory._shutdown_lock is None:
+            CryptoProviderFactory._shutdown_lock = threading.Lock()
+        if CryptoProviderFactory._dummy_provider_creation_lock is None:
+            CryptoProviderFactory._dummy_provider_creation_lock = threading.Lock()
+        
         # Register default providers
         self.register_provider("software", SoftwareCryptoProvider)
         if settings.HSM_ENABLED:
@@ -1135,31 +1144,38 @@ class CryptoProviderFactory:
         This private helper is used when AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set
         and the real crypto provider fails to initialize.
         
+        Thread Safety:
+            Uses _dummy_provider_creation_lock to ensure thread-safe environment
+            variable manipulation during provider creation.
+        
         Returns:
             CryptoProvider: A DummyCryptoProvider instance.
         """
         if "dummy" in self._instances:
             return self._instances["dummy"]
+        
         dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
         
-        # When called from the AUDIT_CRYPTO_ALLOW_INIT_FAILURE fallback path,
-        # temporarily override the AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER check
-        # by setting the environment variable for this instantiation
-        original_allow_dummy = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER")
-        try:
-            # Temporarily set AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER for the fallback path
-            os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = "true"
-            dummy_instance = dummy_cls(
-                software_key_master_accessor=_ensure_software_key_master,
-                fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
-                settings=settings,
-            )
-        finally:
-            # Restore original value
-            if original_allow_dummy is None:
-                os.environ.pop("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", None)
-            else:
-                os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = original_allow_dummy
+        # Use lock to ensure thread-safe environment variable manipulation
+        with CryptoProviderFactory._dummy_provider_creation_lock:
+            # When called from the AUDIT_CRYPTO_ALLOW_INIT_FAILURE fallback path,
+            # temporarily override the AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER check
+            # by setting the environment variable for this instantiation
+            original_allow_dummy = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER")
+            try:
+                # Temporarily set AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER for the fallback path
+                os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = "true"
+                dummy_instance = dummy_cls(
+                    software_key_master_accessor=_ensure_software_key_master,
+                    fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
+                    settings=settings,
+                )
+            finally:
+                # Restore original value
+                if original_allow_dummy is None:
+                    os.environ.pop("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", None)
+                else:
+                    os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = original_allow_dummy
         
         self._instances["dummy"] = dummy_instance
         return dummy_instance
