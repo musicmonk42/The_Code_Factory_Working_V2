@@ -582,7 +582,7 @@ jobs:
           echo "Available: $(awk '/MemAvailable/ {print $2}' /proc/meminfo | numfmt --to=iec --from-unit=K)"
           echo ""
           if [ $(awk '/MemAvailable/ {print $2}' /proc/meminfo) -lt 3000000 ]; then
-            echo "⚠️  WARNING: Less than 3GB memory available - tests may fail due to OOM"
+            echo "⚠️  WARNING: Less than 3GB memory available - tests may fail due to OOM"  # 3000000 KB = 3 GB
           else
             echo "✓ Sufficient memory available for tests"
           fi
