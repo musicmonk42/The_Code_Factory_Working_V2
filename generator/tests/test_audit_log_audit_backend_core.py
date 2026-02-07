@@ -329,6 +329,11 @@ async def test_retry_operation_respects_limits(monkeypatch):
     # Give metrics more time to be collected
     await asyncio.sleep(0.5)  # Increased from 0.2 to 0.5
 
+    # FIX: Force all pending tasks to complete
+    pending = [t for t in asyncio.all_tasks() if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=1.0)
+
     # Force metric collection to ensure the latest metric samples are captured
     _ = list(BACKEND_ERRORS.collect())
 

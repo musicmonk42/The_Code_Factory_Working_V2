@@ -262,6 +262,10 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
     # 2. Flush (triggers WAL write + atomic write)
     await file_backend.flush_batch()
 
+    # FIX: Force metric collection with a small delay
+    await asyncio.sleep(0.1)
+    _ = list(BACKEND_WRITES.collect())
+
     # Check WAL file is gone (written and then deleted)
     assert not os.path.exists(file_backend.wal_file)
 

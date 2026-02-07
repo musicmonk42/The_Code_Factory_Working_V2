@@ -36,6 +36,9 @@ class MockCallable:
         # Fix: Return string "OK" for 'text' attribute to fix health endpoint tests
         if attr == 'text':
             return "OK"
+        # FIX: Return 200 for 'status' attribute to fix health endpoint tests
+        if attr == 'status':
+            return 200
         return MockCallable(f"{self._mock_name}.{attr}")
 
 
