@@ -596,22 +596,22 @@ def get_or_create_gauge(name: str, description: str, labelnames: List[str] = Non
 
 # Prometheus Metrics - Using safe creation functions
 CODEGEN_REQUESTS = get_or_create_counter(
-    "codegen_requests_total",
-    "Total code generation requests",
+    "codegen_agent_requests_total",
+    "Total code generation requests from codegen agent",
     ["backend"],
 )
 # Backwards compatibility: some callers expect CODEGEN_COUNTER
 CODEGEN_COUNTER = CODEGEN_REQUESTS
 
 CODEGEN_LATENCY = get_or_create_histogram(
-    "codegen_latency_seconds",
-    "Latency of code generation requests",
+    "codegen_agent_latency_seconds",
+    "Latency of code generation requests in codegen agent",
     ["backend"],
 )
 
 CODEGEN_ERRORS = get_or_create_counter(
-    "codegen_errors_total",
-    "Total errors during code generation",
+    "codegen_agent_errors_total",
+    "Total errors during code generation in codegen agent",
     ["error_type"],
 )
 
