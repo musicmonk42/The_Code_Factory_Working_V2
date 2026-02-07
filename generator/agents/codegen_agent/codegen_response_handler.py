@@ -278,6 +278,9 @@ def is_audit_logging_available() -> bool:
 DEFAULT_FILENAME = "main.py"
 ERROR_FILENAME = "error.txt"
 
+# Common LLM response prefixes that should be stripped before JSON parsing
+LLM_RESPONSE_PREFIXES = ['json\n', 'python\n', 'JSON\n', 'PYTHON\n']
+
 # Very lightweight heuristic: any assignment to a suspicious name is flagged.
 SECRET_REGEX = re.compile(
     r"(api_key|apikey|secret|token|password)\s*=",
@@ -392,10 +395,83 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         raw[:100] if raw else "(empty)"
     )
     
-    # For robustness, strip outer code fences before JSON parsing attempt.
+    # --- ENHANCEMENT: Try to strip common LLM response prefixes ---
+    # Sometimes LLMs prefix their response with "json\n" or "python\n" before the actual content
+    raw_for_json = raw
+    for prefix in LLM_RESPONSE_PREFIXES:
+        if raw_for_json.startswith(prefix):
+            raw_for_json = raw_for_json[len(prefix):]
+            logger.debug(f"Stripped LLM response prefix: {prefix.strip()}")
+            break
+    
+    # --- 1. Try raw JSON parsing FIRST (before cleaning) ---
+    # This handles cases where LLM returns {"files": {...}} without markdown fences
+    try:
+        payload = json.loads(raw_for_json)
+        if isinstance(payload, dict) and isinstance(payload.get("files"), dict):
+            logger.info("LLM response is valid JSON (raw parsing)")
+            files_obj = payload["files"]
+            code_files: Dict[str, str] = {}
+            errors: Dict[str, str] = {}
+            repair_logs: List[str] = []
+
+            for filename, content in files_obj.items():
+                if not isinstance(content, str):
+                    errors[filename] = "Content is not a string."
+                    continue
+
+                cleaned = _clean_code_block(content)
+                
+                # Use validate_and_repair_syntax instead of _validate_syntax
+                validation_result = validate_and_repair_syntax(cleaned, lang, filename)
+
+                if validation_result['valid']:
+                    code_files[filename] = validation_result['code']
+                    
+                    # Log if auto-repair was used
+                    if validation_result['auto_repaired']:
+                        repair_info = f"Auto-repaired {filename}: {', '.join(validation_result['repairs_applied'])}"
+                        repair_logs.append(repair_info)
+                        logger.info(repair_info)
+                else:
+                    logger.warning(
+                        "Syntax validation failed for '%s' (%s). Details: %s",
+                        filename,
+                        lang,
+                        validation_result['error'],
+                    )
+                    errors[filename] = validation_result['error']
+
+            # If any file failed, emit an aggregated error.txt
+            if errors:
+                lines = [
+                    "One or more files failed syntax validation.",
+                    "",
+                ]
+                for fname, emsg in errors.items():
+                    lines.append(f"[{fname}]")
+                    lines.append(str(emsg))
+                    lines.append("")
+                code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
+
+            if code_files:
+                # Perform production-ready validation
+                is_production_ready, prod_error = validate_production_ready(code_files)
+                if not is_production_ready:
+                    logger.warning("Production-ready validation failed: %s", prod_error)
+                    # Continue but log the issue
+                else:
+                    logger.info("Production-ready validation passed for %d files", len(code_files))
+
+                return code_files
+    except json.JSONDecodeError:
+        # Not valid JSON, continue with cleaning approach
+        logger.debug("Raw JSON parsing failed, trying with code block cleaning")
+    
+    # --- 2. For robustness, strip outer code fences before JSON parsing attempt ---
     cleaned_for_json = _clean_code_block(raw)
     
-    # --- 1. Try multi-file JSON format (only if cleaning produced something) ---
+    # --- 3. Try multi-file JSON format after cleaning (only if cleaning produced something) ---
     if cleaned_for_json:
         try:
             payload = json.loads(cleaned_for_json)

@@ -91,7 +91,7 @@ except ImportError:
         logging.warning(
             "Using dummy count_tokens as runner utility is unavailable. Returning a safe estimate."
         )
-        return len(prompt) // 4  # Simple char-to-token approximation
+        return len(prompt) // 4  # Simple char-to-token approximation (can't use constant - not defined yet)
 
     # Need a dummy SecretsManager if the primary import fails, otherwise secrets_manager = SecretsManager() will fail
     class SecretsManager:
@@ -204,6 +204,14 @@ PROMPT_ERRORS = get_or_create_counter(
     "prompt_errors_total", "Prompt build errors", ["error_type"]
 )
 # --- END FIX ---
+
+# ==============================================================================
+# --- Constants ---
+# ==============================================================================
+
+# Character-to-token estimation factor for fallback token counting
+# When actual token counting fails, we use this heuristic: ~4 characters per token
+CHARS_PER_TOKEN_ESTIMATE = 4
 
 # ==============================================================================
 # --- Syntax Safety Instructions ---
@@ -1011,9 +1019,26 @@ FAILURE TO FOLLOW THESE REQUIREMENTS WILL RESULT IN PARSE ERRORS.
 
             # 9. Final token check
             # --- Token Counting Change: Replace codegen_llm_call.get_token_count with count_tokens ---
-            token_count = await _maybe_await(
-                count_tokens(prompt, META_LLM_MODEL)
-            )  # Using META_LLM_MODEL as a representative LLM model name
+            try:
+                token_count = await _maybe_await(
+                    count_tokens(prompt, META_LLM_MODEL)
+                )  # Using META_LLM_MODEL as a representative LLM model name
+                
+                # Safety: Ensure token_count is an int, not a coroutine
+                if asyncio.iscoroutine(token_count):
+                    token_count = await token_count
+                
+                # Validate it's actually an int
+                if not isinstance(token_count, int):
+                    logger.warning(
+                        f"token_count is not an int (type: {type(token_count)}). Using estimate."
+                    )
+                    token_count = len(prompt) // CHARS_PER_TOKEN_ESTIMATE  # Safe fallback estimate
+            except Exception as e:
+                logger.warning(
+                    f"Token counting failed: {e}. Using character-based estimate."
+                )
+                token_count = len(prompt) // CHARS_PER_TOKEN_ESTIMATE  # Safe fallback
             # --- End Token Counting Change ---
 
             if token_count > MAX_PROMPT_TOKENS:
