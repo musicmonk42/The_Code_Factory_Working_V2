@@ -116,7 +116,7 @@ class TestPromptTemplateLoading:
 
                     mock_file.assert_called_with(custom_path, "r", encoding="utf-8")
                     # Verify templates were loaded
-                    import arbiter.knowledge_graph.prompt_strategies as ps
+                    import self_fixing_engineer.arbiter.knowledge_graph.prompt_strategies as ps
 
                     assert (
                         ps.PROMPT_TEMPLATES["BASE_AGENT_PROMPT_TEMPLATE"]

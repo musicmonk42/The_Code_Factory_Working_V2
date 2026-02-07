@@ -136,12 +136,19 @@ class TestDefaultMultiModalProcessor:
             # The actual connection might fail in test environment, which is handled
             assert mock_logger.info.called or mock_logger.warning.called
 
-    def test_processor_initialization_with_transformers(self, mock_logger, mock_config):
-        """Test processor initialization with transformers available"""
+    @pytest.mark.asyncio
+    async def test_processor_initialization_with_transformers(self, mock_logger, mock_config):
+        """Test processor initialization with transformers available (lazy-loaded)"""
         with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.TRANSFORMERS_AVAILABLE", True):
             with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.pipeline") as mock_pipeline:
                 mock_pipeline.return_value = Mock()
-                DefaultMultiModalProcessor(mock_logger)
+                processor = DefaultMultiModalProcessor(mock_logger)
+
+                # Models are lazy-loaded, so pipeline should not be called during __init__
+                assert mock_pipeline.call_count == 0
+
+                # Trigger lazy initialization
+                await processor._ensure_models_initialized()
 
                 # Check that pipelines were initialized
                 assert mock_pipeline.call_count == 3  # image, audio, text
@@ -301,6 +308,8 @@ class TestDefaultMultiModalProcessor:
         self, mock_logger, mock_config, mock_multimodal_data
     ):
         """Test successful audio processing"""
+        import self_fixing_engineer.arbiter.knowledge_graph.multimodal as mm_module
+
         with patch(
             "self_fixing_engineer.arbiter.knowledge_graph.multimodal.AUDIO_PROCESSING_AVAILABLE", True
         ):
@@ -310,12 +319,15 @@ class TestDefaultMultiModalProcessor:
             test_audio_data = b"fake_audio_data"
             item = mock_multimodal_data("audio", test_audio_data)
 
-            # Mock pydub from the multimodal module
-            with patch("self_fixing_engineer.arbiter.knowledge_graph.multimodal.pydub") as mock_pydub:
-                mock_audio = Mock()
-                mock_audio.__len__ = Mock(return_value=5000)  # 5 seconds
-                mock_pydub.AudioSegment.from_file.return_value = mock_audio
+            # Mock pydub - create attribute if it doesn't exist (import may have failed)
+            mock_pydub = Mock()
+            mock_audio = Mock()
+            mock_audio.__len__ = Mock(return_value=5000)  # 5 seconds
+            mock_pydub.AudioSegment.from_file.return_value = mock_audio
 
+            original_pydub = getattr(mm_module, 'pydub', None)
+            mm_module.pydub = mock_pydub
+            try:
                 # Mock audio transcriber
                 processor.audio_transcriber = Mock()
                 processor.audio_transcriber.return_value = {"text": "Hello world"}
@@ -325,6 +337,11 @@ class TestDefaultMultiModalProcessor:
                 assert result["status"] == "success"
                 assert "5.00 seconds" in result["summary"]
                 assert "Hello world" in result["summary"]
+            finally:
+                if original_pydub is None:
+                    delattr(mm_module, 'pydub')
+                else:
+                    mm_module.pydub = original_pydub
 
     @pytest.mark.skipif(not VIDEO_PROCESSING_AVAILABLE, reason="moviepy not installed")
     @pytest.mark.asyncio
