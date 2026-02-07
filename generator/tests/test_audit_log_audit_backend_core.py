@@ -6,57 +6,12 @@ Regulated-grade tests for audit_log/audit_backend_core.py
 - No outbound network (KMS/alerts patched).
 - Verifies: crypto/compression round-trip, tamper detection, retry/backoff,
   backend registry behavior, and strict crypto init.
-- Robust: dynamically locates audit_backend_core.py anywhere in the repo.
 """
-
-import asyncio
-import importlib.util
-import sys
-from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any, Dict, List
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
-import pytest_asyncio
-from cryptography.fernet import Fernet, MultiFernet
-
-# --- NOTE: Prometheus registry is NOT cleared ---
-# Clearing the registry would unregister metrics, but the module-level 
-# Counter objects would still reference the old (unregistered) metrics.
-# Since we use `before`/`after` comparisons to check for metric increments,
-# we don't need a clean registry - we just need consistent metrics.
-from prometheus_client import REGISTRY
-# --- END NOTE ---
-
-# ---------------------------------------------------------------------------
-# Locate audit_backend_core.py dynamically
-# ---------------------------------------------------------------------------
-THIS_FILE = Path(__file__).resolve()
-# repo root ≈ .../generator
-REPO_ROOT = THIS_FILE.parents[2] if len(THIS_FILE.parents) >= 2 else THIS_FILE.parent
-
-
-def _find_core_file() -> Path:
-    # Search for audit_backend_core.py anywhere under the repo root
-    candidates = [p for p in REPO_ROOT.rglob("audit_backend_core.py") if p.is_file()]
-    if not candidates:
-        raise FileNotFoundError(
-            f"Could not find audit_backend_core.py under {REPO_ROOT}"
-        )
-    # Prefer a path that contains '/audit_log/' in it
-    for p in candidates:
-        if "audit_log" in str(p).replace("\\", "/"):
-            return p
-    # Fallback to first candidate
-    return candidates[0]
-
-
-CORE_PATH = _find_core_file()
 
 # CRITICAL: Set environment variables BEFORE importing the module
 # to avoid validation errors at import time
 import os
+from cryptography.fernet import Fernet
 
 os.environ["AUDIT_LOG_DEV_MODE"] = "true"
 
@@ -76,32 +31,57 @@ os.environ["AUDIT_RETRY_MAX_ATTEMPTS"] = "3"
 os.environ["AUDIT_RETRY_BACKOFF_FACTOR"] = "0.5"
 os.environ["AUDIT_TAMPER_DETECTION_ENABLED"] = "true"
 
-# Load module by file location using a stable module name so our patches match
-spec = importlib.util.spec_from_file_location("audit_backend_core", CORE_PATH)
-if spec is None or spec.loader is None:
-    raise ImportError(f"Could not load spec for {CORE_PATH}")
-core = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-# Set required module attributes before exec_module
-core.__path__ = []  # type: ignore[attr-defined]
-core.__file__ = str(CORE_PATH)  # type: ignore[attr-defined]
-spec.loader.exec_module(core)  # type: ignore[call-arg]
+import asyncio
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any, Dict, List
+from unittest.mock import AsyncMock, MagicMock, patch
 
-# Ensure the directory containing the module is importable for its relative imports
-core_dir = CORE_PATH.parent
-if str(core_dir) not in sys.path:
-    sys.path.insert(0, str(core_dir))
+import pytest
+import pytest_asyncio
+from cryptography.fernet import MultiFernet
 
-# Re-export commonly used names from the loaded module for convenience
-LogBackend = core.LogBackend
-InMemoryBackend = core.InMemoryBackend
-BackendNotFoundError = core.BackendNotFoundError
-CryptoInitializationError = core.CryptoInitializationError
-BACKEND_ERRORS = core.BACKEND_ERRORS
-BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
-BACKEND_WRITES = core.BACKEND_WRITES
-retry_operation = core.retry_operation
-register_backend = core.register_backend
-get_backend = core.get_backend
+# --- NOTE: Prometheus registry is NOT cleared ---
+# Clearing the registry would unregister metrics, but the module-level 
+# Counter objects would still reference the old (unregistered) metrics.
+# Since we use `before`/`after` comparisons to check for metric increments,
+# we don't need a clean registry - we just need consistent metrics.
+from prometheus_client import REGISTRY
+# --- END NOTE ---
+
+# ---------------------------------------------------------------------------
+# Standard imports using generator.audit_log path
+# ---------------------------------------------------------------------------
+# Add generator to path if needed
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+# Import modules using standard paths
+from generator.audit_log.audit_backend.audit_backend_core import (
+    BACKEND_ERRORS,
+    BACKEND_TAMPER_DETECTION_FAILURES,
+    BACKEND_WRITES,
+    BackendNotFoundError,
+    CryptoInitializationError,
+    LogBackend,
+    InMemoryBackend,
+    compute_hash,
+    get_backend,
+    register_backend,
+    retry_operation,
+    SCHEMA_VERSION,
+    COMPRESSION_ALGO,
+    COMPRESSION_LEVEL,
+    ENCRYPTER,
+    RETRY_BACKOFF_FACTOR,
+    RETRY_MAX_ATTEMPTS,
+    send_alert,
+)
+
+# Alias for convenience (used in monkeypatch calls)
+core = sys.modules["generator.audit_log.audit_backend.audit_backend_core"]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -195,7 +175,7 @@ async def mock_send_alert(monkeypatch):
 @pytest_asyncio.fixture
 async def kms_mock():
     """Patch boto3 KMS client if referenced during tests (keeps suite hermetic)."""
-    with patch("audit_backend_core.boto3.client") as mock_client:
+    with patch("generator.audit_log.audit_backend.audit_backend_core.boto3.client") as mock_client:
         kms = MagicMock()
         kms.decrypt.return_value = {"Plaintext": Fernet.generate_key()}
         mock_client.return_value = kms
