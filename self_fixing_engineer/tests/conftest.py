@@ -1,10 +1,20 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """Pytest configuration for self_fixing_engineer tests."""
+import gc
 import os
 
 import psutil
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def cleanup_between_tests():
+    """Aggressively clean up memory between tests."""
+    yield
+    # Force garbage collection after each test
+    gc.collect()
+    gc.collect()  # Run twice to catch circular references
 
 
 @pytest.fixture(autouse=True)
