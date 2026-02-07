@@ -62,7 +62,7 @@ def _load_components():
         from .arbiter import Arbiter as _Arbiter
         arbiter = _arbiter
         Arbiter = _Arbiter
-    except ImportError as e:
+    except (ImportError, NameError) as e:
         print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
 
     try:

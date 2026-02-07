@@ -141,9 +141,9 @@ def _ensure_boto3():
     if boto3 is None:
         try:
             import boto3 as _boto3
-            import botocore.exceptions as _botocore_exceptions
+            import botocore.exceptions as _botocore
             boto3 = _boto3
-            botocore = _botocore_exceptions
+            botocore = _botocore
             HAS_BOTO3 = True
         except ImportError:
             HAS_BOTO3 = False
@@ -529,6 +529,8 @@ _FALLBACK_HMAC_SECRET: Optional[bytes] = None
 _SOFTWARE_KEY_MASTER_LAST_FAILURE: Optional[float] = None
 _SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN: float = 60.0  # seconds
 _SOFTWARE_KEY_MASTER_LAST_ERROR: Optional[Exception] = None
+# Track permanent failures (e.g., InvalidCiphertextException) that should not retry
+_SOFTWARE_KEY_MASTER_PERMANENT_FAILURE: bool = False
 
 
 # --- Master Key for Software Key Encryption (Lazy Init) ---
@@ -545,10 +547,14 @@ async def _ensure_software_key_master() -> bytes:
     In DEV/TEST:
         - Falls back to a deterministic dummy key so imports & tests don't explode.
     """
-    global _SOFTWARE_KEY_MASTER, _SOFTWARE_KEY_MASTER_LAST_FAILURE, _SOFTWARE_KEY_MASTER_LAST_ERROR
+    global _SOFTWARE_KEY_MASTER, _SOFTWARE_KEY_MASTER_LAST_FAILURE, _SOFTWARE_KEY_MASTER_LAST_ERROR, _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE
 
     if _SOFTWARE_KEY_MASTER is not None:
         return _SOFTWARE_KEY_MASTER
+
+    # If we have a permanent failure (e.g., InvalidCiphertextException), raise immediately
+    if _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE and _SOFTWARE_KEY_MASTER_LAST_ERROR is not None:
+        raise _SOFTWARE_KEY_MASTER_LAST_ERROR
 
     # Negative cache: if we recently failed, don't retry immediately
     if _SOFTWARE_KEY_MASTER_LAST_FAILURE is not None:
@@ -617,11 +623,12 @@ async def _ensure_software_key_master() -> bytes:
                 "Ensure you have backups before proceeding.",
                 settings.KMS_KEY_ID,
             )
-            # Set negative cache to prevent repeated attempts
+            # Mark as permanent failure - no need to retry
             error_to_raise = CryptoInitializationError(
                 "InvalidCiphertextException: Master key encrypted with different KMS key. "
                 "See logs for resolution steps."
             )
+            _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE = True
             _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
             _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
             # Re-raise with a clear error message
@@ -1134,11 +1141,26 @@ class CryptoProviderFactory:
         if "dummy" in self._instances:
             return self._instances["dummy"]
         dummy_cls = self._registry.get("dummy", DummyCryptoProvider)
-        dummy_instance = dummy_cls(
-            software_key_master_accessor=_ensure_software_key_master,
-            fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
-            settings=settings,
-        )
+        
+        # When called from the AUDIT_CRYPTO_ALLOW_INIT_FAILURE fallback path,
+        # temporarily override the AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER check
+        # by setting the environment variable for this instantiation
+        original_allow_dummy = os.getenv("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER")
+        try:
+            # Temporarily set AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER for the fallback path
+            os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = "true"
+            dummy_instance = dummy_cls(
+                software_key_master_accessor=_ensure_software_key_master,
+                fallback_hmac_secret_accessor=_ensure_fallback_hmac_secret,
+                settings=settings,
+            )
+        finally:
+            # Restore original value
+            if original_allow_dummy is None:
+                os.environ.pop("AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER", None)
+            else:
+                os.environ["AUDIT_CRYPTO_ALLOW_DUMMY_PROVIDER"] = original_allow_dummy
+        
         self._instances["dummy"] = dummy_instance
         return dummy_instance
 
