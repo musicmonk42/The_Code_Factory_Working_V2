@@ -128,6 +128,14 @@ class TestAgentMethodsCallEnsureLoaded:
             
             service = OmniCoreService()
             
+            # Initialize agent function attributes to None (as they would be after __init__)
+            service._codegen_func = None
+            service._testgen_class = None
+            service._deploy_class = None
+            service._docgen_class = None
+            service._critique_class = None
+            service._clarifier_llm_class = None
+            
             # Mock _ensure_agents_loaded to track calls
             service._ensure_agents_loaded = MagicMock()
             
