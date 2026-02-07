@@ -542,8 +542,8 @@ async def retry_operation(
             BACKEND_ERRORS.labels(backend=backend_name, type=error_type).inc()
             BACKEND_RETRY_ATTEMPTS.labels(backend=backend_name, operation=op_name).inc()
             
-            # Additional increment for network-specific errors
-            if isinstance(e, (ConnectionError, TimeoutError, OSError)):
+            # Additional increment for network-specific errors (including AWS/botocore errors)
+            if isinstance(e, (ConnectionError, TimeoutError, OSError, botocore.exceptions.ClientError)):
                 BACKEND_NETWORK_ERRORS.labels(backend=backend_name, operation=op_name).inc()
 
             if attempt == max_attempts - 1:
