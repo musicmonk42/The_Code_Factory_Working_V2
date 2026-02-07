@@ -182,6 +182,9 @@ class OmniCoreService:
             "clarifier": False,
         }
         
+        # FIX: Track jobs currently in pipeline to prevent concurrent runs
+        self._jobs_in_pipeline: set = set()
+        
         # Track LLM provider status
         self._llm_status = {
             "provider": None,
@@ -1147,6 +1150,20 @@ class OmniCoreService:
                             if len(content) > 10 * 1024 * 1024:  # 10MB per file limit
                                 raise ValueError(f"File {filename} exceeds 10MB size limit")
                             
+                            # FIX: Skip empty or whitespace-only content before writing
+                            if not content or not content.strip():
+                                logger.warning(
+                                    f"[CODEGEN] Skipping empty file: {filename}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "file_name": filename,
+                                        "content_length": len(content),
+                                        "status": "skipped_empty"
+                                    }
+                                )
+                                files_failed.append({"filename": filename, "error": "content_empty_or_whitespace"})
+                                continue
+                            
                             # Resolve and validate file path
                             file_path = (output_path / filename).resolve()
                             if not str(file_path).startswith(str(output_path)):
@@ -1154,6 +1171,16 @@ class OmniCoreService:
                             
                             # Create parent directories if filename contains subdirectories
                             file_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            # Log content preview for debugging (first 200 chars)
+                            logger.debug(
+                                f"[CODEGEN] Writing file {filename}: content preview = {content[:200]}...",
+                                extra={
+                                    "job_id": job_id,
+                                    "file_name": filename,
+                                    "content_length": len(content),
+                                }
+                            )
                             
                             # Write file with explicit encoding
                             file_path.write_text(content, encoding='utf-8')
@@ -2372,12 +2399,26 @@ class OmniCoreService:
     
     async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute full generation pipeline."""
+        # FIX: Check if job is already in pipeline
+        if job_id in self._jobs_in_pipeline:
+            logger.warning(
+                f"[PIPELINE] Job {job_id} is already running in pipeline. Skipping duplicate request.",
+                extra={"job_id": job_id}
+            )
+            return {
+                "status": "skipped",
+                "message": "Pipeline already running for this job",
+                "job_id": job_id,
+            }
+        
+        # Add job to in-progress set
+        self._jobs_in_pipeline.add(job_id)
         logger.info(f"[PIPELINE] Starting pipeline for job {job_id}")
         
-        # Ensure agents are loaded before use
-        self._ensure_agents_loaded()
-        
         try:
+            # Ensure agents are loaded before use
+            self._ensure_agents_loaded()
+            
             # Run pipeline stages sequentially
             stages_completed = []
             
@@ -2414,23 +2455,43 @@ class OmniCoreService:
             
             # 3. Testgen (if requested)
             if payload.get("include_tests", True):
-                testgen_payload = {
-                    "code_path": codegen_result.get("output_path"),
-                    "test_type": "unit",
-                    "coverage_target": 80.0,
-                }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: testgen")
-                testgen_result = await self._run_testgen(job_id, testgen_payload)
-                if testgen_result.get("status") == "completed":
-                    stages_completed.append("testgen")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
-                elif testgen_result.get("status") == "error":
-                    logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_result.get('message', 'Unknown error')}")
-                    return {
-                        "status": "failed",
-                        "message": f"Test generation failed: {testgen_result.get('message', 'Unknown error')}",
-                        "stages_completed": stages_completed,
-                    }
+                # FIX: Check if codegen actually produced valid source files
+                output_path = codegen_result.get("output_path")
+                if output_path:
+                    from pathlib import Path
+                    code_path = Path(output_path)
+                    # Look for Python files (or other source files based on language)
+                    source_files = list(code_path.glob("*.py")) if code_path.exists() else []
+                    
+                    if not source_files:
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} skipping testgen - no source files found in {output_path}",
+                            extra={
+                                "job_id": job_id,
+                                "output_path": str(output_path),
+                                "files_in_directory": [f.name for f in code_path.iterdir()] if code_path.exists() else []
+                            }
+                        )
+                    else:
+                        testgen_payload = {
+                            "code_path": output_path,
+                            "test_type": "unit",
+                            "coverage_target": 80.0,
+                        }
+                        logger.info(f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files")
+                        testgen_result = await self._run_testgen(job_id, testgen_payload)
+                        if testgen_result.get("status") == "completed":
+                            stages_completed.append("testgen")
+                            logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
+                        elif testgen_result.get("status") == "error":
+                            logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_result.get('message', 'Unknown error')}")
+                            # Don't fail the whole pipeline for testgen failure
+                            logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure")
+                else:
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} skipping testgen - no output path from codegen",
+                        extra={"job_id": job_id}
+                    )
             
             # 4. Deploy (if requested)
             # FIX: Default to True since deployment is a core pipeline feature
@@ -2511,6 +2572,10 @@ class OmniCoreService:
                 "message": str(e),
                 "error_type": type(e).__name__,
             }
+        finally:
+            # FIX: Always remove job from in-progress set
+            self._jobs_in_pipeline.discard(job_id)
+            logger.debug(f"[PIPELINE] Removed job {job_id} from in-progress set")
     
     async def _finalize_successful_job(
         self, 

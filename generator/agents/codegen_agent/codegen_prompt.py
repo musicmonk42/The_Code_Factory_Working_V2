@@ -1011,9 +1011,26 @@ FAILURE TO FOLLOW THESE REQUIREMENTS WILL RESULT IN PARSE ERRORS.
 
             # 9. Final token check
             # --- Token Counting Change: Replace codegen_llm_call.get_token_count with count_tokens ---
-            token_count = await _maybe_await(
-                count_tokens(prompt, META_LLM_MODEL)
-            )  # Using META_LLM_MODEL as a representative LLM model name
+            try:
+                token_count = await _maybe_await(
+                    count_tokens(prompt, META_LLM_MODEL)
+                )  # Using META_LLM_MODEL as a representative LLM model name
+                
+                # Safety: Ensure token_count is an int, not a coroutine
+                if asyncio.iscoroutine(token_count):
+                    token_count = await token_count
+                
+                # Validate it's actually an int
+                if not isinstance(token_count, int):
+                    logger.warning(
+                        f"token_count is not an int (type: {type(token_count)}). Using estimate."
+                    )
+                    token_count = len(prompt) // 4  # Safe fallback estimate
+            except Exception as e:
+                logger.warning(
+                    f"Token counting failed: {e}. Using character-based estimate."
+                )
+                token_count = len(prompt) // 4  # Safe fallback: ~4 chars per token
             # --- End Token Counting Change ---
 
             if token_count > MAX_PROMPT_TOKENS:

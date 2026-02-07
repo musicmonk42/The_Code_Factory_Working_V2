@@ -134,16 +134,28 @@ class SecretsManager:
 
 
 # --- Cache Manager ---
+def _redact_redis_url(url: str) -> str:
+    """Redact password from Redis URL for safe logging."""
+    import re
+    # Pattern: redis://[username]:password@host:port
+    # Replace password with [REDACTED]
+    return re.sub(r'(redis://[^:]*:)[^@]+(@)', r'\1[REDACTED]\2', url)
+
+
 class CacheManager:
     def __init__(self, redis_url: Optional[str] = None):
         self.redis = None
         if redis_url:
             try:
                 self.redis = aioredis.from_url(redis_url)
-                logger.info(f"CacheManager: Connected to Redis at {redis_url}")
+                # Redact password before logging
+                safe_url = _redact_redis_url(redis_url)
+                logger.info(f"CacheManager: Connected to Redis at {safe_url}")
             except Exception as e:
+                # Redact password before logging
+                safe_url = _redact_redis_url(redis_url)
                 logger.error(
-                    f"CacheManager: Failed to connect to Redis at {redis_url}. Falling back to in-memory. Error: {e}"
+                    f"CacheManager: Failed to connect to Redis at {safe_url}. Falling back to in-memory. Error: {e}"
                 )
                 self.redis = None
         self.in_memory: Dict[str, Any] = {}
