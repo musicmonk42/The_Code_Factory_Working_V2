@@ -44,24 +44,12 @@ import pytest
 import pytest_asyncio
 from prometheus_client import REGISTRY
 
-# --- FIX: Clear Prometheus registry to prevent conflicts ---
-def _clear_prometheus_registry():
-    """
-    Clear all collectors from the Prometheus registry.
-    This prevents conflicts when multiple test modules dynamically load
-    audit_backend_core.py, which registers metrics on import.
-    """
-    collectors = list(REGISTRY._collector_to_names.keys())
-    for collector in collectors:
-        try:
-            REGISTRY.unregister(collector)
-        except Exception:
-            # Collector might not be registered, ignore
-            pass
-
-# Clear registry before loading audit_backend_core to ensure clean state
-_clear_prometheus_registry()
-# --- END FIX ---
+# --- NOTE: Prometheus registry is NOT cleared ---
+# Clearing the registry would unregister metrics, but the module-level 
+# Counter objects would still reference the old (unregistered) metrics.
+# Since we use `before`/`after` comparisons to check for metric increments,
+# we don't need a clean registry - we just need consistent metrics.
+# --- END NOTE ---
 
 # --- Standard imports using generator.audit_log path ---
 # Add generator to path if needed
