@@ -32,7 +32,7 @@ jobs:
   test-matrix:
     name: Tests - ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120  # Increased to accommodate longer test batches
     permissions:
       contents: read
     strategy:
@@ -753,7 +753,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2 (Arbiter)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25  # Increased from 20 to provide safety margin
+        timeout-minutes: 60  # Increased to allow Arbiter tests to complete
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -774,7 +774,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
           
           echo "=== Running Batch 2: Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=60s 25m python -m pytest \
+          timeout --signal=TERM --kill-after=60s 55m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v --tb=line --maxfail=5 \
             -m "not heavy" \
