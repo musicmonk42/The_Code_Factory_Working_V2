@@ -320,7 +320,7 @@ class TestEdgeCases:
     
     def test_multiple_quotes_per_line(self):
         """Should handle lines with multiple quote pairs."""
-        code = """x = "a" + "b" + "c"""
+        code = 'x = "a" + "b" + "c"'
         result = SyntaxAutoRepair.auto_repair(code, "python")
         
         assert not result['was_modified'], "Should not modify balanced quotes"

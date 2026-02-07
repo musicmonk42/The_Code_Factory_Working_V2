@@ -504,7 +504,8 @@ class TestHumanApproval:
 
         approved = await agent.request_human_approval({}, {})
 
-        assert approved
+        # Verify the webhook was called with correct approval
+        assert approved is True, f"Expected approval to be True, got {approved}"
 
     @pytest.mark.asyncio
     @patch("generator.agents.deploy_agent.deploy_agent.call_llm_api")
