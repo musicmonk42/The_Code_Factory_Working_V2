@@ -847,8 +847,11 @@ def load_config(
     """
     global _cached_config, _cached_config_file
     
+    # Normalize config_file path for cache comparison
+    normalized_config_file = os.path.abspath(config_file)
+    
     # Return cached config if same file and no overrides
-    if _cached_config is not None and _cached_config_file == config_file and overrides is None:
+    if _cached_config is not None and _cached_config_file == normalized_config_file and overrides is None:
         return _cached_config
     
     # Try to find the config file using smart path resolution
@@ -1128,7 +1131,7 @@ def load_config(
     # Cache the result (only if no overrides were applied)
     if overrides is None:
         _cached_config = config
-        _cached_config_file = config_file
+        _cached_config_file = normalized_config_file
     
     return config
 

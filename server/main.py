@@ -429,6 +429,12 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
+# Configuration constants for Redis RAG index
+REDIS_CONNECTION_TIMEOUT_SECONDS = int(os.getenv("REDIS_CONNECTION_TIMEOUT", "5"))
+RAG_INDEX_NAME = os.getenv("RAG_INDEX_NAME", "rag_index")
+RAG_INDEX_PREFIX = os.getenv("RAG_INDEX_PREFIX", "rag:")
+RAG_EMBEDDING_DIM = int(os.getenv("RAG_EMBEDDING_DIM", "384"))  # Default for sentence-transformers all-MiniLM-L6-v2
+
 # FIX: Configure production log levels to reduce log spam
 # Detect production environment and set appropriate log levels
 is_production = (
@@ -638,22 +644,34 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             from redis.commands.search.field import TextField, VectorField
             from redis.commands.search.indexDefinition import IndexDefinition, IndexType
             
-            r = aioredis.Redis.from_url(redis_url, socket_connect_timeout=5, socket_timeout=5)
+            r = aioredis.Redis.from_url(
+                redis_url, 
+                socket_connect_timeout=REDIS_CONNECTION_TIMEOUT_SECONDS, 
+                socket_timeout=REDIS_CONNECTION_TIMEOUT_SECONDS
+            )
             try:
                 # Check if index already exists
-                await r.ft("rag_index").info()
-                logger.info("✓ Redis RAG index already exists")
+                await r.ft(RAG_INDEX_NAME).info()
+                logger.info(f"✓ Redis RAG index '{RAG_INDEX_NAME}' already exists")
             except Exception:
                 # Create the index
                 try:
                     schema = (
                         TextField("content"),
                         TextField("metadata"),
-                        VectorField("embedding", "FLAT", {"TYPE": "FLOAT32", "DIM": 384, "DISTANCE_METRIC": "COSINE"}),
+                        VectorField(
+                            "embedding", 
+                            "FLAT", 
+                            {
+                                "TYPE": "FLOAT32", 
+                                "DIM": RAG_EMBEDDING_DIM, 
+                                "DISTANCE_METRIC": "COSINE"
+                            }
+                        ),
                     )
-                    definition = IndexDefinition(prefix=["rag:"], index_type=IndexType.HASH)
-                    await r.ft("rag_index").create_index(schema, definition=definition)
-                    logger.info("✓ Redis RAG index created successfully")
+                    definition = IndexDefinition(prefix=[RAG_INDEX_PREFIX], index_type=IndexType.HASH)
+                    await r.ft(RAG_INDEX_NAME).create_index(schema, definition=definition)
+                    logger.info(f"✓ Redis RAG index '{RAG_INDEX_NAME}' created successfully (dim={RAG_EMBEDDING_DIM})")
                 except Exception as idx_err:
                     logger.warning(f"⚠ Could not create Redis RAG index: {idx_err}")
                     logger.warning("  Codegen will work without RAG enrichment")
