@@ -302,7 +302,7 @@ def _cleanup_watchdog_observers():
                     thread.join(timeout=1.0)
                 except Exception:
                     pass
-    except ImportError:
+    except (ImportError, AttributeError):
         pass  # watchdog not installed or mocked
     
     # Also try to stop any threads that look like watchdog threads by name
