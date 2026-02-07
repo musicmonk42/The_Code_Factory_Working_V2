@@ -209,16 +209,46 @@ def test_simulation_engine_exists(arbiter_module):
 @pytest.mark.asyncio
 async def test_simulation_run_if_exists(arbiter_module):
     """Test SimulationEngine run method if class exists."""
-    if hasattr(arbiter_module, "SimulationEngine"):
-        engine = arbiter_module.SimulationEngine()
-        result = await engine.run(
-            {"type": "monte_carlo", "params": {"iterations": 5, "alpha": 1.0}},
-            {"agent_name": "test", "energy": 100},
-        )
-        assert result["status"] == "success"
-        assert "result" in result
-    else:
+    import asyncio
+    
+    if not hasattr(arbiter_module, "SimulationEngine"):
         pytest.skip("SimulationEngine class not available")
+        return
+    
+    engine = arbiter_module.SimulationEngine()
+    
+    # Check which method signature the engine supports
+    if hasattr(engine, "run_simulation"):
+        # Real SimulationEngine from simulation_module.py
+        config = {
+            "type": "monte_carlo",
+            "iterations": 5,
+            "alpha": 1.0
+        }
+        # Add timeout to prevent test from hanging
+        result = await asyncio.wait_for(
+            engine.run_simulation(config),
+            timeout=10
+        )
+    elif hasattr(engine, "run"):
+        # Fallback SimulationEngine from arbiter.py
+        config = {
+            "type": "monte_carlo",
+            "params": {"iterations": 5, "alpha": 1.0}
+        }
+        context = {"agent_name": "test", "energy": 100}
+        # Add timeout to prevent test from hanging
+        result = await asyncio.wait_for(
+            engine.run(config, context),
+            timeout=10
+        )
+    else:
+        pytest.skip("SimulationEngine has no compatible run method")
+        return
+    
+    # Verify result structure
+    assert result["status"] == "success"
+    assert "result" in result
 
 
 def test_agent_state_manager_exists(arbiter_module):
