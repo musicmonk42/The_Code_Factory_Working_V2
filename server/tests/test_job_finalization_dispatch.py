@@ -305,8 +305,11 @@ class TestManifestGeneration:
         # Patch Path to return our test directory
         with patch('server.services.job_finalization.Path') as mock_path:
             mock_path_instance = MagicMock()
-            mock_path_instance.resolve.return_value = job_dir
+            # Make resolve() return the mock instance itself, not the real job_dir
+            mock_path_instance.resolve.return_value = mock_path_instance
             mock_path_instance.exists.return_value = True
+            # Store the job_dir for string comparison in security checks
+            mock_path_instance.__str__.return_value = str(job_dir)
             
             # Create file mocks
             def create_file_mock(path, size):

@@ -60,7 +60,7 @@ try:
     # Helper functions for safe metric registration (idempotent pattern)
     def _get_or_create_counter(name: str, description: str, labelnames: list = None):
         """Create a Counter or return existing one with same name."""
-        labelnames = labelnames or []
+        labelnames = tuple(labelnames or [])  # Convert list to tuple
         try:
             collector = REGISTRY._names_to_collectors.get(name)
             if collector is not None:
@@ -78,7 +78,7 @@ try:
     
     def _get_or_create_histogram(name: str, description: str, labelnames: list = None):
         """Create a Histogram or return existing one with same name."""
-        labelnames = labelnames or []
+        labelnames = tuple(labelnames or [])  # Convert list to tuple
         try:
             collector = REGISTRY._names_to_collectors.get(name)
             if collector is not None:
