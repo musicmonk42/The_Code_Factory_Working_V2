@@ -278,6 +278,9 @@ def is_audit_logging_available() -> bool:
 DEFAULT_FILENAME = "main.py"
 ERROR_FILENAME = "error.txt"
 
+# Common LLM response prefixes that should be stripped before JSON parsing
+LLM_RESPONSE_PREFIXES = ['json\n', 'python\n', 'JSON\n', 'PYTHON\n']
+
 # Very lightweight heuristic: any assignment to a suspicious name is flagged.
 SECRET_REGEX = re.compile(
     r"(api_key|apikey|secret|token|password)\s*=",
@@ -395,7 +398,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     # --- ENHANCEMENT: Try to strip common LLM response prefixes ---
     # Sometimes LLMs prefix their response with "json\n" or "python\n" before the actual content
     raw_for_json = raw
-    for prefix in ['json\n', 'python\n', 'JSON\n', 'PYTHON\n']:
+    for prefix in LLM_RESPONSE_PREFIXES:
         if raw_for_json.startswith(prefix):
             raw_for_json = raw_for_json[len(prefix):]
             logger.debug(f"Stripped LLM response prefix: {prefix.strip()}")
@@ -464,7 +467,6 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     except json.JSONDecodeError:
         # Not valid JSON, continue with cleaning approach
         logger.debug("Raw JSON parsing failed, trying with code block cleaning")
-        pass
     
     # --- 2. For robustness, strip outer code fences before JSON parsing attempt ---
     cleaned_for_json = _clean_code_block(raw)

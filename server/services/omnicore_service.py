@@ -869,7 +869,6 @@ class OmniCoreService:
             Result from the generator agent
         """
         import asyncio
-        from pathlib import Path
         
         if action == "run_codegen":
             return await self._run_codegen(job_id, payload)
@@ -2458,7 +2457,6 @@ class OmniCoreService:
                 # FIX: Check if codegen actually produced valid source files
                 output_path = codegen_result.get("output_path")
                 if output_path:
-                    from pathlib import Path
                     code_path = Path(output_path)
                     # Look for Python files (or other source files based on language)
                     source_files = list(code_path.glob("*.py")) if code_path.exists() else []
