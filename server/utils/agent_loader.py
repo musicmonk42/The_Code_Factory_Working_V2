@@ -883,9 +883,10 @@ class AgentLoader:
                 if exc is not None:
                     logger.error(f"Background agent loading task failed with unhandled exception: {exc}", exc_info=exc)
             except asyncio.CancelledError:
-                logger.info("Background agent loading task was cancelled (likely SIGTERM)")
+                logger.info("Background agent loading task was cancelled")
             except asyncio.InvalidStateError:
-                pass  # Task not done yet (shouldn't happen in done callback)
+                # Task not done yet - shouldn't happen in done callback but log if it does
+                logger.warning("Done callback called on task that is not yet done (unexpected)")
         
         # Create the background task - must be in async context
         try:
