@@ -62,6 +62,10 @@ logger = logging.getLogger(__name__)
 # --- Configuration Schema Versioning ---
 CURRENT_VERSION = 4  # Increment to reflect new features like secret pattern overrides
 
+# Module-level config cache
+_cached_config: Optional["RunnerConfig"] = None
+_cached_config_file: Optional[str] = None
+
 
 class RunnerConfig(BaseModel):
     """
@@ -841,6 +845,15 @@ def load_config(
     Returns:
         RunnerConfig: The validated and migrated RunnerConfig instance.
     """
+    global _cached_config, _cached_config_file
+    
+    # Normalize config_file path for cache comparison
+    normalized_config_file = os.path.abspath(config_file)
+    
+    # Return cached config if same file and no overrides
+    if _cached_config is not None and _cached_config_file == normalized_config_file and overrides is None:
+        return _cached_config
+    
     # Try to find the config file using smart path resolution
     resolved_path = _find_config_file(config_file)
     
@@ -1114,6 +1127,12 @@ def load_config(
             raise ConfigurationError(f"Vault integration failed: {e}")
 
     logger.info("Configuration loaded and validated successfully.")
+    
+    # Cache the result (only if no overrides were applied)
+    if overrides is None:
+        _cached_config = config
+        _cached_config_file = normalized_config_file
+    
     return config
 
 

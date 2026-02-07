@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 import zipfile
 from datetime import datetime, timezone
@@ -699,7 +700,7 @@ class OmniCoreService:
     
     async def start_periodic_audit_flush(self):
         """
-        Start periodic audit flush task.
+        Start periodic audit flush task from async context.
         
         HIGH: Call this from application startup to enable periodic audit log flushing.
         """
@@ -707,10 +708,13 @@ class OmniCoreService:
             try:
                 await self._audit_client.start_periodic_flush()
                 logger.info("✓ Periodic audit flush initialized via OmniCore service")
+                return True
             except Exception as e:
                 logger.warning(f"Failed to start periodic audit flush: {e}", exc_info=True)
+                return False
         else:
             logger.debug("Audit client not available, skipping periodic flush initialization")
+            return False
 
     async def route_job(
         self,
@@ -3619,15 +3623,21 @@ class OmniCoreService:
         return requirements
 
 
+# Module-level singleton for OmniCoreService
+_instance: Optional["OmniCoreService"] = None
+_instance_lock = threading.Lock()
+
+
 def get_omnicore_service() -> OmniCoreService:
     """
-    Dependency injection function for OmniCoreService.
+    Get or create the singleton OmniCoreService instance.
     
-    Creates an OmniCoreService instance for centralized routing
-    and coordination of all module operations.
+    This function implements a thread-safe singleton pattern to ensure
+    only one OmniCoreService instance is created, preventing multiple
+    initializations of resources (database pools, Kafka producers, etc.).
     
     Returns:
-        OmniCoreService: Configured OmniCore service instance
+        OmniCoreService: The singleton OmniCore service instance
         
     Example:
         >>> from fastapi import Depends
@@ -3635,4 +3645,9 @@ def get_omnicore_service() -> OmniCoreService:
         >>> async def handler(service: OmniCoreService = Depends(get_omnicore_service)):
         ...     result = await service.route_job(...)
     """
-    return OmniCoreService()
+    global _instance
+    if _instance is None:
+        with _instance_lock:
+            if _instance is None:
+                _instance = OmniCoreService()
+    return _instance

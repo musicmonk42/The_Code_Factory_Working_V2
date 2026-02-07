@@ -1143,7 +1143,10 @@ if PLUGIN_AVAILABLE:
                             }
                         )
                         
+                        # NOTE: response_format requires OpenAI-compatible providers
+                        # If using non-OpenAI backends, ensure they support structured output
                         response = await call_llm_api(
+                            response_format={"type": "json_object"},
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
@@ -1430,10 +1433,13 @@ else:
                             }
                         )
                         
+                        # NOTE: response_format requires OpenAI-compatible providers
+                        # If using non-OpenAI backends, ensure they support structured output
                         response = await call_llm_api(
                             prompt=prompt,
                             provider=config.backend,
                             model=config.model.get(config.backend),
+                            response_format={"type": "json_object"},
                             # Removed cache_manager argument
                         )
                         
