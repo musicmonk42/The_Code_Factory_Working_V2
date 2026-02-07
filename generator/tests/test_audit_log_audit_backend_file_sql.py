@@ -175,27 +175,23 @@ def event_loop():
 
 
 @pytest.fixture(autouse=True)
-def ensure_metrics_work():
+async def ensure_metrics_work():
     """
-    Ensure Prometheus metrics are properly initialized for each test.
+    Ensure Prometheus metrics are properly initialized and captured for each test.
     This fixture runs automatically for every test.
     """
-    # Verify metrics are accessible
-    assert BACKEND_ERRORS is not None
-    assert BACKEND_TAMPER_DETECTION_FAILURES is not None
-    assert BACKEND_WRITES is not None
+    # Force metric collection to ensure they're registered
+    _ = list(BACKEND_ERRORS.collect())
+    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    _ = list(BACKEND_WRITES.collect())
     
     yield
     
-    # Allow metrics to be collected after test completes
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Give any pending metric updates time to complete
-            pass
-    except RuntimeError:
-        pass
+    # Allow async tasks to complete and metrics to be incremented
+    await asyncio.sleep(0.2)
+    pending = [t for t in asyncio.all_tasks() if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=2.0)
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -275,9 +271,11 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
     # 2. Flush (triggers WAL write + atomic write)
     await file_backend.flush_batch()
 
-    # FIX: Force metric collection with a small delay
-    await asyncio.sleep(0.1)
+    # Force metric collection
     _ = list(BACKEND_WRITES.collect())
+
+    # Give async operations time to complete
+    await asyncio.sleep(0.2)
 
     # Check WAL file is gone (written and then deleted)
     assert not os.path.exists(file_backend.wal_file)
@@ -307,6 +305,12 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
 
     await sqlite_backend.append(entry)
     await sqlite_backend.flush_batch()
+
+    # Force metric collection
+    _ = list(BACKEND_WRITES.collect())
+
+    # Give async operations time to complete
+    await asyncio.sleep(0.2)
 
     # --- FIX: Query for the content, not the ephemeral entry_id ---
     conn = sqlite3.connect(sqlite_backend.db_file)
@@ -373,6 +377,12 @@ async def test_file_backend_query_and_tamper(file_backend, caplog):
     with caplog.at_level(logging.ERROR):
         results = await file_backend.query({"entry_id": entry_id}, limit=1)
         assert len(results) == 0  # Query should fail decryption/tamper check
+
+    # Force metric collection
+    _ = list(BACKEND_ERRORS.collect())
+
+    # Give async operations time to complete
+    await asyncio.sleep(0.2)
 
     # --- FIX: Check for error in logs instead of mock ---
     assert any(
