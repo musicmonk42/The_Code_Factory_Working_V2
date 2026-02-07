@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # decision_optimizer.py
 from __future__ import (  # Enable postponed evaluation of annotations for forward references
     annotations,

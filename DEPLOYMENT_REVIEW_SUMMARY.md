@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Deployment Infrastructure Review - Complete Summary
 
 **Comprehensive review of all Docker, Kubernetes, Helm, Makefile, and deployment-related files**

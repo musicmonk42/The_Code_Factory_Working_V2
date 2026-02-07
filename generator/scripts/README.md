@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # 📁 Dev/Migration Scripts – Do Not Ship to Production
 
 This directory contains utility scripts for **local development, testing, and one-time codebase migrations** supporting the Self-Fixing Engineer platform, including the `runner` module. These scripts are explicitly designed for **development-only workflows** and **must not be included in production builds, deployments, or runtime environments**.

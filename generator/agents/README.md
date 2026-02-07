@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 README to Code Generator - Agents Module
 
 The agents module is a core component of the README to Code Generator project within The Code Factory, designed to automate the transformation of natural language requirements (e.g., README files) into production-ready code, tests, deployment configurations, and documentation. It orchestrates a pipeline of specialized agents for code generation, critique, test generation, deployment, and documentation, ensuring compliance with regulated industry standards such as SOC2, PCI DSS, and HIPAA. The module integrates submodules (codegen, critique, testgen, deploy, docgen) under the generator\_plugin\_wrapper.py orchestrator, providing a robust, secure, and observable system for enterprise-grade software development.

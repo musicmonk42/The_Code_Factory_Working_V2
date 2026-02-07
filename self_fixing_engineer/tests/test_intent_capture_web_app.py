@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive test suite for web_app.py - FIXED VERSION
 These tests are designed to reveal actual problems in the implementation

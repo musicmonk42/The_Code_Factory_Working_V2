@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # OmniCore Omega Pro Engine Developer Guide
 
 ## 1. Environment Setup

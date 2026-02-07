@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_backends/test_audit_backend_streaming_backends.py
 """
 test_audit_backend_streaming_backends.py

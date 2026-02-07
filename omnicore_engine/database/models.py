@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/database/models.py
 """
 SQLAlchemy ORM models for the Omnicore Omega Pro Engine.

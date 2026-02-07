@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 {{- if .Values.persistence.uploads.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_llm_client.py
 import time
 from typing import Any, Dict, List

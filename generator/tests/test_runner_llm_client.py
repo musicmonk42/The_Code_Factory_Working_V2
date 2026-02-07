@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/runner/tests/test_llm_client.py
 """
 Unit tests for llm_client.py with >=90% coverage.

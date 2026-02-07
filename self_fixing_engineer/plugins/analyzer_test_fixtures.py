@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Add these fixtures to conftest.py or at the top of test_analyzer.py
 
 import json

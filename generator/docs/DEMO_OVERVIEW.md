@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Demo Overview
 
 This handbook introduces the **investor demo** for the AI README-to-App Code Generator, a platform that automates the generation of deployment configurations (e.g., Dockerfiles) from natural language inputs. The demo highlights the platform’s core capability—taking a simple app description, generating a production-ready Dockerfile, validating it, and saving it to disk with full observability—for investors to prove the platform works.

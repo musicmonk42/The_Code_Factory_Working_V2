@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/summarize_utils.py
 import asyncio
 import hashlib  # For hashing summaries for feedback

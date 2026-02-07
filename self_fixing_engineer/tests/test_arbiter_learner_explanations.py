@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # arbiter/learner/tests/test_explanations.py
 
 import asyncio

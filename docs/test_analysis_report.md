@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Test Configuration Analysis Report
 
 **Date**: 2026-02-05  

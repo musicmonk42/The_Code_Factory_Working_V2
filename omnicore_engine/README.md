@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # OmniCore Omega Pro Engine
 
 > **Quick Start**: See [QUICKSTART.md](../QUICKSTART.md) for platform-wide setup, or use `make run-omnicore` from the root directory.

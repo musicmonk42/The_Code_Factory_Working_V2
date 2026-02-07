@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 DLT (Blockchain) Backend Plugin for CheckpointManager
 - Async, robust, tamper-evident checkpoint history on DLT (Hyperledger Fabric or similar).

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 AI README-to-App Code Generator
 
 > **Quick Start**: See [QUICKSTART.md](../QUICKSTART.md) for platform-wide setup, or use `make run-generator` from the root directory.

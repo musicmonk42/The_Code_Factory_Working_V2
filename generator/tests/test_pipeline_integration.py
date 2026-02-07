@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_pipeline_integration.py
 Code Factory Pipeline Integration Tests

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_prompt_strategies.py
 # Comprehensive production-grade tests for prompt_strategies.py
 # Requires: pytest, pytest-asyncio, unittest.mock

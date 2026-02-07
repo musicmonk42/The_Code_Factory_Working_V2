@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # GitHub Actions CI/CD Compatibility
 
 **Date**: 2026-02-05  

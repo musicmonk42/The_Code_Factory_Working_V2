@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # web_app.py (corrected & hardened)
 import asyncio
 import importlib.util

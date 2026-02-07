@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/integrations/redis_bridge.py
 
 from __future__ import annotations

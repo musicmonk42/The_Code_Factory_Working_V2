@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier.py
 """
 Core orchestrator for LLM-based clarification of ambiguous requirements.

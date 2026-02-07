@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 main.py - Enterprise-Grade Entrypoint for Self-Fixing Engineer (SFE)
 

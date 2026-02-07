@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 core_graph.py - Codebase Import and Call Graph Analyzer
 CRITICAL: This module analyzes codebase structure. It must operate securely.

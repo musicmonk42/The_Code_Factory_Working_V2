@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_e2e_explainable_reasoner.py
 import asyncio
 import json

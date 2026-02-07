@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Docker Security Scanning Script
 # Scans Docker images for security vulnerabilities using multiple tools
 #

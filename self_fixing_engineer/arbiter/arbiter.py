@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Suppress gym deprecation warning from stable_baselines3 BEFORE any imports
 import warnings
 

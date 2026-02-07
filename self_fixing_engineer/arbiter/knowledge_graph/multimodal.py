@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # D:\Code_Factory\self_fixing_engineer\arbiter\knowledge_graph\multimodal.py
 import asyncio
 import hashlib

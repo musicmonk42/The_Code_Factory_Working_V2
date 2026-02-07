@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Patch file to fix the E2E test failures.
 Save this as plugins/tests/test_plugins_e2e_fixed.py

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Proto Module - Self-Fixing Engineer (SFE) 🚀  
 gRPC API v1.0.0 - The "Golden Contract" Edition  
 **Proprietary Technology by Novatrax Labs**

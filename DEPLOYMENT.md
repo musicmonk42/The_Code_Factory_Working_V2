@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Platform - Deployment Guide
 
 **Complete deployment documentation for Docker, Kubernetes, Helm, and production environments.**

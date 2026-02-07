@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # SQL Injection Security Audit
 
 **Date:** 2025-11-21  

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # inside import_fixer/__init__.py
 import sys as _sys
 

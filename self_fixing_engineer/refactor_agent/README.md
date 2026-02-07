@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Refactor Agent Module - Self-Fixing Engineer (SFE) 🚀
 Universal Crew v10.0.0 - The "Infinite Orchestration" EditionProprietary Technology by Novatrax Labs
 Orchestrate AI, human, and plugin agents for self-healing, refactoring, and governance with runtime dynamism.

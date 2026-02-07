@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Enterprise-Grade Test Suite for core.py - Complete Fixed Version
 

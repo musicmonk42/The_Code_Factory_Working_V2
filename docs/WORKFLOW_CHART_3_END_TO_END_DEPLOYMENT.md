@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Workflow Chart 3: Complete End-to-End from MD File to Deployment
 
 ## Overview

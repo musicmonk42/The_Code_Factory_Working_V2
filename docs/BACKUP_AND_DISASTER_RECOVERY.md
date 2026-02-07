@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Backup and Disaster Recovery Guide
 
 This guide covers backup strategies, disaster recovery procedures, and business continuity planning for the Code Factory platform.

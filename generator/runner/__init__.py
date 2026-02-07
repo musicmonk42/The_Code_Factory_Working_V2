@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Runner package entry point.
 Centralises registries, OTEL tracer, and re-exports public symbols.

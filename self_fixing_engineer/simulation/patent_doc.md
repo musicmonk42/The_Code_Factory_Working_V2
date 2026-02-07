@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Appendix: Simulation Module – Technical Innovations \& Patent-Grade Features
 
 

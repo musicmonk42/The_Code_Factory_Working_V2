@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Codebase Analysis Report
 
 Generated: 2025-07-29T11:09:00.572550

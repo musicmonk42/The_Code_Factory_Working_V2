@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_metrics.py
 """
 Unrivaled Metrics Module for Secure Audit Logging

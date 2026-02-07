@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # -*- coding: utf-8 -*-
 """
 Production-Ready Code Generation Post-Processor

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_dlt_simple_clients.py
 """
 Enterprise Production-Grade Test Suite for SimpleDLT Client

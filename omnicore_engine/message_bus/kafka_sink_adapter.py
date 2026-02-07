@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/kafka_sink_adapter.py
 """
 Kafka sink adapter for the OmniCore message-bus.

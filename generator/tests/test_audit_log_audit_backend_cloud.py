@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # --- env must be set before any package import that touches Dynaconf ---
 import asyncio
 import base64

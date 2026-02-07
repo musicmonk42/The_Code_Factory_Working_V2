@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_audit_log.py
 # Comprehensive production-grade tests for audit_log.py
 # Requires: pytest, pytest-asyncio, aiohttp, portalocker

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # agents/docgen_agent.py
 """
 docgen_agent.py

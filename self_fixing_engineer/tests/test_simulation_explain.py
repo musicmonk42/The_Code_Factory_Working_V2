@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import sqlite3
 from datetime import datetime
 from functools import partial

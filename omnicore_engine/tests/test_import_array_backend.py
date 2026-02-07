@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test to ensure omnicore_engine.array_backend can be imported without errors.
 

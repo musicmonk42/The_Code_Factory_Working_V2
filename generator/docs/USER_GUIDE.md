@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# AI README-to-App Code Generator: Comprehensive User Guide
 
 

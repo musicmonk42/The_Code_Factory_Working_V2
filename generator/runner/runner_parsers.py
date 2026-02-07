@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/parsers.py
 # Parsing module for test and coverage reports.
 # Provides robust, extensible, and explainable parsing of various formats,

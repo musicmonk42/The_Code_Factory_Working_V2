@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # D:\SFE\self_fixing_engineer\arbiter\plugins\anthropic_adapter.py
 import asyncio
 import hashlib

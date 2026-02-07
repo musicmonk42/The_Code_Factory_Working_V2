@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_keystore.py
 # Purpose: Handles secure storage, retrieval, and deletion of software keys.
 # All disk crypto/serialization is performed here.

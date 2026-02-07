@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Patent Appendix: `intent\_capture` Module  
 
 \*\*For: Self-Fixing Engineer\*\*  

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/tests/test_integration_full.py
 import asyncio
 import json

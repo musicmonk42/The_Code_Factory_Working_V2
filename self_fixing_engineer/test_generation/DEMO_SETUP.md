@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Test Generation Demo Setup Guide
 
 This guide provides an excessively thorough, step-by-step process to set up a demo for the `test_generation` module (part of the Self-Fixing Engineer platform). It is suitable for both technical and non-technical audiences and ensures a stable, auditable, and visually clear demonstration of automated test generation, auditing, compliance, and reporting. The process leverages the post-v3.1 `venvs.py` fix (resolving venv creation race conditions and audit logging failures), and is cross-platform (Windows, Linux, Docker).

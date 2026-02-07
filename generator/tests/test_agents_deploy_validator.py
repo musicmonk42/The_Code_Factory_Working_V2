@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 test_deploy_validator.py
 Comprehensive tests for deploy_validator module.

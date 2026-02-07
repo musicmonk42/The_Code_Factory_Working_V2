@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 set -e
 
 echo "=== Diagnosing test collection issues ==="

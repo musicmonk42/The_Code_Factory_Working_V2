@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/plugin_registry.py
 Tests plugin registration, execution, versioning, and security features.

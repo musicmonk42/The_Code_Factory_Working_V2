@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Environment Variables for Stub Integrations
 
 This document describes the environment variables needed for the newly integrated real services.

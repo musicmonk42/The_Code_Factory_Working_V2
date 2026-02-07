@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_utils.py
 # Comprehensive production-grade tests for utils.py
 # Requires: pytest, unittest.mock

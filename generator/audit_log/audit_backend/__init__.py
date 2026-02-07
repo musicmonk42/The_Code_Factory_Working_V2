@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/audit_log/audit_backend/__init__.py
 from typing import Any, Dict, Optional, Type
 

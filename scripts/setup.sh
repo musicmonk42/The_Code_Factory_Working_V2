@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # The Code Factory - Comprehensive Setup Script
 # This script sets up all dependencies and initializes the platform
 # For production deployments, review and customize environment variables

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Setup Guide
 
 This handbook provides step-by-step instructions for setting up the development environment for the **AI README-to-App Code Generator investor demo**. Follow these steps to ensure smooth installation and reliable demo execution.

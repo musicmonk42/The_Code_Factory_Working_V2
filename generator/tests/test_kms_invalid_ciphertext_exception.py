@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_kms_invalid_ciphertext_exception.py
 """
 Tests for AWS KMS InvalidCiphertextException handling and rate-limited logging.

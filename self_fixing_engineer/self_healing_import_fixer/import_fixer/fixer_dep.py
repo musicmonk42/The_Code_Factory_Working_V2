@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import ast  # For parsing imports
 import asyncio  # For running async methods
 import difflib  # For diffs in audit log

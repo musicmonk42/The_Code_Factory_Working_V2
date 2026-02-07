@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/security_integration.py
 Tests enterprise security integration with FastAPI and OmniCore components.

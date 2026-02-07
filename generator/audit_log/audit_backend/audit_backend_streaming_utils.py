@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_backends/audit_backend_streaming_utils.py
 import asyncio
 import json

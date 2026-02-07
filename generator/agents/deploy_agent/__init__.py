@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # __init__.py
 # Import components gracefully to handle missing dependencies
 # This prevents DLL initialization errors on Windows during test collection

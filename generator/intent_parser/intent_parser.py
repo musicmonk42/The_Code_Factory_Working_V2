@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # intent_parser/intent_parser.py
 """
 Intent Parser Module - Extracts requirements and features from README documents.

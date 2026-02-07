@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Integration test for the asyncio.Lock lazy initialization fix.
 

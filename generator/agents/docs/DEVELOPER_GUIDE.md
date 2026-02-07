@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Developer Guide for README to Code Generator - Agents Module
 
 This guide provides practical instructions for internal coders working on the agents module of the README to Code Generator project within The Code Factory. It covers development workflows, testing, debugging, and compliance requirements for a closed-source project adhering to regulated industry standards (SOC2, PCI DSS, HIPAA).

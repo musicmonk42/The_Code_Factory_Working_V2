@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# The Code Factory Platform  
 
 \## Comprehensive Patent Disclosure for Counsel

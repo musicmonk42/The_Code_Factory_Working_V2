@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test for rule-based testgen fallback functionality.
 This ensures testgen works without LLM when TESTGEN_FORCE_LLM is not set.

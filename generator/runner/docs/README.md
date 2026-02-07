@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Self-Fixing Engineer: Runners Module
 
 A modular, contract-driven, extensible engine for orchestrating, executing, parsing, and reporting on tests, coverage, and mutation analysis across any language or CI/CD environment. Designed for highly regulated industries (e.g., finance, healthcare, aerospace), it ensures traceability, reproducibility, security, and auditability.

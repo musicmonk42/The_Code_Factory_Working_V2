@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # (full file with the applied fixes)
 import asyncio
 import collections.abc

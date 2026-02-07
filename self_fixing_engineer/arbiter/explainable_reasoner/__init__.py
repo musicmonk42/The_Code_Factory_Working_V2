@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 This module serves as the public API for the explainable reasoning package.
 It exposes key components and classes for easy access and integration.

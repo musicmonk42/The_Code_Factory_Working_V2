@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/array_backend.py
 """
 Unified array backend for the OmniCore engine.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # __init__.py for arbiter.plugins.multimodal.providers
 #
 # Exports the PluginRegistry and the default provider classes for multimodal processing.

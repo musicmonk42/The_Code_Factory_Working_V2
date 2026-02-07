@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # cli.py
 # Fully featured command-line interface for the AI README-to-App Generator.
 # Provides workflow execution, status monitoring, logging, configuration management,

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # plugins/gcp_cloud_run_runner_plugin.py
 
 import asyncio

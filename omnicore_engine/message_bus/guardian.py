@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/guardian.py
 """
 The MessageBusGuardian is a background service responsible for monitoring the

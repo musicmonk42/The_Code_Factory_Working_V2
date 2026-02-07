@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Standalone test file for Neo4jKnowledgeGraph that avoids import chain issues.
 This test file imports the knowledge_graph_db module directly without going through

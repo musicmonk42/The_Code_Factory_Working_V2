@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_history_manager.py
 # Comprehensive production-grade tests for history_manager.py
 # Run with: pytest test_history_manager.py -v

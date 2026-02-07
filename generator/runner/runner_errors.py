@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/errors.py
 # Structured error definitions for the runner system.
 # Defines a custom exception hierarchy for consistent error reporting, logging, and API responses.

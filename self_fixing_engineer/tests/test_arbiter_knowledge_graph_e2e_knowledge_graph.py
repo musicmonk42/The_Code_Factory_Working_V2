@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 End-to-End Test Suite for Knowledge Graph Module
 Tests the complete workflow of the knowledge graph implementation including

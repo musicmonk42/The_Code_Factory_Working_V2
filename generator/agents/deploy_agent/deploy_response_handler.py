@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 deploy_response_handler.py
 Normalizes and validates LLM-generated deployment configs.

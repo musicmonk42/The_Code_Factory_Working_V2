@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/gen_agent/gen_plugins.py
 """
 Module for generating unit tests for Python and JavaScript code.

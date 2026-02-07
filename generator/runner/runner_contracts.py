@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/runner/runner_contracts.py
 # Defines the data structures (Pydantic models) for tasks and results.
 

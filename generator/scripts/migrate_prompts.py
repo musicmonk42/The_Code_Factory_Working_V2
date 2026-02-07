@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # WARNING: This is a migration utility script. DO NOT call from production services or package in production builds.
 # Its purpose is to perform one-time or controlled updates to source code files.
 

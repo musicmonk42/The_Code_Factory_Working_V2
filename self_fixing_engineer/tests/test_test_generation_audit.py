@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import logging
 from pathlib import Path
 from unittest.mock import ANY, AsyncMock, Mock

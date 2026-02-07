@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Generator/agents/docgen_agent/__init__.py
 
 # Exports from the main agent orchestrator

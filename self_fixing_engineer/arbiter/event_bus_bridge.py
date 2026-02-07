@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 EventBusBridge - Bidirectional bridge between Mesh EventBus and Arbiter MessageQueue.
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import asyncio
 import base64  # For base64.b64encode used in dummy shared_key
 import datetime

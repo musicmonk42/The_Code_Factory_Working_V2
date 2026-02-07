@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 End-to-End Test Suite for CodeHealthEnv Module
 Tests complete workflows, real-world scenarios, and integration patterns

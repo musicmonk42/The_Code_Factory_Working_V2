@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/llm_client_providers/local_provider.py
 """
 local_provider.py

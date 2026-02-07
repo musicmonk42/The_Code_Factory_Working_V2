@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # main.py
 # Main entry point for the AI README-to-App Generator.
 # Orchestrates service startup (CLI, GUI, API), configuration management,

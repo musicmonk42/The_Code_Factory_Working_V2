@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive Test Suite for Evolution Module
 Tests all features including genetic optimization, caching, sandboxing,

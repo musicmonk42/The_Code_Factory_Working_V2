@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Platform - Quick Start Guide
 
 Get up and running with the Code Factory Platform in minutes!

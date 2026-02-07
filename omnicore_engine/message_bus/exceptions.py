@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # omnicore_engine/message_bus/exceptions.py
 """
 Centralized exception hierarchy for the OmniCore Message Bus.

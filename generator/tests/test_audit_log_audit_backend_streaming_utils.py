@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_backends/test_audit_backend_streaming_utils.py
 """
 Tests aligned with the post-refactor surface in:

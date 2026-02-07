@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Code Factory Platform 🚀
 Code Factory v1.0.0 – The "Self-Sustaining Code" EditionProprietary Technology by Novatrax Labs
 Transform natural language into production-ready applications with automated, self-healing maintenance powered by AI, DLT, and multi-agent orchestration.

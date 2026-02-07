@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Dependency Management Guide
 
 This guide explains the dependencies used in the Code Factory platform, their purposes, and how to handle missing dependencies gracefully.

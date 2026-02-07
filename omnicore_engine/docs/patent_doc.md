@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Patent Disclosure for Patent Counsel  
 
 \## Omnicore Omega Pro Engine (“Code Factory” Suite)

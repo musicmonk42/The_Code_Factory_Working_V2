@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Configs Directory
 
 Contains configuration files for your project (SAFE MODE).

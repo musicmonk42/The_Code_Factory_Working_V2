@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 otel_config.py - Enterprise OpenTelemetry Configuration for Arbiter Platform
 

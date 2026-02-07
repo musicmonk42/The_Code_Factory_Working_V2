@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_message_bus_e2e.py
 """
 End-to-End tests for the message bus system.

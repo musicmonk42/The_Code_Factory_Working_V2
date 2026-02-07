@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_clarifier_user_prompt.py - FIXED VERSION
 
 import base64

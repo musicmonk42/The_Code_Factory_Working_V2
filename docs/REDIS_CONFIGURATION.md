@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Redis Configuration for Railway Deployment
 
 ## Railway Redis URL

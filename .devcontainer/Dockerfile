@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 FROM mcr.microsoft.com/devcontainers/python:3.11
 
 # Install system dependencies

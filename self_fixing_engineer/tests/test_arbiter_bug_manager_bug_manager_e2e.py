@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch

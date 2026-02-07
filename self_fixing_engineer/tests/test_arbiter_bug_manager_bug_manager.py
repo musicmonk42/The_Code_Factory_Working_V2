@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_bug_manager.py
 # Comprehensive production-grade tests for bug_manager.py
 # Requires: pytest, pytest-asyncio, unittest.mock

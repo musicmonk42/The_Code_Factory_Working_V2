@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/orchestrator/tests/test_orchestrator.py
 from contextlib import asynccontextmanager
 from pathlib import Path

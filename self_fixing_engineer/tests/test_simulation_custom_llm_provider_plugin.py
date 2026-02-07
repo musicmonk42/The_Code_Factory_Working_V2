@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # File: test_custom_llm_provider_plugin.py
 """Test cases for custom_llm_provider_plugin.py."""
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Simple test for ArbiterArena that avoids Pydantic validation issues.
 """

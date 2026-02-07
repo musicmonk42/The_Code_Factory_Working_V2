@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_backends/audit_backend_cloud.py
 # S3, GCS, and AzureBlob audit backends for the audit platform.
 

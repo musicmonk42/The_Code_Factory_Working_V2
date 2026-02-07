@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Restored on August 20, 2025
 import asyncio
 import hashlib

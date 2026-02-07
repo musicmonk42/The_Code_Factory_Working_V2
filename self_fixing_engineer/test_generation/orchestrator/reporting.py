@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # reporting.py - Production-Ready HTML Report Generator
 
 # This module is responsible for creating and securely writing comprehensive HTML reports

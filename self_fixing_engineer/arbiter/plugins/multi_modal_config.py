@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # D:\SFE\self_fixing_engineer\arbiter\plugins\multi_modal_config.py
 import logging
 import os

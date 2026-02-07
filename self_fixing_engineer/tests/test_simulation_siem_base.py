@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_base.py
 """
 Test suite for the base SIEM client implementation.

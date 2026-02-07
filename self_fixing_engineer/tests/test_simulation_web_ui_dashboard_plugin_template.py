@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # tests/test_web_ui_dashboard_plugin_template.py
 
 import asyncio

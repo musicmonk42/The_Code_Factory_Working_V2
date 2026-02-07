@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Patent Lawyer–Grade Technical Disclosure: Code Generator Platform
 
 

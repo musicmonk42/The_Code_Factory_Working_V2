@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_main.py
 """
 Test suite for siem_main.py module.

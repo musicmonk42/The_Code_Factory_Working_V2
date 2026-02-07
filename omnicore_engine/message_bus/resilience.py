@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # message_bus/resilience.py
 """
 Resilience components for the OmniCore Message Bus.

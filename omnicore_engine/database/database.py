@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # File: omnicore_engine/database.py
 from __future__ import annotations
 

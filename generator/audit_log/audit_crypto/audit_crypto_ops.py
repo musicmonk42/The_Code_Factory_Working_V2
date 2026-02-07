@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_crypto_ops.py
 # Purpose: High-level cryptographic business operations.
 # Contains all chain logic and calls into the configured crypto provider.

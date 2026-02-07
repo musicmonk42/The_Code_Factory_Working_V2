@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # secrets.py
 """
 WARNING: In production, this module will ABORT if no production-grade secret manager is enabled.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Agent Orchestration Module – Self-Fixing Engineer (SFE) 🚀
 **Agent Orchestration v1.0.0 – The "Universal Crew" Edition**  
 Proprietary Technology by Novatrax Labs

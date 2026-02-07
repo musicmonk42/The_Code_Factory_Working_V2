@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # A.S.E Web UI Quick Start Guide
 
 ## Overview

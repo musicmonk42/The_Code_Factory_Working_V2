@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/feedback_handlers.py
 """
 runner_feedback_handlers.py – Production-grade feedback ingestion.

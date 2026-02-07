@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Unit tests for agents.testgen_agent.testgen_prompt module.
 

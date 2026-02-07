@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # simulation/__init__.py
 """
 Simulation module for Self-Fixing Engineer platform.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \*\*Updates Made\*\*:
 
 \- Updated timestamp to September 10, 2025.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_generic_clients.py
 """
 Test suite for generic SIEM clients (Splunk, Elasticsearch, Datadog).

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # arbiter/queue_consumer_worker.py
 
 import asyncio

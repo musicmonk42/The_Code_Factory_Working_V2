@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Testing Guidelines - The Code Factory
 
 **Version**: 1.0  

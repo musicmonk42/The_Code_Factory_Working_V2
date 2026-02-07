@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 deploy_validator.py
 Validates deployment configs for build success, security, and compliance.

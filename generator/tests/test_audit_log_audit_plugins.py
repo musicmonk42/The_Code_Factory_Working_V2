@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_audit_plugins.py - FULLY FIXED VERSION
 """
 test_audit_plugins.py

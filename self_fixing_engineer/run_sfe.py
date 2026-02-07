@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 SFE Platform Launcher
 Runs the Self-Fixing Engineer platform components without import conflicts

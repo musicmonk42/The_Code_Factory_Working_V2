@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # main/__init__.py
 # Lazy imports to avoid loading heavy dependencies during test collection
 import os

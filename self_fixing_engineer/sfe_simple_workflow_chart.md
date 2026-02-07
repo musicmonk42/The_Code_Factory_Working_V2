@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 graph TD
 
 &nbsp;   A\[Arbiter: Control Center] -->|Starts Workflow| B\[Create Tests]

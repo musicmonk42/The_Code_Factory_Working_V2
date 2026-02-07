@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_siem_gcp_clients.py
 """
 Test suite for GCP SIEM client implementation.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # ai_provider.py
 """
 OpenAI LLM provider plugin.

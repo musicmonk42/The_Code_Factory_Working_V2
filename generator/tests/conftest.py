@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Conftest for generator tests - ensures prometheus stubs are initialized before test imports.
 

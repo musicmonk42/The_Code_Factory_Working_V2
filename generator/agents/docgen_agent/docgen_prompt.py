@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 docgen_prompt.py
 Generates optimized prompts for documentation generation tasks.

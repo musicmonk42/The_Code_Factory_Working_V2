@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # audit_utils.py
 import base64
 import copy  # FIX: Added import for deepcopy in redaction logic

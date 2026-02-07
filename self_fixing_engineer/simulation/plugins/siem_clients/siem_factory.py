@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 from typing import Any, Callable, Dict, List, Optional, Type
 
 # Import base/tooling

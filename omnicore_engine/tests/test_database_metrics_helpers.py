@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive test suite for omnicore_engine/database/metrics_helpers.py
 """

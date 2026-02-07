@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Providers Subpackage – Arbiter Multimodal (Self-Fixing Engineer)
 
 

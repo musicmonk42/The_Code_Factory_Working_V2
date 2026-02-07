@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Comprehensive unit tests for gui.py
 Tests Textual TUI application, API interactions, and UI components.

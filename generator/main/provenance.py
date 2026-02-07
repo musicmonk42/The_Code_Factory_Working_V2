@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # generator/main/provenance.py
 """
 Provenance Tracking Module for the Code Generation Pipeline.

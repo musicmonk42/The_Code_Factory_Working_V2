@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Self-Healing Import Fixer & Analyzer
 Enterprise-Grade Automated Python Import/Dependency Healing and Policy Enforcement
 🚩 What Is This?

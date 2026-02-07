@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Extending the Demo
 
 This handbook guides coders on **extending the investor demo** for the AI README-to-App Code Generator to add new features, such as additional providers, output formats, or validation methods.  

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for omnicore_engine/fastapi_app.py
 Tests FastAPI endpoints, middleware, and startup/shutdown events.

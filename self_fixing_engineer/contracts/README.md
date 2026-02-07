@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# EVM Chaincode Module - Self-Fixing Engineer (SFE) 🚀  
 
 EVM Chaincode v1.0.0 - The "Immutable Anchor" Edition  

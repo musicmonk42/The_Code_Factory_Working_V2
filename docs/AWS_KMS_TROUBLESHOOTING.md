@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # AWS KMS Troubleshooting Guide
 
 ## Overview

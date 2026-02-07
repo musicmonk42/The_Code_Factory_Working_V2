@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Workflow Chart 2: Bug Detection and Handling
 
 ## Overview

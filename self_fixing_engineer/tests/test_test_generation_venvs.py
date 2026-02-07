@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/orchestrator/tests/test_venvs.py
 """Enterprise-grade tests for venvs.py
 

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # message_bus/encryption.py
 
 from typing import List, Protocol

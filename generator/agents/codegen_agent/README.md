@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 CodeGen Agent Suite
 Overview
 The CodeGen Agent Suite is a production-ready, modular, and extensible AI code generation pipeline designed for enterprise-grade software development. It integrates top-tier large language models (LLMs), multi-modal inputs, retrieval-augmented generation (RAG), compliance and security scanning, and comprehensive observability to deliver secure, scalable, and auditable code generation. Built for professional developers and DevOps teams, it seamlessly integrates into the Software Development Life Cycle (SDLC) with robust error handling and extensibility.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_resilience_async.py
 """
 Test suite for async-aware CircuitBreaker functionality.

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # 🔌 Self Fixing Engineer™ – Plugin System Guide  
 *Confidential & Proprietary. All Rights Reserved.*
 

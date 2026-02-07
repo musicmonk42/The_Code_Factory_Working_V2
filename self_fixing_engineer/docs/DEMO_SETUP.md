@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # SFE Platform — Minimal, Reliable Demo Checklist
 
 **Updated:** September 14, 2025

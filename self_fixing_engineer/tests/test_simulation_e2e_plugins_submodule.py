@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_e2e_plugins_submodule.py
 """
 End-to-end test suite for the plugins submodule.

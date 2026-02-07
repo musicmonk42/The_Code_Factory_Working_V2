@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Kubernetes Deployment Guide for Code Factory Platform
 
 This guide provides Kubernetes deployment configurations optimized for the Code Factory platform, including proper health checks, startup probes, and resource management. It covers both Kustomize-based deployments and raw manifest usage.

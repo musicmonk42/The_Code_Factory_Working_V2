@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # D:\SFE\self_fixing_engineer\arbiter\plugins\__init__.py
 from .anthropic_adapter import AnthropicAdapter
 from .anthropic_adapter import APIError as AnthropicAPIError

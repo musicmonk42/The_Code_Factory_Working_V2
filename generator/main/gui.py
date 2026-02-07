@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # main/gui.py
 import asyncio  # For async operations and Queue
 import gettext

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # cli.py - Ultimate Hardened Production Version (100% Enterprise Ready)
 #
 # Version: 2.3.1

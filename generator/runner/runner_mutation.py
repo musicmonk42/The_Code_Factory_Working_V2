@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/mutation.py
 # module for mutation testing and fuzzing.
 # Provides multi-language support, pluggable tools, advanced strategies,

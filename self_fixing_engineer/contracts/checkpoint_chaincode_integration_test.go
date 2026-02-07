@@ -1,3 +1,5 @@
+// Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 // checkpoint_chaincode_integration_test.go
 // Integration tests for checkpoint_chaincode.go
 // These tests require a running Fabric test network.

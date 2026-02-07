@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Developer Setup
 
 This handbook provides detailed instructions for setting up the development environment for the **AI README-to-App Code Generator** as of July 28, 2025. It covers dependencies, external tools, API keys, local LLM setup, and configuration for maintaining or extending the platform—including the investor demo.

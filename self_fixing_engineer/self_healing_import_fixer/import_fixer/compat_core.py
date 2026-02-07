@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # file: compat_core.py
 # An enterprise-grade, unified facade for core infrastructure dependencies, designed for
 # maximum reliability, security, and compliance in highly regulated industries.

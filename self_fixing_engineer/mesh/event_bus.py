@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Final production-ready event bus module v2.1.0
 #
 # This module provides a robust, scalable, and secure event bus using Redis

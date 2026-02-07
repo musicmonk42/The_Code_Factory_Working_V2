@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Development Guide for AI README-to-App Code Generator
 
 This guide provides step-by-step instructions for setting up your development environment, running and testing the platform, and debugging the **AI README-to-App Code Generator**. It is intended for Python developers and DevOps engineers.

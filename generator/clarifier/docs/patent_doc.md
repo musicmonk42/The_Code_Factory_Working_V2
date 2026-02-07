@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Clarifier Module – Patent Lawyer–Grade Technical Disclosure
 
 

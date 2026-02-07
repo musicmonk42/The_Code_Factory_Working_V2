@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Debugging and Troubleshooting
 
 This handbook provides actionable guidance for debugging and troubleshooting issues while developing the investor demo for the **AI README-to-App Code Generator**. Leverage the platform’s observability features (logs, metrics, tracing) to resolve problems efficiently—without external assistance.

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test the POST /jobs/{job_id}/cancel endpoint.
 """

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Test suite for knowledge_loader module.
 Tests are aligned with the actual implementation in arbiter/knowledge_loader.py

@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 import json
 
 from agents.critique_agent.critique_linter import (  # type: ignore

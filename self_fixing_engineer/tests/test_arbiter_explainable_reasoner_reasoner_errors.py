@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_reasoner_errors.py
 # Comprehensive production-grade tests for reasoner_errors.py
 # Requires: pytest, unittest.mock, structlog, sentry-sdk (optional for real; mock otherwise)

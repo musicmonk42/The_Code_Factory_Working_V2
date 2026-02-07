@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Private Key Generation Guide
 
 This file contains instructions for generating the private key required for audit signing.

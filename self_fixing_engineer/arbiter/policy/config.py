@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Configuration management for the Arbiter system using pydantic-settings.
 Supports environment variables, .env files, and runtime reloading.

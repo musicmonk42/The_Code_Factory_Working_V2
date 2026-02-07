@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 \# Audit Crypto \& Backend Module – Patent Lawyer–Grade Technical Disclosure
 
 

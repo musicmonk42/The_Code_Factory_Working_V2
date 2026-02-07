@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Constraints file for CI to ensure consistent dependency versions
 # This prevents transitive dependencies from upgrading protobuf to 6.x
 

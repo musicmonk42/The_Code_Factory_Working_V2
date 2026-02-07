@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Regulated-grade tests for audit_log/audit_backend_core.py
 

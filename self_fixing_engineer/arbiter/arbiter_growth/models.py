@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 from datetime import datetime
 from typing import Any, Dict, Union
 

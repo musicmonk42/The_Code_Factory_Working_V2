@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 Fixed mesh_policy.py with proper circuit breaker implementation
 """

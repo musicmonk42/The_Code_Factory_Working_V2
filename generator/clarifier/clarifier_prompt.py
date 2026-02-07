@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # clarifier_prompt.py
 """
 User interaction manager for the Clarifier system, handling prompting for ambiguities,

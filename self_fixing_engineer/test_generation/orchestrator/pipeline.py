@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_generation/orchestrator/pipeline.py
 
 """Pipeline entrypoint used by tests and suitable for production.

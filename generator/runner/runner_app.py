@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # runner/runner_app.py
 # TUI application for the runner system.
 # Integrates with a robust backend using structured contracts and error handling.

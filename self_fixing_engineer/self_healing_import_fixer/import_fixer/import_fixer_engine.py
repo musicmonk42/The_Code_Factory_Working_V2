@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # file: import_fixer_engine.py
 # file: simulation/simulation_module.py
 """

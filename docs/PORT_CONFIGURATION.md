@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Port Configuration Guide - Fixed for Railway Deployment
 
 ## Summary of Changes

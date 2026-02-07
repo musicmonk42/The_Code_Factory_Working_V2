@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # test_exceptions.py
 """
 Test suite for the unified exception hierarchy in message_bus/exceptions.py

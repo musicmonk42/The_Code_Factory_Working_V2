@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """
 testgen_validator.py: Validates generated tests for the agentic testing system.
 

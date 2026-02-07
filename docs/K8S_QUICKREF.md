@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Kubernetes and Helm Quick Reference
 
 This is a quick reference guide for deploying The Code Factory using Kubernetes and Helm.

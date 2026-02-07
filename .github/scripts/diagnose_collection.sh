@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # Diagnose which conftest/test file causes collection slowdown
 # This script helps identify CPU-intensive operations during pytest collection
 

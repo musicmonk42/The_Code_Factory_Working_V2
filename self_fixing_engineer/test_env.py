@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 """Set up test environment variables for the self_fixing_engineer test suite"""
 
 import os

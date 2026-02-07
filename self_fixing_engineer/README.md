@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 Self-Fixing Engineer (SFE) Platform
 
 Version: 1.0.0 | Last Updated: August 22, 2025 | License: MIT

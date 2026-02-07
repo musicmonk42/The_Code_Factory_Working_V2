@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # OmniCore Engine: Central Hub Architecture for Audit Logging
 
 ## Overview

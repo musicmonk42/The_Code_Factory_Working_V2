@@ -1,3 +1,5 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
 # agent_core.py - Ultimate Production-Ready Version (Final - Upgraded 2025)
 #
 # This file culminates a series of production-hardening refinements. It is designed for maximum

@@ -1,3 +1,5 @@
+<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+
 # Arbiter Bug Manager
 
 **Version:** 1.0.0  | **Python:** 3.12+
