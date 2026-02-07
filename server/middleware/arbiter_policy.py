@@ -60,26 +60,20 @@ class ArbiterPolicyMiddleware:
     
     def __init__(self):
         """Initialize the policy middleware."""
-        self.policy_engine = None
-        self._init_policy_engine()
+        self.policy_module_available = self._check_policy_module()
     
-    def _init_policy_engine(self):
-        """Try to initialize PolicyEngine with graceful fallback."""
+    def _check_policy_module(self):
+        """Check if the policy module is available for use."""
         try:
-            from self_fixing_engineer.arbiter.policy import PolicyEngine
-            self.policy_engine = PolicyEngine()
-            logger.info("ArbiterPolicyMiddleware: PolicyEngine initialized")
+            from self_fixing_engineer.arbiter.policy import should_auto_learn
+            logger.info("ArbiterPolicyMiddleware: Policy module available")
+            return True
         except ImportError as e:
             logger.warning(
-                f"ArbiterPolicyMiddleware: PolicyEngine not available ({e}). "
+                f"ArbiterPolicyMiddleware: Policy module not available ({e}). "
                 "Policy checks will be bypassed."
             )
-            self.policy_engine = None
-        except Exception as e:
-            logger.error(
-                f"ArbiterPolicyMiddleware: Failed to initialize PolicyEngine: {e}"
-            )
-            self.policy_engine = None
+            return False
     
     async def check_policy(
         self,
@@ -112,20 +106,22 @@ class ArbiterPolicyMiddleware:
         if context:
             policy_context.update(context)
         
-        # If PolicyEngine not available, allow by default (fail-open)
-        if not self.policy_engine:
+        # If policy module not available, allow by default (fail-open)
+        if not self.policy_module_available:
             logger.debug(
-                f"PolicyEngine unavailable, allowing {action} on {route} (fail-open)"
+                f"Policy module unavailable, allowing {action} on {route} (fail-open)"
             )
             if METRICS_AVAILABLE:
                 POLICY_CHECK_TOTAL.labels(
                     route=route, method=method, result="allowed_no_engine"
                 ).inc()
-            return True, "Policy check bypassed (PolicyEngine unavailable)"
+            return True, "Policy check bypassed (policy module unavailable)"
         
-        # Check policy
+        # Check policy using module-level function (handles lazy initialization)
         try:
-            allowed, reason = await self.policy_engine.should_auto_learn(
+            from self_fixing_engineer.arbiter.policy import should_auto_learn
+            
+            allowed, reason = await should_auto_learn(
                 "API",
                 action,
                 route,
