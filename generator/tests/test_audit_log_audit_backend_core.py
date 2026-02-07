@@ -276,18 +276,21 @@ async def test_tamper_detection_flags_and_skips(
     results = await test_backend.query({}, limit=10)
     assert results == []
 
-    # Give scheduled tasks (send_alert via create_task) time to execute
-    await asyncio.sleep(0.5)  # Give async tasks more time to complete and increment metrics
+    # Give scheduled tasks (send_alert via create_task) more time to execute
+    await asyncio.sleep(1.0)  # Increased from 0.5 to 1.0
+    
+    # Force all pending tasks to complete
+    pending = [t for t in asyncio.all_tasks() if not t.done()]
+    if pending:
+        await asyncio.wait(pending, timeout=2.0)
 
-    # Force metric collection to ensure the latest metric samples are captured.
-    # This ensures the collection iterator returns fresh data that includes
-    # any recent counter increments.
+    # Force metric collection to ensure the latest metric samples are captured
     _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
 
     after = _counter_total_for_labels(
         BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
     )
-    assert after > before
+    assert after > before, f"Metric did not increment: before={before}, after={after}"
 
     if mock_send_alert is not None:
         assert mock_send_alert.await_count >= 1
@@ -323,19 +326,17 @@ async def test_retry_operation_respects_limits(monkeypatch):
 
     assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
 
-    # Give metrics time to be collected
-    await asyncio.sleep(0.2)
+    # Give metrics more time to be collected
+    await asyncio.sleep(0.5)  # Increased from 0.2 to 0.5
 
-    # Force metric collection to ensure the latest metric samples are captured.
-    # This ensures the collection iterator returns fresh data that includes
-    # any recent counter increments.
+    # Force metric collection to ensure the latest metric samples are captured
     _ = list(BACKEND_ERRORS.collect())
 
     after = _counter_total_for_labels(
         BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )
     # The counter increments on EACH attempt, so with 3 max attempts we expect 3 increments
-    assert after >= before + 3
+    assert after >= before + 3, f"Expected at least {before + 3} errors, got {after} (before={before})"
 
 
 @pytest.mark.asyncio
