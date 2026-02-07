@@ -155,7 +155,7 @@ def get_or_create_histogram(name: str, description: str, labelnames=None):
     if not isinstance(labelnames, (list, tuple)):
         labelnames = []
     labelnames = [label for label in labelnames if label and isinstance(label, str)]
-    
+
     existing = _get_existing_metric(name)
     if existing is not None:
         return existing
@@ -168,7 +168,7 @@ def get_or_create_counter(name: str, description: str, labelnames=None):
     if not isinstance(labelnames, (list, tuple)):
         labelnames = []
     labelnames = [label for label in labelnames if label and isinstance(label, str)]
-    
+
     existing = _get_existing_metric(name)
     if existing is not None:
         return existing
@@ -414,7 +414,10 @@ class HotReloadingFileSystemLoader(FileSystemLoader):
         return super().get_source(environment, template)
 
 
-template_paths = [os.path.join(os.path.dirname(__file__), "templates"), "project_templates"]
+template_paths = [
+    os.path.join(os.path.dirname(__file__), "templates"),
+    "project_templates",
+]
 env = Environment(
     loader=HotReloadingFileSystemLoader(template_paths),
     autoescape=select_autoescape(["html", "xml"]),
@@ -664,89 +667,108 @@ async def translate_requirements_if_needed(
 def _parse_requirements_flexible(requirements: Any) -> Dict[str, Any]:
     """
     Parse requirements in any format into a structured dict with 'features' list.
-    
+
     Handles multiple input formats:
     - Dict with 'features' key (pass through)
     - String (markdown, plain text, or JSON string)
     - Other formats (convert to string and extract features)
-    
+
     Args:
         requirements: Requirements in any format
-    
+
     Returns:
         Dict with 'features' list and optional 'description'
-    
+
     Example:
         >>> _parse_requirements_flexible("Build a REST API")
         {'features': ['Build a REST API'], 'description': 'Build a REST API'}
-        
+
         >>> _parse_requirements_flexible({'features': ['API', 'Auth']})
         {'features': ['API', 'Auth']}
     """
     import json
     import re
-    
+
     # Already in correct format
-    if isinstance(requirements, dict) and 'features' in requirements and isinstance(requirements['features'], list):
+    if (
+        isinstance(requirements, dict)
+        and "features" in requirements
+        and isinstance(requirements["features"], list)
+    ):
         return requirements
-    
+
     # Try to parse as JSON string
     if isinstance(requirements, str):
         # Try JSON parsing first
         try:
             parsed = json.loads(requirements)
-            if isinstance(parsed, dict) and 'features' in parsed:
+            if isinstance(parsed, dict) and "features" in parsed:
                 return parsed
         except (json.JSONDecodeError, ValueError):
             pass
-        
+
         # Extract features from markdown/text
         features = []
         description = requirements
-        
+
         # Look for bullet points (-, *, •)
-        bullet_pattern = r'^[\s]*[-*•]\s+(.+)$'
-        for line in requirements.split('\n'):
+        bullet_pattern = r"^[\s]*[-*•]\s+(.+)$"
+        for line in requirements.split("\n"):
             match = re.match(bullet_pattern, line.strip())
             if match:
                 features.append(match.group(1).strip())
-        
+
         # Look for numbered lists (1., 2., etc.)
-        numbered_pattern = r'^[\s]*\d+[\.)]\s+(.+)$'
+        numbered_pattern = r"^[\s]*\d+[\.)]\s+(.+)$"
         if not features:
-            for line in requirements.split('\n'):
+            for line in requirements.split("\n"):
                 match = re.match(numbered_pattern, line.strip())
                 if match:
                     features.append(match.group(1).strip())
-        
+
         # Look for ## Feature: or # Feature: headers
-        feature_header_pattern = r'^#+\s*(feature|requirement|task)s?:\s*(.+)$'
+        feature_header_pattern = r"^#+\s*(feature|requirement|task)s?:\s*(.+)$"
         if not features:
-            for line in requirements.split('\n'):
+            for line in requirements.split("\n"):
                 match = re.match(feature_header_pattern, line.strip(), re.IGNORECASE)
                 if match:
                     features.append(match.group(2).strip())
-        
+
         # If no structured features found, split on sentences or use whole text
         if not features:
             # Split on periods for multiple requirements
-            sentences = [s.strip() for s in requirements.split('.') if s.strip()]
+            sentences = [s.strip() for s in requirements.split(".") if s.strip()]
             if len(sentences) > 1:
                 features = sentences[:10]  # Limit to 10 features
             else:
                 # Single requirement
                 features = [requirements.strip()]
-        
+
         return {
-            'features': features,
-            'description': description,
+            "features": features,
+            "description": description,
         }
-    
+
     # Convert other types to string and treat as single feature
     return {
-        'features': [str(requirements)],
-        'description': str(requirements),
+        "features": [str(requirements)],
+        "description": str(requirements),
     }
+
+
+# ==============================================================================
+# --- Helper Functions ---
+# ==============================================================================
+
+
+async def _maybe_await(value: Any) -> Any:
+    """
+    Helper that allows us to pass in either sync or async helpers
+    (e.g., count_tokens) without caring at call sites.
+    """
+    if asyncio.iscoroutine(value) or isinstance(value, asyncio.Future):
+        return await value
+    return value
 
 
 # ==============================================================================
@@ -766,7 +788,7 @@ async def build_code_generation_prompt(
 ) -> str:
     """
     Builds a production-ready, context-aware, and optimized prompt for code generation.
-    
+
     Args:
         requirements: Dict containing 'features' list and optional 'description'
         state_summary: Summary of current system state
@@ -778,13 +800,15 @@ async def build_code_generation_prompt(
         multi_modal_inputs: Optional multimodal inputs (images, diagrams)
         audit_logger: Optional audit logger (uses log_audit_event if None)
         redis_client: Optional Redis client for RAG
-    
+
     Returns:
         str: The constructed prompt for code generation
     """
     # Determine template name for metric labeling
-    template_name = f"{target_language}_{target_framework}" if target_framework else target_language
-    
+    template_name = (
+        f"{target_language}_{target_framework}" if target_framework else target_language
+    )
+
     with PROMPT_BUILD_LATENCY.labels(template=template_name).time():
         with tracer.start_as_current_span(
             "build_prompt",
@@ -802,15 +826,17 @@ async def build_code_generation_prompt(
             if not requirements:
                 PROMPT_ERRORS.labels("InvalidInput").inc()
                 raise ValueError("Requirements cannot be None or empty")
-            
+
             if not isinstance(requirements, dict):
                 PROMPT_ERRORS.labels("InvalidInput").inc()
-                raise ValueError(f"Requirements must be a dict, got {type(requirements).__name__}")
-            
+                raise ValueError(
+                    f"Requirements must be a dict, got {type(requirements).__name__}"
+                )
+
             if "features" not in requirements:
                 PROMPT_ERRORS.labels("InvalidInput").inc()
                 raise ValueError("Requirements must contain 'features' key")
-            
+
             features = requirements.get("features")
             if not features or not isinstance(features, list):
                 PROMPT_ERRORS.labels("InvalidInput").inc()
@@ -849,10 +875,12 @@ async def build_code_generation_prompt(
             # 6. Build Previous Error Context (if retry after failure)
             error_context = None
             if previous_error:
-                error_type = previous_error.get('error_type', 'Unknown')
-                error_details = previous_error.get('details', 'No details available')
-                error_instruction = previous_error.get('instruction', 'Please fix the syntax error')
-                
+                error_type = previous_error.get("error_type", "Unknown")
+                error_details = previous_error.get("details", "No details available")
+                error_instruction = previous_error.get(
+                    "instruction", "Please fix the syntax error"
+                )
+
                 error_context = f"""
 ⚠️ PREVIOUS ATTEMPT HAD SYNTAX ERROR ⚠️
 
@@ -927,7 +955,9 @@ Review the error carefully and ensure your generated code does not repeat the sa
                                 ].strip()
                         prompt += f"\n\n--- Self-Correction Advisory ---\n{critique}\n--- End Advisory ---"
                         # --- Logging Change: Replace audit_logger.log_action with log_audit_event ---
-                        await log_audit_event("Prompt Self-Refined", {"refinement": critique})
+                        await log_audit_event(
+                            "Prompt Self-Refined", {"refinement": critique}
+                        )
                         # --- End Logging Change ---
                     except Exception as e:
                         logger.error(f"Meta-LLM critique failed: {e}")
@@ -936,11 +966,11 @@ Review the error carefully and ensure your generated code does not repeat the sa
             # 8. Prepend Syntax Safety Instructions
             # These are CRITICAL to reduce syntax errors from LLM generation
             prompt = SYNTAX_SAFETY_INSTRUCTIONS + "\n\n" + prompt
-            
+
             if error_context:
                 # If this is a retry, add error context prominently at the start
                 prompt = error_context + "\n\n" + prompt
-            
+
             logger.debug("Added syntax safety instructions to prompt")
 
             # 9. Add critical output requirements
@@ -971,18 +1001,18 @@ Your response MUST adhere to these requirements:
 
 FAILURE TO FOLLOW THESE REQUIREMENTS WILL RESULT IN PARSE ERRORS.
 """.format(language=target_language)
-            
+
             prompt = prompt + output_requirements
-            
+
             logger.debug(
                 "Added critical output requirements to prompt (target_language: %s)",
-                target_language
+                target_language,
             )
 
             # 9. Final token check
             # --- Token Counting Change: Replace codegen_llm_call.get_token_count with count_tokens ---
-            token_count = count_tokens(
-                prompt, META_LLM_MODEL
+            token_count = await _maybe_await(
+                count_tokens(prompt, META_LLM_MODEL)
             )  # Using META_LLM_MODEL as a representative LLM model name
             # --- End Token Counting Change ---
 
