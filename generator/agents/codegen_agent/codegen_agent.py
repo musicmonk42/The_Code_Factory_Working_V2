@@ -501,7 +501,12 @@ def get_or_create_counter(name: str, description: str, labelnames: List[str] = N
     Returns:
         Existing or newly created Counter instance
     """
+    # Validate and filter labelnames - remove empty strings
     labelnames = labelnames or []
+    if not isinstance(labelnames, (list, tuple)):
+        labelnames = []
+    labelnames = [label for label in labelnames if label and isinstance(label, str)]
+    
     try:
         # Check if metric already exists in registry (idempotent)
         collector = REGISTRY._names_to_collectors.get(name)
@@ -511,7 +516,7 @@ def get_or_create_counter(name: str, description: str, labelnames: List[str] = N
         pass
     # Create new counter if it doesn't exist
     try:
-        return Counter(name, description, labelnames)
+        return Counter(name, description, labelnames=labelnames)
     except ValueError as e:
         # Handle race condition: metric was created by another thread/process
         if "Duplicated timeseries" in str(e):
@@ -533,7 +538,12 @@ def get_or_create_histogram(name: str, description: str, labelnames: List[str] =
     Returns:
         Existing or newly created Histogram instance
     """
+    # Validate and filter labelnames - remove empty strings
     labelnames = labelnames or []
+    if not isinstance(labelnames, (list, tuple)):
+        labelnames = []
+    labelnames = [label for label in labelnames if label and isinstance(label, str)]
+    
     try:
         collector = REGISTRY._names_to_collectors.get(name)
         if collector is not None:
@@ -541,7 +551,7 @@ def get_or_create_histogram(name: str, description: str, labelnames: List[str] =
     except (AttributeError, KeyError):
         pass
     try:
-        return Histogram(name, description, labelnames)
+        return Histogram(name, description, labelnames=labelnames)
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
             existing = REGISTRY._names_to_collectors.get(name)
@@ -562,7 +572,12 @@ def get_or_create_gauge(name: str, description: str, labelnames: List[str] = Non
     Returns:
         Existing or newly created Gauge instance
     """
+    # Validate and filter labelnames - remove empty strings
     labelnames = labelnames or []
+    if not isinstance(labelnames, (list, tuple)):
+        labelnames = []
+    labelnames = [label for label in labelnames if label and isinstance(label, str)]
+    
     try:
         collector = REGISTRY._names_to_collectors.get(name)
         if collector is not None:
@@ -570,7 +585,7 @@ def get_or_create_gauge(name: str, description: str, labelnames: List[str] = Non
     except (AttributeError, KeyError):
         pass
     try:
-        return Gauge(name, description, labelnames)
+        return Gauge(name, description, labelnames=labelnames)
     except ValueError as e:
         if "Duplicated timeseries" in str(e):
             existing = REGISTRY._names_to_collectors.get(name)
@@ -581,22 +596,22 @@ def get_or_create_gauge(name: str, description: str, labelnames: List[str] = Non
 
 # Prometheus Metrics - Using safe creation functions
 CODEGEN_REQUESTS = get_or_create_counter(
-    "codegen_requests_total",
-    "Total code generation requests",
+    "codegen_agent_requests_total",
+    "Total code generation requests from codegen agent",
     ["backend"],
 )
 # Backwards compatibility: some callers expect CODEGEN_COUNTER
 CODEGEN_COUNTER = CODEGEN_REQUESTS
 
 CODEGEN_LATENCY = get_or_create_histogram(
-    "codegen_latency_seconds",
-    "Latency of code generation requests",
+    "codegen_agent_latency_seconds",
+    "Latency of code generation requests in codegen agent",
     ["backend"],
 )
 
 CODEGEN_ERRORS = get_or_create_counter(
-    "codegen_errors_total",
-    "Total errors during code generation",
+    "codegen_agent_errors_total",
+    "Total errors during code generation in codegen agent",
     ["error_type"],
 )
 
