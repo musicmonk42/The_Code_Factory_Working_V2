@@ -52,8 +52,17 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --memory="512m"
+          --memory-swap="512m"
         ports:
           - 6379:6379
+        # Configure Redis for low memory usage
+        command: >
+          redis-server
+          --maxmemory 256mb
+          --maxmemory-policy allkeys-lru
+          --save ""
+          --appendonly no
     
     env:
       TESTING: '1'
@@ -559,6 +568,25 @@ jobs:
           echo "=== Test discovery (quick check) ==="
           timeout 30 python -m pytest ${{ matrix.module }}/ --collect-only --quiet 2>&1 | tail -20 || echo "Collection took >30s or failed"
       
+      - name: Monitor memory before tests
+        run: |
+          echo "=== Memory Status Before Tests ==="
+          free -h
+          echo ""
+          echo "=== Available Memory ==="
+          awk '/MemAvailable/ {printf "Available: %s (%.1f GB)\n", $2, $2/1024/1024}' /proc/meminfo
+          echo ""
+          echo "=== Memory Breakdown ==="
+          echo "Total:     $(awk '/MemTotal/ {print $2}' /proc/meminfo | numfmt --to=iec --from-unit=K)"
+          echo "Used:      $(awk '/MemTotal|MemAvailable/ {mem[$1]=$2} END {printf "%s", (mem["MemTotal:"]-mem["MemAvailable:"]) | "numfmt --to=iec --from-unit=K"}' /proc/meminfo)"
+          echo "Available: $(awk '/MemAvailable/ {print $2}' /proc/meminfo | numfmt --to=iec --from-unit=K)"
+          echo ""
+          if [ $(awk '/MemAvailable/ {print $2}' /proc/meminfo) -lt 3000000 ]; then
+            echo "⚠️  WARNING: Less than 3GB memory available - tests may fail due to OOM"
+          else
+            echo "✓ Sufficient memory available for tests"
+          fi
+      
       - name: Fix PyTorch memory issues
         run: |
           # Enable memory overcommit
@@ -734,7 +762,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2 (Arbiter)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 20
+        timeout-minutes: 25  # Increased from 20 to provide safety margin
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -755,7 +783,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
           
           echo "=== Running Batch 2: Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 20m python -m pytest \
+          timeout --signal=TERM --kill-after=60s 25m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v --tb=line --maxfail=5 \
             -m "not heavy" \

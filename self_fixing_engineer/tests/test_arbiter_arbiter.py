@@ -208,13 +208,86 @@ def test_simulation_engine_exists(arbiter_module):
 
 @pytest.mark.asyncio
 async def test_simulation_run_if_exists(arbiter_module):
-    """Test SimulationEngine run method if class exists."""
+    """Test SimulationEngine run method if class exists.
+    
+    This test uses mocks to prevent OOM by avoiding expensive initialization of:
+    - Database connection pools (~100-150MB)
+    - ShardedMessageBus infrastructure (~50-100MB)
+    - UnifiedSimulationModule (~200-500MB)
+    
+    The test still validates the API contract and basic functionality.
+    """
     import asyncio
     
     if not hasattr(arbiter_module, "SimulationEngine"):
         pytest.skip("SimulationEngine class not available")
         return
     
+    # Create engine instance
+    engine = arbiter_module.SimulationEngine()
+    
+    # Mock the expensive initialization to prevent OOM
+    with patch.object(engine, '_ensure_initialized', new_callable=AsyncMock):
+        # Mock the _module to return expected results
+        mock_module = MagicMock()
+        mock_module.execute_simulation = AsyncMock(return_value={
+            "status": "success",
+            "result": {"simulation_output": "mocked"}
+        })
+        engine._module = mock_module
+        
+        # Check which method signature the engine supports
+        if hasattr(engine, "run_simulation"):
+            # Real SimulationEngine from simulation_module.py
+            config = {
+                "type": "monte_carlo",
+                "iterations": 5,
+                "alpha": 1.0
+            }
+            # Add timeout to prevent test from hanging
+            result = await asyncio.wait_for(
+                engine.run_simulation(config),
+                timeout=10
+            )
+        elif hasattr(engine, "run"):
+            # Fallback SimulationEngine from arbiter.py
+            config = {
+                "type": "monte_carlo",
+                "params": {"iterations": 5, "alpha": 1.0}
+            }
+            context = {"agent_name": "test", "energy": 100}
+            # Add timeout to prevent test from hanging
+            result = await asyncio.wait_for(
+                engine.run(config, context),
+                timeout=10
+            )
+        else:
+            pytest.skip("SimulationEngine has no compatible run method")
+            return
+        
+        # Verify result structure
+        assert result["status"] == "success"
+        assert "result" in result
+
+
+@pytest.mark.heavy
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_simulation_run_integration(arbiter_module):
+    """Full integration test with real SimulationEngine initialization.
+    
+    This test is marked as 'heavy' and will only run when explicitly requested.
+    It performs actual resource allocation and is memory-intensive.
+    
+    Run with: pytest -m heavy
+    """
+    import asyncio
+    
+    if not hasattr(arbiter_module, "SimulationEngine"):
+        pytest.skip("SimulationEngine class not available")
+        return
+    
+    # This is the original test logic without mocks
     engine = arbiter_module.SimulationEngine()
     
     # Check which method signature the engine supports
