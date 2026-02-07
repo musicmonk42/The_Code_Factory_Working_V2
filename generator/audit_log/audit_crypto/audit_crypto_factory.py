@@ -141,9 +141,9 @@ def _ensure_boto3():
     if boto3 is None:
         try:
             import boto3 as _boto3
-            import botocore.exceptions as _botocore
+            import botocore.exceptions as _botocore_exceptions
             boto3 = _boto3
-            botocore = _botocore
+            botocore = _botocore_exceptions
             HAS_BOTO3 = True
         except ImportError:
             HAS_BOTO3 = False
