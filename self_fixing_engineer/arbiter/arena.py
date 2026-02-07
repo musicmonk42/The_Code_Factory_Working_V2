@@ -68,8 +68,12 @@ except ImportError as e:
     SIMULATION_AVAILABLE = False
 
 from self_fixing_engineer.arbiter.agent_state import Base
+
 # REMOVED: from self_fixing_engineer.arbiter.arbiter import Arbiter  # Moved to lazy import to break circular dependency
-from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, get_registry
+from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
+    PlugInKind,
+    get_registry,
+)
 from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
 
 # Import core components with ABSOLUTE PATHS
@@ -81,7 +85,10 @@ from self_fixing_engineer.arbiter.feedback import FeedbackManager
 from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
 
 # NEW: Import metric creation helpers from self_fixing_engineer.arbiter.metrics
-from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+from self_fixing_engineer.arbiter.metrics import (
+    get_or_create_counter,
+    get_or_create_gauge,
+)
 from self_fixing_engineer.arbiter.monitoring import Monitor
 from self_fixing_engineer.arbiter.otel_config import get_tracer
 
@@ -105,19 +112,20 @@ _Arbiter_class = None
 def _get_arbiter_class():
     """
     Lazy import helper for Arbiter class.
-    
+
     This breaks the circular import chain:
     __init__.py -> arbiter.py -> arena.py -> arbiter.py
-    
+
     By importing Arbiter only when actually needed (not at module load time),
     we ensure arbiter.py has fully loaded before arena.py tries to use it.
-    
+
     Returns:
         The Arbiter class from self_fixing_engineer.arbiter.arbiter
     """
     global _Arbiter_class
     if _Arbiter_class is None:
         from self_fixing_engineer.arbiter.arbiter import Arbiter
+
         _Arbiter_class = Arbiter
         logger.debug("Lazily imported Arbiter class to break circular dependency")
     return _Arbiter_class
@@ -265,7 +273,9 @@ class ArbiterArena:
         self.version = "1.1.0"
         self.base_port = port if port is not None else 9001
         self.num = kwargs.get("num", 3)
-        self.arbiters: List["Arbiter"] = []  # Quoted for forward reference, lazy imported
+        self.arbiters: List["Arbiter"] = (
+            []
+        )  # Quoted for forward reference, lazy imported
         self._lock = asyncio.Lock()
         self._db_engine = db_engine
         self.session_maker = (
@@ -310,7 +320,10 @@ class ArbiterArena:
         )
 
         # Lazy import to avoid circular dependencies
-        from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
+        from self_fixing_engineer.arbiter.human_loop import (
+            HumanInLoop,
+            HumanInLoopConfig,
+        )
 
         hitl_config = HumanInLoopConfig(
             DATABASE_URL=self.settings.DB_PATH,
@@ -539,7 +552,9 @@ class ArbiterArena:
 
         # Fix 5: Create shared MessageQueueService instance
         try:
-            from self_fixing_engineer.arbiter.message_queue_service import MessageQueueService
+            from self_fixing_engineer.arbiter.message_queue_service import (
+                MessageQueueService,
+            )
 
             shared_mq_service = MessageQueueService(
                 backend_type="redis_streams",
@@ -611,7 +626,9 @@ class ArbiterArena:
 
         # Fix 5: Create DecisionOptimizer after all Arbiters are initialized
         try:
-            from self_fixing_engineer.arbiter.decision_optimizer import DecisionOptimizer
+            from self_fixing_engineer.arbiter.decision_optimizer import (
+                DecisionOptimizer,
+            )
 
             decision_optimizer = DecisionOptimizer(
                 plugin_registry=_get_plugin_registry_dict(),
@@ -661,7 +678,9 @@ class ArbiterArena:
                 await self._send_webhook("agent_removed", {"agent_name": arbiter.name})
                 arena_ops_total.labels(operation="remove_arbiter").inc()
 
-    async def get_random_arbiter(self) -> "Arbiter":  # Quoted for forward reference, lazy imported
+    async def get_random_arbiter(
+        self,
+    ) -> "Arbiter":  # Quoted for forward reference, lazy imported
         """Returns a random active arbiter from the arena."""
         async with self._lock:
             if not self.arbiters:
