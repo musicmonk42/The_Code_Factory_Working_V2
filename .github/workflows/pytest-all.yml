@@ -734,23 +734,27 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2 (Arbiter)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 45
+        timeout-minutes: 20
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
+          
+          # Force aggressive garbage collection between tests
+          python -c "import gc; gc.set_threshold(700, 10, 10)"
           
           # Force cleanup between batches
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
           
           echo "=== Running Batch 2: Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 20m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v --tb=line --maxfail=5 \
             -m "not heavy" \
-            --timeout=300 --durations=10 \
+            --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
             2>&1 | tee test-output-sfe-batch2.log
