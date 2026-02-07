@@ -103,16 +103,10 @@ except ImportError:
 
 load_dotenv()
 
-# Structured JSON Logging Setup
+# Get module logger - follows Python logging best practices.
+# Do NOT add handlers at module level to avoid duplicate logs.
+# The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
-if not logger.handlers:
-    logger.setLevel(logging.DEBUG)
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        '{"time": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}'
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
 
 
 # --- OpenTelemetry and Prometheus Metrics Setup ---

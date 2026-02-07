@@ -207,6 +207,15 @@ async def _trigger_pipeline_background(
         # Step 3: Finalize job immediately (CRITICAL - must happen before process exit)
         # This ensures job status reaches SUCCESS and artifacts are persisted
         pipeline_status = result.get("status", "unknown") if result else "unknown"
+        
+        # Handle skipped pipelines (duplicate request detected by OmniCoreService)
+        if pipeline_status == "skipped":
+            logger.info(
+                f"[Pipeline] Job {job_id} pipeline was skipped (already running). "
+                f"Not finalizing - the original pipeline run will handle finalization."
+            )
+            return
+        
         stages_completed = result.get("stages_completed", []) if result else []
         
         # Check if ANY code was generated (codegen stage succeeded)
