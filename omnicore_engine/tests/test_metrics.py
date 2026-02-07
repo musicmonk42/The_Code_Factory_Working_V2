@@ -240,7 +240,7 @@ class TestUtilityFunctions:
     """Test utility functions"""
 
     @pytest.mark.forked
-    @pytest.mark.flaky(reruns=2, reruns_delay=1)  # Allow retries for flaky registry state
+    @pytest.mark.flaky(max_runs=3)  # Allow retries for flaky registry state
     def test_get_all_metrics_data(self):
         """Test getting all metrics data
         
