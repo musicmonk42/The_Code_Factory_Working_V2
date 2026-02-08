@@ -2445,7 +2445,10 @@ class OmniCoreService:
             stages_completed = []
             
             # 1. Clarify (optional)
-            if payload.get("readme_content"):
+            if payload.get("skip_clarification", False):
+                # Skip clarification when resuming after clarification is already completed
+                logger.info(f"[PIPELINE] Skipping clarification for job {job_id} (already completed)")
+            elif payload.get("readme_content"):
                 logger.info(f"[PIPELINE] Job {job_id} starting step: clarify")
                 clarify_result = await self._run_clarifier(job_id, payload)
                 if clarify_result.get("status") == "clarification_initiated":

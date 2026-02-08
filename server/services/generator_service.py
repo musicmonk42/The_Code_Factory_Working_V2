@@ -595,6 +595,7 @@ class GeneratorService:
         include_deployment: bool,
         include_docs: bool,
         run_critique: bool,
+        skip_clarification: bool = False,
     ) -> Dict[str, Any]:
         """
         Run the full generation pipeline via OmniCore.
@@ -607,6 +608,7 @@ class GeneratorService:
             include_deployment: Whether to generate deployment configs
             include_docs: Whether to generate documentation
             run_critique: Whether to run security/quality checks
+            skip_clarification: Whether to skip the clarification step (used when resuming after clarification)
 
         Returns:
             Full pipeline execution results
@@ -623,6 +625,7 @@ class GeneratorService:
                 "include_deployment": include_deployment,
                 "include_docs": include_docs,
                 "run_critique": run_critique,
+                "skip_clarification": skip_clarification,
             }
             result = await self.omnicore_service.route_job(
                 job_id=job_id,
