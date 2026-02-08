@@ -45,7 +45,7 @@ class MockFuzzyParser:
 def clean_parser_priorities():
     """Clean parser priorities before each test to ensure test isolation."""
     # Import the module to access PARSER_PRIORITIES directly
-    import arbiter.learner.fuzzy as fuzzy_module
+    import self_fixing_engineer.arbiter.learner.fuzzy as fuzzy_module
 
     # Store original state
     original = fuzzy_module.PARSER_PRIORITIES.copy()
@@ -64,7 +64,7 @@ class TestLoadParserPriorities:
 
     def test_load_priorities_from_file(self):
         """Test loading parser priorities from JSON file."""
-        import arbiter.learner.fuzzy as fuzzy_module
+        import self_fixing_engineer.arbiter.learner.fuzzy as fuzzy_module
 
         test_priorities = {"Parser1": 10, "Parser2": 5, "Parser3": 15}
 
@@ -81,7 +81,7 @@ class TestLoadParserPriorities:
 
     def test_load_priorities_file_not_found(self):
         """Test fallback when priority file not found."""
-        import arbiter.learner.fuzzy as fuzzy_module
+        import self_fixing_engineer.arbiter.learner.fuzzy as fuzzy_module
 
         with patch("builtins.open", side_effect=FileNotFoundError):
             with patch("self_fixing_engineer.arbiter.learner.fuzzy.os.getenv", return_value="missing.json"):
@@ -222,7 +222,7 @@ class TestProcessUnstructuredData:
     @pytest.mark.asyncio
     async def test_process_with_parser_priority(self, mock_learner):
         """Test that parsers are executed in priority order."""
-        import arbiter.learner.fuzzy as fuzzy_module
+        import self_fixing_engineer.arbiter.learner.fuzzy as fuzzy_module
 
         # Create distinct parser classes to avoid name conflicts
         class LowPriorityParser(MockFuzzyParser):
@@ -409,7 +409,7 @@ class TestRegisterFuzzyParserHook:
 
     def test_register_valid_parser(self):
         """Test registering a valid parser."""
-        import arbiter.learner.fuzzy as fuzzy_module
+        import self_fixing_engineer.arbiter.learner.fuzzy as fuzzy_module
 
         mock_learner = Mock()
         mock_learner.fuzzy_parser_hooks = []

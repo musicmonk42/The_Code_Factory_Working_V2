@@ -121,7 +121,12 @@ class TestGetOrCreateMetric:
 
     def test_replace_metric_with_different_type(self):
         """Test replacing a metric when type mismatch occurs."""
-        existing_counter = Counter("mismatched_metric", "Old metric", ["label1"])
+        from prometheus_client import CollectorRegistry
+
+        isolated_registry = CollectorRegistry()
+        existing_counter = Counter(
+            "mismatched_metric", "Old metric", ["label1"], registry=isolated_registry
+        )
         mock_registry = Mock()
         mock_registry._names_to_collectors = {"mismatched_metric": existing_counter}
         mock_registry.unregister = Mock()
