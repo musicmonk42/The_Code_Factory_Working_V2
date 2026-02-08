@@ -233,6 +233,7 @@ class RedisClient:
                     f"Successfully connected to Redis at {_redact_key(self.redis_url)}"
                 )
             except Exception as e:
+                self.client = None  # Reset client on failure so retries start fresh
                 REDIS_CALLS_TOTAL.labels(operation="connect", status="failure").inc()
                 REDIS_CALLS_ERRORS.labels(
                     operation="connect", error_type=type(e).__name__
