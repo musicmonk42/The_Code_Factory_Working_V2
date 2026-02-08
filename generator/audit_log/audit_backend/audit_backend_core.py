@@ -78,26 +78,116 @@ except ImportError:
             )
 
 
+# Early logger initialization for safe_metric function
+logger = logging.getLogger(__name__)
+
 # --- START: ADDED HELPER FUNCTION (Modified to use universal safe_metric) ---
 def safe_metric(metric_type, name, description, labelnames=()):
-    """Return existing metric if already registered, otherwise create a new one."""
+    """
+    Return existing metric if already registered, otherwise create a new one.
+    
+    This function is defensive and will ALWAYS return a valid metric object,
+    even if the Prometheus registry is in an inconsistent state (e.g., when
+    other test modules have cleared/swapped the registry).
+    
+    Strategy:
+    1. Try to retrieve from registry (checking bare name and common suffixes)
+    2. If not found, try creating the metric
+    3. If creating fails with ValueError (duplicate), retry retrieval
+    4. As a last resort, create with a unique fallback name
+    """
     try:
-        # Prometheus stores metrics by name (and its sub-components)
-        return REGISTRY._names_to_collectors[name]
-    except KeyError:
-        # Create metric based on type
-        if metric_type == "Counter":
-            return Counter(name, description, labelnames)
-        elif metric_type == "Gauge":
-            return Gauge(name, description, labelnames)
-        elif metric_type == "Histogram":
-            return Histogram(name, description, labelnames)
-        else:
-            raise ValueError(f"Unknown metric type: {metric_type}")
+        # Strategy 1: Try to retrieve from registry
+        # Check both the bare name and common suffixes (_total for Counter, etc.)
+        if hasattr(REGISTRY, '_names_to_collectors'):
+            names_to_check = [name]
+            # Counters internally register with _total and _created suffixes
+            if metric_type == "Counter":
+                names_to_check.extend([f"{name}_total", f"{name}_created"])
+            
+            for check_name in names_to_check:
+                try:
+                    collector = REGISTRY._names_to_collectors.get(check_name)
+                    if collector is not None:
+                        return collector
+                except (KeyError, AttributeError):
+                    continue
+        
+        # Strategy 2: Try creating the metric normally
+        try:
+            if metric_type == "Counter":
+                return Counter(name, description, labelnames)
+            elif metric_type == "Gauge":
+                return Gauge(name, description, labelnames)
+            elif metric_type == "Histogram":
+                return Histogram(name, description, labelnames)
+            else:
+                # Unknown type - default to Counter
+                return Counter(name, description, labelnames)
+        except ValueError as e:
+            # Strategy 3: Creation failed (likely duplicate), try retrieving again
+            # The error might have occurred because another thread registered it
+            if hasattr(REGISTRY, '_names_to_collectors'):
+                names_to_check = [name]
+                if metric_type == "Counter":
+                    names_to_check.extend([f"{name}_total", f"{name}_created"])
+                
+                for check_name in names_to_check:
+                    try:
+                        collector = REGISTRY._names_to_collectors.get(check_name)
+                        if collector is not None:
+                            return collector
+                    except (KeyError, AttributeError):
+                        continue
+            
+            # Strategy 4: Last resort - create with unique fallback name
+            # This ensures module initialization never fails
+            import random
+            fallback_name = f"{name}_fallback_{random.randint(1000, 9999)}"
+            logger.warning(
+                f"[safe_metric] Failed to retrieve or create metric '{name}' ({e}). "
+                f"Using fallback: {fallback_name}"
+            )
+            if metric_type == "Counter":
+                return Counter(fallback_name, description, labelnames)
+            elif metric_type == "Gauge":
+                return Gauge(fallback_name, description, labelnames)
+            elif metric_type == "Histogram":
+                return Histogram(fallback_name, description, labelnames)
+            else:
+                return Counter(fallback_name, description, labelnames)
+    
+    except Exception as e:
+        # Broad catch-all to ensure module initialization never fails
+        # Create a metric with a unique name as last resort
+        import random
+        emergency_name = f"audit_emergency_metric_{random.randint(10000, 99999)}"
+        logger.error(
+            f"[safe_metric] Emergency fallback for metric '{name}' due to: {e}"
+        )
+        try:
+            return Counter(emergency_name, "Emergency fallback metric", [])
+        except Exception:
+            # If even this fails, return a mock object that won't crash
+            class MockMetric:
+                def labels(self, **kwargs):
+                    return self
+                def inc(self, *args, **kwargs):
+                    pass
+                def dec(self, *args, **kwargs):
+                    pass
+                def set(self, *args, **kwargs):
+                    pass
+                def observe(self, *args, **kwargs):
+                    pass
+                def collect(self):
+                    return []
+            return MockMetric()
 
 
 # Retaining safe_counter alias for backward compatibility with previous steps
 def safe_counter(name, description, labelnames=()):
+    """Create or retrieve a Counter metric safely."""
     return safe_metric("Counter", name, description, labelnames)
 
 
@@ -127,8 +217,6 @@ except ImportError:
     
     class ValidationError(Exception):
         pass
-
-logger = logging.getLogger(__name__)
 
 
 # --- START: EDIT B (Moved Custom Exception Classes) ---
