@@ -219,8 +219,9 @@ sys.modules["self_fixing_engineer.arbiter.message_queue_service"].DecryptionErro
 sys.modules["self_fixing_engineer.arbiter.bug_manager"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.bug_manager"].AuditLogManager = AsyncMock
 
-sys.modules["self_fixing_engineer.arbiter.logging_utils"] = MagicMock()
-sys.modules["self_fixing_engineer.arbiter.logging_utils"].PIIRedactorFilter = MagicMock
+if "self_fixing_engineer.arbiter.logging_utils" not in sys.modules or isinstance(sys.modules["self_fixing_engineer.arbiter.logging_utils"], MagicMock):
+    sys.modules["self_fixing_engineer.arbiter.logging_utils"] = MagicMock()
+    sys.modules["self_fixing_engineer.arbiter.logging_utils"].PIIRedactorFilter = MagicMock
 
 sys.modules["arbiter_plugin_registry"] = MagicMock()
 sys.modules["arbiter_plugin_registry"].registry = MagicMock()
