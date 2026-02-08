@@ -12,18 +12,37 @@ This test module validates the following critical bug fixes:
 
 import asyncio
 import json
+import sys
 import pytest
 from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
 
-# Import the router and related functionality
-from server.routers.events import (
-    websocket_endpoint,
-    event_stream,
-    _remove_connection_safely,
-    _active_connections_by_ip,
-    active_connections,
-)
+
+# Lazy imports to avoid loading all dependencies during test collection
+websocket_endpoint = None
+event_stream = None
+_remove_connection_safely = None
+_active_connections_by_ip = None
+active_connections = None
+
+
+def _lazy_import():
+    """Lazy import of server modules to avoid dependency issues during collection."""
+    global websocket_endpoint, event_stream, _remove_connection_safely, _active_connections_by_ip, active_connections
+    
+    if websocket_endpoint is None:
+        from server.routers.events import (
+            websocket_endpoint as _websocket_endpoint,
+            event_stream as _event_stream,
+            _remove_connection_safely as _remove,
+            _active_connections_by_ip as _conns_by_ip,
+            active_connections as _active_conns,
+        )
+        websocket_endpoint = _websocket_endpoint
+        event_stream = _event_stream
+        _remove_connection_safely = _remove
+        _active_connections_by_ip = _conns_by_ip
+        active_connections = _active_conns
 
 
 class TestWebSocketBugFixes:
@@ -69,6 +88,8 @@ class TestWebSocketBugFixes:
         The event_handler should use call_soon_threadsafe to enqueue events
         when called from ThreadPoolExecutor workers.
         """
+        _lazy_import()
+        
         event_loop = asyncio.get_event_loop()
         
         # Track if call_soon_threadsafe was used
@@ -128,6 +149,8 @@ class TestWebSocketBugFixes:
         When a WebSocket disconnects, all topic subscriptions should be
         properly unsubscribed to prevent ghost subscribers.
         """
+        _lazy_import()
+        
         with patch("server.routers.events.get_omnicore_service", return_value=mock_omnicore_service):
             # Simulate a send error to trigger disconnect
             mock_websocket.send_json.side_effect = RuntimeError("Connection closed")
@@ -172,6 +195,8 @@ class TestWebSocketBugFixes:
         The cleanup should happen regardless of how the connection ends
         (normal exit, exception, or disconnect).
         """
+        _lazy_import()
+        
         # Clear the global tracking
         active_connections.clear()
         _active_connections_by_ip.clear()
@@ -203,6 +228,8 @@ class TestWebSocketBugFixes:
         """
         Test Bug 3 Fix: Verify cleanup on exception in main loop.
         """
+        _lazy_import()
+        
         active_connections.clear()
         _active_connections_by_ip.clear()
         
@@ -253,6 +280,8 @@ class TestSSEBugFixes:
         
         The SSE event_handler should use call_soon_threadsafe to enqueue events.
         """
+        _lazy_import()
+        
         event_loop = asyncio.get_event_loop()
         
         # Track if call_soon_threadsafe was used
@@ -316,6 +345,8 @@ class TestSSEBugFixes:
         When an SSE stream ends, all topic subscriptions should be
         properly unsubscribed.
         """
+        _lazy_import()
+        
         # Track subscriptions
         subscribed_topics = []
         unsubscribed_topics = []
@@ -364,6 +395,8 @@ class TestConnectionCleanup:
 
     def test_remove_connection_safely(self):
         """Test _remove_connection_safely properly updates tracking."""
+        _lazy_import()
+        
         # Clear globals
         active_connections.clear()
         _active_connections_by_ip.clear()
@@ -390,6 +423,8 @@ class TestConnectionCleanup:
 
     def test_remove_connection_safely_handles_missing_ip(self):
         """Test _remove_connection_safely handles missing IP gracefully."""
+        _lazy_import()
+        
         active_connections.clear()
         _active_connections_by_ip.clear()
         
