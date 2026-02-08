@@ -71,7 +71,7 @@ class MockAsyncFile:
 
 
 # Save original aiofiles module for restoration after tests
-_original_aiofiles_keys = {k: sys.modules[k] for k in list(sys.modules) if k.startswith("aiofiles")}
+_original_aiofiles_keys = {k: v for k in list(sys.modules) if k.startswith("aiofiles") if (v := sys.modules.get(k)) is not None}
 
 mock_aiofiles = MagicMock()
 mock_aiofiles_open = AsyncMock(return_value=MockAsyncFile())

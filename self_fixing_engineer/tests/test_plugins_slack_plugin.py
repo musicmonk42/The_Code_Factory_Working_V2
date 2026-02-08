@@ -49,7 +49,7 @@ mock_psutil.virtual_memory.return_value.percent = 50.0
 sys.modules["psutil"] = mock_psutil
 
 # Save original aiofiles modules before mocking
-_original_aiofiles_keys = {k: sys.modules[k] for k in list(sys.modules) if k.startswith("aiofiles")}
+_original_aiofiles_keys = {k: v for k in list(sys.modules) if k.startswith("aiofiles") if (v := sys.modules.get(k)) is not None}
 
 # Mock aiofiles at module level before importing slack_plugin
 mock_aiofiles = MagicMock()

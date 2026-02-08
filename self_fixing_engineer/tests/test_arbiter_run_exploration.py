@@ -131,7 +131,7 @@ class AiofilesMock:
 
 # Save original aiofiles module before mocking
 _original_aiofiles = sys.modules.get("aiofiles")
-_original_aiofiles_keys = {k: sys.modules[k] for k in list(sys.modules) if k.startswith("aiofiles")}
+_original_aiofiles_keys = {k: v for k in list(sys.modules) if k.startswith("aiofiles") if (v := sys.modules.get(k)) is not None}
 
 # Mock aiofiles module
 aiofiles_mock = MagicMock()
