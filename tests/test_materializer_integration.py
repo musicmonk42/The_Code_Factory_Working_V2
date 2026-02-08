@@ -9,6 +9,8 @@ Verifies that:
 3. main.py never contains raw JSON bundle content
 4. requirements.txt is written when present in the codegen result
 5. Provenance and validation are invoked in the full pipeline
+6. JSON string results from agent are parsed into file maps
+7. Spec-required files are extracted from MD content and validated
 """
 
 import json
@@ -202,3 +204,110 @@ class TestMaterializerIntegration:
 
         result = await service._run_codegen(job_id, payload)
         assert result["status"] == "error"
+
+    @pytest.mark.asyncio
+    async def test_codegen_handles_json_string_result(
+        self, service, job_id, mock_job
+    ):
+        """
+        When the agent returns a JSON string instead of a dict,
+        _run_codegen should parse it and materialize the files.
+        """
+        json_result = json.dumps({
+            "main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+            "requirements.txt": "fastapi\nuvicorn\n",
+        })
+        self._setup_service(service, {})
+        # Override codegen func to return a string
+        service._codegen_func = AsyncMock(return_value=json_result)
+
+        payload = {
+            "requirements": "Create a FastAPI app",
+            "language": "python",
+            "framework": "fastapi",
+        }
+
+        result = await service._run_codegen(job_id, payload)
+
+        assert result["status"] == "completed"
+        output_path = Path(result["output_path"])
+        main_py = output_path / "main.py"
+        assert main_py.exists(), "main.py should exist after JSON string parsing"
+        content = main_py.read_text(encoding="utf-8")
+        assert "FastAPI" in content
+
+    @pytest.mark.asyncio
+    async def test_codegen_handles_nested_json_string_result(
+        self, service, job_id, mock_job
+    ):
+        """
+        When the agent returns a JSON string with a nested 'files' key,
+        _run_codegen should unwrap and materialize each file.
+        """
+        json_result = json.dumps({
+            "files": {
+                "main.py": "print('hello')\n",
+            }
+        })
+        self._setup_service(service, {})
+        service._codegen_func = AsyncMock(return_value=json_result)
+
+        payload = {
+            "requirements": "Print hello",
+            "language": "python",
+        }
+
+        result = await service._run_codegen(job_id, payload)
+
+        assert result["status"] == "completed"
+        output_path = Path(result["output_path"])
+        assert (output_path / "main.py").exists()
+
+
+class TestExtractRequiredFilesFromMd:
+    """Tests for extract_required_files_from_md in provenance module."""
+
+    def test_extract_tree_style_files(self):
+        """Extract files from tree-style project listing."""
+        from generator.main.provenance import extract_required_files_from_md
+
+        md = (
+            "## Project Structure\n"
+            "├── main.py\n"
+            "├── models.py\n"
+            "├── app/routes.py\n"
+            "├── requirements.txt\n"
+        )
+        result = extract_required_files_from_md(md)
+        assert "main.py" in result
+        assert "models.py" in result
+        assert "app/routes.py" in result
+        assert "requirements.txt" in result
+
+    def test_extract_backtick_files(self):
+        """Extract files referenced in backticks."""
+        from generator.main.provenance import extract_required_files_from_md
+
+        md = "The app uses `main.py` and `app/routes.py` for routing."
+        result = extract_required_files_from_md(md)
+        assert "main.py" in result
+        assert "app/routes.py" in result
+
+    def test_extract_empty_spec(self):
+        """Empty spec returns empty list."""
+        from generator.main.provenance import extract_required_files_from_md
+
+        result = extract_required_files_from_md("Just a description, no files.")
+        assert result == []
+
+    def test_extract_deduplicates(self):
+        """Duplicate file references are deduplicated."""
+        from generator.main.provenance import extract_required_files_from_md
+
+        md = (
+            "├── main.py\n"
+            "├── main.py\n"
+            "Use `main.py` as entry point.\n"
+        )
+        result = extract_required_files_from_md(md)
+        assert result.count("main.py") == 1

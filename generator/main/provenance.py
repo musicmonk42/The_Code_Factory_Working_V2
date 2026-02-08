@@ -429,6 +429,49 @@ def extract_endpoints_from_md(md_content: str) -> List[Dict[str, str]]:
             span.end()
 
 
+def extract_required_files_from_md(md_content: str) -> List[str]:
+    """
+    Extract required file paths referenced in a Markdown spec.
+
+    Parses the specification for explicit file references such as
+    ``app/routes.py``, ``models.py``, etc., so the validation step can
+    verify that the generated project contains them.
+
+    Supported patterns:
+        - Tree-style listings: ``├── app/routes.py`` or ``│   ├── routes.py``
+        - Backtick references: ``app/routes.py``
+
+    Args:
+        md_content: Markdown specification content to parse.
+
+    Returns:
+        Deduplicated, sorted list of relative file paths found in the spec.
+    """
+    files: List[str] = []
+    seen: Set[str] = set()
+
+    # Common source file extensions to look for
+    file_ext_pattern = r'(?:\.py|\.js|\.ts|\.jsx|\.tsx|\.yml|\.yaml|\.toml|\.cfg|\.txt|\.json|\.html|\.css)'
+
+    patterns = [
+        # Tree-style listing: ├── app/routes.py or │ ├── routes.py
+        # Includes box-drawing characters ├ └ │ ─ and ASCII fallbacks
+        rf'[├└│─\-\| ]+([a-zA-Z_][\w/]*{file_ext_pattern})',
+        # Backtick code reference: `app/routes.py`
+        rf'`([a-zA-Z_][\w/]*{file_ext_pattern})`',
+    ]
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, md_content):
+            path = match.group(1).strip()
+            if path and path not in seen:
+                seen.add(path)
+                files.append(path)
+
+    files.sort()
+    return files
+
+
 def validate_spec_fidelity(
     md_content: str,
     generated_files: Dict[str, str],
