@@ -192,6 +192,10 @@ class TestConnection:
         redis_client._mock_client.ping.side_effect = ConnectionError(
             "Connection failed"
         )
+        # Patch retry wait to avoid slow exponential backoff in tests
+        mocker.patch.object(
+            redis_client.connect.retry, "wait", return_value=0
+        )
         with pytest.raises(ConnectionError, match="Failed to connect to Redis"):
             await redis_client.connect()
 
@@ -652,7 +656,12 @@ class TestPerformance:
     async def test_connection_pooling(self, redis_client, mocker: MockerFixture):
         """Test that connection pooling is configured."""
 
-        mock_from_url = mocker.patch("redis.asyncio.from_url")
+        mock_inner_client = mocker.MagicMock()
+        mock_inner_client.ping = mocker.AsyncMock(return_value=True)
+        mock_inner_client.close = mocker.AsyncMock()
+        mock_from_url = mocker.patch(
+            "redis.asyncio.from_url", return_value=mock_inner_client
+        )
 
         client = RedisClient()
         await client.connect()
@@ -661,6 +670,8 @@ class TestPerformance:
         call_kwargs = mock_from_url.call_args[1]
         assert "max_connections" in call_kwargs
         assert call_kwargs["max_connections"] == 50
+
+        await client.disconnect()
 
     @pytest.mark.asyncio
     async def test_concurrent_operations(self, redis_client):
