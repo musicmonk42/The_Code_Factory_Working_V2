@@ -22,17 +22,17 @@ from opentelemetry import trace
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from redis.asyncio import Redis
 
-# Defensive import for redis.asyncio.lock
-# This module is available in redis>=4.2.0, but may have compatibility issues
+# Defensive import for redis Lock class
+# In redis-py 5.x, Lock is located in redis.asyncio.client module
 try:
-    from redis.asyncio.lock import Lock as RedisLock
+    from redis.asyncio.client import Lock as RedisLock
 except ImportError as e:
     # Provide a clear error message if redis version is incompatible
     import warnings
     warnings.warn(
-        f"Could not import redis.asyncio.lock: {e}. "
+        f"Could not import redis.asyncio.client.Lock: {e}. "
         f"This typically indicates an incompatible redis version. "
-        f"Please ensure redis>=4.5.0 is installed. "
+        f"Please ensure redis>=5.0.0 is installed. "
         f"Redis locking features will be disabled.",
         ImportWarning,
         stacklevel=2
@@ -676,7 +676,7 @@ class RedisClient:
         if RedisLock is None:
             raise RuntimeError(
                 "Redis locking features are not available. "
-                "Please ensure redis>=4.5.0 is installed and redis.asyncio.lock can be imported."
+                "Please ensure redis>=5.0.0 is installed and redis.asyncio.client.Lock can be imported."
             )
         if not name or len(name) > 1024:
             raise ValueError("Lock name must be non-empty and <= 1024 characters.")

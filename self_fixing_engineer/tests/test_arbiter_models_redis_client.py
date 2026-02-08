@@ -93,7 +93,7 @@ async def redis_client(mocker: MockerFixture):
     mock_lock.__aenter__ = mocker.AsyncMock(return_value=mock_lock)
     mock_lock.__aexit__ = mocker.AsyncMock(return_value=None)
 
-    mocker.patch("redis.asyncio.Lock", return_value=mock_lock)
+    mocker.patch("redis.asyncio.client.Lock", return_value=mock_lock)
     mocker.patch("redis.asyncio.from_url", return_value=mock_client)
 
     client = RedisClient()
