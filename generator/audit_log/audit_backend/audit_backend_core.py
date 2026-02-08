@@ -647,15 +647,56 @@ class LogBackend(abc.ABC):
         return data_bytes
 
     def _decompress(self, data: bytes) -> str:
-        """Decompresses data using the configured algorithm."""
+        """Decompresses data using the configured algorithm with fallback support."""
+        backend_name = self.__class__.__name__
+        
+        # Try primary decompression algorithm
         try:
             if COMPRESSION_ALGO == "zstd":
                 return zstd.decompress(data).decode("utf-8")
             elif COMPRESSION_ALGO == "gzip":
                 return zlib.decompress(data).decode("utf-8")
             return data.decode("utf-8")
+        except (zstd.ZstdError, zlib.error) as primary_err:
+            # Fallback: try the other algorithm if primary fails
+            # This handles cases where data was compressed with a different algorithm
+            logger.warning(
+                f"Primary decompression with {COMPRESSION_ALGO} failed for {backend_name}, "
+                f"trying fallback algorithm: {primary_err}"
+            )
+            try:
+                if COMPRESSION_ALGO == "zstd":
+                    # Try gzip as fallback
+                    return zlib.decompress(data).decode("utf-8")
+                elif COMPRESSION_ALGO == "gzip":
+                    # Try zstd as fallback
+                    return zstd.decompress(data).decode("utf-8")
+                else:
+                    # No fallback available for 'none' compression
+                    raise primary_err
+            except Exception as fallback_err:
+                logger.error(
+                    f"All decompression methods failed for {backend_name}: "
+                    f"primary={primary_err}, fallback={fallback_err}"
+                )
+                BACKEND_ERRORS.labels(backend=backend_name, type="DecompressionError").inc()
+                # Safely schedule alert - handle case when no event loop is running
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        send_alert(
+                            f"Audit log decompression failed for {backend_name}. Data corruption or wrong algorithm?",
+                            severity="medium",
+                        )
+                    )
+                except RuntimeError:
+                    # No running event loop - log instead of creating task
+                    logger.warning(
+                        f"Could not send alert for decompression failure (no event loop): {fallback_err}"
+                    )
+                raise fallback_err
         except Exception as e:
-            backend_name = self.__class__.__name__
+            # Handle other exceptions (e.g., UnicodeDecodeError)
             BACKEND_ERRORS.labels(backend=backend_name, type="DecompressionError").inc()
             logger.error(f"Decompression failed for {backend_name}: {e}", exc_info=True)
             # Safely schedule alert - handle case when no event loop is running
@@ -827,6 +868,10 @@ class LogBackend(abc.ABC):
             # Single attempt; backend handles its own transactional/queue semantics
             await perform_flush()
         # --- END: Change ---
+        
+        # INCREMENT BACKEND_WRITES HERE - AFTER retry_operation completes successfully
+        # This ensures the metric is incremented only when the operation fully succeeds
+        BACKEND_WRITES.labels(backend=backend_name).inc(len(batch_copy))
 
     # --- START: APPLIED EDIT ---
     async def _perform_atomic_batch_write(
@@ -858,9 +903,7 @@ class LogBackend(abc.ABC):
             # The yield in _atomic_context will handle the actual storage based on backend type
             pass
         
-        # INCREMENT WRITE METRICS IMMEDIATELY AFTER SUCCESSFUL ATOMIC WRITE
-        # This ensures metrics are updated before any retry logic or exception handling
-        BACKEND_WRITES.labels(backend=self.__class__.__name__).inc(len(prepared_entries))
+        # REMOVED: BACKEND_WRITES increment - now done in flush_batch after retry completes
 
     async def _flush_batch_periodically(self):
         """Periodically flushes batch."""
