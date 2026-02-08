@@ -320,13 +320,13 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
             await f.write(content)
         return p
 
-    @patch("generator.runner.runner_file_utils.aiofiles", new_callable=MagicMock)
+    @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
         "runner.runner_file_utils.scan_for_vulnerabilities",
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_load_text_file(self, mock_prov, mock_scan, mock_aiofiles):
         file_path = await self._create_test_file("test.txt", "Hello World")
 
@@ -342,13 +342,13 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
             str(file_path.resolve()), FILE_INTEGRITY_STORE
         )  # Check integrity stored
 
-    @patch("generator.runner.runner_file_utils.aiofiles", new_callable=MagicMock)
+    @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
         "runner.runner_file_utils.scan_for_vulnerabilities",
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_load_json_file(self, mock_prov, mock_scan, mock_aiofiles):
         file_path = await self._create_test_file("test.json", '{"key": "value"}')
 
@@ -371,14 +371,14 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
             self.skipTest("Pillow/pytesseract not installed, skipping OCR test.")
         self.assertIn("image/ocr", FILE_HANDLERS)
 
-    @patch("generator.runner.runner_file_utils.aiofiles", new_callable=MagicMock)
+    @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
         "runner.runner_file_utils.scan_for_vulnerabilities",
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
-    @patch("generator.runner.runner_file_utils.decrypt_data", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.decrypt_data", new_callable=AsyncMock)
     async def test_save_and_load_encrypted_fernet(
         self, mock_decrypt, mock_prov, mock_scan, mock_aiofiles
     ):
@@ -414,13 +414,13 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[REDACTED]", decrypted_content)
         self.assertNotIn("secret123", decrypted_content)
 
-    @patch("generator.runner.runner_file_utils.aiofiles", new_callable=MagicMock)
+    @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
         "runner.runner_file_utils.scan_for_vulnerabilities",
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_backup_and_rollback(self, mock_prov, mock_scan, mock_aiofiles):
         file_path = await self._create_test_file("rollback_test.txt", "Version 1")
 
@@ -468,7 +468,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_compliant_deletion(self, mock_prov, mock_scan, mock_remove):
         file_to_delete_path = await self._create_test_file(
             "delete_me.txt", "Sensitive GDPR/CCPA data"
@@ -499,13 +499,13 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result_non_existent["status"], "skipped")
         mock_remove.assert_not_called()
 
-    @patch("generator.runner.runner_file_utils.aiofiles", new_callable=MagicMock)
+    @patch("runner.runner_file_utils.aiofiles", new_callable=MagicMock)
     @patch(
         "runner.runner_file_utils.scan_for_vulnerabilities",
         new_callable=AsyncMock,
         return_value={"vulnerabilities_found": 0},
     )
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_file_integrity_check(self, mock_prov, mock_scan, mock_aiofiles):
         file_path = await self._create_test_file(
             "integrity_test.txt", "Original content."
@@ -713,7 +713,7 @@ class TestMaterializeFileMap:
         assert content == "line1\nline2\nline3\n"
 
     @pytest.mark.asyncio
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_materialize_logs_to_audit_system(self, mock_add_provenance, output_dir):
         """Test that materialize_file_map logs to the audit system."""
         file_map = {
@@ -841,7 +841,7 @@ class TestValidateGeneratedProject:
         assert any("requirements.txt" in w for w in result["warnings"])
 
     @pytest.mark.asyncio
-    @patch("generator.runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
+    @patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock)
     async def test_validate_logs_to_audit_system(self, mock_add_provenance, project_dir):
         """Test that validate_generated_project logs to the audit system."""
         (project_dir / "main.py").write_text("print('hello')")

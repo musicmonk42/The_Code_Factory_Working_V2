@@ -1134,11 +1134,11 @@ Respond in plain prose only (no JSON / no code fences).
                                     }
 
                                 if (
-                                    v_report.get("build_status") not in ("success", "skipped")
+                                    v_report.get("build_status") not in ("success", "skipped", "tool_not_found")
                                     or v_report.get("compliance_score", 0.0) < 0.5
                                 ):
-                                    # Allow skipped builds when Docker is unavailable (unless docker_required=True)
-                                    if v_report.get("build_status") == "skipped":
+                                    # Allow skipped/tool_not_found builds when Docker is unavailable
+                                    if v_report.get("build_status") in ("skipped", "tool_not_found"):
                                         logger.warning(
                                             f"Docker validation skipped for {t} - Docker not available. "
                                             "Set DOCKER_REQUIRED=true to enforce Docker availability."
@@ -1343,13 +1343,21 @@ Respond in plain prose only (no JSON / no code fences).
 
                 if "validate" in steps:
                     vres = await self.validate_configs_final(config_content, target)
-                    if not vres.get("valid", False):
+                    # Treat 'skipped' and 'tool_not_found' build statuses as non-fatal
+                    build_status = vres.get("build_status", "")
+                    is_valid = vres.get("valid", False)
+                    if not is_valid and build_status not in ("skipped", "tool_not_found", "success"):
                         DEPLOY_ERRORS.labels(error_type="ValidationFailed").inc()
                         raise RunnerError(
                             error_code="VALIDATION_FAILED",
                             detail=f"Validation failed: {vres}",
                             task_id=self.run_id
                         )
+                    elif not is_valid and build_status in ("skipped", "tool_not_found"):
+                        logger.warning(
+                            f"[DEPLOY_AGENT] Validation skipped for {target}: Docker/tools not available"
+                        )
+                        vres["valid"] = True  # Mark as valid since tools aren't available
                 else:
                     vres = {"valid": True, "details": "Skipped"}
 

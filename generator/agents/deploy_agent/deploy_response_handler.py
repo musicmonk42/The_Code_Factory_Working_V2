@@ -709,12 +709,20 @@ class DockerfileHandler(FormatHandler):
         # Track normalization metrics
         start_time = time.time()
         
+        # ✅ PRE-SANITIZE: Strip markdown fences and leading tokens that LLMs emit
+        sanitized = raw
+        # Remove leading/trailing markdown fences (```dockerfile ... ```)
+        sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(r'\n```\s*$', '', sanitized)
+        # Remove leading "!" token (common LLM error)
+        sanitized = re.sub(r'^!+\s*', '', sanitized)
+        
         # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
         lines = []
         invalid_lines_removed = 0
         shebangs_removed = 0
         
-        for line_num, line in enumerate(raw.splitlines(), start=1):
+        for line_num, line in enumerate(sanitized.splitlines(), start=1):
             stripped = line.strip()
             
             # Skip shebang lines (common LLM hallucination)
@@ -728,6 +736,20 @@ class DockerfileHandler(FormatHandler):
                         "handler": "DockerfileHandler"
                     }
                 )
+                continue
+            
+            # Skip lines starting with '!' (invalid Dockerfile token from LLM)
+            if stripped.startswith('!'):
+                invalid_lines_removed += 1
+                logger.debug(
+                    "Removed invalid '!' line from Dockerfile",
+                    extra={"line_number": line_num, "content": stripped[:50]}
+                )
+                continue
+            
+            # Skip markdown fence lines that survived pre-sanitization
+            if stripped.startswith('```'):
+                invalid_lines_removed += 1
                 continue
             
             # Skip comment lines (but preserve in-line comments if needed)

@@ -1503,6 +1503,18 @@ async def validate_generated_project(
     # Other required files produce warnings when absent.
     CRITICAL_REQUIRED_FILES = {"main.py"}
     
+    # When the generated project uses an app/ layout, also require key files
+    app_dir = output_dir / "app"
+    if app_dir.is_dir():
+        CRITICAL_REQUIRED_FILES.update({
+            "app/main.py", "app/routes.py",
+        })
+        # Add app-layout files to required_files if not already there
+        for af in ["app/main.py", "app/routes.py", "app/schemas.py",
+                    "requirements.txt", "README.md", ".env.example"]:
+            if af not in required_files:
+                required_files.append(af)
+    
     for required_file in required_files:
         file_path = output_dir / required_file
         if not file_path.exists():
@@ -1573,37 +1585,44 @@ async def validate_generated_project(
     
     # Check for FastAPI endpoints
     if check_fastapi_endpoints or expected_endpoints:
-        main_py = output_dir / "main.py"
-        if main_py.exists():
-            try:
-                main_content = main_py.read_text(encoding="utf-8")
-                
-                # Simple pattern matching for FastAPI routes
-                import re
-                endpoint_patterns = [
-                    r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
-                    r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
-                ]
-                
-                found_endpoints = set()
-                for pattern in endpoint_patterns:
-                    matches = re.findall(pattern, main_content, re.IGNORECASE)
-                    for method, path in matches:
-                        found_endpoints.add(path)
-                
-                result["endpoints_found"] = list(found_endpoints)
-                
-                if expected_endpoints:
-                    for expected in expected_endpoints:
-                        if expected not in found_endpoints:
-                            result["endpoints_missing"].append(expected)
+        # Scan all possible locations for endpoint definitions
+        endpoint_files = [
+            output_dir / "main.py",
+            output_dir / "app" / "main.py",
+            output_dir / "app" / "routes.py",
+            output_dir / "routes.py",
+        ]
+        found_endpoints = set()
+        for ep_file in endpoint_files:
+            if ep_file.exists():
+                try:
+                    ep_content = ep_file.read_text(encoding="utf-8")
                     
-                    if result["endpoints_missing"]:
-                        result["warnings"].append(
-                            f"Expected endpoints not found: {result['endpoints_missing']}"
-                        )
-            except Exception as e:
-                result["warnings"].append(f"Could not analyze main.py for endpoints: {e}")
+                    # Simple pattern matching for FastAPI routes
+                    import re
+                    endpoint_patterns = [
+                        r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                        r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                    ]
+                    
+                    for pattern in endpoint_patterns:
+                        matches = re.findall(pattern, ep_content, re.IGNORECASE)
+                        for method, path in matches:
+                            found_endpoints.add(path)
+                except Exception as e:
+                    result["warnings"].append(f"Could not analyze {ep_file.name} for endpoints: {e}")
+        
+        result["endpoints_found"] = list(found_endpoints)
+        
+        if expected_endpoints:
+            for expected in expected_endpoints:
+                if expected not in found_endpoints:
+                    result["endpoints_missing"].append(expected)
+            
+            if result["endpoints_missing"]:
+                result["warnings"].append(
+                    f"Expected endpoints not found: {result['endpoints_missing']}"
+                )
     
     # Check tests directory
     tests_dir = output_dir / "tests"
@@ -1624,6 +1643,32 @@ async def validate_generated_project(
                         )
                 except Exception:
                     pass
+    
+    # Check echo endpoint input validation (strip_whitespace or .strip())
+    if expected_endpoints and "/echo" in str(expected_endpoints):
+        _echo_validated = False
+        schema_files = [
+            output_dir / "app" / "schemas.py",
+            output_dir / "schemas.py",
+            output_dir / "app" / "routes.py",
+            output_dir / "routes.py",
+            output_dir / "main.py",
+            output_dir / "app" / "main.py",
+        ]
+        for sf in schema_files:
+            if sf.exists():
+                try:
+                    sc = sf.read_text(encoding="utf-8")
+                    if "strip_whitespace" in sc or ".strip()" in sc:
+                        _echo_validated = True
+                        break
+                except Exception:
+                    pass
+        if not _echo_validated:
+            result["warnings"].append(
+                "Echo endpoint schema should use strip_whitespace=True or explicit .strip() "
+                "to reject whitespace-only input"
+            )
     
     # Calculate validation time
     result["validation_time_ms"] = (time.time() - start_time) * 1000
