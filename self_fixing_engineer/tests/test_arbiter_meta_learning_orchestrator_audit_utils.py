@@ -1,11 +1,13 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import asyncio
+import importlib
 import json
 import logging
 import os
 import sys
 import uuid
+from unittest.mock import MagicMock
 
 import aiofiles
 import pytest
@@ -53,6 +55,33 @@ SAMPLE_ENV = {
 }
 
 SAMPLE_EVENT = {"event_type": "test_event", "details": {"test_key": "test_value"}}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_real_aiofiles():
+    """Ensure audit_utils uses the real aiofiles module, not a mock.
+
+    Other test modules (e.g. test_arbiter_run_exploration, test_plugins_slack_plugin,
+    test_plugins_siem_plugin) replace sys.modules["aiofiles"] with MagicMock at
+    module level. If audit_utils was imported while aiofiles was mocked, its
+    module-level ``aiofiles`` reference will still point to the mock.  This fixture
+    restores the real module before any test in this module runs.
+    """
+    global aiofiles
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils as audit_module
+
+    real_aiofiles = sys.modules.get("aiofiles")
+    if real_aiofiles is None or isinstance(real_aiofiles, MagicMock) or hasattr(real_aiofiles, '_mock_name'):
+        # Remove mocked aiofiles entries and reimport
+        for key in [k for k in list(sys.modules) if k.startswith("aiofiles")]:
+            del sys.modules[key]
+        real_aiofiles = importlib.import_module("aiofiles")
+
+    # Patch audit_utils's reference so it uses the real module
+    audit_module.aiofiles = real_aiofiles
+    # Also update this test module's own reference
+    aiofiles = real_aiofiles
+    yield
 
 
 @pytest_asyncio.fixture
