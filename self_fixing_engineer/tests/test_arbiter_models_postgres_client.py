@@ -207,6 +207,13 @@ async def clear_metrics_and_traces(in_memory_exporter):
             table='feedback',
             status='success'
         ),
+        'load_feedback_success': get_metric_value(
+            DB_CALLS_TOTAL,
+            db_type='postgresql',
+            operation='load',
+            table='feedback',
+            status='success'
+        ),
         'connections_current': get_metric_value(
             DB_CONNECTIONS_CURRENT,
             db_type='postgresql'
@@ -676,17 +683,16 @@ async def test_jsonb_handling(pg_client, mocker: MockerFixture, clear_metrics_an
     
     assert save_delta == 1
     
-    # Load operations don't need initial tracking in this test
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="load",
-            table="feedback",
-            status="success",
-        )
-        >= 1  # At least one load should have occurred
-    )
+    # Calculate load delta
+    load_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="load",
+        table="feedback",
+        status="success",
+    ) - initial['load_feedback_success']
+    
+    assert load_delta == 1
 
 
 @pytest.mark.asyncio
