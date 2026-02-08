@@ -546,3 +546,364 @@ class TestClarificationSkipResume:
         finally:
             if job_id in jobs_db:
                 del jobs_db[job_id]
+
+
+class TestPipelineResumeOnAnswerCompletion:
+    """Test that answering all questions locally triggers pipeline resumption."""
+
+    @pytest.mark.asyncio
+    async def test_single_answer_resumes_when_all_answered(self):
+        """Answering the last remaining question should resume the pipeline."""
+        from server.routers.generator import submit_clarification_response
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+        from fastapi import BackgroundTasks
+
+        job_id = "test-resume-answer-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": "# Test",
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [
+                    {"id": "q1", "question": "What database?"},
+                ],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            # OmniCore returns "submitted" — NOT "completed"
+            mock_service.submit_clarification_response = AsyncMock(return_value={
+                "status": "submitted",
+                "job_id": job_id,
+                "question_id": "q1",
+            })
+
+            bg = BackgroundTasks()
+            req = ClarificationResponseRequest(question_id="q1", response="PostgreSQL")
+
+            result = await submit_clarification_response(
+                job_id=job_id,
+                request=req,
+                background_tasks=bg,
+                generator_service=mock_service,
+            )
+
+            # Should detect all questions answered and return completed
+            assert result["status"] == "completed"
+            assert result["answered"] == 1
+            assert result["total"] == 1
+            assert job.status == JobStatus.RUNNING
+            assert job.metadata["clarification_status"] == "resolved"
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_partial_answer_does_not_resume(self):
+        """Answering only some questions should NOT resume the pipeline."""
+        from server.routers.generator import submit_clarification_response
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+        from fastapi import BackgroundTasks
+
+        job_id = "test-partial-answer-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": "# Test",
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [
+                    {"id": "q1", "question": "What database?"},
+                    {"id": "q2", "question": "What auth method?"},
+                ],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.submit_clarification_response = AsyncMock(return_value={
+                "status": "submitted",
+                "job_id": job_id,
+                "question_id": "q1",
+            })
+
+            bg = BackgroundTasks()
+            req = ClarificationResponseRequest(question_id="q1", response="PostgreSQL")
+
+            result = await submit_clarification_response(
+                job_id=job_id,
+                request=req,
+                background_tasks=bg,
+                generator_service=mock_service,
+            )
+
+            # Should record answer but NOT resume
+            assert result["status"] == "answer_recorded"
+            assert result["answered"] == 1
+            assert result["total"] == 2
+            assert job.status == JobStatus.NEEDS_CLARIFICATION
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_bulk_responses_resume_pipeline(self):
+        """Submitting all answers via bulk responses dict should resume the pipeline."""
+        from server.routers.generator import submit_clarification_response
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+        from fastapi import BackgroundTasks
+
+        job_id = "test-bulk-answer-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": "# Test",
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [
+                    {"id": "q1", "question": "What database?"},
+                    {"id": "q2", "question": "What auth method?"},
+                ],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.submit_clarification_response = AsyncMock(return_value={
+                "status": "submitted",
+            })
+
+            bg = BackgroundTasks()
+            req = ClarificationResponseRequest(
+                responses={"q1": "PostgreSQL", "q2": "OAuth2"}
+            )
+
+            result = await submit_clarification_response(
+                job_id=job_id,
+                request=req,
+                background_tasks=bg,
+                generator_service=mock_service,
+            )
+
+            # Should resume after bulk answers
+            assert result["status"] == "completed"
+            assert result["answered"] == 2
+            assert result["total"] == 2
+            assert job.status == JobStatus.RUNNING
+            assert job.metadata["clarification_status"] == "resolved"
+            # Service should have been called twice (once per question)
+            assert mock_service.submit_clarification_response.call_count == 2
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_incremental_answers_resume_on_last(self):
+        """Answering questions one by one should resume on the final answer."""
+        from server.routers.generator import submit_clarification_response
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+        from fastapi import BackgroundTasks
+
+        job_id = "test-incremental-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": "# Test",
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [
+                    {"id": "q1", "question": "What database?"},
+                    {"id": "q2", "question": "What auth method?"},
+                ],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.submit_clarification_response = AsyncMock(return_value={
+                "status": "submitted",
+            })
+
+            # Answer Q1
+            bg1 = BackgroundTasks()
+            req1 = ClarificationResponseRequest(question_id="q1", response="PostgreSQL")
+            result1 = await submit_clarification_response(
+                job_id=job_id, request=req1,
+                background_tasks=bg1, generator_service=mock_service,
+            )
+            assert result1["status"] == "answer_recorded"
+            assert job.status == JobStatus.NEEDS_CLARIFICATION
+
+            # Answer Q2 — should trigger resume
+            bg2 = BackgroundTasks()
+            req2 = ClarificationResponseRequest(question_id="q2", response="OAuth2")
+            result2 = await submit_clarification_response(
+                job_id=job_id, request=req2,
+                background_tasks=bg2, generator_service=mock_service,
+            )
+            assert result2["status"] == "completed"
+            assert job.status == JobStatus.RUNNING
+            assert job.metadata["clarification_status"] == "resolved"
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+
+class TestEmptyQuestionFiltering:
+    """Test that empty/blank clarification questions are filtered out."""
+
+    def test_filter_empty_string_questions(self):
+        """Empty string questions should be removed."""
+        from server.routers.generator import _filter_empty_questions
+
+        questions = ["What database?", "", "  ", "What auth?"]
+        filtered = _filter_empty_questions(questions)
+        assert len(filtered) == 2
+        assert filtered[0] == "What database?"
+        assert filtered[1] == "What auth?"
+
+    def test_filter_empty_dict_questions(self):
+        """Dict questions with empty/missing text should be removed."""
+        from server.routers.generator import _filter_empty_questions
+
+        questions = [
+            {"id": "q1", "question": "What database?"},
+            {"id": "q2", "question": ""},
+            {"id": "q3", "question": "  "},
+            {"id": "q4", "text": "What auth?"},
+            {"id": "q5"},  # no question or text key
+        ]
+        filtered = _filter_empty_questions(questions)
+        assert len(filtered) == 2
+        assert filtered[0]["id"] == "q1"
+        assert filtered[1]["id"] == "q4"
+
+    def test_filter_preserves_valid_questions(self):
+        """All valid questions should be preserved."""
+        from server.routers.generator import _filter_empty_questions
+
+        questions = [
+            {"id": "q1", "question": "What database?"},
+            {"id": "q2", "question": "What auth?"},
+        ]
+        filtered = _filter_empty_questions(questions)
+        assert len(filtered) == 2
+
+    @pytest.mark.asyncio
+    async def test_pipeline_filters_empty_questions(self):
+        """Pipeline should filter empty questions before storing them."""
+        from server.routers.generator import _trigger_pipeline_background
+        from server.storage import jobs_db
+
+        job_id = "test-filter-empty-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.RUNNING,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.clarify_requirements = AsyncMock(return_value={
+                "clarifications": [
+                    {"id": "q1", "question": "What database?"},
+                    {"id": "q2", "question": ""},
+                    {"id": "q3", "question": "What auth?"},
+                ],
+                "questions_count": 3,
+                "method": "rule_based",
+            })
+            mock_service.run_full_pipeline = AsyncMock()
+
+            await _trigger_pipeline_background(
+                job_id=job_id,
+                readme_content="# Test",
+                generator_service=mock_service,
+            )
+
+            # Should have filtered out the empty question
+            assert job.status == JobStatus.NEEDS_CLARIFICATION
+            stored = job.metadata["clarification_questions"]
+            assert len(stored) == 2
+            assert stored[0]["id"] == "q1"
+            assert stored[1]["id"] == "q3"
+            mock_service.run_full_pipeline.assert_not_called()
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_all_empty_questions_skips_clarification(self):
+        """If ALL questions are empty, pipeline should proceed without clarification."""
+        from server.routers.generator import _trigger_pipeline_background
+        from server.storage import jobs_db
+
+        job_id = "test-all-empty-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.RUNNING,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.clarify_requirements = AsyncMock(return_value={
+                "clarifications": [
+                    {"id": "q1", "question": ""},
+                    {"id": "q2", "question": "  "},
+                ],
+                "questions_count": 2,
+                "method": "rule_based",
+            })
+            mock_service.run_full_pipeline = AsyncMock(return_value={
+                "status": "completed",
+                "stages_completed": ["codegen"],
+            })
+
+            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize:
+                mock_finalize.return_value = True
+                await _trigger_pipeline_background(
+                    job_id=job_id,
+                    readme_content="# Test",
+                    generator_service=mock_service,
+                )
+
+            # With all empty questions filtered out, pipeline should proceed to codegen
+            mock_service.run_full_pipeline.assert_called_once()
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]

@@ -104,6 +104,26 @@ def detect_language_from_content(readme_content: str) -> str:
     return "python"
 
 
+def _filter_empty_questions(questions: list) -> list:
+    """
+    Filter out clarification questions with empty or missing text.
+
+    Handles both string questions and dict questions (with a 'question' or
+    'text' key).  Returns only questions that have non-blank content.
+    """
+    filtered = []
+    for q in questions:
+        if isinstance(q, str):
+            if q.strip():
+                filtered.append(q)
+        elif isinstance(q, dict):
+            text = q.get("question") or q.get("text") or ""
+            if text.strip():
+                filtered.append(q)
+        # Silently drop anything that is neither str nor dict
+    return filtered
+
+
 async def _trigger_pipeline_background(
     job_id: str,
     readme_content: str,
@@ -160,7 +180,17 @@ async def _trigger_pipeline_background(
             
             # Check if clarification generated questions that need user input
             clarifications = clarify_result.get("clarifications", [])
-            questions_count = clarify_result.get("questions_count", len(clarifications))
+
+            # Filter out empty/blank questions (Fix C: prevents blank Q2 bug)
+            original_count = len(clarifications)
+            clarifications = _filter_empty_questions(clarifications)
+            if len(clarifications) < original_count:
+                logger.warning(
+                    f"[Pipeline] Dropped {original_count - len(clarifications)} empty "
+                    f"clarification question(s) for job {job_id}"
+                )
+
+            questions_count = len(clarifications)
             
             if questions_count > 0:
                 # Store clarification questions in job metadata for later retrieval
@@ -789,7 +819,17 @@ async def clarify_requirements(
         
         # Check if questions were generated and return proper response
         questions = result.get("clarifications", [])
-        questions_count = result.get("questions_count", len(questions))
+
+        # Filter out empty/blank questions (Fix C: prevents blank Q2 bug)
+        original_count = len(questions)
+        questions = _filter_empty_questions(questions)
+        if len(questions) < original_count:
+            logger.warning(
+                f"Dropped {original_count - len(questions)} empty "
+                f"clarification question(s) for job {job_id}"
+            )
+
+        questions_count = len(questions)
         
         if questions and questions_count > 0:
             # Questions generated - return them for UI display
@@ -929,24 +969,61 @@ async def submit_clarification_response(
             detail="Must provide question_id+response, responses, or skip=true",
         )
 
-    logger.debug(f"Received clarification response for job {job_id}, question {request.question_id}")
+    # Initialize local answer tracking if not present
+    if "clarification_answers" not in job.metadata:
+        job.metadata["clarification_answers"] = {}
 
-    result = await generator_service.submit_clarification_response(
-        job_id=job_id,
-        question_id=request.question_id or "",
-        response=request.response or "",
+    # Build a map of question_id -> answer from this request
+    answers_to_record: dict = {}
+    if request.responses:
+        # Bulk answers keyed by question ID
+        answers_to_record = dict(request.responses)
+    elif request.question_id:
+        answers_to_record = {request.question_id: request.response or ""}
+
+    logger.debug(
+        f"Received clarification response for job {job_id}, "
+        f"questions: {list(answers_to_record.keys())}"
     )
 
-    # If all questions are answered, resume the pipeline
-    if result.get("status") == "completed":
-        clarified_requirements = result.get("clarified_requirements", {})
+    # Record each answer via OmniCore and store locally
+    last_result = {}
+    for qid, answer in answers_to_record.items():
+        result = await generator_service.submit_clarification_response(
+            job_id=job_id,
+            question_id=qid,
+            response=answer,
+        )
+        job.metadata["clarification_answers"][qid] = answer
+        last_result = result
+
+    job.updated_at = datetime.now(timezone.utc)
+
+    # Determine the total number of clarification questions
+    questions = job.metadata.get("clarification_questions", [])
+    total_questions = len(questions)
+    answered_count = len(job.metadata["clarification_answers"])
+
+    # Check if all questions are now answered (locally tracked) or
+    # if OmniCore signalled completion
+    all_answered = (
+        (total_questions > 0 and answered_count >= total_questions)
+        or last_result.get("status") == "completed"
+    )
+
+    if all_answered:
+        # Build clarified requirements from recorded answers
+        clarified_requirements = last_result.get("clarified_requirements", {})
+        if not clarified_requirements:
+            clarified_requirements = {
+                "clarified_requirements": dict(job.metadata["clarification_answers"])
+            }
         logger.info(
-            f"[Pipeline] All clarification questions answered for job {job_id}. "
-            f"Resuming pipeline with clarified requirements."
+            f"[Pipeline] All clarification questions answered for job {job_id} "
+            f"({answered_count}/{total_questions}). Resuming pipeline."
         )
         job.metadata["clarification_status"] = "resolved"
         job.status = JobStatus.RUNNING
-        job.updated_at = datetime.now(timezone.utc)
 
         background_tasks.add_task(
             _resume_pipeline_after_clarification,
@@ -955,8 +1032,25 @@ async def submit_clarification_response(
             clarified_requirements=clarified_requirements,
         )
 
-    logger.info(f"Clarification response submitted for job {job_id}, question {request.question_id}")
-    return result
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "message": "All clarification questions answered. Pipeline resuming.",
+            "answered": answered_count,
+            "total": total_questions,
+        }
+
+    logger.info(
+        f"Clarification response submitted for job {job_id} "
+        f"({answered_count}/{total_questions} answered)"
+    )
+    return {
+        "job_id": job_id,
+        "status": "answer_recorded",
+        "message": f"Answer recorded ({answered_count}/{total_questions}).",
+        "answered": answered_count,
+        "total": total_questions,
+    }
 
 
 @router.post("/{job_id}/codegen")

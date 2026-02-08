@@ -236,7 +236,7 @@ class TestClarifierIntegration:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "response_submitted"
+        assert data["status"] == "answer_recorded"
 
 
 class TestGeneratorStatusAndLogs:
