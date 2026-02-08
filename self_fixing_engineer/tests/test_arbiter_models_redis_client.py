@@ -33,7 +33,7 @@ SAMPLE_ENV = {
     "REDIS_USE_SSL": "false",
     "LOG_LEVEL": "DEBUG",
     "SFE_OTEL_EXPORTER_TYPE": "console",
-    "REDIS_HEALTH_CHECK_INTERVAL": "60",
+    "REDIS_HEALTH_CHECK_INTERVAL": "0.1",
     "REDIS_MAX_CONNECTIONS": "50",
     "METRICS_PORT": "0",
     "ENV": "dev",

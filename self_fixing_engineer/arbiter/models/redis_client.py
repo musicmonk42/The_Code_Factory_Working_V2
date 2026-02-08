@@ -272,17 +272,35 @@ class RedisClient:
             return False
 
     async def _start_health_check(
-        self, interval: float = float(os.getenv("REDIS_HEALTH_CHECK_INTERVAL", "60.0"))
+        self, interval: Optional[float] = None
     ) -> None:
         """Runs a background task to periodically check connection health."""
+        if interval is None:
+            interval = float(os.getenv("REDIS_HEALTH_CHECK_INTERVAL", "60.0"))
         while self.client is not None:
             try:
                 if not await self.ping():
-                    await self.reconnect()
-                await self.update_redis_stats()
+                    logger.warning("Redis connection unhealthy during health check, attempting reconnect.")
+                    try:
+                        await self.client.close()
+                    except Exception as e:
+                        logger.debug(f"Error closing client during health check reconnect: {e}")
+                    self.client = None
+                    # Re-establish connection without creating another health check task
+                    max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "50"))
+                    self.client = aioredis.from_url(
+                        self.redis_url,
+                        decode_responses=True,
+                        ssl=self.use_ssl,
+                        max_connections=max_connections,
+                    )
+                    await self.client.ping()
+                    logger.info("Redis reconnected successfully during health check.")
+                else:
+                    await self.update_redis_stats()
             except asyncio.CancelledError:
                 logger.info("Health check task cancelled.")
-                break
+                raise
             except Exception as e:
                 logger.error(f"Health check failed: {e}", exc_info=True)
             await asyncio.sleep(interval)
@@ -316,10 +334,12 @@ class RedisClient:
             return
         if self._health_check_task:
             self._health_check_task.cancel()
-            try:
-                await self._health_check_task
-            except asyncio.CancelledError:
-                pass
+            # Avoid deadlock: don't await the health check task if we ARE the health check task
+            if asyncio.current_task() is not self._health_check_task:
+                try:
+                    await self._health_check_task
+                except asyncio.CancelledError:
+                    pass
             self._health_check_task = None
         with tracer.start_as_current_span("redis_disconnect") as span:
             start_time = time.monotonic()
