@@ -129,6 +129,10 @@ class AiofilesMock:
         return AsyncFileMock("{}")
 
 
+# Save original aiofiles module before mocking
+_original_aiofiles = sys.modules.get("aiofiles")
+_original_aiofiles_keys = {k: v for k in list(sys.modules) if k.startswith("aiofiles") if (v := sys.modules.get(k)) is not None}
+
 # Mock aiofiles module
 aiofiles_mock = MagicMock()
 aiofiles_mock.open = AiofilesMock.open
@@ -160,6 +164,12 @@ def _restore_original_modules():
         elif mod_name in sys.modules and isinstance(sys.modules[mod_name], MagicMock):
             # Only remove if it's our mock
             del sys.modules[mod_name]
+    # Restore original aiofiles modules
+    for key in list(sys.modules):
+        if key.startswith("aiofiles") and key not in _original_aiofiles_keys:
+            del sys.modules[key]
+    for key, mod in _original_aiofiles_keys.items():
+        sys.modules[key] = mod
 
 
 # Register cleanup to run after all tests in this module

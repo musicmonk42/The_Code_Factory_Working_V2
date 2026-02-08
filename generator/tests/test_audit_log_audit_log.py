@@ -134,7 +134,9 @@ for name in pkg_roots:
         sys.modules[name] = mod
 
 # --- Stub 1: audit_backend_core (for get_backend) ---
+# Save original module for restoration after tests
 backend_core_name = "generator.audit_log.audit_backend.audit_backend_core"
+_original_backend_core = sys.modules.get(backend_core_name)
 backend_core = ModuleType(backend_core_name)
 backend_core.__path__ = []
 backend_core.__spec__ = importlib.machinery.ModuleSpec(
@@ -284,6 +286,16 @@ except Exception:
 # --------------------------------------------------------------------------- #
 # 4. Fixtures
 # --------------------------------------------------------------------------- #
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_backend_core_module():
+    """Restore the original audit_backend_core module when this test module finishes."""
+    yield
+    if _original_backend_core is not None:
+        sys.modules[backend_core_name] = _original_backend_core
+    elif backend_core_name in sys.modules:
+        del sys.modules[backend_core_name]
 
 
 @pytest.fixture(scope="function")

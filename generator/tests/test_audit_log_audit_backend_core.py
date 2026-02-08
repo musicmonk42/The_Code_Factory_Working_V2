@@ -58,6 +58,20 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Ensure the real audit_backend_core module is loaded, not a stub
+# (test_audit_log_audit_log.py replaces it and parent packages with stubs)
+_core_mod_name = "generator.audit_log.audit_backend.audit_backend_core"
+_existing = sys.modules.get(_core_mod_name)
+if _existing is not None and not hasattr(_existing, "BACKEND_ERRORS"):
+    # Remove stub and any stub parent packages so reimport works
+    for _key in [_core_mod_name,
+                 "generator.audit_log.audit_backend",
+                 "generator.audit_log",
+                 "generator"]:
+        _mod = sys.modules.get(_key)
+        if _mod is not None and getattr(_mod, "__file__", "").startswith("<mocked"):
+            del sys.modules[_key]
+
 # Import modules using standard paths
 from generator.audit_log.audit_backend.audit_backend_core import (
     BACKEND_ERRORS,

@@ -48,6 +48,9 @@ mock_psutil.virtual_memory.return_value.used = 1024 * 1024
 mock_psutil.virtual_memory.return_value.percent = 50.0
 sys.modules["psutil"] = mock_psutil
 
+# Save original aiofiles modules before mocking
+_original_aiofiles_keys = {k: v for k in list(sys.modules) if k.startswith("aiofiles") if (v := sys.modules.get(k)) is not None}
+
 # Mock aiofiles at module level before importing slack_plugin
 mock_aiofiles = MagicMock()
 mock_aiofiles.open = AsyncMock()
@@ -84,6 +87,17 @@ class NonCriticalError(Exception):
 
 
 # --- Test Setup ---
+@pytest.fixture(scope="module", autouse=True)
+def _restore_aiofiles_after_module():
+    """Restore original aiofiles modules when this test module finishes."""
+    yield
+    for key in list(sys.modules):
+        if key.startswith("aiofiles") and key not in _original_aiofiles_keys:
+            del sys.modules[key]
+    for key, mod in _original_aiofiles_keys.items():
+        sys.modules[key] = mod
+
+
 @pytest.fixture(scope="function", autouse=True)
 def setup_environment(monkeypatch):
     """Set up additional environment variables for the test session if needed."""
