@@ -185,3 +185,20 @@ class TestMaterializerIntegration:
         assert (output_path / "main.py").exists()
         assert (output_path / "tests" / "test_main.py").exists()
         assert (output_path / "requirements.txt").exists()
+
+    @pytest.mark.asyncio
+    async def test_codegen_error_txt_only_returns_error(
+        self, service, job_id, mock_job
+    ):
+        """Test that error.txt-only results are returned as errors."""
+        self._setup_service(service, {
+            "error.txt": "LLM response did not contain recognizable code.",
+        })
+
+        payload = {
+            "requirements": "Something",
+            "language": "python",
+        }
+
+        result = await service._run_codegen(job_id, payload)
+        assert result["status"] == "error"
