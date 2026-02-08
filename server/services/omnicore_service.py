@@ -1878,14 +1878,11 @@ class OmniCoreService:
                 
                 if not configs:
                     logger.warning(f"Deploy agent returned no configurations for job {job_id}")
-                    # Generate a default Dockerfile as fallback so deployment
-                    # artifacts are never completely missing.
                     generated_files = []
                     if platform in ("docker", "dockerfile"):
-                        # Default assumes a Python/FastAPI project structure.
-                        # This is a best-effort fallback when the deploy agent
-                        # produces no output; projects with different structures
-                        # should configure their own Dockerfile.
+                        output_dir = repo_path
+                        
+                        # Default Dockerfile
                         default_dockerfile = (
                             "FROM python:3.11-slim\n"
                             "WORKDIR /app\n"
@@ -1894,13 +1891,51 @@ class OmniCoreService:
                             "COPY . /app\n"
                             'CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]\n'
                         )
-                        output_dir = repo_path
                         file_path = output_dir / "Dockerfile"
                         async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                             await f.write(default_dockerfile)
                         generated_files.append("Dockerfile")
+                        
+                        # Default docker-compose.yml
+                        default_compose = (
+                            "version: '3.8'\n\n"
+                            "services:\n"
+                            "  app:\n"
+                            "    build:\n"
+                            "      context: .\n"
+                            "      dockerfile: Dockerfile\n"
+                            "    ports:\n"
+                            '      - "8000:8000"\n'
+                            "    environment:\n"
+                            "      - ENVIRONMENT=production\n"
+                            "      - LOG_LEVEL=info\n"
+                            "    restart: unless-stopped\n"
+                            "    healthcheck:\n"
+                            '      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]\n'
+                            "      interval: 30s\n"
+                            "      timeout: 10s\n"
+                            "      retries: 3\n"
+                            "      start_period: 40s\n"
+                        )
+                        compose_path = output_dir / "docker-compose.yml"
+                        async with aiofiles.open(compose_path, "w", encoding="utf-8") as f:
+                            await f.write(default_compose)
+                        generated_files.append("docker-compose.yml")
+                        
+                        # Default .dockerignore
+                        default_dockerignore = (
+                            "__pycache__\n*.pyc\n*.pyo\n.git\n.gitignore\n"
+                            ".env\n.venv\nvenv\nnode_modules\n"
+                            ".pytest_cache\n.mypy_cache\n*.egg-info\n"
+                            "dist\nbuild\n.coverage\nhtmlcov\n"
+                        )
+                        dockerignore_path = output_dir / ".dockerignore"
+                        async with aiofiles.open(dockerignore_path, "w", encoding="utf-8") as f:
+                            await f.write(default_dockerignore)
+                        generated_files.append(".dockerignore")
+                        
                         logger.info(
-                            f"[DEPLOY] Generated default Dockerfile fallback for job {job_id}"
+                            f"[DEPLOY] Generated default deployment fallback for job {job_id}: {generated_files}"
                         )
                     return {
                         "status": "completed",

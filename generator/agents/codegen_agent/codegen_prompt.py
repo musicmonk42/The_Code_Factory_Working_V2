@@ -247,7 +247,23 @@ The following are MANDATORY checks:
    - Maintain proper indentation levels for nested blocks
    - Verify indentation after control structures
 
-5. PRE-GENERATION CHECKLIST:
+5. ORGANIZE INTO FILES:
+   Structure as a proper project with separate files:
+   - main.py (or equivalent entry point)
+   - routes.py (API route definitions, if applicable)
+   - models.py (data structures/schemas)
+   - utils.py or helpers.py (utility functions if needed)
+   - requirements.txt (dependencies)
+   - README.md (setup and usage instructions)
+
+6. INPUT VALIDATION (for Pydantic models):
+   - Use field constraints for string inputs:
+     * Use `constr(strip_whitespace=True, min_length=1)` for required text fields
+     * Use `Field(..., min_length=1)` with `@field_validator` for stripping whitespace
+     * Never accept empty or whitespace-only strings for required text inputs
+     * Example: `message: constr(strip_whitespace=True, min_length=1)` instead of `message: str`
+
+7. PRE-GENERATION CHECKLIST:
    Before submitting your response, mentally verify:
    ☐ All strings are properly quoted
    ☐ All control structures have colons
