@@ -1305,6 +1305,25 @@ async def materialize_file_map(
         if normalize_newlines:
             content = content.replace("\r\n", "\n").replace("\r", "\n")
         
+        # Normalize escaped characters from LLM output (literal \\n, \\t)
+        # This prevents files being written with two-char escape sequences
+        # instead of real control characters.
+        content = content.replace("\\r\\n", "\n")
+        content = content.replace("\\n", "\n")
+        content = content.replace("\\t", "\t")
+        # Strip BOM
+        content = content.lstrip("\ufeff")
+        
+        # Strip markdown fences if the entire content is wrapped in them
+        import re as _re
+        _fence_pat = _re.compile(
+            r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
+            _re.DOTALL | _re.IGNORECASE,
+        )
+        _m = _fence_pat.match(content.strip())
+        if _m:
+            content = _m.group(1)
+        
         # Compute full path (already validated to be within output_dir)
         file_path = (output_dir / relative_path).resolve()
         
@@ -1511,6 +1530,8 @@ async def validate_generated_project(
         })
         # Add app-layout files to required_files if not already there
         for af in ["app/main.py", "app/routes.py", "app/schemas.py",
+                    "tests/test_health.py", "tests/test_version.py",
+                    "tests/test_echo.py",
                     "requirements.txt", "README.md", ".env.example"]:
             if af not in required_files:
                 required_files.append(af)

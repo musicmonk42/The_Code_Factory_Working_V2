@@ -1982,6 +1982,10 @@ class OmniCoreService:
                     else:
                         filename = f"{target}.config"
                     
+                    # Sanitize Dockerfile content: strip markdown/images/mermaid tokens
+                    if filename == "Dockerfile":
+                        config_content = self._sanitize_dockerfile_content(config_content)
+                    
                     file_path = output_dir / filename
                     
                     # Write the file
@@ -2050,6 +2054,55 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
     
+    @staticmethod
+    def _sanitize_dockerfile_content(content: str) -> str:
+        """Sanitize Dockerfile content from LLM responses.
+
+        Strips markdown fences, image/badge lines, mermaid blocks, and
+        ensures the first non-comment non-blank line starts with FROM.
+        If no FROM is found, prepends a default FROM instruction.
+        """
+        import re as _re
+
+        if not content or not isinstance(content, str):
+            return content
+
+        # Strip markdown fences (```dockerfile ... ```)
+        content = _re.sub(
+            r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', content, flags=_re.IGNORECASE
+        )
+        content = _re.sub(r'\n```\s*$', '', content)
+
+        lines = content.splitlines()
+        cleaned: list = []
+        for line in lines:
+            stripped = line.strip()
+            # Remove markdown image/badge lines: ![...](...)
+            if stripped.startswith('!['):
+                continue
+            # Remove mermaid/markdown tokens
+            if stripped.startswith('```'):
+                continue
+            # Remove lines starting with '!' (invalid Dockerfile token)
+            if stripped.startswith('!'):
+                continue
+            cleaned.append(line)
+
+        # Ensure first non-comment non-blank line starts with FROM
+        has_from = False
+        for line in cleaned:
+            s = line.strip()
+            if not s or s.startswith('#'):
+                continue
+            if s.upper().startswith('FROM'):
+                has_from = True
+            break
+
+        if not has_from:
+            cleaned.insert(0, 'FROM python:3.11-slim')
+
+        return '\n'.join(cleaned)
+
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute documentation generation with timeout."""
         # Ensure agents are loaded before use

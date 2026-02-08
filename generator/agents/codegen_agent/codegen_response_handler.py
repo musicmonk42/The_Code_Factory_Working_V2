@@ -323,6 +323,49 @@ DEFAULT_COMMENT_STYLE = ("#", "")
 
 
 # ==============================================================================
+# --- Content Normalization ---
+# ==============================================================================
+
+
+def _normalize_file_content(content: str) -> str:
+    """
+    Normalize file content from LLM responses before syntax validation.
+
+    Handles common issues where LLM output contains escaped characters
+    that are literal two-character sequences instead of real control chars:
+      - ``\\n`` (backslash + n) → real newline
+      - ``\\t`` (backslash + t) → real tab
+      - ``\\r\\n`` → real newline
+    Also strips:
+      - Leading BOM (U+FEFF)
+      - Markdown fences (```python ... ```)
+    """
+    if not content:
+        return content
+
+    # Strip BOM
+    content = content.lstrip("\ufeff")
+
+    # Unescape literal two-char sequences that should be real control chars.
+    # Order matters: \\r\\n before \\n to avoid partial replacement.
+    content = content.replace("\\r\\n", "\n")
+    content = content.replace("\\n", "\n")
+    content = content.replace("\\t", "\t")
+
+    # Strip markdown fences if the entire content is wrapped in them
+    stripped = content.strip()
+    fence_pattern = re.compile(
+        r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
+        re.DOTALL | re.IGNORECASE,
+    )
+    m = fence_pattern.match(stripped)
+    if m:
+        content = m.group(1)
+
+    return content
+
+
+# ==============================================================================
 # --- Tooling Helpers ---
 # ==============================================================================
 
@@ -445,7 +488,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     errors[filename] = "Content is not a string."
                     continue
 
-                cleaned = _clean_code_block(content)
+                cleaned = _normalize_file_content(_clean_code_block(content))
                 
                 # Use validate_and_repair_syntax instead of _validate_syntax
                 validation_result = validate_and_repair_syntax(cleaned, lang, filename)
@@ -459,6 +502,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         repair_logs.append(repair_info)
                         logger.info(repair_info)
                 else:
+                    # Save normalized content anyway for debugging
+                    code_files[filename] = cleaned
                     logger.warning(
                         "Syntax validation failed for '%s' (%s). Details: %s",
                         filename,
@@ -519,7 +564,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         errors[filename] = "Content is not a string."
                         continue
 
-                    cleaned = _clean_code_block(content)
+                    cleaned = _normalize_file_content(_clean_code_block(content))
                     
                     # Use validate_and_repair_syntax instead of _validate_syntax
                     validation_result = validate_and_repair_syntax(cleaned, lang, filename)
@@ -533,6 +578,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                             repair_logs.append(repair_info)
                             logger.info(repair_info)
                     else:
+                        # Save normalized content anyway for debugging
+                        code_files[filename] = cleaned
                         logger.warning(
                             "Syntax validation failed for '%s' (%s). Details: %s",
                             filename,
@@ -1174,8 +1221,10 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
 
     # --- Python ---
     if lang_l in ("python", "py"):
+        # Normalize content before syntax validation to handle escaped chars
+        normalized = _normalize_file_content(code)
         try:
-            compile(code, filename, "exec")
+            compile(normalized, filename, "exec")
             return True, ""
         except SyntaxError as e:
             msg = f"{e.__class__.__name__}: {e}"
@@ -1301,6 +1350,9 @@ def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[
             - 'repairs_applied': List[str] - List of repairs that were applied
             - 'auto_repaired': bool - Whether auto-repair was needed and successful
     """
+    # Normalize content first to handle escaped characters from LLM
+    code = _normalize_file_content(code)
+    
     # Try original code first
     is_valid, error_msg = _validate_syntax(code, language, filename)
     
