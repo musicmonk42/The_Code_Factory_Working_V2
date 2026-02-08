@@ -918,6 +918,11 @@ async def submit_clarification_response(
         }
 
     # Validate that either question_id+response or responses is provided
+    if request.question_id and not request.response:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide response when question_id is specified",
+        )
     if not request.question_id and not request.responses:
         raise HTTPException(
             status_code=400,
