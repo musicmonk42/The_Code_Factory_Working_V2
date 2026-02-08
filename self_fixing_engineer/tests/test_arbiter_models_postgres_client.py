@@ -180,33 +180,47 @@ async def pg_client(mocker: MockerFixture):
 
 @pytest_asyncio.fixture(autouse=True)
 async def clear_metrics_and_traces(in_memory_exporter):
-    """Clear Prometheus metrics and OpenTelemetry traces before each test."""
+    """Clear OpenTelemetry traces and capture initial metric state before each test."""
     # Clear OpenTelemetry spans
     in_memory_exporter.clear()
     
-    # Clear Prometheus metrics
-    # We need to clear the internal counters of all metrics
-    from prometheus_client import REGISTRY
+    # Capture initial metric values to calculate deltas
+    initial_metrics = {
+        'connect_success': get_metric_value(
+            DB_CALLS_TOTAL,
+            db_type='postgresql',
+            operation='connect',
+            table='n/a',
+            status='success'
+        ),
+        'disconnect_success': get_metric_value(
+            DB_CALLS_TOTAL,
+            db_type='postgresql',
+            operation='disconnect',
+            table='n/a',
+            status='success'
+        ),
+        'save_feedback_success': get_metric_value(
+            DB_CALLS_TOTAL,
+            db_type='postgresql',
+            operation='save',
+            table='feedback',
+            status='success'
+        ),
+        'load_feedback_success': get_metric_value(
+            DB_CALLS_TOTAL,
+            db_type='postgresql',
+            operation='load',
+            table='feedback',
+            status='success'
+        ),
+        'connections_current': get_metric_value(
+            DB_CONNECTIONS_CURRENT,
+            db_type='postgresql'
+        ),
+    }
     
-    # Clear all metric values by iterating through collectors
-    for collector in list(REGISTRY._collector_to_names.keys()):
-        # Skip process and platform collectors
-        if hasattr(collector, '_metrics'):
-            collector._metrics.clear()
-    
-    # Reset specific metrics we use in tests
-    try:
-        # Reset Counter metrics by clearing their internal state
-        if hasattr(DB_CALLS_TOTAL, '_metrics'):
-            DB_CALLS_TOTAL._metrics.clear()
-        if hasattr(DB_CALLS_ERRORS, '_metrics'):
-            DB_CALLS_ERRORS._metrics.clear()
-        if hasattr(DB_CONNECTIONS_CURRENT, '_metrics'):
-            DB_CONNECTIONS_CURRENT._metrics.clear()
-    except:
-        pass  # Ignore any errors during cleanup
-    
-    yield
+    yield initial_metrics
 
 
 @pytest.mark.asyncio
@@ -244,23 +258,25 @@ async def test_connect_success(pg_client, in_memory_exporter):
 
 
 @pytest.mark.asyncio
-async def test_connect_idempotent(pg_client, caplog):
+async def test_connect_idempotent(pg_client, caplog, clear_metrics_and_traces):
     """Test connect is idempotent."""
+    initial = clear_metrics_and_traces
+    
     caplog.set_level(logging.INFO)
     await pg_client.connect()
     await pg_client.connect()  # Second call should return early
     assert "PostgreSQL client already connected" in caplog.text
-    # Only one successful connection should be recorded
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="connect",
-            table="n/a",
-            status="success",
-        )
-        == 1
-    )
+    
+    # Only one successful connection should be recorded (delta should be 1)
+    connect_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="connect",
+        table="n/a",
+        status="success",
+    ) - initial['connect_success']
+    
+    assert connect_delta == 1
 
 
 @pytest.mark.asyncio
@@ -302,25 +318,35 @@ async def test_connect_failure(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
-async def test_disconnect_success(pg_client, in_memory_exporter):
+async def test_disconnect_success(pg_client, in_memory_exporter, clear_metrics_and_traces):
     """Test successful disconnection."""
+    initial = clear_metrics_and_traces
+    
     await pg_client.connect()
     await pg_client.disconnect()
     assert pg_client._pool is None
     assert pg_client._is_closed
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="disconnect",
-            table="n/a",
-            status="success",
-        )
-        == 1
-    )
-    assert get_metric_value(DB_CONNECTIONS_CURRENT, db_type="postgresql") == 0
+    
+    # Calculate disconnect delta
+    disconnect_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="disconnect",
+        table="n/a",
+        status="success",
+    ) - initial['disconnect_success']
+    
+    assert disconnect_delta == 1
+    
+    # Check connection gauge decreased
+    connections_delta = get_metric_value(
+        DB_CONNECTIONS_CURRENT,
+        db_type="postgresql"
+    ) - initial['connections_current']
+    
+    assert connections_delta == 0
 
-    # Check for spans if available (optional since tracer might already be configured)
+    # Check for spans if available
     spans = in_memory_exporter.get_finished_spans()
     if spans:
         disconnect_span = next(
@@ -331,8 +357,10 @@ async def test_disconnect_success(pg_client, in_memory_exporter):
 
 
 @pytest.mark.asyncio
-async def test_disconnect_idempotent(pg_client, caplog):
+async def test_disconnect_idempotent(pg_client, caplog, clear_metrics_and_traces):
     """Test disconnect is idempotent."""
+    initial = clear_metrics_and_traces
+    
     caplog.set_level(logging.INFO)
     await pg_client.disconnect()  # Not connected
     assert "PostgreSQL client already disconnected" in caplog.text
@@ -342,17 +370,17 @@ async def test_disconnect_idempotent(pg_client, caplog):
     await pg_client.disconnect()
     await pg_client.disconnect()  # Second call
     assert "PostgreSQL client already disconnected" in caplog.text
-    # Only one successful disconnect should be recorded
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="disconnect",
-            table="n/a",
-            status="success",
-        )
-        == 1
-    )
+    
+    # Only one successful disconnect should be recorded (delta should be 1)
+    disconnect_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="disconnect",
+        table="n/a",
+        status="success",
+    ) - initial['disconnect_success']
+    
+    assert disconnect_delta == 1
 
 
 @pytest.mark.asyncio
@@ -579,8 +607,10 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
-async def test_concurrent_save(pg_client, mocker: MockerFixture):
+async def test_concurrent_save(pg_client, mocker: MockerFixture, clear_metrics_and_traces):
     """Test concurrent save operations."""
+    initial = clear_metrics_and_traces
+    
     await pg_client.connect()
 
     # Mock fetch to return different IDs for each save
@@ -600,21 +630,24 @@ async def test_concurrent_save(pg_client, mocker: MockerFixture):
     results = await asyncio.gather(*tasks)
     assert len(results) == 5
     assert all(isinstance(sid, str) for sid in results)
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="save",
-            table="feedback",
-            status="success",
-        )
-        == 5
-    )
+    
+    # Calculate save delta
+    save_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="save",
+        table="feedback",
+        status="success",
+    ) - initial['save_feedback_success']
+    
+    assert save_delta == 5
 
 
 @pytest.mark.asyncio
-async def test_jsonb_handling(pg_client, mocker: MockerFixture):
+async def test_jsonb_handling(pg_client, mocker: MockerFixture, clear_metrics_and_traces):
     """Test JSONB field handling and parsing."""
+    initial = clear_metrics_and_traces
+    
     await pg_client.connect()
 
     data_with_jsonb = {
@@ -638,26 +671,28 @@ async def test_jsonb_handling(pg_client, mocker: MockerFixture):
 
     assert isinstance(record["data"], dict)
     assert record["data"]["nested"]["key"] == "value"
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="save",
-            table="feedback",
-            status="success",
-        )
-        == 1
-    )
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="load",
-            table="feedback",
-            status="success",
-        )
-        == 1
-    )
+    
+    # Calculate save delta
+    save_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="save",
+        table="feedback",
+        status="success",
+    ) - initial['save_feedback_success']
+    
+    assert save_delta == 1
+    
+    # Calculate load delta
+    load_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="load",
+        table="feedback",
+        status="success",
+    ) - initial['load_feedback_success']
+    
+    assert load_delta == 1
 
 
 @pytest.mark.asyncio
@@ -702,8 +737,10 @@ async def test_ssl_mode(mocker: MockerFixture):
 
 
 @pytest.mark.asyncio
-async def test_context_manager(pg_client, mocker: MockerFixture):
+async def test_context_manager(pg_client, mocker: MockerFixture, clear_metrics_and_traces):
     """Test async context manager for connect/disconnect."""
+    initial = clear_metrics_and_traces
+    
     # Don't access pool before it's created
     async with pg_client:
         assert pg_client._pool is not None
@@ -718,26 +755,28 @@ async def test_context_manager(pg_client, mocker: MockerFixture):
 
     assert pg_client._pool is None
     assert pg_client._is_closed
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="connect",
-            table="n/a",
-            status="success",
-        )
-        == 1
-    )
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="disconnect",
-            table="n/a",
-            status="success",
-        )
-        == 1
-    )
+    
+    # Calculate connect delta
+    connect_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="connect",
+        table="n/a",
+        status="success",
+    ) - initial['connect_success']
+    
+    assert connect_delta == 1
+    
+    # Calculate disconnect delta
+    disconnect_delta = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="disconnect",
+        table="n/a",
+        status="success",
+    ) - initial['disconnect_success']
+    
+    assert disconnect_delta == 1
 
 
 @pytest.mark.asyncio
