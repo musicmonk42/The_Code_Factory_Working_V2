@@ -1008,7 +1008,8 @@ async def submit_clarification_response(
     # Check if bulk responses were provided that cover all questions
     # This handles the case where the frontend sends all answers at once
     bulk_responses_cover_all = (
-        request.responses 
+        request.responses
+        and total_questions > 0
         and len(request.responses) >= total_questions
     )
 

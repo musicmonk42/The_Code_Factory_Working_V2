@@ -193,7 +193,7 @@ class TestBulkResponseHandling:
             request = ClarificationResponseRequest(
                 responses={
                     "q1": "Answer 1",
-                    "q2": "Answer 2", 
+                    "q2": "Answer 2",
                     "q3": "Answer 3",
                 }
             )
