@@ -173,15 +173,45 @@ async def ensure_metrics_work():
     module-level Counter objects from the active registry.  This fixture
     re-fetches the live counter references from the core module and
     re-registers them with the current active REGISTRY if necessary.
+
+    If the module was only partially loaded (e.g. due to an earlier import
+    failure during pytest collection), the metrics are re-created using
+    safe_counter to ensure tests can still run.
     """
     global BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES
 
     # Re-fetch the counter objects from the live module to ensure we are
     # checking the same objects that the production code increments.
     live_module = sys.modules.get("generator.audit_log.audit_backend.audit_backend_core", core)
-    BACKEND_ERRORS = live_module.BACKEND_ERRORS
-    BACKEND_WRITES = live_module.BACKEND_WRITES
-    BACKEND_TAMPER_DETECTION_FAILURES = live_module.BACKEND_TAMPER_DETECTION_FAILURES
+
+    # Defensively fetch metrics; if the module was partially loaded (e.g. during
+    # early pytest collection before env vars were set), recreate them.
+    from generator.audit_log.audit_backend.audit_backend_core import safe_counter
+
+    _be = getattr(live_module, "BACKEND_ERRORS", None)
+    BACKEND_ERRORS = _be if _be is not None else safe_counter(
+        "audit_backend_errors_total", "Total errors per backend", ["backend", "type"]
+    )
+
+    _bw = getattr(live_module, "BACKEND_WRITES", None)
+    BACKEND_WRITES = _bw if _bw is not None else safe_counter(
+        "audit_backend_writes_total", "Total writes to backend", ["backend"]
+    )
+
+    _btdf = getattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES", None)
+    BACKEND_TAMPER_DETECTION_FAILURES = _btdf if _btdf is not None else safe_counter(
+        "audit_backend_tamper_detection_failures_total",
+        "Count of failed tamper detection checks",
+        ["backend"],
+    )
+
+    # If the module was missing attributes, set them so other code can find them.
+    if not hasattr(live_module, "BACKEND_ERRORS"):
+        live_module.BACKEND_ERRORS = BACKEND_ERRORS
+    if not hasattr(live_module, "BACKEND_WRITES"):
+        live_module.BACKEND_WRITES = BACKEND_WRITES
+    if not hasattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES"):
+        live_module.BACKEND_TAMPER_DETECTION_FAILURES = BACKEND_TAMPER_DETECTION_FAILURES
 
     # Ensure the counters are registered with the current active REGISTRY.
     try:

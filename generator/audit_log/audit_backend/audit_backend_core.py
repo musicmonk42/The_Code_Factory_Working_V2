@@ -258,9 +258,14 @@ class CryptoInitializationError(Exception):
 
 # FIX: Set test mode environment variables BEFORE creating Dynaconf
 def _is_test_or_dev_mode() -> bool:
-    # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag
+    # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag.
+    # CI workflows set TESTING=1 and/or CI=1 which should also trigger test mode
+    # to avoid KMS/production crypto initialization during test collection.
     return bool(
-        os.getenv("PYTEST_CURRENT_TEST") or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
+        os.getenv("PYTEST_CURRENT_TEST")
+        or os.getenv("AUDIT_LOG_DEV_MODE") == "true"
+        or os.getenv("TESTING") == "1"
+        or os.getenv("CI") == "1"
     )
 
 
