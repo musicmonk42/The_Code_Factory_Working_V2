@@ -79,14 +79,35 @@ async def redis_client(mocker: MockerFixture):
     mock_client = mocker.MagicMock(spec=aioredis.Redis)
     mock_client.ping = mocker.AsyncMock(return_value=True)
 
-    async def mock_set(key, value, ex=None, px=None):
+    async def mock_set(key, value, ex=None, px=None, nx=False, xx=False, **kwargs):
+        # nx=True means "set if not exists"
+        # xx=True means "set if exists"
+        if nx and key in mock_store:
+            return None  # Key already exists, NX fails
+        if xx and key not in mock_store:
+            return None  # Key doesn't exist, XX fails
         mock_store[key] = value
         return True
 
+    # Store the mock instances for reference
+    get_mock = mocker.AsyncMock()
+    delete_mock = mocker.AsyncMock()
+    
+    # Store the original return_value objects to detect if they've been overridden
+    original_get_return = get_mock.return_value
+    original_delete_return = delete_mock.return_value
+
+    # Create mock methods that support both stateful behavior and manual override
     async def mock_get(key):
+        # If test has set a specific return value (different from original), use it
+        if get_mock.return_value is not original_get_return:
+            return get_mock.return_value
         return mock_store.get(key)
 
     async def mock_delete(*keys):
+        # If test has set a specific return value (different from original), use it  
+        if delete_mock.return_value is not original_delete_return:
+            return delete_mock.return_value
         count = 0
         for key in keys:
             if key in mock_store:
@@ -102,13 +123,20 @@ async def redis_client(mocker: MockerFixture):
         return True
 
     mock_client.set = mocker.AsyncMock(side_effect=mock_set)
-    mock_client.get = mocker.AsyncMock(side_effect=mock_get)
-    mock_client.delete = mocker.AsyncMock(side_effect=mock_delete)
+    mock_client.get = get_mock
+    get_mock.side_effect = mock_get
+    mock_client.delete = delete_mock  
+    delete_mock.side_effect = mock_delete
     mock_client.mget = mocker.AsyncMock(side_effect=mock_mget)
     mock_client.mset = mocker.AsyncMock(side_effect=mock_mset)
     mock_client.close = mocker.AsyncMock()
     mock_client.info = mocker.AsyncMock(return_value={"used_memory": 1048576})
     mock_client.dbsize = mocker.AsyncMock(return_value=100)
+
+    # Mock Lua script methods needed by redis.asyncio.Lock
+    # register_script returns a callable that when called, returns a coroutine
+    mock_script = mocker.AsyncMock(return_value=1)  # Return success for lua scripts
+    mock_client.register_script = mocker.MagicMock(return_value=mock_script)
 
     # Mock lock - properly async compatible
     mock_lock = mocker.MagicMock()

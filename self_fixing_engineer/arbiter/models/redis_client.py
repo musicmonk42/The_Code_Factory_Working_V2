@@ -465,7 +465,7 @@ class RedisClient:
         # Ensure value is serializable
         if not isinstance(value, (str, bytes, int, float)):
             try:
-                value = json.dumps(value, default=str)
+                value = json.dumps(value)
             except (TypeError, ValueError, RecursionError) as e:
                 logger.error(
                     f"Value for key '{_redact_key(key)}' is not JSON serializable: {e}",
@@ -516,7 +516,7 @@ class RedisClient:
                 )
             if not isinstance(value, (str, bytes, int, float)):
                 try:
-                    sanitized_mapping[key] = json.dumps(value, default=str)
+                    sanitized_mapping[key] = json.dumps(value)
                 except (TypeError, ValueError, RecursionError) as e:
                     logger.error(
                         f"Value for key '{_redact_key(key)}' is not JSON serializable: {e}",
