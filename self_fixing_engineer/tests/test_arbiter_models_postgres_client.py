@@ -117,6 +117,8 @@ async def pg_client(mocker: MockerFixture):
     mock_conn.fetchval = mocker.AsyncMock(return_value=1)
 
     # Create proper async context manager for acquire
+    # Note: acquire() itself is sync but returns an async context manager
+    # This matches asyncpg's pattern: async with pool.acquire() as conn:
     class MockAcquireContext:
         async def __aenter__(self):
             return mock_conn
@@ -124,10 +126,11 @@ async def pg_client(mocker: MockerFixture):
         async def __aexit__(self, *args):
             return None
 
-    mock_pool.acquire.return_value = MockAcquireContext()
+    # Make acquire() a callable that returns the async context manager
+    mock_pool.acquire = mocker.MagicMock(return_value=MockAcquireContext())
     mock_pool.close = mocker.AsyncMock()
-    mock_pool.get_size.return_value = 1
-    mock_pool.is_closed.return_value = False
+    mock_pool.get_size = mocker.MagicMock(return_value=1)
+    mock_pool.is_closed = mocker.MagicMock(return_value=False)
 
     # Mock create_pool
     mocker.patch(
@@ -138,6 +141,13 @@ async def pg_client(mocker: MockerFixture):
     client.max_retries = 2  # Reduce for faster tests
 
     yield client
+
+    # FIXED: Add explicit cleanup
+    if client._pool is not None:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -491,8 +501,9 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
     mock_pool.acquire.return_value = MockAcquireContext()
 
     # Fail twice, then succeed
+    # FIXED: Correct module path
     mocker.patch(
-        "postgres_client.asyncpg.create_pool",
+        "self_fixing_engineer.arbiter.models.postgres_client.asyncpg.create_pool",
         side_effect=[
             asyncpg_exceptions.PostgresError("Failed"),
             asyncpg_exceptions.PostgresError("Failed"),

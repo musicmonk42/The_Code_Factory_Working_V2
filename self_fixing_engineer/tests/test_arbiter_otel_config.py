@@ -294,7 +294,7 @@ class TestOpenTelemetryConfig:
         )
 
         # Temporarily inject the mock
-        import arbiter.otel_config as otel
+        import self_fixing_engineer.arbiter.otel_config as otel
 
         original_consul = getattr(otel, "consul", None)
         otel.consul = mock_consul_module
@@ -360,7 +360,7 @@ class TestModuleFunctions:
 
     def setup_method(self):
         """Reset module state before each test."""
-        import arbiter.otel_config as otel
+        import self_fixing_engineer.arbiter.otel_config as otel
 
         otel._config = None
         OpenTelemetryConfig._instance = None
@@ -371,7 +371,7 @@ class TestModuleFunctions:
         tracer = get_tracer("test_component")
         assert tracer is not None
 
-        import arbiter.otel_config as otel
+        import self_fixing_engineer.arbiter.otel_config as otel
 
         assert otel._config is not None
 
