@@ -1199,12 +1199,70 @@ class OmniCoreService:
                             files_failed.append({"filename": "(all)", "error": str(mat_err)})
                     else:
                         # Fallback: write files directly (legacy path when materializer unavailable)
-                        for filename, content in result.items():
+                        # Unpack nested {"files": {...}} structures or JSON string bundles
+                        # to prevent the JSON-bundle-in-main.py bug.
+                        file_map = result
+                        if "files" in file_map and isinstance(file_map["files"], dict):
+                            logger.info(
+                                f"[CODEGEN] Fallback: unwrapping nested 'files' key",
+                                extra={"job_id": job_id}
+                            )
+                            file_map = file_map["files"]
+
+                        for filename, content in file_map.items():
                             try:
                                 if not filename or '..' in filename or filename.startswith('/'):
                                     raise SecurityError(f"Invalid filename: {filename}")
+                                # Handle content that is a dict (nested file map under a single key)
+                                if isinstance(content, dict):
+                                    # If a value is a dict, treat it as a nested file map
+                                    for sub_name, sub_content in content.items():
+                                        sub_path_str = f"{filename}/{sub_name}" if filename != "files" else sub_name
+                                        if not isinstance(sub_content, str):
+                                            files_failed.append({"filename": sub_path_str, "error": f"nested content must be string, got {type(sub_content).__name__}"})
+                                            continue
+                                        if '..' in sub_path_str or sub_path_str.startswith('/'):
+                                            raise SecurityError(f"Invalid filename: {sub_path_str}")
+                                        sub_file_path = (output_path / sub_path_str).resolve()
+                                        if not str(sub_file_path).startswith(str(output_path)):
+                                            raise SecurityError(f"Path traversal attempt in filename: {sub_path_str}")
+                                        sub_file_path.parent.mkdir(parents=True, exist_ok=True)
+                                        sub_file_path.write_text(sub_content, encoding='utf-8')
+                                        if sub_file_path.exists() and sub_file_path.stat().st_size > 0:
+                                            generated_files.append(str(sub_file_path))
+                                            total_bytes_written += len(sub_content.encode('utf-8'))
+                                    continue
                                 if not isinstance(content, str):
                                     raise TypeError(f"File content must be string, got {type(content).__name__}")
+                                # Detect JSON string that represents a file map bundle
+                                stripped = content.strip()
+                                if stripped.startswith('{') and stripped.endswith('}'):
+                                    try:
+                                        parsed = json.loads(stripped)
+                                        if isinstance(parsed, dict) and len(parsed) > 0:
+                                            inner = parsed
+                                            if "files" in inner and isinstance(inner["files"], dict):
+                                                inner = inner["files"]
+                                            # Only treat as file map if all values are strings
+                                            if all(isinstance(v, str) for v in inner.values()):
+                                                logger.info(
+                                                    f"[CODEGEN] Fallback: unpacking JSON bundle from '{filename}'",
+                                                    extra={"job_id": job_id, "inner_files": list(inner.keys())}
+                                                )
+                                                for inner_name, inner_content in inner.items():
+                                                    if not inner_name or '..' in inner_name or inner_name.startswith('/'):
+                                                        raise SecurityError(f"Invalid filename: {inner_name}")
+                                                    inner_path = (output_path / inner_name).resolve()
+                                                    if not str(inner_path).startswith(str(output_path)):
+                                                        raise SecurityError(f"Path traversal attempt in filename: {inner_name}")
+                                                    inner_path.parent.mkdir(parents=True, exist_ok=True)
+                                                    inner_path.write_text(inner_content, encoding='utf-8')
+                                                    if inner_path.exists() and inner_path.stat().st_size > 0:
+                                                        generated_files.append(str(inner_path))
+                                                        total_bytes_written += len(inner_content.encode('utf-8'))
+                                                continue
+                                    except (json.JSONDecodeError, ValueError):
+                                        pass  # Not valid JSON, treat as normal file content
                                 if len(content) > 10 * 1024 * 1024:
                                     raise ValueError(f"File {filename} exceeds 10MB size limit")
                                 if not content or not content.strip():
