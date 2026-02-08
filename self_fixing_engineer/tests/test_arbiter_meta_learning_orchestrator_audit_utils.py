@@ -93,6 +93,7 @@ async def audit_utils(setup_env, tmp_path):
         log_path=str(tmp_path / "audit_log.jsonl"),
         rotation_size_mb=1,  # 1 MB for tests
         max_files=3,  # 3 max files for tests
+        encryption_key=ENCRYPTION_KEY,  # Pass encryption key directly
     )
     yield audit_utils
 
@@ -391,6 +392,7 @@ async def test_log_rotation(setup_env, tmp_path):
         log_path=str(tmp_path / "audit_log_rotation.jsonl"),
         rotation_size_mb=0.0005,  # ~524 bytes
         max_files=3,
+        encryption_key=ENCRYPTION_KEY,
     )
 
     # Write enough events to trigger rotation

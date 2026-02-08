@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import aiofiles
 import cryptography.exceptions
@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from prometheus_client import Counter, Histogram
 from pydantic import BaseModel
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_not_exception_type, stop_after_attempt, wait_exponential
 
 # Configuration from environment variables
 AUDIT_LOG_PATH = os.getenv("AUDIT_LOG_PATH", "./audit_log.jsonl")
@@ -90,6 +90,7 @@ class AuditUtils:
         log_path: str = AUDIT_LOG_PATH,
         rotation_size_mb: int = AUDIT_LOG_ROTATION_SIZE_MB,
         max_files: int = AUDIT_LOG_MAX_FILES,
+        encryption_key: Optional[str] = None,
     ):
 
         self.log_path = log_path
@@ -97,8 +98,8 @@ class AuditUtils:
         self.max_files = max_files
         self._lock = asyncio.Lock()
 
-        # Encryption setup
-        self.encryption_key = AUDIT_ENCRYPTION_KEY
+        # Encryption setup - prefer explicit parameter, fall back to module-level variable
+        self.encryption_key = encryption_key or AUDIT_ENCRYPTION_KEY
         self.fernet = (
             Fernet(self.encryption_key.encode()) if self.encryption_key else None
         )
@@ -240,7 +241,9 @@ class AuditUtils:
         logger.info(f"Log rotation complete. New file created at {self.log_path}")
 
     @retry(
-        stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=1, max=10)
+        stop=stop_after_attempt(5),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_not_exception_type(TypeError),
     )
     async def _write_audit_event(self, event: Dict[str, Any]):
         await self._rotate_log()
