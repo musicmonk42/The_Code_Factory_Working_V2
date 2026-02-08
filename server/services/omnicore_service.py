@@ -1825,6 +1825,10 @@ class OmniCoreService:
                     # artifacts are never completely missing.
                     generated_files = []
                     if platform in ("docker", "dockerfile"):
+                        # Default assumes a Python/FastAPI project structure.
+                        # This is a best-effort fallback when the deploy agent
+                        # produces no output; projects with different structures
+                        # should configure their own Dockerfile.
                         default_dockerfile = (
                             "FROM python:3.11-slim\n"
                             "WORKDIR /app\n"

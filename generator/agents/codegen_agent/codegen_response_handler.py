@@ -414,8 +414,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     else:
         # Fallback: case-insensitive check for a leading "json" token before JSON content
         _lower = raw_for_json.lstrip()
-        if _lower[:4].lower() == "json" and len(_lower) > 4 and _lower[4:].lstrip().startswith("{"):
-            raw_for_json = _lower[4:].lstrip()
+        _token = "json"
+        if _lower[:len(_token)].lower() == _token and len(_lower) > len(_token) and _lower[len(_token):].lstrip().startswith("{"):
+            raw_for_json = _lower[len(_token):].lstrip()
             logger.debug("Stripped leading 'json' token from LLM response")
     
     # --- 1. Try raw JSON parsing FIRST (before cleaning) ---
