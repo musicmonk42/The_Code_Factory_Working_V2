@@ -14,7 +14,7 @@ class TestParserPrioritiesConfig:
     @pytest.fixture
     def config_data(self):
         """Load the actual parser_priorities.json file."""
-        config_path = Path(__file__).parent.parent / "parser_priorities.json"
+        config_path = Path(__file__).parent.parent / "arbiter" / "learner" / "parser_priorities.json"
         with open(config_path, "r") as f:
             return json.load(f)
 
