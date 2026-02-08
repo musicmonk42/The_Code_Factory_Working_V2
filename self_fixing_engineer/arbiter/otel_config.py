@@ -881,7 +881,7 @@ class NoOpSpan:
                 trace_id=0,
                 span_id=0,
                 is_remote=False,
-                trace_flags=TraceFlags(0x00),
+                trace_flags=TraceFlags.DEFAULT,
                 trace_state=None,
             )
         except ImportError:
@@ -919,7 +919,7 @@ def get_tracer(name: Optional[str] = None) -> Any:
     global _config
     
     # Check if OTEL is explicitly disabled
-    if os.getenv('OTEL_SDK_DISABLED') == '1' or os.getenv('TESTING') == '1':
+    if os.getenv('OTEL_SDK_DISABLED') == '1':
         logger.debug(f"OTEL disabled, returning NoOpTracer for {name}")
         return NoOpTracer()
     
