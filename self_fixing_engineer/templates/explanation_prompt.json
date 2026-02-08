@@ -1,0 +1,72 @@
+{
+  "new_fact": {
+    "template": "A new fact has been learned in the domain '{domain}' with key '{key}'. The value is: {new_value}. Please provide a concise human-readable explanation of this new fact and its significance. {kg_insights}",
+    "description": "Template for explaining newly learned facts",
+    "variables": ["domain", "key", "new_value", "kg_insights"],
+    "max_tokens": 500,
+    "temperature": 0.7
+  },
+  "updated_fact": {
+    "template": "A fact in the domain '{domain}' with key '{key}' has been updated. The previous value was: {old_value}. The new value is: {new_value}. The changes are: {diff}. Please explain the update, highlight the changes, and comment on their significance. {kg_insights}",
+    "description": "Template for explaining fact updates with change tracking",
+    "variables": ["domain", "key", "old_value", "new_value", "diff", "kg_insights"],
+    "max_tokens": 750,
+    "temperature": 0.7
+  },
+  "unchanged_fact": {
+    "template": "The fact in the domain '{domain}' with key '{key}' remained the same, but its metadata might have been refreshed. Please provide a brief explanation of what this fact represents. {kg_insights}",
+    "description": "Template for metadata-only updates",
+    "variables": ["domain", "key", "kg_insights"],
+    "max_tokens": 300,
+    "temperature": 0.6
+  },
+  "conflict_resolution": {
+    "template": "A conflict has been detected in domain '{domain}' for key '{key}'. Current value: {current_value}. Conflicting value: {conflicting_value}. Sources: {sources}. Knowledge graph analysis: {kg_insights}. Please analyze this conflict and suggest a resolution strategy.",
+    "description": "Template for resolving data conflicts",
+    "variables": ["domain", "key", "current_value", "conflicting_value", "sources", "kg_insights"],
+    "max_tokens": 1000,
+    "temperature": 0.5
+  },
+  "batch_summary": {
+    "template": "Batch learning completed for domain '{domain}'. Total facts processed: {total_facts}. New facts: {new_facts}. Updated facts: {updated_facts}. Failed validations: {failed_facts}. Time taken: {processing_time}ms. Please provide an executive summary of this batch learning operation and highlight any significant patterns or anomalies.",
+    "description": "Template for batch learning operation summaries",
+    "variables": ["domain", "total_facts", "new_facts", "updated_facts", "failed_facts", "processing_time"],
+    "max_tokens": 800,
+    "temperature": 0.6
+  },
+  "security_alert": {
+    "template": "SECURITY ALERT: Suspicious activity detected in domain '{domain}'. Event type: {event_type}. Details: {details}. User: {user_id}. Timestamp: {timestamp}. Risk level: {risk_level}. Please provide a security assessment and recommended actions.",
+    "description": "Template for security-related explanations",
+    "variables": ["domain", "event_type", "details", "user_id", "timestamp", "risk_level"],
+    "max_tokens": 600,
+    "temperature": 0.3
+  },
+  "data_quality_assessment": {
+    "template": "Data quality assessment for domain '{domain}', key '{key}'. Completeness: {completeness_score}%. Accuracy confidence: {accuracy_score}%. Consistency with related facts: {consistency_score}%. Age of data: {data_age}. Source reliability: {source_reliability}. Please provide a comprehensive data quality report and recommendations.",
+    "description": "Template for data quality assessments",
+    "variables": ["domain", "key", "completeness_score", "accuracy_score", "consistency_score", "data_age", "source_reliability"],
+    "max_tokens": 700,
+    "temperature": 0.5
+  },
+  "compliance_check": {
+    "template": "Compliance verification for domain '{domain}'. Regulation: {regulation}. Data classification: {classification}. Retention policy: {retention_policy}. Encryption status: {encryption_status}. Access controls: {access_controls}. Please assess compliance status and identify any gaps.",
+    "description": "Template for regulatory compliance checks",
+    "variables": ["domain", "regulation", "classification", "retention_policy", "encryption_status", "access_controls"],
+    "max_tokens": 900,
+    "temperature": 0.4
+  },
+  "performance_analysis": {
+    "template": "Performance analysis for learning operation. Domain: {domain}. Processing time: {processing_time}ms. Memory usage: {memory_usage}MB. Cache hit rate: {cache_hit_rate}%. Database queries: {db_queries}. Redis operations: {redis_ops}. Please analyze the performance metrics and suggest optimizations.",
+    "description": "Template for performance metric analysis",
+    "variables": ["domain", "processing_time", "memory_usage", "cache_hit_rate", "db_queries", "redis_ops"],
+    "max_tokens": 600,
+    "temperature": 0.6
+  },
+  "audit_trail": {
+    "template": "Audit trail entry for domain '{domain}', key '{key}'. Action: {action}. User: {user_id}. Timestamp: {timestamp}. IP Address: {ip_address}. Session ID: {session_id}. Merkle proof: {merkle_proof}. Previous hash: {previous_hash}. Please generate a tamper-evident audit record.",
+    "description": "Template for audit trail generation",
+    "variables": ["domain", "key", "action", "user_id", "timestamp", "ip_address", "session_id", "merkle_proof", "previous_hash"],
+    "max_tokens": 500,
+    "temperature": 0.2
+  }
+}
