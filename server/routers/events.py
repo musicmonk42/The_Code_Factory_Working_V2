@@ -17,7 +17,7 @@ Industry-standard features:
 import asyncio
 import json
 import logging
-import queue
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -257,11 +257,14 @@ async def websocket_endpoint(websocket: WebSocket):
     # Track subscriptions and handlers for cleanup (Bug 2 fix)
     subscribed_topics = []
     event_handler_ref = None
-    event_loop = asyncio.get_event_loop()
+    omnicore_service_ref = None  # Store service reference for cleanup
     
     try:
+        event_loop = asyncio.get_event_loop()  # Get loop inside try block
+        
         # Initialize OmniCore service for this connection
         omnicore_service = get_omnicore_service()
+        omnicore_service_ref = omnicore_service  # Store for cleanup
         
         # Check if message bus is ready BEFORE subscribing
         if _is_message_bus_ready(omnicore_service):
@@ -284,13 +287,14 @@ async def websocket_endpoint(websocket: WebSocket):
             # Create event queue for this WebSocket connection
             event_queue = asyncio.Queue(maxsize=100)
             
-            # Flag to stop processing after disconnect
-            handler_active = True
+            # Thread-safe flag to stop processing after disconnect (Bug 2 fix)
+            handler_active = threading.Event()
+            handler_active.set()  # Initially active
             
             # Define handler for message bus events (Bug 1 fix: thread-safe queueing)
             def event_handler(message):
                 """Handle events from message bus and queue them for WebSocket."""
-                if not handler_active:
+                if not handler_active.is_set():
                     return  # Skip processing if connection closed
                     
                 try:
@@ -411,12 +415,11 @@ async def websocket_endpoint(websocket: WebSocket):
         _remove_connection_safely(websocket)
     finally:
         # BUG 2 FIX: Unsubscribe from all topics on disconnect
-        if event_handler_ref and subscribed_topics:
-            handler_active = False  # Stop handler from processing new events
-            omnicore_service = get_omnicore_service()
+        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+            handler_active.clear()  # Thread-safe: stop handler from processing new events
             for topic in subscribed_topics:
                 try:
-                    omnicore_service._message_bus.unsubscribe(topic, event_handler_ref)
+                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
                     logger.debug(f"Unsubscribed from topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Error unsubscribing from {topic}: {e}")
@@ -454,10 +457,13 @@ async def event_stream(
     # Track subscriptions for cleanup (Bug 4 fix)
     subscribed_topics = []
     event_handler_ref = None
-    event_loop = asyncio.get_event_loop()
-    handler_active = True
+    omnicore_service_ref = omnicore_service  # Store reference for cleanup
+    handler_active = threading.Event()  # Thread-safe flag
+    handler_active.set()  # Initially active
     
     try:
+        event_loop = asyncio.get_event_loop()  # Get loop inside try block
+        
         # Check if message bus is ready
         if omnicore_service and _is_message_bus_ready(omnicore_service):
             
@@ -469,7 +475,7 @@ async def event_stream(
             # Define handler for message bus events (Bug 4 fix: thread-safe queueing)
             def event_handler(message):
                 """Handle events from message bus and queue them for SSE."""
-                if not handler_active:
+                if not handler_active.is_set():
                     return  # Skip processing if stream closed
                     
                 try:
@@ -587,11 +593,11 @@ async def event_stream(
                 }
     finally:
         # BUG 4 FIX: Unsubscribe from all topics when stream ends
-        if event_handler_ref and subscribed_topics:
-            handler_active = False  # Stop handler from processing new events
+        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+            handler_active.clear()  # Thread-safe: stop handler from processing new events
             for topic in subscribed_topics:
                 try:
-                    omnicore_service._message_bus.unsubscribe(topic, event_handler_ref)
+                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
                     logger.debug(f"SSE unsubscribed from topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Error unsubscribing SSE from {topic}: {e}")
