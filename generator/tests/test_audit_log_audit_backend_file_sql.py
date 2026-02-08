@@ -354,9 +354,10 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     # Decompress based on the actual compression algorithm used
     # Note: The backend uses zlib.compress() even when COMPRESSION_ALGO="gzip"
     # This is a misnomer in the original code but we stay consistent with it
-    if COMPRESSION_ALGO == "gzip":
+    # Use core.COMPRESSION_ALGO to get the current module value, not the imported value
+    if core.COMPRESSION_ALGO == "gzip":
         decompressed = zlib.decompress(decrypted).decode("utf-8")
-    elif COMPRESSION_ALGO == "zstd":
+    elif core.COMPRESSION_ALGO == "zstd":
         import zstandard
         decompressed = zstandard.decompress(decrypted).decode("utf-8")
     else:
