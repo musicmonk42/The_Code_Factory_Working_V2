@@ -43,6 +43,29 @@ try:
 except ImportError:
     _parse_requirements_flexible = None
 
+# Import existing materializer for writing LLM multi-file output to disk
+# This replaces the manual file-writing loop and prevents the JSON-bundle-in-main.py bug
+try:
+    from generator.runner.runner_file_utils import (
+        materialize_file_map as _materialize_file_map,
+        validate_generated_project as _validate_generated_project,
+        write_validation_error as _write_validation_error,
+    )
+    _MATERIALIZER_AVAILABLE = True
+except ImportError:
+    _MATERIALIZER_AVAILABLE = False
+
+# Import existing provenance tracker and spec validator
+try:
+    from generator.main.provenance import (
+        ProvenanceTracker,
+        validate_spec_fidelity as _validate_spec_fidelity,
+        run_fail_fast_validation as _run_fail_fast_validation,
+    )
+    _PROVENANCE_AVAILABLE = True
+except ImportError:
+    _PROVENANCE_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # Observability imports with graceful degradation
@@ -1135,182 +1158,80 @@ class OmniCoreService:
                     extra={"job_id": job_id, "output_path": str(output_path)}
                 )
                 
-                # Save generated files with comprehensive validation and observability
+                # Save generated files using the canonical materializer from runner_file_utils.
+                # This replaces the manual loop and prevents the JSON-bundle-in-main.py bug
+                # because materialize_file_map handles {"files": {...}} unwrapping, JSON string
+                # parsing, path traversal prevention, and content type validation.
                 generated_files = []
                 total_bytes_written = 0
                 files_failed = []
                 
                 if isinstance(result, dict):
-                    for filename, content in result.items():
+                    if _MATERIALIZER_AVAILABLE:
                         try:
-                            # Security: Validate filename to prevent path traversal
-                            if not filename or '..' in filename or filename.startswith('/'):
-                                raise SecurityError(f"Invalid filename: {filename}")
-                            
-                            # Validate content
-                            if not isinstance(content, str):
-                                raise TypeError(f"File content must be string, got {type(content).__name__}")
-                            if len(content) > 10 * 1024 * 1024:  # 10MB per file limit
-                                raise ValueError(f"File {filename} exceeds 10MB size limit")
-                            
-                            # FIX: Skip empty or whitespace-only content before writing
-                            if not content or not content.strip():
-                                logger.warning(
-                                    f"[CODEGEN] Skipping empty file: {filename}",
-                                    extra={
-                                        "job_id": job_id,
-                                        "file_name": filename,
-                                        "content_length": len(content),
-                                        "status": "skipped_empty"
-                                    }
-                                )
-                                files_failed.append({"filename": filename, "error": "content_empty_or_whitespace"})
-                                continue
-                            
-                            # Resolve and validate file path
-                            file_path = (output_path / filename).resolve()
-                            if not str(file_path).startswith(str(output_path)):
-                                raise SecurityError(f"Path traversal attempt in filename: {filename}")
-                            
-                            # Create parent directories if filename contains subdirectories
-                            file_path.parent.mkdir(parents=True, exist_ok=True)
-                            
-                            # Log content preview for debugging (first 200 chars)
-                            logger.debug(
-                                f"[CODEGEN] Writing file {filename}: content preview = {content[:200]}...",
-                                extra={
-                                    "job_id": job_id,
-                                    "file_name": filename,
-                                    "content_length": len(content),
-                                }
+                            mat_result = await _materialize_file_map(
+                                result, output_path
                             )
-                            
-                            # Write file with explicit encoding
-                            file_path.write_text(content, encoding='utf-8')
-                            
-                            # FIX: Verify file was actually written
-                            if not file_path.exists():
-                                # File not found after write - this is a critical error
-                                logger.error(
-                                    f"[CODEGEN] ✗ File not found after write: {filename}",
-                                    extra={
-                                        "job_id": job_id,
-                                        "file_name": filename,
-                                        "file_path": str(file_path),
-                                        "status": "failed"
-                                    }
-                                )
-                                files_failed.append({"filename": filename, "error": "file_not_found_after_write"})
-                                continue
-                            elif file_path.stat().st_size == 0:
-                                # File exists but is empty - also an error
-                                logger.error(
-                                    f"[CODEGEN] ✗ File is empty after write: {filename}",
-                                    extra={
-                                        "job_id": job_id,
-                                        "file_name": filename,
-                                        "file_path": str(file_path),
-                                        "status": "failed"
-                                    }
-                                )
-                                files_failed.append({"filename": filename, "error": "file_empty_after_write"})
-                                continue
-                            
-                            # File verified successfully
-                            generated_files.append(str(file_path))
-                            total_bytes_written += len(content.encode('utf-8'))
-                            
-                            # Determine file type for metrics
-                            file_ext = file_path.suffix.lstrip('.') or 'unknown'
-                            
-                            # File verified - continue with metrics
-                            
-                            # Record metrics
-                            if METRICS_AVAILABLE:
-                                codegen_files_generated.labels(
-                                    job_id=job_id,
-                                    language=language
-                                ).inc()
-                                codegen_file_size_bytes.labels(
-                                    job_id=job_id,
-                                    file_type=file_ext
-                                ).observe(len(content.encode('utf-8')))
-                            
-                            # Structured logging with context
-                            logger.info(
-                                f"✓ File written successfully - filename={filename}, size={len(content)} bytes, type={file_ext}",
-                                extra={
-                                    "job_id": job_id,
-                                    "file_name": filename,
-                                    "file_size": len(content),
-                                    "file_type": file_ext,
-                                    "status": "success"
-                                }
-                            )
-                            
-                        except SecurityError as sec_error:
-                            # Security errors are critical - log and track
+                            if mat_result.get("success"):
+                                for fname in mat_result.get("files_written", []):
+                                    full_path = str((output_path / fname).resolve())
+                                    generated_files.append(full_path)
+                                    if METRICS_AVAILABLE:
+                                        file_ext = Path(fname).suffix.lstrip('.') or 'unknown'
+                                        codegen_files_generated.labels(
+                                            job_id=job_id,
+                                            language=language
+                                        ).inc()
+                                total_bytes_written = mat_result.get("total_bytes_written", 0)
+                            else:
+                                for err in mat_result.get("errors", []):
+                                    files_failed.append({"filename": "(materializer)", "error": err})
+                            for skipped in mat_result.get("files_skipped", []):
+                                files_failed.append({
+                                    "filename": skipped.get("path", "unknown"),
+                                    "error": skipped.get("reason", "unknown")
+                                })
+                        except Exception as mat_err:
                             logger.error(
-                                f"Security violation in file write - filename={filename}, error={sec_error}",
-                                extra={
-                                    "job_id": job_id,
-                                    "file_name": filename,
-                                    "error_type": "security_violation",
-                                    "status": "failed"
-                                },
-                                exc_info=True
+                                f"[CODEGEN] Materialization failed: {mat_err}",
+                                extra={"job_id": job_id}, exc_info=True
                             )
-                            files_failed.append({"filename": filename, "error": "security_violation"})
-                            if METRICS_AVAILABLE:
-                                codegen_errors_total.labels(
-                                    job_id=job_id,
-                                    error_type="security_violation"
-                                ).inc()
-                            # Don't continue on security errors - this is critical
-                            raise
-                        
-                        except TypeError as type_error:
-                            # Type errors indicate invalid data structure
-                            logger.error(
-                                f"Type error in file write - filename={filename}, error={type_error}",
-                                extra={
-                                    "job_id": job_id,
-                                    "file_name": filename,
-                                    "error_type": "type_error",
-                                    "error_message": str(type_error),
-                                    "status": "failed"
-                                },
-                                exc_info=True
-                            )
-                            files_failed.append({"filename": filename, "error": "type_error"})
-                            if METRICS_AVAILABLE:
-                                codegen_errors_total.labels(
-                                    job_id=job_id,
-                                    error_type="type_error"
-                                ).inc()
-                            # Continue with other files (graceful degradation)
-                            
-                        except Exception as write_error:
-                            # Log file write failures with full context
-                            error_type = type(write_error).__name__
-                            logger.error(
-                                f"Failed to write file - filename={filename}, error={error_type}: {write_error}",
-                                extra={
-                                    "job_id": job_id,
-                                    "file_name": filename,
-                                    "error_type": error_type,
-                                    "error_message": str(write_error),
-                                    "status": "failed"
-                                },
-                                exc_info=True
-                            )
-                            files_failed.append({"filename": filename, "error": error_type})
-                            if METRICS_AVAILABLE:
-                                codegen_errors_total.labels(
-                                    job_id=job_id,
-                                    error_type=error_type
-                                ).inc()
-                            # Continue with other files (graceful degradation)
+                            files_failed.append({"filename": "(all)", "error": str(mat_err)})
+                    else:
+                        # Fallback: write files directly (legacy path when materializer unavailable)
+                        for filename, content in result.items():
+                            try:
+                                if not filename or '..' in filename or filename.startswith('/'):
+                                    raise SecurityError(f"Invalid filename: {filename}")
+                                if not isinstance(content, str):
+                                    raise TypeError(f"File content must be string, got {type(content).__name__}")
+                                if len(content) > 10 * 1024 * 1024:
+                                    raise ValueError(f"File {filename} exceeds 10MB size limit")
+                                if not content or not content.strip():
+                                    files_failed.append({"filename": filename, "error": "content_empty_or_whitespace"})
+                                    continue
+                                file_path = (output_path / filename).resolve()
+                                if not str(file_path).startswith(str(output_path)):
+                                    raise SecurityError(f"Path traversal attempt in filename: {filename}")
+                                file_path.parent.mkdir(parents=True, exist_ok=True)
+                                file_path.write_text(content, encoding='utf-8')
+                                if file_path.exists() and file_path.stat().st_size > 0:
+                                    generated_files.append(str(file_path))
+                                    total_bytes_written += len(content.encode('utf-8'))
+                                    if METRICS_AVAILABLE:
+                                        file_ext = file_path.suffix.lstrip('.') or 'unknown'
+                                        codegen_files_generated.labels(
+                                            job_id=job_id, language=language
+                                        ).inc()
+                                        codegen_file_size_bytes.labels(
+                                            job_id=job_id, file_type=file_ext
+                                        ).observe(len(content.encode('utf-8')))
+                                else:
+                                    files_failed.append({"filename": filename, "error": "file_empty_after_write"})
+                            except SecurityError:
+                                raise
+                            except Exception as write_error:
+                                files_failed.append({"filename": filename, "error": str(write_error)})
                 else:
                     logger.warning(
                         f"Code generation returned non-dict result - type={type(result).__name__}",
@@ -2455,6 +2376,75 @@ class OmniCoreService:
                     "message": "Code generation failed",
                     "stages_completed": stages_completed,
                 }
+            
+            # 2b. Validate generated project (spec fidelity + syntax + JSON-bundle detection)
+            output_path_for_validation = codegen_result.get("output_path")
+            if output_path_for_validation and _MATERIALIZER_AVAILABLE:
+                try:
+                    md_content = payload.get("readme_content", payload.get("requirements", ""))
+                    val_result = await _validate_generated_project(
+                        output_dir=output_path_for_validation,
+                        required_files=["main.py"],
+                        check_python_syntax=True,
+                    )
+                    if not val_result.get("valid", True):
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} validation warnings: {val_result.get('errors', [])}",
+                            extra={"job_id": job_id, "validation_result": val_result}
+                        )
+                        # Write error file but don't fail pipeline for non-critical issues
+                        await _write_validation_error(output_path_for_validation, val_result)
+                    else:
+                        stages_completed.append("validate")
+                        logger.info(f"[PIPELINE] Job {job_id} completed step: validate")
+                except Exception as val_err:
+                    logger.warning(f"[PIPELINE] Job {job_id} validation step error: {val_err}")
+            
+            # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
+            if output_path_for_validation and _PROVENANCE_AVAILABLE:
+                try:
+                    md_content = payload.get("readme_content", payload.get("requirements", ""))
+                    if md_content:
+                        # Read generated files for spec validation
+                        gen_dir = Path(output_path_for_validation)
+                        gen_files = {}
+                        for py_file in gen_dir.glob("**/*.py"):
+                            rel = str(py_file.relative_to(gen_dir))
+                            gen_files[rel] = py_file.read_text(encoding="utf-8")
+                        
+                        spec_result = _validate_spec_fidelity(
+                            md_content, gen_files, output_path_for_validation
+                        )
+                        if spec_result.get("valid", True):
+                            stages_completed.append("spec_validate")
+                            logger.info(f"[PIPELINE] Job {job_id} completed step: spec_validate")
+                        else:
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} spec fidelity check found issues: "
+                                f"{spec_result.get('errors', [])}",
+                                extra={"job_id": job_id}
+                            )
+                except Exception as spec_err:
+                    logger.warning(f"[PIPELINE] Job {job_id} spec validation error: {spec_err}")
+            
+            # 2d. Write provenance metadata
+            if output_path_for_validation and _PROVENANCE_AVAILABLE:
+                try:
+                    tracker = ProvenanceTracker(job_id=job_id)
+                    md_content = payload.get("readme_content", payload.get("requirements", ""))
+                    if md_content:
+                        tracker.record_stage("READ_MD", artifacts={"md_input": md_content})
+                    tracker.record_stage("CODEGEN", metadata={
+                        "files_generated": codegen_result.get("files_count", 0),
+                        "output_path": output_path_for_validation,
+                    })
+                    tracker.record_stage("MATERIALIZE", metadata={
+                        "materializer_used": _MATERIALIZER_AVAILABLE,
+                    })
+                    tracker.save_to_file(output_path_for_validation)
+                    logger.info(f"[PIPELINE] Job {job_id} provenance written")
+                except Exception as prov_err:
+                    logger.warning(f"[PIPELINE] Job {job_id} provenance error: {prov_err}")
             
             # 3. Testgen (if requested)
             if payload.get("include_tests", True):
