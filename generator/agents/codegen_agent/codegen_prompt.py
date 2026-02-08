@@ -248,20 +248,27 @@ The following are MANDATORY checks:
    - Verify indentation after control structures
 
 5. ORGANIZE INTO FILES:
-   Structure as a proper project with separate files:
-   - main.py (or equivalent entry point)
-   - routes.py (API route definitions, if applicable)
-   - models.py (data structures/schemas)
-   - utils.py or helpers.py (utility functions if needed)
+   Structure as a proper project with separate files using app/ directory:
+   - app/main.py (FastAPI app instance, imports router from app/routes.py, includes middleware)
+   - app/routes.py (API route definitions with APIRouter - ALL endpoints defined here)
+   - app/schemas.py (Pydantic models for request/response validation)
+   - tests/test_health.py (health endpoint tests)
+   - tests/test_version.py (version endpoint tests)
+   - tests/test_echo.py (echo endpoint tests if /echo is required)
    - requirements.txt (dependencies)
    - README.md (setup and usage instructions)
+   - .env.example (example environment variables with NO real secrets)
 
 6. INPUT VALIDATION (for Pydantic models):
    - Use field constraints for string inputs:
-     * Use `constr(strip_whitespace=True, min_length=1)` for required text fields
+     * Use `constr(strip_whitespace=True, min_length=1, max_length=500)` for required text fields
      * Use `Field(..., min_length=1)` with `@field_validator` for stripping whitespace
      * Never accept empty or whitespace-only strings for required text inputs
-     * Example: `message: constr(strip_whitespace=True, min_length=1)` instead of `message: str`
+     * Example: `message: constr(strip_whitespace=True, min_length=1, max_length=500)` instead of `message: str`
+   - For /echo endpoint:
+     * Must reject missing message with 400
+     * Must reject whitespace-only message ("   ") with 400
+     * Must reject messages over 500 characters with 400
 
 7. PRE-GENERATION CHECKLIST:
    Before submitting your response, mentally verify:
