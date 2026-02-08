@@ -62,7 +62,9 @@ if str(REPO_ROOT) not in sys.path:
 # (test_audit_log_audit_log.py replaces it and parent packages with stubs)
 _core_mod_name = "generator.audit_log.audit_backend.audit_backend_core"
 _existing = sys.modules.get(_core_mod_name)
-if _existing is not None and not hasattr(_existing, "BACKEND_ERRORS"):
+if _existing is not None and (
+    not hasattr(_existing, "BACKEND_ERRORS") or not hasattr(_existing, "safe_counter")
+):
     # Remove stub and any stub parent packages so reimport works
     for _key in [_core_mod_name,
                  "generator.audit_log.audit_backend",
@@ -186,7 +188,19 @@ async def ensure_metrics_work():
 
     # Defensively fetch metrics; if the module was partially loaded (e.g. during
     # early pytest collection before env vars were set), recreate them.
-    from generator.audit_log.audit_backend.audit_backend_core import safe_counter
+    # NOTE: Do NOT use `from ... import safe_counter` here because the module
+    # may have been replaced with a stub by another test file (e.g.
+    # test_audit_log_audit_log.py).  Use getattr with a fallback instead.
+    safe_counter = getattr(live_module, "safe_counter", None)
+    if safe_counter is None:
+        # Fallback: create counters directly via prometheus_client.Counter
+        try:
+            from prometheus_client import Counter as _Counter
+            def safe_counter(name, description, labelnames=()):
+                return _Counter(name, description, list(labelnames))
+        except ImportError:
+            def safe_counter(name, description, labelnames=()):
+                return MagicMock()
 
     _be = getattr(live_module, "BACKEND_ERRORS", None)
     BACKEND_ERRORS = _be if _be is not None else safe_counter(
