@@ -1202,12 +1202,14 @@ class OmniCoreService:
                         # Unpack nested {"files": {...}} structures or JSON string bundles
                         # to prevent the JSON-bundle-in-main.py bug.
                         file_map = result
+                        files_key_unwrapped = False
                         if "files" in file_map and isinstance(file_map["files"], dict):
                             logger.info(
                                 f"[CODEGEN] Fallback: unwrapping nested 'files' key",
                                 extra={"job_id": job_id}
                             )
                             file_map = file_map["files"]
+                            files_key_unwrapped = True
 
                         for filename, content in file_map.items():
                             try:
@@ -1217,12 +1219,17 @@ class OmniCoreService:
                                 if isinstance(content, dict):
                                     # If a value is a dict, treat it as a nested file map
                                     for sub_name, sub_content in content.items():
-                                        sub_path_str = f"{filename}/{sub_name}" if filename != "files" else sub_name
+                                        sub_path_str = f"{filename}/{sub_name}"
                                         if not isinstance(sub_content, str):
                                             files_failed.append({"filename": sub_path_str, "error": f"nested content must be string, got {type(sub_content).__name__}"})
                                             continue
                                         if '..' in sub_path_str or sub_path_str.startswith('/'):
                                             raise SecurityError(f"Invalid filename: {sub_path_str}")
+                                        if len(sub_content) > 10 * 1024 * 1024:
+                                            raise ValueError(f"File {sub_path_str} exceeds 10MB size limit")
+                                        if not sub_content or not sub_content.strip():
+                                            files_failed.append({"filename": sub_path_str, "error": "content_empty_or_whitespace"})
+                                            continue
                                         sub_file_path = (output_path / sub_path_str).resolve()
                                         if not str(sub_file_path).startswith(str(output_path)):
                                             raise SecurityError(f"Path traversal attempt in filename: {sub_path_str}")
@@ -1252,6 +1259,11 @@ class OmniCoreService:
                                                 for inner_name, inner_content in inner.items():
                                                     if not inner_name or '..' in inner_name or inner_name.startswith('/'):
                                                         raise SecurityError(f"Invalid filename: {inner_name}")
+                                                    if len(inner_content) > 10 * 1024 * 1024:
+                                                        raise ValueError(f"File {inner_name} exceeds 10MB size limit")
+                                                    if not inner_content or not inner_content.strip():
+                                                        files_failed.append({"filename": inner_name, "error": "content_empty_or_whitespace"})
+                                                        continue
                                                     inner_path = (output_path / inner_name).resolve()
                                                     if not str(inner_path).startswith(str(output_path)):
                                                         raise SecurityError(f"Path traversal attempt in filename: {inner_name}")
