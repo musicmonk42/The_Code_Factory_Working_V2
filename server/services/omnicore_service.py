@@ -2448,7 +2448,22 @@ class OmniCoreService:
             if payload.get("readme_content"):
                 logger.info(f"[PIPELINE] Job {job_id} starting step: clarify")
                 clarify_result = await self._run_clarifier(job_id, payload)
-                if clarify_result.get("status") != "error":
+                if clarify_result.get("status") == "clarification_initiated":
+                    # Pause pipeline for clarifications
+                    questions = clarify_result.get("clarifications", [])
+                    # Update job status in database
+                    job = jobs_db.get(job_id)
+                    if job:
+                        job.status = JobStatus.NEEDS_CLARIFICATION
+                        job.current_stage = JobStage.GENERATOR_CLARIFICATION
+                        job.updated_at = datetime.now(timezone.utc)
+                        job.metadata["clarification_questions"] = questions
+                        job.metadata["clarification_status"] = "pending_response"
+                    logger.info(f"[PIPELINE] Job {job_id} awaiting clarification responses; pausing pipeline.")
+                    # Remove from in-progress tracking to allow resumption
+                    self._jobs_in_pipeline.discard(job_id)
+                    return {"status": "clarification_initiated", "clarifications": questions, "job_id": job_id}
+                elif clarify_result.get("status") != "error":
                     stages_completed.append("clarify")
                     logger.info(f"[PIPELINE] Job {job_id} completed step: clarify")
             

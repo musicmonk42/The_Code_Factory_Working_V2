@@ -31,7 +31,7 @@ let wsEventHandlers = null; // Store event handlers for cleanup
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Valid job status values - kept in sync with backend JobStatus enum
-const VALID_JOB_STATUSES = ['running', 'completed', 'failed', 'pending'];
+const VALID_JOB_STATUSES = ['running', 'completed', 'failed', 'pending', 'needs_clarification'];
 
 // Maximum concurrent file fetch requests to prevent server overload
 const MAX_CONCURRENT_FILE_FETCHES = 5;
@@ -810,6 +810,7 @@ async function createJobCard(job) {
     const isCompleted = job.status === 'completed';
     const isRunning = job.status === 'running';
     const isFailed = job.status === 'failed';
+    const needsClarification = job.status === 'needs_clarification';
     
     // Auto-fetch files for completed jobs to ensure file count is up-to-date
     let hasOutputFiles = job.output_files && job.output_files.length > 0;
@@ -895,6 +896,11 @@ async function createJobCard(job) {
             ${isRunning ? `
                 <button class="btn btn-secondary" onclick="cancelJob('${job.id}')">
                     ❌ Cancel
+                </button>
+            ` : ''}
+            ${needsClarification ? `
+                <button class="btn btn-primary" onclick="loadClarificationForJob('${job.id}')">
+                    ❓ Answer Questions
                 </button>
             ` : ''}
             ${!isRunning ? `
@@ -1730,6 +1736,7 @@ style.textContent = `
     .status-running { background: rgba(51, 153, 255, 0.2); color: var(--info); }
     .status-completed { background: rgba(0, 204, 136, 0.2); color: var(--success); }
     .status-failed { background: rgba(255, 68, 68, 0.2); color: var(--error); }
+    .status-needs_clarification { background: rgba(255, 170, 0, 0.2); color: var(--warning, #ffaa00); }
     .status-proposed { background: rgba(51, 153, 255, 0.2); color: var(--info); }
     .status-approved { background: rgba(0, 204, 136, 0.2); color: var(--success); }
     .status-applied { background: rgba(0, 204, 136, 0.2); color: var(--success); }
@@ -2854,6 +2861,70 @@ async function showSIEMConfig() {
 }
 
 // ==================== Clarifier Functions ====================
+
+/**
+ * Load pending clarification questions for a job and navigate to the clarifier tab.
+ * Called when user clicks "Answer Questions" on a job card with needs_clarification status.
+ */
+async function loadClarificationForJob(jobId) {
+    try {
+        // Fetch job details to get clarification questions from metadata
+        const response = await fetchWithRetry(`${API_BASE}/jobs/${jobId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch job: HTTP ${response.status}`);
+        }
+        const job = await response.json();
+
+        const questions = (job.metadata && job.metadata.clarification_questions) || [];
+        const readmeContent = (job.metadata && job.metadata.readme_content) || '';
+
+        if (questions.length === 0) {
+            showError('No clarification questions found for this job. The questions may have already been answered or were not generated during the pipeline run.');
+            return;
+        }
+
+        // Navigate to clarifier tab
+        showView('clarifier');
+        const navLinks = document.querySelectorAll('.main-nav a');
+        navLinks.forEach(l => {
+            l.classList.toggle('active', l.dataset.view === 'clarifier');
+        });
+
+        // Set up the clarifier UI with the job's data
+        currentClarifierJobId = jobId;
+        document.getElementById('clarifier-job-id').value = jobId;
+        document.getElementById('clarifier-requirements').value = readmeContent;
+
+        // Clear previous conversation
+        clarifierConversation = [];
+        const conversationContainer = document.getElementById('clarifier-conversation');
+        conversationContainer.innerHTML = '';
+
+        // Show initial requirements if available
+        if (readmeContent) {
+            addClarifierMessage('user', readmeContent, 'Initial Requirements');
+        }
+
+        // Store questions and display the first one
+        window.clarificationQuestions = questions;
+        window.clarifierQuestions = questions;
+        window.currentQuestionIndex = 0;
+        currentQuestionId = (typeof questions[0] === 'object' && questions[0].id) ? questions[0].id : 'q1';
+
+        updateClarifierStatus(`Waiting for answer (1/${questions.length})`, 'waiting');
+
+        // Display first question
+        displayClarificationQuestion(questions[0], 0);
+
+        // Show answer section
+        document.getElementById('clarifier-conversation').style.display = 'block';
+        document.getElementById('answer-section').style.display = 'block';
+
+    } catch (error) {
+        console.error('Load clarification error:', error);
+        showError('Failed to load clarification questions: ' + error.message);
+    }
+}
 let currentClarifierJobId = null;
 let currentQuestionId = null;
 let clarifierConversation = [];
