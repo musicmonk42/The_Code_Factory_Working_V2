@@ -1700,9 +1700,9 @@ class OmniCoreService:
                 
                 generated_files = []
                 
-                # Write generated configs to files
-                output_dir = repo_path / "deploy"
-                output_dir.mkdir(parents=True, exist_ok=True)
+                # Write generated configs to the generated/ directory root
+                # so they appear at generated/Dockerfile, generated/docker-compose.yml etc.
+                output_dir = repo_path
                 
                 for target, config_content in configs.items():
                     # Determine filename based on target
@@ -1730,6 +1730,34 @@ class OmniCoreService:
                         logger.warning(f"[DEPLOY] File {file_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
                         generated_files.append(str(file_path))
                     logger.info(f"Generated deployment file: {file_path}")
+                
+                # Generate standard .dockerignore if a Dockerfile was produced
+                dockerfile_path = output_dir / "Dockerfile"
+                if dockerfile_path.exists():
+                    dockerignore_path = output_dir / ".dockerignore"
+                    if not dockerignore_path.exists():
+                        dockerignore_content = (
+                            "__pycache__\n*.pyc\n*.pyo\n.git\n.gitignore\n"
+                            ".env\n.venv\nvenv\nnode_modules\n"
+                            ".pytest_cache\n.mypy_cache\n*.egg-info\n"
+                            "dist\nbuild\n.coverage\nhtmlcov\n"
+                        )
+                        async with aiofiles.open(dockerignore_path, "w", encoding="utf-8") as f:
+                            await f.write(dockerignore_content)
+                        generated_files.append(".dockerignore")
+                        logger.info(f"Generated .dockerignore: {dockerignore_path}")
+                
+                # Write deploy_metadata.json
+                deploy_meta_path = output_dir / "deploy_metadata.json"
+                deploy_meta = {
+                    "platform": platform,
+                    "run_id": deploy_result.get("run_id"),
+                    "generated_files": generated_files,
+                    "validations": deploy_result.get("validations", {}),
+                }
+                async with aiofiles.open(deploy_meta_path, "w", encoding="utf-8") as f:
+                    await f.write(json.dumps(deploy_meta, indent=2))
+                generated_files.append("deploy_metadata.json")
                 
                 result = {
                     "status": "completed",
@@ -2377,11 +2405,13 @@ class OmniCoreService:
                     "stages_completed": stages_completed,
                 }
             
-            # 2b. Validate generated project (spec fidelity + syntax + JSON-bundle detection)
+            # 2b. Post-codegen validation stages
             output_path_for_validation = codegen_result.get("output_path")
+            md_content = payload.get("readme_content", payload.get("requirements", ""))
+            
+            # Validate generated project (syntax + JSON-bundle detection)
             if output_path_for_validation and _MATERIALIZER_AVAILABLE:
                 try:
-                    md_content = payload.get("readme_content", payload.get("requirements", ""))
                     val_result = await _validate_generated_project(
                         output_dir=output_path_for_validation,
                         required_files=["main.py"],
@@ -2403,7 +2433,6 @@ class OmniCoreService:
             # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
-                    md_content = payload.get("readme_content", payload.get("requirements", ""))
                     if md_content:
                         # Read generated files for spec validation
                         gen_dir = Path(output_path_for_validation)
@@ -2431,7 +2460,6 @@ class OmniCoreService:
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
                     tracker = ProvenanceTracker(job_id=job_id)
-                    md_content = payload.get("readme_content", payload.get("requirements", ""))
                     if md_content:
                         tracker.record_stage("READ_MD", artifacts={"md_input": md_content})
                     tracker.record_stage("CODEGEN", metadata={
