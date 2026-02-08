@@ -283,8 +283,8 @@ class RedisClient:
                     logger.warning("Redis connection unhealthy during health check, attempting reconnect.")
                     try:
                         await self.client.close()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Error closing client during health check reconnect: {e}")
                     self.client = None
                     # Re-establish connection without creating another health check task
                     max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "50"))
