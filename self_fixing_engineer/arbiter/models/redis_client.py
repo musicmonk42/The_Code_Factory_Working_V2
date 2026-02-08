@@ -466,7 +466,7 @@ class RedisClient:
         if not isinstance(value, (str, bytes, int, float)):
             try:
                 value = json.dumps(value, default=str)
-            except TypeError as e:
+            except (TypeError, ValueError, RecursionError) as e:
                 logger.error(
                     f"Value for key '{_redact_key(key)}' is not JSON serializable: {e}",
                     exc_info=True,
@@ -474,6 +474,10 @@ class RedisClient:
                 raise DataError(f"Value not serializable: {e}") from e
         if isinstance(value, (str, bytes)) and len(value) > 1024 * 1024:  # 1MB limit
             raise ValueError("Value size exceeds 1MB limit.")
+
+        # Check connection before accessing client methods
+        if not self.client:
+            raise RuntimeError("Redis client not connected. Call connect() first.")
 
         return await self._execute_operation(
             "set", key, self.client.set, key, value, ex=ex, px=px
@@ -513,7 +517,7 @@ class RedisClient:
             if not isinstance(value, (str, bytes, int, float)):
                 try:
                     sanitized_mapping[key] = json.dumps(value, default=str)
-                except TypeError as e:
+                except (TypeError, ValueError, RecursionError) as e:
                     logger.error(
                         f"Value for key '{_redact_key(key)}' is not JSON serializable: {e}",
                         exc_info=True,
@@ -523,6 +527,10 @@ class RedisClient:
                 sanitized_mapping[key] = value
             if isinstance(value, (str, bytes)) and len(value) > 1024 * 1024:
                 raise ValueError(f"Value for key '{key}' exceeds 1MB limit.")
+
+        # Check connection before accessing client methods
+        if not self.client:
+            raise RuntimeError("Redis client not connected. Call connect() first.")
 
         return await self._execute_operation(
             "mset", "multiple", self.client.mset, sanitized_mapping
@@ -552,6 +560,10 @@ class RedisClient:
         """
         if not key or len(key) > 1024:
             raise ValueError("Key must be non-empty and <= 1024 characters.")
+
+        # Check connection before accessing client methods
+        if not self.client:
+            raise RuntimeError("Redis client not connected. Call connect() first.")
 
         value = await self._execute_operation("get", key, self.client.get, key)
         if value and isinstance(value, str):
@@ -591,6 +603,11 @@ class RedisClient:
                 raise ValueError(
                     f"Key '{key}' must be non-empty and <= 1024 characters."
                 )
+
+        # Check connection before accessing client methods
+        if not self.client:
+            raise RuntimeError("Redis client not connected. Call connect() first.")
+
         values = await self._execute_operation(
             "mget", "multiple", self.client.mget, keys
         )
@@ -634,6 +651,11 @@ class RedisClient:
                 raise ValueError(
                     f"Key '{key}' must be non-empty and <= 1024 characters."
                 )
+
+        # Check connection before accessing client methods
+        if not self.client:
+            raise RuntimeError("Redis client not connected. Call connect() first.")
+
         return await self._execute_operation(
             "delete", "multiple", self.client.delete, *keys
         )

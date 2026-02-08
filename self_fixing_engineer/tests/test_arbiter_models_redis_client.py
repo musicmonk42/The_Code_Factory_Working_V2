@@ -72,22 +72,46 @@ async def redis_client(mocker: MockerFixture):
     """Fixture for RedisClient with mocked aioredis dependencies."""
     import redis.asyncio as aioredis
 
+    # Create an in-memory store for the mock to simulate Redis
+    mock_store = {}
+
     # Mock aioredis client
     mock_client = mocker.MagicMock(spec=aioredis.Redis)
     mock_client.ping = mocker.AsyncMock(return_value=True)
-    mock_client.set = mocker.AsyncMock(return_value=True)
-    mock_client.get = mocker.AsyncMock(return_value=json.dumps(SAMPLE_VALUE))
-    mock_client.mset = mocker.AsyncMock(return_value=True)
-    mock_client.mget = mocker.AsyncMock(
-        return_value=[json.dumps({"num": i}) for i in range(3)]
-    )
-    mock_client.delete = mocker.AsyncMock(return_value=1)
+
+    async def mock_set(key, value, ex=None, px=None):
+        mock_store[key] = value
+        return True
+
+    async def mock_get(key):
+        return mock_store.get(key)
+
+    async def mock_delete(*keys):
+        count = 0
+        for key in keys:
+            if key in mock_store:
+                del mock_store[key]
+                count += 1
+        return count
+
+    async def mock_mget(keys):
+        return [mock_store.get(k) for k in keys]
+
+    async def mock_mset(mapping):
+        mock_store.update(mapping)
+        return True
+
+    mock_client.set = mocker.AsyncMock(side_effect=mock_set)
+    mock_client.get = mocker.AsyncMock(side_effect=mock_get)
+    mock_client.delete = mocker.AsyncMock(side_effect=mock_delete)
+    mock_client.mget = mocker.AsyncMock(side_effect=mock_mget)
+    mock_client.mset = mocker.AsyncMock(side_effect=mock_mset)
     mock_client.close = mocker.AsyncMock()
     mock_client.info = mocker.AsyncMock(return_value={"used_memory": 1048576})
     mock_client.dbsize = mocker.AsyncMock(return_value=100)
 
-    # Mock lock - needs to be AsyncMock for async operations
-    mock_lock = mocker.AsyncMock()
+    # Mock lock - properly async compatible
+    mock_lock = mocker.MagicMock()
     mock_lock.acquire = mocker.AsyncMock(return_value=True)
     mock_lock.release = mocker.AsyncMock()
     mock_lock.__aenter__ = mocker.AsyncMock(return_value=mock_lock)
@@ -99,9 +123,10 @@ async def redis_client(mocker: MockerFixture):
     client = RedisClient()
     client._mock_client = mock_client  # Store for test access
     client._mock_lock = mock_lock
+    client._mock_store = mock_store  # Store for debugging if needed
     yield client
 
-    # FIXED: Proper cleanup
+    # Proper cleanup
     if client.client:
         try:
             await client.disconnect()
