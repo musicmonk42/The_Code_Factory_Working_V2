@@ -349,6 +349,7 @@ async def _resume_pipeline_after_clarification(
             include_deployment=True,
             include_docs=True,
             run_critique=True,
+            skip_clarification=True,
         )
 
         logger.info(f"[Pipeline] Full pipeline completed for job {job_id}: {result}")
@@ -1003,12 +1004,20 @@ async def submit_clarification_response(
     questions = job.metadata.get("clarification_questions", [])
     total_questions = len(questions)
     answered_count = len(job.metadata["clarification_answers"])
+    
+    # Check if bulk responses were provided that cover all questions
+    # This handles the case where the frontend sends all answers at once
+    bulk_responses_cover_all = (
+        request.responses 
+        and len(request.responses) >= total_questions
+    )
 
     # Check if all questions are now answered (locally tracked) or
-    # if OmniCore signalled completion
+    # if OmniCore signalled completion or bulk responses cover all
     all_answered = (
         (total_questions > 0 and answered_count >= total_questions)
         or last_result.get("status") == "completed"
+        or bulk_responses_cover_all
     )
 
     if all_answered:
