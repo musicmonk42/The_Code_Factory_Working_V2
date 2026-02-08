@@ -428,18 +428,22 @@ def clean_registry():
 
 @pytest.fixture(scope="function", autouse=True)
 def cleanup_chromadb():
-    """Clean up ChromaDB between tests to prevent state leakage."""
+    """Clean up ChromaDB between tests to prevent state leakage.
+    
+    Only performs cleanup if chromadb is already imported (avoids import overhead).
+    """
     yield
     
-    # Clean up ChromaDB client singleton if it exists
-    try:
-        import chromadb
-        if hasattr(chromadb, '_client'):
-            chromadb._client = None
-        if hasattr(chromadb, 'Client'):
-            chromadb.Client._instances = {}
-    except (ImportError, AttributeError):
-        pass
+    # Only clean up if chromadb was actually imported during this test
+    if "chromadb" in sys.modules:
+        try:
+            chromadb = sys.modules["chromadb"]
+            if hasattr(chromadb, '_client'):
+                chromadb._client = None
+            if hasattr(chromadb, 'Client') and hasattr(chromadb.Client, '_instances'):
+                chromadb.Client._instances = {}
+        except (AttributeError, TypeError):
+            pass
 
 
 @pytest.fixture

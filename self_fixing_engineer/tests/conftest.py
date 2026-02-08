@@ -1,7 +1,6 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """Pytest configuration for self_fixing_engineer tests."""
-import gc
 import os
 
 import psutil
@@ -9,17 +8,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def cleanup_between_tests():
-    """Aggressively clean up memory between tests."""
-    yield
-    # Force garbage collection after each test
-    gc.collect()
-    gc.collect()  # Run twice to catch circular references
-
-
-@pytest.fixture(autouse=True)
 def monitor_memory(request):
     """Monitor memory usage per test.
+    
+    Only performs expensive memory measurement when PYTEST_MONITOR_MEMORY
+    environment variable is set (e.g., PYTEST_MONITOR_MEMORY=1), to avoid
+    psutil overhead on every test in CI.
     
     Warns when a test consumes more than 500MB of memory.
     The 500MB threshold was chosen based on:
@@ -27,6 +21,10 @@ def monitor_memory(request):
     - 500MB indicates potential memory leak or excessive resource usage
     - Helps identify tests that may cause OOM in CI environments
     """
+    if not os.getenv('PYTEST_MONITOR_MEMORY'):
+        yield
+        return
+    
     process = psutil.Process()
     mem_before = process.memory_info().rss / 1024 / 1024  # MB
     
