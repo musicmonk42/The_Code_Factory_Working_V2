@@ -662,7 +662,7 @@ class PluginRegistry:
                     if existing_meta:
                         if version_parse(version) < version_parse(existing_meta.version):
                             raise ValueError(
-                                f"Plugin [{kind.value}:{name}] version {version} is older than existing version {existing_meta.version}."
+                                f"Plugin [{kind.value}:{name}] version {version} not newer than existing version {existing_meta.version}."
                             )
                         elif version_parse(version) == version_parse(existing_meta.version):
                             # Same version already registered - skip silently (idempotent)
