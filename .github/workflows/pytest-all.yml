@@ -52,6 +52,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --sysctl vm.overcommit_memory=1
         ports:
           - 6379:6379
     
@@ -749,9 +750,9 @@ jobs:
             --import-mode=importlib \
             2>&1 | tee test-output-sfe-batch1.log
 
-      - name: Run self_fixing_engineer tests - Batch 2 (Arbiter)
+      - name: Run self_fixing_engineer tests - Batch 2a (Arbiter Postgres)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 60  # Increased to allow Arbiter tests to complete
+        timeout-minutes: 25
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -759,27 +760,60 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          
-          # Force aggressive garbage collection between tests
-          # gc.set_threshold(threshold0, threshold1, threshold2):
-          # - threshold0=700: Run GC after 700 allocations (default 700)
-          # - threshold1=10: Check generation 1 every 10 gen0 collections (default 10)
-          # - threshold2=10: Check generation 2 every 10 gen1 collections (default 10)
-          # More frequent gen1/gen2 collections help prevent memory buildup in long test runs
-          python -c "import gc; gc.set_threshold(700, 10, 10)"
-          
-          # Force cleanup between batches
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
           
-          echo "=== Running Batch 2: Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=60s 55m python -m pytest \
-            self_fixing_engineer/tests/test_arbiter*.py \
-            -v --tb=line \
-            -m "not heavy" \
-            --timeout=180 --durations=10 \
-            -p no:randomly -p no:cacheprovider \
-            --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2.log
+          echo "=== Running Batch 2a: Postgres Client Tests ==="
+          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
+            self_fixing_engineer/tests/test_arbiter_models_postgres_client.py \
+            -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
+            -p no:randomly -p no:cacheprovider --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch2a.log
+          
+          # Memory cleanup between batches
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
+      - name: Run self_fixing_engineer tests - Batch 2b (Arbiter Redis)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 25
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          PYTHONMALLOC: "malloc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 2b: Redis Client Tests ==="
+          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
+            self_fixing_engineer/tests/test_arbiter_models_redis_client.py \
+            -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
+            -p no:randomly -p no:cacheprovider --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch2b.log
+          
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
+      - name: Run self_fixing_engineer tests - Batch 2c (Arbiter Other)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 25
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          PYTHONMALLOC: "malloc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          
+          echo "=== Running Batch 2c: Other Arbiter Tests ==="
+          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
+            self_fixing_engineer/tests/test_arbiter_monitoring.py \
+            self_fixing_engineer/tests/test_arbiter_otel_config.py \
+            self_fixing_engineer/tests/test_arbiter_plugin_registry.py \
+            self_fixing_engineer/tests/test_arbiter_models_multi_modal_schemas.py \
+            -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
+            -p no:randomly -p no:cacheprovider --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch2c.log
 
       - name: Run self_fixing_engineer tests - Batch 3 (Mesh)
         if: matrix.module == 'self_fixing_engineer'

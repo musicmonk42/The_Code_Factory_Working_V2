@@ -87,12 +87,13 @@ async def redis_client(mocker: MockerFixture):
     mock_client.dbsize = mocker.AsyncMock(return_value=100)
 
     # Mock lock
-    mock_lock = mocker.MagicMock()
+    mock_lock = mocker.AsyncMock()
     mock_lock.acquire = mocker.AsyncMock(return_value=True)
     mock_lock.release = mocker.AsyncMock()
     mock_lock.__aenter__ = mocker.AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = mocker.AsyncMock()
+    mock_lock.__aexit__ = mocker.AsyncMock(return_value=None)
 
+    # FIXED: Patch before client initialization
     mocker.patch("redis.asyncio.Lock", return_value=mock_lock)
     mocker.patch("redis.asyncio.from_url", return_value=mock_client)
 
@@ -101,9 +102,12 @@ async def redis_client(mocker: MockerFixture):
     client._mock_lock = mock_lock
     yield client
 
-    # Cleanup
+    # FIXED: Proper cleanup
     if client.client:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:
+            pass  # Ignore cleanup errors
 
 
 @pytest_asyncio.fixture(autouse=True)
