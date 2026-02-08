@@ -59,7 +59,7 @@ SAMPLE_EVENT = {"event_type": "test_event", "details": {"test_key": "test_value"
 async def setup_env(mocker: MockerFixture, tmp_path):
     """Set up environment variables and temp directories."""
     # Patch the module-level variables in audit_utils directly
-    import arbiter.meta_learning_orchestrator.audit_utils as audit_module
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils as audit_module
 
     # Store originals
     orig_encryption_key = audit_module.AUDIT_ENCRYPTION_KEY
@@ -136,7 +136,7 @@ async def test_initialization_success(audit_utils):
 @pytest.mark.asyncio
 async def test_initialization_no_encryption_key(mocker: MockerFixture, tmp_path):
     """Test initialization without encryption key."""
-    import arbiter.meta_learning_orchestrator.audit_utils as audit_module
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils as audit_module
     from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     # Temporarily clear the module-level variable
@@ -261,7 +261,7 @@ async def test_add_audit_event_kafka_fallback(mocker: MockerFixture, tmp_path, c
 @pytest.mark.asyncio
 async def test_add_audit_event_no_encryption(mocker: MockerFixture, tmp_path):
     """Test adding an audit event without encryption."""
-    import arbiter.meta_learning_orchestrator.audit_utils as audit_module
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils as audit_module
     from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 
     original_key = audit_module.AUDIT_ENCRYPTION_KEY
