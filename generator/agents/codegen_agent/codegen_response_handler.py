@@ -279,7 +279,14 @@ DEFAULT_FILENAME = "main.py"
 ERROR_FILENAME = "error.txt"
 
 # Common LLM response prefixes that should be stripped before JSON parsing
-LLM_RESPONSE_PREFIXES = ['json\n', 'python\n', 'JSON\n', 'PYTHON\n']
+# Includes variations with/without newlines and mixed casing (e.g. "json\n{...}", "json {...")
+LLM_RESPONSE_PREFIXES = [
+    'json\n', 'JSON\n', 'Json\n',
+    'json\r\n', 'JSON\r\n',
+    'json ', 'JSON ',
+    'python\n', 'PYTHON\n',
+    'python\r\n', 'PYTHON\r\n',
+]
 
 # Very lightweight heuristic: any assignment to a suspicious name is flagged.
 SECRET_REGEX = re.compile(
@@ -396,13 +403,21 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     )
     
     # --- ENHANCEMENT: Try to strip common LLM response prefixes ---
-    # Sometimes LLMs prefix their response with "json\n" or "python\n" before the actual content
+    # Sometimes LLMs prefix their response with "json\n" or "python\n" before the actual content.
+    # Also handles bare "json{" or "json  {" (no separator or whitespace-only separator).
     raw_for_json = raw
     for prefix in LLM_RESPONSE_PREFIXES:
         if raw_for_json.startswith(prefix):
             raw_for_json = raw_for_json[len(prefix):]
             logger.debug(f"Stripped LLM response prefix: {prefix.strip()}")
             break
+    else:
+        # Fallback: case-insensitive check for a leading "json" token before JSON content
+        _lower = raw_for_json.lstrip()
+        _token = "json"
+        if _lower[:len(_token)].lower() == _token and len(_lower) > len(_token) and _lower[len(_token):].lstrip().startswith("{"):
+            raw_for_json = _lower[len(_token):].lstrip()
+            logger.debug("Stripped leading 'json' token from LLM response")
     
     # --- 1. Try raw JSON parsing FIRST (before cleaning) ---
     # This handles cases where LLM returns {"files": {...}} without markdown fences
