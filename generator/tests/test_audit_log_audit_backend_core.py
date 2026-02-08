@@ -96,16 +96,44 @@ def _cancel_backend_tasks(backend: LogBackend) -> None:
 
 
 def _counter_total_for_labels(counter, **expected_labels) -> float:
-    """Sum counter samples that match expected label values."""
+    """Sum counter samples that match expected label values.
+
+    Uses two strategies for robustness against Prometheus registry
+    interference from other test modules:
+      1. Try counter.collect() (the standard Prometheus API).
+      2. Fall back to reading the counter's internal _metrics dict directly,
+         which avoids dependency on registry state.
+    """
+    # --- Strategy 1: Standard collect() API ---
     total = 0.0
-    for metric in counter.collect():
-        for sample in metric.samples:
-            # Only sum samples that end with _total (exclude _created timestamps)
-            if not sample.name.endswith('_total'):
-                continue
-            labels = sample.labels or {}
-            if all(labels.get(k) == v for k, v in expected_labels.items()):
-                total += float(sample.value)
+    try:
+        for metric in counter.collect():
+            for sample in metric.samples:
+                # Only sum samples that end with _total (exclude _created timestamps)
+                if not sample.name.endswith('_total'):
+                    continue
+                labels = sample.labels or {}
+                if all(labels.get(k) == v for k, v in expected_labels.items()):
+                    total += float(sample.value)
+        if total > 0:
+            return total
+    except Exception:
+        pass
+
+    # --- Strategy 2: Direct internal access (fallback) ---
+    # When the Prometheus registry is in an inconsistent state (e.g. after
+    # another test module swaps/clears the global REGISTRY), collect() may
+    # return empty samples even though the counter was incremented.  Reading
+    # the internal _metrics dict bypasses the registry entirely.
+    if hasattr(counter, '_metrics'):
+        label_key = tuple(sorted(expected_labels.items()))
+        for key, child in counter._metrics.items():
+            if key == label_key:
+                # Access the underlying value
+                if hasattr(child, '_value'):
+                    val = child._value
+                    # _value may be a MmapedValue (multiprocess) or ValueClass
+                    return float(val.get() if hasattr(val, 'get') else val)
     return total
 
 
@@ -125,15 +153,41 @@ def event_loop():
 async def ensure_metrics_work():
     """
     Ensure Prometheus metrics are properly initialized and captured for each test.
-    This fixture runs automatically for every test.
+
+    When running the full test suite, other test modules (e.g. test_runner_metrics)
+    may swap/clear the global Prometheus REGISTRY, which can disconnect the
+    module-level Counter objects from the active registry.  This fixture
+    re-fetches the live counter references from the core module and
+    re-registers them with the current active REGISTRY if necessary.
     """
-    # Force metric collection to ensure they're registered
+    global BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES
+
+    # Re-fetch the counter objects from the live module to ensure we are
+    # checking the same objects that the production code increments.
+    live_module = sys.modules.get("generator.audit_log.audit_backend.audit_backend_core", core)
+    BACKEND_ERRORS = live_module.BACKEND_ERRORS
+    BACKEND_WRITES = live_module.BACKEND_WRITES
+    BACKEND_TAMPER_DETECTION_FAILURES = live_module.BACKEND_TAMPER_DETECTION_FAILURES
+
+    # Ensure the counters are registered with the current active REGISTRY.
+    try:
+        import prometheus_client
+        active_registry = prometheus_client.REGISTRY
+        for counter in (BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES):
+            try:
+                active_registry.register(counter)
+            except (ValueError, KeyError):
+                pass  # Already registered – that's fine
+    except Exception:
+        pass
+
+    # Force metric collection to warm up internal state
     _ = list(BACKEND_ERRORS.collect())
     _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
     _ = list(BACKEND_WRITES.collect())
-    
+
     yield
-    
+
     # Allow async tasks to complete and metrics to be incremented
     await asyncio.sleep(0.2)
     pending = [t for t in asyncio.all_tasks() if not t.done()]
