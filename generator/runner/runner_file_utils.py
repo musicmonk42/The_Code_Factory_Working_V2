@@ -1499,11 +1499,18 @@ async def validate_generated_project(
     if required_files is None:
         required_files = ["main.py"]
     
+    # Files that are always hard requirements (missing = error)
+    _CRITICAL_REQUIRED = {"main.py"}
+    
     for required_file in required_files:
         file_path = output_dir / required_file
         if not file_path.exists():
-            result["valid"] = False
-            result["errors"].append(f"Required file missing: {required_file}")
+            if required_file in _CRITICAL_REQUIRED:
+                result["valid"] = False
+                result["errors"].append(f"Required file missing: {required_file}")
+            else:
+                # Non-critical files: warn but do not fail validation
+                result["warnings"].append(f"Optional file missing: {required_file}")
         else:
             # Check file is not empty
             if file_path.stat().st_size == 0:

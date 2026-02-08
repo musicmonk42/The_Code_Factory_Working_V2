@@ -469,6 +469,42 @@ def process_data():
     assert "Here's the implementation" not in cleaned
 
 
+def test_parse_llm_response_json_prefix_stripped():
+    """
+    When LLM prefixes output with 'json' before the JSON body,
+    parse_llm_response should strip that prefix and parse multi-file JSON.
+    """
+    payload = json.dumps({"files": {"app/main.py": "print('hello')", "app/utils.py": "x = 1"}})
+    # Simulate LLM prefixing with 'json\n'
+    response = "json\n" + payload
+    files = crh.parse_llm_response(response, lang="python")
+    assert "app/main.py" in files
+    assert "app/utils.py" in files
+    assert crh.ERROR_FILENAME not in files
+
+
+def test_parse_llm_response_json_prefix_no_newline():
+    """
+    When LLM prefixes output with bare 'json' (no newline) before '{',
+    parse_llm_response should still strip and parse.
+    """
+    payload = json.dumps({"files": {"main.py": "print('ok')"}})
+    response = "json" + payload
+    files = crh.parse_llm_response(response, lang="python")
+    assert "main.py" in files
+    assert files["main.py"] == "print('ok')"
+
+
+def test_parse_llm_response_json_prefix_case_insensitive():
+    """
+    The 'json' prefix stripping should work regardless of case.
+    """
+    payload = json.dumps({"files": {"main.py": "x = 1"}})
+    response = "JSON\n" + payload
+    files = crh.parse_llm_response(response, lang="python")
+    assert "main.py" in files
+
+
 def test_validate_syntax_empty_code_error_message():
     """
     Test that empty code produces helpful error message.
