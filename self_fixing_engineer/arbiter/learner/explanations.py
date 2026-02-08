@@ -40,7 +40,9 @@ EXPLANATION_CACHE_REDIS_TTL = int(
 )  # 24 hours
 EXPLANATION_PROMPT_TEMPLATE_PATH = os.getenv(
     "EXPLANATION_PROMPT_TEMPLATE_PATH",
-    os.path.join(os.path.dirname(__file__), "templates/explanation_prompt.json"),
+    os.path.join(
+        os.path.dirname(__file__), "..", "..", "templates", "explanation_prompt.json"
+    ),
 )
 EXPLANATION_LLM_TIMEOUT_SECONDS = float(
     os.getenv("EXPLANATION_LLM_TIMEOUT_SECONDS", 30.0)
