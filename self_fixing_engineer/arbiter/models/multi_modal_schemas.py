@@ -72,7 +72,7 @@ class BaseConfig(BaseModel):
         extra="forbid",
         alias_generator=to_camel,  # Apply camelCase alias generator
         populate_by_name=True,  # Allow both field name and alias
-        use_enum_values=True,
+        use_enum_values=False,  # Preserve Enum objects instead of converting to values
         validate_assignment=True,
     )
 
@@ -98,6 +98,30 @@ class BaseConfig(BaseModel):
                 "sanitize"
             ):
                 return escape(v, quote=True)
+        return v
+
+    @field_validator('timestamp_utc', mode='before', check_fields=False)
+    @classmethod
+    def ensure_utc_timezone_before(cls, v):
+        """Ensure timestamp has UTC timezone before validation."""
+        if isinstance(v, str):
+            # Parse string to datetime
+            if v.endswith('Z'):
+                v = v.replace('Z', '+00:00')
+            from datetime import datetime as dt_class
+            dt = dt_class.fromisoformat(v)
+            if dt.tzinfo is None:
+                logger.warning(f"timestamp_utc is naive, assuming UTC: {dt}")
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        elif isinstance(v, datetime):
+            if v.tzinfo is None:
+                # Naive datetime - assume UTC
+                logger.warning(f"timestamp_utc is naive, assuming UTC: {v}")
+                return v.replace(tzinfo=timezone.utc)
+            elif v.tzinfo != timezone.utc:
+                # Non-UTC timezone - convert to UTC
+                return v.astimezone(timezone.utc)
         return v
 
 

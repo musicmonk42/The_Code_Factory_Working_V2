@@ -918,14 +918,16 @@ def get_tracer(name: Optional[str] = None) -> Any:
     """Get a tracer instance for the given component name."""
     global _config
     
-    # Check if OTEL is explicitly disabled
-    if os.getenv('OTEL_SDK_DISABLED') == '1':
-        logger.debug(f"OTEL disabled, returning NoOpTracer for {name}")
-        return NoOpTracer()
-    
     try:
+        # Initialize config if needed
         if _config is None:
             _config = OpenTelemetryConfig.get_instance()
+        
+        # Check if OTEL is explicitly disabled
+        if os.getenv('OTEL_SDK_DISABLED') == '1':
+            logger.debug(f"OTEL disabled, returning NoOpTracer for {name}")
+            return NoOpTracer()
+        
         return _config.get_tracer(name)
     except Exception as e:
         logger.warning(f"Failed to get tracer for {name}, returning NoOpTracer: {e}")

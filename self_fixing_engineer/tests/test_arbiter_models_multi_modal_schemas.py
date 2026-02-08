@@ -161,7 +161,7 @@ def test_image_analysis_result_validation():
     """Test ImageAnalysisResult schema validation."""
     image = ImageAnalysisResult(**SAMPLE_IMAGE_ANALYSIS)
     assert image.image_id == "img_12345"
-    assert image.source_url == "http://example.com/image.jpg"
+    assert str(image.source_url).rstrip('/') == "http://example.com/image.jpg"
     assert image.ocr_result.text == "Hello World"
     assert image.captioning_result.confidence == 0.88
     assert image.face_detection_count == 1
@@ -313,9 +313,7 @@ def test_camel_case_deserialization():
     }
     image = ImageAnalysisResult.model_validate(json_data)
     assert image.image_id == "img_camel"
-    assert (
-        str(image.source_url) == "http://example.com/camel.jpg/"
-    )  # Note: Pydantic may normalize URLs
+    assert str(image.source_url).rstrip('/') == "http://example.com/camel.jpg"
     assert image.ocr_result.text == "Camel Case"
 
 
