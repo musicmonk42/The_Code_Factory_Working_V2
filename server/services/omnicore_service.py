@@ -1088,9 +1088,14 @@ class OmniCoreService:
                         if isinstance(parsed, dict):
                             # Handle nested {"files": {...}} wrapper
                             if "files" in parsed and isinstance(parsed["files"], dict):
-                                result = parsed["files"]
-                            else:
-                                result = parsed
+                                parsed = parsed["files"]
+                            # Validate that values are strings (valid file content)
+                            non_str = {k for k, v in parsed.items() if not isinstance(v, (str, dict))}
+                            if non_str:
+                                raise TypeError(
+                                    f"Parsed JSON contains non-string values for keys: {non_str}"
+                                )
+                            result = parsed
                             logger.info(
                                 f"[CODEGEN] Parsed JSON string into file map with {len(result)} entries",
                                 extra={"job_id": job_id, "files": list(result.keys())}
@@ -2533,9 +2538,8 @@ class OmniCoreService:
                 try:
                     spec_files = _extract_required_files_from_md(md_content)
                     if spec_files:
-                        for sf in spec_files:
-                            if sf not in required_files:
-                                required_files.append(sf)
+                        existing = set(required_files)
+                        required_files.extend(sf for sf in spec_files if sf not in existing)
                         logger.info(
                             f"[PIPELINE] Job {job_id} spec-derived required files: {required_files}",
                             extra={"job_id": job_id}

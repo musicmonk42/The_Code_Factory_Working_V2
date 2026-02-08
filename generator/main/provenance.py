@@ -439,8 +439,7 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
 
     Supported patterns:
         - Tree-style listings: ``├── app/routes.py`` or ``│   ├── routes.py``
-        - Backtick references: ```app/routes.py```
-        - Bullet-point references: ``- app/routes.py``
+        - Backtick references: ``app/routes.py``
 
     Args:
         md_content: Markdown specification content to parse.
