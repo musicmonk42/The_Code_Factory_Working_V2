@@ -61,6 +61,7 @@ try:
         ProvenanceTracker,
         validate_spec_fidelity as _validate_spec_fidelity,
         run_fail_fast_validation as _run_fail_fast_validation,
+        extract_required_files_from_md as _extract_required_files_from_md,
     )
     _PROVENANCE_AVAILABLE = True
 except ImportError:
@@ -1075,7 +1076,34 @@ class OmniCoreService:
                 )
                 
                 # Validate result structure - industry standard
-                if not isinstance(result, dict):
+                # If agent returned a JSON string instead of a file map dict,
+                # parse it into a dict so materialize_file_map can process it.
+                if isinstance(result, str):
+                    logger.warning(
+                        f"[CODEGEN] Agent returned string instead of dict, attempting JSON parse",
+                        extra={"job_id": job_id, "result_length": len(result)}
+                    )
+                    try:
+                        parsed = json.loads(result)
+                        if isinstance(parsed, dict):
+                            # Handle nested {"files": {...}} wrapper
+                            if "files" in parsed and isinstance(parsed["files"], dict):
+                                result = parsed["files"]
+                            else:
+                                result = parsed
+                            logger.info(
+                                f"[CODEGEN] Parsed JSON string into file map with {len(result)} entries",
+                                extra={"job_id": job_id, "files": list(result.keys())}
+                            )
+                        else:
+                            raise TypeError(f"Parsed JSON is not a dict, got {type(parsed).__name__}")
+                    except (json.JSONDecodeError, TypeError) as parse_err:
+                        logger.error(
+                            f"[CODEGEN] Invalid result type: {type(result).__name__}, JSON parse failed: {parse_err}",
+                            extra={"job_id": job_id, "result": str(result)[:200]}
+                        )
+                        raise TypeError(f"Code generation must return dict, got {type(result).__name__}")
+                elif not isinstance(result, dict):
                     logger.error(
                         f"[CODEGEN] Invalid result type: {type(result).__name__}",
                         extra={"job_id": job_id, "result": str(result)[:200]}
@@ -2497,12 +2525,30 @@ class OmniCoreService:
             output_path_for_validation = codegen_result.get("output_path")
             md_content = payload.get("readme_content", payload.get("requirements", ""))
             
+            # Extract spec-required files from the MD content so that
+            # validation catches missing files like app/routes.py when the
+            # spec references them.
+            required_files = ["main.py"]
+            if md_content and _PROVENANCE_AVAILABLE:
+                try:
+                    spec_files = _extract_required_files_from_md(md_content)
+                    if spec_files:
+                        for sf in spec_files:
+                            if sf not in required_files:
+                                required_files.append(sf)
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} spec-derived required files: {required_files}",
+                            extra={"job_id": job_id}
+                        )
+                except Exception as parse_err:
+                    logger.warning(f"[PIPELINE] Job {job_id} failed to extract required files from spec: {parse_err}")
+            
             # Validate generated project (syntax + JSON-bundle detection)
             if output_path_for_validation and _MATERIALIZER_AVAILABLE:
                 try:
                     val_result = await _validate_generated_project(
                         output_dir=output_path_for_validation,
-                        required_files=["main.py"],
+                        required_files=required_files,
                         check_python_syntax=True,
                     )
                     if not val_result.get("valid", True):
