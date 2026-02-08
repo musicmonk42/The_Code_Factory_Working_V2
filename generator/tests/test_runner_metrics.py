@@ -46,12 +46,15 @@ def clean_prometheus_registry(monkeypatch):
     # Monkeypatch the global REGISTRY to be our new one
     monkeypatch.setattr(prom, "REGISTRY", new_registry)
 
-    # Get all metric objects defined in the module
-    sut_metrics = [
-        v
-        for v in vars(m).values()
-        if isinstance(v, (prom.Counter, prom.Gauge, prom.Histogram))
-    ]
+    # Get all metric objects defined in the module (deduplicated by identity,
+    # since aliases like LLM_CALLS_TOTAL = LLM_REQUESTS_TOTAL point to the
+    # same Counter object and re-registering it would cause a ValueError).
+    seen_ids = set()
+    sut_metrics = []
+    for v in vars(m).values():
+        if isinstance(v, (prom.Counter, prom.Gauge, prom.Histogram)) and id(v) not in seen_ids:
+            sut_metrics.append(v)
+            seen_ids.add(id(v))
 
     # --- START FIX ---
     # Clear the internal state of all metric objects before registering.
