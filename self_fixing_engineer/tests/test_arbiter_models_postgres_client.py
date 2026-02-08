@@ -117,6 +117,8 @@ async def pg_client(mocker: MockerFixture):
     mock_conn.fetchval = mocker.AsyncMock(return_value=1)
 
     # Create proper async context manager for acquire
+    # Note: acquire() itself is sync but returns an async context manager
+    # This matches asyncpg's pattern: async with pool.acquire() as conn:
     class MockAcquireContext:
         async def __aenter__(self):
             return mock_conn
@@ -124,7 +126,7 @@ async def pg_client(mocker: MockerFixture):
         async def __aexit__(self, *args):
             return None
 
-    # FIXED: Make acquire() a callable that returns context manager
+    # Make acquire() a callable that returns the async context manager
     mock_pool.acquire = mocker.MagicMock(return_value=MockAcquireContext())
     mock_pool.close = mocker.AsyncMock()
     mock_pool.get_size = mocker.MagicMock(return_value=1)
