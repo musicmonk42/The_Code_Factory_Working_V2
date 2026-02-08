@@ -8,7 +8,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import aiofiles
 import cryptography.exceptions
@@ -90,7 +90,7 @@ class AuditUtils:
         log_path: str = AUDIT_LOG_PATH,
         rotation_size_mb: int = AUDIT_LOG_ROTATION_SIZE_MB,
         max_files: int = AUDIT_LOG_MAX_FILES,
-        encryption_key: str = None,
+        encryption_key: Optional[str] = None,
     ):
 
         self.log_path = log_path
@@ -99,7 +99,7 @@ class AuditUtils:
         self._lock = asyncio.Lock()
 
         # Encryption setup - prefer explicit parameter, fall back to module-level variable
-        self.encryption_key = encryption_key if encryption_key is not None else AUDIT_ENCRYPTION_KEY
+        self.encryption_key = encryption_key or AUDIT_ENCRYPTION_KEY
         self.fernet = (
             Fernet(self.encryption_key.encode()) if self.encryption_key else None
         )
