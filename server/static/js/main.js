@@ -2879,7 +2879,7 @@ async function loadClarificationForJob(jobId) {
         const readmeContent = (job.metadata && job.metadata.readme_content) || '';
 
         if (questions.length === 0) {
-            showError('No clarification questions found for this job. Try running clarification again.');
+            showError('No clarification questions found for this job. The questions may have already been answered or were not generated during the pipeline run.');
             return;
         }
 
@@ -2909,7 +2909,7 @@ async function loadClarificationForJob(jobId) {
         window.clarificationQuestions = questions;
         window.clarifierQuestions = questions;
         window.currentQuestionIndex = 0;
-        currentQuestionId = 'q1';
+        currentQuestionId = (typeof questions[0] === 'object' && questions[0].id) ? questions[0].id : 'q1';
 
         updateClarifierStatus(`Waiting for answer (1/${questions.length})`, 'waiting');
 
