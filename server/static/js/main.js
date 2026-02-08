@@ -3155,8 +3155,32 @@ function skipQuestion() {
     } else {
         updateClarifierStatus('Complete (with skipped questions)', 'active');
         document.getElementById('answer-section').style.display = 'none';
-        addClarifierMessage('system', 'Clarification process complete.', 'System');
-        fetchClarifiedRequirements();
+        addClarifierMessage('system', 'Skipping remaining questions and resuming pipeline...', 'System');
+        // Notify backend to skip clarification and resume the SAME job
+        skipAllClarification();
+    }
+}
+
+/**
+ * Skip all remaining clarification questions and resume the pipeline for the current job.
+ * Calls POST /generator/{job_id}/clarification/respond with { skip: true }.
+ */
+async function skipAllClarification() {
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/generator/${currentClarifierJobId}/clarification/respond`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ skip: true })
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const result = await response.json();
+        addClarifierMessage('system', '✅ Clarification skipped. Pipeline resuming for this job.', 'System');
+        updateClarifierStatus('Pipeline resuming', 'active');
+    } catch (error) {
+        console.error('Skip all clarification error:', error);
+        showError('Failed to skip clarification: ' + error.message);
     }
 }
 
