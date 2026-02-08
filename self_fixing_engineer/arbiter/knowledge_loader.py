@@ -118,7 +118,7 @@ class KnowledgeLoader:
             knowledge_data_path, master_knowledge_file
         )
         self.loaded_knowledge: Dict[str, Any] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         self._canonical_knowledge_data = {
             "SelfFixingEngineer": {
