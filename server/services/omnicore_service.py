@@ -925,6 +925,71 @@ class OmniCoreService:
             logger.warning(f"Unknown generator action: {action}")
             return {"status": "error", "message": f"Unknown action: {action}"}
     
+    def _unwrap_nested_json_content(self, content: str, job_id: str) -> Optional[Dict[str, str]]:
+        """
+        Helper to recursively unwrap nested JSON strings in file content.
+        
+        If content is a JSON string representing a file map, parse and return it.
+        Handles nested {"files": {...}} structures and validates all values are strings.
+        
+        Args:
+            content: File content that might be a JSON string
+            job_id: Job ID for logging
+            
+        Returns:
+            Dict of filename -> content if content is a valid file map JSON, else None
+        """
+        stripped = content.strip()
+        if not (stripped.startswith('{') and stripped.endswith('}')):
+            return None
+            
+        try:
+            parsed = json.loads(stripped)
+            if not isinstance(parsed, dict) or len(parsed) == 0:
+                return None
+                
+            # Unwrap "files" key if present
+            inner = parsed
+            if "files" in inner and isinstance(inner["files"], dict):
+                inner = inner["files"]
+            
+            # Check if all values are strings (valid file map)
+            # OR if values are themselves JSON strings that can be unwrapped
+            file_map = {}
+            for key, value in inner.items():
+                if isinstance(value, str):
+                    # Check if this string value is itself a nested JSON file map
+                    nested = self._unwrap_nested_json_content(value, job_id)
+                    if nested:
+                        # Recursively unwrapped - prefix keys with parent key
+                        for nested_key, nested_content in nested.items():
+                            combined_key = f"{key}/{nested_key}" if key else nested_key
+                            file_map[combined_key] = nested_content
+                    else:
+                        # Regular string content
+                        file_map[key] = value
+                elif isinstance(value, dict):
+                    # Value is a dict - treat as nested file map
+                    for nested_key, nested_content in value.items():
+                        if isinstance(nested_content, str):
+                            combined_key = f"{key}/{nested_key}"
+                            file_map[combined_key] = nested_content
+                else:
+                    # Invalid value type
+                    return None
+            
+            if file_map:
+                logger.info(
+                    f"[CODEGEN] Unwrapped nested JSON content: {len(file_map)} files",
+                    extra={"job_id": job_id, "files": list(file_map.keys())}
+                )
+                return file_map
+                
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.debug(f"Content is not valid JSON: {e}")
+            
+        return None
+    
     async def _run_codegen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute code generation agent."""
         # Ensure agents are loaded before use
@@ -1302,40 +1367,32 @@ class OmniCoreService:
                                     continue
                                 if not isinstance(content, str):
                                     raise TypeError(f"File content must be string, got {type(content).__name__}")
-                                # Detect JSON string that represents a file map bundle
-                                stripped = content.strip()
-                                if stripped.startswith('{') and stripped.endswith('}'):
-                                    try:
-                                        parsed = json.loads(stripped)
-                                        if isinstance(parsed, dict) and len(parsed) > 0:
-                                            inner = parsed
-                                            if "files" in inner and isinstance(inner["files"], dict):
-                                                inner = inner["files"]
-                                            # Only treat as file map if all values are strings
-                                            if all(isinstance(v, str) for v in inner.values()):
-                                                logger.info(
-                                                    f"[CODEGEN] Fallback: unpacking JSON bundle from '{filename}'",
-                                                    extra={"job_id": job_id, "inner_files": list(inner.keys())}
-                                                )
-                                                for inner_name, inner_content in inner.items():
-                                                    if not inner_name or '..' in inner_name or inner_name.startswith('/'):
-                                                        raise SecurityError(f"Invalid filename: {inner_name}")
-                                                    if len(inner_content) > 10 * 1024 * 1024:
-                                                        raise ValueError(f"File {inner_name} exceeds 10MB size limit")
-                                                    if not inner_content or not inner_content.strip():
-                                                        files_failed.append({"filename": inner_name, "error": "content_empty_or_whitespace"})
-                                                        continue
-                                                    inner_path = (output_path / inner_name).resolve()
-                                                    if not str(inner_path).startswith(str(output_path)):
-                                                        raise SecurityError(f"Path traversal attempt in filename: {inner_name}")
-                                                    inner_path.parent.mkdir(parents=True, exist_ok=True)
-                                                    inner_path.write_text(inner_content, encoding='utf-8')
-                                                    if inner_path.exists() and inner_path.stat().st_size > 0:
-                                                        generated_files.append(str(inner_path))
-                                                        total_bytes_written += len(inner_content.encode('utf-8'))
-                                                continue
-                                    except (json.JSONDecodeError, ValueError):
-                                        pass  # Not valid JSON, treat as normal file content
+                                
+                                # Use the helper to recursively unwrap nested JSON strings
+                                unwrapped = self._unwrap_nested_json_content(content, job_id)
+                                if unwrapped:
+                                    # Content was a nested JSON file map - write each file
+                                    logger.info(
+                                        f"[CODEGEN] Fallback: unpacking JSON bundle from '{filename}'",
+                                        extra={"job_id": job_id, "inner_files": list(unwrapped.keys())}
+                                    )
+                                    for inner_name, inner_content in unwrapped.items():
+                                        if not inner_name or '..' in inner_name or inner_name.startswith('/'):
+                                            raise SecurityError(f"Invalid filename: {inner_name}")
+                                        if len(inner_content) > 10 * 1024 * 1024:
+                                            raise ValueError(f"File {inner_name} exceeds 10MB size limit")
+                                        if not inner_content or not inner_content.strip():
+                                            files_failed.append({"filename": inner_name, "error": "content_empty_or_whitespace"})
+                                            continue
+                                        inner_path = (output_path / inner_name).resolve()
+                                        if not str(inner_path).startswith(str(output_path)):
+                                            raise SecurityError(f"Path traversal attempt in filename: {inner_name}")
+                                        inner_path.parent.mkdir(parents=True, exist_ok=True)
+                                        inner_path.write_text(inner_content, encoding='utf-8')
+                                        if inner_path.exists() and inner_path.stat().st_size > 0:
+                                            generated_files.append(str(inner_path))
+                                            total_bytes_written += len(inner_content.encode('utf-8'))
+                                    continue
                                 if len(content) > 10 * 1024 * 1024:
                                     raise ValueError(f"File {filename} exceeds 10MB size limit")
                                 if not content or not content.strip():
@@ -1821,14 +1878,11 @@ class OmniCoreService:
                 
                 if not configs:
                     logger.warning(f"Deploy agent returned no configurations for job {job_id}")
-                    # Generate a default Dockerfile as fallback so deployment
-                    # artifacts are never completely missing.
                     generated_files = []
                     if platform in ("docker", "dockerfile"):
-                        # Default assumes a Python/FastAPI project structure.
-                        # This is a best-effort fallback when the deploy agent
-                        # produces no output; projects with different structures
-                        # should configure their own Dockerfile.
+                        output_dir = repo_path
+                        
+                        # Default Dockerfile
                         default_dockerfile = (
                             "FROM python:3.11-slim\n"
                             "WORKDIR /app\n"
@@ -1837,13 +1891,51 @@ class OmniCoreService:
                             "COPY . /app\n"
                             'CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]\n'
                         )
-                        output_dir = repo_path
                         file_path = output_dir / "Dockerfile"
                         async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                             await f.write(default_dockerfile)
                         generated_files.append("Dockerfile")
+                        
+                        # Default docker-compose.yml
+                        default_compose = (
+                            "version: '3.8'\n\n"
+                            "services:\n"
+                            "  app:\n"
+                            "    build:\n"
+                            "      context: .\n"
+                            "      dockerfile: Dockerfile\n"
+                            "    ports:\n"
+                            '      - "8000:8000"\n'
+                            "    environment:\n"
+                            "      - ENVIRONMENT=production\n"
+                            "      - LOG_LEVEL=info\n"
+                            "    restart: unless-stopped\n"
+                            "    healthcheck:\n"
+                            '      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]\n'
+                            "      interval: 30s\n"
+                            "      timeout: 10s\n"
+                            "      retries: 3\n"
+                            "      start_period: 40s\n"
+                        )
+                        compose_path = output_dir / "docker-compose.yml"
+                        async with aiofiles.open(compose_path, "w", encoding="utf-8") as f:
+                            await f.write(default_compose)
+                        generated_files.append("docker-compose.yml")
+                        
+                        # Default .dockerignore
+                        default_dockerignore = (
+                            "__pycache__\n*.pyc\n*.pyo\n.git\n.gitignore\n"
+                            ".env\n.venv\nvenv\nnode_modules\n"
+                            ".pytest_cache\n.mypy_cache\n*.egg-info\n"
+                            "dist\nbuild\n.coverage\nhtmlcov\n"
+                        )
+                        dockerignore_path = output_dir / ".dockerignore"
+                        async with aiofiles.open(dockerignore_path, "w", encoding="utf-8") as f:
+                            await f.write(default_dockerignore)
+                        generated_files.append(".dockerignore")
+                        
                         logger.info(
-                            f"[DEPLOY] Generated default Dockerfile fallback for job {job_id}"
+                            f"[DEPLOY] Generated default deployment fallback for job {job_id}: {generated_files}"
                         )
                     return {
                         "status": "completed",

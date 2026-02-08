@@ -45,7 +45,7 @@ Your response MUST be valid JSON in this exact structure:
 {% if language == "python" %}
     "main.py": "# Entry point with complete implementation",
     "models.py": "# Data models/schemas with validation",
-{% if framework == "fastapi" %}
+{% if framework == "fastapi" or framework == "flask" %}
     "routes.py": "# API routes with proper error handling",
 {% endif %}
     "utils.py": "# Utility functions if needed",

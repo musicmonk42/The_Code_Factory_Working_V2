@@ -97,6 +97,13 @@ except ImportError:
     validate_deployment_artifacts = None
     validate_spec_fidelity = None
 
+# Import materializer for writing codegen files to output_path
+try:
+    from generator.runner.runner_file_utils import materialize_file_map as _materialize_file_map_cli
+    HAS_MATERIALIZER = True
+except ImportError:
+    HAS_MATERIALIZER = False
+
 # Import DeployAgent for deployment artifact generation
 try:
     from generator.agents.deploy_agent.deploy_agent import DeployAgent
@@ -1217,6 +1224,43 @@ class WorkflowEngine:
                         # Skip testgen and deploy if validation failed
                         if not validation_passed:
                             continue
+                        
+                        # [STAGE:MATERIALIZE] Write codegen files to output_path
+                        if output_path:
+                            codegen_files = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
+                            if codegen_files:
+                                output_dir = Path(output_path)
+                                output_dir.mkdir(parents=True, exist_ok=True)
+                                
+                                if HAS_MATERIALIZER:
+                                    mat_result = await _materialize_file_map_cli(codegen_files, output_dir)
+                                    if mat_result.get("success"):
+                                        logger.info(
+                                            f"[STAGE:MATERIALIZE] Wrote {len(mat_result.get('files_written', []))} files to {output_path}",
+                                            extra={"workflow_id": workflow_id}
+                                        )
+                                    else:
+                                        logger.warning(
+                                            f"[STAGE:MATERIALIZE] Materialization had errors: {mat_result.get('errors', [])}",
+                                            extra={"workflow_id": workflow_id}
+                                        )
+                                else:
+                                    # Simple fallback
+                                    for fname, content in codegen_files.items():
+                                        if isinstance(content, str):
+                                            fpath = output_dir / fname
+                                            fpath.parent.mkdir(parents=True, exist_ok=True)
+                                            fpath.write_text(content, encoding="utf-8")
+                                    logger.info(
+                                        f"[STAGE:MATERIALIZE] Wrote {len(codegen_files)} files to {output_path} (fallback)",
+                                        extra={"workflow_id": workflow_id}
+                                    )
+                                
+                                if provenance:
+                                    provenance.record_stage(
+                                        ProvenanceTracker.STAGE_MATERIALIZE if hasattr(ProvenanceTracker, 'STAGE_MATERIALIZE') else "MATERIALIZE",
+                                        metadata={"output_path": output_path, "files_count": len(codegen_files)}
+                                    )
                         
                         # [STAGE:TESTGEN] Execute test generation AFTER validation
                         # Tests should be generated based on final validated code
