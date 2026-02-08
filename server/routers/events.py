@@ -17,6 +17,7 @@ Industry-standard features:
 import asyncio
 import json
 import logging
+import threading
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -253,9 +254,17 @@ async def websocket_endpoint(websocket: WebSocket):
         _active_connections_by_ip[client_ip] -= 1  # Decrement on failure
         return
 
+    # Track subscriptions and handlers for cleanup (Bug 2 fix)
+    subscribed_topics = []
+    event_handler_ref = None
+    omnicore_service_ref = None  # Store service reference for cleanup
+    
     try:
+        event_loop = asyncio.get_event_loop()  # Get loop inside try block
+        
         # Initialize OmniCore service for this connection
         omnicore_service = get_omnicore_service()
+        omnicore_service_ref = omnicore_service  # Store for cleanup
         
         # Check if message bus is ready BEFORE subscribing
         if _is_message_bus_ready(omnicore_service):
@@ -278,9 +287,16 @@ async def websocket_endpoint(websocket: WebSocket):
             # Create event queue for this WebSocket connection
             event_queue = asyncio.Queue(maxsize=100)
             
-            # Define handler for message bus events
+            # Thread-safe flag to stop processing after disconnect (Bug 2 fix)
+            handler_active = threading.Event()
+            handler_active.set()  # Initially active
+            
+            # Define handler for message bus events (Bug 1 fix: thread-safe queueing)
             def event_handler(message):
                 """Handle events from message bus and queue them for WebSocket."""
+                if not handler_active.is_set():
+                    return  # Skip processing if connection closed
+                    
                 try:
                     # Convert Message object to dict for WebSocket serialization
                     if isinstance(message, dict):
@@ -299,18 +315,24 @@ async def websocket_endpoint(websocket: WebSocket):
                             "timestamp": getattr(message, "timestamp", None),
                         }
                     
-                    # Put event in queue (non-blocking)
+                    # BUG 1 FIX: Use call_soon_threadsafe for thread-safe queue access
+                    # The dispatcher calls this from a ThreadPoolExecutor, so we must
+                    # schedule the put on the event loop thread
                     if not event_queue.full():
-                        event_queue.put_nowait(event_data)
+                        event_loop.call_soon_threadsafe(event_queue.put_nowait, event_data)
                     else:
-                        logger.warning("Event queue full, dropping event")
+                        logger.warning(f"Event queue full for connection {connection_id}, dropping event")
                 except Exception as e:
                     logger.error(f"Error queuing event: {e}")
+            
+            # Store handler reference for cleanup
+            event_handler_ref = event_handler
             
             # Subscribe to all event topics
             for topic in event_topics:
                 try:
                     omnicore_service._message_bus.subscribe(topic, event_handler)
+                    subscribed_topics.append(topic)
                     logger.debug(f"Subscribed to topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Could not subscribe to {topic}: {e}")
@@ -391,6 +413,31 @@ async def websocket_endpoint(websocket: WebSocket):
             exc_info=True
         )
         _remove_connection_safely(websocket)
+    finally:
+        # BUG 2 FIX: Unsubscribe from all topics on disconnect
+        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+            handler_active.clear()  # Thread-safe: stop handler from processing new events
+            for topic in subscribed_topics:
+                try:
+                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
+                    logger.debug(f"Unsubscribed from topic: {topic}")
+                except Exception as e:
+                    logger.warning(f"Error unsubscribing from {topic}: {e}")
+        
+        # BUG 3 FIX: Ensure connection cleanup always happens
+        _remove_connection_safely(websocket)
+        
+        connection_duration = time.time() - connection_start
+        logger.info(
+            f"WebSocket connection closed - connection_id={connection_id}, "
+            f"duration={connection_duration:.2f}s, total_connections={len(active_connections)}",
+            extra={
+                "connection_id": connection_id,
+                "duration": connection_duration,
+                "total_connections": len(active_connections),
+                "status": "disconnected"
+            }
+        )
 
 
 async def event_stream(
@@ -407,126 +454,153 @@ async def event_stream(
     Yields:
         SSE-formatted event strings
     """
-    # Check if message bus is ready
-    if omnicore_service and _is_message_bus_ready(omnicore_service):
+    # Track subscriptions for cleanup (Bug 4 fix)
+    subscribed_topics = []
+    event_handler_ref = None
+    omnicore_service_ref = omnicore_service  # Store reference for cleanup
+    handler_active = threading.Event()  # Thread-safe flag
+    handler_active.set()  # Initially active
+    
+    try:
+        event_loop = asyncio.get_event_loop()  # Get loop inside try block
         
-        logger.info(f"Message bus ready for SSE events (job_id: {job_id})")
-        
-        # Create event queue for SSE
-        event_queue = asyncio.Queue(maxsize=100)
-        
-        # Define handler for message bus events
-        def event_handler(message):
-            """Handle events from message bus and queue them for SSE."""
-            try:
-                # Convert Message object to dict for SSE serialization
-                if isinstance(message, dict):
-                    event_data = message
-                else:
-                    # Message object from ShardedMessageBus
-                    try:
-                        payload = json.loads(message.payload) if isinstance(message.payload, str) else message.payload
-                    except (json.JSONDecodeError, TypeError):
-                        payload = {"raw_payload": str(message.payload)}
-                    event_data = {
-                        "topic": getattr(message, "topic", "unknown"),
-                        "message": payload.get("message", f"Event on {getattr(message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
-                        "data": payload,
-                        "trace_id": getattr(message, "trace_id", None),
-                        "timestamp": getattr(message, "timestamp", None),
-                        "job_id": payload.get("job_id") if isinstance(payload, dict) else None,
-                    }
-                
-                # Filter by job_id if specified
-                if job_id and event_data.get("job_id") != job_id:
-                    return
-                
-                # Put event in queue (non-blocking)
-                if not event_queue.full():
-                    event_queue.put_nowait(event_data)
-                else:
-                    logger.warning("SSE event queue full, dropping event")
-            except Exception as e:
-                logger.error(f"Error queuing SSE event: {e}")
-        
-        # Subscribe to relevant topics
-        event_topics = [
-            "job.created",
-            "job.updated",
-            "job.completed",
-            "job.failed",
-            "sfe.analysis_complete",
-            "generator.stage_update",
-        ]
-        
-        for topic in event_topics:
-            try:
-                omnicore_service._message_bus.subscribe(topic, event_handler)
-                logger.debug(f"SSE subscribed to topic: {topic}")
-            except Exception as e:
-                logger.warning(f"Could not subscribe to {topic}: {e}")
-        
-        # Stream events from queue
-        counter = 0
-        while counter < 1000:  # Limit to prevent infinite streams
-            counter += 1
+        # Check if message bus is ready
+        if omnicore_service and _is_message_bus_ready(omnicore_service):
             
-            try:
-                # Wait for event with timeout
-                event_data = await asyncio.wait_for(event_queue.get(), timeout=5.0)
+            logger.info(f"Message bus ready for SSE events (job_id: {job_id})")
+            
+            # Create event queue for SSE
+            event_queue = asyncio.Queue(maxsize=100)
+            
+            # Define handler for message bus events (Bug 4 fix: thread-safe queueing)
+            def event_handler(message):
+                """Handle events from message bus and queue them for SSE."""
+                if not handler_active.is_set():
+                    return  # Skip processing if stream closed
+                    
+                try:
+                    # Convert Message object to dict for SSE serialization
+                    if isinstance(message, dict):
+                        event_data = message
+                    else:
+                        # Message object from ShardedMessageBus
+                        try:
+                            payload = json.loads(message.payload) if isinstance(message.payload, str) else message.payload
+                        except (json.JSONDecodeError, TypeError):
+                            payload = {"raw_payload": str(message.payload)}
+                        event_data = {
+                            "topic": getattr(message, "topic", "unknown"),
+                            "message": payload.get("message", f"Event on {getattr(message, 'topic', 'unknown')}") if isinstance(payload, dict) else str(payload),
+                            "data": payload,
+                            "trace_id": getattr(message, "trace_id", None),
+                            "timestamp": getattr(message, "timestamp", None),
+                            "job_id": payload.get("job_id") if isinstance(payload, dict) else None,
+                        }
+                    
+                    # Filter by job_id if specified
+                    if job_id and event_data.get("job_id") != job_id:
+                        return
+                    
+                    # BUG 4 FIX: Use call_soon_threadsafe for thread-safe queue access
+                    if not event_queue.full():
+                        event_loop.call_soon_threadsafe(event_queue.put_nowait, event_data)
+                    else:
+                        logger.warning(f"SSE event queue full (job_id: {job_id}), dropping event")
+                except Exception as e:
+                    logger.error(f"Error queuing SSE event: {e}")
+            
+            # Store handler reference for cleanup
+            event_handler_ref = event_handler
+            
+            # Subscribe to relevant topics
+            event_topics = [
+                "job.created",
+                "job.updated",
+                "job.completed",
+                "job.failed",
+                "sfe.analysis_complete",
+                "generator.stage_update",
+            ]
+            
+            for topic in event_topics:
+                try:
+                    omnicore_service._message_bus.subscribe(topic, event_handler)
+                    subscribed_topics.append(topic)
+                    logger.debug(f"SSE subscribed to topic: {topic}")
+                except Exception as e:
+                    logger.warning(f"Could not subscribe to {topic}: {e}")
+            
+            # Stream events from queue
+            counter = 0
+            while counter < 1000:  # Limit to prevent infinite streams
+                counter += 1
                 
+                try:
+                    # Wait for event with timeout
+                    event_data = await asyncio.wait_for(event_queue.get(), timeout=5.0)
+                    
+                    event = EventMessage(
+                        event_type=EventType.LOG_MESSAGE,
+                        timestamp=datetime.now(timezone.utc),
+                        job_id=job_id,
+                        message=event_data.get("message", "Event update"),
+                        data=event_data,
+                        severity="info",
+                    )
+                    
+                    yield {
+                        "event": event.event_type.value,
+                        "data": json.dumps(event.to_json_dict()),
+                    }
+                    
+                except asyncio.TimeoutError:
+                    # Send keepalive
+                    event = EventMessage(
+                        event_type=EventType.PLATFORM_STATUS,
+                        timestamp=datetime.now(timezone.utc),
+                        job_id=job_id,
+                        message="Keepalive",
+                        data={"status": "listening"},
+                        severity="info",
+                    )
+                    
+                    yield {
+                        "event": "keepalive",
+                        "data": json.dumps(event.to_json_dict()),
+                    }
+                    
+        else:
+            # Fallback: Send periodic mock updates
+            logger.info(f"Using fallback mode for SSE events (job_id: {job_id})")
+            
+            counter = 0
+            while counter < 100:  # Limit for demo
+                counter += 1
+                await asyncio.sleep(2)
+
                 event = EventMessage(
                     event_type=EventType.LOG_MESSAGE,
                     timestamp=datetime.now(timezone.utc),
                     job_id=job_id,
-                    message=event_data.get("message", "Event update"),
-                    data=event_data,
+                    message=f"Progress update {counter} (fallback mode)",
+                    data={"progress": counter, "mode": "fallback"},
                     severity="info",
                 )
-                
+
                 yield {
                     "event": event.event_type.value,
                     "data": json.dumps(event.to_json_dict()),
                 }
-                
-            except asyncio.TimeoutError:
-                # Send keepalive
-                event = EventMessage(
-                    event_type=EventType.PLATFORM_STATUS,
-                    timestamp=datetime.now(timezone.utc),
-                    job_id=job_id,
-                    message="Keepalive",
-                    data={"status": "listening"},
-                    severity="info",
-                )
-                
-                yield {
-                    "event": "keepalive",
-                    "data": json.dumps(event.to_json_dict()),
-                }
-                
-    else:
-        # Fallback: Send periodic mock updates
-        logger.info(f"Using fallback mode for SSE events (job_id: {job_id})")
-        
-        counter = 0
-        while counter < 100:  # Limit for demo
-            counter += 1
-            await asyncio.sleep(2)
-
-            event = EventMessage(
-                event_type=EventType.LOG_MESSAGE,
-                timestamp=datetime.now(timezone.utc),
-                job_id=job_id,
-                message=f"Progress update {counter} (fallback mode)",
-                data={"progress": counter, "mode": "fallback"},
-                severity="info",
-            )
-
-            yield {
-                "event": event.event_type.value,
-                "data": json.dumps(event.to_json_dict()),
-            }
+    finally:
+        # BUG 4 FIX: Unsubscribe from all topics when stream ends
+        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+            handler_active.clear()  # Thread-safe: stop handler from processing new events
+            for topic in subscribed_topics:
+                try:
+                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
+                    logger.debug(f"SSE unsubscribed from topic: {topic}")
+                except Exception as e:
+                    logger.warning(f"Error unsubscribing SSE from {topic}: {e}")
 
 
 @router.get("/sse")
