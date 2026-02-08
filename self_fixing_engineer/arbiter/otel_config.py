@@ -869,18 +869,34 @@ class NoOpSpan:
     def record_exception(self, exception: Exception):
         pass
 
+    def is_recording(self):
+        return False
+
     def get_span_context(self):
-        return type(
-            "SpanContext",
-            (),
-            {
-                "trace_id": 0,
-                "span_id": 0,
-                "is_remote": False,
-                "trace_flags": 0,
-                "trace_state": None,
-            },
-        )()
+        """Return a valid but non-recording span context."""
+        # Import here to avoid circular dependency
+        try:
+            from opentelemetry.trace import SpanContext, TraceFlags
+            return SpanContext(
+                trace_id=0,
+                span_id=0,
+                is_remote=False,
+                trace_flags=TraceFlags(0x00),
+                trace_state=None,
+            )
+        except ImportError:
+            # Fallback if opentelemetry is not available
+            return type(
+                "SpanContext",
+                (),
+                {
+                    "trace_id": 0,
+                    "span_id": 0,
+                    "is_remote": False,
+                    "trace_flags": 0,
+                    "trace_state": None,
+                },
+            )()
 
 
 class NoOpTracer:
@@ -901,9 +917,19 @@ _config: Optional[OpenTelemetryConfig] = None
 def get_tracer(name: Optional[str] = None) -> Any:
     """Get a tracer instance for the given component name."""
     global _config
-    if _config is None:
-        _config = OpenTelemetryConfig.get_instance()
-    return _config.get_tracer(name)
+    
+    # Check if OTEL is explicitly disabled
+    if os.getenv('OTEL_SDK_DISABLED') == '1' or os.getenv('TESTING') == '1':
+        logger.debug(f"OTEL disabled, returning NoOpTracer for {name}")
+        return NoOpTracer()
+    
+    try:
+        if _config is None:
+            _config = OpenTelemetryConfig.get_instance()
+        return _config.get_tracer(name)
+    except Exception as e:
+        logger.warning(f"Failed to get tracer for {name}, returning NoOpTracer: {e}")
+        return NoOpTracer()
 
 
 def trace_operation(operation_name: str = None):
