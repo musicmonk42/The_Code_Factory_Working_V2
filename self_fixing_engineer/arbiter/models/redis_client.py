@@ -25,7 +25,7 @@ from redis.asyncio import Redis
 # Defensive import for redis.asyncio.lock
 # This module is available in redis>=4.2.0, but may have compatibility issues
 try:
-    from redis.asyncio.lock import Lock as RedisLock
+    from redis.asyncio.client import Lock as RedisLock
 except ImportError as e:
     # Provide a clear error message if redis version is incompatible
     import warnings
