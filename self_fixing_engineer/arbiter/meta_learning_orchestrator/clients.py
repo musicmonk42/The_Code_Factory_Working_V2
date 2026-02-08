@@ -27,6 +27,7 @@ except (ImportError, AttributeError) as e:
     SQLiteBackend = None
 
 from opentelemetry import trace
+from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import Counter, Histogram
 from tenacity import (
     retry,
@@ -116,7 +117,7 @@ def _with_client_logging_and_metrics(span_name: str, span_attributes: Dict[str, 
     def decorator(func):
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
-            tracer = trace.get_tracer(__name__)
+            tracer = get_tracer(__name__)
             method_name = func.__name__
             client_name = self.__class__.__name__
 

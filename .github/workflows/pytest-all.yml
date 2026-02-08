@@ -472,7 +472,6 @@ jobs:
             -v \
             --tb=long \
             --import-mode=importlib \
-            --maxfail=1 \
             2>&1 | tee pytest-collection-debug.log || {
               EXIT_CODE=$?
               echo "=========================================="
@@ -664,7 +663,6 @@ jobs:
             $PYTEST_ARGS \
             -v \
             --tb=line \
-            --maxfail=5 \
             -m "not heavy" \
             --timeout=${TIMEOUT_VALUE} \
             --durations=20 \
@@ -745,7 +743,7 @@ jobs:
           timeout --signal=TERM --kill-after=30s 15m python -m pytest \
             self_fixing_engineer/tests/test_sfe_basic.py \
             self_fixing_engineer/tests/test_audit_fixes.py \
-            -v --tb=line --maxfail=5 \
+            -v --tb=line \
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
@@ -776,7 +774,7 @@ jobs:
           echo "=== Running Batch 2: Arbiter Tests ==="
           timeout --signal=TERM --kill-after=60s 55m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
-            -v --tb=line --maxfail=5 \
+            -v --tb=line \
             -m "not heavy" \
             --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider \
@@ -798,7 +796,7 @@ jobs:
           echo "=== Running Batch 3: Mesh Tests ==="
           timeout --signal=TERM --kill-after=30s 15m python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
-            -v --tb=line --maxfail=5 \
+            -v --tb=line \
             -m "not heavy" \
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
@@ -820,7 +818,7 @@ jobs:
           echo "=== Running Batch 4: Import Fixer Tests ==="
           timeout --signal=TERM --kill-after=30s 15m python -m pytest \
             self_fixing_engineer/tests/test_self_healing_import_fixer*.py \
-            -v --tb=line --maxfail=5 \
+            -v --tb=line \
             -m "not heavy" \
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
@@ -842,7 +840,7 @@ jobs:
           echo "=== Running Batch 5: Simulation Tests ==="
           timeout --signal=TERM --kill-after=30s 15m python -m pytest \
             self_fixing_engineer/tests/test_simulation*.py \
-            -v --tb=line --maxfail=5 \
+            -v --tb=line \
             -m "not heavy" \
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
