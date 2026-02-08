@@ -100,7 +100,7 @@ class BaseConfig(BaseModel):
                 return escape(v, quote=True)
         return v
 
-    @field_validator('timestamp_utc', mode='before')
+    @field_validator('timestamp_utc', mode='before', check_fields=False)
     @classmethod
     def ensure_utc_timezone_before(cls, v):
         """Ensure timestamp has UTC timezone before validation."""
