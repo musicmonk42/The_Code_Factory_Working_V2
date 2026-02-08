@@ -348,3 +348,201 @@ class TestFallbackMaterialization:
             assert (output_dir / "README.md").read_text() == "# Project\n\nA simple project."
         finally:
             shutil.rmtree(output_dir, ignore_errors=True)
+
+
+class TestClarificationSkipResume:
+    """Test that skip=true in the clarification respond endpoint resumes the pipeline."""
+
+    @pytest.mark.asyncio
+    async def test_skip_sets_status_running_and_resumes(self):
+        """Calling respond with skip=true should set job to RUNNING and trigger pipeline resumption."""
+        from server.routers.generator import _resume_pipeline_after_clarification
+        from server.storage import jobs_db
+
+        job_id = "test-skip-resume-001"
+        readme_content = "# Test Project\n\nBuild a web app."
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": readme_content,
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [
+                    {"id": "q1", "question": "What database?"},
+                    {"id": "q2", "question": "What auth method?"},
+                ],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            mock_service.run_full_pipeline = AsyncMock(return_value={
+                "status": "completed",
+                "stages_completed": ["codegen"],
+            })
+
+            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize:
+                mock_finalize.return_value = True
+
+                # Simulate what the endpoint does on skip: mark resolved + RUNNING + resume
+                job.metadata["clarification_status"] = "resolved"
+                job.status = JobStatus.RUNNING
+                job.updated_at = datetime.now(timezone.utc)
+
+                await _resume_pipeline_after_clarification(
+                    job_id=job_id,
+                    generator_service=mock_service,
+                    clarified_requirements={},
+                )
+
+            # run_full_pipeline should have been called (pipeline resumed)
+            mock_service.run_full_pipeline.assert_called_once()
+
+            # clarification_status should be "completed" after successful resumption
+            assert job.metadata["clarification_status"] == "completed"
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_skip_endpoint_returns_skipped_status(self):
+        """The respond endpoint should return status='skipped' when skip=true."""
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+
+        job_id = "test-skip-endpoint-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={
+                "readme_content": "# Test",
+                "language": "python",
+                "clarification_status": "pending_response",
+                "clarification_questions": [{"id": "q1", "question": "What?"}],
+            },
+        )
+        jobs_db[job_id] = job
+
+        try:
+            from fastapi import BackgroundTasks
+
+            # Create the skip request
+            skip_request = ClarificationResponseRequest(skip=True)
+            background_tasks = BackgroundTasks()
+            mock_service = MagicMock()
+
+            from server.routers.generator import submit_clarification_response
+
+            result = await submit_clarification_response(
+                job_id=job_id,
+                request=skip_request,
+                background_tasks=background_tasks,
+                generator_service=mock_service,
+            )
+
+            assert result["status"] == "skipped"
+            assert result["job_id"] == job_id
+            assert job.status == JobStatus.RUNNING
+            assert job.metadata["clarification_status"] == "resolved"
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_respond_without_skip_or_question_returns_400(self):
+        """Sending neither skip nor question_id should return HTTP 400."""
+        from server.schemas.generator_schemas import ClarificationResponseRequest
+        from server.storage import jobs_db
+
+        job_id = "test-bad-request-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.NEEDS_CLARIFICATION,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+
+        try:
+            from fastapi import BackgroundTasks
+
+            empty_request = ClarificationResponseRequest(skip=False)
+            background_tasks = BackgroundTasks()
+            mock_service = MagicMock()
+
+            from server.routers.generator import submit_clarification_response
+
+            with pytest.raises(Exception) as exc_info:
+                await submit_clarification_response(
+                    job_id=job_id,
+                    request=empty_request,
+                    background_tasks=background_tasks,
+                    generator_service=mock_service,
+                )
+
+            assert exc_info.value.status_code == 400
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_pipeline_endpoint_returns_202_on_needs_clarification(self):
+        """The /pipeline endpoint should return 202 when clarification is needed."""
+        from server.storage import jobs_db
+
+        job_id = "test-pipeline-202-001"
+        job = Job(
+            id=job_id,
+            status=JobStatus.RUNNING,
+            input_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+
+        try:
+            mock_service = MagicMock()
+            # Simulate the pipeline that sets NEEDS_CLARIFICATION
+            async def mock_run_full_pipeline(**kwargs):
+                job.status = JobStatus.NEEDS_CLARIFICATION
+                job.metadata["clarification_questions"] = [
+                    {"id": "q1", "question": "What database?"},
+                ]
+                return {"status": "clarification_initiated"}
+
+            mock_service.run_full_pipeline = AsyncMock(side_effect=mock_run_full_pipeline)
+
+            from server.routers.generator import run_full_pipeline
+            from server.schemas.generator_schemas import PipelineRequest
+
+            request = PipelineRequest(
+                readme_content="# Build a web app",
+                language="python",
+            )
+
+            result = await run_full_pipeline(
+                job_id=job_id,
+                request=request,
+                generator_service=mock_service,
+            )
+
+            # Should be a JSONResponse with 202 status
+            assert result.status_code == 202
+            import json
+            body = json.loads(result.body.decode())
+            assert body["status"] == "needs_clarification"
+            assert len(body["questions"]) == 1
+        finally:
+            if job_id in jobs_db:
+                del jobs_db[job_id]

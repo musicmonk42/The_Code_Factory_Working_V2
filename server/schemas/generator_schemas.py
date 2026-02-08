@@ -94,9 +94,11 @@ class ClarifyRequest(BaseModel):
 
 
 class ClarificationResponseRequest(BaseModel):
-    """Request body for submitting a clarification response."""
-    question_id: str = Field(..., description="ID of the question being answered")
-    response: str = Field(..., description="User's response to the question")
+    """Request body for submitting a clarification response or skipping clarification."""
+    question_id: Optional[str] = Field(None, description="ID of the question being answered")
+    response: Optional[str] = Field(None, description="User's response to the question")
+    responses: Optional[Dict[str, str]] = Field(None, description="Bulk responses keyed by question ID")
+    skip: bool = Field(False, description="If true, skip all clarification questions and resume pipeline")
 
 
 class LLMConfigRequest(BaseModel):

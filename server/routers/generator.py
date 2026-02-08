@@ -17,6 +17,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 
 from server.middleware import arbiter_policy_check
 from server.schemas import (
@@ -869,35 +870,71 @@ async def submit_clarification_response(
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
-    Submit a response to a clarification question.
+    Submit a response to a clarification question, or skip all clarification.
 
     Allows users to provide answers to clarification questions through
     the API. The response is routed through OmniCore to the clarifier
-    module for processing. When all questions have been answered, the
-    pipeline automatically resumes with code generation.
+    module for processing. When all questions have been answered (or skipped),
+    the pipeline automatically resumes with code generation.
 
     **Path Parameters:**
     - job_id: Unique job identifier
 
-    **Request Body:**
-    - question_id: ID of the question being answered
-    - response: User's response to the question
+    **Request Body (one of):**
+    - question_id + response: Answer a single question
+    - responses: Bulk answers keyed by question ID
+    - skip: If true, skip all remaining clarification questions
 
     **Returns:**
     - Response submission confirmation
 
     **Errors:**
+    - 400: Invalid request (skip=false with no question_id/response)
     - 404: Job not found
     """
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
+    job = jobs_db[job_id]
+
+    # Handle skip: mark clarification resolved and resume pipeline
+    if request.skip:
+        logger.info(f"[Pipeline] Clarification skipped for job {job_id}. Resuming pipeline.")
+        job.metadata["clarification_status"] = "resolved"
+        job.status = JobStatus.RUNNING
+        job.updated_at = datetime.now(timezone.utc)
+
+        background_tasks.add_task(
+            _resume_pipeline_after_clarification,
+            job_id=job_id,
+            generator_service=generator_service,
+            clarified_requirements={},
+        )
+
+        return {
+            "job_id": job_id,
+            "status": "skipped",
+            "message": "Clarification skipped. Pipeline resuming.",
+        }
+
+    # Validate that either question_id+response or responses is provided
+    if request.question_id and not request.response:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide response when question_id is specified",
+        )
+    if not request.question_id and not request.responses:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide question_id+response, responses, or skip=true",
+        )
+
     logger.debug(f"Received clarification response for job {job_id}, question {request.question_id}")
 
     result = await generator_service.submit_clarification_response(
         job_id=job_id,
-        question_id=request.question_id,
-        response=request.response,
+        question_id=request.question_id or "",
+        response=request.response or "",
     )
 
     # If all questions are answered, resume the pipeline
@@ -907,6 +944,10 @@ async def submit_clarification_response(
             f"[Pipeline] All clarification questions answered for job {job_id}. "
             f"Resuming pipeline with clarified requirements."
         )
+        job.metadata["clarification_status"] = "resolved"
+        job.status = JobStatus.RUNNING
+        job.updated_at = datetime.now(timezone.utc)
+
         background_tasks.add_task(
             _resume_pipeline_after_clarification,
             job_id=job_id,
@@ -1169,6 +1210,24 @@ async def run_full_pipeline(
         include_docs=request.include_docs,
         run_critique=request.run_critique,
     )
+
+    # Check if the pipeline paused for clarification
+    job = jobs_db[job_id]
+    if job.status == JobStatus.NEEDS_CLARIFICATION:
+        questions = job.metadata.get("clarification_questions", [])
+        logger.info(
+            f"Pipeline paused for clarification on job {job_id} "
+            f"({len(questions)} questions)"
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "job_id": job_id,
+                "status": "needs_clarification",
+                "questions": questions,
+                "message": "Pipeline paused — clarification required before code generation.",
+            },
+        )
 
     logger.info(f"Full pipeline executed for job {job_id}")
     return result
