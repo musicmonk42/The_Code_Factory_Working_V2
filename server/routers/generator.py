@@ -166,6 +166,9 @@ async def _trigger_pipeline_background(
                 job.metadata["clarification_questions"] = clarifications
                 job.metadata["clarification_status"] = "pending_response"
                 job.metadata["clarification_method"] = clarify_result.get("method", "rule_based")
+                job.metadata["readme_content"] = readme_content
+                job.metadata["language"] = language
+                job.status = JobStatus.NEEDS_CLARIFICATION
                 job.updated_at = datetime.now(timezone.utc)
                 
                 logger.info(
@@ -173,10 +176,10 @@ async def _trigger_pipeline_background(
                     f"Job is waiting for user responses via /generator/{job_id}/clarification/respond"
                 )
                 
-                # Note: For now, we continue the pipeline without waiting for user input
-                # This maintains backward compatibility while the clarification UI is being developed
-                # In a production system, you would set job.status = JobStatus.PENDING and return here
-                # to wait for user responses before continuing
+                # Pause pipeline: wait for user to answer questions before continuing
+                # The pipeline will resume via submit_clarification_response once all
+                # questions are answered.
+                return
                 
         except Exception as clarify_error:
             logger.warning(
@@ -261,6 +264,95 @@ async def _trigger_pipeline_background(
         logger.error(f"[Pipeline] Critical error for job {job_id}: {e}", exc_info=True)
         
         # Finalize job as failure
+        if job_id in jobs_db:
+            await finalize_job_failure(job_id, e)
+
+
+async def _resume_pipeline_after_clarification(
+    job_id: str,
+    generator_service: GeneratorService,
+    clarified_requirements: dict,
+):
+    """
+    Resume the pipeline after all clarification questions have been answered.
+
+    Continues from the code generation stage using the original README content
+    supplemented with clarified requirements.
+
+    Args:
+        job_id: Job ID
+        generator_service: GeneratorService instance
+        clarified_requirements: Requirements refined from user answers
+    """
+    try:
+        if job_id not in jobs_db:
+            logger.error(f"[Pipeline] Job {job_id} not found for resumption")
+            return
+
+        job = jobs_db[job_id]
+
+        readme_content = job.metadata.get("readme_content", "")
+        language = job.metadata.get("language", "python")
+
+        # Supplement README with clarified requirements
+        if clarified_requirements:
+            clarified = clarified_requirements.get("clarified_requirements", {})
+            if clarified:
+                supplement = "\n\n## Clarified Requirements\n"
+                for key, value in clarified.items():
+                    supplement += f"- **{key}**: {value}\n"
+                readme_content = readme_content + supplement
+
+        # Update job status to RUNNING and stage to code generation
+        job.status = JobStatus.RUNNING
+        job.current_stage = JobStage.GENERATOR_GENERATION
+        job.metadata["clarification_status"] = "completed"
+        job.updated_at = datetime.now(timezone.utc)
+        logger.info(f"[Pipeline] Resuming code generation for job {job_id} after clarification")
+
+        result = await generator_service.run_full_pipeline(
+            job_id=job_id,
+            readme_content=readme_content,
+            language=language,
+            include_tests=True,
+            include_deployment=True,
+            include_docs=True,
+            run_critique=True,
+        )
+
+        logger.info(f"[Pipeline] Full pipeline completed for job {job_id}: {result}")
+
+        pipeline_status = result.get("status", "unknown") if result else "unknown"
+
+        if pipeline_status == "skipped":
+            logger.info(
+                f"[Pipeline] Job {job_id} pipeline was skipped (already running). "
+                f"Not finalizing - the original pipeline run will handle finalization."
+            )
+            return
+
+        stages_completed = result.get("stages_completed", []) if result else []
+
+        if "codegen" in stages_completed or pipeline_status == "completed":
+            logger.info(f"[Pipeline] Finalizing successful job {job_id}")
+            finalized = await finalize_job_success(job_id, result)
+            if finalized:
+                logger.info(
+                    f"[Pipeline] Job {job_id} finalized successfully after clarification. "
+                    f"Ready for manual dispatch to Self-Fixing Engineer."
+                )
+            else:
+                logger.error(f"[Pipeline] Failed to finalize job {job_id}")
+        else:
+            logger.warning(
+                f"[Pipeline] Job {job_id} failed after clarification: no code was generated "
+                f"(completed stages: {', '.join(stages_completed) if stages_completed else 'none'})"
+            )
+            error = Exception(result.get("message", "Code generation failed - no code produced"))
+            await finalize_job_failure(job_id, error)
+
+    except Exception as e:
+        logger.error(f"[Pipeline] Critical error resuming job {job_id}: {e}", exc_info=True)
         if job_id in jobs_db:
             await finalize_job_failure(job_id, e)
 
@@ -773,6 +865,7 @@ async def get_clarification_feedback(
 async def submit_clarification_response(
     job_id: str,
     request: ClarificationResponseRequest,
+    background_tasks: BackgroundTasks,
     generator_service: GeneratorService = Depends(get_generator_service),
 ):
     """
@@ -780,7 +873,8 @@ async def submit_clarification_response(
 
     Allows users to provide answers to clarification questions through
     the API. The response is routed through OmniCore to the clarifier
-    module for processing.
+    module for processing. When all questions have been answered, the
+    pipeline automatically resumes with code generation.
 
     **Path Parameters:**
     - job_id: Unique job identifier
@@ -805,6 +899,20 @@ async def submit_clarification_response(
         question_id=request.question_id,
         response=request.response,
     )
+
+    # If all questions are answered, resume the pipeline
+    if result.get("status") == "completed":
+        clarified_requirements = result.get("clarified_requirements", {})
+        logger.info(
+            f"[Pipeline] All clarification questions answered for job {job_id}. "
+            f"Resuming pipeline with clarified requirements."
+        )
+        background_tasks.add_task(
+            _resume_pipeline_after_clarification,
+            job_id=job_id,
+            generator_service=generator_service,
+            clarified_requirements=clarified_requirements,
+        )
 
     logger.info(f"Clarification response submitted for job {job_id}, question {request.question_id}")
     return result
