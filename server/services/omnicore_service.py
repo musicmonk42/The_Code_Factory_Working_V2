@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 import time
 import zipfile
@@ -2062,19 +2063,17 @@ class OmniCoreService:
         ensures the first non-comment non-blank line starts with FROM.
         If no FROM is found, prepends a default FROM instruction.
         """
-        import re as _re
-
         if not content or not isinstance(content, str):
             return content
 
         # Strip markdown fences (```dockerfile ... ```)
-        content = _re.sub(
-            r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', content, flags=_re.IGNORECASE
+        content = re.sub(
+            r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', content, flags=re.IGNORECASE
         )
-        content = _re.sub(r'\n```\s*$', '', content)
+        content = re.sub(r'\n```\s*$', '', content)
 
         lines = content.splitlines()
-        cleaned: list = []
+        cleaned: List[str] = []
         for line in lines:
             stripped = line.strip()
             # Remove markdown image/badge lines: ![...](...)

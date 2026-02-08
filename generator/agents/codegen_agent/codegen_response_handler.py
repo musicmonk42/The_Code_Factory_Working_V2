@@ -326,6 +326,12 @@ DEFAULT_COMMENT_STYLE = ("#", "")
 # --- Content Normalization ---
 # ==============================================================================
 
+# Pre-compiled pattern for stripping markdown fences wrapping entire file content
+_FENCE_PATTERN = re.compile(
+    r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
 
 def _normalize_file_content(content: str) -> str:
     """
@@ -353,12 +359,7 @@ def _normalize_file_content(content: str) -> str:
     content = content.replace("\\t", "\t")
 
     # Strip markdown fences if the entire content is wrapped in them
-    stripped = content.strip()
-    fence_pattern = re.compile(
-        r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
-        re.DOTALL | re.IGNORECASE,
-    )
-    m = fence_pattern.match(stripped)
+    m = _FENCE_PATTERN.match(content.strip())
     if m:
         content = m.group(1)
 

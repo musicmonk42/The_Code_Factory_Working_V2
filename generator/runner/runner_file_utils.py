@@ -9,6 +9,7 @@ import json
 import mimetypes  # For auto-detect
 import os
 import platform  # For checking OS
+import re
 import shutil
 import tempfile
 import zipfile
@@ -1022,6 +1023,12 @@ MAX_PATH_LENGTH = 255  # Maximum filename length (POSIX limit)
 DANGEROUS_EXTENSIONS = {'.exe', '.dll', '.so', '.dylib', '.bat', '.cmd', '.sh', '.ps1'}
 ALLOWED_EXTENSIONS = {'.py', '.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.html', '.css', '.js', '.ts', '.jsx', '.tsx'}
 
+# Pre-compiled pattern for stripping markdown fences during materialization
+_MATERIALIZE_FENCE_PATTERN = re.compile(
+    r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
+    re.DOTALL | re.IGNORECASE,
+)
+
 
 def _validate_filename_security(filename: str, output_dir: Path) -> Tuple[bool, str]:
     """
@@ -1315,12 +1322,7 @@ async def materialize_file_map(
         content = content.lstrip("\ufeff")
         
         # Strip markdown fences if the entire content is wrapped in them
-        import re as _re
-        _fence_pat = _re.compile(
-            r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
-            _re.DOTALL | _re.IGNORECASE,
-        )
-        _m = _fence_pat.match(content.strip())
+        _m = _MATERIALIZE_FENCE_PATTERN.match(content.strip())
         if _m:
             content = _m.group(1)
         
