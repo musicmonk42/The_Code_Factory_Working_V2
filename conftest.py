@@ -143,6 +143,81 @@ def _initialize_prometheus_mock():
         pass
     
     # Create mock metric classes
+    class _MockSample:
+        """Mock Prometheus sample representing a single metric data point."""
+        def __init__(self, name, labels, value, timestamp=None):
+            self.name = name
+            self.labels = labels
+            self.value = value
+            self.timestamp = timestamp
+
+    class _MockMetricFamily:
+        """Mock Prometheus metric family containing multiple samples."""
+        def __init__(self, name, documentation, metric_type, samples):
+            self.name = name
+            self.documentation = documentation
+            self.type = metric_type
+            self.samples = samples
+
+    class _MockCounterChild:
+        """Child counter for a specific label combination."""
+        def __init__(self, parent, label_key, label_values):
+            self.parent = parent
+            self.label_key = label_key
+            self.label_values = label_values
+            self._value = 0
+        def inc(self, amount=1):
+            self._value += amount
+        def labels(self, **kwargs):
+            return self.parent.labels(**kwargs)
+        def collect(self):
+            return self.parent.collect()
+
+    class MockCounter:
+        """Mock Prometheus Counter that tracks increments and supports labels."""
+        def __init__(self, name='', description='', labelnames=(), *args, **kwargs):
+            self.name = name if isinstance(name, str) else ''
+            self.description = description if isinstance(description, str) else ''
+            self.labelnames = labelnames
+            self._metrics = {}
+        def labels(self, *args, **kwargs):
+            if args:
+                label_key = tuple(zip(self.labelnames, args)) if self.labelnames else tuple(enumerate(args))
+                label_values = dict(label_key)
+            else:
+                label_key = tuple(sorted(kwargs.items()))
+                label_values = kwargs
+            if label_key not in self._metrics:
+                self._metrics[label_key] = _MockCounterChild(self, label_key, label_values)
+            return self._metrics[label_key]
+        def inc(self, amount=1):
+            label_key = ()
+            if label_key not in self._metrics:
+                self._metrics[label_key] = _MockCounterChild(self, label_key, {})
+            self._metrics[label_key].inc(amount)
+        def collect(self):
+            samples = []
+            for label_key, child in self._metrics.items():
+                sample = _MockSample(
+                    name=self.name + '_total',
+                    labels=dict(label_key) if label_key else {},
+                    value=child._value,
+                )
+                samples.append(sample)
+            return [_MockMetricFamily(self.name, self.description, 'counter', samples)]
+        def dec(self, *args, **kwargs):
+            pass
+        def set(self, *args, **kwargs):
+            pass
+        def observe(self, *args, **kwargs):
+            pass
+        def time(self, *args, **kwargs):
+            def decorator(func):
+                return func
+            decorator.__enter__ = lambda: None
+            decorator.__exit__ = lambda *args: None
+            return decorator
+
     class MockMetric:
         def __init__(self, *args, **kwargs):
             pass
@@ -176,7 +251,7 @@ def _initialize_prometheus_mock():
     
     # Create main module mock
     _create_simple_mock("prometheus_client", {
-        "Counter": MockMetric,
+        "Counter": MockCounter,
         "Histogram": MockMetric,
         "Gauge": MockMetric,
         "Info": MockMetric,
@@ -188,10 +263,11 @@ def _initialize_prometheus_mock():
     }, submodules=["core", "registry", "multiprocess", "metrics"])
     
     # Add attributes to submodules
-    sys.modules["prometheus_client.core"].Counter = MockMetric
+    sys.modules["prometheus_client.core"].Counter = MockCounter
     sys.modules["prometheus_client.core"].Histogram = MockMetric
     sys.modules["prometheus_client.core"].Gauge = MockMetric
     sys.modules["prometheus_client.core"].REGISTRY = sys.modules["prometheus_client"].REGISTRY
+    sys.modules["prometheus_client.registry"].REGISTRY = sys.modules["prometheus_client"].REGISTRY
     sys.modules["prometheus_client.multiprocess"].MultiProcessCollector = lambda *args, **kwargs: None
     
     class MetricWrapperBase:

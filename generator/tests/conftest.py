@@ -119,6 +119,13 @@ if "prometheus_client" not in sys.modules:
         sys.modules["prometheus_client.core"] = prom_core
         prom_module.core = prom_core
         
+        # Create registry submodule
+        registry_spec = importlib.machinery.ModuleSpec(name="prometheus_client.registry", loader=None, is_package=False)
+        prom_registry = importlib.util.module_from_spec(registry_spec)
+        prom_registry.__file__ = "<mocked prometheus_client.registry>"
+        sys.modules["prometheus_client.registry"] = prom_registry
+        prom_module.registry = prom_registry
+        
         # Add mock classes
         class _MockHistogramMetricFamily:
             def __init__(self, *args, **kwargs): pass
@@ -274,6 +281,7 @@ if "prometheus_client" not in sys.modules:
         prom_core.Histogram = _MockHistogram
         prom_core.Gauge = _MockGauge
         prom_core.REGISTRY = _shared_registry
+        prom_registry.REGISTRY = _shared_registry
 
 # Add root directory to path if not already there
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
