@@ -89,7 +89,8 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     os.environ["ML_DATA_LAKE_PATH"] = str(data_lake_path)
     os.environ["ML_LOCAL_AUDIT_LOG_PATH"] = str(audit_log_path)
 
-    mocker.patch("aiofiles.open", mocker.AsyncMock())
+    # Removed aiofiles.open patch - it was causing issues with async context manager protocol
+    # mocker.patch("aiofiles.open", mocker.AsyncMock())
     mocker.patch("os.makedirs", return_value=None)
     mocker.patch("os.access", return_value=True)
     mocker.patch("os.path.exists", return_value=True)
