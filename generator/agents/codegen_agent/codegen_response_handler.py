@@ -500,7 +500,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     # extracted content from ```json ... ``` fences but left "json\n" prefix)
     if cleaned_for_json:
         _cj = cleaned_for_json.lstrip()
-        if _cj[:4].lower() == "json" and len(_cj) > 4 and _cj[4:].lstrip().startswith("{"):
+        if len(_cj) > 4 and _cj[:4].lower() == "json" and _cj[4:].lstrip().startswith("{"):
             cleaned_for_json = _cj[4:].lstrip()
             logger.debug("Stripped 'json' prefix from cleaned content before JSON parse")
     
@@ -589,7 +589,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             continue
         _candidate = candidate.strip()
         # Strip leading "json" prefix if present
-        if _candidate[:4].lower() == "json" and len(_candidate) > 4:
+        if len(_candidate) > 4 and _candidate[:4].lower() == "json":
             _candidate = _candidate[4:].lstrip()
         if _candidate.startswith("{"):
             try:

@@ -1251,7 +1251,7 @@ class OmniCoreService:
                     if isinstance(sole_value, str):
                         # Strip leading "json" prefix (LLM sometimes prepends it)
                         _sv = sole_value.strip()
-                        if _sv[:4].lower() == "json" and len(_sv) > 4:
+                        if len(_sv) > 4 and _sv[:4].lower() == "json":
                             _sv = _sv[4:].lstrip()
                         if _sv.startswith("{"):
                             try:
