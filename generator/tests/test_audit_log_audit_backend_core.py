@@ -173,15 +173,19 @@ async def ensure_metrics_work():
     # Defensively fetch metrics; if the module was partially loaded (e.g. during
     # early pytest collection before env vars were set), recreate them.
     from generator.audit_log.audit_backend.audit_backend_core import safe_counter
-    BACKEND_ERRORS = getattr(live_module, "BACKEND_ERRORS", None) or safe_counter(
+
+    _be = getattr(live_module, "BACKEND_ERRORS", None)
+    BACKEND_ERRORS = _be if _be is not None else safe_counter(
         "audit_backend_errors_total", "Total errors per backend", ["backend", "type"]
     )
-    BACKEND_WRITES = getattr(live_module, "BACKEND_WRITES", None) or safe_counter(
+
+    _bw = getattr(live_module, "BACKEND_WRITES", None)
+    BACKEND_WRITES = _bw if _bw is not None else safe_counter(
         "audit_backend_writes_total", "Total writes to backend", ["backend"]
     )
-    BACKEND_TAMPER_DETECTION_FAILURES = getattr(
-        live_module, "BACKEND_TAMPER_DETECTION_FAILURES", None
-    ) or safe_counter(
+
+    _btdf = getattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES", None)
+    BACKEND_TAMPER_DETECTION_FAILURES = _btdf if _btdf is not None else safe_counter(
         "audit_backend_tamper_detection_failures_total",
         "Count of failed tamper detection checks",
         ["backend"],
