@@ -783,6 +783,46 @@ class TestProvenance:
 
 
 # ============================================================================
+# REGRESSION TESTS: Dockerfile sanitization
+# ============================================================================
+
+
+class TestDockerfileSanitization:
+    """Tests that DockerfileHandler.normalize sanitizes LLM output properly."""
+
+    def test_normalize_strips_leading_exclamation(self):
+        """Regression: LLM emitting '!' before FROM must be stripped."""
+        raw = "!FROM python:3.11-slim\nRUN pip install fastapi"
+        handler = DockerfileHandler()
+        lines = handler.normalize(raw)
+        assert lines[0].startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
+
+    def test_normalize_strips_markdown_fences(self):
+        """Regression: Markdown fences around Dockerfile content must be stripped."""
+        raw = "```dockerfile\nFROM python:3.11-slim\nRUN pip install fastapi\n```"
+        handler = DockerfileHandler()
+        lines = handler.normalize(raw)
+        assert lines[0].startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
+        assert not any(line.startswith("```") for line in lines), \
+            "Markdown fences should not appear in normalized output"
+
+    def test_normalize_adds_from_when_missing(self):
+        """When FROM instruction is missing, normalize should prepend a default."""
+        raw = "RUN pip install fastapi\nCOPY . /app"
+        handler = DockerfileHandler()
+        lines = handler.normalize(raw)
+        assert lines[0].upper().startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
+
+    def test_normalize_strips_shebang(self):
+        """Shebang lines should be removed from Dockerfile."""
+        raw = "#!/bin/bash\nFROM python:3.11-slim\nRUN pip install fastapi"
+        handler = DockerfileHandler()
+        lines = handler.normalize(raw)
+        assert lines[0].startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
+        assert not any("#!/" in line for line in lines)
+
+
+# ============================================================================
 # RUN TESTS
 # ============================================================================
 

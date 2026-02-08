@@ -1248,31 +1248,49 @@ class OmniCoreService:
                 if len(result) == 1:
                     sole_key = next(iter(result))
                     sole_value = result[sole_key]
-                    if isinstance(sole_value, str) and sole_value.strip().startswith("{"):
-                        try:
-                            inner = json.loads(sole_value)
-                            if isinstance(inner, dict):
-                                # Unwrap nested {"files": {...}} if present
-                                if "files" in inner and isinstance(inner["files"], dict):
-                                    inner = inner["files"]
-                                # Only unwrap if the inner dict looks like a file map
-                                # (multiple entries or keys contain path separators / extensions)
-                                if len(inner) > 1 or any(
-                                    "/" in k or "." in k for k in inner.keys()
-                                ):
-                                    logger.info(
-                                        f"[CODEGEN] Unwrapped collapsed JSON file map from '{sole_key}': "
-                                        f"{len(inner)} files",
-                                        extra={"job_id": job_id, "files": list(inner.keys())}
-                                    )
-                                    result = inner
-                        except (json.JSONDecodeError, TypeError):
-                            pass  # Not valid JSON, proceed with original result
+                    if isinstance(sole_value, str):
+                        # Strip leading "json" prefix (LLM sometimes prepends it)
+                        _sv = sole_value.strip()
+                        if _sv[:4].lower() == "json" and len(_sv) > 4:
+                            _sv = _sv[4:].lstrip()
+                        if _sv.startswith("{"):
+                            try:
+                                inner = json.loads(_sv)
+                                if isinstance(inner, dict):
+                                    # Unwrap nested {"files": {...}} if present
+                                    if "files" in inner and isinstance(inner["files"], dict):
+                                        inner = inner["files"]
+                                    # Only unwrap if the inner dict looks like a file map
+                                    # (multiple entries or keys contain path separators / extensions)
+                                    if len(inner) > 1 or any(
+                                        "/" in k or "." in k for k in inner.keys()
+                                    ):
+                                        logger.info(
+                                            f"[CODEGEN] Unwrapped collapsed JSON file map from '{sole_key}': "
+                                            f"{len(inner)} files",
+                                            extra={"job_id": job_id, "files": list(inner.keys())}
+                                        )
+                                        result = inner
+                            except (json.JSONDecodeError, TypeError):
+                                pass  # Not valid JSON, proceed with original result
                 
                 # Create output directory with security validation
                 # Prevent path traversal attacks - industry standard security
                 base_uploads_dir = Path("./uploads").resolve()
-                output_path = (base_uploads_dir / job_id / "generated").resolve()
+                # Propagate output_dir from payload/frontmatter if specified
+                custom_output_dir = payload.get("output_dir", "").strip()
+                if custom_output_dir:
+                    # Sanitize: reject path traversal attempts
+                    if ".." in custom_output_dir or custom_output_dir.startswith("/"):
+                        logger.warning(
+                            f"[CODEGEN] Rejecting suspicious output_dir: {custom_output_dir}",
+                            extra={"job_id": job_id}
+                        )
+                        custom_output_dir = ""
+                if custom_output_dir:
+                    output_path = (base_uploads_dir / job_id / "generated" / custom_output_dir).resolve()
+                else:
+                    output_path = (base_uploads_dir / job_id / "generated").resolve()
                 
                 # Ensure output path is within uploads directory
                 if not str(output_path).startswith(str(base_uploads_dir)):

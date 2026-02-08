@@ -374,20 +374,30 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     """
     # Handle dict response from OpenAI API
     if isinstance(response, dict):
-        # Extract content from OpenAI chat completion response
-        raw = ''
-        try:
-            # Try OpenAI chat completion format first
-            if 'choices' in response and response['choices']:
-                raw = response['choices'][0].get('message', {}).get('content', '')
-        except (KeyError, TypeError):
-            # KeyError: unexpected dict structure
-            # TypeError: choices is not subscriptable or message is not a dict
-            pass
-        
-        # Fallback: try to get 'content' or 'text' directly if extraction failed
-        if not raw:
-            raw = response.get('content', response.get('text', ''))
+        # Check if this is already a file map ({"files": {...}} or {"app/main.py": "..."})
+        if "files" in response and isinstance(response["files"], dict):
+            logger.info("Response is already a file map dict with 'files' key")
+            raw = json.dumps(response)
+        elif all(isinstance(v, str) for v in response.values()) and any(
+            "/" in k or "." in k for k in response.keys()
+        ):
+            logger.info("Response is already a flat file map dict")
+            raw = json.dumps({"files": response})
+        else:
+            # Extract content from OpenAI chat completion response
+            raw = ''
+            try:
+                # Try OpenAI chat completion format first
+                if 'choices' in response and response['choices']:
+                    raw = response['choices'][0].get('message', {}).get('content', '')
+            except (KeyError, TypeError):
+                # KeyError: unexpected dict structure
+                # TypeError: choices is not subscriptable or message is not a dict
+                pass
+            
+            # Fallback: try to get 'content' or 'text' directly if extraction failed
+            if not raw:
+                raw = response.get('content', response.get('text', ''))
         
         logger.debug("Extracted content from dict response, length: %d", len(raw) if raw else 0)
     else:
@@ -486,6 +496,14 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     # --- 2. For robustness, strip outer code fences before JSON parsing attempt ---
     cleaned_for_json = _clean_code_block(raw)
     
+    # Strip leading "json" prefix from cleaned content (e.g. when _clean_code_block
+    # extracted content from ```json ... ``` fences but left "json\n" prefix)
+    if cleaned_for_json:
+        _cj = cleaned_for_json.lstrip()
+        if _cj[:4].lower() == "json" and len(_cj) > 4 and _cj[4:].lstrip().startswith("{"):
+            cleaned_for_json = _cj[4:].lstrip()
+            logger.debug("Stripped 'json' prefix from cleaned content before JSON parse")
+    
     # --- 3. Try multi-file JSON format after cleaning (only if cleaning produced something) ---
     if cleaned_for_json:
         try:
@@ -562,6 +580,34 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
     # --- 2. Single-file fallback ---
     cleaned_code = _clean_code_block(raw)
+    
+    # --- GUARD: Detect JSON file-map blob that would be written as code ---
+    # If cleaned_code or raw looks like a JSON {"files": {...}} bundle,
+    # attempt one final parse to prevent writing JSON as code into main.py.
+    for candidate in (cleaned_code, raw):
+        if not candidate:
+            continue
+        _candidate = candidate.strip()
+        # Strip leading "json" prefix if present
+        if _candidate[:4].lower() == "json" and len(_candidate) > 4:
+            _candidate = _candidate[4:].lstrip()
+        if _candidate.startswith("{"):
+            try:
+                parsed_guard = json.loads(_candidate)
+                if isinstance(parsed_guard, dict) and isinstance(parsed_guard.get("files"), dict):
+                    files_obj = parsed_guard["files"]
+                    # Validate that values are strings
+                    valid_files = {
+                        k: v for k, v in files_obj.items() if isinstance(v, str)
+                    }
+                    if valid_files:
+                        logger.info(
+                            "Guard: recovered %d files from JSON bundle in single-file fallback",
+                            len(valid_files)
+                        )
+                        return valid_files
+            except (json.JSONDecodeError, TypeError):
+                pass
     
     # If cleaning resulted in empty string but we have raw content,
     # check if it's likely explanatory prose or actual code
@@ -762,8 +808,8 @@ def _clean_code_block(code_content: str) -> str:
     
     # Strategy 1: Extract from language-specific markdown fences (```python, ```py, etc.)
     # Pattern matches: ```<language>\ncode\n```
-    # Supports: python, py, javascript, js, typescript, ts, java, go, rust, cpp, c++, etc.
-    code_block_pattern = r'```(?:python|py|javascript|js|typescript|ts|java|go|rust|cpp|c\+\+|c#|csharp|ruby|php|swift|kotlin)\s*\n(.*?)```'
+    # Supports: python, py, javascript, js, typescript, ts, java, go, rust, cpp, c++, json, etc.
+    code_block_pattern = r'```(?:python|py|javascript|js|typescript|ts|java|go|rust|cpp|c\+\+|c#|csharp|ruby|php|swift|kotlin|json)\s*\n(.*?)```'
     matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     if matches:

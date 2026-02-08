@@ -514,3 +514,77 @@ def test_validate_syntax_empty_code_error_message():
     assert "Empty code block" in msg
     assert "explanatory text" in msg or "LLM returned" in msg
 
+
+# ==============================================================================
+# --- Regression Tests: JSON file-map parsing (root cause fixes) ---
+# ==============================================================================
+
+
+def test_parse_llm_response_fenced_json_block():
+    """
+    Regression: When LLM wraps JSON file-map in ```json ... ``` fences,
+    parse_llm_response must extract and materialize individual files,
+    NOT dump the JSON blob into a single main.py.
+    """
+    payload = json.dumps({
+        "files": {
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()",
+            "app/routes.py": "from fastapi import APIRouter\nrouter = APIRouter()",
+        }
+    })
+    response = "```json\n" + payload + "\n```"
+    files = crh.parse_llm_response(response, lang="python")
+    assert "app/main.py" in files, f"Expected 'app/main.py' in result, got: {list(files.keys())}"
+    assert "app/routes.py" in files, f"Expected 'app/routes.py' in result, got: {list(files.keys())}"
+    # Must NOT produce a single main.py with JSON content
+    if crh.DEFAULT_FILENAME in files:
+        assert '{"files"' not in files[crh.DEFAULT_FILENAME], \
+            "main.py must not contain raw JSON file-map bundle"
+
+
+def test_parse_llm_response_dict_file_map():
+    """
+    When response is already a dict with {"files": {...}},
+    parse_llm_response should recognize it as a file map and return files.
+    """
+    response_dict = {
+        "files": {
+            "app/main.py": "print('hello')",
+            "app/utils.py": "x = 1",
+        }
+    }
+    files = crh.parse_llm_response(response_dict, lang="python")
+    assert "app/main.py" in files
+    assert "app/utils.py" in files
+
+
+def test_parse_llm_response_no_json_blob_in_main_py():
+    """
+    Regression: Under no circumstances should main.py contain a literal
+    JSON {"files": {...}} bundle. This test verifies the guard.
+    """
+    # Simulate a response that is just a JSON blob with files key
+    payload = json.dumps({
+        "files": {
+            "app/main.py": "import os",
+            "tests/test_main.py": "def test_ok(): pass",
+        }
+    })
+    files = crh.parse_llm_response(payload, lang="python")
+    for filename, content in files.items():
+        if filename != crh.ERROR_FILENAME:
+            assert '{"files"' not in content, \
+                f"File '{filename}' must not contain raw JSON file-map bundle"
+
+
+def test_parse_llm_response_json_prefix_with_whitespace():
+    """
+    When LLM prefixes with '  json\\n' (leading whitespace + json prefix),
+    the parser should strip it and parse correctly.
+    """
+    payload = json.dumps({"files": {"main.py": "x = 42"}})
+    response = "  json\n" + payload
+    files = crh.parse_llm_response(response, lang="python")
+    assert "main.py" in files
+    assert files["main.py"] == "x = 42"
+
