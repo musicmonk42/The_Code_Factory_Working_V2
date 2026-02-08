@@ -11,8 +11,9 @@ import pytest
 def monitor_memory(request):
     """Monitor memory usage per test.
     
-    Only performs expensive memory measurement when PYTEST_MONITOR_MEMORY=1 is set,
-    to avoid psutil overhead on every test in CI.
+    Only performs expensive memory measurement when PYTEST_MONITOR_MEMORY
+    environment variable is set (e.g., PYTEST_MONITOR_MEMORY=1), to avoid
+    psutil overhead on every test in CI.
     
     Warns when a test consumes more than 500MB of memory.
     The 500MB threshold was chosen based on:

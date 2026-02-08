@@ -117,8 +117,7 @@ def aggressive_memory_cleanup():
     
     Optimized to avoid expensive per-test operations:
     - Single gc.collect() pass instead of multiple
-    - Module cache clearing only when memory pressure is detected
-    - Prometheus cleanup only when needed
+    - Removed per-test module cache scanning and Prometheus registry cleanup
     """
     yield
     
