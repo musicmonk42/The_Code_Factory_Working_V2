@@ -622,7 +622,7 @@ class ExplainableReasonerPlugin:
         if PYTEST_COLLECTING:
             logger.debug("Skipping ExplainableReasonerPlugin initialization during pytest collection")
             return
-            
+
         # Try to import real plugin
         try:
             from self_fixing_engineer.arbiter.explainable_reasoner import (
