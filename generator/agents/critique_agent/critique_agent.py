@@ -1308,12 +1308,20 @@ async def orchestrate_critique_pipeline(
                 )
 
                 try:
+                    # Pass lint errors, vulnerabilities, and validation failures to the prompt builder
+                    # so the LLM has context about what needs to be fixed
+                    error_context = {
+                        "lint_errors": results.get("lint_errors", []),
+                        "vulnerabilities": results.get("vulnerabilities", []),
+                        "test_failures": results.get("unit_test_pass_rate", 1.0) < 1.0,
+                    }
+
                     prompt = await build_semantic_critique_prompt(
                         code_files,
                         test_files,
                         requirements,
                         state_summary,
-                        config={"language": config.target_language},
+                        config={"language": config.target_language, "error_context": error_context},
                     )
                     semantic_result = await resilient_step(
                         call_llm_for_critique,
