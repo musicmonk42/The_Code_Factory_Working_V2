@@ -240,14 +240,14 @@ async def ensure_metrics_work():
     BACKEND_TAMPER_DETECTION_FAILURES = live_module.BACKEND_TAMPER_DETECTION_FAILURES
 
     # Verify that metrics are real Counter objects, not mocks or fallbacks
-    from prometheus_client import Counter
+    # Use duck typing instead of isinstance() to avoid TypeError in edge cases
     for metric_name, counter in [
         ("BACKEND_ERRORS", BACKEND_ERRORS),
         ("BACKEND_WRITES", BACKEND_WRITES),
         ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
     ]:
-        # Check if it's a real Counter or at least has the expected methods
-        if not isinstance(counter, Counter) and not (hasattr(counter, 'labels') and hasattr(counter, 'collect')):
+        # Check if it has the expected Counter methods (duck typing)
+        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and callable(getattr(counter, 'labels', None))):
             raise RuntimeError(
                 f"{metric_name} is not a proper Prometheus Counter object. "
                 f"It is: {type(counter)}. This will cause tests to fail."
