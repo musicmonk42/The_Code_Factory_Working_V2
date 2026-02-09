@@ -360,11 +360,11 @@ else:
         os.environ.setdefault("AUDIT_HEALTH_CHECK_INTERVAL", "30")
         os.environ.setdefault("AUDIT_RETRY_MAX_ATTEMPTS", "3")
         os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
-        # Clear validators to prevent re-validation failures
-        try:
-            settings.validators.validators = []
-        except Exception:
-            pass
+        # Recreate settings WITHOUT validators to avoid re-validation errors
+        settings = Dynaconf(
+            envvar_prefix="AUDIT",
+            settings_files=["audit_config.yaml"],
+        )
 
 
 # ---- Safe getters (handle strings from env) ----
@@ -418,13 +418,13 @@ def _as_json_list(name: str, default: list) -> list:
     try:
         v = settings.get(name, default)
     except ValidationError:
-        if _is_test_or_dev_mode():
-            # In test/dev, use environment variable directly
-            v = os.environ.get(name, None)
-            if v is None:
+        # In test/dev or when validation fails, use environment variable directly
+        v = os.environ.get(name, None)
+        if v is None:
+            if _is_test_or_dev_mode():
                 return default
-        else:
-            raise
+            else:
+                raise
     if isinstance(v, list):
         return v
     if isinstance(v, str):
