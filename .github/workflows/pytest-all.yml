@@ -834,9 +834,9 @@ jobs:
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
             2>&1 | tee test-output-sfe-batch2c.log
 
-      - name: Run self_fixing_engineer tests - Batch 2d (Remaining Arbiter)
+      - name: Run self_fixing_engineer tests - Batch 2d-1 (Remaining Arbiter Part 1)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 40
+        timeout-minutes: 25
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -852,8 +852,8 @@ jobs:
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
 
-          echo "=== Running Batch 2d: Remaining Arbiter Tests (excluding test_arbiter_growth.py) ==="
-          timeout --signal=TERM --kill-after=60s 35m python -m pytest \
+          echo "=== Running Batch 2d-1: Remaining Arbiter Tests Part 1 (7 test files) ==="
+          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
             self_fixing_engineer/tests/test_arbiter_utils.py \
             self_fixing_engineer/tests/test_arbiter_config.py \
             self_fixing_engineer/tests/test_arbiter_arbiter.py \
@@ -861,6 +861,33 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_plugins_e2e_multimodal.py \
             self_fixing_engineer/tests/test_arbiter_message_queue_service.py \
             self_fixing_engineer/tests/test_arbiter_knowledge_graph_config.py \
+            -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
+            -p no:randomly -p no:cacheprovider --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch2d-1.log
+
+          # Memory cleanup between batches
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
+      - name: Run self_fixing_engineer tests - Batch 2d-2 (Remaining Arbiter Part 2)
+        if: matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 25
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          PYTHONMALLOC: "malloc"
+          PYTEST_COLLECTING: "1"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD"
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
+          # Remove CPU time limits to prevent SIGXCPU (exit code 152)
+          prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
+
+          echo "=== Running Batch 2d-2: Remaining Arbiter Tests Part 2 (7 test files) ==="
+          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
             self_fixing_engineer/tests/test_arbiter_meta_learning_orchestrator_models.py \
             self_fixing_engineer/tests/test_arbiter_models_meta_learning_data_store.py \
             self_fixing_engineer/tests/test_arbiter_models_models_e2e.py \
@@ -870,7 +897,10 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_models_feature_store_client.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2d.log
+            2>&1 | tee test-output-sfe-batch2d-2.log
+
+          # Memory cleanup after batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2e (Arbiter Growth - Isolated)
         if: matrix.module == 'self_fixing_engineer'
