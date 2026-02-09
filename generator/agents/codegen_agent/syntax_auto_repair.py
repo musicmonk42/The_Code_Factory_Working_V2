@@ -164,7 +164,10 @@ class SyntaxAutoRepair:
                     continue
 
                 # Check if line ends with a backslash (potential line continuation)
-                if line.endswith('\\'):
+                # Need to handle Windows line endings (\r\n) by checking stripped version
+                # but preserving any trailing whitespace in the original line
+                stripped = line.rstrip()
+                if stripped.endswith('\\'):
                     # Determine if this is an intentional line continuation
                     # Intentional cases:
                     # 1. Inside a string literal (check for quotes)
@@ -174,33 +177,36 @@ class SyntaxAutoRepair:
                     # If the backslash appears at the end of a line with no clear reason,
                     # it's likely an error. We check if removing it would make sense.
 
-                    # Check if this looks like a string with escaped character
-                    stripped = line.rstrip()
-                    if stripped.endswith('\\'):
-                        # Count quotes to see if we're inside a string
-                        single_quotes = line.count("'") - line.count("\\'")
-                        double_quotes = line.count('"') - line.count('\\"')
+                    # Count quotes to see if we're inside a string
+                    single_quotes = line.count("'") - line.count("\\'")
+                    double_quotes = line.count('"') - line.count('\\"')
 
-                        # If quotes are balanced (even), we're not inside a string
-                        # so the backslash is likely an error
-                        if single_quotes % 2 == 0 and double_quotes % 2 == 0:
-                            # Check if next line exists and is not indented more
-                            # (which would suggest intentional continuation)
-                            next_line_continuation = False
-                            if i < len(lines):
-                                next_line = lines[i] if i < len(lines) else ""
-                                if next_line and not next_line.startswith(('    ', '\t')):
-                                    # Next line is not indented, likely not a continuation
-                                    next_line_continuation = False
-                                elif next_line and next_line.startswith(('    ', '\t')):
-                                    # Next line is indented, might be intentional
-                                    next_line_continuation = True
+                    # If quotes are balanced (even), we're not inside a string
+                    # so the backslash is likely an error
+                    if single_quotes % 2 == 0 and double_quotes % 2 == 0:
+                        # Check if next line exists and is not indented more
+                        # (which would suggest intentional continuation)
+                        # However, for control structure keywords (def, if, for, etc.),
+                        # a trailing backslash is NEVER intentional since they should end with ':'
+                        is_control_structure = _CONTROL_STRUCTURE_PATTERN.match(stripped.lstrip())
 
-                            # If next line doesn't suggest continuation, remove backslash
-                            if not next_line_continuation:
-                                line = line[:-1]  # Remove trailing backslash
-                                fixes.append(f"Line {i}: Removed stray line continuation character")
-                                logger.debug(f"Repaired line continuation at line {i}")
+                        next_line_continuation = False
+                        if not is_control_structure and i < len(lines):
+                            next_line = lines[i] if i < len(lines) else ""
+                            if next_line and next_line.startswith(('    ', '\t')):
+                                # Next line is indented, might be intentional continuation
+                                # (but not for control structures)
+                                next_line_continuation = True
+
+                        # If next line doesn't suggest continuation, or this is a control structure,
+                        # remove the backslash
+                        if not next_line_continuation:
+                            # Remove the backslash and any trailing whitespace after it
+                            # (e.g., for Windows line endings "\\\r")
+                            trailing_whitespace = line[len(stripped):]
+                            line = stripped[:-1] + trailing_whitespace
+                            fixes.append(f"Line {i}: Removed stray line continuation character")
+                            logger.debug(f"Repaired line continuation at line {i}")
 
                 repaired_lines.append(line)
 

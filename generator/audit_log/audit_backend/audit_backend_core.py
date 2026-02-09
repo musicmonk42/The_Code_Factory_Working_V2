@@ -654,13 +654,17 @@ async def retry_operation(
 
         except Exception as e:
             error_type = type(e).__name__
-            
+
             # Always increment these metrics for ANY exception
             BACKEND_ERRORS.labels(backend=backend_name, type=error_type).inc()
             BACKEND_RETRY_ATTEMPTS.labels(backend=backend_name, operation=op_name).inc()
-            
+
             # Additional increment for network-specific errors (including AWS/botocore errors)
-            if isinstance(e, (ConnectionError, TimeoutError, OSError, botocore.exceptions.ClientError)):
+            # Build the tuple of error types dynamically to handle cases where botocore might not be available
+            network_error_types = [ConnectionError, TimeoutError, OSError]
+            if hasattr(botocore, 'exceptions') and hasattr(botocore.exceptions, 'ClientError'):
+                network_error_types.append(botocore.exceptions.ClientError)
+            if isinstance(e, tuple(network_error_types)):
                 BACKEND_NETWORK_ERRORS.labels(backend=backend_name, operation=op_name).inc()
 
             if attempt == max_attempts - 1:
