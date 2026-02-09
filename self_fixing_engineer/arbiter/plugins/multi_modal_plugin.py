@@ -372,8 +372,10 @@ class OutputValidator:
                 f"Output for {modality} processing did not indicate success."
             )
 
-        if "model_confidence" in result and result["model_confidence"] < rules.get(
-            "min_confidence", 0.0
+        if (
+            "model_confidence" in result
+            and result["model_confidence"] is not None
+            and result["model_confidence"] < rules.get("min_confidence", 0.0)
         ):
             raise MultiModalException(
                 f"Model confidence for {modality} below threshold."

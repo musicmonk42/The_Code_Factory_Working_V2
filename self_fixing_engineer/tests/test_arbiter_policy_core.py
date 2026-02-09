@@ -173,9 +173,9 @@ async def cleanup():
 @pytest.fixture(autouse=True)
 def mock_circuit_breaker(monkeypatch):
     """Automatically mock circuit breaker functions for all tests."""
-    mock_is_open = Mock(return_value=False)
-    mock_record_failure = Mock()
-    mock_record_success = Mock()
+    mock_is_open = AsyncMock(return_value=False)
+    mock_record_failure = AsyncMock()
+    mock_record_success = AsyncMock()
 
     monkeypatch.setattr(
         "self_fixing_engineer.arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open
