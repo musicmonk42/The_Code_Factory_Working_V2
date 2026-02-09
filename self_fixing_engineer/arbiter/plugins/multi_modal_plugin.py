@@ -743,6 +743,12 @@ class MultiModalPlugin:
 
     def _check_circuit_breaker(self, modality: str):
         """Checks the circuit breaker state and raises an error if it's open."""
+        # Initialize circuit breaker state for modality if not present
+        if modality not in self._circuit_breaker_states:
+            self._circuit_breaker_states[modality] = "closed"
+        if modality not in self._circuit_breaker_last_failure_time:
+            self._circuit_breaker_last_failure_time[modality] = 0.0
+
         state = self._circuit_breaker_states.get(modality, "closed")
         if state == "open":
             last_failure_time = self._circuit_breaker_last_failure_time.get(
@@ -759,6 +765,14 @@ class MultiModalPlugin:
 
     def _update_circuit_breaker(self, modality: str, success: bool):
         """Updates the circuit breaker state based on the result of the operation."""
+        # Initialize circuit breaker state for modality if not present
+        if modality not in self._circuit_breaker_states:
+            self._circuit_breaker_states[modality] = "closed"
+        if modality not in self._circuit_breaker_failures:
+            self._circuit_breaker_failures[modality] = 0
+        if modality not in self._circuit_breaker_last_failure_time:
+            self._circuit_breaker_last_failure_time[modality] = 0.0
+
         if success:
             if self._circuit_breaker_states.get(modality) in ["open", "half-open"]:
                 logger.info(

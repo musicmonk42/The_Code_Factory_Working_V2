@@ -636,14 +636,14 @@ class TestPolicyEngine:
 
         mock_llm = MagicMock()
         mock_llm.generate_text = AsyncMock(return_value="YES, safe data")
-        mock_llm_class = MagicMock(return_value=mock_llm)
 
-        monkeypatch.setattr("self_fixing_engineer.arbiter.policy.core.LLMClient", mock_llm_class)
+        # Mock the _create_llm_client method directly on the policy_engine instance
+        monkeypatch.setattr(policy_engine, "_create_llm_client", lambda: mock_llm)
 
         result, reason = await policy_engine.should_auto_learn(
             "test", "key", "user", "test_value"
         )
-        assert result
+        assert result is True
         mock_llm.generate_text.assert_called_once()
 
     @pytest.mark.asyncio
