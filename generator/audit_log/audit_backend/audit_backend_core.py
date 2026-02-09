@@ -43,9 +43,7 @@ except ImportError:
 # Local utility module (assumed to exist outside audit_backends package)
 _send_alert_imported = False
 try:
-    from audit_utils import compute_hash as _compute_hash_util, send_alert as _send_alert_util
-    compute_hash = _compute_hash_util
-    send_alert = _send_alert_util
+    from audit_utils import compute_hash, send_alert
     _send_alert_imported = True
 except ImportError:
     logging.warning(
@@ -53,7 +51,7 @@ except ImportError:
     )
 
 # Always define compute_hash fallback if not imported
-if not _send_alert_imported or 'compute_hash' not in globals():
+if not _send_alert_imported:
     import hashlib
     
     def compute_hash(data: bytes) -> str:
@@ -65,7 +63,7 @@ if not _send_alert_imported or 'compute_hash' not in globals():
         return h.hexdigest()
 
 # Always define send_alert fallback at module level if not imported
-if not _send_alert_imported or 'send_alert' not in globals():
+if not _send_alert_imported:
     async def send_alert(message: str, severity: str = "warning") -> None:
         """
         Minimal alert hook.
