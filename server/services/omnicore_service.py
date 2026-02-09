@@ -2416,7 +2416,14 @@ class OmniCoreService:
                 critique_result = await agent.run(
                     code_files=code_files,
                     test_files={},
-                    requirements={"scan_types": scan_types, "auto_fix": auto_fix},
+                    requirements={
+                        "scan_types": scan_types, 
+                        "auto_fix": auto_fix,
+                        "test_failures": payload.get("test_results"),
+                        "validation_failures": payload.get("validation_results"),
+                        "stages_completed": payload.get("stages_completed", []),
+                        "stages_failed": payload.get("stages_failed", []),
+                    },
                 )
                 
                 # Extract results with type checking
@@ -2685,6 +2692,10 @@ class OmniCoreService:
             
             # Run pipeline stages sequentially
             stages_completed = []
+            
+            # Initialize result tracking for critique context
+            testgen_result = None
+            val_result = None
             
             # 1. Clarify (optional)
             if payload.get("skip_clarification", False):
@@ -3003,9 +3014,20 @@ class OmniCoreService:
                             stages_completed.append("testgen")
                             logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
                         elif testgen_result.get("status") == "error":
-                            logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_result.get('message', 'Unknown error')}")
-                            # Don't fail the whole pipeline for testgen failure
-                            logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure")
+                            testgen_error = testgen_result.get('message', 'Unknown error')
+                            logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}")
+                            
+                            # If tests were explicitly requested (include_tests=True), treat test failure as fatal
+                            if payload.get("include_tests", True):
+                                logger.error(f"[PIPELINE] Job {job_id} FAILING pipeline because include_tests=True and tests failed")
+                                await self._finalize_failed_job(job_id, error=f"Test generation/execution failed: {testgen_error}")
+                                return {
+                                    "status": "failed",
+                                    "message": f"Test generation failed: {testgen_error}",
+                                    "stages_completed": stages_completed,
+                                }
+                            else:
+                                logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure (tests not required)")
                 else:
                     logger.warning(
                         f"[PIPELINE] Job {job_id} skipping testgen - no output path from codegen",
@@ -3051,10 +3073,24 @@ class OmniCoreService:
             
             # 6. Critique (if requested)
             if payload.get("run_critique", False):
+                # Enrich critique with test and validation results for better context
+                stages_failed = []
+                if payload.get("include_tests", True) and "testgen" not in stages_completed:
+                    stages_failed.append("testgen")
+                if payload.get("include_deployment", True) and "deploy" not in stages_completed:
+                    stages_failed.append("deploy")
+                if payload.get("include_docgen", False) and "docgen" not in stages_completed:
+                    stages_failed.append("docgen")
+                
                 critique_payload = {
                     "code_path": codegen_result.get("output_path"),
                     "scan_types": ["security", "quality"],
                     "auto_fix": False,
+                    # Feed test results so critique can suggest fixes
+                    "test_results": testgen_result,
+                    "validation_results": val_result,
+                    "stages_completed": stages_completed,
+                    "stages_failed": stages_failed,
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
                 critique_result = await self._run_critique(job_id, critique_payload)
