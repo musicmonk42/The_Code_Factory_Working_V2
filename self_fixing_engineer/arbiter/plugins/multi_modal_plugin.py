@@ -739,6 +739,7 @@ class MultiModalPlugin:
                 raise MultiModalException(
                     f"Hook execution failed for {modality}"
                 ) from e
+        return processed_data
 
     def _check_circuit_breaker(self, modality: str):
         """Checks the circuit breaker state and raises an error if it's open."""
