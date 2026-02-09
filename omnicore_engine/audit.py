@@ -770,6 +770,7 @@ class ExplainAudit:
         self.buffer_size = self.config.AUDIT_BUFFER_SIZE
         self.flush_interval = self.config.AUDIT_FLUSH_INTERVAL
         self.flush_task_started = False  # Track if flush task is running
+        self._tables_initialized = False  # Track if database tables have been created
 
         self.web3 = None
         self.encrypter: Optional[Fernet] = None
@@ -1342,6 +1343,26 @@ class ExplainAudit:
             records_to_flush = self.buffer[:]
             self.buffer.clear()
             AUDIT_BUFFER_SIZE_CURRENT.set(0)
+
+        # Ensure database tables exist before first flush (Issue #1 fix)
+        if not self._tables_initialized and self._db_client is not None:
+            try:
+                logger.info("Audit: Ensuring database tables are created before first flush...")
+                await self._db_client.create_tables()
+                self._tables_initialized = True
+                logger.info("Audit: Database tables initialized successfully")
+            except Exception as e:
+                logger.error(
+                    f"Audit: Failed to initialize database tables: {e}. "
+                    "Will continue and retry on next flush.",
+                    exc_info=True
+                )
+                # Don't set _tables_initialized to True, so we retry next time
+                # Re-add records to buffer so they aren't lost
+                with self.lock:
+                    self.buffer.extend(records_to_flush)
+                    AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
+                return
 
         try:
             for record in records_to_flush:

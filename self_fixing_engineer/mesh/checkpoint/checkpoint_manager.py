@@ -163,9 +163,9 @@ class Environment:
     # Paths
     CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/var/lib/checkpoints")
     AUDIT_LOG_PATH = os.environ.get(
-        "CHECKPOINT_AUDIT_LOG_PATH", "/var/log/checkpoint/audit.log"
+        "CHECKPOINT_AUDIT_LOG_PATH", "./logs/checkpoint/audit.log"
     )
-    DLQ_PATH = os.environ.get("CHECKPOINT_DLQ_PATH", "/var/log/checkpoint/dlq.jsonl")
+    DLQ_PATH = os.environ.get("CHECKPOINT_DLQ_PATH", "./logs/checkpoint/dlq.jsonl")
 
     # Security
     ENCRYPTION_KEYS = os.environ.get("CHECKPOINT_ENCRYPTION_KEYS", "")
@@ -179,7 +179,7 @@ class Environment:
     CACHE_SIZE = int(os.environ.get("CHECKPOINT_CACHE_SIZE", "1000"))
 
     # Operational
-    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+    LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
     LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", 10 * 1024 * 1024))
     LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", 10))
     ENABLE_PROFILING = (
@@ -265,7 +265,10 @@ audit_logger = AuditLogger(Environment.AUDIT_LOG_PATH)
 
 # Configure standard logger
 logger = logging.getLogger(__name__)
-logger.setLevel(getattr(logging, Environment.LOG_LEVEL))
+log_level = getattr(logging, Environment.LOG_LEVEL, logging.INFO)
+if callable(log_level):
+    log_level = logging.INFO
+logger.setLevel(log_level)
 
 
 # ---- Metrics Configuration ----
