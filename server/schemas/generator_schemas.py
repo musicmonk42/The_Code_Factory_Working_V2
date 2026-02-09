@@ -83,6 +83,7 @@ class PipelineRequest(BaseModel):
     include_deployment: bool = Field(True, description="Generate deployment configs")
     include_docs: bool = Field(True, description="Generate documentation")
     run_critique: bool = Field(True, description="Run security/quality checks")
+    output_dir: Optional[str] = Field(None, description="Optional subdirectory within generated/ for output (e.g., 'hello_generator')")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 

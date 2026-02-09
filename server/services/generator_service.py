@@ -596,6 +596,7 @@ class GeneratorService:
         include_docs: bool,
         run_critique: bool,
         skip_clarification: bool = False,
+        output_dir: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Run the full generation pipeline via OmniCore.
@@ -627,6 +628,10 @@ class GeneratorService:
                 "run_critique": run_critique,
                 "skip_clarification": skip_clarification,
             }
+            # Add output_dir if specified
+            if output_dir:
+                payload["output_dir"] = output_dir
+
             result = await self.omnicore_service.route_job(
                 job_id=job_id,
                 source_module="api",
