@@ -841,7 +841,13 @@ class Database:
             await self.create_tables()
 
             if self.is_postgres:
-                await self.migrate_to_citus()
+                try:
+                    await self.migrate_to_citus()
+                except Exception as e:
+                    logger.warning(
+                        f"Citus migration skipped (non-fatal): {e}. "
+                        "Continuing with standard PostgreSQL."
+                    )
                 logger.info(
                     "For PostgreSQL, ensure data migration from SQLite (if any) is handled externally."
                 )
@@ -2821,9 +2827,12 @@ class Database:
                 await session.commit()
                 logger.info("Citus extension ensured.")
             except sqlalchemy.exc.SQLAlchemyError as e:
-                logger.error(f"Failed to ensure Citus extension: {e}", exc_info=True)
+                logger.warning(
+                    f"Citus extension not available: {e}. "
+                    "Continuing with standard PostgreSQL."
+                )
                 await session.rollback()
-                raise
+                return
 
             try:
                 # Issue #12 fix: Reference model tablenames instead of hardcoded strings
@@ -2842,11 +2851,12 @@ class Database:
                 await session.commit()
                 logger.info("Migrated to Citus with distribution keys.")
             except sqlalchemy.exc.SQLAlchemyError as e:
-                logger.error(
-                    f"Failed to create distributed tables for Citus: {e}", exc_info=True
+                logger.warning(
+                    f"Failed to create distributed tables for Citus: {e}. "
+                    "Continuing with standard PostgreSQL."
                 )
                 await session.rollback()
-                raise
+                return
 
     async def rotate_keys(self, new_key: bytes):
         """
