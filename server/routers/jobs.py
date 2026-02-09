@@ -474,9 +474,9 @@ async def download_job_files(job_id: str):
         zip_path = tmp_file.name
 
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Add all files from job directory
+            # Add all files from job directory, excluding existing output zips to avoid nesting
             for file_path in job_dir.rglob('*'):
-                if file_path.is_file():
+                if file_path.is_file() and not file_path.name.endswith('_output.zip'):
                     arcname = file_path.relative_to(job_dir)
                     zipf.write(file_path, arcname=arcname)
 
@@ -538,9 +538,9 @@ async def download_partial_results(job_id: str):
         zip_path = tmp_file.name
         
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Add all files from job directory
+            # Add all files from job directory, excluding existing output zips to avoid nesting
             for file_path in job_dir.rglob('*'):
-                if file_path.is_file():
+                if file_path.is_file() and not file_path.name.endswith('_output.zip'):
                     arcname = file_path.relative_to(job_dir)
                     zipf.write(file_path, arcname=arcname)
         
@@ -617,8 +617,9 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
     files = []
     total_size = 0
     
+    # Exclude _output.zip files from the file listing
     for file_path in job_dir.rglob('*'):
-        if file_path.is_file():
+        if file_path.is_file() and not file_path.name.endswith('_output.zip'):
             stat = file_path.stat()
             mime_type, _ = mimetypes.guess_type(str(file_path))
             

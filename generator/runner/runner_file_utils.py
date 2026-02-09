@@ -1527,6 +1527,11 @@ async def validate_generated_project(
     # When the generated project uses an app/ layout, also require key files
     app_dir = output_dir / "app"
     if app_dir.is_dir():
+        # Remove root main.py requirement when app/ layout is detected
+        CRITICAL_REQUIRED_FILES.discard("main.py")
+        if "main.py" in required_files:
+            required_files.remove("main.py")
+        
         CRITICAL_REQUIRED_FILES.update({
             "app/main.py", "app/routes.py",
         })
