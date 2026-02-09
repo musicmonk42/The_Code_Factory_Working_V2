@@ -992,7 +992,8 @@ class WorkflowEngine:
                 "finished_at": None,
                 "duration_seconds": 0.0,
                 "errors": [],
-                "agent_results": {}
+                "agent_results": {},
+                "stages_completed": []  # Track which stages completed successfully
             }
             
             # [ARBITER] Pre-orchestration policy check
@@ -1086,6 +1087,13 @@ class WorkflowEngine:
                             workflow_id
                         )
                         result["agent_results"]["codegen"] = codegen_result
+
+                        # Track codegen completion
+                        if codegen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                            result["stages_completed"].append("codegen")
+                            logger.debug(f"[Pipeline] Stage 'codegen' completed for workflow {workflow_id}")
+                        else:
+                            logger.warning(f"[Pipeline] Stage 'codegen' failed or skipped for workflow {workflow_id}")
                         
                         # [ARBITER] Publish codegen output event
                         if self.arbiter_bridge:
@@ -1125,6 +1133,11 @@ class WorkflowEngine:
                                 workflow_id
                             )
                             result["agent_results"]["critique"] = critique_result
+
+                            # Track critique completion
+                            if critique_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                                result["stages_completed"].append("critique")
+                                logger.debug(f"[Pipeline] Stage 'critique' completed for workflow {workflow_id}")
                             
                             # [ARBITER] Publish critique results event
                             if self.arbiter_bridge:
@@ -1275,6 +1288,11 @@ class WorkflowEngine:
                                 workflow_id
                             )
                             result["agent_results"]["testgen"] = testgen_result
+
+                            # Track testgen completion
+                            if testgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                                result["stages_completed"].append("testgen")
+                                logger.debug(f"[Pipeline] Stage 'testgen' completed for workflow {workflow_id}")
                             
                             # [ARBITER] Publish test results event
                             if self.arbiter_bridge:
@@ -1310,6 +1328,11 @@ class WorkflowEngine:
                                     provenance=provenance
                                 )
                                 result["agent_results"]["deploy"] = deploy_result
+
+                                # Track deploy completion - only if status is completed
+                                if deploy_result.get("status") == "completed":
+                                    result["stages_completed"].append("deploy")
+                                    logger.debug(f"[Pipeline] Stage 'deploy' completed for workflow {workflow_id}")
                                 
                                 # Check if deploy validation failed - HARD FAIL
                                 if deploy_result.get("status") == "validation_failed":
@@ -1352,9 +1375,13 @@ class WorkflowEngine:
                         
                         # Small delay between iterations
                         await asyncio.sleep(DEFAULT_ITERATION_DELAY_SECONDS)
-                
-                # Mark as completed
-                result["status"] = WorkflowStatus.COMPLETED.value
+
+                # Check if any errors occurred during the pipeline
+                # If result status is already FAILED (from validation errors), don't override it
+                if result["status"] != WorkflowStatus.FAILED.value:
+                    # Mark as completed only if no failures occurred
+                    result["status"] = WorkflowStatus.COMPLETED.value
+
                 span.set_status(Status(StatusCode.OK))
                 logger.info(
                     f"Workflow {workflow_id} completed successfully",
