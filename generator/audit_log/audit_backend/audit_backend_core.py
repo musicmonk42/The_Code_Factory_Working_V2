@@ -41,17 +41,17 @@ except ImportError:
     HAS_OPENTELEMETRY = False
 
 # Local utility module (assumed to exist outside audit_backends package)
-_send_alert_imported = False
+_audit_utils_imported = False
 try:
     from audit_utils import compute_hash, send_alert
-    _send_alert_imported = True
+    _audit_utils_imported = True
 except ImportError:
     logging.warning(
         "audit_utils.py not found. Tamper detection and alerting features will use fallback implementations."
     )
 
 # Define fallback implementations if not imported
-if not _send_alert_imported:
+if not _audit_utils_imported:
     import hashlib
     
     def compute_hash(data: bytes) -> str:
