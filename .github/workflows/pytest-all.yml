@@ -828,13 +828,21 @@ jobs:
           
           echo "=== Running Batch 2d: Remaining Arbiter Tests ==="
           timeout --signal=TERM --kill-after=60s 35m python -m pytest \
-            self_fixing_engineer/tests/test_arbiter*.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_models_postgres_client.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_models_redis_client.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_monitoring.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_otel_config.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_plugin_registry.py \
-            --ignore=self_fixing_engineer/tests/test_arbiter_models_multi_modal_schemas.py \
+            self_fixing_engineer/tests/test_arbiter_utils.py \
+            self_fixing_engineer/tests/test_arbiter_growth.py \
+            self_fixing_engineer/tests/test_arbiter_config.py \
+            self_fixing_engineer/tests/test_arbiter_arbiter.py \
+            self_fixing_engineer/tests/test_arbiter_policy_core.py \
+            self_fixing_engineer/tests/test_arbiter_plugins_e2e_multimodal.py \
+            self_fixing_engineer/tests/test_arbiter_message_queue_service.py \
+            self_fixing_engineer/tests/test_arbiter_knowledge_graph_config.py \
+            self_fixing_engineer/tests/test_arbiter_meta_learning_orchestrator_models.py \
+            self_fixing_engineer/tests/test_arbiter_models_meta_learning_data_store.py \
+            self_fixing_engineer/tests/test_arbiter_models_models_e2e.py \
+            self_fixing_engineer/tests/test_arbiter_models_merkle_tree.py \
+            self_fixing_engineer/tests/test_arbiter_models_audit_ledger_client.py \
+            self_fixing_engineer/tests/test_arbiter_models_knowledge_graph_db.py \
+            self_fixing_engineer/tests/test_arbiter_models_feature_store_client.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
             2>&1 | tee test-output-sfe-batch2d.log
