@@ -614,7 +614,7 @@ class PolicyEngine:
         """Creates an LLMClient instance with retry logic."""
         return LLMClient(
             provider=self.config.LLM_PROVIDER,
-            api_key=get_config().get_api_key_for_provider(self.config.LLM_PROVIDER),
+            api_key=self.config.get_api_key_for_provider(self.config.LLM_PROVIDER),
             model=self.config.LLM_MODEL,
         )
 
@@ -644,7 +644,7 @@ class PolicyEngine:
                 return "NO", "Circuit breaker open for LLM provider.", 0.0
 
             llm_provider = self.config.LLM_PROVIDER
-            if not get_config().get_api_key_for_provider(llm_provider):
+            if not self.config.get_api_key_for_provider(llm_provider):
                 reason = (
                     f"LLM evaluation skipped: API key missing for '{llm_provider}'."
                 )
