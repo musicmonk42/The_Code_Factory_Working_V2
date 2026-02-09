@@ -1953,6 +1953,21 @@ class TestPlaceholder:
                     task_payload.test_files, tests_sub_dir
                 )
                 span.add_event("Code and test files saved to temporary directory.")
+                
+                # Write conftest.py to the temp root to ensure code/ is importable
+                # This fixes ModuleNotFoundError when tests import from code modules
+                conftest_content = '''import sys
+import os
+
+# Add code subdirectory to sys.path for test imports
+code_path = os.path.join(os.path.dirname(__file__), "code")
+if code_path not in sys.path:
+    sys.path.insert(0, code_path)
+'''
+                conftest_path = temp_dir_path / "conftest.py"
+                async with aiofiles.open(conftest_path, "w", encoding="utf-8") as f:
+                    await f.write(conftest_content)
+                span.add_event("conftest.py generated to make code/ importable")
             except Exception as e:
                 # _save_files_to_temp_dir raises SetupError
                 if isinstance(e, SetupError):
