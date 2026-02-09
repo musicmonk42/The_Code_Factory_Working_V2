@@ -1527,19 +1527,22 @@ async def validate_generated_project(
     # When the generated project uses an app/ layout, also require key files
     app_dir = output_dir / "app"
     if app_dir.is_dir():
-        # Remove root main.py requirement when app/ layout is detected
+        # App-layout detected: only require app/main.py as the entry point
         CRITICAL_REQUIRED_FILES.discard("main.py")
         if "main.py" in required_files:
             required_files.remove("main.py")
         
-        CRITICAL_REQUIRED_FILES.update({
-            "app/main.py", "app/routes.py",
-        })
-        # Add app-layout files to required_files if not already there
-        for af in ["app/main.py", "app/routes.py", "app/schemas.py",
-                    "tests/test_health.py", "tests/test_version.py",
-                    "tests/test_echo.py",
-                    "requirements.txt", "README.md", ".env.example"]:
+        # Only app/main.py is truly critical - it's the entry point
+        CRITICAL_REQUIRED_FILES.add("app/main.py")
+        
+        # Other files are optional/recommended - produce warnings not errors
+        optional_app_files = [
+            "app/routes.py", "app/schemas.py",
+            "tests/test_health.py", "tests/test_version.py",
+            "tests/test_echo.py",
+            "requirements.txt", "README.md", ".env.example",
+        ]
+        for af in ["app/main.py"] + optional_app_files:
             if af not in required_files:
                 required_files.append(af)
     

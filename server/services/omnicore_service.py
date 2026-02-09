@@ -2782,21 +2782,37 @@ class OmniCoreService:
                     if not val_result.get("valid", True):
                         validation_errors = val_result.get('errors', [])
                         validation_warnings = val_result.get('warnings', [])
-                        logger.warning(
-                            f"[PIPELINE] Job {job_id} validation warnings: {validation_errors}",
-                            extra={"job_id": job_id, "validation_result": val_result}
-                        )
-                        # Store validation warnings in job metadata for API consumers
+
+                        # Store validation info in job metadata
                         if job_id in jobs_db:
                             job = jobs_db[job_id]
-                            if validation_errors or validation_warnings:
-                                job.metadata["validation_warnings"] = validation_errors + validation_warnings
-                                logger.info(
-                                    f"[PIPELINE] Job {job_id} stored validation warnings in metadata",
-                                    extra={"job_id": job_id, "warning_count": len(validation_errors) + len(validation_warnings)}
-                                )
-                        # Write error file but don't fail pipeline for non-critical issues
+                            job.metadata["validation_errors"] = validation_errors
+                            job.metadata["validation_warnings"] = validation_warnings
+
                         await _write_validation_error(output_path_for_validation, val_result)
+
+                        if validation_errors:
+                            # HARD FAIL: Critical validation errors prevent pipeline from continuing
+                            logger.error(
+                                f"[PIPELINE] Job {job_id} HARD FAIL - validation errors: {validation_errors}",
+                                extra={"job_id": job_id, "validation_result": val_result}
+                            )
+                            await self._finalize_failed_job(
+                                job_id, error=f"Validation failed: {validation_errors}"
+                            )
+                            return {
+                                "status": "failed",
+                                "message": f"Validation failed: {validation_errors}",
+                                "stages_completed": stages_completed,
+                                "output_path": output_path_for_validation,
+                            }
+                        else:
+                            # Only warnings, not errors - log and continue
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} validation warnings (non-fatal): {validation_warnings}",
+                                extra={"job_id": job_id}
+                            )
+                            stages_completed.append("validate")
                     else:
                         stages_completed.append("validate")
                         logger.info(f"[PIPELINE] Job {job_id} completed step: validate")
@@ -2944,14 +2960,18 @@ class OmniCoreService:
             
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             
-            # CRITICAL: Finalize job status and persist outputs
             output_path = codegen_result.get("output_path")
-            await self._finalize_successful_job(
-                job_id=job_id,
-                output_path=output_path,
-                stages_completed=stages_completed
-            )
-            
+
+            # Store stages_completed in job metadata for the single finalizer in generator.py
+            if job_id in jobs_db:
+                job = jobs_db[job_id]
+                job.metadata["stages_completed"] = stages_completed
+                job.metadata["output_path"] = output_path
+
+            # NOTE: Do NOT call _finalize_successful_job here.
+            # Finalization is handled by finalize_job_success() in generator.py
+            # to avoid double-finalization and inconsistent state.
+
             return {
                 "status": "completed",
                 "stages_completed": stages_completed,
@@ -3032,7 +3052,13 @@ class OmniCoreService:
             
             # Trigger dispatch to Self-Fixing Engineer (non-blocking)
             try:
-                await self._dispatch_to_sfe(job_id, output_path)
+                # Extract validation context from job metadata
+                validation_context = {
+                    "validation_errors": job.metadata.get("validation_errors", []),
+                    "validation_warnings": job.metadata.get("validation_warnings", []),
+                    "stages_completed": stages_completed,
+                }
+                await self._dispatch_to_sfe(job_id, output_path, validation_context)
             except Exception as dispatch_error:
                 # Don't fail job finalization if dispatch fails
                 logger.warning(f"⚠ SFE dispatch failed for job {job_id}: {dispatch_error}")
@@ -3102,7 +3128,12 @@ class OmniCoreService:
             logger.error(f"✗ Failed to create artifact ZIP: {e}", exc_info=True)
             # Don't raise - ZIP creation failure shouldn't fail the job
     
-    async def _dispatch_to_sfe(self, job_id: str, output_path: Optional[str]) -> None:
+    async def _dispatch_to_sfe(
+        self, 
+        job_id: str, 
+        output_path: Optional[str],
+        validation_context: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Dispatch completed job to Self-Fixing Engineer with fallback.
         
@@ -3111,6 +3142,7 @@ class OmniCoreService:
         Args:
             job_id: Unique job identifier
             output_path: Path to generated outputs
+            validation_context: Optional validation context with errors, warnings, stages
         """
         try:
             # Import here to avoid circular dependencies
@@ -3123,9 +3155,14 @@ class OmniCoreService:
                 try:
                     # Check if Kafka producer is available
                     if hasattr(self, 'kafka_producer') and self.kafka_producer:
+                        sfe_payload = {
+                            "job_id": job_id,
+                            "output_path": output_path,
+                            "validation_context": validation_context or {},
+                        }
                         await self.kafka_producer.send(
                             topic="sfe_jobs",
-                            value={"job_id": job_id, "output_path": output_path}
+                            value=sfe_payload
                         )
                         logger.info(f"✓ Dispatched job {job_id} to SFE via Kafka")
                         return
@@ -3137,10 +3174,16 @@ class OmniCoreService:
             if sfe_url:
                 import httpx
                 
+                sfe_payload = {
+                    "job_id": job_id,
+                    "source": "omnicore",
+                    "output_path": output_path,
+                    "validation_context": validation_context or {},
+                }
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(
                         f"{sfe_url}/api/jobs",
-                        json={"job_id": job_id, "source": "omnicore", "output_path": output_path}
+                        json=sfe_payload
                     )
                     response.raise_for_status()  # Raise exception for 4xx/5xx responses
                 logger.info(f"✓ Dispatched job {job_id} to SFE via HTTP fallback (status: {response.status_code})")
