@@ -273,6 +273,8 @@ async def _trigger_pipeline_background(
         # At minimum, codegen must have succeeded to finalize as success
         codegen_succeeded = "codegen" in stages_completed or pipeline_status == "completed"
 
+        # FIX: Only finalize as SUCCESS if codegen succeeded AND all requested stages completed
+        # If any requested stage failed, this is a FAILURE, not a partial success
         if codegen_succeeded and all_requested_completed:
             # SUCCESS: All requested stages completed - finalize with success status
             logger.info(
@@ -280,63 +282,65 @@ async def _trigger_pipeline_background(
                 f"Completed stages: {', '.join(stages_completed)}. "
                 f"Requested stages: {', '.join(requested_stages)}"
             )
-            
+
             # Verify output directory exists and has files before finalizing
             job_dir = Path(f"./uploads/{job_id}")
             if not job_dir.exists():
                 logger.warning(f"[Pipeline] Output directory {job_dir} does not exist after pipeline completion")
+                # Missing output directory is a FAILURE
+                error = Exception(f"Output directory {job_dir} does not exist after pipeline completion")
+                await finalize_job_failure(job_id, error)
             else:
                 files = list(job_dir.rglob('*'))
                 file_count = sum(1 for f in files if f.is_file())
                 logger.info(f"[Pipeline] Found {file_count} output files in {job_dir}")
-            
-            # Call finalization service to persist status and manifest
-            finalized = await finalize_job_success(job_id, result)
-            
-            if finalized:
-                # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
-                # Users must explicitly click "Send to SFE" button in UI
-                # This prevents unwanted automatic processing and gives users control
-                # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
-                logger.info(
-                    f"[Pipeline] Job {job_id} finalized successfully. "
-                    f"Ready for manual dispatch to Self-Fixing Engineer."
-                )
-            else:
-                logger.error(f"[Pipeline] Failed to finalize job {job_id}")
+
+                # Check for minimum required files
+                if file_count == 0:
+                    logger.error(f"[Pipeline] No output files generated for job {job_id}")
+                    error = Exception("No output files generated - code generation produced no files")
+                    await finalize_job_failure(job_id, error)
+                else:
+                    # Call finalization service to persist status and manifest
+                    finalized = await finalize_job_success(job_id, result)
+
+                    if finalized:
+                        # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
+                        # Users must explicitly click "Send to SFE" button in UI
+                        # This prevents unwanted automatic processing and gives users control
+                        # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
+                        logger.info(
+                            f"[Pipeline] Job {job_id} finalized successfully. "
+                            f"Ready for manual dispatch to Self-Fixing Engineer."
+                        )
+                    else:
+                        logger.error(f"[Pipeline] Failed to finalize job {job_id}")
 
         elif codegen_succeeded and not all_requested_completed:
-            # PARTIAL SUCCESS: Codegen succeeded but some requested stages failed
+            # FAILURE: Codegen succeeded but some requested stages failed
+            # FIX: This is now treated as FAILURE, not partial success
             failed_stages = [stage for stage in requested_stages if stage not in stages_completed]
-            logger.warning(
-                f"[Pipeline] Job {job_id} partially completed. "
-                f"Codegen succeeded but the following requested stages failed: {', '.join(failed_stages)}. "
+            logger.error(
+                f"[Pipeline] Job {job_id} FAILED: Codegen succeeded but the following "
+                f"requested stages failed: {', '.join(failed_stages)}. "
                 f"Completed stages: {', '.join(stages_completed)}"
             )
 
-            # Still finalize as partial success since codegen succeeded
-            # This allows users to see the generated code even if tests/docs/deploy failed
-            result_with_warning = dict(result) if result else {}
-            result_with_warning["partial_success"] = True
-            result_with_warning["failed_stages"] = failed_stages
-
-            finalized = await finalize_job_success(job_id, result_with_warning)
-
-            if finalized:
-                logger.info(
-                    f"[Pipeline] Job {job_id} finalized with partial success. "
-                    f"Generated code is available but some stages failed."
-                )
-            else:
-                logger.error(f"[Pipeline] Failed to finalize partially successful job {job_id}")
+            # Mark job as FAILED when requested stages do not complete
+            error_message = (
+                f"Pipeline failed: {len(failed_stages)} requested stage(s) did not complete "
+                f"({', '.join(failed_stages)}). Completed stages: {', '.join(stages_completed)}"
+            )
+            error = Exception(error_message)
+            await finalize_job_failure(job_id, error)
 
         else:
             # FAILURE: No code generated at all
-            logger.warning(
+            logger.error(
                 f"[Pipeline] Job {job_id} failed: no code was generated "
                 f"(completed stages: {', '.join(stages_completed) if stages_completed else 'none'})"
             )
-            
+
             error = Exception(result.get("message", "Code generation failed - no code produced"))
             await finalize_job_failure(job_id, error)
             
@@ -414,8 +418,23 @@ async def _resume_pipeline_after_clarification(
 
         stages_completed = result.get("stages_completed", []) if result else []
 
-        if "codegen" in stages_completed or pipeline_status == "completed":
-            logger.info(f"[Pipeline] Finalizing successful job {job_id}")
+        # Determine which stages were requested
+        requested_stages = ["codegen"]
+        # These flags match the defaults in _trigger_pipeline_background
+        requested_stages.extend(["testgen", "deploy", "docgen", "critique"])
+
+        # Check if ALL requested stages completed
+        all_requested_completed = (
+            pipeline_status == "completed" or
+            all(stage in stages_completed for stage in requested_stages)
+        )
+
+        codegen_succeeded = "codegen" in stages_completed or pipeline_status == "completed"
+
+        # FIX: Apply same logic as _trigger_pipeline_background
+        # Only finalize as SUCCESS if ALL requested stages completed
+        if codegen_succeeded and all_requested_completed:
+            logger.info(f"[Pipeline] Finalizing successful job {job_id} after clarification")
             finalized = await finalize_job_success(job_id, result)
             if finalized:
                 logger.info(
@@ -424,8 +443,20 @@ async def _resume_pipeline_after_clarification(
                 )
             else:
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
+        elif codegen_succeeded and not all_requested_completed:
+            # FAILURE: Some requested stages failed
+            failed_stages = [stage for stage in requested_stages if stage not in stages_completed]
+            logger.error(
+                f"[Pipeline] Job {job_id} FAILED after clarification: Codegen succeeded but "
+                f"the following requested stages failed: {', '.join(failed_stages)}"
+            )
+            error = Exception(
+                f"Pipeline failed: {len(failed_stages)} requested stage(s) did not complete "
+                f"({', '.join(failed_stages)})"
+            )
+            await finalize_job_failure(job_id, error)
         else:
-            logger.warning(
+            logger.error(
                 f"[Pipeline] Job {job_id} failed after clarification: no code was generated "
                 f"(completed stages: {', '.join(stages_completed) if stages_completed else 'none'})"
             )
