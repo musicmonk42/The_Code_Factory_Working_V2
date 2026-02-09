@@ -453,21 +453,39 @@ class DefaultAudioProcessor(AudioProcessor):
                 f"Invalid configuration for DefaultAudioProcessor: {e}"
             ) from e
 
-        self.requests_total = get_or_create(
-            Counter(
-                "default_audio_processor_requests_total",
-                "Total audio processing requests",
-                ["status"],
+        try:
+            self.requests_total = get_or_create(
+                Counter(
+                    "default_audio_processor_requests_total",
+                    "Total audio processing requests",
+                    ["status"],
+                )
             )
-        )
-        self.processing_latency_seconds = get_or_create(
-            Histogram(
-                "default_audio_processor_latency_seconds",
-                "Audio processing latency",
-                [],
-                buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_audio_processor_requests_total":
+                    self.requests_total = collector
+                    break
+            else:
+                self.requests_total = None
+
+        try:
+            self.processing_latency_seconds = get_or_create(
+                Histogram(
+                    "default_audio_processor_latency_seconds",
+                    "Audio processing latency",
+                    [],
+                    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+                )
             )
-        )
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_audio_processor_latency_seconds":
+                    self.processing_latency_seconds = collector
+                    break
+            else:
+                self.processing_latency_seconds = None
+
         logger.info("DefaultAudioProcessor initialized with config: %s", self.config)
 
     async def process(
@@ -618,21 +636,39 @@ class DefaultVideoProcessor(VideoProcessor):
                 f"Invalid configuration for DefaultVideoProcessor: {e}"
             ) from e
 
-        self.requests_total = get_or_create(
-            Counter(
-                "default_video_processor_requests_total",
-                "Total video processing requests",
-                ["status"],
+        try:
+            self.requests_total = get_or_create(
+                Counter(
+                    "default_video_processor_requests_total",
+                    "Total video processing requests",
+                    ["status"],
+                )
             )
-        )
-        self.processing_latency_seconds = get_or_create(
-            Histogram(
-                "default_video_processor_latency_seconds",
-                "Video processing latency",
-                [],
-                buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_video_processor_requests_total":
+                    self.requests_total = collector
+                    break
+            else:
+                self.requests_total = None
+
+        try:
+            self.processing_latency_seconds = get_or_create(
+                Histogram(
+                    "default_video_processor_latency_seconds",
+                    "Video processing latency",
+                    [],
+                    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+                )
             )
-        )
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_video_processor_latency_seconds":
+                    self.processing_latency_seconds = collector
+                    break
+            else:
+                self.processing_latency_seconds = None
+
         logger.info("DefaultVideoProcessor initialized with config: %s", self.config)
 
     async def process(
@@ -785,21 +821,39 @@ class DefaultTextProcessor(TextProcessor):
                 f"Invalid configuration for DefaultTextProcessor: {e}"
             ) from e
 
-        self.requests_total = get_or_create(
-            Counter(
-                "default_text_processor_requests_total",
-                "Total text processing requests",
-                ["status"],
+        try:
+            self.requests_total = get_or_create(
+                Counter(
+                    "default_text_processor_requests_total",
+                    "Total text processing requests",
+                    ["status"],
+                )
             )
-        )
-        self.processing_latency_seconds = get_or_create(
-            Histogram(
-                "default_text_processor_latency_seconds",
-                "Text processing latency",
-                [],
-                buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_text_processor_requests_total":
+                    self.requests_total = collector
+                    break
+            else:
+                self.requests_total = None
+
+        try:
+            self.processing_latency_seconds = get_or_create(
+                Histogram(
+                    "default_text_processor_latency_seconds",
+                    "Text processing latency",
+                    [],
+                    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+                )
             )
-        )
+        except ValueError:
+            for collector in list(REGISTRY._names_to_collectors.values()):
+                if hasattr(collector, '_name') and collector._name == "default_text_processor_latency_seconds":
+                    self.processing_latency_seconds = collector
+                    break
+            else:
+                self.processing_latency_seconds = None
+
         logger.info("DefaultTextProcessor initialized with config: %s", self.config)
 
     async def process(
