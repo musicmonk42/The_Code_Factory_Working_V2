@@ -633,6 +633,13 @@ class TestPolicyEngine:
         policy_engine.config.LLM_POLICY_EVALUATION_ENABLED = True
         policy_engine._policies["llm_rules"]["enabled"] = True
 
+        # Mock the API key check to bypass the early return when no API key is present
+        monkeypatch.setattr(
+            policy_engine.config, 
+            "get_api_key_for_provider", 
+            lambda provider: "mock-api-key-for-testing"
+        )
+
         mock_llm = MagicMock()
         mock_llm.generate_text = AsyncMock(return_value="YES, safe data")
 
