@@ -354,10 +354,12 @@ class DefaultImageProcessor(ImageProcessor):
                 f"[{op_id}] Image processing completed successfully. Summary: {summary}"
             )
 
-            self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="success").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
 
             return ProcessingResult(
                 success=True,
@@ -372,20 +374,24 @@ class DefaultImageProcessor(ImageProcessor):
                 f"[{op_id}] Invalid input error during image processing: {e}",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
                 f"[{op_id}] Unexpected error during image processing. Input starts with '{str(image_data)[:50]}...'",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -544,10 +550,12 @@ class DefaultAudioProcessor(AudioProcessor):
                 f"[{op_id}] Audio processing completed successfully. Summary: {summary}"
             )
 
-            self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="success").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
 
             return ProcessingResult(
                 success=True,
@@ -561,20 +569,24 @@ class DefaultAudioProcessor(AudioProcessor):
                 f"[{op_id}] Invalid input error during audio processing: {e}",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
                 f"[{op_id}] Unexpected error during audio processing. Input starts with '{str(audio_data)[:50]}...'",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -729,10 +741,12 @@ class DefaultVideoProcessor(VideoProcessor):
                 f"[{op_id}] Video processing completed successfully. Summary: {result_summary}"
             )
 
-            self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="success").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
 
             return ProcessingResult(
                 success=True,
@@ -746,20 +760,24 @@ class DefaultVideoProcessor(VideoProcessor):
                 f"[{op_id}] Invalid input error during video processing: {e}",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
                 f"[{op_id}] Unexpected error during video processing. Input starts with '{str(video_data)[:50]}...'",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",
@@ -894,10 +912,12 @@ class DefaultTextProcessor(TextProcessor):
                 f"[{op_id}] Text processing completed successfully. Summary: {result_summary}"
             )
 
-            self.requests_total.labels(status="success").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="success").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
 
             return ProcessingResult(
                 success=True,
@@ -911,20 +931,24 @@ class DefaultTextProcessor(TextProcessor):
                 f"[{op_id}] Invalid input error during text processing: {e}",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(success=False, error=str(e), operation_id=op_id)
         except Exception as e:
             logger.error(
                 f"[{op_id}] Unexpected error during text processing. Input starts with '{text_data[:50]}...'",
                 exc_info=True,
             )
-            self.requests_total.labels(status="failure").inc()
-            self.processing_latency_seconds.observe(
-                asyncio.get_event_loop().time() - start_time
-            )
+            if self.requests_total:
+                self.requests_total.labels(status="failure").inc()
+            if self.processing_latency_seconds:
+                self.processing_latency_seconds.observe(
+                    asyncio.get_event_loop().time() - start_time
+                )
             return ProcessingResult(
                 success=False,
                 error=f"Unexpected processing error: {e}",

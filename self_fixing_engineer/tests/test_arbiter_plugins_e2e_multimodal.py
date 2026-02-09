@@ -350,7 +350,7 @@ class TestE2EMultiModalSystem:
         # Test with invalid data
         result = await plugin_with_config.process_image(None)
         assert result.success is False
-        assert "Invalid" in result.error
+        assert "Input data cannot be None" in result.error
 
         # Test with data exceeding size limits
         huge_text = "x" * 10000  # Exceeds configured max_length
