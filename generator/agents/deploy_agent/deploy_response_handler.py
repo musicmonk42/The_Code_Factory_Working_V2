@@ -1863,6 +1863,33 @@ async def handle_deploy_response(
                 Status(StatusCode.OK, "Response handling completed successfully.")
             )
 
+            # Validate that output doesn't contain unsubstituted placeholders
+            placeholder_patterns = [
+                r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
+                r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
+                r'placeholder',  # Generic "placeholder" text
+                r'REPLACE_ME',  # Common placeholder pattern
+                r'TODO:.*',  # TODO comments
+                r'FIXME:.*',  # FIXME comments
+            ]
+
+            placeholder_found = False
+            placeholder_details = []
+            for pattern in placeholder_patterns:
+                matches = re.findall(pattern, enriched_final_output, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    placeholder_found = True
+                    placeholder_details.extend(matches)
+
+            if placeholder_found:
+                error_msg = (
+                    f"Deploy config contains unsubstituted placeholders: {set(placeholder_details)}. "
+                    f"All placeholders must be replaced with concrete values before deployment."
+                )
+                logger.error(error_msg, extra={**log_extra, "placeholders": list(set(placeholder_details))})
+                span.set_status(Status(StatusCode.ERROR, "Placeholders detected in output"))
+                raise ValueError(error_msg)
+
             result = {
                 "final_config_output": enriched_final_output,  # The final string with all enrichments
                 "structured_data": normalized_data,  # The normalized Python object for further processing

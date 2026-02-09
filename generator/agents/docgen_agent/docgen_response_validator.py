@@ -365,6 +365,28 @@ class MarkdownPlugin(DocGenPlugin):
                 f"Insufficient sections: found {found_sections}, need at least {min_sections}"
             )
 
+        # Check for unsubstituted placeholders in documentation
+        placeholder_patterns = [
+            r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
+            r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
+            r'placeholder',  # Generic "placeholder" text
+            r'REPLACE_ME',  # Common placeholder pattern
+            r'timestamp_placeholder',  # From deploy plugins
+        ]
+
+        placeholders_found = []
+        for pattern in placeholder_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            if matches:
+                placeholders_found.extend(matches)
+
+        if placeholders_found:
+            issues.append(
+                f"Documentation contains unsubstituted placeholders: {set(placeholders_found)}. "
+                f"All placeholders must be replaced with actual values."
+            )
+
+
         return {"valid": len(issues) == 0, "issues": issues}
 
     def format(self, content: str) -> str:
