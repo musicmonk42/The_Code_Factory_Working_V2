@@ -260,15 +260,31 @@ The following are MANDATORY checks:
    - .env.example (example environment variables with NO real secrets)
 
 6. INPUT VALIDATION (for Pydantic models):
-   - Use field constraints for string inputs:
+   - For /echo endpoint specifically:
+     * Use plain `message: str` in the Pydantic model with NO field-level constraints
+     * Perform ALL validation manually in the route handler using `HTTPException(status_code=400)`
+     * In the route handler, strip whitespace and check: if not message.strip(): raise HTTPException(400)
+     * Check length after stripping: if len(message.strip()) > 500: raise HTTPException(400)
+     * Add a global exception handler to convert FastAPI's 422 responses to 400:
+       ```python
+       from fastapi.exceptions import RequestValidationError
+       from fastapi.responses import JSONResponse
+       
+       @app.exception_handler(RequestValidationError)
+       async def validation_exception_handler(request, exc):
+           return JSONResponse(status_code=400, content={"detail": "Invalid request"})
+       ```
+   - For other endpoints (non-echo):
+     * Use field constraints for string inputs as appropriate
      * Use `constr(strip_whitespace=True, min_length=1, max_length=500)` for required text fields
      * Use `Field(..., min_length=1)` with `@field_validator` for stripping whitespace
      * Never accept empty or whitespace-only strings for required text inputs
-     * Example: `message: constr(strip_whitespace=True, min_length=1, max_length=500)` instead of `message: str`
-   - For /echo endpoint:
-     * Must reject missing message with 400
-     * Must reject whitespace-only message ("   ") with 400
-     * Must reject messages over 500 characters with 400
+   
+   - For test boundary cases:
+     * CRITICAL: Use `"x" * N` for max-length boundary tests, NOT `"" * N`
+     * Empty string multiplied by any number is still empty: `"" * 501 == ""`
+     * Example: `("x" * 501, 400)` tests 501-character message (correct)
+     * Example: `("" * 501, 400)` tests empty string (WRONG - this is a bug)
 
 7. PRE-GENERATION CHECKLIST:
    Before submitting your response, mentally verify:

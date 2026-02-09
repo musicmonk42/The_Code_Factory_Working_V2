@@ -3013,6 +3013,39 @@ class OmniCoreService:
                         if testgen_result.get("status") == "completed":
                             stages_completed.append("testgen")
                             logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
+                            
+                            # BUG FIX: Check if tests actually passed, not just if testgen completed
+                            # Even if testgen "completed", tests may have failed
+                            if payload.get("include_tests", True):
+                                # Extract test results from testgen_result
+                                result_data = testgen_result.get("result", {})
+                                final_validation_report = result_data.get("final_validation_report", {})
+                                
+                                # Check coverage validation results for test failures
+                                coverage_report = final_validation_report.get("coverage", {})
+                                test_results = coverage_report.get("test_results", {})
+                                fail_count = test_results.get("failed", 0) or test_results.get("fail_count", 0)
+                                
+                                # Also check top-level test results if available
+                                if fail_count == 0 and "test_results" in result_data:
+                                    top_level_results = result_data.get("test_results", {})
+                                    fail_count = top_level_results.get("failed", 0) or top_level_results.get("fail_count", 0)
+                                
+                                if fail_count > 0:
+                                    logger.error(
+                                        f"[PIPELINE] Job {job_id} FAILING pipeline: {fail_count} test(s) failed even though testgen completed. "
+                                        f"include_tests=True requires all tests to pass."
+                                    )
+                                    await self._finalize_failed_job(
+                                        job_id, 
+                                        error=f"Test execution failed: {fail_count} test(s) failed"
+                                    )
+                                    return {
+                                        "status": "failed",
+                                        "message": f"Test execution failed: {fail_count} test(s) failed",
+                                        "stages_completed": stages_completed,
+                                        "test_failures": fail_count,
+                                    }
                         elif testgen_result.get("status") == "error":
                             testgen_error = testgen_result.get('message', 'Unknown error')
                             logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}")
