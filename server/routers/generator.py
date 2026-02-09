@@ -264,14 +264,13 @@ async def _trigger_pipeline_background(
             requested_stages.append("critique")
 
         # Check if ALL requested stages completed successfully
-        # A stage is considered successful if it's in stages_completed OR if the overall status is "completed"
-        all_requested_completed = (
-            pipeline_status == "completed" or
-            all(stage in stages_completed for stage in requested_stages)
-        )
+        # BUG FIX: Removed pipeline_status == "completed" short-circuit
+        # We must verify actual stage completion, not just trust pipeline status
+        all_requested_completed = all(stage in stages_completed for stage in requested_stages)
 
         # At minimum, codegen must have succeeded to finalize as success
-        codegen_succeeded = "codegen" in stages_completed or pipeline_status == "completed"
+        # BUG FIX: Removed pipeline_status == "completed" short-circuit
+        codegen_succeeded = "codegen" in stages_completed
 
         # FIX: Only finalize as SUCCESS if codegen succeeded AND all requested stages completed
         # If any requested stage failed, this is a FAILURE, not a partial success
@@ -424,12 +423,12 @@ async def _resume_pipeline_after_clarification(
         requested_stages.extend(["testgen", "deploy", "docgen", "critique"])
 
         # Check if ALL requested stages completed
-        all_requested_completed = (
-            pipeline_status == "completed" or
-            all(stage in stages_completed for stage in requested_stages)
-        )
+        # BUG FIX: Removed pipeline_status == "completed" short-circuit
+        # We must verify actual stage completion, not just trust pipeline status
+        all_requested_completed = all(stage in stages_completed for stage in requested_stages)
 
-        codegen_succeeded = "codegen" in stages_completed or pipeline_status == "completed"
+        # BUG FIX: Removed pipeline_status == "completed" short-circuit
+        codegen_succeeded = "codegen" in stages_completed
 
         # FIX: Apply same logic as _trigger_pipeline_background
         # Only finalize as SUCCESS if ALL requested stages completed
