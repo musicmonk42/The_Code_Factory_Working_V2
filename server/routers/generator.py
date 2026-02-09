@@ -252,34 +252,48 @@ async def _trigger_pipeline_background(
         
         stages_completed = result.get("stages_completed", []) if result else []
 
-        # Determine which stages were requested in the pipeline
-        requested_stages = ["codegen"]  # codegen is always requested
+        # Distinguish between CRITICAL and AUXILIARY stages
+        # CRITICAL stages: codegen (always), testgen (if tests requested)
+        # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
+        critical_stages = ["codegen"]  # codegen is always critical
         if include_tests:
-            requested_stages.append("testgen")
+            critical_stages.append("testgen")
+        
+        auxiliary_stages = []
         if include_deployment:
-            requested_stages.append("deploy")
+            auxiliary_stages.append("deploy")
         if include_docs:
-            requested_stages.append("docgen")
+            auxiliary_stages.append("docgen")
         if run_critique:
-            requested_stages.append("critique")
+            auxiliary_stages.append("critique")
 
-        # Check if ALL requested stages completed successfully
+        # Check if ALL CRITICAL stages completed successfully
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        all_requested_completed = all(stage in stages_completed for stage in requested_stages)
+        all_critical_completed = all(stage in stages_completed for stage in critical_stages)
 
         # At minimum, codegen must have succeeded to finalize as success
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         codegen_succeeded = "codegen" in stages_completed
+        
+        # Identify any auxiliary stages that failed (for warning logging)
+        failed_auxiliary = [s for s in auxiliary_stages if s not in stages_completed]
 
-        # FIX: Only finalize as SUCCESS if codegen succeeded AND all requested stages completed
-        # If any requested stage failed, this is a FAILURE, not a partial success
-        if codegen_succeeded and all_requested_completed:
-            # SUCCESS: All requested stages completed - finalize with success status
+        # FIX: Only finalize as SUCCESS if codegen succeeded AND all CRITICAL stages completed
+        # Auxiliary stage failures are logged as warnings but do NOT prevent success
+        if codegen_succeeded and all_critical_completed:
+            # SUCCESS: All critical stages completed - finalize with success status
+            # Log warnings for any auxiliary stages that failed
+            if failed_auxiliary:
+                logger.warning(
+                    f"[Pipeline] Job {job_id}: The following auxiliary stages did not complete "
+                    f"but job will still be marked as SUCCESS: {', '.join(failed_auxiliary)}"
+                )
+            
             logger.info(
                 f"[Pipeline] Finalizing successful job {job_id}. "
                 f"Completed stages: {', '.join(stages_completed)}. "
-                f"Requested stages: {', '.join(requested_stages)}"
+                f"Critical stages: {', '.join(critical_stages)}"
             )
 
             # Verify output directory exists and has files before finalizing
@@ -315,20 +329,20 @@ async def _trigger_pipeline_background(
                     else:
                         logger.error(f"[Pipeline] Failed to finalize job {job_id}")
 
-        elif codegen_succeeded and not all_requested_completed:
-            # FAILURE: Codegen succeeded but some requested stages failed
-            # FIX: This is now treated as FAILURE, not partial success
-            failed_stages = [stage for stage in requested_stages if stage not in stages_completed]
+        elif codegen_succeeded and not all_critical_completed:
+            # FAILURE: Codegen succeeded but some CRITICAL stages failed
+            # FIX: This is now treated as FAILURE only for critical stages
+            failed_critical = [stage for stage in critical_stages if stage not in stages_completed]
             logger.error(
                 f"[Pipeline] Job {job_id} FAILED: Codegen succeeded but the following "
-                f"requested stages failed: {', '.join(failed_stages)}. "
+                f"CRITICAL stages failed: {', '.join(failed_critical)}. "
                 f"Completed stages: {', '.join(stages_completed)}"
             )
 
-            # Mark job as FAILED when requested stages do not complete
+            # Mark job as FAILED when critical stages do not complete
             error_message = (
-                f"Pipeline failed: {len(failed_stages)} requested stage(s) did not complete "
-                f"({', '.join(failed_stages)}). Completed stages: {', '.join(stages_completed)}"
+                f"Pipeline failed: {len(failed_critical)} critical stage(s) did not complete "
+                f"({', '.join(failed_critical)}). Completed stages: {', '.join(stages_completed)}"
             )
             error = Exception(error_message)
             await finalize_job_failure(job_id, error)
@@ -417,22 +431,36 @@ async def _resume_pipeline_after_clarification(
 
         stages_completed = result.get("stages_completed", []) if result else []
 
-        # Determine which stages were requested
-        requested_stages = ["codegen"]
+        # Distinguish between CRITICAL and AUXILIARY stages
+        # CRITICAL stages: codegen (always), testgen (if tests requested)
+        # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
+        critical_stages = ["codegen"]  # codegen is always critical
         # These flags match the defaults in _trigger_pipeline_background
-        requested_stages.extend(["testgen", "deploy", "docgen", "critique"])
+        critical_stages.append("testgen")  # tests are requested in this function
+        
+        auxiliary_stages = ["deploy", "docgen", "critique"]  # all auxiliary stages are requested
 
-        # Check if ALL requested stages completed
+        # Check if ALL CRITICAL stages completed
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        all_requested_completed = all(stage in stages_completed for stage in requested_stages)
+        all_critical_completed = all(stage in stages_completed for stage in critical_stages)
 
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         codegen_succeeded = "codegen" in stages_completed
+        
+        # Identify any auxiliary stages that failed (for warning logging)
+        failed_auxiliary = [s for s in auxiliary_stages if s not in stages_completed]
 
         # FIX: Apply same logic as _trigger_pipeline_background
-        # Only finalize as SUCCESS if ALL requested stages completed
-        if codegen_succeeded and all_requested_completed:
+        # Only finalize as SUCCESS if ALL CRITICAL stages completed
+        if codegen_succeeded and all_critical_completed:
+            # Log warnings for any auxiliary stages that failed
+            if failed_auxiliary:
+                logger.warning(
+                    f"[Pipeline] Job {job_id}: The following auxiliary stages did not complete "
+                    f"but job will still be marked as SUCCESS: {', '.join(failed_auxiliary)}"
+                )
+            
             logger.info(f"[Pipeline] Finalizing successful job {job_id} after clarification")
             finalized = await finalize_job_success(job_id, result)
             if finalized:
@@ -442,16 +470,16 @@ async def _resume_pipeline_after_clarification(
                 )
             else:
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
-        elif codegen_succeeded and not all_requested_completed:
-            # FAILURE: Some requested stages failed
-            failed_stages = [stage for stage in requested_stages if stage not in stages_completed]
+        elif codegen_succeeded and not all_critical_completed:
+            # FAILURE: Some CRITICAL stages failed
+            failed_critical = [stage for stage in critical_stages if stage not in stages_completed]
             logger.error(
                 f"[Pipeline] Job {job_id} FAILED after clarification: Codegen succeeded but "
-                f"the following requested stages failed: {', '.join(failed_stages)}"
+                f"the following CRITICAL stages failed: {', '.join(failed_critical)}"
             )
             error = Exception(
-                f"Pipeline failed: {len(failed_stages)} requested stage(s) did not complete "
-                f"({', '.join(failed_stages)})"
+                f"Pipeline failed: {len(failed_critical)} critical stage(s) did not complete "
+                f"({', '.join(failed_critical)})"
             )
             await finalize_job_failure(job_id, error)
         else:

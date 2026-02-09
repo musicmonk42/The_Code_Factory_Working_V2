@@ -449,6 +449,82 @@ class TestValidationErrorReporting:
         assert "Files found: 5" in content
 
 
+class TestCriticalVsAuxiliaryStages:
+    """Test critical vs auxiliary stage completion logic."""
+
+    @pytest.mark.asyncio
+    async def test_job_succeeds_when_critical_stages_complete_but_auxiliary_fail(self):
+        """Test that job is marked SUCCESS when codegen and testgen succeed but deploy/docgen/critique fail."""
+        # Arrange
+        job_id = "test-job-auxiliary-fail"
+        job = Job(
+            id=job_id,
+            status=JobStatus.RUNNING,
+            current_stage=JobStage.GENERATOR_GENERATION,
+            input_files=[],
+            output_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+        reset_finalization_state()
+
+        # Act - Finalize with codegen and testgen completed, but deploy/docgen/critique missing
+        result_dict = {
+            "status": "completed",
+            "output_path": "/tmp/test/output",
+            "stages_completed": ["codegen", "testgen"],  # Missing: deploy, docgen, critique
+        }
+        success = await finalize_job_success(job_id, result_dict)
+
+        # Assert - Job should still be marked as COMPLETED
+        assert success
+        assert job.status == JobStatus.COMPLETED
+        assert job.current_stage == JobStage.COMPLETED
+        assert job.completed_at is not None
+
+        # Cleanup
+        if job_id in jobs_db:
+            del jobs_db[job_id]
+
+    @pytest.mark.asyncio
+    async def test_job_succeeds_when_only_codegen_completes_and_tests_not_requested(self):
+        """Test that job is marked SUCCESS when only codegen succeeds and tests were not requested."""
+        # Arrange
+        job_id = "test-job-codegen-only"
+        job = Job(
+            id=job_id,
+            status=JobStatus.RUNNING,
+            current_stage=JobStage.GENERATOR_GENERATION,
+            input_files=[],
+            output_files=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={},
+        )
+        jobs_db[job_id] = job
+        reset_finalization_state()
+
+        # Act - Finalize with only codegen completed
+        result_dict = {
+            "status": "completed",
+            "output_path": "/tmp/test/output",
+            "stages_completed": ["codegen"],  # Only codegen - no tests requested
+        }
+        success = await finalize_job_success(job_id, result_dict)
+
+        # Assert - Job should be marked as COMPLETED
+        assert success
+        assert job.status == JobStatus.COMPLETED
+        assert job.current_stage == JobStage.COMPLETED
+        assert job.completed_at is not None
+
+        # Cleanup
+        if job_id in jobs_db:
+            del jobs_db[job_id]
+
+
 # Integration test combining multiple fixes
 class TestPipelineIntegration:
     """Integration tests combining multiple pipeline fixes."""
