@@ -615,8 +615,7 @@ class ArbiterConfig(BaseSettings):
                 span.set_attribute("cache_status", "miss")
                 return result
 
-    @staticmethod
-    def get_api_key_for_provider(provider: str) -> Optional[str]:
+    def get_api_key_for_provider(self, provider: str) -> Optional[str]:
         """Retrieves the API key for a given LLM provider from environment variables."""
         with tracer.start_as_current_span(
             "get_api_key_for_provider", attributes={"provider": provider}
