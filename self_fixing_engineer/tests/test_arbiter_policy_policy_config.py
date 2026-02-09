@@ -168,16 +168,19 @@ def test_secret_redaction_to_dict():
 
 
 def test_get_api_key_for_provider(monkeypatch):
-    """Tests the static method for retrieving provider-specific API keys."""
+    """Tests the instance method for retrieving provider-specific API keys."""
     monkeypatch.setenv("OPENAI_API_KEY", "openai123")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "anthro456")
     monkeypatch.setenv("GOOGLE_API_KEY", "gemini789")
     monkeypatch.setenv("LLM_API_KEY", "llm999")
-    assert ArbiterConfig.get_api_key_for_provider("openai") == "openai123"
-    assert ArbiterConfig.get_api_key_for_provider("anthropic") == "anthro456"
-    assert ArbiterConfig.get_api_key_for_provider("gemini") == "gemini789"
-    assert ArbiterConfig.get_api_key_for_provider("google") == "gemini789"
-    assert ArbiterConfig.get_api_key_for_provider("other") == "llm999"
+
+    with patch("redis.asyncio.Redis.from_url"):
+        cfg = ArbiterConfig()
+        assert cfg.get_api_key_for_provider("openai") == "openai123"
+        assert cfg.get_api_key_for_provider("anthropic") == "anthro456"
+        assert cfg.get_api_key_for_provider("gemini") == "gemini789"
+        assert cfg.get_api_key_for_provider("google") == "gemini789"
+        assert cfg.get_api_key_for_provider("other") == "llm999"
 
 
 ########## Model Validator: Production Environment ##########
@@ -448,4 +451,5 @@ def test_branch_coverage(monkeypatch):
     with patch("redis.asyncio.Redis.from_url"):
         # .get_api_key_for_provider unknown provider with no fallback env
         monkeypatch.delenv("LLM_API_KEY", raising=False)
-        assert ArbiterConfig.get_api_key_for_provider("unknown") is None
+        cfg = ArbiterConfig()
+        assert cfg.get_api_key_for_provider("unknown") is None
