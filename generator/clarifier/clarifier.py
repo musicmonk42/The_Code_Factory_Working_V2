@@ -1536,11 +1536,9 @@ Format your response as a JSON array of strings, for example:
         if any(word in content_lower for word in ['deploy', 'production']) and \
            not any(platform in content_lower for platform in ['docker', 'kubernetes', 'aws', 'heroku']):
             ambiguities.append("Deployment platform not specified")
-        
-        # Generic ambiguity if nothing specific found
-        if not ambiguities:
-            ambiguities.append("General technical specifications need clarification")
-        
+
+        # FIX Issue 1: Remove generic fallback - only return actual ambiguities found
+        # If no specific ambiguities are detected, return empty list instead of forcing a generic question
         self.logger.info(f"Rule-based detection found {len(ambiguities)} ambiguities")
         return ambiguities[:5]  # Limit to 5 for rule-based
 
@@ -1578,10 +1576,19 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     response_clean = self._extract_json_from_markdown(response)
                     questions = json.loads(response_clean)
                     if isinstance(questions, list) and len(questions) > 0:
-                        # Validate structure
-                        if all(isinstance(q, dict) and 'question' in q for q in questions):
-                            self.logger.info(f"LLM generated {len(questions)} questions")
-                            return questions[:10]  # Limit to 10 questions
+                        # Validate structure and filter empty questions
+                        validated_questions = []
+                        for q in questions:
+                            if isinstance(q, dict) and 'question' in q:
+                                question_text = q.get('question', '').strip()
+                                if question_text:
+                                    validated_questions.append(q)
+                                else:
+                                    self.logger.warning(f"Skipping empty question from LLM: {q}")
+
+                        if validated_questions:
+                            self.logger.info(f"LLM generated {len(validated_questions)} questions (validated from {len(questions)})")
+                            return validated_questions[:10]  # Limit to 10 questions
                 except json.JSONDecodeError:
                     self.logger.warning("Failed to parse LLM response as JSON, falling back to rule-based")
             except Exception as e:
@@ -1591,7 +1598,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
         questions = []
         for ambiguity in ambiguities:
             ambiguity_lower = ambiguity.lower()
-            
+
             # Map ambiguities to specific questions
             if 'database' in ambiguity_lower:
                 questions.append({
@@ -1624,17 +1631,23 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     "question": f"Please clarify: {ambiguity}",
                     "category": "general"
                 })
-        
-        # Add default questions if none were generated
-        if not questions:
-            questions = [
-                {"question": "What is the primary programming language you'd like to use?", "category": "general"},
-                {"question": "Who are the target users of this application?", "category": "general"},
-                {"question": "Are there any specific third-party integrations required?", "category": "general"}
-            ]
-        
-        self.logger.info(f"Generated {len(questions)} questions")
-        return questions[:5]  # Limit to 5 questions
+
+        # FIX Issue 2: Filter out any empty or blank questions
+        # Validate that all questions have non-empty text before returning
+        filtered_questions = []
+        for q in questions:
+            question_text = q.get("question", "").strip() if isinstance(q, dict) else str(q).strip()
+            if question_text:
+                filtered_questions.append(q)
+            else:
+                self.logger.warning(f"Skipping empty question from generation: {q}")
+
+        # FIX Issue 1: Remove hard-coded default questions
+        # Only generate questions for actual ambiguities detected
+        # If no ambiguities, return empty list - this allows pipeline to proceed without clarification
+
+        self.logger.info(f"Generated {len(filtered_questions)} questions (filtered from {len(questions)})")
+        return filtered_questions[:5]  # Limit to 5 questions
 
     async def get_clarifications(
         self, ambiguities: List[str], requirements: Dict[str, Any]
