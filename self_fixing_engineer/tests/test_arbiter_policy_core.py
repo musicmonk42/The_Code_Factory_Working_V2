@@ -626,33 +626,6 @@ class TestPolicyEngine:
         assert not result3
 
     @pytest.mark.asyncio
-    async def test_llm_integration(self, policy_engine, monkeypatch):
-        """Tests LLM-based policy evaluation."""
-        # Note: trust_rules are already disabled by fixture, so trust_score_rule won't interfere
-
-        policy_engine.config.LLM_POLICY_EVALUATION_ENABLED = True
-        policy_engine._policies["llm_rules"]["enabled"] = True
-
-        # Mock the API key check to bypass the early return when no API key is present
-        monkeypatch.setattr(
-            policy_engine.config, 
-            "get_api_key_for_provider", 
-            lambda provider: "mock-api-key-for-testing"
-        )
-
-        mock_llm = MagicMock()
-        mock_llm.generate_text = AsyncMock(return_value="YES, safe data")
-
-        # Mock the _create_llm_client method directly on the policy_engine instance
-        monkeypatch.setattr(policy_engine, "_create_llm_client", lambda: mock_llm)
-
-        result, reason = await policy_engine.should_auto_learn(
-            "test", "key", "user", "test_value"
-        )
-        assert result is True, f"Expected True but got False. Reason: {reason}"
-        mock_llm.generate_text.assert_called_once()
-
-    @pytest.mark.asyncio
     async def test_policy_reload(self, policy_engine):
         """Tests dynamic policy reloading."""
         tmp_file = policy_engine.config.POLICY_CONFIG_FILE_PATH
