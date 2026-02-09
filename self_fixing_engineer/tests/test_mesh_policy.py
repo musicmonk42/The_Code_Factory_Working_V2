@@ -99,7 +99,7 @@ class MockPolicySchema(BaseModel):
 @pytest_asyncio.fixture
 async def local_backend():
     """Create local policy backend."""
-    from mesh.mesh_policy import MeshPolicyBackend
+    from self_fixing_engineer.mesh.mesh_policy import MeshPolicyBackend
 
     backend = MeshPolicyBackend(
         backend_type="local", policy_schema=MockPolicySchema, local_dir=str(TEST_DIR)
@@ -112,7 +112,7 @@ async def local_backend():
 @pytest_asyncio.fixture
 async def mock_s3_backend():
     """Create S3 backend with mocked client."""
-    from mesh.mesh_policy import MeshPolicyBackend
+    from self_fixing_engineer.mesh.mesh_policy import MeshPolicyBackend
 
     with patch("boto3.Session") as mock_session:
         mock_client = MagicMock()
@@ -129,7 +129,7 @@ async def mock_s3_backend():
 @pytest_asyncio.fixture
 async def policy_enforcer(local_backend):
     """Create policy enforcer."""
-    from mesh.mesh_policy import MeshPolicyEnforcer
+    from self_fixing_engineer.mesh.mesh_policy import MeshPolicyEnforcer
 
     enforcer = MeshPolicyEnforcer(policy_id="test_policy", backend=local_backend)
 
@@ -155,7 +155,7 @@ def test_policy():
 @pytest.fixture(autouse=True)
 def reset_circuit_breakers():
     """Reset all circuit breakers before each test."""
-    from mesh.mesh_policy import breakers
+    from self_fixing_engineer.mesh.mesh_policy import breakers
 
     for backend in breakers:
         if hasattr(breakers[backend], "reset_breaker"):
@@ -259,7 +259,7 @@ class TestPolicyOperations:
 
         # Invalid policy - expect PolicyBackendError (not ValueError)
         invalid_policy = {"id": "invalid", "allow": "not_a_list"}  # Should be list
-        from mesh.mesh_policy import PolicyBackendError
+        from self_fixing_engineer.mesh.mesh_policy import PolicyBackendError
 
         with pytest.raises(PolicyBackendError, match="Save operation failed"):
             await local_backend.save("invalid_policy", invalid_policy)
@@ -426,7 +426,7 @@ class TestPolicyEnforcement:
     @pytest.mark.asyncio
     async def test_max_redeliveries(self, policy_enforcer, test_policy):
         """Test max redelivery limit for failed enforcements."""
-        from mesh.mesh_policy import failure_cache
+        from self_fixing_engineer.mesh.mesh_policy import failure_cache
 
         await policy_enforcer.backend.save("test_policy", test_policy)
         await policy_enforcer.load_policy()
@@ -461,7 +461,7 @@ class TestReliability:
                 raise ConnectionError("Transient error")
             return "v1"
 
-        from mesh.mesh_policy import PolicyBackendError
+        from self_fixing_engineer.mesh.mesh_policy import PolicyBackendError
 
         with patch.object(local_backend, "_do_save", side_effect=flaky_save):
             # The save method doesn't retry internally, it just propagates the error
@@ -472,7 +472,7 @@ class TestReliability:
     @pytest.mark.asyncio
     async def test_circuit_breaker(self, local_backend):
         """Test circuit breaker pattern."""
-        from mesh.mesh_policy import breakers
+        from self_fixing_engineer.mesh.mesh_policy import breakers
 
         if "local" in breakers:
             # Reset circuit breaker by creating a new instance
@@ -486,7 +486,7 @@ class TestReliability:
                 raise Exception("Backend failure")
 
             with patch.object(local_backend, "_do_save", side_effect=failing_save):
-                from mesh.mesh_policy import PolicyBackendError
+                from self_fixing_engineer.mesh.mesh_policy import PolicyBackendError
                 from pybreaker import CircuitBreakerError
 
                 # Trigger failures to open circuit

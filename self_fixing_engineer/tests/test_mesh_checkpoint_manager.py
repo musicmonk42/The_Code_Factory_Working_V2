@@ -88,7 +88,7 @@ async def clean_test_env():
 @pytest_asyncio.fixture
 async def manager():
     """Create CheckpointManager instance for testing."""
-    from mesh.checkpoint.checkpoint_manager import CheckpointManager
+    from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
     mgr = CheckpointManager(
         backend_type="local",
@@ -106,7 +106,7 @@ async def manager():
 @pytest_asyncio.fixture
 async def manager_with_schema():
     """Create CheckpointManager with schema validation."""
-    from mesh.checkpoint.checkpoint_manager import CheckpointManager
+    from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
     mgr = CheckpointManager(
         backend_type="local", state_schema=MockStateSchema, keep_versions=3
@@ -476,7 +476,7 @@ class TestSchemaValidation:
     @pytest.mark.asyncio
     async def test_invalid_schema(self, manager_with_schema):
         """Test schema validation failure."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointValidationError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointValidationError
 
         invalid_state = {
             "counter": "not_an_int",  # Should be int
@@ -628,7 +628,7 @@ class TestProductionMode:
         # that make it difficult to test directly
 
         # Test the logic conceptually
-        from mesh.checkpoint.checkpoint_manager import CRYPTOGRAPHY_AVAILABLE
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CRYPTOGRAPHY_AVAILABLE
 
         # Verify cryptography is available in test environment
         assert CRYPTOGRAPHY_AVAILABLE, "Cryptography should be available"

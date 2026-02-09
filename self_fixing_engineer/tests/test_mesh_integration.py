@@ -53,7 +53,7 @@ for key, value in TEST_ENV.items():
 from self_fixing_engineer.mesh import checkpoint_manager, event_bus, mesh_policy
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def policy_enforcer():
     """Fixture for a configured MeshPolicyEnforcer."""
     backend = mesh_policy.MeshPolicyBackend(backend_type="local")
@@ -76,7 +76,7 @@ async def policy_enforcer():
     yield enforcer
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="function")
 async def checkpoint_manager_service():
     """Fixture for a configured CheckpointManager."""
     manager = checkpoint_manager.CheckpointManager(backend_type="local")

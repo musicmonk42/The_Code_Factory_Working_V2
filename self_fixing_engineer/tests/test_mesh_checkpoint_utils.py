@@ -72,7 +72,7 @@ class TestData:
 @pytest.fixture
 def crypto_provider():
     """Get CryptoProvider instance."""
-    from mesh.checkpoint.checkpoint_utils import CryptoProvider
+    from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import CryptoProvider
 
     return CryptoProvider()
 
@@ -154,7 +154,7 @@ class TestHashing:
 
     def test_hash_data_consistency(self):
         """Test hash consistency."""
-        from mesh.checkpoint.checkpoint_utils import hash_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import hash_data
 
         data = TestData.SIMPLE_DICT
         hash1 = hash_data(data)
@@ -165,7 +165,7 @@ class TestHashing:
 
     def test_hash_dict_with_chaining(self):
         """Test hash chaining."""
-        from mesh.checkpoint.checkpoint_utils import hash_dict
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import hash_dict
 
         data = TestData.SIMPLE_DICT
         hash1 = hash_dict(data)
@@ -176,7 +176,7 @@ class TestHashing:
 
     def test_hmac_signing(self):
         """Test HMAC signing and verification."""
-        from mesh.checkpoint.checkpoint_utils import compute_hmac, verify_hmac
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compute_hmac, verify_hmac
 
         data = b"test payload"
         key = os.urandom(32)
@@ -190,7 +190,7 @@ class TestHashing:
     @pytest.mark.parametrize("algorithm", ["SHA256", "SHA512", "SHA3-256", "BLAKE2B"])
     def test_multiple_hash_algorithms(self, algorithm):
         """Test different hash algorithms."""
-        from mesh.checkpoint.checkpoint_utils import hash_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import hash_data
 
         data = "test data"
         hash_val = hash_data(data, algorithm=algorithm)
@@ -207,7 +207,7 @@ class TestCompression:
 
     def test_compress_decompress_roundtrip(self):
         """Test compression roundtrip."""
-        from mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
 
         data = json.dumps(TestData.LARGE_DATA).encode()
 
@@ -219,7 +219,7 @@ class TestCompression:
 
     def test_compress_json(self):
         """Test JSON compression."""
-        from mesh.checkpoint.checkpoint_utils import compress_json, decompress_json
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compress_json, decompress_json
 
         data = TestData.LARGE_DATA
 
@@ -232,7 +232,7 @@ class TestCompression:
     @pytest.mark.parametrize("algorithm", ["GZIP", "ZLIB", "BZ2", "LZMA"])
     def test_compression_algorithms(self, algorithm):
         """Test different compression algorithms."""
-        from mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
 
         data = b"x" * 1000  # Highly compressible
 
@@ -244,7 +244,7 @@ class TestCompression:
 
     def test_auto_detect_compression(self):
         """Test automatic compression detection."""
-        from mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compress_data, decompress_data
 
         data = b"test data"
 
@@ -264,7 +264,7 @@ class TestDataScrubbing:
 
     def test_scrub_sensitive_fields(self):
         """Test scrubbing of sensitive field names."""
-        from mesh.checkpoint.checkpoint_utils import scrub_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import scrub_data
 
         scrubbed = scrub_data(TestData.SENSITIVE_DATA)
 
@@ -283,7 +283,7 @@ class TestDataScrubbing:
 
     def test_scrub_patterns(self):
         """Test pattern-based scrubbing."""
-        from mesh.checkpoint.checkpoint_utils import scrub_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import scrub_data
 
         data = {
             "text": "My SSN is 123-45-6789 and card is 4111-1111-1111-1111",
@@ -300,7 +300,7 @@ class TestDataScrubbing:
 
     def test_anonymize_data(self):
         """Test data anonymization."""
-        from mesh.checkpoint.checkpoint_utils import anonymize_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import anonymize_data
 
         data = {"user": {"name": "John Doe", "email": "john@example.com", "age": 30}}
 
@@ -322,7 +322,7 @@ class TestDataComparison:
 
     def test_deep_diff_additions(self):
         """Test deep diff detecting additions."""
-        from mesh.checkpoint.checkpoint_utils import deep_diff
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import deep_diff
 
         old = {"a": 1}
         new = {"a": 1, "b": 2}
@@ -333,7 +333,7 @@ class TestDataComparison:
 
     def test_deep_diff_modifications(self):
         """Test deep diff detecting modifications."""
-        from mesh.checkpoint.checkpoint_utils import deep_diff
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import deep_diff
 
         old = {"a": 1, "b": {"c": 3}}
         new = {"a": 2, "b": {"c": 4}}
@@ -345,7 +345,7 @@ class TestDataComparison:
 
     def test_deep_diff_type_changes(self):
         """Test deep diff detecting type changes."""
-        from mesh.checkpoint.checkpoint_utils import deep_diff
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import deep_diff
 
         old = {"a": 1}
         new = {"a": "1"}
@@ -364,7 +364,7 @@ class TestKeyRotation:
 
     def test_create_fernet_key(self):
         """Test Fernet key creation."""
-        from mesh.checkpoint.checkpoint_utils import create_fernet_key
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import create_fernet_key
 
         # Random key
         key1 = create_fernet_key()
@@ -379,7 +379,7 @@ class TestKeyRotation:
 
     def test_rotate_keys(self):
         """Test key rotation."""
-        from mesh.checkpoint.checkpoint_utils import rotate_fernet_keys
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import rotate_fernet_keys
 
         current_keys = [Fernet.generate_key() for _ in range(2)]
         new_key = Fernet.generate_key()
@@ -404,7 +404,7 @@ class TestValidation:
 
     def test_validate_checkpoint_data(self):
         """Test checkpoint data validation."""
-        from mesh.checkpoint.checkpoint_utils import validate_checkpoint_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import validate_checkpoint_data
 
         valid_data = {
             "state": {"key": "value"},
@@ -432,7 +432,7 @@ class TestUtilities:
 
     def test_generate_checkpoint_id(self):
         """Test checkpoint ID generation."""
-        from mesh.checkpoint.checkpoint_utils import generate_checkpoint_id
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import generate_checkpoint_id
 
         id1 = generate_checkpoint_id()
         id2 = generate_checkpoint_id()
@@ -442,7 +442,7 @@ class TestUtilities:
 
     def test_format_size(self):
         """Test size formatting."""
-        from mesh.checkpoint.checkpoint_utils import format_size
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import format_size
 
         assert format_size(100) == "100.00 B"
         assert format_size(1024) == "1.00 KB"
@@ -451,7 +451,7 @@ class TestUtilities:
 
     def test_parse_duration(self):
         """Test duration parsing."""
-        from mesh.checkpoint.checkpoint_utils import parse_duration
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import parse_duration
 
         assert parse_duration("30s") == timedelta(seconds=30)
         assert parse_duration("5m") == timedelta(minutes=5)
@@ -464,7 +464,7 @@ class TestUtilities:
 
     def test_valid_identifier(self):
         """Test identifier validation."""
-        from mesh.checkpoint.checkpoint_utils import is_valid_identifier
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import is_valid_identifier
 
         assert is_valid_identifier("valid_name-123.test")
         assert is_valid_identifier("checkpoint_v1")
@@ -480,7 +480,7 @@ class TestPerformance:
 
     def test_hash_performance(self, benchmark):
         """Benchmark hashing performance."""
-        from mesh.checkpoint.checkpoint_utils import hash_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import hash_data
 
         data = TestData.LARGE_DATA
         result = benchmark(hash_data, data)
@@ -488,7 +488,7 @@ class TestPerformance:
 
     def test_compression_performance(self, benchmark):
         """Benchmark compression performance."""
-        from mesh.checkpoint.checkpoint_utils import compress_json
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import compress_json
 
         data = TestData.LARGE_DATA
         result = benchmark(compress_json, data)
@@ -496,7 +496,7 @@ class TestPerformance:
 
     def test_scrubbing_performance(self, benchmark):
         """Benchmark data scrubbing performance."""
-        from mesh.checkpoint.checkpoint_utils import scrub_data
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import scrub_data
 
         # Large data with many sensitive fields
         large_sensitive = {f"password_{i}": f"secret_{i}" for i in range(100)}
@@ -515,7 +515,7 @@ class TestSecurityCompliance:
         """Test FIPS mode compliance."""
         os.environ["FIPS_MODE"] = "true"
 
-        from mesh.checkpoint.checkpoint_utils import SecurityConfig
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import SecurityConfig
 
         # Should only allow FIPS-approved algorithms
         assert SecurityConfig.ENCRYPTION_ALGORITHM in ["AES-256-GCM", "AES-256-CBC"]
@@ -532,7 +532,7 @@ class TestSecurityCompliance:
 
     def test_secure_deletion(self):
         """Test secure memory erasure."""
-        from mesh.checkpoint.checkpoint_utils import CryptoProvider
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_utils import CryptoProvider
 
         crypto = CryptoProvider()
 
