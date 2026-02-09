@@ -427,3 +427,166 @@ async def test_concurrent_audit_entries(tmp_path):
     # Check that merkle tree was updated (root should have changed from initial)
     final_root = audit.system_audit_merkle_tree.get_root()
     assert final_root is not None
+
+
+@pytest.mark.asyncio
+async def test_audit_database_initialization_eager(tmp_path):
+    """Test that Database.initialize() is called during eager initialization"""
+    mock_merkle_tree = MockMerkleTree()
+    mock_settings = _get_mock_settings()
+    mock_arbiter_config = _get_mock_arbiter_config()
+
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Create a spy on the Database.initialize method
+    original_initialize = RealDatabase.initialize
+    initialize_called = []
+    
+    async def spy_initialize(self):
+        initialize_called.append(True)
+        return await original_initialize(self)
+    
+    with patch("omnicore_engine.database.database.settings", mock_settings), \
+         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
+         patch("omnicore_engine.audit.Database", RealDatabase), \
+         patch.object(RealDatabase, "initialize", spy_initialize), \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit - it should trigger eager initialization
+        audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Wait a bit for the eager init task to execute
+        await asyncio.sleep(0.2)
+        
+        # Verify that initialize was called during eager init
+        assert len(initialize_called) > 0, "Database.initialize() should be called during eager initialization"
+        
+        # Verify the _tables_initialized flag was set
+        assert audit._tables_initialized, "_tables_initialized should be True after eager initialization"
+
+
+@pytest.mark.asyncio
+async def test_audit_database_initialization_lazy_fallback(tmp_path):
+    """Test that Database.initialize() is called during lazy initialization if eager init fails"""
+    mock_merkle_tree = MockMerkleTree()
+    mock_settings = _get_mock_settings()
+    mock_arbiter_config = _get_mock_arbiter_config()
+
+    db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    from omnicore_engine.database import Database as RealDatabase
+    
+    # Track initialize calls
+    initialize_call_count = []
+    
+    original_initialize = RealDatabase.initialize
+    
+    async def spy_initialize(self):
+        initialize_call_count.append(True)
+        return await original_initialize(self)
+    
+    with patch("omnicore_engine.database.database.settings", mock_settings), \
+         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
+         patch("omnicore_engine.audit.Database", RealDatabase), \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit
+        audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance
+        db = RealDatabase(db_url)
+        
+        # Spy on its initialize method
+        original_db_initialize = db.initialize
+        db_initialize_called = []
+        
+        async def db_spy_initialize():
+            db_initialize_called.append(True)
+            return await original_db_initialize()
+        
+        db.initialize = db_spy_initialize
+        
+        # Replace audit's db client and reset the flag to simulate failed eager init
+        audit._db_client = db
+        audit._tables_initialized = False
+        audit.knowledge_graph = None
+        
+        # Add an entry and flush - this should trigger lazy initialization
+        with patch.object(
+            audit.policy_engine,
+            "should_auto_learn",
+            AsyncMock(return_value=(True, "allowed")),
+        ):
+            await audit.add_entry_async(
+                "test_event", "test_name", {"foo": 1}, sim_id="sim1"
+            )
+            
+            # Flush buffer - this should call initialize() if not initialized
+            await audit._flush_buffer()
+        
+        # Verify that initialize was called during lazy init
+        assert len(db_initialize_called) > 0, "Database.initialize() should be called during lazy initialization"
+        
+        # Verify the _tables_initialized flag was set
+        assert audit._tables_initialized, "_tables_initialized should be True after lazy initialization"
+
+
+@pytest.mark.asyncio
+async def test_audit_database_initialization_idempotent(tmp_path):
+    """Test that Database.initialize() is only called once when already initialized"""
+    mock_merkle_tree = MockMerkleTree()
+    mock_settings = _get_mock_settings()
+    mock_arbiter_config = _get_mock_arbiter_config()
+
+    db_url = _sqlite_url_from_path(tmp_path / "test.db")
+    
+    from omnicore_engine.database import Database as RealDatabase
+    
+    with patch("omnicore_engine.database.database.settings", mock_settings), \
+         patch("omnicore_engine.audit.ArbiterConfig", return_value=mock_arbiter_config), \
+         patch("omnicore_engine.audit.Database", RealDatabase), \
+         patch("omnicore_engine.audit.AUDIT_ERRORS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS"), \
+         patch("omnicore_engine.audit.AUDIT_RECORDS_PROCESSED_TOTAL"):
+        
+        # Create ExplainAudit
+        audit = ExplainAudit(system_audit_merkle_tree=mock_merkle_tree)
+        
+        # Create a real db instance
+        db = RealDatabase(db_url)
+        await db.initialize()
+        
+        # Spy on its initialize method
+        db_initialize_call_count = []
+        original_db_initialize = db.initialize
+        
+        async def db_spy_initialize():
+            db_initialize_call_count.append(True)
+            return await original_db_initialize()
+        
+        db.initialize = db_spy_initialize
+        
+        # Replace audit's db client and set the flag to true (already initialized)
+        audit._db_client = db
+        audit._tables_initialized = True
+        audit.knowledge_graph = None
+        
+        # Add an entry and flush - this should NOT trigger initialization again
+        with patch.object(
+            audit.policy_engine,
+            "should_auto_learn",
+            AsyncMock(return_value=(True, "allowed")),
+        ):
+            await audit.add_entry_async(
+                "test_event", "test_name", {"foo": 1}, sim_id="sim1"
+            )
+            
+            # Flush buffer - this should NOT call initialize() since already initialized
+            await audit._flush_buffer()
+        
+        # Verify that initialize was NOT called again
+        assert len(db_initialize_call_count) == 0, "Database.initialize() should not be called when already initialized"
