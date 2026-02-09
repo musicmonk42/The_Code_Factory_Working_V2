@@ -825,7 +825,7 @@ class ExplainAudit:
                 except Exception as e:
                     logger.warning(
                         f"Audit: Eager database initialization failed: {e}. "
-                        "Will retry via lazy initialization on first flush.",
+                        "Lazy initialization will be attempted during the first buffer flush if not yet complete.",
                         exc_info=True,
                     )
             self.safe_create_task(_eager_init())
