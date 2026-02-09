@@ -342,6 +342,7 @@ def _normalize_file_content(content: str) -> str:
       - ``\\n`` (backslash + n) → real newline
       - ``\\t`` (backslash + t) → real tab
       - ``\\r\\n`` → real newline
+      - Stray backslash at line endings (line continuation characters)
     Also strips:
       - Leading BOM (U+FEFF)
       - Markdown fences (```python ... ```)
@@ -357,6 +358,14 @@ def _normalize_file_content(content: str) -> str:
     content = content.replace("\\r\\n", "\n")
     content = content.replace("\\n", "\n")
     content = content.replace("\\t", "\t")
+
+    # Handle stray backslashes at line endings (line continuation character errors)
+    # This fixes the common LLM artifact where backslashes are added at line ends
+    # Pattern: backslash followed by newline (literal line continuation)
+    # We replace it with just a newline to remove the continuation character
+    content = content.replace("\\\n", "\n")
+    # Also handle Windows line endings
+    content = content.replace("\\\r\n", "\n")
 
     # Strip markdown fences if the entire content is wrapped in them
     m = _FENCE_PATTERN.match(content.strip())

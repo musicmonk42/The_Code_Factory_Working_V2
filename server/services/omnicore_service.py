@@ -2712,7 +2712,7 @@ class OmniCoreService:
                     stages_completed.append("clarify")
                     logger.info(f"[PIPELINE] Job {job_id} completed step: clarify")
             
-            # 2. Codegen
+            # 2. Codegen with retry logic
             # Transform payload for codegen - it needs 'requirements' not 'readme_content'
             # Preserve all original payload fields that might be needed
             codegen_payload = {
@@ -2721,21 +2721,56 @@ class OmniCoreService:
             }
             # Remove readme_content from codegen payload as it's now in requirements
             codegen_payload.pop("readme_content", None)
-            
-            logger.info(f"[PIPELINE] Job {job_id} starting step: codegen")
-            codegen_result = await self._run_codegen(job_id, codegen_payload)
-            if codegen_result.get("status") == "completed":
-                stages_completed.append("codegen")
-                logger.info(f"[PIPELINE] Job {job_id} completed step: codegen")
-            else:
-                logger.error(f"[PIPELINE] Job {job_id} failed step: codegen - {codegen_result.get('message', 'Unknown error')}")
-                return {
-                    "status": "failed",
-                    "message": "Code generation failed",
-                    "stages_completed": stages_completed,
-                }
-            
-            # 2b. Post-codegen validation stages
+
+            # Retry configuration
+            max_codegen_retries = 2  # Total attempts = 1 initial + 2 retries = 3
+            codegen_attempt = 0
+            codegen_result = None
+            previous_error = None
+
+            while codegen_attempt <= max_codegen_retries:
+                codegen_attempt += 1
+                attempt_label = f"attempt {codegen_attempt}/{max_codegen_retries + 1}"
+
+                logger.info(f"[PIPELINE] Job {job_id} starting step: codegen ({attempt_label})")
+
+                # Add previous_error to payload if retrying
+                if previous_error:
+                    codegen_payload["previous_error"] = previous_error
+                    logger.info(
+                        f"[PIPELINE] Job {job_id} retrying codegen with error feedback: {previous_error.get('error_type')}",
+                        extra={"job_id": job_id, "attempt": codegen_attempt, "previous_error": previous_error}
+                    )
+
+                codegen_result = await self._run_codegen(job_id, codegen_payload)
+
+                if codegen_result.get("status") == "completed":
+                    stages_completed.append("codegen")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: codegen ({attempt_label})")
+                    break  # Success, exit retry loop
+                else:
+                    error_msg = codegen_result.get('message', 'Unknown error')
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} codegen {attempt_label} failed: {error_msg}",
+                        extra={"job_id": job_id, "attempt": codegen_attempt, "error": error_msg}
+                    )
+
+                    # If this was the last attempt, fail the pipeline
+                    if codegen_attempt > max_codegen_retries:
+                        logger.error(
+                            f"[PIPELINE] Job {job_id} failed step: codegen after {max_codegen_retries + 1} attempts",
+                            extra={"job_id": job_id, "total_attempts": codegen_attempt}
+                        )
+                        return {
+                            "status": "failed",
+                            "message": f"Code generation failed after {codegen_attempt} attempts",
+                            "stages_completed": stages_completed,
+                            "last_error": error_msg,
+                        }
+
+                    # Continue to next attempt (previous_error will be set from validation if available)
+
+            # 2b. Post-codegen validation stages with retry on syntax errors
             output_path_for_validation = codegen_result.get("output_path")
             md_content = payload.get("readme_content", payload.get("requirements", ""))
 
@@ -2784,7 +2819,7 @@ class OmniCoreService:
                         f"[PIPELINE] Job {job_id} detected app/ layout, adjusted required files",
                         extra={"job_id": job_id, "required_files": required_files}
                     )
-            
+
             if md_content and _PROVENANCE_AVAILABLE:
                 try:
                     spec_files = _extract_required_files_from_md(md_content)
@@ -2797,7 +2832,7 @@ class OmniCoreService:
                         )
                 except Exception as parse_err:
                     logger.warning(f"[PIPELINE] Job {job_id} failed to extract required files from spec: {parse_err}")
-            
+
             # Validate generated project (syntax + JSON-bundle detection)
             if output_path_for_validation and _MATERIALIZER_AVAILABLE:
                 try:
@@ -2809,6 +2844,42 @@ class OmniCoreService:
                     if not val_result.get("valid", True):
                         validation_errors = val_result.get('errors', [])
                         validation_warnings = val_result.get('warnings', [])
+
+                        # Check for syntax errors that could be fixed with retry
+                        syntax_errors = [e for e in validation_errors if 'syntax' in e.lower() or 'SyntaxError' in e]
+
+                        if syntax_errors and codegen_attempt <= max_codegen_retries:
+                            # Build error context for retry
+                            previous_error = {
+                                "error_type": "SyntaxError",
+                                "details": "\n".join(syntax_errors[:3]),  # Limit to first 3 errors
+                                "instruction": (
+                                    "The previous code generation had syntax errors. "
+                                    "Please fix these errors and regenerate the code with proper syntax. "
+                                    "Pay special attention to:\n"
+                                    "1. String literals must be properly terminated with matching quotes\n"
+                                    "2. All control structures (if, for, def, class, etc.) must end with a colon (:)\n"
+                                    "3. Check for stray backslashes at line endings\n"
+                                    "4. Ensure all brackets, parentheses, and braces are properly matched"
+                                )
+                            }
+
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} validation found syntax errors, will retry codegen",
+                                extra={"job_id": job_id, "syntax_errors": syntax_errors, "attempt": codegen_attempt}
+                            )
+
+                            # Retry codegen by continuing the loop
+                            # Remove the failed output directory to avoid conflicts
+                            import shutil
+                            try:
+                                shutil.rmtree(output_path_for_validation)
+                                logger.info(f"[PIPELINE] Job {job_id} cleaned up failed output directory for retry")
+                            except Exception as cleanup_err:
+                                logger.warning(f"[PIPELINE] Job {job_id} failed to clean up output directory: {cleanup_err}")
+
+                            # Continue the while loop to retry
+                            continue
 
                         # Store validation info in job metadata
                         if job_id in jobs_db:

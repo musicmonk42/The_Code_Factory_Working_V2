@@ -40,7 +40,7 @@ class LLMProviderConfig(BaseSettings):
         description="OpenAI API key for GPT models"
     )
     openai_model: str = Field(
-        default="gpt-4",
+        default="gpt-4o",
         description="Default OpenAI model to use"
     )
     openai_base_url: Optional[str] = Field(
@@ -507,13 +507,13 @@ def get_default_model_for_provider(provider: str) -> str:
         Default model name for the provider
     """
     model_defaults = {
-        "openai": "gpt-4-turbo",
+        "openai": "gpt-4o",
         "anthropic": "claude-3-sonnet-20240229",
         "grok": "grok-beta",
         "google": "gemini-pro",
         "ollama": "codellama",
     }
-    return model_defaults.get(provider, "gpt-4")
+    return model_defaults.get(provider, "gpt-4o")
 
 
 def validate_configuration() -> Dict[str, Any]:
