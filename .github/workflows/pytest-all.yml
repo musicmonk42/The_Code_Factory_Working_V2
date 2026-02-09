@@ -764,7 +764,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch1.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch1.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -813,7 +814,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2a.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2a.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2a.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2a.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -865,7 +867,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2b.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2b.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2b.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2b.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -919,7 +922,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2c.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2c.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2c.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2c.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -975,7 +979,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2d-1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-1.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2d-1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-1.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -1034,7 +1039,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2d-2.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-2.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2d-2.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-2.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -1086,7 +1092,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch2e.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2e.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch2e.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2e.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -1138,7 +1145,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch3.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch3.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch3.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch3.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -1190,7 +1198,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch4.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch4.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch4.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch4.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
@@ -1242,7 +1251,8 @@ jobs:
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
-              if grep -qE "[0-9]+ passed" test-output-sfe-batch5.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch5.log; then
+              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
+              if grep -qE "([1-9][0-9]*|[1-9]) passed" test-output-sfe-batch5.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch5.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
                 echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
