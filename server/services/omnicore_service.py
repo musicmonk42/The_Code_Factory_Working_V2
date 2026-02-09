@@ -1556,18 +1556,13 @@ class OmniCoreService:
                             extra={"job_id": job_id, "files_count": len(relative_files)}
                         )
                         
-                        # FIX: Mark job as COMPLETED after successful code generation
-                        # This ensures jobs appear in UI immediately and are downloadable
-                        if len(generated_files) > 0:  # Only mark complete if files were generated
-                            job.status = JobStatus.COMPLETED
-                            job.completed_at = datetime.now(timezone.utc)
-                            job.current_stage = JobStage.COMPLETED
-                            
+                        # Code generation complete - keep job in running state for pipeline
+                        # Only mark as COMPLETED in _finalize_successful_job after all stages
+                        if len(generated_files) > 0:
                             logger.info(
-                                f"✓ Job {job_id} marked as COMPLETED after code generation",
+                                f"✓ Job {job_id} code generation completed, continuing pipeline",
                                 extra={
                                     "job_id": job_id,
-                                    "status": "completed",
                                     "files_generated": len(generated_files),
                                     "stage": "codegen"
                                 }
@@ -2748,6 +2743,22 @@ class OmniCoreService:
             # validation catches missing files like app/routes.py when the
             # spec references them.
             required_files = ["main.py"]
+            
+            # Adjust required_files based on actual output structure (app/ layout detection)
+            if output_path_for_validation:
+                from pathlib import Path
+                output_path_obj = Path(output_path_for_validation)
+                app_dir = output_path_obj / "app"
+                if app_dir.is_dir():
+                    # Remove root main.py requirement for app-structured projects
+                    if "main.py" in required_files:
+                        required_files.remove("main.py")
+                    # The validator will add app/main.py automatically when it detects app/ dir
+                    logger.info(
+                        f"[PIPELINE] Job {job_id} detected app/ layout, adjusted required files",
+                        extra={"job_id": job_id, "required_files": required_files}
+                    )
+            
             if md_content and _PROVENANCE_AVAILABLE:
                 try:
                     spec_files = _extract_required_files_from_md(md_content)
@@ -2770,10 +2781,21 @@ class OmniCoreService:
                         check_python_syntax=True,
                     )
                     if not val_result.get("valid", True):
+                        validation_errors = val_result.get('errors', [])
+                        validation_warnings = val_result.get('warnings', [])
                         logger.warning(
-                            f"[PIPELINE] Job {job_id} validation warnings: {val_result.get('errors', [])}",
+                            f"[PIPELINE] Job {job_id} validation warnings: {validation_errors}",
                             extra={"job_id": job_id, "validation_result": val_result}
                         )
+                        # Store validation warnings in job metadata for API consumers
+                        if job_id in jobs_db:
+                            job = jobs_db[job_id]
+                            if validation_errors or validation_warnings:
+                                job.metadata["validation_warnings"] = validation_errors + validation_warnings
+                                logger.info(
+                                    f"[PIPELINE] Job {job_id} stored validation warnings in metadata",
+                                    extra={"job_id": job_id, "warning_count": len(validation_errors) + len(validation_warnings)}
+                                )
                         # Write error file but don't fail pipeline for non-critical issues
                         await _write_validation_error(output_path_for_validation, val_result)
                     else:
@@ -2832,8 +2854,12 @@ class OmniCoreService:
                 output_path = codegen_result.get("output_path")
                 if output_path:
                     code_path = Path(output_path)
-                    # Look for Python files (or other source files based on language)
-                    source_files = list(code_path.glob("*.py")) if code_path.exists() else []
+                    # Look for Python files recursively (supports nested structures like app/)
+                    # Exclude test files from source count to match what _run_testgen does
+                    source_files = [
+                        f for f in code_path.rglob("*.py") 
+                        if not f.name.startswith("test_")
+                    ] if code_path.exists() else []
                     
                     if not source_files:
                         logger.warning(
@@ -2988,7 +3014,8 @@ class OmniCoreService:
                 output_dir = Path(output_path)
                 if output_dir.exists():
                     artifacts = list(output_dir.rglob('*'))
-                    artifact_files = [f for f in artifacts if f.is_file()]
+                    # Exclude existing _output.zip files to avoid nested zips
+                    artifact_files = [f for f in artifacts if f.is_file() and not f.name.endswith('_output.zip')]
                     
                     # Generate artifact manifest
                     job.output_files = [f.name for f in artifact_files]
