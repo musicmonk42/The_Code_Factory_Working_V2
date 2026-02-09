@@ -247,7 +247,8 @@ async def ensure_metrics_work():
         ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
     ]:
         # Check if it has the expected Counter methods (duck typing)
-        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and callable(getattr(counter, 'labels', None))):
+        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and 
+                callable(getattr(counter, 'labels', None)) and callable(getattr(counter, 'collect', None))):
             raise RuntimeError(
                 f"{metric_name} is not a proper Prometheus Counter object. "
                 f"It is: {type(counter)}. This will cause tests to fail."
