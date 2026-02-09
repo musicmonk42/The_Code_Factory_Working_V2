@@ -50,7 +50,7 @@ except ImportError:
         "audit_utils.py not found. Tamper detection and alerting features will use fallback implementations."
     )
 
-# Always define compute_hash fallback if not imported
+# Define fallback implementations if not imported
 if not _send_alert_imported:
     import hashlib
     
@@ -62,8 +62,6 @@ if not _send_alert_imported:
         h.update(data)
         return h.hexdigest()
 
-# Always define send_alert fallback at module level if not imported
-if not _send_alert_imported:
     async def send_alert(message: str, severity: str = "warning") -> None:
         """
         Minimal alert hook.
