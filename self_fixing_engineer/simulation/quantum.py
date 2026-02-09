@@ -82,7 +82,7 @@ if PROMETHEUS_AVAILABLE:
         with _metrics_lock:
             try:
                 existing_metric = _metrics_registry._names_to_collectors[name]
-                if isinstance(existing_metric, metric_type):
+                if metric_type and isinstance(existing_metric, metric_type):
                     return existing_metric
                 else:
                     quantum_logger.warning(

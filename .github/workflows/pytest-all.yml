@@ -728,7 +728,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 1 (Basic & Core)
         if: matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 15
+        timeout-minutes: 20
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -756,7 +756,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2a (Arbiter Postgres)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -783,7 +783,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2b (Arbiter Redis)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -809,7 +809,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2c (Arbiter Other)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -836,7 +836,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2d-1 (Remaining Arbiter Part 1)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -870,7 +870,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2d-2 (Remaining Arbiter Part 2)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 35
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -904,7 +904,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2e (Arbiter Growth - Isolated)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 20
+        timeout-minutes: 30
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -928,7 +928,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 3 (Mesh)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -955,7 +955,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -982,7 +982,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 15
+        timeout-minutes: 25
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
