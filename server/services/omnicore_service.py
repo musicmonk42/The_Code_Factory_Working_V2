@@ -3074,6 +3074,7 @@ class OmniCoreService:
             # 6. Critique (if requested)
             if payload.get("run_critique", False):
                 # Enrich critique with test and validation results for better context
+                # Only mark stages as "failed" if they were expected (via include_* flags) but not completed
                 stages_failed = []
                 if payload.get("include_tests", True) and "testgen" not in stages_completed:
                     stages_failed.append("testgen")

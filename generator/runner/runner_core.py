@@ -1956,7 +1956,7 @@ class TestPlaceholder:
                 
                 # Write conftest.py to the temp root to ensure code/ is importable
                 # This fixes ModuleNotFoundError when tests import from code modules
-                conftest_content = f'''import sys
+                conftest_content = '''import sys
 import os
 
 # Add code subdirectory to sys.path for test imports
