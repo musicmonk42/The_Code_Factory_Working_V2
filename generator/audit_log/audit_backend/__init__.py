@@ -21,6 +21,7 @@ from .audit_backend_core import (
     TamperDetectionError,
     compute_hash,
     logger,
+    send_alert,
 )
 
 # File and SQL Backends
@@ -95,6 +96,7 @@ __all__ = [
     "CryptoInitializationError",
     "SCHEMA_VERSION",
     "compute_hash",
+    "send_alert",
     "_STATUS_OK",
     "_STATUS_ERROR",
     "logger",
