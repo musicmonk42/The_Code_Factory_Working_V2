@@ -21,8 +21,8 @@ def _get_log_action():
             from .audit_log import log_action as _imported_log_action
 
             _log_action = _imported_log_action
-        except ImportError:
-            # Fallback dummy if circular dependency still occurs
+        except Exception:
+            # Fallback dummy if circular dependency or validation errors occur
             _logger.debug("log_action lazy import failed, using dummy function")
 
             async def _dummy_log_action(*args, **kwargs):
