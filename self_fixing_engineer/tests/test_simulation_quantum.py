@@ -264,15 +264,17 @@ async def test_quantum_forecast_failure_success(monkeypatch):
 
 
 # --- Tests for QuantumRLAgent ---
-def test_quantum_rl_agent_init_success(monkeypatch):
-    """Test successful initialization of QuantumRLAgent."""
-    monkeypatch.setattr("self_fixing_engineer.simulation.quantum.TORCH_RL_AVAILABLE", True)
-    monkeypatch.setattr("torch.nn.Module", MagicMock())
-    monkeypatch.setattr("torch.nn.Linear", MagicMock())
-    monkeypatch.setattr("torch.nn.Sequential", MagicMock())
-    monkeypatch.setattr("torch.nn.Parameter", MagicMock())
-    monkeypatch.setattr("torch.randn", MagicMock())
+# Check if torch is available for conditional test execution
+try:
+    import torch
+    TORCH_AVAILABLE_FOR_TESTS = True
+except ImportError:
+    TORCH_AVAILABLE_FOR_TESTS = False
 
+
+@pytest.mark.skipif(not TORCH_AVAILABLE_FOR_TESTS, reason="PyTorch not available")
+def test_quantum_rl_agent_init_success():
+    """Test successful initialization of QuantumRLAgent."""
     agent = QuantumRLAgent(10, 5)
     assert agent.actor is not None
     assert agent.critic is not None

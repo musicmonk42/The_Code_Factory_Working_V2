@@ -58,9 +58,9 @@ async def checkpoint_manager():
     """Create a CheckpointManager instance for testing."""
     # Import after environment setup
     # Use importlib.reload to ensure modules pick up the test environment variables
-    from mesh.checkpoint import checkpoint_exceptions
-    from mesh.checkpoint import checkpoint_manager as manager_module
-    from mesh.checkpoint import checkpoint_utils
+    from self_fixing_engineer.mesh.checkpoint import checkpoint_exceptions
+    from self_fixing_engineer.mesh.checkpoint import checkpoint_manager as manager_module
+    from self_fixing_engineer.mesh.checkpoint import checkpoint_utils
 
     importlib.reload(checkpoint_utils)
     importlib.reload(checkpoint_exceptions)
@@ -82,9 +82,9 @@ async def checkpoint_manager():
 @pytest_asyncio.fixture
 async def s3_checkpoint_manager():
     """Create a CheckpointManager with mocked S3 backend."""
-    from mesh.checkpoint.checkpoint_manager import CheckpointManager
+    from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
-    with patch("mesh.checkpoint.checkpoint_backends.aioboto3") as mock_boto:
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_backends.aioboto3") as mock_boto:
         mock_client = AsyncMock()
         mock_session = AsyncMock()
         mock_session.client.return_value.__aenter__.return_value = mock_client
@@ -242,7 +242,7 @@ class TestSecurity:
         )
 
         # Create a new manager instance to pick up the new keys
-        from mesh.checkpoint.checkpoint_manager import CheckpointManager
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
         new_manager = CheckpointManager(backend_type="local")
         await new_manager.initialize()
@@ -453,7 +453,7 @@ class TestBackendIntegration:
     @pytest.mark.asyncio
     async def test_backend_configuration(self):
         """Test that different backends can be configured."""
-        from mesh.checkpoint.checkpoint_manager import CheckpointManager
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
         # Test that we can create managers with different backend types
         manager_local = CheckpointManager(backend_type="local")
@@ -505,7 +505,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_schema_validation(self, checkpoint_manager):
         """Test schema validation."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointValidationError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointValidationError
 
         checkpoint_manager.state_schema = MockCheckpointSchema
 

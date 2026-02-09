@@ -62,7 +62,7 @@ for key, value in TEST_ENV.items():
 @pytest_asyncio.fixture
 async def redis_adapter():
     """Create MeshPubSub with Redis backend."""
-    from mesh.mesh_adapter import MeshPubSub
+    from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
     adapter = MeshPubSub(
         backend_url="redis://localhost:6379/15",
@@ -79,11 +79,11 @@ async def redis_adapter():
 @pytest_asyncio.fixture
 async def mock_kafka_adapter():
     """Create MeshPubSub with mocked Kafka backend."""
-    from mesh.mesh_adapter import MeshPubSub
+    from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
     with (
-        patch("mesh.mesh_adapter.AIOKafkaProducer") as mock_producer,
-        patch("mesh.mesh_adapter.AIOKafkaConsumer") as mock_consumer,
+        patch("self_fixing_engineer.mesh.mesh_adapter.AIOKafkaProducer") as mock_producer,
+        patch("self_fixing_engineer.mesh.mesh_adapter.AIOKafkaConsumer") as mock_consumer,
     ):
 
         # Setup mocks
@@ -134,7 +134,7 @@ def mock_metrics():
         metrics[name] = Mock()
         metrics[name].labels.return_value = metrics[name]
 
-    with patch.multiple("mesh.mesh_adapter", **metrics):
+    with patch.multiple("self_fixing_engineer.mesh.mesh_adapter", **metrics):
         yield metrics
 
 
@@ -146,7 +146,7 @@ class TestBackendDetection:
 
     def test_detect_backend_urls(self):
         """Test URL-based backend detection."""
-        from mesh.mesh_adapter import MeshPubSub
+        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
         test_cases = [
             ("redis://localhost:6379", "redis"),
@@ -179,7 +179,7 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_redis_connect(self, mock_metrics):
         """Test Redis connection."""
-        from mesh.mesh_adapter import MeshPubSub
+        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
         adapter = MeshPubSub("redis://localhost:6379/15")
         await adapter.connect()
@@ -192,7 +192,7 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_connection_retry(self):
         """Test connection retry logic."""
-        from mesh.mesh_adapter import MeshPubSub
+        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
         call_count = 0
 
@@ -204,7 +204,7 @@ class TestConnection:
             return AsyncMock()
 
         # Updated to use from_url instead of create_redis_pool
-        with patch("mesh.mesh_adapter.aioredis.from_url", side_effect=flaky_connect):
+        with patch("self_fixing_engineer.mesh.mesh_adapter.aioredis.from_url", side_effect=flaky_connect):
             adapter = MeshPubSub("redis://localhost:6379")
             await adapter.connect()
             assert call_count == 2
@@ -397,7 +397,7 @@ class TestSubscription:
 
         # Patch at module level where it's imported
         with patch(
-            "mesh.mesh_adapter.AIOKafkaConsumer", return_value=mock_consumer_instance
+            "self_fixing_engineer.mesh.mesh_adapter.AIOKafkaConsumer", return_value=mock_consumer_instance
         ):
             received = []
 
@@ -515,7 +515,7 @@ class TestReliability:
     @pytest.mark.asyncio
     async def test_circuit_breaker(self, redis_adapter):
         """Test circuit breaker pattern."""
-        from mesh.mesh_adapter import circuit_breakers
+        from self_fixing_engineer.mesh.mesh_adapter import circuit_breakers
 
         # Reset circuit breaker if exists
         if "redis" in circuit_breakers and circuit_breakers["redis"].breaker:
@@ -623,11 +623,11 @@ class TestProductionMode:
             # Mock sys.exit to capture the call
             with patch("sys.exit") as mock_exit:
                 # Import fresh to trigger module-level checks
-                if "mesh.mesh_adapter" in sys.modules:
-                    del sys.modules["mesh.mesh_adapter"]
+                if "self_fixing_engineer.mesh.mesh_adapter" in sys.modules:
+                    del sys.modules["self_fixing_engineer.mesh.mesh_adapter"]
 
                 try:
-                    from mesh.mesh_adapter import MeshPubSub
+                    from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
                     # Try to create adapter with localhost
                     MeshPubSub("redis://localhost:6379")
@@ -640,8 +640,8 @@ class TestProductionMode:
             # Restore original value
             os.environ["PROD_MODE"] = original_prod_mode
             # Clear the module so it reloads with correct settings
-            if "mesh.mesh_adapter" in sys.modules:
-                del sys.modules["mesh.mesh_adapter"]
+            if "self_fixing_engineer.mesh.mesh_adapter" in sys.modules:
+                del sys.modules["self_fixing_engineer.mesh.mesh_adapter"]
 
 
 # ---- Performance Tests ----
