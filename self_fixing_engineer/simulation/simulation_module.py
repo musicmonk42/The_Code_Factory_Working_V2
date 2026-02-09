@@ -198,7 +198,12 @@ class Database:
         self._production_mode = PRODUCTION_MODE
         self._real_db = None
         self._using_real = False
-        self._init_real_db(db_path)
+        # CRITICAL FIX: Skip expensive initialization during pytest collection
+        # to prevent CPU timeout (exit code 152) during test discovery
+        if not PYTEST_COLLECTING:
+            self._init_real_db(db_path)
+        else:
+            logger.debug("Skipping Database initialization during pytest collection")
 
     def _init_real_db(self, db_path: Optional[str] = None):
         """Initialize connection to real database."""
@@ -611,6 +616,12 @@ class ExplainableReasonerPlugin:
     def __init__(self):
         self._production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
         self._real_plugin = None
+
+        # CRITICAL FIX: Skip expensive initialization during pytest collection
+        # to prevent CPU timeout (exit code 152) during test discovery
+        if PYTEST_COLLECTING:
+            logger.debug("Skipping ExplainableReasonerPlugin initialization during pytest collection")
+            return
 
         # Try to import real plugin
         try:
