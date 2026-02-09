@@ -169,48 +169,22 @@ def event_loop():
 async def ensure_metrics_work():
     """
     Ensure Prometheus metrics are properly initialized and captured for each test.
-
+    
     When running the full test suite, other test modules (e.g. test_runner_metrics)
     may swap/clear the global Prometheus REGISTRY, which can disconnect the
-    module-level Counter objects from the active registry.  This fixture
-    re-registers them with the current active REGISTRY if necessary.
-
-    If the module was only partially loaded (e.g. due to an earlier import
-    failure during pytest collection), the metrics are re-created using
-    safe_counter to ensure tests can still run.
+    module-level Counter objects from the active registry. This fixture ensures
+    metrics remain properly connected.
     """
-    # Get the counter objects from the live core module
-    live_module = sys.modules.get("generator.audit_log.audit_backend.audit_backend_core", core)
-
-    # Defensively fetch metrics; if the module was partially loaded (e.g. during
-    # early pytest collection before env vars were set), recreate them.
-    # NOTE: Do NOT use `from ... import safe_counter` here because the module
-    # may have been replaced with a stub by another test file (e.g.
-    # test_audit_log_audit_log.py).  Use getattr with a fallback instead.
-    safe_counter = getattr(live_module, "safe_counter", None)
-    if safe_counter is None:
-        # Fallback: create counters directly via prometheus_client.Counter
-        try:
-            from prometheus_client import Counter as _Counter
-            def safe_counter(name, description, labelnames=()):
-                return _Counter(name, description, list(labelnames))
-        except ImportError:
-            def safe_counter(name, description, labelnames=()):
-                return MagicMock()
-
-    # Get or create metrics in the live module
-    for metric_name, metric_info in [
-        ("BACKEND_ERRORS", ("audit_backend_errors_total", "Total errors per backend", ["backend", "type"])),
-        ("BACKEND_WRITES", ("audit_backend_writes_total", "Total writes to backend", ["backend"])),
-        ("BACKEND_TAMPER_DETECTION_FAILURES", ("audit_backend_tamper_detection_failures_total", "Count of failed tamper detection checks", ["backend"])),
-    ]:
-        if not hasattr(live_module, metric_name) or getattr(live_module, metric_name) is None:
-            setattr(live_module, metric_name, safe_counter(*metric_info))
-
+    # Import fresh to get current module state
+    from generator.audit_log.audit_backend import audit_backend_core as fresh_core
+    
     # Verify that metrics are real Counter objects, not mocks or fallbacks
-    # Use duck typing instead of isinstance() to avoid TypeError in edge cases
     for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
-        counter = getattr(live_module, metric_name)
+        counter = getattr(fresh_core, metric_name, None)
+        if counter is None:
+            raise RuntimeError(
+                f"{metric_name} is None. Metrics not properly initialized."
+            )
         # Check if it has the expected Counter methods (duck typing)
         if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and
                 callable(getattr(counter, 'labels', None)) and callable(getattr(counter, 'collect', None))):
@@ -218,40 +192,23 @@ async def ensure_metrics_work():
                 f"{metric_name} is not a proper Prometheus Counter object. "
                 f"It is: {type(counter)}. This will cause tests to fail."
             )
-
-    # Ensure the counters are registered with the current active REGISTRY.
-    try:
-        import prometheus_client
-        active_registry = prometheus_client.REGISTRY
-        for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
-            counter = getattr(live_module, metric_name)
-            try:
-                # Check if the counter is already in the registry
-                if hasattr(active_registry, '_collector_to_names') and counter not in active_registry._collector_to_names:
-                    # Only try to register if it's not already registered
-                    active_registry.register(counter)
-            except (ValueError, KeyError) as e:
-                # If it fails because it's already registered with different names, that's OK
-                # But if it's a different error, we should know about it
-                if "Duplicated" not in str(e) and "already" not in str(e).lower():
-                    import warnings
-                    warnings.warn(f"Failed to register metric: {e}")
-    except Exception as e:
-        import warnings
-        warnings.warn(f"Failed to ensure metrics are registered: {e}")
-
+    
     # Force metric collection to warm up internal state
     for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
-        counter = getattr(live_module, metric_name)
-        _ = list(counter.collect())
-
+        counter = getattr(fresh_core, metric_name)
+        try:
+            _ = list(counter.collect())
+        except Exception as e:
+            import warnings
+            warnings.warn(f"Failed to collect {metric_name}: {e}")
+    
     yield
-
+    
     # Allow async tasks to complete and metrics to be incremented
-    await asyncio.sleep(0.2)
+    await asyncio.sleep(0.3)  # Increased from 0.2 to ensure metric updates complete
     pending = [t for t in asyncio.all_tasks() if not t.done()]
     if pending:
-        await asyncio.wait(pending, timeout=2.0)
+        await asyncio.wait(pending, timeout=3.0)  # Increased timeout
 
 
 # ---------------------------------------------------------------------------
