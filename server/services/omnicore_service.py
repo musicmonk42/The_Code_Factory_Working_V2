@@ -2865,21 +2865,29 @@ class OmniCoreService:
                             }
 
                             logger.warning(
-                                f"[PIPELINE] Job {job_id} validation found syntax errors, will retry codegen",
+                                f"[PIPELINE] Job {job_id} validation found syntax errors after codegen completion",
                                 extra={"job_id": job_id, "syntax_errors": syntax_errors, "attempt": codegen_attempt}
                             )
 
-                            # Retry codegen by continuing the loop
                             # Remove the failed output directory to avoid conflicts
                             import shutil
                             try:
                                 shutil.rmtree(output_path_for_validation)
-                                logger.info(f"[PIPELINE] Job {job_id} cleaned up failed output directory for retry")
+                                logger.info(f"[PIPELINE] Job {job_id} cleaned up failed output directory")
                             except Exception as cleanup_err:
                                 logger.warning(f"[PIPELINE] Job {job_id} failed to clean up output directory: {cleanup_err}")
 
-                            # Continue the while loop to retry
-                            continue
+                            # Return failure - syntax errors found after codegen retries exhausted
+                            # The retry logic in the while loop above has already completed
+                            await self._finalize_failed_job(
+                                job_id, error=f"Syntax errors in generated code: {syntax_errors[:3]}"
+                            )
+                            return {
+                                "status": "failed",
+                                "message": f"Syntax errors in generated code after {codegen_attempt} attempts",
+                                "stages_completed": stages_completed,
+                                "validation_errors": syntax_errors,
+                            }
 
                         # Store validation info in job metadata
                         if job_id in jobs_db:
