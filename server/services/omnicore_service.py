@@ -2746,7 +2746,6 @@ class OmniCoreService:
             
             # Adjust required_files based on actual output structure (app/ layout detection)
             if output_path_for_validation:
-                from pathlib import Path
                 output_path_obj = Path(output_path_for_validation)
                 app_dir = output_path_obj / "app"
                 if app_dir.is_dir():
