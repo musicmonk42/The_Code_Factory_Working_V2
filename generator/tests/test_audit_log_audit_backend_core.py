@@ -229,17 +229,26 @@ async def ensure_metrics_work():
 
     # Verify that metrics are real Counter objects, not mocks or fallbacks
     from prometheus_client import Counter
+
+    # Check if Counter is a valid type for isinstance()
+    # In some edge cases (e.g., with type annotations or mocking), Counter might not be a proper type
+    counter_is_valid_type = isinstance(Counter, type)
+
     for metric_name, counter in [
         ("BACKEND_ERRORS", BACKEND_ERRORS),
         ("BACKEND_WRITES", BACKEND_WRITES),
         ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
     ]:
         # Check if it's a real Counter or at least has the expected methods
-        # Wrap isinstance check in try-except to handle cases where Counter might not be a valid type
-        try:
-            is_counter_instance = isinstance(counter, Counter)
-        except TypeError:
-            # Counter is not a valid type (e.g., it's a string, None, or type annotation)
+        # Only use isinstance if Counter is a valid type
+        if counter_is_valid_type:
+            try:
+                is_counter_instance = isinstance(counter, Counter)
+            except TypeError:
+                # isinstance still failed even though Counter appeared to be a type
+                is_counter_instance = False
+        else:
+            # Counter is not a valid type, skip isinstance check
             is_counter_instance = False
 
         if not is_counter_instance and not (hasattr(counter, 'labels') and hasattr(counter, 'collect')):
