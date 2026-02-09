@@ -235,7 +235,14 @@ async def ensure_metrics_work():
         ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
     ]:
         # Check if it's a real Counter or at least has the expected methods
-        if not isinstance(counter, Counter) and not (hasattr(counter, 'labels') and hasattr(counter, 'collect')):
+        # Wrap isinstance check in try-except to handle cases where Counter might not be a valid type
+        try:
+            is_counter_instance = isinstance(counter, Counter)
+        except TypeError:
+            # Counter is not a valid type (e.g., it's a string, None, or type annotation)
+            is_counter_instance = False
+
+        if not is_counter_instance and not (hasattr(counter, 'labels') and hasattr(counter, 'collect')):
             raise RuntimeError(
                 f"{metric_name} is not a proper Prometheus Counter object. "
                 f"It is: {type(counter)}. This will cause tests to fail."
