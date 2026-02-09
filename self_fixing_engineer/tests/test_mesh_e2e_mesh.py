@@ -76,8 +76,8 @@ sys.modules["redis.asyncio"] = mock_redis_module
 sys.modules["redis"] = MagicMock()
 
 # Import mesh components after environment setup and mocking
-from mesh import event_bus, mesh_adapter, mesh_policy
-from mesh.checkpoint import CheckpointManager
+from self_fixing_engineer.mesh import event_bus, mesh_adapter, mesh_policy
+from self_fixing_engineer.mesh.checkpoint import CheckpointManager
 from pydantic import BaseModel
 
 # Force REDIS_AVAILABLE to True for testing

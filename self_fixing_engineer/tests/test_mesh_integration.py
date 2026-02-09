@@ -50,7 +50,7 @@ for key, value in TEST_ENV.items():
 # --- Fixtures ---
 
 # Import modules after setting the environment
-from mesh import checkpoint_manager, event_bus, mesh_policy
+from self_fixing_engineer.mesh import checkpoint_manager, event_bus, mesh_policy
 
 
 @pytest_asyncio.fixture(scope="module")
