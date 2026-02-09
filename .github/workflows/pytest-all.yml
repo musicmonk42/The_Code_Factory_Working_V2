@@ -755,7 +755,7 @@ jobs:
             2>&1 | tee test-output-sfe-batch1.log
 
       - name: Run self_fixing_engineer tests - Batch 2a (Arbiter Postgres)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
         env:
           TESTING: "1"
@@ -782,7 +782,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2b (Arbiter Redis)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
         env:
           TESTING: "1"
@@ -808,7 +808,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2c (Arbiter Other)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
         env:
           TESTING: "1"
@@ -835,7 +835,7 @@ jobs:
             2>&1 | tee test-output-sfe-batch2c.log
 
       - name: Run self_fixing_engineer tests - Batch 2d-1 (Remaining Arbiter Part 1)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
         env:
           TESTING: "1"
@@ -869,7 +869,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2d-2 (Remaining Arbiter Part 2)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
         env:
           TESTING: "1"
@@ -903,7 +903,7 @@ jobs:
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2e (Arbiter Growth - Isolated)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 20
         env:
           TESTING: "1"
@@ -927,7 +927,7 @@ jobs:
             2>&1 | tee test-output-sfe-batch2e.log
 
       - name: Run self_fixing_engineer tests - Batch 3 (Mesh)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 15
         env:
           TESTING: "1"
@@ -954,7 +954,7 @@ jobs:
             2>&1 | tee test-output-sfe-batch3.log
 
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 15
         env:
           TESTING: "1"
@@ -981,7 +981,7 @@ jobs:
             2>&1 | tee test-output-sfe-batch4.log
 
       - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 15
         env:
           TESTING: "1"
