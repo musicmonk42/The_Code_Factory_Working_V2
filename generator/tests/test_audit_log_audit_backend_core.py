@@ -76,9 +76,6 @@ if _existing is not None and (
 
 # Import modules using standard paths
 from generator.audit_log.audit_backend.audit_backend_core import (
-    BACKEND_ERRORS,
-    BACKEND_TAMPER_DETECTION_FAILURES,
-    BACKEND_WRITES,
     BackendNotFoundError,
     CryptoInitializationError,
     LogBackend,
@@ -96,7 +93,10 @@ from generator.audit_log.audit_backend.audit_backend_core import (
     send_alert,
 )
 
-# Alias for convenience (used in monkeypatch calls)
+# DO NOT import metrics here - always reference from core module
+# This ensures we're checking the same objects that production code increments
+
+# Alias for convenience (used in monkeypatch calls and metric access)
 core = sys.modules["generator.audit_log.audit_backend.audit_backend_core"]
 
 # ---------------------------------------------------------------------------
@@ -173,17 +173,13 @@ async def ensure_metrics_work():
     When running the full test suite, other test modules (e.g. test_runner_metrics)
     may swap/clear the global Prometheus REGISTRY, which can disconnect the
     module-level Counter objects from the active registry.  This fixture
-    re-fetches the live counter references from the core module and
     re-registers them with the current active REGISTRY if necessary.
 
     If the module was only partially loaded (e.g. due to an earlier import
     failure during pytest collection), the metrics are re-created using
     safe_counter to ensure tests can still run.
     """
-    global BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES
-
-    # Re-fetch the counter objects from the live module to ensure we are
-    # checking the same objects that the production code increments.
+    # Get the counter objects from the live core module
     live_module = sys.modules.get("generator.audit_log.audit_backend.audit_backend_core", core)
 
     # Defensively fetch metrics; if the module was partially loaded (e.g. during
@@ -202,40 +198,21 @@ async def ensure_metrics_work():
             def safe_counter(name, description, labelnames=()):
                 return MagicMock()
 
-    _be = getattr(live_module, "BACKEND_ERRORS", None)
-    BACKEND_ERRORS = _be if _be is not None else safe_counter(
-        "audit_backend_errors_total", "Total errors per backend", ["backend", "type"]
-    )
-
-    _bw = getattr(live_module, "BACKEND_WRITES", None)
-    BACKEND_WRITES = _bw if _bw is not None else safe_counter(
-        "audit_backend_writes_total", "Total writes to backend", ["backend"]
-    )
-
-    _btdf = getattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES", None)
-    BACKEND_TAMPER_DETECTION_FAILURES = _btdf if _btdf is not None else safe_counter(
-        "audit_backend_tamper_detection_failures_total",
-        "Count of failed tamper detection checks",
-        ["backend"],
-    )
-
-    # If the module was missing attributes, set them so other code can find them.
-    if not hasattr(live_module, "BACKEND_ERRORS"):
-        live_module.BACKEND_ERRORS = BACKEND_ERRORS
-    if not hasattr(live_module, "BACKEND_WRITES"):
-        live_module.BACKEND_WRITES = BACKEND_WRITES
-    if not hasattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES"):
-        live_module.BACKEND_TAMPER_DETECTION_FAILURES = BACKEND_TAMPER_DETECTION_FAILURES
+    # Get or create metrics in the live module
+    for metric_name, metric_info in [
+        ("BACKEND_ERRORS", ("audit_backend_errors_total", "Total errors per backend", ["backend", "type"])),
+        ("BACKEND_WRITES", ("audit_backend_writes_total", "Total writes to backend", ["backend"])),
+        ("BACKEND_TAMPER_DETECTION_FAILURES", ("audit_backend_tamper_detection_failures_total", "Count of failed tamper detection checks", ["backend"])),
+    ]:
+        if not hasattr(live_module, metric_name) or getattr(live_module, metric_name) is None:
+            setattr(live_module, metric_name, safe_counter(*metric_info))
 
     # Verify that metrics are real Counter objects, not mocks or fallbacks
     # Use duck typing instead of isinstance() to avoid TypeError in edge cases
-    for metric_name, counter in [
-        ("BACKEND_ERRORS", BACKEND_ERRORS),
-        ("BACKEND_WRITES", BACKEND_WRITES),
-        ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
-    ]:
+    for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+        counter = getattr(live_module, metric_name)
         # Check if it has the expected Counter methods (duck typing)
-        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and 
+        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and
                 callable(getattr(counter, 'labels', None)) and callable(getattr(counter, 'collect', None))):
             raise RuntimeError(
                 f"{metric_name} is not a proper Prometheus Counter object. "
@@ -246,7 +223,8 @@ async def ensure_metrics_work():
     try:
         import prometheus_client
         active_registry = prometheus_client.REGISTRY
-        for counter in (BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES):
+        for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+            counter = getattr(live_module, metric_name)
             try:
                 # Check if the counter is already in the registry
                 if hasattr(active_registry, '_collector_to_names') and counter not in active_registry._collector_to_names:
@@ -263,9 +241,9 @@ async def ensure_metrics_work():
         warnings.warn(f"Failed to ensure metrics are registered: {e}")
 
     # Force metric collection to warm up internal state
-    _ = list(BACKEND_ERRORS.collect())
-    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
-    _ = list(BACKEND_WRITES.collect())
+    for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+        counter = getattr(live_module, metric_name)
+        _ = list(counter.collect())
 
     yield
 
@@ -407,12 +385,12 @@ async def test_tamper_detection_flags_and_skips(
     assert len(test_backend.storage) == 1
 
     backend_label = test_backend.__class__.__name__
-    
+
     # Force metric collection before measuring
-    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
-    
+    _ = list(core.BACKEND_TAMPER_DETECTION_FAILURES.collect())
+
     before = _counter_total_for_labels(
-        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+        core.BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
     )
 
     original_compute = core.compute_hash
@@ -437,10 +415,10 @@ async def test_tamper_detection_flags_and_skips(
         await asyncio.wait(pending, timeout=2.0)
 
     # Force metric collection before assertion
-    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    _ = list(core.BACKEND_TAMPER_DETECTION_FAILURES.collect())
 
     after = _counter_total_for_labels(
-        BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+        core.BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
     )
     assert after > before, f"Metric did not increment: before={before}, after={after}"
 
@@ -464,10 +442,10 @@ async def test_retry_operation_respects_limits(monkeypatch):
         monkeypatch.setattr(core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
 
     # Force metric collection before measuring
-    _ = list(BACKEND_ERRORS.collect())
-    
+    _ = list(core.BACKEND_ERRORS.collect())
+
     before = _counter_total_for_labels(
-        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+        core.BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )
 
     with pytest.raises(ValueError, match="expected failure"):
@@ -490,10 +468,10 @@ async def test_retry_operation_respects_limits(monkeypatch):
         await asyncio.wait(pending, timeout=1.0)
 
     # Force metric collection before assertion
-    _ = list(BACKEND_ERRORS.collect())
+    _ = list(core.BACKEND_ERRORS.collect())
 
     after = _counter_total_for_labels(
-        BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+        core.BACKEND_ERRORS, backend="TestBackend", type="ValueError"
     )
     # The counter increments on EACH attempt, so with 3 max attempts we expect 3 increments
     assert after >= before + 3, f"Expected at least {before + 3} errors, got {after} (before={before})"

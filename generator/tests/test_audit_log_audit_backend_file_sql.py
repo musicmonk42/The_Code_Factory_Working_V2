@@ -139,12 +139,8 @@ def _counter_total_for_labels(counter, **expected_labels) -> float:
     return total
 
 
-# Import metrics from core module for convenient access in test assertions.
-# These are the actual Prometheus counter objects. Using counter.collect() directly
-# is the correct way to access metric values, rather than REGISTRY.get_sample_value().
-BACKEND_WRITES = core.BACKEND_WRITES
-BACKEND_ERRORS = core.BACKEND_ERRORS
-BACKEND_TAMPER_DETECTION_FAILURES = core.BACKEND_TAMPER_DETECTION_FAILURES
+# DO NOT create module-level aliases for metrics - always reference from core module
+# This ensures we're checking the same objects that production code increments
 
 
 def _prepare_v1_entry(entry_data: Dict) -> str:
@@ -227,27 +223,17 @@ async def ensure_metrics_work():
     When running the full test suite, other test modules (e.g. test_runner_metrics)
     may swap/clear the global Prometheus REGISTRY, which can disconnect the
     module-level Counter objects from the active registry.  This fixture
-    re-fetches the live counter references from the core module and
     re-registers them with the current active REGISTRY if necessary.
     """
-    global BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES
-
-    # Re-fetch the counter objects from the live module to ensure we are
-    # checking the same objects that the production code increments.
+    # Get the counter objects from the live core module
     live_module = sys.modules.get("generator.audit_log.audit_backend.audit_backend_core", core)
-    BACKEND_ERRORS = live_module.BACKEND_ERRORS
-    BACKEND_WRITES = live_module.BACKEND_WRITES
-    BACKEND_TAMPER_DETECTION_FAILURES = live_module.BACKEND_TAMPER_DETECTION_FAILURES
 
     # Verify that metrics are real Counter objects, not mocks or fallbacks
     # Use duck typing instead of isinstance() to avoid TypeError in edge cases
-    for metric_name, counter in [
-        ("BACKEND_ERRORS", BACKEND_ERRORS),
-        ("BACKEND_WRITES", BACKEND_WRITES),
-        ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
-    ]:
+    for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+        counter = getattr(live_module, metric_name)
         # Check if it has the expected Counter methods (duck typing)
-        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and 
+        if not (hasattr(counter, 'labels') and hasattr(counter, 'collect') and
                 callable(getattr(counter, 'labels', None)) and callable(getattr(counter, 'collect', None))):
             raise RuntimeError(
                 f"{metric_name} is not a proper Prometheus Counter object. "
@@ -258,7 +244,8 @@ async def ensure_metrics_work():
     try:
         import prometheus_client
         active_registry = prometheus_client.REGISTRY
-        for counter in (BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES):
+        for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+            counter = getattr(live_module, metric_name)
             try:
                 # Check if the counter is already in the registry
                 if hasattr(active_registry, '_collector_to_names') and counter not in active_registry._collector_to_names:
@@ -275,9 +262,9 @@ async def ensure_metrics_work():
         warnings.warn(f"Failed to ensure metrics are registered: {e}")
 
     # Force metric collection to warm up internal state
-    _ = list(BACKEND_ERRORS.collect())
-    _ = list(BACKEND_TAMPER_DETECTION_FAILURES.collect())
-    _ = list(BACKEND_WRITES.collect())
+    for metric_name in ["BACKEND_ERRORS", "BACKEND_WRITES", "BACKEND_TAMPER_DETECTION_FAILURES"]:
+        counter = getattr(live_module, metric_name)
+        _ = list(counter.collect())
 
     yield
 
@@ -377,7 +364,7 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
     await file_backend.flush_batch()
 
     # Force metric collection
-    _ = list(BACKEND_WRITES.collect())
+    _ = list(core.BACKEND_WRITES.collect())
 
     # Give async operations time to complete
     await asyncio.sleep(0.2)
@@ -398,7 +385,7 @@ async def test_file_backend_append_and_flush(file_backend, mock_alerts_and_otel)
     # Use >= instead of == because Prometheus counters are global and may have
     # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
-        BACKEND_WRITES, backend="FileBackend"
+        core.BACKEND_WRITES, backend="FileBackend"
     ) >= 1
 
 
@@ -412,7 +399,7 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     await sqlite_backend.flush_batch()
 
     # Force metric collection
-    _ = list(BACKEND_WRITES.collect())
+    _ = list(core.BACKEND_WRITES.collect())
 
     # Give async operations time to complete
     await asyncio.sleep(0.2)
@@ -446,7 +433,7 @@ async def test_sqlite_backend_append_and_flush(sqlite_backend, mock_alerts_and_o
     # Use >= instead of == because Prometheus counters are global and may have
     # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
-        BACKEND_WRITES, backend="SQLiteBackend"
+        core.BACKEND_WRITES, backend="SQLiteBackend"
     ) >= 1
 
 
@@ -485,7 +472,7 @@ async def test_file_backend_query_and_tamper(file_backend, caplog):
         assert len(results) == 0  # Query should fail decryption/tamper check
 
     # Force metric collection
-    _ = list(BACKEND_ERRORS.collect())
+    _ = list(core.BACKEND_ERRORS.collect())
 
     # Give async operations time to complete
     await asyncio.sleep(0.2)
@@ -498,7 +485,7 @@ async def test_file_backend_query_and_tamper(file_backend, caplog):
     # --- END FIX ---
     # Use > instead of >= because we're checking that errors were incremented
     assert _counter_total_for_labels(
-        BACKEND_ERRORS, backend="FileBackend", type="DecodeError"
+        core.BACKEND_ERRORS, backend="FileBackend", type="DecodeError"
     ) > 0
 
 
@@ -547,7 +534,7 @@ async def test_sqlite_backend_query_and_tamper(sqlite_backend, caplog):
     # Use >= instead of == because Prometheus counters are global and may have
     # been incremented by previous test runs in the same process
     assert _counter_total_for_labels(
-        BACKEND_TAMPER_DETECTION_FAILURES, backend="SQLiteBackend"
+        core.BACKEND_TAMPER_DETECTION_FAILURES, backend="SQLiteBackend"
     ) >= 1
 
 
