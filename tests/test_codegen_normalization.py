@@ -114,6 +114,22 @@ class TestContentNormalization:
         normalized = self._normalize(raw)
         compile(normalized, "test.py", "exec")
 
+    def test_line_continuation_characters_removed(self):
+        """Stray backslashes at line endings should be removed."""
+        # Test single line continuation
+        result = self._normalize("print('hello')\\\nprint('world')")
+        assert result == "print('hello')\nprint('world')"
+
+        # Test Windows line endings
+        result = self._normalize("print('hello')\\\r\nprint('world')")
+        assert result == "print('hello')\nprint('world')"
+
+    def test_line_continuation_multiple_lines(self):
+        """Multiple line continuation characters should all be removed."""
+        raw = "x = 1\\\ny = 2\\\nz = 3\n"
+        result = self._normalize(raw)
+        assert result == "x = 1\ny = 2\nz = 3\n"
+
 
 # ---------------------------------------------------------------------------
 # C) Materialization regression
