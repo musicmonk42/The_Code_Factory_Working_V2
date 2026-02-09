@@ -26,7 +26,7 @@ import pytest
 
 # Optional: Property-based testing
 try:
-    from hypothesis import given, settings
+    from hypothesis import HealthCheck, given, settings
     from hypothesis import strategies as st
 
     HYPOTHESIS_AVAILABLE = True
@@ -628,6 +628,9 @@ class TestPolicyEngine:
     @pytest.mark.asyncio
     async def test_llm_integration(self, policy_engine, monkeypatch):
         """Tests LLM-based policy evaluation."""
+        # Clear custom rules to avoid interference
+        policy_engine._custom_rules.clear()
+
         policy_engine.config.LLM_POLICY_EVALUATION_ENABLED = True
         policy_engine._policies["llm_rules"]["enabled"] = True
 
@@ -941,7 +944,7 @@ if HYPOTHESIS_AVAILABLE:
                 st.text(max_size=50), st.text(max_size=50), max_size=10
             ),
         )
-        @settings(max_examples=50, deadline=None)
+        @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
         async def test_fuzz_should_auto_learn(
             self, policy_engine, domain, key, user_id, value
         ):
