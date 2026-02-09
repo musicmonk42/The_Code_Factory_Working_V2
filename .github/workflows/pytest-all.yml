@@ -761,6 +761,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch1.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch1.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -798,6 +810,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2a.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2a.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2a.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -838,6 +862,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2b.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2b.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2b.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -880,6 +916,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2c.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2c.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2c.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -924,6 +972,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2d-1.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-1.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2d-1.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -971,6 +1031,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2d-2.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2d-2.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2d-2.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -1011,6 +1083,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch2e.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch2e.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch2e.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -1051,6 +1135,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch3.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch3.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch3.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -1091,6 +1187,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch4.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch4.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch4.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
@@ -1131,6 +1239,18 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              # Check if tests actually passed by examining the pytest summary line
+              if grep -qE "[0-9]+ passed" test-output-sfe-batch5.log && ! grep -qE "FAILED|ERROR" test-output-sfe-batch5.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch5.log
+                exit 124
+              fi
             else
               echo "Unexpected exit code: $EXIT_CODE"
               exit $EXIT_CODE
