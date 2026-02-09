@@ -343,13 +343,16 @@ else:
         logger.critical(
             f"[audit_backend_core] Production validation failed: {ve}. "
             "Audit logging will operate in degraded mode with mock encryption. "
-            "Set AUDIT_ENCRYPTION_KEYS environment variable to fix this."
+            "Set AUDIT_ENCRYPTION_KEYS environment variable to fix this. "
+            "WARNING: Using ephemeral keys - audit logs cannot be decrypted after restart!"
         )
         warnings.warn(
             f"[audit_backend_core] Production validation failed: {ve}",
             RuntimeWarning,
         )
         # Set fallback environment defaults so the rest of the module can load
+        # NOTE: Using ephemeral keys means audit logs cannot be decrypted after restart
+        # This is a last-resort fallback to prevent total system failure
         os.environ.setdefault(
             "AUDIT_ENCRYPTION_KEYS",
             '[{"key_id":"mock_fallback_key","key":"' + Fernet.generate_key().decode() + '"}]',
@@ -424,7 +427,7 @@ def _as_json_list(name: str, default: list) -> list:
             if _is_test_or_dev_mode():
                 return default
             else:
-                raise
+                raise ValidationError(f"{name} is required but not set in environment")
     if isinstance(v, list):
         return v
     if isinstance(v, str):
