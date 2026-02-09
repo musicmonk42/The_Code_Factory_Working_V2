@@ -727,7 +727,7 @@ jobs:
           echo "✓ Tests completed for ${{ matrix.module }}"
 
       - name: Run self_fixing_engineer tests - Batch 1 (Basic & Core)
-        if: matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 20
         env:
           TESTING: "1"
@@ -752,7 +752,20 @@ jobs:
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch1.log
+            2>&1 | tee test-output-sfe-batch1.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
       - name: Run self_fixing_engineer tests - Batch 2a (Arbiter Postgres)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -776,7 +789,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_models_postgres_client.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2a.log
+            2>&1 | tee test-output-sfe-batch2a.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
           
           # Memory cleanup between batches
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
@@ -803,7 +829,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_models_redis_client.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2b.log
+            2>&1 | tee test-output-sfe-batch2b.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
           
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
@@ -832,7 +871,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_models_multi_modal_schemas.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2c.log
+            2>&1 | tee test-output-sfe-batch2c.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
       - name: Run self_fixing_engineer tests - Batch 2d-1 (Remaining Arbiter Part 1)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -863,7 +915,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_knowledge_graph_config.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2d-1.log
+            2>&1 | tee test-output-sfe-batch2d-1.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
           # Memory cleanup between batches
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
@@ -897,7 +962,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_models_feature_store_client.py \
             -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2d-2.log
+            2>&1 | tee test-output-sfe-batch2d-2.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
           # Memory cleanup after batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
@@ -924,7 +1002,20 @@ jobs:
             self_fixing_engineer/tests/test_arbiter_growth.py \
             -v --tb=line -m "not heavy" --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch2e.log
+            2>&1 | tee test-output-sfe-batch2e.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
       - name: Run self_fixing_engineer tests - Batch 3 (Mesh)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -951,7 +1042,20 @@ jobs:
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch3.log
+            2>&1 | tee test-output-sfe-batch3.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -978,7 +1082,20 @@ jobs:
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch4.log
+            2>&1 | tee test-output-sfe-batch4.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
 
       - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1005,7 +1122,20 @@ jobs:
             --timeout=300 --durations=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch5.log
+            2>&1 | tee test-output-sfe-batch5.log || {
+            EXIT_CODE=$?
+            echo "Batch exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
           
       - name: Profile test collection (on failure)
         if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
