@@ -435,10 +435,12 @@ async def _resume_pipeline_after_clarification(
         # CRITICAL stages: codegen (always), testgen (if tests requested)
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
         critical_stages = ["codegen"]  # codegen is always critical
-        # These flags match the defaults in _trigger_pipeline_background
-        critical_stages.append("testgen")  # tests are requested in this function
+        # In clarification flow, all stages are always requested (see lines 400-403)
+        # Therefore, testgen is always a critical stage in this flow
+        critical_stages.append("testgen")
         
-        auxiliary_stages = ["deploy", "docgen", "critique"]  # all auxiliary stages are requested
+        # In clarification flow, all auxiliary stages are always requested (see lines 400-403)
+        auxiliary_stages = ["deploy", "docgen", "critique"]
 
         # Check if ALL CRITICAL stages completed
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
