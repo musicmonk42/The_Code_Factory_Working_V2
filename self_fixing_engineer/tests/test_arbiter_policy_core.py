@@ -628,8 +628,7 @@ class TestPolicyEngine:
     @pytest.mark.asyncio
     async def test_llm_integration(self, policy_engine, monkeypatch):
         """Tests LLM-based policy evaluation."""
-        # Clear custom rules to avoid interference
-        policy_engine._custom_rules.clear()
+        # Note: trust_rules are already disabled by fixture, so trust_score_rule won't interfere
 
         policy_engine.config.LLM_POLICY_EVALUATION_ENABLED = True
         policy_engine._policies["llm_rules"]["enabled"] = True
@@ -643,7 +642,7 @@ class TestPolicyEngine:
         result, reason = await policy_engine.should_auto_learn(
             "test", "key", "user", "test_value"
         )
-        assert result is True
+        assert result is True, f"Expected True but got False. Reason: {reason}"
         mock_llm.generate_text.assert_called_once()
 
     @pytest.mark.asyncio
