@@ -1519,11 +1519,11 @@ async def validate_generated_project(
     # Check required files
     if required_files is None:
         required_files = ["main.py"]
-    
+
     # Files that are always hard requirements (missing = error).
     # Other required files produce warnings when absent.
     CRITICAL_REQUIRED_FILES = {"main.py"}
-    
+
     # When the generated project uses an app/ layout, also require key files
     app_dir = output_dir / "app"
     if app_dir.is_dir():
@@ -1531,10 +1531,10 @@ async def validate_generated_project(
         CRITICAL_REQUIRED_FILES.discard("main.py")
         if "main.py" in required_files:
             required_files.remove("main.py")
-        
+
         # Only app/main.py is truly critical - it's the entry point
         CRITICAL_REQUIRED_FILES.add("app/main.py")
-        
+
         # Other files are optional/recommended - produce warnings not errors
         optional_app_files = [
             "app/routes.py", "app/schemas.py",
@@ -1545,7 +1545,27 @@ async def validate_generated_project(
         for af in ["app/main.py"] + optional_app_files:
             if af not in required_files:
                 required_files.append(af)
-    
+
+    # If main.py is required but not found at root, try recursive search
+    # This handles cases where main.py exists in subdirectories not named 'app'
+    if "main.py" in CRITICAL_REQUIRED_FILES:
+        main_at_root = (output_dir / "main.py").exists()
+        if not main_at_root:
+            # Search recursively for main.py
+            main_files = list(output_dir.rglob("main.py"))
+            if main_files:
+                # Found main.py in a subdirectory - update requirements
+                main_rel_path = main_files[0].relative_to(output_dir)
+                CRITICAL_REQUIRED_FILES.discard("main.py")
+                CRITICAL_REQUIRED_FILES.add(str(main_rel_path))
+                if "main.py" in required_files:
+                    required_files.remove("main.py")
+                    required_files.append(str(main_rel_path))
+                logger.info(
+                    f"Found main.py at non-standard location: {main_rel_path}. "
+                    f"Updating validation requirements."
+                )
+
     for required_file in required_files:
         file_path = output_dir / required_file
         if not file_path.exists():

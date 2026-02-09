@@ -873,6 +873,36 @@ async def build_semantic_critique_prompt(
         final_template = Template(template_content_str)  # Fallback to untuned template
 
     # --- Render final prompt ---
+    # Extract error context from config if present
+    error_context = {}
+    if isinstance(conf, dict) and "error_context" in conf:
+        error_context = conf["error_context"]
+    elif hasattr(conf, "error_context"):
+        error_context = getattr(conf, "error_context", {})
+
+    # Format error context for inclusion in prompt
+    error_context_str = ""
+    if error_context:
+        error_parts = []
+
+        lint_errors = error_context.get("lint_errors", [])
+        if lint_errors:
+            error_parts.append(f"## Linting Errors ({len(lint_errors)} issues found):\n")
+            for i, err in enumerate(lint_errors[:20], 1):  # Limit to first 20 errors
+                error_parts.append(f"{i}. {json.dumps(err, default=str)}")
+
+        vulnerabilities = error_context.get("vulnerabilities", [])
+        if vulnerabilities:
+            error_parts.append(f"\n## Security Vulnerabilities ({len(vulnerabilities)} found):\n")
+            for i, vuln in enumerate(vulnerabilities[:10], 1):  # Limit to first 10 vulns
+                error_parts.append(f"{i}. {json.dumps(vuln, default=str)}")
+
+        if error_context.get("test_failures"):
+            error_parts.append("\n## Test Failures: Some unit tests are failing. Please review and fix.")
+
+        if error_parts:
+            error_context_str = "\n".join(error_parts)
+
     prompt = final_template.render(
         tasks=conf.tasks,
         output_schema=conf.output_schema,
@@ -887,6 +917,7 @@ async def build_semantic_critique_prompt(
         prompt_hash=prompt_hash,
         user_context=conf.user_context,
         rag_context=rag_context,
+        error_context=error_context_str,  # Add error context to template
     )
 
     # --- Token budget & truncation (safe, deterministic) ---

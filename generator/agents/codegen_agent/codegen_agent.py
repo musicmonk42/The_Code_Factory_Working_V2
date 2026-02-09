@@ -913,7 +913,7 @@ Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
 
 1. **ANALYZE THE SPEC**: Carefully read and extract:
    - All API endpoints, routes, or functions mentioned
-   - All data models, classes, or schemas required  
+   - All data models, classes, or schemas required
    - All business logic, calculations, and operations
    - All error handling requirements (validation, edge cases)
    - All dependencies and imports needed
@@ -925,19 +925,35 @@ Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
    - Proper error handling for all edge cases
    - Type hints and documentation
 
-3. **ORGANIZE INTO FILES**: Structure as a proper {target_language} project:
-   - main.py (or equivalent entry point)
-   - models.py (data structures/schemas)
-   - utils.py or helpers.py (utility functions if needed)
-   - requirements.txt (dependencies)
-   - README.md (setup and usage instructions)
+3. **ORGANIZE INTO FILES**: Structure as a proper {target_language} project with ALL necessary files:
+
+   **REQUIRED FILES (minimum):**
+   - app/main.py (or main.py) - Main entry point with all routes/endpoints
+   - app/models.py (or models.py) - All data models, schemas, classes
+   - requirements.txt (or package.json) - ALL dependencies with versions
+   - README.md - Complete setup and usage instructions
+   - Dockerfile - Container configuration for deployment
+   - .env.example - Environment variable template
+
+   **ADDITIONAL FILES (as needed for completeness):**
+   - app/config.py or config.py - Configuration management
+   - app/utils.py or utils.py - Utility/helper functions
+   - app/database.py or database.py - Database connection and setup
+   - tests/test_*.py or tests/*.test.js - Basic test files
+   - .gitignore - Standard ignore patterns
+   - docker-compose.yml - Multi-service orchestration (if applicable)
+
+   **Create subdirectories when appropriate:**
+   - Use app/ directory for application code
+   - Use tests/ for test files
+   - Use docs/ for additional documentation
 
 4. **CODE QUALITY**:
    - Follow {target_language} best practices
    - Use proper naming conventions
    - Add docstrings and comments
    - Handle errors gracefully
-   - Make code testable
+   - Make code testable and production-ready
 
 ## CRITICAL OUTPUT FORMAT:
 
@@ -945,21 +961,38 @@ Your response MUST be VALID JSON in this EXACT format:
 
 {{
   "files": {{
-    "main.py": "complete code content here...",
-    "models.py": "complete code content here...",
-    "requirements.txt": "dependencies here...",
-    "README.md": "documentation here..."
+    "app/main.py": "complete code content with all endpoints/routes...",
+    "app/models.py": "complete data models and schemas...",
+    "app/config.py": "configuration management code...",
+    "requirements.txt": "all dependencies with versions...",
+    "Dockerfile": "complete Docker configuration...",
+    ".env.example": "environment variables template...",
+    "README.md": "complete documentation...",
+    "tests/test_main.py": "basic test cases...",
+    ".gitignore": "standard ignore patterns..."
   }}
 }}
 
-**RULES:**
+**ABSOLUTE RULES:**
 1. Output ONLY the JSON - no text before or after
 2. Do NOT wrap in markdown fences (no ```json```)
-3. ALL code must be complete and functional
-4. Properly escape special characters in JSON (\\n for newlines, \\" for quotes)
-5. Implement EVERY requirement from the specification
+3. Include AT LEAST 8-12 files for a complete scaffold
+4. ALL code must be complete and functional (no stubs or TODOs)
+5. Properly escape special characters in JSON (\\n for newlines, \\" for quotes)
+6. Implement EVERY requirement from the specification
+7. Include proper directory structure (app/, tests/, etc.)
 
-Verify you have implemented ALL requirements before responding.
+**CHECKLIST before responding:**
+- [ ] All API endpoints/routes implemented in app/main.py
+- [ ] All data models defined in app/models.py
+- [ ] requirements.txt with ALL dependencies
+- [ ] Dockerfile for containerization
+- [ ] README.md with setup instructions
+- [ ] At least one test file in tests/
+- [ ] .env.example with configuration vars
+- [ ] .gitignore file included
+
+Verify you have implemented ALL requirements and included ALL necessary files before responding.
 """
     return prompt
 

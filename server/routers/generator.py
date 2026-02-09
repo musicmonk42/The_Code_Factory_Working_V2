@@ -251,11 +251,35 @@ async def _trigger_pipeline_background(
             return
         
         stages_completed = result.get("stages_completed", []) if result else []
-        
-        # Check if ANY code was generated (codegen stage succeeded)
-        if "codegen" in stages_completed or pipeline_status == "completed":
-            # SUCCESS: Finalize with success status
-            logger.info(f"[Pipeline] Finalizing successful job {job_id}")
+
+        # Determine which stages were requested in the pipeline
+        requested_stages = ["codegen"]  # codegen is always requested
+        if include_tests:
+            requested_stages.append("testgen")
+        if include_deployment:
+            requested_stages.append("deploy")
+        if include_docs:
+            requested_stages.append("docgen")
+        if run_critique:
+            requested_stages.append("critique")
+
+        # Check if ALL requested stages completed successfully
+        # A stage is considered successful if it's in stages_completed OR if the overall status is "completed"
+        all_requested_completed = (
+            pipeline_status == "completed" or
+            all(stage in stages_completed for stage in requested_stages)
+        )
+
+        # At minimum, codegen must have succeeded to finalize as success
+        codegen_succeeded = "codegen" in stages_completed or pipeline_status == "completed"
+
+        if codegen_succeeded and all_requested_completed:
+            # SUCCESS: All requested stages completed - finalize with success status
+            logger.info(
+                f"[Pipeline] Finalizing successful job {job_id}. "
+                f"Completed stages: {', '.join(stages_completed)}. "
+                f"Requested stages: {', '.join(requested_stages)}"
+            )
             
             # Verify output directory exists and has files before finalizing
             job_dir = Path(f"./uploads/{job_id}")
@@ -280,7 +304,32 @@ async def _trigger_pipeline_background(
                 )
             else:
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
-            
+
+        elif codegen_succeeded and not all_requested_completed:
+            # PARTIAL SUCCESS: Codegen succeeded but some requested stages failed
+            failed_stages = [stage for stage in requested_stages if stage not in stages_completed]
+            logger.warning(
+                f"[Pipeline] Job {job_id} partially completed. "
+                f"Codegen succeeded but the following requested stages failed: {', '.join(failed_stages)}. "
+                f"Completed stages: {', '.join(stages_completed)}"
+            )
+
+            # Still finalize as partial success since codegen succeeded
+            # This allows users to see the generated code even if tests/docs/deploy failed
+            result_with_warning = dict(result) if result else {}
+            result_with_warning["partial_success"] = True
+            result_with_warning["failed_stages"] = failed_stages
+
+            finalized = await finalize_job_success(job_id, result_with_warning)
+
+            if finalized:
+                logger.info(
+                    f"[Pipeline] Job {job_id} finalized with partial success. "
+                    f"Generated code is available but some stages failed."
+                )
+            else:
+                logger.error(f"[Pipeline] Failed to finalize partially successful job {job_id}")
+
         else:
             # FAILURE: No code generated at all
             logger.warning(
