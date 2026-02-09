@@ -228,6 +228,12 @@ env:
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
   
+  # SFE Checkpoint Manager Paths (container-friendly defaults)
+  # These use relative paths that resolve to /app/logs/checkpoint/ in containers
+  # Override if custom paths are needed (e.g., mounted persistent volumes)
+  # CHECKPOINT_AUDIT_LOG_PATH: "/app/logs/checkpoint/audit.log"
+  # CHECKPOINT_DLQ_PATH: "/app/logs/checkpoint/dlq.jsonl"
+  
   # Runner Configuration Path
   # Optional: Set custom path to runner configuration file
   # If not set, uses smart path resolution (see CONFIG_PATH_RESOLUTION_FIX.md)

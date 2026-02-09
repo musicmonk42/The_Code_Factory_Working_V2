@@ -1344,24 +1344,62 @@ class ExplainAudit:
             self.buffer.clear()
             AUDIT_BUFFER_SIZE_CURRENT.set(0)
 
-        # Ensure database tables exist before first flush (Issue #1 fix)
+        # Lazy table initialization - ensures database tables exist before first write operation
+        # This is a defensive pattern for distributed deployments where database initialization
+        # may not be complete when the audit system starts. Industry best practice for resilient
+        # microservices that handle transient infrastructure failures gracefully.
         if not self._tables_initialized and self._db_client is not None:
             try:
-                logger.info("Audit: Ensuring database tables are created before first flush...")
+                logger.info(
+                    "Audit: Initializing database tables before first flush operation",
+                    extra={"operation": "lazy_table_init", "record_count": len(records_to_flush)}
+                )
                 await self._db_client.create_tables()
                 self._tables_initialized = True
-                logger.info("Audit: Database tables initialized successfully")
-            except Exception as e:
-                logger.error(
-                    f"Audit: Failed to initialize database tables: {e}. "
-                    "Will continue and retry on next flush.",
-                    exc_info=True
+                logger.info(
+                    "Audit: Database tables initialized successfully",
+                    extra={"operation": "lazy_table_init", "status": "success"}
                 )
-                # Don't set _tables_initialized to True, so we retry next time
-                # Re-add records to buffer so they aren't lost
+                # Emit metric for successful initialization
+                AUDIT_RECORDS.labels(operation="table_init_success").inc()
+            except Exception as e:
+                # Log with structured context for observability
+                logger.error(
+                    "Audit: Failed to initialize database tables. Records will be preserved "
+                    "and table initialization will be retried on next flush.",
+                    exc_info=True,
+                    extra={
+                        "operation": "lazy_table_init",
+                        "status": "failed",
+                        "error_type": type(e).__name__,
+                        "record_count": len(records_to_flush),
+                        "retry_strategy": "next_flush"
+                    }
+                )
+                # Emit metric for failed initialization
+                AUDIT_ERRORS.labels(operation="table_init_failed").inc()
+                
+                # Critical: Don't set _tables_initialized to True - allow retry on next flush
+                # Re-add records to buffer to prevent data loss (at-least-once delivery guarantee)
                 with self.lock:
                     self.buffer.extend(records_to_flush)
                     AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
+                
+                # Report to feedback system for monitoring and alerting
+                self.safe_create_task(
+                    self.feedback_manager.record_feedback(
+                        user_id="system",
+                        feedback_type=FeedbackType.BUG_REPORT,
+                        details={
+                            "type": "audit_table_initialization_failed",
+                            "operation": "lazy_table_init",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "records_preserved": len(records_to_flush),
+                            "mitigation": "Records preserved in buffer, will retry on next flush"
+                        },
+                    )
+                )
                 return
 
         try:
