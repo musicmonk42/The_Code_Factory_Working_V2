@@ -65,18 +65,29 @@ class MockAIOKafkaProducer:
         self.send_and_wait = AsyncMock()
 
 
+# Thread lock for metric creation
+_test_metrics_lock = threading.Lock()
+
+
 # Dummy metric function
 def _get_or_create_metric(
     metric_type, name, documentation, labelnames=None, buckets=None
 ):
-    if metric_type == Counter:
-        return Counter(name, documentation, labelnames or ())
-    elif metric_type == Gauge:
-        return Gauge(name, documentation, labelnames or ())
-    elif metric_type == Histogram:
-        return Histogram(name, documentation, labelnames or (), buckets or ())
-    else:
-        raise ValueError("Unsupported")
+    """Idempotently create or retrieve a Prometheus metric in a thread-safe manner."""
+    with _test_metrics_lock:
+        # Check if metric already exists
+        if name in REGISTRY._names_to_collectors:
+            return REGISTRY._names_to_collectors[name]
+        # Create new metric
+        if metric_type == Counter:
+            return Counter(name, documentation, labelnames or ())
+        elif metric_type == Gauge:
+            return Gauge(name, documentation, labelnames or ())
+        elif metric_type == Histogram:
+            return Histogram(name, documentation, labelnames or (), buckets or ())
+        else:
+            raise ValueError("Unsupported")
+
 
 
 # Define simplified MessageQueueService for testing
@@ -94,20 +105,24 @@ class MessageQueueService:
             self.kafka_producer = MockAIOKafkaProducer()
         else:
             raise ValueError("Invalid backend type")
-        self.publish_count = Counter(
-            "mq_publish_total", "Total publishes", ["event_type"]
+        self.publish_count = _get_or_create_metric(
+            Counter, "mq_publish_total", "Total publishes", ["event_type"]
         )
-        self.publish_errors = Counter(
-            "mq_publish_errors_total", "Publish errors", ["event_type"]
+        self.publish_errors = _get_or_create_metric(
+            Counter, "mq_publish_errors_total", "Publish errors", ["event_type"]
         )
-        self.critical_events_count = Counter(
-            "mq_critical_events_total", "Critical events", ["event_type"]
+        self.critical_events_count = _get_or_create_metric(
+            Counter, "mq_critical_events_total", "Critical events", ["event_type"]
         )
-        self.message_latency = Histogram(
-            "mq_message_latency_seconds", "Latency", ["event_type"]
+        self.message_latency = _get_or_create_metric(
+            Histogram, "mq_message_latency_seconds", "Latency", ["event_type"]
         )
-        self.message_retries = Counter("mq_message_retries_total", "Retries")
-        self.poison_messages = Counter("mq_poison_messages_total", "Poison messages")
+        self.message_retries = _get_or_create_metric(
+            Counter, "mq_message_retries_total", "Retries"
+        )
+        self.poison_messages = _get_or_create_metric(
+            Counter, "mq_poison_messages_total", "Poison messages"
+        )
         self._consume_loop_task = None
 
     async def publish(self, event_type, data, is_critical=False):

@@ -689,13 +689,13 @@ class PluginRegistry:
                     self._trigger_event(event_dict)
 
                     try:
-                        asyncio.create_task(
-                            self.register_with_omnicore(
-                                kind, name, plugin_class, version, meta.author
-                            )
+                        coro = self.register_with_omnicore(
+                            kind, name, plugin_class, version, meta.author
                         )
+                        asyncio.create_task(coro)
                     except RuntimeError:
-                        # No event loop during import - this is expected and safe to skip
+                        # No event loop during import - close the coroutine to suppress warning
+                        coro.close()
                         logger.debug(
                             f"No event loop available during registration of [{kind.value}:{name}]. "
                             "OmniCore registration will be deferred."
@@ -770,13 +770,13 @@ class PluginRegistry:
             self._trigger_event(event_dict)
 
             try:
-                asyncio.create_task(
-                    self.register_with_omnicore(
-                        kind, name, instance, version, meta.author
-                    )
+                coro = self.register_with_omnicore(
+                    kind, name, instance, version, meta.author
                 )
+                asyncio.create_task(coro)
             except RuntimeError:
-                # No event loop during import - this is expected and safe to skip
+                # No event loop during import - close the coroutine to suppress warning
+                coro.close()
                 logger.debug(
                     f"No event loop available during registration of [{kind.value}:{name}]. "
                     "OmniCore registration will be deferred."
