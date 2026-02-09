@@ -815,6 +815,20 @@ class ExplainAudit:
             self._db_client = Database(
                 self.config.DATABASE_URL, system_audit_merkle_tree=system_audit_merkle_tree
             )
+            
+            # Schedule eager database initialization to create tables before first flush
+            async def _eager_init():
+                try:
+                    await self._db_client.initialize()
+                    self._tables_initialized = True
+                    logger.info("Audit: Database eagerly initialized during ExplainAudit construction")
+                except Exception as e:
+                    logger.warning(
+                        f"Audit: Eager database initialization failed: {e}. "
+                        "Will retry via lazy initialization on first flush.",
+                        exc_info=True,
+                    )
+            self.safe_create_task(_eager_init())
 
         # Initialize PolicyEngine with proper config
         try:
@@ -1354,7 +1368,7 @@ class ExplainAudit:
                     "Audit: Initializing database tables before first flush operation",
                     extra={"operation": "lazy_table_init", "record_count": len(records_to_flush)}
                 )
-                await self._db_client.create_tables()
+                await self._db_client.initialize()
                 self._tables_initialized = True
                 logger.info(
                     "Audit: Database tables initialized successfully",
