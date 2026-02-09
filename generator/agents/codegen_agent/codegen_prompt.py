@@ -272,7 +272,10 @@ The following are MANDATORY checks:
        
        @app.exception_handler(RequestValidationError)
        async def validation_exception_handler(request, exc):
-           return JSONResponse(status_code=400, content={"detail": "Invalid request"})
+           return JSONResponse(
+               status_code=400, 
+               content={"detail": "Invalid request", "errors": exc.errors()}
+           )
        ```
    - For other endpoints (non-echo):
      * Use field constraints for string inputs as appropriate
