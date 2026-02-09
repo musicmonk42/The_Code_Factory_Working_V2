@@ -17,7 +17,6 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
-from queue import PriorityQueue
 from typing import (
     Any,
     Awaitable,
@@ -606,16 +605,18 @@ class EventQueue(Protocol):
 
 class PriorityEventQueue(EventQueue):
     def __init__(self, maxsize: int):
-        self._queue = PriorityQueue(maxsize=maxsize)
+        self._queue: asyncio.PriorityQueue[tuple[int, SlackEvent]] = (
+            asyncio.PriorityQueue(maxsize=maxsize)
+        )
 
     async def startup(self):
-        pass
+        return None
 
     async def shutdown(self):
-        pass
+        await self.flush()
 
-    async def put(self, item: SlackEvent):
-        priority = 1 if item.severity == "critical" else 2
+    async def put(self, item: Optional[SlackEvent]):
+        priority = 0 if item is None else (1 if item.severity == "critical" else 2)
         await self._queue.put((priority, item))
 
     async def get(self) -> SlackEvent:
