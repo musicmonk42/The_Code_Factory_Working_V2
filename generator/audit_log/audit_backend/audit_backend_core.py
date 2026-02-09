@@ -40,6 +40,9 @@ except ImportError:
     StatusCode = None
     HAS_OPENTELEMETRY = False
 
+# Early logger initialization (needed by fallback send_alert)
+logger = logging.getLogger(__name__)
+
 # Local utility module (assumed to exist outside audit_backends package)
 _audit_utils_imported = False
 try:
@@ -53,7 +56,7 @@ except ImportError:
 # Define fallback implementations if not imported
 if not _audit_utils_imported:
     import hashlib
-    
+
     def compute_hash(data: bytes) -> str:
         """
         Stable SHA-256 hash used for tamper-evident chaining.
@@ -65,7 +68,7 @@ if not _audit_utils_imported:
     async def send_alert(message: str, severity: str = "warning") -> None:
         """
         Minimal alert hook.
-        
+
         In production, override via audit_utils or env-specific wiring to:
         - push to Slack/Teams
         - send email
@@ -75,10 +78,6 @@ if not _audit_utils_imported:
             logging.WARNING if severity in ("low", "warning") else logging.ERROR,
             f"[ALERT:{severity.upper()}] {message}",
         )
-
-
-# Early logger initialization for safe_metric function
-logger = logging.getLogger(__name__)
 
 # --- START: ADDED HELPER FUNCTION (Modified to use universal safe_metric) ---
 def safe_metric(metric_type, name, description, labelnames=()):
