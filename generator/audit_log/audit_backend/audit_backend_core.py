@@ -85,16 +85,15 @@ logger = logging.getLogger(__name__)
 def safe_metric(metric_type, name, description, labelnames=()):
     """
     Return existing metric if already registered, otherwise create a new one.
-    
+
     This function is defensive and will ALWAYS return a valid metric object,
     even if the Prometheus registry is in an inconsistent state (e.g., when
     other test modules have cleared/swapped the registry).
-    
+
     Strategy:
     1. Try to retrieve from registry (checking bare name and common suffixes)
     2. If not found, try creating the metric
-    3. If creating fails with ValueError (duplicate), retry retrieval
-    4. As a last resort, create with a unique fallback name
+    3. If creating fails with ValueError (duplicate), try unregistering and recreating
     """
     try:
         # Strategy 1: Try to retrieve from registry
@@ -104,7 +103,7 @@ def safe_metric(metric_type, name, description, labelnames=()):
             # Counters internally register with _total and _created suffixes
             if metric_type == "Counter":
                 names_to_check.extend([f"{name}_total", f"{name}_created"])
-            
+
             for check_name in names_to_check:
                 try:
                     collector = REGISTRY._names_to_collectors.get(check_name)
@@ -112,77 +111,69 @@ def safe_metric(metric_type, name, description, labelnames=()):
                         return collector
                 except (KeyError, AttributeError):
                     continue
-        
+
         # Strategy 2: Try creating the metric normally
         try:
             if metric_type == "Counter":
-                return Counter(name, description, labelnames)
+                return Counter(name, description, labelnames, registry=REGISTRY)
             elif metric_type == "Gauge":
-                return Gauge(name, description, labelnames)
+                return Gauge(name, description, labelnames, registry=REGISTRY)
             elif metric_type == "Histogram":
-                return Histogram(name, description, labelnames)
+                return Histogram(name, description, labelnames, registry=REGISTRY)
             else:
                 # Unknown type - default to Counter
-                return Counter(name, description, labelnames)
+                return Counter(name, description, labelnames, registry=REGISTRY)
         except ValueError as e:
             # Strategy 3: Creation failed (likely duplicate), try retrieving again
             # The error might have occurred because another thread registered it
-            if hasattr(REGISTRY, '_names_to_collectors'):
-                names_to_check = [name]
-                if metric_type == "Counter":
-                    names_to_check.extend([f"{name}_total", f"{name}_created"])
-                
-                for check_name in names_to_check:
-                    try:
+            if "Duplicated" in str(e) or "already registered" in str(e):
+                if hasattr(REGISTRY, '_names_to_collectors'):
+                    names_to_check = [name]
+                    if metric_type == "Counter":
+                        names_to_check.extend([f"{name}_total", f"{name}_created"])
+
+                    for check_name in names_to_check:
+                        try:
+                            collector = REGISTRY._names_to_collectors.get(check_name)
+                            if collector is not None:
+                                return collector
+                        except (KeyError, AttributeError):
+                            continue
+
+            # If we still can't find it, try to unregister and recreate
+            # This handles the case where the metric was registered but not properly
+            try:
+                # Try to unregister the old metric
+                if hasattr(REGISTRY, '_names_to_collectors'):
+                    for check_name in [name, f"{name}_total", f"{name}_created"]:
                         collector = REGISTRY._names_to_collectors.get(check_name)
                         if collector is not None:
-                            return collector
-                    except (KeyError, AttributeError):
-                        continue
-            
-            # Strategy 4: Last resort - create with unique fallback name
-            # This ensures module initialization never fails
-            import random
-            fallback_name = f"{name}_fallback_{random.randint(1000, 9999)}"
-            logger.warning(
-                f"[safe_metric] Failed to retrieve or create metric '{name}' ({e}). "
-                f"Using fallback: {fallback_name}"
-            )
-            if metric_type == "Counter":
-                return Counter(fallback_name, description, labelnames)
-            elif metric_type == "Gauge":
-                return Gauge(fallback_name, description, labelnames)
-            elif metric_type == "Histogram":
-                return Histogram(fallback_name, description, labelnames)
-            else:
-                return Counter(fallback_name, description, labelnames)
-    
+                            try:
+                                REGISTRY.unregister(collector)
+                            except Exception:
+                                pass
+
+                # Now try creating again
+                if metric_type == "Counter":
+                    return Counter(name, description, labelnames, registry=REGISTRY)
+                elif metric_type == "Gauge":
+                    return Gauge(name, description, labelnames, registry=REGISTRY)
+                elif metric_type == "Histogram":
+                    return Histogram(name, description, labelnames, registry=REGISTRY)
+                else:
+                    return Counter(name, description, labelnames, registry=REGISTRY)
+            except Exception as inner_e:
+                logger.error(
+                    f"[safe_metric] Failed to recreate metric '{name}' after unregister: {inner_e}"
+                )
+                raise
+
     except Exception as e:
-        # Broad catch-all to ensure module initialization never fails
-        # Create a metric with a unique name as last resort
-        import random
-        emergency_name = f"audit_emergency_metric_{random.randint(10000, 99999)}"
         logger.error(
-            f"[safe_metric] Emergency fallback for metric '{name}' due to: {e}"
+            f"[safe_metric] Failed to create or retrieve metric '{name}': {e}. "
+            f"This will cause metric tracking to fail."
         )
-        try:
-            return Counter(emergency_name, "Emergency fallback metric", [])
-        except Exception:
-            # If even this fails, return a mock object that won't crash
-            class MockMetric:
-                def labels(self, **kwargs):
-                    return self
-                def inc(self, *args, **kwargs):
-                    pass
-                def dec(self, *args, **kwargs):
-                    pass
-                def set(self, *args, **kwargs):
-                    pass
-                def observe(self, *args, **kwargs):
-                    pass
-                def collect(self):
-                    return []
-            return MockMetric()
+        raise  # Don't create fallback metrics - fail fast to identify issues
 
 
 # Retaining safe_counter alias for backward compatibility with previous steps

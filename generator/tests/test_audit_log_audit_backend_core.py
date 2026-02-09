@@ -227,17 +227,39 @@ async def ensure_metrics_work():
     if not hasattr(live_module, "BACKEND_TAMPER_DETECTION_FAILURES"):
         live_module.BACKEND_TAMPER_DETECTION_FAILURES = BACKEND_TAMPER_DETECTION_FAILURES
 
+    # Verify that metrics are real Counter objects, not mocks or fallbacks
+    from prometheus_client import Counter
+    for metric_name, counter in [
+        ("BACKEND_ERRORS", BACKEND_ERRORS),
+        ("BACKEND_WRITES", BACKEND_WRITES),
+        ("BACKEND_TAMPER_DETECTION_FAILURES", BACKEND_TAMPER_DETECTION_FAILURES),
+    ]:
+        # Check if it's a real Counter or at least has the expected methods
+        if not isinstance(counter, Counter) and not (hasattr(counter, 'labels') and hasattr(counter, 'collect')):
+            raise RuntimeError(
+                f"{metric_name} is not a proper Prometheus Counter object. "
+                f"It is: {type(counter)}. This will cause tests to fail."
+            )
+
     # Ensure the counters are registered with the current active REGISTRY.
     try:
         import prometheus_client
         active_registry = prometheus_client.REGISTRY
         for counter in (BACKEND_ERRORS, BACKEND_WRITES, BACKEND_TAMPER_DETECTION_FAILURES):
             try:
-                active_registry.register(counter)
-            except (ValueError, KeyError):
-                pass  # Already registered – that's fine
-    except Exception:
-        pass
+                # Check if the counter is already in the registry
+                if hasattr(active_registry, '_collector_to_names') and counter not in active_registry._collector_to_names:
+                    # Only try to register if it's not already registered
+                    active_registry.register(counter)
+            except (ValueError, KeyError) as e:
+                # If it fails because it's already registered with different names, that's OK
+                # But if it's a different error, we should know about it
+                if "Duplicated" not in str(e) and "already" not in str(e).lower():
+                    import warnings
+                    warnings.warn(f"Failed to register metric: {e}")
+    except Exception as e:
+        import warnings
+        warnings.warn(f"Failed to ensure metrics are registered: {e}")
 
     # Force metric collection to warm up internal state
     _ = list(BACKEND_ERRORS.collect())
