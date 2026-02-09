@@ -41,41 +41,44 @@ except ImportError:
     HAS_OPENTELEMETRY = False
 
 # Local utility module (assumed to exist outside audit_backends package)
+_send_alert_imported = False
 try:
-    from audit_utils import compute_hash, send_alert
+    from audit_utils import compute_hash as _compute_hash_util, send_alert as _send_alert_util
+    compute_hash = _compute_hash_util
+    send_alert = _send_alert_util
+    _send_alert_imported = True
 except ImportError:
     logging.warning(
-        "audit_utils.py not found. Tamper detection and alerting features will be unavailable."
+        "audit_utils.py not found. Tamper detection and alerting features will use fallback implementations."
     )
 
-    if "compute_hash" not in globals():
-        import hashlib
+# Always define compute_hash fallback if not imported
+if not _send_alert_imported or 'compute_hash' not in globals():
+    import hashlib
+    
+    def compute_hash(data: bytes) -> str:
+        """
+        Stable SHA-256 hash used for tamper-evident chaining.
+        """
+        h = hashlib.sha256()
+        h.update(data)
+        return h.hexdigest()
 
-        def compute_hash(data: bytes) -> str:
-            """
-            Stable SHA-256 hash used for tamper-evident chaining.
-            """
-            h = hashlib.sha256()
-            h.update(data)
-            return h.hexdigest()
-
-    if "send_alert" not in globals():
-
-        async def send_alert(
-            message: str, severity: str = "warning"
-        ) -> None:  # <-- Kept async to match usage
-            """
-            Minimal alert hook.
-
-            In production, override via audit_utils or env-specific wiring to:
-            - push to Slack/Teams
-            - send email
-            - hit incident webhook, etc.
-            """
-            logger.log(
-                logging.WARNING if severity in ("low", "warning") else logging.ERROR,
-                f"[ALERT:{severity.upper()}] {message}",
-            )
+# Always define send_alert fallback at module level if not imported
+if not _send_alert_imported or 'send_alert' not in globals():
+    async def send_alert(message: str, severity: str = "warning") -> None:
+        """
+        Minimal alert hook.
+        
+        In production, override via audit_utils or env-specific wiring to:
+        - push to Slack/Teams
+        - send email
+        - hit incident webhook, etc.
+        """
+        logger.log(
+            logging.WARNING if severity in ("low", "warning") else logging.ERROR,
+            f"[ALERT:{severity.upper()}] {message}",
+        )
 
 
 # Early logger initialization for safe_metric function
