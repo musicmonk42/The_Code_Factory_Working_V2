@@ -950,9 +950,11 @@ jobs:
         if: failure() && matrix.module == 'self_fixing_engineer'
         run: |
           echo "=== Lightweight test collection for self_fixing_engineer (no profiling) ==="
+          echo "Note: Excluding test_arbiter_growth.py due to expensive import-time module stubbing"
           python -m pytest self_fixing_engineer/tests/ \
             --collect-only \
             --quiet \
+            --ignore=self_fixing_engineer/tests/test_arbiter_growth.py \
             2>&1 | head -50 || true
         continue-on-error: true
           
