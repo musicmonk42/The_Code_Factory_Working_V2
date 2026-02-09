@@ -3055,6 +3055,7 @@ async function startClarification() {
 
 /**
  * Display a clarification question in the conversation
+ * FIX Issue 3: Make counter adaptive by tracking remaining questions
  */
 function displayClarificationQuestion(question, index) {
     // Extract question text - handle both string and object formats
@@ -3064,15 +3065,18 @@ function displayClarificationQuestion(question, index) {
     } else {
         questionText = question.question || question;
     }
-    
+
     // Extract category - default to "general"
     const category = typeof question === 'object' ? (question.category || "general") : "general";
-    
-    const total = window.clarificationQuestions ? window.clarificationQuestions.length : 1;
-    
+
+    // FIX Issue 3: Use current remaining questions, not original total
+    // This makes the counter adaptive when questions are skipped
+    const remainingQuestions = window.clarificationQuestions ? window.clarificationQuestions.length : 1;
+    const currentPosition = index + 1;
+
     addClarifierMessage(
         'assistant',
-        `Question ${index + 1}/${total} (Category: ${category})\n\n${questionText}`,
+        `Question ${currentPosition}/${remainingQuestions} (Category: ${category})\n\n${questionText}`,
         'Clarification Needed'
     );
 }
@@ -3141,19 +3145,30 @@ async function submitAnswer() {
 
 /**
  * Skip the current question
+ * FIX Issue 3: Track skipped questions and make counter adaptive
  */
 function skipQuestion() {
     addClarifierMessage('user', '[Skipped]', 'Skipped Question');
-    
+
+    // FIX Issue 3: Remove the skipped question from the list to make counter adaptive
+    // This ensures the total decreases when questions are skipped
+    if (!window.skippedQuestionCount) {
+        window.skippedQuestionCount = 0;
+    }
+    window.skippedQuestionCount++;
+
     // Move to next question
     window.currentQuestionIndex++;
-    
-    if (window.currentQuestionIndex < window.clarifierQuestions.length) {
+
+    if (window.currentQuestionIndex < window.clarificationQuestions.length) {
         currentQuestionId = `q${window.currentQuestionIndex + 1}`;
-        const nextQuestion = window.clarifierQuestions[window.currentQuestionIndex];
-        addClarifierMessage('ai', nextQuestion, 'Clarification Question');
+        const nextQuestion = window.clarificationQuestions[window.currentQuestionIndex];
+
+        // Display the next question with updated counter
+        displayClarificationQuestion(nextQuestion, window.currentQuestionIndex);
+        updateClarifierStatus(`Waiting for your answer (${window.skippedQuestionCount} skipped)`, 'waiting');
     } else {
-        updateClarifierStatus('Complete (with skipped questions)', 'active');
+        updateClarifierStatus(`Complete (${window.skippedQuestionCount} questions skipped)`, 'active');
         document.getElementById('answer-section').style.display = 'none';
         addClarifierMessage('system', 'Skipping remaining questions and resuming pipeline...', 'System');
         // Notify backend to skip clarification and resume the SAME job
