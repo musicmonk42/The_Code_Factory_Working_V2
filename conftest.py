@@ -303,12 +303,24 @@ def _initialize_opentelemetry_mock():
         def set_status(self, status):
             pass
     
+    # Create mock Status and StatusCode
+    class MockStatus:
+        OK = "OK"
+        ERROR = "ERROR"
+    
+    class MockStatusCode:
+        OK = "OK"
+        ERROR = "ERROR"
+        UNSET = "UNSET"
+    
     # Create simple mocks for opentelemetry modules
     _create_simple_mock("opentelemetry", {}, submodules=["trace", "sdk"])
     _create_simple_mock("opentelemetry.trace", {
         "get_tracer": lambda name: MockTracer(),
         "get_tracer_provider": lambda: MagicMock(),
         "set_tracer_provider": lambda provider: None,
+        "Status": MockStatus,
+        "StatusCode": MockStatusCode,
     }, submodules=[])
     _create_simple_mock("opentelemetry.sdk", {}, submodules=["trace"])
     _create_simple_mock("opentelemetry.sdk.trace", {}, submodules=["export"])

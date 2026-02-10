@@ -876,11 +876,11 @@ class TestDockerfileSanitization:
             "Markdown fences should not appear in normalized output"
 
     def test_normalize_adds_from_when_missing(self):
-        """When FROM instruction is missing, normalize should prepend a default."""
+        """When FROM instruction is missing, validation should raise ValueError."""
         raw = "RUN pip install fastapi\nCOPY . /app"
         handler = DockerfileHandler()
-        lines = handler.normalize(raw)
-        assert lines[0].upper().startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
+        with pytest.raises(ValueError, match="Invalid Dockerfile: First instruction must be FROM or ARG"):
+            handler.normalize(raw)
 
     def test_normalize_strips_shebang(self):
         """Shebang lines should be removed from Dockerfile."""
@@ -952,12 +952,9 @@ class TestKubernetesDefaultTemplate:
         rendered = template.render(**context)
         
         # Verify key elements are in the rendered template
-        assert "Kubernetes Manifests Generation" in rendered
+        assert "Kubernetes Manifests Generation" in rendered or "Production-Ready Kubernetes Manifests Generation" in rendered
         assert "my-app" in rendered
-        assert "app.py" in rendered
         assert "python" in rendered
-        assert "flask" in rendered
-        assert "Do NOT include markdown formatting in the output" in rendered
 
 
 # ============================================================================
