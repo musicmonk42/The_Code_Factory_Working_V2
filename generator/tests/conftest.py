@@ -11,6 +11,7 @@ import sys
 import os
 import importlib.machinery
 import importlib.util
+import multiprocessing
 import threading
 from unittest.mock import MagicMock, Mock
 
@@ -332,8 +333,42 @@ def cleanup_watchdog_after_test():
     _cleanup_watchdog_observers()
 
 
+def _cleanup_multiprocessing_resources():
+    """
+    Clean up any leftover multiprocessing processes and queues that may be blocking test completion.
+
+    Multiprocessing processes and queues can cause test timeouts if not properly cleaned up.
+    This function forcefully terminates all non-main processes and attempts to close queues.
+    """
+    try:
+        # Get all active processes
+        active_children = multiprocessing.active_children()
+        if active_children:
+            for process in active_children:
+                try:
+                    if process.is_alive():
+                        process.terminate()
+                        process.join(timeout=1.0)
+                    # If still alive, kill it
+                    if process.is_alive():
+                        process.kill()
+                        process.join(timeout=0.5)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def cleanup_multiprocessing_after_test():
+    """Automatically clean up multiprocessing resources after each test."""
+    yield
+    _cleanup_multiprocessing_resources()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_watchdog_at_session_end():
     """Clean up watchdog observers at the end of the test session."""
     yield
     _cleanup_watchdog_observers()
+    _cleanup_multiprocessing_resources()
