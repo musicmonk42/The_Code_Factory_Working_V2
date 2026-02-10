@@ -1309,14 +1309,21 @@ class YAMLHandler(FormatHandler):
                     next_key = remainder.split(':')[0].strip()
                     
                     # Provide a sensible default value based on the key
+                    # For Kubernetes Service type, use LoadBalancer; otherwise use placeholder
                     if key == "type":
                         default_value = "LoadBalancer"
                     else:
                         default_value = "PLACEHOLDER"
+                        # Log warning for non-standard keys that need manual review
+                        logger.warning(
+                            f"Using PLACEHOLDER for key '{key}' in malformed YAML. Manual review recommended.",
+                            extra={"key": key, "remainder": remainder}
+                        )
                     
                     # Add the fixed line with default value
                     lines.append(f"{indent}{key}: {default_value}")
-                    # Add the next key with proper indentation (increase indent by 2 spaces)
+                    # Add the next key with increased indentation (2 spaces is YAML standard)
+                    # Note: YAML standard uses 2-space indents, but this may not match all documents
                     lines.append(f"{indent}  {next_key}:")
                     
                     logger.warning(

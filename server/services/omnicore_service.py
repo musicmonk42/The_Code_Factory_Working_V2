@@ -1402,24 +1402,26 @@ class OmniCoreService:
                             # FIX #1: Strip "generated/" and custom_output_dir prefixes from file_map keys
                             # to prevent double-nesting (e.g., generated/hello_generator/generated/app/main.py)
                             cleaned_file_map = {}
-                            for file_path, content in result.items():
+                            for original_path, content in result.items():
+                                cleaned_path = original_path
+                                
                                 # Remove "generated/" prefix if present
-                                if file_path.startswith("generated/"):
-                                    file_path = file_path[len("generated/"):]
+                                if cleaned_path.startswith("generated/"):
+                                    cleaned_path = cleaned_path[len("generated/"):]
                                     logger.debug(
-                                        f"[CODEGEN] Stripped 'generated/' prefix from file path: {file_path}",
+                                        f"[CODEGEN] Stripped 'generated/' prefix: {original_path} -> {cleaned_path}",
                                         extra={"job_id": job_id}
                                     )
                                 
                                 # Remove custom_output_dir prefix if present (avoid double-nesting)
-                                if custom_output_dir and file_path.startswith(f"{custom_output_dir}/"):
-                                    file_path = file_path[len(custom_output_dir) + 1:]
+                                if custom_output_dir and cleaned_path.startswith(f"{custom_output_dir}/"):
+                                    cleaned_path = cleaned_path[len(custom_output_dir) + 1:]
                                     logger.debug(
-                                        f"[CODEGEN] Stripped custom_output_dir prefix from file path: {file_path}",
+                                        f"[CODEGEN] Stripped custom_output_dir prefix: {original_path} -> {cleaned_path}",
                                         extra={"job_id": job_id, "custom_output_dir": custom_output_dir}
                                     )
                                 
-                                cleaned_file_map[file_path] = content
+                                cleaned_file_map[cleaned_path] = content
                             
                             mat_result = await _materialize_file_map(
                                 cleaned_file_map, output_path
