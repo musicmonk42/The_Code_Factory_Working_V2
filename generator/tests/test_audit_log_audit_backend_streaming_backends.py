@@ -43,6 +43,7 @@ from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
+from aiohttp import ClientError
 import aiokafka
 import pytest
 import pytest_asyncio
@@ -555,7 +556,7 @@ class TestHTTPBackend:
         with patch.object(
             http_backend, "_send_batch_chunks", new_callable=AsyncMock
         ) as mock_send_chunks:
-            mock_send_chunks.side_effect = aiohttp.ClientError(
+            mock_send_chunks.side_effect = ClientError(
                 "Persistent network failure"
             )
 
@@ -567,7 +568,7 @@ class TestHTTPBackend:
 
             # flush_batch() calls _atomic_context, which calls _send_batch_chunks
             # _atomic_context catches the error, enqueues, and re-raises
-            with pytest.raises(aiohttp.ClientError):
+            with pytest.raises(ClientError):
                 await http_backend.flush_batch()
 
             # --- START: FIX for TestHTTPBackend.test_flush_fail_internal_retry ---
@@ -592,7 +593,7 @@ class TestHTTPBackend:
         with patch.object(
             http_backend, "_send_batch_chunks", new_callable=AsyncMock
         ) as mock_send_chunks:
-            mock_send_chunks.side_effect = aiohttp.ClientError(
+            mock_send_chunks.side_effect = ClientError(
                 "Persistent network failure"
             )
 
@@ -606,7 +607,7 @@ class TestHTTPBackend:
 
             assert http_backend._dlq._queue.qsize() == 0
 
-            with pytest.raises(aiohttp.ClientError):
+            with pytest.raises(ClientError):
                 await http_backend.flush_batch()
 
             # Check that it was enqueued to the *DLQ*
@@ -777,7 +778,7 @@ class TestSplunkBackend:
         mock_session, _, _ = mock_aiohttp
 
         # Mock session.post to fail persistently
-        mock_session.post.side_effect = aiohttp.ClientError("HEC failure")
+        mock_session.post.side_effect = ClientError("HEC failure")
 
         # We need to patch retry_operation to fail faster than 3 attempts
         with patch(
@@ -785,7 +786,7 @@ class TestSplunkBackend:
             new_callable=AsyncMock,
             create=True,  # Create if missing for test isolation
         ) as mock_retry:
-            mock_retry.side_effect = aiohttp.ClientError("HEC failure")
+            mock_retry.side_effect = ClientError("HEC failure")
 
             entry = _create_test_entry(Faker())
             # --- FIX: Do not append a copy ---
@@ -795,7 +796,7 @@ class TestSplunkBackend:
             assert splunk_backend._dlq._queue.qsize() == 0
 
             # The error propagates up from _atomic_context
-            with pytest.raises(aiohttp.ClientError):
+            with pytest.raises(ClientError):
                 await splunk_backend.flush_batch()
 
             # Verify (based on source) that DLQ was NOT used
