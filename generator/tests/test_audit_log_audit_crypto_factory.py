@@ -120,7 +120,10 @@ def mock_settings(monkeypatch):
 
 @pytest.fixture
 def mock_boto(monkeypatch):
-    """Mocks the boto3 client and its responses."""
+    """Mocks the boto3 module and its client responses."""
+    # Create mock boto3 module with client method
+    mock_boto3_module = MagicMock()
+    
     mock_kms_client = MagicMock()
     mock_decrypt = MagicMock(
         return_value={"Plaintext": b"test-master-key-from-kms-0123456"}
@@ -128,9 +131,12 @@ def mock_boto(monkeypatch):
     mock_kms_client.decrypt = mock_decrypt
 
     mock_boto_client = MagicMock(return_value=mock_kms_client)
+    mock_boto3_module.client = mock_boto_client
+    
+    # Patch the entire boto3 module object (not boto3.client)
     monkeypatch.setattr(
-        "generator.audit_log.audit_crypto.audit_crypto_factory.boto3.client",
-        mock_boto_client,
+        "generator.audit_log.audit_crypto.audit_crypto_factory.boto3",
+        mock_boto3_module,
     )
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", True
@@ -786,8 +792,9 @@ class TestAsyncUtils:
         mock_sleep = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", mock_sleep)
 
-        # The alert should fail but NOT raise (it catches the exception and logs it)
-        await send_alert("Test Alert", severity="critical")
+        # FIX: Pass the mocked endpoint explicitly
+        mock_endpoint = mock_settings[0].ALERT_ENDPOINT
+        await send_alert("Test Alert", severity="critical", endpoint=mock_endpoint)
 
         # Assert it was called the correct number of times (default is 3)
         assert mock_session.post.call_count == 3
