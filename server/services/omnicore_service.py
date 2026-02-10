@@ -2882,27 +2882,49 @@ class OmniCoreService:
                         validation_warnings = val_result.get('warnings', [])
 
                         # Check for syntax errors that could be fixed with retry
+                        # Also check for missing required files, as they may be missing due to syntax errors
+                        # causing the file to be rejected during codegen
                         syntax_errors = [e for e in validation_errors if 'syntax' in e.lower() or 'SyntaxError' in e]
+                        missing_files = [e for e in validation_errors if 'missing' in e.lower() and 'required' in e.lower()]
+                        
+                        # If we have missing required files, check if error.txt was generated (indicates syntax issues)
+                        errors_for_retry = syntax_errors
+                        if missing_files and output_path_for_validation:
+                            error_txt_path = Path(output_path_for_validation) / "error.txt"
+                            if error_txt_path.exists():
+                                # Missing files + error.txt suggests files were rejected due to syntax errors
+                                logger.info(
+                                    f"[PIPELINE] Job {job_id} has missing required files and error.txt, "
+                                    "suggesting syntax errors caused file rejection",
+                                    extra={"job_id": job_id, "missing_files": missing_files}
+                                )
+                                errors_for_retry.extend(missing_files)
 
-                        if syntax_errors and codegen_attempt <= max_codegen_retries:
+                        if errors_for_retry and codegen_attempt <= max_codegen_retries:
                             # Build error context for retry
                             previous_error = {
-                                "error_type": "SyntaxError",
-                                "details": "\n".join(syntax_errors[:3]),  # Limit to first 3 errors
+                                "error_type": "SyntaxError" if syntax_errors else "ValidationError",
+                                "details": "\n".join(errors_for_retry[:3]),  # Limit to first 3 errors
                                 "instruction": (
-                                    "The previous code generation had syntax errors. "
+                                    "The previous code generation had syntax errors or missing required files. "
                                     "Please fix these errors and regenerate the code with proper syntax. "
                                     "Pay special attention to:\n"
                                     "1. String literals must be properly terminated with matching quotes\n"
                                     "2. All control structures (if, for, def, class, etc.) must end with a colon (:)\n"
                                     "3. Check for stray backslashes at line endings\n"
-                                    "4. Ensure all brackets, parentheses, and braces are properly matched"
+                                    "4. Ensure all brackets, parentheses, and braces are properly matched\n"
+                                    "5. Include commas between function arguments and list/dict elements"
                                 )
                             }
 
                             logger.warning(
-                                f"[PIPELINE] Job {job_id} validation found syntax errors after codegen completion",
-                                extra={"job_id": job_id, "syntax_errors": syntax_errors, "attempt": codegen_attempt}
+                                f"[PIPELINE] Job {job_id} validation found errors after codegen completion, will retry",
+                                extra={
+                                    "job_id": job_id, 
+                                    "syntax_errors": syntax_errors, 
+                                    "missing_files": missing_files,
+                                    "attempt": codegen_attempt
+                                }
                             )
 
                             # Remove the failed output directory to avoid conflicts
