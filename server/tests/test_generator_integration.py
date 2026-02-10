@@ -378,14 +378,15 @@ class TestReadmeContentLoading:
         job_dir = tmp_path / job_id
         job_dir.mkdir()
         
-        # Create multiple README files
-        (job_dir / "README.md").write_text("Lower priority")
-        (job_dir / "New_Test_README.md").write_text("Higher priority")
+        # Create multiple README files - README.md has highest priority
+        (job_dir / "readme.md").write_text("Lower priority")
+        (job_dir / "README.txt").write_text("Lower priority txt")
+        (job_dir / "README.md").write_text("Highest priority")
         
-        # Should load the higher priority file
+        # Should load README.md (highest priority)
         result = await generator_service.get_readme_content(job_id)
         
-        assert result == "Higher priority"
+        assert result == "Highest priority"
 
     async def test_get_readme_content_fallback_to_md_files(self, generator_service, tmp_path):
         """Test fallback to any .md file when standard README names not found."""

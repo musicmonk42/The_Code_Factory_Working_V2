@@ -609,7 +609,6 @@ class GeneratorService:
         
         # Priority order for README files
         readme_patterns = [
-            "New_Test_README.md",  # Explicitly uploaded README
             "README.md",
             "readme.md", 
             "README.txt",
