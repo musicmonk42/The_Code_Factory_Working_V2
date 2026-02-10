@@ -81,7 +81,7 @@ async def query_all_audit_logs(
     if "generator" in modules_to_query:
         try:
             modules_queried.append("generator")
-            generator_logs = await generator_service.query_audit_logs(
+            generator_logs = await _query_generator_audit_logs(
                 start_time=start_time,
                 end_time=end_time,
                 event_type=event_type,
@@ -89,7 +89,7 @@ async def query_all_audit_logs(
                 limit=limit,
             )
             
-            for log in generator_logs.get("logs", []):
+            for log in generator_logs:
                 log["module"] = "generator"
                 aggregated_logs.append(log)
                 
@@ -224,6 +224,93 @@ async def query_all_audit_logs(
             "limit": limit,
         }
     }
+
+
+async def _query_generator_audit_logs(
+    start_time: Optional[str],
+    end_time: Optional[str],
+    event_type: Optional[str],
+    job_id: Optional[str],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Query Generator audit logs from the audit_log module."""
+    try:
+        # Import generator's AUDIT_LOG singleton
+        from generator.audit_log.audit_log import AUDIT_LOG
+        
+        # Try to get the log file path from the backend
+        if hasattr(AUDIT_LOG, 'backend') and hasattr(AUDIT_LOG.backend, 'log_file'):
+            log_file = Path(AUDIT_LOG.backend.log_file)
+        else:
+            # Fallback: try common default paths
+            default_paths = [
+                Path("logs/generator_audit.jsonl"),
+                Path("generator/logs/audit_log.jsonl"),
+                Path("audit_log.jsonl"),
+            ]
+            log_file = None
+            for path in default_paths:
+                if path.exists():
+                    log_file = path
+                    break
+            
+            if not log_file:
+                logger.warning("Generator audit log file not found")
+                return []
+        
+        if not log_file.exists():
+            logger.warning(f"Generator audit log file not found: {log_file}")
+            return []
+        
+        logs = []
+        with open(log_file, 'r') as f:
+            for line in f:
+                try:
+                    entry = json.loads(line.strip())
+                    
+                    # Apply filters
+                    # Check event_type (could be in 'action' or 'event_type' field)
+                    entry_event_type = entry.get("event_type") or entry.get("action")
+                    if event_type and entry_event_type != event_type:
+                        continue
+                    
+                    # Check job_id (could be in details or top-level)
+                    entry_job_id = entry.get("job_id") or entry.get("details", {}).get("job_id")
+                    if job_id and str(entry_job_id) != job_id:
+                        continue
+                    
+                    # Parse timestamp for range filtering
+                    entry_time = entry.get("timestamp")
+                    if start_time and entry_time and entry_time < start_time:
+                        continue
+                    if end_time and entry_time and entry_time > end_time:
+                        continue
+                    
+                    # Normalize to standardized format
+                    logs.append({
+                        "timestamp": entry.get("timestamp"),
+                        "event_type": entry_event_type,
+                        "job_id": entry_job_id,
+                        "action": entry.get("action") if "action" in entry else entry_event_type,
+                        "user": entry.get("user", entry.get("user_id", "system")),
+                        "status": entry.get("status", "success"),
+                        "details": entry.get("details", {}),
+                    })
+                    
+                    if len(logs) >= limit:
+                        break
+                        
+                except json.JSONDecodeError:
+                    continue
+        
+        return logs
+        
+    except ImportError:
+        logger.warning("Generator audit logger not available")
+        return []
+    except Exception as e:
+        logger.error(f"Error reading generator audit logs: {e}", exc_info=True)
+        return []
 
 
 async def _query_arbiter_audit_logs(
