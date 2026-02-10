@@ -200,6 +200,12 @@ try:
         "Total security findings detected",
         ["format", "finding_type"],
     )
+    # FIX 6: Add LLM_OUTPUT_FORMAT metric
+    llm_output_format_counter = Counter(
+        "deploy_llm_output_format_total",
+        "Classification of LLM output format",
+        ["target", "format_type"],
+    )
 except ValueError:
     # Metrics already registered (happens during pytest collection)
     from prometheus_client import REGISTRY
@@ -218,6 +224,10 @@ except ValueError:
     )
     scan_total_findings = REGISTRY._names_to_collectors.get(
         "deploy_scan_total_findings"
+    )
+    # FIX 6: Get existing LLM output format metric
+    llm_output_format_counter = REGISTRY._names_to_collectors.get(
+        "deploy_llm_output_format_total"
     )
 
 # --- ADDED: Constants and Functions for Test Fixes ---
@@ -595,14 +605,34 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     """
     raw = raw_response.strip()
     
+    # Check if empty
+    if not raw:
+        # FIX 6: Record LLM output format classification
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="empty").inc()
+        logger.warning(f"Empty LLM response for {format_type}")
+        return raw
+    
     # Check if response is already pure config (starts with expected instruction)
     if format_type == "dockerfile" and raw.startswith(("FROM", "ARG")):
+        # FIX 6: Record valid format
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
     if format_type in ("yaml", "kubernetes", "helm") and raw.startswith(("---", "apiVersion:", "name:", "replicaCount:")):
+        # FIX 6: Record valid format
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
     if format_type == "json" and raw.startswith(("{", "[")):
+        # FIX 6: Record valid format
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
     if format_type == "hcl" and (raw.startswith("resource") or raw.startswith("provider") or raw.startswith("terraform")):
+        # FIX 6: Record valid format
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
     
     # Try to extract from markdown code blocks
@@ -615,6 +645,9 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     if code_block_match:
         extracted = code_block_match.group(1).strip()
         logger.debug(f"Extracted config from markdown code block: {len(extracted)} chars")
+        # FIX 6: Record markdown wrapped format
+        if llm_output_format_counter:
+            llm_output_format_counter.labels(target=format_type, format_type="markdown_wrapped").inc()
         return extracted
     
     # Last resort for Dockerfile: find first FROM or ARG instruction
@@ -623,6 +656,9 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         if match:
             extracted = raw[match.start():]
             logger.debug(f"Extracted Dockerfile from first FROM/ARG: {len(extracted)} chars")
+            # FIX 6: Record prose format
+            if llm_output_format_counter:
+                llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
     
     # Last resort for YAML: find first --- or apiVersion
@@ -631,6 +667,9 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         if match:
             extracted = raw[match.start():]
             logger.debug(f"Extracted YAML from first --- or apiVersion: {len(extracted)} chars")
+            # FIX 6: Record prose format
+            if llm_output_format_counter:
+                llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
     
     # Last resort for JSON: find first { or [
@@ -639,10 +678,16 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         if match:
             extracted = raw[match.start():]
             logger.debug(f"Extracted JSON from first brace/bracket: {len(extracted)} chars")
+            # FIX 6: Record prose format
+            if llm_output_format_counter:
+                llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
     
     # Return as-is for handler to validate/fail
     logger.debug(f"No extraction patterns matched for {format_type}, returning original")
+    # FIX 6: Record unknown/prose format
+    if llm_output_format_counter:
+        llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
     return raw
 
 

@@ -211,6 +211,36 @@ DEPLOY_ERRORS = _get_or_create_metric(
 MAX_LLM_RETRIES = 3
 # --- End of FIX 4 constant ---
 
+# --- FIX 6: Add new Prometheus metrics ---
+PROMPT_TOKEN_COUNT = _get_or_create_metric(
+    prometheus_client.Histogram,
+    "deploy_prompt_token_count",
+    "Token count of deployment prompts",
+    ["target"],
+)
+
+CONTEXT_FILES_COUNT = _get_or_create_metric(
+    prometheus_client.Gauge,
+    "deploy_context_files_count",
+    "Number of files included in deployment context",
+    ["target"],
+)
+
+LLM_OUTPUT_FORMAT = _get_or_create_metric(
+    prometheus_client.Counter,
+    "deploy_llm_output_format_total",
+    "Classification of LLM output format",
+    ["target", "format_type"],  # format_type: valid, prose, markdown_wrapped, empty
+)
+
+LLM_RETRY_COUNT = _get_or_create_metric(
+    prometheus_client.Counter,
+    "deploy_llm_retry_total",
+    "Number of LLM retries for deployment generation",
+    ["target", "attempt"],
+)
+# --- End of FIX 6 metrics ---
+
 
 # --- Scrubbing / Logging --------------------------------------------
 def scrub_text(text: str) -> str:
@@ -1354,6 +1384,10 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                 logger.info(f"[DEPLOY_AGENT] Found plugin for target '{target}': {plugin.name if hasattr(plugin, 'name') else 'unknown'}")
 
                 context = await self.gather_context([])
+                
+                # FIX 6: Record context files count
+                files_list = requirements.get("files", [])
+                CONTEXT_FILES_COUNT.labels(target=target).set(len(files_list))
 
                 steps = requirements.get(
                     "pipeline_steps",
@@ -1369,6 +1403,10 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                     
                     for attempt in range(MAX_LLM_RETRIES):
                         try:
+                            # FIX 6: Record retry attempt
+                            if attempt > 0:
+                                LLM_RETRY_COUNT.labels(target=target, attempt=str(attempt + 1)).inc()
+                            
                             # --- FIX 3.3: Pass repo_path to prompt agent ---
                             prompt = await self.prompt_agent(
                                 target=target,
@@ -1378,6 +1416,16 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                                 context=context,
                             )
                             # --------------------------------------------
+                            
+                            # FIX 6: Record prompt token count (approximate)
+                            if HAS_TIKTOKEN:
+                                try:
+                                    encoding = tiktoken.encoding_for_model("gpt-4")
+                                    token_count = len(encoding.encode(prompt))
+                                    PROMPT_TOKEN_COUNT.labels(target=target).observe(token_count)
+                                    logger.debug(f"[DEPLOY_AGENT] Prompt token count: {token_count}")
+                                except Exception as e:
+                                    logger.debug(f"[DEPLOY_AGENT] Could not count tokens: {e}")
                             
                             # FIX 4: Build retry prompt with error context on subsequent attempts
                             if attempt > 0 and last_error:

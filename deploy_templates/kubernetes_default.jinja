@@ -165,7 +165,7 @@ securityContext:
 
 ---
 
-## OUTPUT FORMAT
+## STRICT OUTPUT FORMAT - CRITICAL
 
 **CRITICAL REQUIREMENTS:**
 
@@ -192,7 +192,6 @@ securityContext:
    - ACTUAL health check endpoints
 
 **Example Output Structure** (without markdown fences):
-```
 ---
 # Deployment manifest here
 apiVersion: apps/v1
@@ -203,7 +202,6 @@ kind: Deployment
 apiVersion: v1
 kind: Service
 ...
-```
 
 **VALIDATION CHECKLIST:**
 - [ ] Output contains ONLY YAML (no markdown)
@@ -213,3 +211,5 @@ kind: Service
 - [ ] Health probes are configured
 - [ ] Labels follow app.kubernetes.io standard
 - [ ] Service selector matches Deployment labels
+
+BEGIN YOUR KUBERNETES MANIFESTS NOW:
