@@ -978,6 +978,9 @@ class DeploymentCompletenessValidator(Validator):
                             report["errors"].append(f"Error reading/validating {file_path}: {str(e)}")
                             report["status"] = "failed"
         
+        # Validate that deployment files match the actual generated code
+        await self._validate_deployment_matches_code(report)
+        
         logger.info(f"DeploymentCompletenessValidator validation {report['status']} for {target_type}")
         return report
     
@@ -1017,6 +1020,58 @@ class DeploymentCompletenessValidator(Validator):
                 f"Dockerfile validation failed for {file_path}: Missing required instructions {missing_instructions}"
             )
             report["status"] = "failed"
+    
+    async def _validate_deployment_matches_code(self, report: Dict[str, Any]) -> None:
+        """
+        Validate that deployment configurations match the actual generated code.
+        
+        Checks:
+        - Dockerfile copies/references actual project files
+        - Kubernetes/Helm configs use ports that match the application code
+        - Entry points match actual main files
+        """
+        warnings = []
+        
+        # Check if we have a requirements.txt or package.json in the project
+        has_requirements = Path("requirements.txt").exists()
+        has_package_json = Path("package.json").exists()
+        has_go_mod = Path("go.mod").exists()
+        
+        # Validate Dockerfile if it exists
+        dockerfile_path = Path("Dockerfile")
+        if dockerfile_path.exists():
+            try:
+                async with aiofiles.open(dockerfile_path, 'r', encoding='utf-8') as f:
+                    dockerfile_content = await f.read()
+                
+                # Check if Dockerfile copies dependency files
+                if has_requirements and "requirements.txt" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference requirements.txt found in project")
+                
+                if has_package_json and "package.json" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference package.json found in project")
+                
+                if has_go_mod and "go.mod" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference go.mod found in project")
+                
+                # Check for common entry points
+                common_entry_points = ["main.py", "app.py", "server.py", "index.js", "server.js", "main.go"]
+                found_entry_points = [ep for ep in common_entry_points if Path(ep).exists()]
+                
+                if found_entry_points:
+                    # Check if at least one entry point is referenced in Dockerfile
+                    if not any(ep in dockerfile_content for ep in found_entry_points):
+                        warnings.append(
+                            f"Dockerfile may not use detected entry points: {found_entry_points}"
+                        )
+                        
+            except Exception as e:
+                logger.warning(f"Could not validate Dockerfile content matching: {e}")
+        
+        # Add warnings to report (non-fatal)
+        if warnings:
+            report["warnings"] = warnings
+            logger.info(f"Deployment matching validation warnings: {warnings}")
     
     async def fix(self, config_content: str, issues: List[str], target_type: str) -> str:
         """

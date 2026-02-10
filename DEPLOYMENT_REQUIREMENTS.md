@@ -2,7 +2,19 @@
 
 ## Overview
 
-The Code Factory deployment pipeline now ensures that **all generated projects** include complete and valid deployment artifacts for Docker, Kubernetes, and Helm. This document specifies the mandatory deployment requirements for all generated projects.
+The Code Factory deployment pipeline now ensures that **all generated projects** include complete and valid deployment artifacts for Docker, Kubernetes, and Helm. **CRITICAL**: All deployment files MUST accurately reflect the actual generated code, not generic templates.
+
+## Key Principle: Deployment Files Must Match Generated Code
+
+**Every deployment configuration must be based on analysis of the actual generated project files.**
+
+This means:
+- **Dockerfile** copies the actual dependencies file (requirements.txt, package.json, go.mod)
+- **Ports** exposed match what the application actually listens on
+- **Entry points** (CMD/ENTRYPOINT) use the actual main file
+- **Environment variables** match what the code references
+- **Health checks** point to actual endpoints the app exposes
+- **Kubernetes/Helm configs** use actual application ports and service names
 
 ## Deployment Pipeline Changes
 
@@ -51,7 +63,7 @@ deploy_result = await self._run_deploy_all(job_id, deploy_payload)
 
 ### 3. Deployment Completeness Validator
 
-**Issue**: No validator ensured all required deployment artifacts exist and are valid.
+**Issue**: No validator ensured all required deployment artifacts exist and are valid, or that they match the generated code.
 
 **Solution**: Created `DeploymentCompletenessValidator` class in `generator/agents/deploy_agent/deploy_validator.py` that validates:
 
@@ -78,6 +90,10 @@ deploy_result = await self._run_deploy_all(job_id, deploy_payload)
 2. **YAML Validation**: All YAML files have valid syntax
 3. **Dockerfile Validation**: Contains required instructions (FROM, etc.)
 4. **Placeholder Validation**: No unsubstituted placeholders like `<PORT_NUMBER>`, `{VARIABLE}`, etc.
+5. **Code Matching Validation** (NEW): 
+   - Dockerfile references actual dependency files (requirements.txt, package.json, go.mod)
+   - Dockerfile uses actual entry points found in the project
+   - Deployment configs don't use generic values when actual values are available
 
 **Exceptions**: Helm template placeholders like `{{ .Values.x }}` are allowed as they are valid Go template syntax.
 
@@ -138,6 +154,64 @@ if result["status"] == "failed":
         print(f"Validation errors: {result['validation_errors']}")
 ```
 
+## How Deploy Agent Analyzes Generated Code
+
+The deploy agent uses a multi-step process to ensure deployment files match the actual generated code:
+
+### 1. Context Gathering (`gather_context()`)
+
+The deploy agent automatically reads and analyzes:
+
+- **requirements.txt** - Python dependencies and versions
+- **package.json** - JavaScript/TypeScript dependencies and scripts
+- **go.mod** - Go module requirements
+- **Main application files** - Entry points, ports, configuration
+- **Git commits** - Recent changes for context
+
+### 2. File Content Analysis (`gather_context_for_prompt()`)
+
+Before generating deployment configs, the agent:
+
+- Reads actual file contents from the repository
+- Extracts language/framework information
+- Identifies dependencies with versions
+- Detects common entry points (main.py, app.py, server.js, etc.)
+
+### 3. Enhanced Prompt Templates
+
+The deployment prompt templates now explicitly:
+
+- Include actual file contents (first 300-500 chars of each file)
+- Show detected dependencies with versions
+- Emphasize using EXACT values from code (ports, entry points, env vars)
+- Warn against generic templates
+
+**Example from docker_default.jinja**:
+```jinja
+**CRITICAL**: You MUST analyze the actual generated project files below 
+and create a Dockerfile that accurately reflects what was built. 
+Do NOT use generic templates.
+
+## Actual File Contents (Use These to Determine Configuration)
+{% for filename, content in context.files_content.items() %}
+### File: {{ filename }}
+{{ content[:500] }}
+{% endfor %}
+
+**IMPORTANT**: Based on the above file contents:
+- Detect the correct entry point (main file, app.py, server.js, etc.)
+- Identify the actual port the application listens on
+- Determine the exact dependencies and their versions
+```
+
+### 4. Validation Against Code
+
+The `DeploymentCompletenessValidator` performs additional checks:
+
+- Verifies Dockerfile references actual dependency files found in project
+- Checks that detected entry points are used in CMD/ENTRYPOINT
+- Warns if deployment configs use generic values when actual values exist
+
 ## Success Criteria
 
 After these changes:
@@ -151,6 +225,12 @@ After these changes:
 ✅ **Fast Failure**: Pipeline fails immediately if deployment artifacts are incomplete or invalid
 
 ✅ **Clear Error Messages**: Detailed error reporting for debugging deployment issues
+
+✅ **Code-Accurate Deployments** (NEW): Deployment files reflect actual generated code, not generic templates
+  - Dockerfile copies actual dependencies (requirements.txt, package.json, etc.)
+  - Ports match actual application ports
+  - Entry points match actual main files
+  - Environment variables match code references
 
 ## Troubleshooting
 

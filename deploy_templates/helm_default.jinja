@@ -24,15 +24,39 @@ Generate a Helm chart for {{ target | default('the application') }}.
 {% endif %}
 
 {% if context is defined %}
-## Application Context
+## Application Context & Dependencies
+
 {% if context.language is defined %}
-- Language: {{ context.language }}
+**Language**: {{ context.language }}
 {% endif %}
+
 {% if context.framework is defined %}
-- Framework: {{ context.framework }}
+**Framework**: {{ context.framework }}
 {% endif %}
+
 {% if context.dependencies is defined and context.dependencies %}
-- Dependencies: {{ context.dependencies | join(', ') }}
+**Dependencies**:
+{% for dep in context.dependencies %}
+  - {{ dep }}
+{% endfor %}
+{% endif %}
+
+{% if context.files_content is defined and context.files_content %}
+## Generated Application Analysis
+
+**CRITICAL**: Analyze these actual project files to determine:
+- Application entry point and startup command
+- Ports the application listens on
+- Environment variables the app expects
+- Health check endpoints (if any)
+- Resource requirements based on dependencies
+
+{% for filename, content in context.files_content.items() %}
+### {{ filename }}
+```
+{{ content[:300] }}{% if content|length > 300 %}...{% endif %}
+```
+{% endfor %}
 {% endif %}
 {% endif %}
 
@@ -91,3 +115,14 @@ The Helm chart should include:
 
 ---
 **Output Format**: Generate the Helm chart values.yaml or the complete chart structure as requested. Use proper YAML formatting with comments explaining configuration options.
+
+**CRITICAL VALIDATION**: Your generated Helm chart MUST:
+1. Use the EXACT container port(s) from the application code
+2. Set the correct image repository and tag based on the project
+3. Include ALL environment variables the application code references
+4. Configure health checks at endpoints the application actually exposes
+5. Set resource limits appropriate for the detected language/framework
+6. Use service names and labels that match the application name
+7. Include ConfigMaps/Secrets for any configuration files the app needs
+
+Base ALL configuration on the actual generated code, not generic templates.

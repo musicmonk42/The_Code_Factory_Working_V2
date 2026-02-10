@@ -14,7 +14,9 @@
 
 # Production-Ready Dockerfile Generation
 
-Generate a production-grade Dockerfile for these files:
+**CRITICAL**: You MUST analyze the actual generated project files below and create a Dockerfile that accurately reflects what was built. Do NOT use generic templates.
+
+## Generated Project Files
 {% if files %}
 {% for file in files %}
 - {{ file }}
@@ -24,15 +26,38 @@ Generate a production-grade Dockerfile for these files:
 {% endif %}
 
 {% if context is defined %}
-## Context Information
+## Project Context & Dependencies
+
 {% if context.language is defined %}
-- Language: {{ context.language }}
+**Language**: {{ context.language }}
 {% endif %}
+
 {% if context.framework is defined %}
-- Framework: {{ context.framework }}
+**Framework**: {{ context.framework }}
 {% endif %}
+
 {% if context.dependencies is defined and context.dependencies %}
-- Dependencies: {{ context.dependencies | join(', ') }}
+**Dependencies Found**:
+{% for dep in context.dependencies %}
+  - {{ dep }}
+{% endfor %}
+{% endif %}
+
+{% if context.files_content is defined and context.files_content %}
+## Actual File Contents (Use These to Determine Configuration)
+
+{% for filename, content in context.files_content.items() %}
+### File: {{ filename }}
+```
+{{ content[:500] }}{% if content|length > 500 %}... (truncated, see full analysis){% endif %}
+```
+{% endfor %}
+
+**IMPORTANT**: Based on the above file contents:
+- Detect the correct entry point (main file, app.py, server.js, etc.)
+- Identify the actual port the application listens on
+- Determine the exact dependencies and their versions
+- Use the correct package manager commands (pip, npm, go mod, etc.)
 {% endif %}
 {% endif %}
 
@@ -87,3 +112,15 @@ The Dockerfile must include:
 
 ---
 **Output Format**: Generate ONLY the Dockerfile content. No explanations, comments outside the Dockerfile, or markdown formatting. The output should be ready to save as a `Dockerfile`.
+
+**CRITICAL VALIDATION**: Your generated Dockerfile MUST:
+1. Use the EXACT entry point found in the actual code files
+2. Expose the EXACT port(s) the application uses (scan code for listen/bind calls)
+3. Install the EXACT dependencies from requirements.txt/package.json/go.mod (with versions)
+4. Copy ALL necessary files that the application references
+5. Use the correct base image for the detected language/framework
+6. Include the actual environment variables the code expects
+7. Match the directory structure the code uses
+
+If you cannot determine any of these from the provided files, make reasonable inferences based on the language/framework conventions, but prefer accuracy over generic templates.
+

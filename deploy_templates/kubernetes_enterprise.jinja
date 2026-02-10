@@ -33,24 +33,63 @@ Generate production-grade, security-hardened Kubernetes manifests following ente
 {% endif %}
 
 {% if context is defined %}
-## Application Context
+## Application Context & Analysis
+
 {% if context.language is defined %}
 - **Language**: {{ context.language }}
 {% endif %}
+
 {% if context.framework is defined %}
 - **Framework**: {{ context.framework }}
 {% endif %}
+
+{% if context.dependencies is defined and context.dependencies %}
+**Dependencies Detected**:
+{% for dep in context.dependencies %}
+  - {{ dep }}
+{% endfor %}
+{% endif %}
+
+{% if context.files_content is defined and context.files_content %}
+## Generated Application Files (Analyze for Configuration)
+
+**CRITICAL**: Review these actual files to determine the correct:
+- Application port(s)
+- Entry point command
+- Required environment variables
+- Health check endpoints
+- Volume mount paths
+
+{% for filename, content in context.files_content.items() %}
+### {{ filename }}
+```
+{{ content[:400] }}{% if content|length > 400 %}...{% endif %}
+```
+{% endfor %}
+{% endif %}
+
 {% if context.replicas is defined %}
 - **Replicas**: {{ context.replicas }}
 {% else %}
 - **Replicas**: 3 (HA default)
 {% endif %}
+
 {% if context.port is defined %}
 - **Port**: {{ context.port }}
 {% endif %}
 {% endif %}
 
 ---
+
+**DEPLOYMENT ACCURACY REQUIREMENT**: 
+Before generating manifests, you MUST analyze the actual application code above to determine:
+1. The exact port(s) the application listens on (scan for listen/bind calls)
+2. The correct startup command and entry point
+3. Environment variables the code actually uses
+4. Health check endpoints the application exposes
+5. Any configuration files the app reads
+
+Do NOT use generic port 8080 unless the code actually uses it!
 
 ## CRITICAL REQUIREMENTS - Enterprise Kubernetes Standards
 
