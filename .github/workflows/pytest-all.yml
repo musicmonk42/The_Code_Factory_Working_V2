@@ -940,7 +940,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 2d-1 (Remaining Arbiter Part 1)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 35
+        timeout-minutes: 15
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -956,7 +956,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
 
           echo "=== Running Batch 2d-1: Remaining Arbiter Tests Part 1 (7 test files) ==="
-          timeout --signal=TERM --kill-after=60s 20m python -m pytest \
+          timeout --signal=TERM --kill-after=60s 10m python -m pytest \
             self_fixing_engineer/tests/test_arbiter_utils.py \
             self_fixing_engineer/tests/test_arbiter_config.py \
             self_fixing_engineer/tests/test_arbiter_arbiter.py \
