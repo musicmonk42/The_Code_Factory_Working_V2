@@ -9,6 +9,7 @@ resources:
   - configmap.yaml
   - secret.yaml
   - rbac.yaml
+  - migration-job.yaml
   - api-deployment.yaml
   - redis-deployment.yaml
   - ingress.yaml

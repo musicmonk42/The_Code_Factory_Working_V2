@@ -63,6 +63,7 @@ data:
   ENABLE_FEATURE_STORE: "0"
   ENABLE_LIBVIRT: "0"
   ENABLE_KAFKA: "0"
+  ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
   
   # ============================================
   # Audit Crypto Configuration

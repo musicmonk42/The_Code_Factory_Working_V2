@@ -1,0 +1,117 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+# Database Migration Job
+# This job runs Alembic migrations before deploying the main application
+# Can be run manually or automatically as part of deployment pipeline
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: codefactory-migrations
+  namespace: codefactory
+  labels:
+    app: codefactory
+    component: migrations
+  annotations:
+    # This annotation marks this as a pre-deployment job
+    # In a CI/CD pipeline, run this before deploying api-deployment.yaml
+    deployment.order: "1"
+spec:
+  # Keep job history for debugging
+  ttlSecondsAfterFinished: 300
+  # Retry up to 3 times on failure
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: codefactory
+        component: migrations
+    spec:
+      restartPolicy: Never
+      serviceAccountName: codefactory
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: migrations
+        image: ghcr.io/musicmonk42/codefactory:latest
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "========================================="
+            echo "Running Database Migrations with Alembic"
+            echo "========================================="
+            cd /app
+            
+            # Show current migration status
+            echo "Current migration version:"
+            alembic current || echo "No migrations applied yet"
+            
+            # Run migrations
+            echo ""
+            echo "Applying migrations..."
+            alembic upgrade head
+            
+            # Verify success
+            echo ""
+            echo "Migration completed. Current version:"
+            alembic current
+            
+            echo ""
+            echo "========================================="
+            echo "Migration Job Completed Successfully"
+            echo "========================================="
+        env:
+          # Database connection (from secret)
+          - name: DB_PATH
+            valueFrom:
+              secretKeyRef:
+                name: codefactory-secrets
+                key: database-url
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: codefactory-secrets
+                key: database-url
+          
+          # Basic configuration
+          - name: APP_ENV
+            valueFrom:
+              configMapKeyRef:
+                name: codefactory-config
+                key: APP_ENV
+          - name: LOG_LEVEL
+            valueFrom:
+              configMapKeyRef:
+                name: codefactory-config
+                key: LOG_LEVEL
+          
+          # Disable features not needed for migrations
+          - name: ENABLE_REDIS
+            value: "0"
+          - name: ENABLE_PROMETHEUS
+            value: "0"
+          - name: SKIP_IMPORT_TIME_VALIDATION
+            value: "1"
+        
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
