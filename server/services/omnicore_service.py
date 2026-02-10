@@ -2825,9 +2825,11 @@ class OmniCoreService:
                     # Remove root main.py requirement for app-structured projects
                     if "main.py" in required_files:
                         required_files.remove("main.py")
-                    # The validator will add app/main.py automatically when it detects app/ dir
+                    # Explicitly add app/ subdirectory files to required_files
+                    # The validator does NOT auto-detect these, so we must add them here
+                    required_files.extend(["app/main.py", "app/routes.py", "app/schemas.py"])
                     logger.info(
-                        f"[PIPELINE] Job {job_id} detected app/ layout, adjusted required files",
+                        f"[PIPELINE] Job {job_id} detected app/ layout, adjusted required files: {required_files}",
                         extra={"job_id": job_id, "required_files": required_files}
                     )
 
@@ -3003,12 +3005,28 @@ class OmniCoreService:
                             }
                         )
                     else:
+                        # Check if LLM provider is configured for intelligent test generation
+                        # detect_available_llm_provider() is imported at line 158 from runner.llm_client
+                        llm_provider_configured = False
+                        try:
+                            if self.llm_config and self.llm_config.default_llm_provider:
+                                llm_provider_configured = True
+                            elif detect_available_llm_provider():
+                                llm_provider_configured = True
+                        except Exception:
+                            pass
+                        
                         testgen_payload = {
                             "code_path": output_path,
                             "test_type": "unit",
                             "coverage_target": 80.0,
+                            "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
+                            "llm_timeout": 120 if llm_provider_configured else 30,  # 2 min for LLM, 30s for rule-based
                         }
-                        logger.info(f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files "
+                            f"(LLM-based: {llm_provider_configured})"
+                        )
                         testgen_result = await self._run_testgen(job_id, testgen_payload)
                         if testgen_result.get("status") == "completed":
                             stages_completed.append("testgen")

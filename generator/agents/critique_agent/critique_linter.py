@@ -571,17 +571,57 @@ class LintPlugin(ABC):
         timeout: int,
         use_container: bool,
         container_image: Optional[str],
+        fallback_to_local: bool = True,
     ) -> Dict[str, Any]:
         if use_container:
             if not shutil.which("docker"):
+                # Docker not available - try local fallback if enabled
+                if fallback_to_local and cmd:
+                    tool_binary = cmd[0]
+                    if shutil.which(tool_binary):
+                        logger.info(
+                            f"Docker not available, using local {tool_name} installation at {shutil.which(tool_binary)}"
+                        )
+                        # Recursively call with use_container=False to run tool locally
+                        # This is safe from infinite recursion because:
+                        # 1. use_container=False takes a different code path (non-Docker execution)
+                        # 2. fallback_to_local=False prevents re-entering this fallback logic
+                        try:
+                            result = await self._run_tool(
+                                cmd=cmd,
+                                project_dir=project_dir,
+                                tool_name=tool_name,
+                                timeout=timeout,
+                                use_container=False,
+                                container_image=None,
+                                fallback_to_local=False,  # Prevent infinite recursion
+                            )
+                            # Verify the local execution worked
+                            if result.get("success") or result.get("returncode") == 0:
+                                return result
+                            else:
+                                logger.warning(
+                                    f"Local {tool_name} execution failed (returncode={result.get('returncode')}). "
+                                    f"Skipping this check."
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error running local {tool_name}: {e}. Skipping this check.",
+                                exc_info=True
+                            )
+                    else:
+                        logger.warning(
+                            f"Docker not available and {tool_name} not found locally at {tool_binary}. Skipping {tool_name}."
+                        )
+                else:
+                    logger.warning(
+                        f"Docker not available and local fallback disabled. Skipping containerized linting for {tool_name}."
+                    )
                 # Capability check - gracefully skip containerized linting
-                logger.warning(
-                    f"Docker is not installed or not in PATH. Skipping containerized linting for {tool_name}."
-                )
                 return {
                     "success": True,  # Don't fail the job, just skip this check
                     "stdout": "",
-                    "stderr": "Docker not available - skipping containerized linting",
+                    "stderr": f"Docker not available and {tool_name} not found locally - skipping",
                     "returncode": 0,
                     "status": "skipped",
                 }

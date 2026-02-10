@@ -1905,16 +1905,33 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     Sets up sinks, encryption, and real-time streaming as specified.
 
     [NEW] This function also initializes the audit system key ID.
+    [FIX] Added check to avoid adding duplicate handlers if server logging is already configured.
     """
     from .runner_audit import set_audit_key_id, get_last_audit_hash
 
-    logger = logging.getLogger("runner")
-    logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels
+    
+    # Check if root logger already has handlers (meaning server logging is configured)
+    root_logger = logging.getLogger()
+    server_logging_configured = len(root_logger.handlers) > 0
+    
+    if server_logging_configured:
+        # Server logging is already configured - only configure audit logger
+        # Use root logger for this message since runner logger may not have handlers yet
+        # Ensure root logger has handlers before logging
+        if root_logger.handlers:
+            root_logger.info("Root logger already configured (server logging active). Configuring only runner.audit logger.")
+        else:
+            # Fallback to stderr if no handlers configured yet (should not happen, but defensive)
+            print("[INFO] Root logger detected but no handlers configured. Configuring runner.audit logger.", 
+                  file=sys.stderr)
+    else:
+        # Configure runner logger normally
+        logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels
 
-    # Remove existing handlers to avoid duplicate logs during reconfiguration
-    for handler in list(logger.handlers):
-        handler.close()  # Close handler resources
-        logger.removeHandler(handler)
+        # Remove existing handlers to avoid duplicate logs during reconfiguration
+        for handler in list(logger.handlers):
+            handler.close()  # Close handler resources
+            logger.removeHandler(handler)
 
     json_formatter = StructuredJSONFormatter()
 
@@ -1975,8 +1992,13 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
                 ]:
                     audit_logger.addHandler(handler)
 
-            logger.addHandler(handler)
-            logger.info(f"Added log sink: {sink_type}")
+            # Only add handler to runner logger if server logging is NOT configured
+            if not server_logging_configured:
+                logger.addHandler(handler)
+                logger.info(f"Added log sink: {sink_type}")
+            else:
+                # Server logging is configured - only add to audit logger
+                logger.debug(f"Skipping handler for runner logger (server logging active): {sink_type}")
         except Exception as e:
             logger.error(
                 f"Failed to setup log handler for sink type '{sink_type}': {e}. Skipping this sink.",
