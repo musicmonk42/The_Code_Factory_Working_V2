@@ -230,6 +230,147 @@ class SyntaxAutoRepair:
             return code, []
 
     @staticmethod
+    def repair_truncated_keywords(
+        code: str,
+        language: str
+    ) -> Tuple[str, List[str]]:
+        """
+        Detect and repair truncated Python keywords.
+        
+        LLMs sometimes generate truncated keywords like 'de' (should be 'def'),
+        'clas' (should be 'class'), 'retur' (should be 'return'), etc.
+        These are typically at the start of a line and cause NameError at runtime.
+        
+        Detection Strategy:
+        1. Look for standalone truncated keywords at start of lines
+        2. Remove lines with stray truncated keywords that can't be repaired
+        3. Complete partial keywords when safe to do so
+        
+        Algorithm Complexity: O(n) where n=number of lines
+        
+        Production Safety:
+        - Only removes/repairs lines that match known truncated patterns
+        - Conservative: Only acts on high-confidence matches
+        - Logs all repairs for audit trail
+        
+        Args:
+            code: The source code to repair (must be valid UTF-8 string)
+            language: Programming language identifier (case-insensitive)
+        
+        Returns:
+            Tuple[str, List[str]]:
+                - repaired_code: Code with truncated keywords fixed
+                - fixes_applied: Human-readable list of repairs made
+        
+        Raises:
+            SyntaxAutoRepairError: Only on critical internal errors, not bad input
+        
+        Examples:
+            >>> code = "de\\nprint('hello')"
+            >>> repaired, fixes = SyntaxAutoRepair.repair_truncated_keywords(code, "python")
+            >>> 'de\\n' not in repaired
+            True
+        """
+        # Input validation with safe defaults
+        if not isinstance(code, str):
+            logger.error(
+                f"Invalid input type to repair_truncated_keywords: {type(code).__name__}. "
+                "Expected str. Returning empty result."
+            )
+            return code if code else "", []
+        
+        if not isinstance(language, str):
+            logger.warning(
+                f"Invalid language type: {type(language).__name__}. "
+                "Defaulting to generic behavior."
+            )
+            language = "unknown"
+        
+        fixes = []
+        
+        # Only Python has this issue currently
+        if language.lower() not in ("python", "py"):
+            logger.debug(
+                f"Language '{language}' not supported for truncated keyword repair. "
+                "Returning original code."
+            )
+            return code, []
+        
+        try:
+            lines = code.split('\n')
+            repaired_lines = []
+            
+            # Patterns for truncated keywords
+            # Map truncated -> (full_keyword, require_context)
+            truncated_patterns = {
+                # Stray truncations that should just be removed (no valid completion)
+                r'^\s*de\s*$': ('', True),  # Just 'de' alone - remove it
+                r'^\s*clas\s*$': ('', True),  # Just 'clas' alone - remove it
+                r'^\s*retur\s*$': ('', True),  # Just 'retur' alone - remove it
+                r'^\s*impo\s*$': ('', True),  # Just 'impo' alone - remove it
+                r'^\s*fro\s*$': ('', True),  # Just 'fro' alone - remove it
+                r'^\s*defin\s*$': ('', True),  # Just 'defin' alone - remove it
+                # Patterns that can be completed (if followed by valid syntax)
+                r'^\s*de\s+(\w+)\s*\(': ('def', False),  # 'de func()' -> 'def func()'
+                r'^\s*clas\s+(\w+)': ('class', False),  # 'clas MyClass' -> 'class MyClass'
+                r'^\s*defin\s+(\w+)\s*\(': ('def', False),  # 'defin func()' -> 'def func()'
+            }
+            
+            for i, line in enumerate(lines, 1):
+                should_remove = False
+                replacement_line = line
+                
+                # Check for stray single truncated keywords
+                stripped = line.strip()
+                if stripped in ['de', 'clas', 'retur', 'impo', 'fro', 'defin', 'els', 'eli', 'whil', 'fo']:
+                    # These are standalone truncated keywords - just remove the line
+                    should_remove = True
+                    fixes.append(f"Line {i}: Removed stray truncated keyword '{stripped}'")
+                    logger.debug(f"Removed truncated keyword '{stripped}' at line {i}")
+                else:
+                    # Check for patterns that can be completed
+                    for pattern, (replacement, require_remove) in truncated_patterns.items():
+                        if re.match(pattern, line):
+                            if require_remove or not replacement:
+                                should_remove = True
+                                fixes.append(f"Line {i}: Removed line with truncated keyword")
+                                logger.debug(f"Removed line with truncated pattern at line {i}")
+                            else:
+                                # Try to complete the keyword
+                                if replacement == 'def':
+                                    replacement_line = re.sub(r'^\s*de\s+', lambda m: m.group(0).replace('de', 'def'), line)
+                                    replacement_line = re.sub(r'^\s*defin\s+', lambda m: m.group(0).replace('defin', 'def'), replacement_line)
+                                elif replacement == 'class':
+                                    replacement_line = re.sub(r'^\s*clas\s+', lambda m: m.group(0).replace('clas', 'class'), line)
+                                
+                                if replacement_line != line:
+                                    fixes.append(f"Line {i}: Completed truncated keyword to '{replacement}'")
+                                    logger.debug(f"Completed truncated keyword to '{replacement}' at line {i}")
+                            break
+                
+                if not should_remove:
+                    repaired_lines.append(replacement_line)
+            
+            repaired_code = '\n'.join(repaired_lines)
+            
+            if fixes:
+                logger.info(
+                    f"Successfully repaired {len(fixes)} truncated keyword(s) "
+                    f"in {len(lines)} lines of {language} code"
+                )
+            
+            return repaired_code, fixes
+            
+        except Exception as e:
+            # Critical internal error - log but don't break the pipeline
+            logger.error(
+                f"Unexpected error in repair_truncated_keywords: {e}",
+                exc_info=True
+            )
+            # Safe default: return original code
+            return code, []
+
+    @staticmethod
     def repair_unterminated_strings(
         code: str, 
         language: str
@@ -580,13 +721,19 @@ class SyntaxAutoRepair:
             )
             
             # Apply repairs in optimal sequence
-            # Order matters: line continuations first, then structural, then literals
+            # Order matters: line continuations first, then truncated keywords, then structural, then literals
 
             # Phase 0: Fix line continuations (must be first to prevent cascading errors)
             code, fixes = cls.repair_line_continuations(code, language)
             all_fixes.extend(fixes)
             if fixes:
                 logger.debug(f"Phase 0 complete: {len(fixes)} line continuation(s) repaired")
+
+            # Phase 0.5: Fix truncated keywords (remove stray 'de', 'clas', etc.)
+            code, fixes = cls.repair_truncated_keywords(code, language)
+            all_fixes.extend(fixes)
+            if fixes:
+                logger.debug(f"Phase 0.5 complete: {len(fixes)} truncated keyword(s) repaired")
 
             # Phase 1: Fix missing colons (structural)
             code, fixes = cls.repair_missing_colons(code, language)

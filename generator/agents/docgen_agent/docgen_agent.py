@@ -1186,7 +1186,7 @@ class DocgenAgent:
                     )
                     output_format = "md"
 
-                response_validator = ResponseValidator(schema={})
+                response_validator = ResponseValidator(schema={"doc_type": doc_type})
                 validator_result = (
                     await response_validator.process_and_validate_response(
                         raw_response=llm_response,
@@ -1601,7 +1601,7 @@ class DocgenAgent:
                 )
                 output_format = "md"
 
-            response_validator = ResponseValidator(schema={})
+            response_validator = ResponseValidator(schema={"doc_type": doc_type})
             validator_result = await response_validator.process_and_validate_response(
                 raw_response=llm_response,
                 output_format=output_format,  # Use mapped format

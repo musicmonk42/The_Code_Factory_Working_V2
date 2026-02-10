@@ -512,10 +512,10 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         repair_logs.append(repair_info)
                         logger.info(repair_info)
                 else:
-                    # Save normalized content anyway for debugging
-                    code_files[filename] = cleaned
-                    logger.warning(
-                        "Syntax validation failed for '%s' (%s). Details: %s",
+                    # Do NOT save syntactically invalid files - add to errors instead
+                    # This prevents materialization of broken code that would fail validation
+                    logger.error(
+                        "Syntax validation failed for '%s' (%s). NOT materializing invalid file. Details: %s",
                         filename,
                         lang,
                         validation_result['error'],

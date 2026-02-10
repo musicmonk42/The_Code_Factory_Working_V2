@@ -231,7 +231,7 @@ async def rag_retrieve(query: str) -> str:
     """
     context = await _rag_retrieve_context(query)
     if context:
-        log_action("RAG Retrieved", {"query": query, "context_length": len(context)})
+        await log_action("RAG Retrieved", {"query": query, "context_length": len(context)})
     return context if context else "No relevant context found in RAG."
 
 
@@ -294,7 +294,7 @@ async def auto_tune_template_based_on_feedback(
                         refined_template_content = refined_template_content.rstrip(
                             "```"
                         ).strip()
-                    log_action(
+                    await log_action(
                         "Template Tuned",
                         {
                             "feedback": feedback,

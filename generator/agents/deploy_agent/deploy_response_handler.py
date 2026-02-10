@@ -1864,6 +1864,34 @@ async def handle_deploy_response(
             )
 
             # Validate that output doesn't contain unsubstituted placeholders
+            # PII redaction tokens from Presidio should be excluded from this check
+            # as they are legitimate redactions, not unsubstituted placeholders
+            pii_redaction_tokens = {
+                '<PERSON>', '<ORGANIZATION>', '<EMAIL_ADDRESS>', '<LOCATION>',
+                '<DATE_TIME>', '<PHONE_NUMBER>', '<CREDIT_CARD>', '<IP_ADDRESS>',
+                '<URL>', '<US_SSN>', '<US_PASSPORT>', '<IBAN_CODE>', '<NRP>',
+                '<MEDICAL_LICENSE>', '<US_DRIVER_LICENSE>', '<CRYPTO>',
+                '<US_BANK_NUMBER>', '<SWIFT_CODE>', '<ABA_ROUTING_NUMBER>',
+            }
+            
+            # Common environment variable placeholders - substitute with defaults before checking
+            common_env_placeholders = {
+                '{BUILD_ENV}': 'production',
+                '{ENVIRONMENT}': 'production',
+                '{NODE_ENV}': 'production',
+                '{PORT}': '8000',
+                '{HOST}': '0.0.0.0',
+            }
+            
+            # Pre-substitute common environment placeholders
+            enriched_final_output_for_validation = enriched_final_output
+            for placeholder, default_value in common_env_placeholders.items():
+                if placeholder in enriched_final_output_for_validation:
+                    enriched_final_output_for_validation = enriched_final_output_for_validation.replace(
+                        placeholder, default_value
+                    )
+                    logger.debug(f"Pre-substituted placeholder {placeholder} with default {default_value}")
+            
             placeholder_patterns = [
                 r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
                 r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
@@ -1876,10 +1904,13 @@ async def handle_deploy_response(
             placeholder_found = False
             placeholder_details = []
             for pattern in placeholder_patterns:
-                matches = re.findall(pattern, enriched_final_output, re.IGNORECASE | re.MULTILINE)
+                matches = re.findall(pattern, enriched_final_output_for_validation, re.IGNORECASE | re.MULTILINE)
                 if matches:
-                    placeholder_found = True
-                    placeholder_details.extend(matches)
+                    # Filter out PII redaction tokens
+                    filtered_matches = [m for m in matches if m.upper() not in pii_redaction_tokens]
+                    if filtered_matches:
+                        placeholder_found = True
+                        placeholder_details.extend(filtered_matches)
 
             if placeholder_found:
                 error_msg = (

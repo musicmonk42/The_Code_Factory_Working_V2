@@ -334,7 +334,16 @@ class MarkdownPlugin(DocGenPlugin):
 
         # FIXED: More reasonable section checking
         required_sections = schema.get("sections", [])
-        core_sections = schema.get("core_sections", ["introduction", "usage"])
+        
+        # Make core sections doc-type-aware
+        doc_type = schema.get("doc_type", "readme").lower()
+        if doc_type in ("api", "api_reference", "openapi", "swagger"):
+            # API documentation has different requirements
+            core_sections = schema.get("core_sections", ["endpoints", "authentication"])
+        else:
+            # README and general documentation require introduction and usage
+            core_sections = schema.get("core_sections", ["introduction", "usage"])
+        
         min_sections = schema.get("required_section_minimum", 3)
 
         # Check for core sections (essential ones)

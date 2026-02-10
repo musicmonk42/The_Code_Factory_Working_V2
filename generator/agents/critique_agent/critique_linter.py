@@ -571,17 +571,40 @@ class LintPlugin(ABC):
         timeout: int,
         use_container: bool,
         container_image: Optional[str],
+        fallback_to_local: bool = True,
     ) -> Dict[str, Any]:
         if use_container:
             if not shutil.which("docker"):
+                # Docker not available - try local fallback if enabled
+                if fallback_to_local and cmd:
+                    tool_binary = cmd[0]
+                    if shutil.which(tool_binary):
+                        logger.info(
+                            f"Docker not available, using local {tool_name} installation at {shutil.which(tool_binary)}"
+                        )
+                        # Run the tool locally without Docker by recursively calling without container
+                        return await self._run_tool(
+                            cmd=cmd,
+                            project_dir=project_dir,
+                            tool_name=tool_name,
+                            timeout=timeout,
+                            use_container=False,
+                            container_image=None,
+                            fallback_to_local=False,  # Prevent infinite recursion
+                        )
+                    else:
+                        logger.warning(
+                            f"Docker not available and {tool_name} not found locally at {tool_binary}. Skipping {tool_name}."
+                        )
+                else:
+                    logger.warning(
+                        f"Docker not available and local fallback disabled. Skipping containerized linting for {tool_name}."
+                    )
                 # Capability check - gracefully skip containerized linting
-                logger.warning(
-                    f"Docker is not installed or not in PATH. Skipping containerized linting for {tool_name}."
-                )
                 return {
                     "success": True,  # Don't fail the job, just skip this check
                     "stdout": "",
-                    "stderr": "Docker not available - skipping containerized linting",
+                    "stderr": f"Docker not available and {tool_name} not found locally - skipping",
                     "returncode": 0,
                     "status": "skipped",
                 }
