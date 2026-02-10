@@ -165,12 +165,15 @@ def reset_circuit_breakers():
 
 @pytest.fixture
 def test_jwt_token():
-    """Create test JWT token."""
+    """Create test JWT token with all required claims."""
     if HAS_JWT:
         payload = {
             "user": "test_user",
             "mfa_verified": True,
             "exp": datetime.utcnow() + timedelta(hours=1),
+            "iat": datetime.utcnow(),  # Issued at
+            "iss": "test_issuer",  # Issuer
+            "sub": "test_user",  # Subject
         }
         return jwt.encode(payload, TEST_JWT_SECRET, algorithm="HS256")
     else:
@@ -390,7 +393,14 @@ class TestPolicyEnforcement:
         # Create token without MFA
         if HAS_JWT:
             no_mfa_token = jwt.encode(
-                {"user": "test", "mfa_verified": False},
+                {
+                    "user": "test",
+                    "mfa_verified": False,
+                    "exp": datetime.utcnow() + timedelta(hours=1),
+                    "iat": datetime.utcnow(),
+                    "iss": "test_issuer",
+                    "sub": "test",
+                },
                 TEST_JWT_SECRET,
                 algorithm="HS256",
             )
@@ -603,6 +613,9 @@ class TestProductionMode:
 import os
 import sys
 
+# Add current directory to Python path for module imports
+sys.path.insert(0, os.getcwd())
+
 # Set production mode
 os.environ["PROD_MODE"] = "true"
 os.environ["POLICY_ENCRYPTION_KEY"] = ""
@@ -613,8 +626,10 @@ os.environ["JWT_SECRET"] = "test"
 try:
     # Force reimport by clearing cache
     import importlib
-    import mesh.mesh_policy
-    importlib.reload(mesh.mesh_policy)
+    if "self_fixing_engineer.mesh.mesh_policy" in sys.modules:
+        del sys.modules["self_fixing_engineer.mesh.mesh_policy"]
+    import self_fixing_engineer.mesh.mesh_policy
+    importlib.reload(self_fixing_engineer.mesh.mesh_policy)
     # Should not reach here
     sys.exit(0)
 except SystemExit as e:
@@ -624,12 +639,19 @@ except SystemExit as e:
     sys.exit(0)
 except Exception as e:
     # Unexpected error
-    print(f"Unexpected error: {e}")
+    print(f"Unexpected error: {e}", file=sys.stderr)
     sys.exit(1)
 """
 
+        # Run subprocess in the repository root directory
+        import os
+        repo_root = Path(__file__).parent.parent.parent
+        
         result = subprocess.run(
-            [sys.executable, "-c", test_code], capture_output=True, text=True
+            [sys.executable, "-c", test_code],
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),  # Set working directory to repo root
         )
 
         # Check that it exited with our expected code (100)

@@ -127,7 +127,7 @@ class TestCheckpointAndEvents:
         checkpoint_state = {"step": "completed", "result": "success"}
 
         # Use a mock to intercept the event publish call
-        with patch("mesh.event_bus.publish_event", new=AsyncMock()) as mock_publish:
+        with patch.object(event_bus, "publish_event", new=AsyncMock()) as mock_publish:
             # 1. Save the checkpoint
             await checkpoint_manager_service.save(checkpoint_name, checkpoint_state)
 

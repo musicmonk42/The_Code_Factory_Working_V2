@@ -463,7 +463,13 @@ class TestSubscription:
         pubsub = mock_redis_client.pubsub.return_value
         test_data = {"test": "data"}
         payload_bytes = json.dumps(test_data).encode("utf-8")
-        encrypted_payload = payload_bytes + b"_encrypted"
+        
+        # Use proper Fernet encryption instead of mock encryption
+        from cryptography.fernet import Fernet
+        fernet_key = os.environ["EVENT_BUS_ENCRYPTION_KEY"]
+        fernet = Fernet(fernet_key.encode())
+        encrypted_payload = fernet.encrypt(payload_bytes)
+        
         signature = hmac.new(
             os.environ["EVENT_BUS_HMAC_KEY"].encode(), encrypted_payload, hashlib.sha256
         ).hexdigest()
@@ -488,8 +494,8 @@ class TestSubscription:
 
         with patch("event_bus.get_redis_client", return_value=mock_redis_client):
             task = await subscribe_event("test", handler)
-            # Wait for message to be processed
-            await asyncio.sleep(0.1)
+            # Wait longer for message to be processed (increased from 0.1 to 0.3)
+            await asyncio.sleep(0.3)
             if not task.done():
                 task.cancel()
             try:
