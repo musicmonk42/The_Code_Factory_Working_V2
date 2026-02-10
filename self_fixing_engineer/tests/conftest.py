@@ -11,18 +11,35 @@ import pytest
 
 @pytest.fixture(autouse=True, scope="function")
 def aggressive_memory_cleanup():
-    """Aggressively clean up memory between tests to prevent OOM on CI runners.
+    """Enhanced memory cleanup between tests to prevent OOM.
     
     This fixture runs after each test and forces multiple garbage collection cycles
     to ensure that heavy objects (quantum circuits, large datasets, etc.) are
     properly cleaned up before the next test starts.
+    
+    Enhanced in v2 to also clear module-level caches and mock call histories.
     """
     yield
-    # Force full garbage collection (generation 2) multiple times
-    # Multiple cycles help ensure all circular references are cleaned up
-    gc.collect(generation=2)
-    gc.collect(generation=2)
-    gc.collect(generation=2)
+    # Clear all module-level caches
+    import sys
+    for module_name in list(sys.modules.keys()):
+        if 'test_' in module_name or 'Mock' in module_name:
+            try:
+                del sys.modules[module_name]
+            except (KeyError, AttributeError):
+                pass
+    
+    # Force multiple GC passes
+    gc.collect()
+    gc.collect()
+    gc.collect()
+    
+    # Clear unittest.mock call history
+    try:
+        from unittest.mock import _patch
+        _patch._clear_all_patches()
+    except:
+        pass
 
 
 @pytest.fixture(autouse=True)

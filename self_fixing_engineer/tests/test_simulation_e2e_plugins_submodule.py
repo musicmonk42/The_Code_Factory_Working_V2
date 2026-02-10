@@ -81,9 +81,6 @@ except Exception as e:
     dlt_factory = MagicMock()
     dlt_base = MagicMock()
 
-# Mark tests to skip the problematic fixture
-pytestmark = pytest.mark.usefixtures()
-
 
 # Mock plugin implementations
 class MockPlugin:
