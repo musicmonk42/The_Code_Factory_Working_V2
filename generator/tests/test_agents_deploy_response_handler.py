@@ -278,6 +278,33 @@ class TestDockerfileHandler:
         assert "FROM python:3.9-slim" in output
         assert isinstance(output, str)
 
+    def test_validate_dockerfile_with_invalid_start(self):
+        """Test that Dockerfile with invalid start character is rejected."""
+        handler = DockerfileHandler()
+        invalid_dockerfile = "! Invalid start\nFROM python:3.9"
+        
+        # The normalize method should raise ValueError due to validate_dockerfile
+        with pytest.raises(ValueError, match="Invalid Dockerfile: First instruction must be FROM or ARG"):
+            handler.normalize(invalid_dockerfile)
+
+    def test_validate_dockerfile_with_valid_from(self):
+        """Test that Dockerfile starting with FROM is accepted."""
+        handler = DockerfileHandler()
+        valid_dockerfile = "FROM python:3.9\nWORKDIR /app"
+        
+        result = handler.normalize(valid_dockerfile)
+        assert isinstance(result, list)
+        assert "FROM python:3.9" in result
+
+    def test_validate_dockerfile_with_valid_arg(self):
+        """Test that Dockerfile starting with ARG is accepted."""
+        handler = DockerfileHandler()
+        valid_dockerfile = "ARG BASE_IMAGE=python:3.9\nFROM ${BASE_IMAGE}\nWORKDIR /app"
+        
+        result = handler.normalize(valid_dockerfile)
+        assert isinstance(result, list)
+        assert "ARG BASE_IMAGE=python:3.9" in result
+
 
 class TestYAMLHandler:
     """Tests for YAMLHandler."""
@@ -318,6 +345,48 @@ class TestYAMLHandler:
 
         assert "apiVersion: v1" in output
         assert "kind: Service" in output
+
+    def test_normalize_yaml_with_markdown_formatting(self):
+        """Test that YAML with markdown formatting is rejected."""
+        handler = YAMLHandler()
+        yaml_with_markdown = """apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  annotations:
+    description: "- **Purpose:** Provide default configuration"
+"""
+        
+        # Should raise ValueError due to markdown pattern detection
+        with pytest.raises(ValueError, match="Invalid output: Response contains Markdown formatting"):
+            handler.normalize(yaml_with_markdown)
+
+    def test_normalize_yaml_with_markdown_bold(self):
+        """Test that YAML containing ** (bold markdown) is rejected."""
+        handler = YAMLHandler()
+        yaml_with_bold = """apiVersion: v1
+kind: Deployment
+**metadata**:
+  name: test
+"""
+        
+        with pytest.raises(ValueError, match="Invalid output: Response contains Markdown formatting"):
+            handler.normalize(yaml_with_bold)
+
+    def test_normalize_yaml_strips_code_fences(self):
+        """Test that YAML with markdown code fences is stripped."""
+        handler = YAMLHandler()
+        yaml_with_fences = """```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+```"""
+        
+        result = handler.normalize(yaml_with_fences)
+        assert isinstance(result, dict)
+        assert result["apiVersion"] == "v1"
+        assert result["kind"] == "Service"
 
 
 class TestJSONHandler:
@@ -820,6 +889,75 @@ class TestDockerfileSanitization:
         lines = handler.normalize(raw)
         assert lines[0].startswith("FROM"), f"Expected FROM first, got: {lines[0]}"
         assert not any("#!/" in line for line in lines)
+
+
+# ============================================================================
+# TESTS: Template Validation
+# ============================================================================
+
+
+class TestKubernetesDefaultTemplate:
+    """Tests for kubernetes_default.jinja template."""
+
+    def test_kubernetes_default_template_exists(self):
+        """Test that kubernetes_default.jinja template exists in deploy_templates."""
+        from pathlib import Path
+        
+        # Get the project root (two levels up from generator/tests)
+        project_root = Path(__file__).parent.parent.parent
+        template_path = project_root / "deploy_templates" / "kubernetes_default.jinja"
+        
+        assert template_path.exists(), f"kubernetes_default.jinja not found at {template_path}"
+
+    def test_kubernetes_default_template_is_valid_jinja(self):
+        """Test that kubernetes_default.jinja is a valid Jinja2 template."""
+        from pathlib import Path
+        from jinja2 import Environment, FileSystemLoader, TemplateSyntaxError
+        
+        # Get the project root and set up Jinja environment
+        project_root = Path(__file__).parent.parent.parent
+        templates_dir = project_root / "deploy_templates"
+        
+        env = Environment(loader=FileSystemLoader(str(templates_dir)))
+        
+        # This will raise TemplateSyntaxError if template is invalid
+        try:
+            template = env.get_template("kubernetes_default.jinja")
+            assert template is not None
+        except TemplateSyntaxError as e:
+            pytest.fail(f"kubernetes_default.jinja has invalid Jinja2 syntax: {e}")
+
+    def test_kubernetes_default_template_renders_with_basic_context(self):
+        """Test that kubernetes_default.jinja renders successfully with basic context."""
+        from pathlib import Path
+        from jinja2 import Environment, FileSystemLoader
+        
+        project_root = Path(__file__).parent.parent.parent
+        templates_dir = project_root / "deploy_templates"
+        env = Environment(loader=FileSystemLoader(str(templates_dir)))
+        
+        template = env.get_template("kubernetes_default.jinja")
+        
+        # Render with minimal context
+        context = {
+            "target": "my-app",
+            "files": ["app.py", "requirements.txt"],
+            "context": {
+                "language": "python",
+                "framework": "flask",
+                "port": 8000
+            }
+        }
+        
+        rendered = template.render(**context)
+        
+        # Verify key elements are in the rendered template
+        assert "Kubernetes Manifests Generation" in rendered
+        assert "my-app" in rendered
+        assert "app.py" in rendered
+        assert "python" in rendered
+        assert "flask" in rendered
+        assert "Do NOT include markdown formatting in the output" in rendered
 
 
 # ============================================================================

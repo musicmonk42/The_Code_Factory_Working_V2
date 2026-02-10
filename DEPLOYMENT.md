@@ -1108,6 +1108,52 @@ curl http://localhost:9090/metrics | grep http_request
 - [ ] Input validation enabled
 - [ ] Rate limiting configured
 
+### Appendix E: Deployment Templates
+
+The deploy agent uses Jinja2 templates to generate deployment configurations. These templates are located in `deploy_templates/` and are used by the Code Factory's automated deployment pipeline.
+
+**Available Templates:**
+
+| Template | Purpose | Standards |
+|----------|---------|-----------|
+| `docker_default.jinja` | Standard Docker containerization | CIS Docker Benchmark |
+| `docker_enterprise.jinja` | Enterprise Docker with security hardening | Multi-stage builds, security scanning |
+| `helm_default.jinja` | Helm chart generation | CNCF best practices |
+| `kubernetes_default.jinja` | **NEW** Standard K8s manifests | Pod Security Standards (Baseline) |
+| `kubernetes_enterprise.jinja` | Production K8s with full hardening | CIS K8s Benchmark, PSS Restricted |
+| `docs_default.jinja` | Deployment documentation | Comprehensive guides |
+
+**kubernetes_default.jinja Features:**
+- Production-ready Deployment and Service manifests
+- Security contexts (non-root, capability dropping)
+- Resource requests and limits
+- Liveness and readiness probes
+- Standard labels (app.kubernetes.io)
+- Cloud-native best practices
+- Prevents LLM markdown contamination in output
+
+**Template Selection:**
+```python
+# The deploy agent automatically selects templates based on:
+# {target}_{variant}.jinja
+
+# Examples:
+# - kubernetes_default.jinja  (target=kubernetes, variant=default)
+# - kubernetes_enterprise.jinja  (target=kubernetes, variant=enterprise)
+# - docker_default.jinja  (target=docker, variant=default)
+```
+
+**Custom Templates:**
+Place custom templates in `deploy_templates/` directory. They will be auto-discovered and can be selected using the variant parameter.
+
+**Template Validation:**
+The deploy agent validates generated configurations for:
+- YAML syntax correctness
+- No unsubstituted placeholders
+- No markdown formatting contamination
+- Required Kubernetes/Docker fields present
+- Security best practices compliance
+
 ---
 
 ## Support

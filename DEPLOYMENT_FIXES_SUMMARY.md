@@ -73,6 +73,7 @@ Created `DeploymentCompletenessValidator` class that validates:
 **Files**: 
 - `deploy_templates/docker_default.jinja`
 - `deploy_templates/helm_default.jinja`
+- `deploy_templates/kubernetes_default.jinja` (NEW)
 - `deploy_templates/kubernetes_enterprise.jinja`
 
 **Enhancements**:

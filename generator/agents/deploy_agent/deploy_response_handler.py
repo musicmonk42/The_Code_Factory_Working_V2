@@ -689,6 +689,103 @@ class FormatHandler(ABC):
             ) from e
 
 
+def validate_dockerfile(content: str) -> bool:
+    """
+    Validate Dockerfile structure and syntax according to industry best practices.
+    
+    Performs strict validation of Dockerfile content to ensure it meets Docker best
+    practices and prevents common LLM-generated errors. This is a critical security
+    and reliability check that runs before normalization.
+    
+    Validation Rules:
+        1. First non-comment, non-empty line MUST be FROM or ARG instruction
+        2. No invalid leading characters (e.g., '!', '@', '$')
+        3. No empty Dockerfiles
+        4. Proper instruction format
+    
+    Industry Standards Compliance:
+        - Docker Best Practices Guide
+        - Dockerfile Reference Specification
+        - Container Security Standards
+    
+    Args:
+        content: Raw Dockerfile content from LLM or other source
+        
+    Returns:
+        True if Dockerfile passes validation
+        
+    Raises:
+        ValueError: If Dockerfile fails validation with detailed error message
+        
+    Example:
+        >>> validate_dockerfile("FROM python:3.11-slim\\nWORKDIR /app")
+        True
+        >>> validate_dockerfile("! Invalid\\nFROM python:3.11")
+        ValueError: Invalid Dockerfile: First instruction must be FROM or ARG...
+        
+    Note:
+        This function is called early in the DockerfileHandler.normalize() pipeline
+        to fail fast on invalid content before expensive processing occurs.
+    """
+    if not content or not isinstance(content, str):
+        raise ValueError(
+            "Invalid Dockerfile: Content is empty or not a string. "
+            "Dockerfile must contain at least a FROM instruction."
+        )
+    
+    lines = content.strip().split('\n')
+    if not lines:
+        raise ValueError(
+            "Invalid Dockerfile: No content found after stripping whitespace. "
+            "Dockerfile must contain at least a FROM instruction."
+        )
+    
+    # Find first non-comment, non-empty line
+    for line_num, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        
+        # Skip empty lines and comments
+        if not stripped or stripped.startswith('#'):
+            continue
+        
+        # First instruction line found - validate it
+        # Valid Dockerfile instructions that can start a Dockerfile
+        valid_start_instructions = ('FROM', 'ARG')
+        instruction_upper = stripped.upper()
+        
+        # Check if line starts with a valid instruction
+        is_valid = any(
+            instruction_upper.startswith(valid_instruction) 
+            for valid_instruction in valid_start_instructions
+        )
+        
+        if not is_valid:
+            # Provide detailed error with context
+            error_context = stripped[:80] + '...' if len(stripped) > 80 else stripped
+            raise ValueError(
+                f"Invalid Dockerfile: First instruction must be FROM or ARG "
+                f"(per Dockerfile specification). Got '{error_context}' at line {line_num}. "
+                f"Common LLM errors: leading '!', invalid tokens, or missing FROM."
+            )
+        
+        # Validation passed
+        logger.debug(
+            "Dockerfile validation passed",
+            extra={
+                "first_instruction": stripped.split()[0] if stripped.split() else "unknown",
+                "line_number": line_num,
+                "validator": "validate_dockerfile"
+            }
+        )
+        return True
+    
+    # If we get here, no non-comment lines were found
+    raise ValueError(
+        "Invalid Dockerfile: Contains only comments or empty lines. "
+        "Dockerfile must contain at least a FROM instruction."
+    )
+
+
 class DockerfileHandler(FormatHandler):
     __version__ = "1.1"  # Example version bump
     __source__ = "built-in"
@@ -726,6 +823,9 @@ class DockerfileHandler(FormatHandler):
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
         # Remove leading "!" token (common LLM error)
         sanitized = re.sub(r'^!+\s*', '', sanitized)
+        
+        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
+        validate_dockerfile(sanitized)
         
         # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
         lines = []
@@ -952,16 +1052,132 @@ class DockerfileHandler(FormatHandler):
 
 
 class YAMLHandler(FormatHandler):
-    __version__ = "1.2"
+    """
+    YAML Format Handler for Kubernetes and Helm manifests.
+    
+    Provides industry-standard YAML processing with strict validation to prevent
+    common LLM errors such as markdown-polluted output. Uses ruamel.yaml for
+    high-fidelity parsing and preservation of comments/structure.
+    
+    Security Features:
+        - Markdown contamination detection
+        - Code fence stripping
+        - Strict YAML syntax validation
+        - Safe loading (no code execution)
+    """
+    __version__ = "1.3"  # Incremented for enhanced validation
     __source__ = "built-in"
 
     def normalize(self, raw: str) -> Any:
-        """Normalizes raw YAML string to a Python object using ruamel.yaml for fidelity."""
+        """
+        Normalize raw YAML string to Python object with strict validation.
+        
+        Performs comprehensive sanitization and validation of LLM-generated YAML:
+        1. Strips markdown code fences (```yaml, ```)
+        2. Detects and rejects markdown formatting contamination
+        3. Parses YAML using ruamel.yaml for fidelity
+        4. Provides detailed error messages for debugging
+        
+        This is critical for Kubernetes/Helm deployments where invalid YAML
+        can cause deployment failures or security issues.
+        
+        Common LLM Errors Detected:
+            - Markdown code fences around YAML
+            - Bold markdown (**text**)
+            - Markdown bullets mixed with YAML (- **item**)
+            - Explanatory text outside YAML structure
+        
+        Args:
+            raw: Raw YAML string from LLM or other source
+            
+        Returns:
+            Parsed YAML as Python dict/list/scalar
+            
+        Raises:
+            ValueError: If YAML contains markdown or has syntax errors
+            
+        Example:
+            >>> handler = YAMLHandler()
+            >>> handler.normalize("apiVersion: v1\\nkind: Service")
+            {'apiVersion': 'v1', 'kind': 'Service'}
+            
+            >>> handler.normalize("**bold**: value")  # Markdown detected
+            ValueError: Invalid output: Response contains Markdown formatting...
+        """
+        # Sanitize: Strip markdown code fences if present
+        raw = raw.strip()
+        
+        # Handle various code fence formats
+        if raw.startswith("```yaml"):
+            raw = raw[7:]  # Remove ```yaml
+            logger.debug("Stripped ```yaml code fence from YAML response")
+        elif raw.startswith("```"):
+            raw = raw[3:]  # Remove generic ```
+            logger.debug("Stripped ``` code fence from YAML response")
+        
+        if raw.endswith("```"):
+            raw = raw[:-3]  # Remove trailing ```
+            logger.debug("Stripped trailing ``` from YAML response")
+        
+        raw = raw.strip()
+        
+        # Validate: Reject if contains obvious markdown patterns
+        # Check for ** (markdown bold) which should never appear in valid YAML values
+        # Note: We check for ** which covers both standalone bold and "- **" patterns
+        if "**" in raw:
+            # Provide context about where markdown was found
+            lines_with_markdown = [
+                f"Line {i+1}: {line[:80]}"
+                for i, line in enumerate(raw.split('\n'))
+                if "**" in line
+            ]
+            context = "\n  ".join(lines_with_markdown[:3])  # Show first 3 occurrences
+            
+            raise ValueError(
+                f"Invalid output: Response contains Markdown formatting (** detected). "
+                f"Expected pure YAML without markdown bold syntax or bullets.\n"
+                f"  {context}\n"
+                f"Ensure LLM outputs ONLY YAML without markdown formatting."
+            )
+        
+        # Parse YAML using ruamel.yaml for high fidelity
         ru_yaml = YAML()
         try:
-            return ru_yaml.load(raw)
+            parsed_data = ru_yaml.load(raw)
+            
+            # Log successful parse for observability
+            logger.debug(
+                "YAML parsed successfully",
+                extra={
+                    "yaml_size_bytes": len(raw),
+                    "yaml_lines": len(raw.split('\n')),
+                    "result_type": type(parsed_data).__name__,
+                    "handler": "YAMLHandler"
+                }
+            )
+            
+            return parsed_data
+            
         except Exception as e:
-            raise ValueError(f"Invalid YAML format: {e}")
+            # Provide detailed error for debugging
+            error_msg = f"Invalid YAML format: {e}"
+            
+            # Try to provide context about where the error occurred
+            if hasattr(e, 'problem_mark'):
+                mark = e.problem_mark
+                error_msg += f" at line {mark.line + 1}, column {mark.column + 1}"
+            
+            logger.error(
+                "YAML parsing failed",
+                extra={
+                    "error": str(e),
+                    "yaml_preview": raw[:200] + "..." if len(raw) > 200 else raw,
+                    "handler": "YAMLHandler"
+                },
+                exc_info=True
+            )
+            
+            raise ValueError(error_msg)
 
     def convert(self, data: Any, to_format: str) -> str:
         """Converts structured YAML data to JSON or back to YAML."""

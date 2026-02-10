@@ -66,6 +66,16 @@ Create Template Directory:
 mkdir deploy_templates
 echo -e "Generate a production-grade Dockerfile for these files: {{ files | join(', ') }}.\nInclude all required build, environment, network, and security settings.\nConfiguration must be safe, efficient, and ready for CI/CD.\nAdditional instructions: {{ instructions | default('') }}" > deploy_templates/docker_default.jinja
 
+**Note:** The platform includes production-ready templates for:
+- `docker_default.jinja` - Standard Docker containerization
+- `docker_enterprise.jinja` - Enterprise Docker with multi-stage builds
+- `kubernetes_default.jinja` - Standard Kubernetes manifests
+- `kubernetes_enterprise.jinja` - Production K8s with full hardening
+- `helm_default.jinja` - Helm chart generation
+- `docs_default.jinja` - Deployment documentation
+
+Templates are auto-discovered from the `deploy_templates/` directory.
+
 
 
 Running the Demo
