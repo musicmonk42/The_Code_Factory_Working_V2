@@ -792,8 +792,9 @@ class TestAsyncUtils:
         mock_sleep = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", mock_sleep)
 
-        # The alert should fail but NOT raise (it catches the exception and logs it)
-        await send_alert("Test Alert", severity="critical")
+        # FIX: Pass the mocked endpoint explicitly
+        mock_endpoint = mock_settings[0].ALERT_ENDPOINT
+        await send_alert("Test Alert", severity="critical", endpoint=mock_endpoint)
 
         # Assert it was called the correct number of times (default is 3)
         assert mock_session.post.call_count == 3
