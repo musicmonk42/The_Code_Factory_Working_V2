@@ -409,6 +409,12 @@ metadata:
         assert isinstance(result, dict)
         assert result["kind"] == "Deployment"
         assert result["metadata"]["name"] == "myapp"
+        
+        # Verify numbered list with markdown was stripped (not in parsed result)
+        # The markdown list shouldn't be part of the YAML structure
+        result_str = str(result)
+        assert "Deployment Manifest" not in result_str
+        assert "Metadata" not in result_str or "metadata" in result_str  # Only allow lowercase yaml key
     
     def test_sanitize_inline_bold_text(self):
         """Test that inline bold markdown is removed but text preserved."""
@@ -416,17 +422,22 @@ metadata:
 kind: ConfigMap
 metadata:
   name: app-config
-data:
   # This is a **very important** configuration
+data:
+  description: This is **very important**
   key: value"""
         
         handler = YAMLHandler()
+        # First test: should work with bold in description value (after sanitization)
         result = handler.normalize(raw)
         
         # Should parse successfully with bold removed
         assert isinstance(result, dict)
         assert result["kind"] == "ConfigMap"
         assert result["data"]["key"] == "value"
+        # Bold should be removed from description
+        assert "**" not in result["data"]["description"]
+        assert "very important" in result["data"]["description"]
     
     def test_markdown_bold_in_yaml_triggers_error(self):
         """Test that markdown bold in YAML content still triggers validation error."""

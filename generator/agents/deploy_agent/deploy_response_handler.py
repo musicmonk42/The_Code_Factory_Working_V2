@@ -1303,8 +1303,9 @@ class YAMLHandler(FormatHandler):
             # Remove markdown italic (*text* or _text_) but preserve the text
             # Pattern explanation: (?<!\*)\*(?!\*)  matches a single * not adjacent to another *
             # This captures italic *text* without matching **bold** text
-            line = re.sub(r'(?<!\*)\*(?!\*)([^*]+)\*(?!\*)', r'\1', line)  # *text*
-            line = re.sub(r'_([^_]+)_', r'\1', line)  # _text_
+            # Using non-greedy matching +? to handle multiple words correctly
+            line = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'\1', line)  # *text*
+            line = re.sub(r'_(.+?)_', r'\1', line)  # _text_
             
             # Remove inline code backticks (but preserve YAML values)
             # Only remove if backticks are mid-line (not YAML block markers)
