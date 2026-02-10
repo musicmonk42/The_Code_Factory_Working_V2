@@ -139,18 +139,21 @@ except ImportError:
             Add a fact to the knowledge graph.
             
             Args:
-                domain: Fact domain/category (should not contain ':')
-                key: Unique fact identifier (should not contain ':')
+                domain: Fact domain/category (colons will be replaced with underscores)
+                key: Unique fact identifier (colons will be replaced with underscores)
                 data: Fact data
                 **kwargs: Additional parameters (e.g., source, timestamp)
             
             Returns:
                 Status dictionary with operation result
+            
+            Note:
+                Domain and key are sanitized by replacing colons with underscores
+                to ensure unambiguous fact_id generation.
             """
             # Sanitize domain and key to avoid ambiguous identifiers
-            # Replace colons with underscores if present
-            safe_domain = domain.replace(':', '_') if ':' in domain else domain
-            safe_key = key.replace(':', '_') if ':' in key else key
+            safe_domain = domain.replace(':', '_')
+            safe_key = key.replace(':', '_')
             
             fact_id = f"{safe_domain}:{safe_key}"
             # Store fact as a node

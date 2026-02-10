@@ -9,7 +9,7 @@ import threading
 import time
 import types
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Coroutine, Dict, List, Optional, Union
 
 from circuitbreaker import circuit
@@ -1486,7 +1486,7 @@ class ExplainAudit:
                             record.uuid,
                             record.model_dump(),
                             source="audit",
-                            timestamp=datetime.utcnow().isoformat(),
+                            timestamp=datetime.now(timezone.utc).isoformat(),
                         )
                     except Exception as kg_error:
                         # Log error but don't fail the entire flush operation
