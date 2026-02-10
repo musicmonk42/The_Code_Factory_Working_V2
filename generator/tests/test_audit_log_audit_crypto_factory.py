@@ -290,18 +290,21 @@ def mock_aiohttp_session():
     mock_response = MagicMock()
     # In aiohttp, raise_for_status() is a synchronous method, not a coroutine
     mock_response.raise_for_status = MagicMock()
-    
+
     # Create a context manager for session.post()
     mock_post_cm = MagicMock()
     mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
     mock_post_cm.__aexit__ = AsyncMock(return_value=None)
-    
+
     mock_session = MagicMock()
     mock_session.post = MagicMock(return_value=mock_post_cm)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=None)
-    
-    with patch('generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession', return_value=mock_session):
+
+    # Create a context manager for ClientSession itself
+    mock_session_cm = MagicMock()
+    mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session_cm.__aexit__ = AsyncMock(return_value=None)
+
+    with patch('generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession', return_value=mock_session_cm):
         yield mock_session, mock_response
 
 

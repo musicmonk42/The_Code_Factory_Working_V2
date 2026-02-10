@@ -330,8 +330,8 @@ def mock_hsm_full(monkeypatch):
     return mock_pkcs11_session, mock_get_pin
 
 
-@pytest_asyncio.fixture
-async def mock_accessors():
+@pytest.fixture
+def mock_accessors():
     """Provides mock async accessor functions for master key and fallback secret."""
     master_key_accessor = AsyncMock(
         name="master_key_accessor", return_value=b"mock-master-key-for-keystore-32b"
