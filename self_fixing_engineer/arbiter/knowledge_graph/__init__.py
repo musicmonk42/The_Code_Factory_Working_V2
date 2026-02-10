@@ -128,6 +128,43 @@ except ImportError:
             """Get graph statistics."""
             return {"node_count": len(self.nodes), "edge_count": len(self.edges)}
 
+        async def add_fact(
+            self, 
+            domain: str, 
+            key: str, 
+            data: Dict[str, Any],
+            **kwargs
+        ) -> Dict[str, Any]:
+            """
+            Add a fact to the knowledge graph.
+            
+            Args:
+                domain: Fact domain/category (colons will be replaced with underscores)
+                key: Unique fact identifier (colons will be replaced with underscores)
+                data: Fact data
+                **kwargs: Additional parameters (e.g., source, timestamp)
+            
+            Returns:
+                Status dictionary with operation result
+            
+            Note:
+                Domain and key are sanitized by replacing colons with underscores
+                to ensure unambiguous fact_id generation.
+            """
+            # Sanitize domain and key to avoid ambiguous identifiers
+            safe_domain = domain.replace(':', '_')
+            safe_key = key.replace(':', '_')
+            
+            fact_id = f"{safe_domain}:{safe_key}"
+            # Store fact as a node
+            await self.add_node(fact_id, {
+                "domain": safe_domain,
+                "key": safe_key,
+                "data": data,
+                **kwargs
+            })
+            return {"status": "success", "fact_id": fact_id}
+
 
 # Export the main class
 __all__ = ["KnowledgeGraph"]
