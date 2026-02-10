@@ -26,31 +26,50 @@ import pytest_asyncio
 from cryptography.fernet import Fernet
 from pydantic import BaseModel
 
-# Test configuration
-TEST_DIR = Path(tempfile.mkdtemp(prefix="checkpoint_test_"))
+# Test configuration - generate keys at module level but defer directory creation
 TEST_KEYS = [Fernet.generate_key().decode() for _ in range(3)]
 TEST_HMAC_KEY = "test-hmac-key-" + os.urandom(16).hex()
 
-# Configure environment before imports
-TEST_ENV = {
-    "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS[:2]),
-    "CHECKPOINT_HMAC_KEY": TEST_HMAC_KEY,
-    "CHECKPOINT_DIR": str(TEST_DIR),
-    "CHECKPOINT_AUDIT_LOG_PATH": str(TEST_DIR / "audit.log"),
-    "CHECKPOINT_DLQ_PATH": str(TEST_DIR / "dlq.jsonl"),
-    "PROD_MODE": "false",
-    "ENV": "test",
-    "TENANT": "test_tenant",
-    "CHECKPOINT_MAX_RETRIES": "3",
-    "CHECKPOINT_RETRY_DELAY": "0.01",
-    "CHECKPOINT_CACHE_TTL": "1",
-}
-
-for key, value in TEST_ENV.items():
-    os.environ[key] = value
+# Global variable to hold test directory (will be set by session fixture)
+TEST_DIR = None
 
 
 # ---- Fixtures ----
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_dir():
+    """Create and configure test directory for the session."""
+    global TEST_DIR
+
+    # Create temporary directory
+    test_dir = Path(tempfile.mkdtemp(prefix="checkpoint_test_"))
+    TEST_DIR = test_dir
+
+    # Configure environment
+    TEST_ENV = {
+        "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS[:2]),
+        "CHECKPOINT_HMAC_KEY": TEST_HMAC_KEY,
+        "CHECKPOINT_DIR": str(TEST_DIR),
+        "CHECKPOINT_AUDIT_LOG_PATH": str(TEST_DIR / "audit.log"),
+        "CHECKPOINT_DLQ_PATH": str(TEST_DIR / "dlq.jsonl"),
+        "PROD_MODE": "false",
+        "ENV": "test",
+        "TENANT": "test_tenant",
+        "CHECKPOINT_MAX_RETRIES": "3",
+        "CHECKPOINT_RETRY_DELAY": "0.01",
+        "CHECKPOINT_CACHE_TTL": "1",
+    }
+
+    for key, value in TEST_ENV.items():
+        os.environ[key] = value
+
+    yield test_dir
+
+    # Cleanup after all tests
+    if test_dir.exists():
+        import shutil
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest_asyncio.fixture
