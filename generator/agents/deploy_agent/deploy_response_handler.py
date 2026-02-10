@@ -1265,6 +1265,7 @@ class YAMLHandler(FormatHandler):
         - Markdown emphasis patterns (bold, italic)
         - Numbered lists with explanations
         - Markdown bullet points with bold text
+        - Malformed YAML like "type: <PERSON>ports:" (splits into proper lines)
         
         This is a best-effort cleanup before strict validation.
         
@@ -1292,6 +1293,44 @@ class YAMLHandler(FormatHandler):
             if re.match(r'^\s*-\s+\*\*[^*]+\*\*\s*:', line):
                 # This looks like a markdown explanation list, skip it
                 continue
+            
+            # FIX #2: Fix common LLM YAML syntax errors like "type: <PERSON>ports:"
+            # This pattern detects lines with malformed values containing <TAG>KEY: pattern
+            # Example: "type: <PERSON>ports:" should be "type: LoadBalancer" + "  ports:"
+            match = re.match(r'^(\s*)([\w-]+):\s*<[^>]+>(.+)$', line)
+            if match:
+                indent = match.group(1)
+                key = match.group(2)
+                remainder = match.group(3).strip()
+                
+                # Split the malformed line into proper YAML
+                if remainder and ':' in remainder:
+                    # Extract the next key from remainder (e.g., "ports:" from remainder)
+                    next_key = remainder.split(':')[0].strip()
+                    
+                    # Provide a sensible default value based on the key
+                    # For Kubernetes Service type, use LoadBalancer; otherwise use placeholder
+                    if key == "type":
+                        default_value = "LoadBalancer"
+                    else:
+                        default_value = "PLACEHOLDER"
+                        # Log warning for non-standard keys that need manual review
+                        logger.warning(
+                            f"Using PLACEHOLDER for key '{key}' in malformed YAML. Manual review recommended.",
+                            extra={"key": key, "remainder": remainder}
+                        )
+                    
+                    # Add the fixed line with default value
+                    lines.append(f"{indent}{key}: {default_value}")
+                    # Add the next key with increased indentation (2 spaces is YAML standard)
+                    # Note: YAML standard uses 2-space indents, but this may not match all documents
+                    lines.append(f"{indent}  {next_key}:")
+                    
+                    logger.warning(
+                        f"Fixed malformed YAML line: '{line.strip()}' -> "
+                        f"'{indent}{key}: {default_value}' + '{indent}  {next_key}:'"
+                    )
+                    continue
             
             # Remove markdown links: [text](url)
             line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line)
