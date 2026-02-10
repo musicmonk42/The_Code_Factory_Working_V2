@@ -233,10 +233,13 @@ class TestUtilityFunctions:
         assert compute_hash(data) == expected_hash
 
     def test_compute_hash_invalid_type(self, caplog):
+        import logging
         from generator.audit_log.audit_crypto.audit_crypto_ops import compute_hash
-
-        with pytest.raises(TypeError, match="Data for hashing must be bytes"):
-            compute_hash("not bytes")
+        
+        with caplog.at_level(logging.ERROR, logger="generator.audit_log.audit_crypto.audit_crypto_ops"):
+            with pytest.raises(TypeError, match="Data for hashing must be bytes"):
+                compute_hash("not bytes")
+        
         assert "Data for hashing must be bytes" in caplog.text
 
     @pytest.mark.asyncio

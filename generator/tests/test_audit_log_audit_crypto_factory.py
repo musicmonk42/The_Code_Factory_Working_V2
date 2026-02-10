@@ -285,6 +285,26 @@ def mock_aiohttp(monkeypatch):
 
 
 @pytest.fixture
+def mock_aiohttp_session():
+    """Mock aiohttp.ClientSession for alert tests."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()  # Non-async mock since it's called as response.raise_for_status()
+    
+    # Create a context manager for session.post()
+    mock_post_cm = MagicMock()
+    mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_post_cm.__aexit__ = AsyncMock(return_value=None)
+    
+    mock_session = MagicMock()
+    mock_session.post = MagicMock(return_value=mock_post_cm)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
+    
+    with patch('aiohttp.ClientSession', return_value=mock_session):
+        yield mock_session, mock_response
+
+
+@pytest.fixture
 def mock_log_action(monkeypatch):
     """Mocks the log_action async function."""
     mock_log = AsyncMock()
@@ -757,51 +777,38 @@ class TestGlobalSecrets:
 class TestAsyncUtils:
     """Tests utility functions like send_alert and retry_operation."""
 
-    async def test_send_alert_success(self, mock_aiohttp, mock_settings):
+    async def test_send_alert_success(self, mock_aiohttp_session, mock_settings):
         """Tests that send_alert successfully POSTs to the endpoint."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
 
-        mock_session, mock_response = mock_aiohttp
+        mock_session, mock_response = mock_aiohttp_session
 
-        # The mock is already set up properly in the fixture
-        # Just ensure raise_for_status doesn't raise an exception
-        mock_response.raise_for_status.side_effect = None
-
-        # FIX 4: Explicitly pass the mocked endpoint value to bypass default argument evaluation issue.
         mock_endpoint = mock_settings[0].ALERT_ENDPOINT
         await send_alert("Test Alert", severity="high", endpoint=mock_endpoint)
 
-        # Verify the post method was called
         mock_session.post.assert_called_once_with(
             mock_endpoint, json={"message": "Test Alert", "severity": "high"}
         )
 
     async def test_send_alert_failure_with_retries(
-        self, monkeypatch, mock_aiohttp, mock_settings
+        self, monkeypatch, mock_aiohttp_session, mock_settings
     ):
         """Tests that send_alert retries on failure."""
         from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
 
-        mock_session, mock_response = mock_aiohttp
-        # Make raise_for_status raise an error
-        mock_response.raise_for_status.side_effect = aiohttp.ClientError(
-            "Connection failed"
-        )
+        mock_session, mock_response = mock_aiohttp_session
+        mock_response.raise_for_status.side_effect = aiohttp.ClientError("Connection failed")
 
-        # Mock asyncio.sleep to speed up the test
         mock_sleep = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", mock_sleep)
 
-        # FIX: Pass the mocked endpoint explicitly
         mock_endpoint = mock_settings[0].ALERT_ENDPOINT
         await send_alert("Test Alert", severity="critical", endpoint=mock_endpoint)
 
-        # Assert it was called the correct number of times (default is 3)
         assert mock_session.post.call_count == 3
-        # Assert sleep was called with exponential backoff
         assert mock_sleep.call_count == 2
-        assert mock_sleep.call_args_list[0].args[0] == 1.0  # initial_delay
-        assert mock_sleep.call_args_list[1].args[0] == 2.0  # delay * backoff_factor
+        assert mock_sleep.call_args_list[0].args[0] == 1.0
+        assert mock_sleep.call_args_list[1].args[0] == 2.0
 
     async def test_retry_operation_success_first_try(self, mock_log_action):
         """Tests retry_operation succeeding on the first attempt."""
