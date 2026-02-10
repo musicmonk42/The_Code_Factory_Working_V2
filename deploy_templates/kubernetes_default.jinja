@@ -1,0 +1,79 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{# 
+  Default Kubernetes Deployment Template
+  Generates standard Kubernetes manifests for application deployment.
+#}
+
+# Kubernetes Manifests Generation
+
+Generate Kubernetes deployment manifests for {{ target | default('the application') }}.
+
+{% if files %}
+## Application Files:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Application Context
+
+{% if context.language is defined %}
+**Language**: {{ context.language }}
+{% endif %}
+
+{% if context.framework is defined %}
+**Framework**: {{ context.framework }}
+{% endif %}
+
+{% if context.files_content is defined and context.files_content %}
+## Application Code Analysis
+
+**CRITICAL**: Analyze these files to determine:
+- The actual port(s) the application listens on
+- The correct startup command
+- Required environment variables
+- Health check endpoints
+
+{% for filename, content in context.files_content.items() %}
+### {{ filename }}
+```
+{{ content[:400] }}{% if content|length > 400 %}...{% endif %}
+```
+{% endfor %}
+{% endif %}
+
+{% if context.port is defined %}
+**Port**: {{ context.port }}
+{% endif %}
+{% endif %}
+
+## Requirements
+
+Generate the following Kubernetes manifests:
+
+1. **Deployment** - with:
+   - Appropriate replicas
+   - Container spec with correct port and command
+   - Resource limits and requests
+   - Readiness and liveness probes
+   - Security context (non-root user)
+
+2. **Service** - with:
+   - ClusterIP type (or LoadBalancer if specified)
+   - Correct port mapping
+   - Proper selector labels
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+---
+**Output Format**: Generate valid YAML Kubernetes manifests. Output ONLY the YAML content with no markdown formatting, no explanations, and no code fences around the YAML.
+
+**CRITICAL**: 
+- Use the EXACT port from the application code
+- Do NOT use generic port 8080 unless the code actually uses it
+- Do NOT include markdown formatting in the output
