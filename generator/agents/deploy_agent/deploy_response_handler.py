@@ -667,9 +667,9 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
             # - Empty line followed by explanatory text (e.g., "This Dockerfile...")
             # - Common LLM closing phrases
             trailing_patterns = [
-                r'\n\n(?:This|The above|Note:|Explanation:|To use this)',
-                r'\n\n(?:Here\'s|This is|Above is)',
-                r'\n\n(?:You can|To build|To run)',
+                r'\n\n(?:This|The above|Note:|Explanation:|To use this)',  # Explanatory statements
+                r'\n\n(?:Here\'s|This is|Above is)',  # Introduction phrases
+                r'\n\n(?:You can|To build|To run)',  # Usage instructions
             ]
             
             for pattern in trailing_patterns:
