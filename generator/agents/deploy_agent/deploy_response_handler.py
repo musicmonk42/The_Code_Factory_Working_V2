@@ -1262,7 +1262,9 @@ class YAMLHandler(FormatHandler):
         - Lines starting with markdown headers (# Header)
         - Lines with markdown links ([text](url))
         - Inline code backticks (`code`)
-        - Markdown emphasis patterns
+        - Markdown emphasis patterns (bold, italic)
+        - Numbered lists with explanations
+        - Markdown bullet points with bold text
         
         This is a best-effort cleanup before strict validation.
         
@@ -1274,12 +1276,33 @@ class YAMLHandler(FormatHandler):
         """
         lines = []
         for line in raw.split('\n'):
+            # FIX Issue 5: Enhanced markdown detection and stripping
+            
             # Skip lines that start with markdown headers (# followed by space and any letter)
             if re.match(r'^\s*#\s+[A-Za-z]', line):
                 continue
             
+            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
+            # These are often explanatory text, not YAML content
+            if re.match(r'^\s*\d+\.\s+\*\*', line):
+                continue
+            
+            # Skip lines that are primarily markdown bullets with bold (e.g., "- **item**:")
+            # But allow YAML lists that might have some formatting
+            if re.match(r'^\s*-\s+\*\*[^*]+\*\*\s*:', line):
+                # This looks like a markdown explanation list, skip it
+                continue
+            
             # Remove markdown links: [text](url)
             line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line)
+            
+            # Remove markdown bold (**text**) but preserve the text
+            # This handles inline bold that might appear in explanations
+            line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+            
+            # Remove markdown italic (*text* or _text_) but preserve the text
+            line = re.sub(r'(?<!\*)\*(?!\*)([^*]+)\*(?!\*)', r'\1', line)  # *text*
+            line = re.sub(r'_([^_]+)_', r'\1', line)  # _text_
             
             # Remove inline code backticks (but preserve YAML values)
             # Only remove if backticks are mid-line (not YAML block markers)
@@ -1390,6 +1413,12 @@ class YAMLHandler(FormatHandler):
         # FIX 2: Support multi-document YAML with load_all()
         # Industry standard: Handle multi-doc efficiently with lazy evaluation
         ru_yaml = YAML()
+        
+        # FIX Issue 6: Configure to allow duplicate keys for detection and merging
+        # By default, ruamel.yaml raises DuplicateKeyError on duplicates
+        # We'll catch this error and provide a helpful message
+        ru_yaml.allow_duplicate_keys = False  # Explicitly enforce no duplicates
+        
         try:
             # Use load_all() for multi-document support (Kubernetes manifests)
             # Load documents incrementally to handle large files efficiently
@@ -1439,6 +1468,34 @@ class YAMLHandler(FormatHandler):
                 raise ValueError("Empty YAML document")
             
         except Exception as e:
+            # FIX Issue 6: Special handling for duplicate key errors
+            # Check if it's a DuplicateKeyError from ruamel.yaml
+            if 'DuplicateKeyError' in type(e).__name__ or 'duplicate key' in str(e).lower():
+                # Extract key name from error message if possible
+                error_str = str(e)
+                key_match = re.search(r'duplicate key ["\']?([^"\']+)["\']?', error_str, re.IGNORECASE)
+                key_name = key_match.group(1) if key_match else "unknown"
+                
+                # Provide helpful error message about duplicate keys
+                error_msg = (
+                    f"Invalid YAML: Duplicate key '{key_name}' detected. "
+                    f"YAML does not allow the same key to appear multiple times in the same mapping. "
+                    f"This is a common LLM error. Please ensure each key appears only once. "
+                    f"Original error: {error_str}"
+                )
+                
+                logger.error(
+                    "Duplicate key detected in YAML",
+                    extra={
+                        "key_name": key_name,
+                        "error": str(e),
+                        "yaml_preview": raw[:300] + "..." if len(raw) > 300 else raw,
+                        "handler": "YAMLHandler"
+                    }
+                )
+                
+                raise ValueError(error_msg)
+            
             # Provide detailed error for debugging
             error_msg = f"Invalid YAML format: {e}"
             
@@ -1460,7 +1517,12 @@ class YAMLHandler(FormatHandler):
             raise ValueError(error_msg)
 
     def convert(self, data: Any, to_format: str) -> str:
-        """Converts structured YAML data to JSON or back to YAML."""
+        """Converts structured YAML data to JSON or back to YAML.
+        
+        Supports conversion to:
+        - 'json': Convert to JSON format
+        - 'yaml', 'kubernetes', 'k8s', 'helm': Convert to YAML format (all are YAML-based)
+        """
         if to_format == "json":
             # Convert ruamel.yaml specific types to standard Python types for json.dumps
             # A bit of a heavy-handed way, but effective
@@ -1474,7 +1536,8 @@ class YAMLHandler(FormatHandler):
             clean_data = convert_ruamel(data)
             return json.dumps(clean_data, indent=2)
 
-        elif to_format == "yaml":
+        elif to_format in ("yaml", "kubernetes", "k8s", "helm"):
+            # FIX Issue 4: Support kubernetes, k8s, helm as aliases for YAML format
             # Use ruamel.yaml to dump, preserving comments/formatting if possible from normalized data
             from io import StringIO
 

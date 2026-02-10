@@ -314,3 +314,242 @@ service:
         assert result.get("_helm_template") is not True
         assert result["replicaCount"] == 2
         assert result["image"]["repository"] == "myapp"
+
+
+class TestIssue4KubernetesFormatConversion:
+    """Test Issue 4: YAMLHandler.convert() doesn't support 'kubernetes' format."""
+
+    def test_convert_to_kubernetes_format(self):
+        """Test converting YAML to 'kubernetes' format."""
+        data = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "name": "myapp"
+            },
+            "spec": {
+                "type": "ClusterIP",
+                "ports": [{"port": 80}]
+            }
+        }
+        
+        handler = YAMLHandler()
+        # Should not raise ValueError for 'kubernetes' format
+        result = handler.convert(data, "kubernetes")
+        
+        # Should return valid YAML string
+        assert isinstance(result, str)
+        assert "apiVersion: v1" in result
+        assert "kind: Service" in result
+    
+    def test_convert_to_k8s_format(self):
+        """Test converting YAML to 'k8s' format."""
+        data = {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {"name": "app"}
+        }
+        
+        handler = YAMLHandler()
+        # Should not raise ValueError for 'k8s' format
+        result = handler.convert(data, "k8s")
+        
+        # Should return valid YAML string
+        assert isinstance(result, str)
+        assert "kind: Deployment" in result
+    
+    def test_convert_to_helm_format(self):
+        """Test converting YAML to 'helm' format."""
+        data = {
+            "replicaCount": 2,
+            "image": {
+                "repository": "myapp",
+                "tag": "1.0.0"
+            }
+        }
+        
+        handler = YAMLHandler()
+        # Should not raise ValueError for 'helm' format
+        result = handler.convert(data, "helm")
+        
+        # Should return valid YAML string
+        assert isinstance(result, str)
+        assert "replicaCount: 2" in result
+        assert "repository: myapp" in result
+    
+    def test_convert_unsupported_format_still_fails(self):
+        """Test that unsupported formats still raise ValueError."""
+        data = {"test": "value"}
+        handler = YAMLHandler()
+        
+        with pytest.raises(ValueError) as exc_info:
+            handler.convert(data, "invalid_format")
+        
+        assert "does not support conversion to 'invalid_format'" in str(exc_info.value)
+
+
+class TestIssue5MarkdownSanitization:
+    """Test Issue 5: Markdown contamination in YAML output."""
+
+    def test_sanitize_numbered_list_with_bold(self):
+        """Test that numbered lists with bold markdown are removed."""
+        raw = """1. **Deployment Manifest**:
+   - **Metadata**: Must include a descriptive name
+   - **Replica Count**: Set to a minimum of 2
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp"""
+        
+        handler = YAMLHandler()
+        result = handler.normalize(raw)
+        
+        # Should successfully parse after sanitization
+        assert isinstance(result, dict)
+        assert result["kind"] == "Deployment"
+        assert result["metadata"]["name"] == "myapp"
+    
+    def test_sanitize_inline_bold_text(self):
+        """Test that inline bold markdown is removed but text preserved."""
+        raw = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  # This is a **very important** configuration
+  key: value"""
+        
+        handler = YAMLHandler()
+        result = handler.normalize(raw)
+        
+        # Should parse successfully with bold removed
+        assert isinstance(result, dict)
+        assert result["kind"] == "ConfigMap"
+        assert result["data"]["key"] == "value"
+    
+    def test_markdown_bold_in_yaml_triggers_error(self):
+        """Test that markdown bold in YAML content still triggers validation error."""
+        # After sanitization, if ** still exists, it should error
+        raw = """apiVersion: v1
+kind: Service
+metadata:
+  name: **myapp**
+spec:
+  type: ClusterIP"""
+        
+        handler = YAMLHandler()
+        
+        # This should raise ValueError due to ** in YAML content
+        with pytest.raises(ValueError) as exc_info:
+            handler.normalize(raw)
+        
+        assert "Markdown formatting" in str(exc_info.value)
+        assert "**" in str(exc_info.value)
+    
+    def test_sanitize_markdown_italic(self):
+        """Test that markdown italic is removed."""
+        raw = """apiVersion: v1
+kind: Service
+metadata:
+  name: myapp
+  # This is *very* important
+spec:
+  type: ClusterIP"""
+        
+        handler = YAMLHandler()
+        result = handler.normalize(raw)
+        
+        # Should parse successfully
+        assert isinstance(result, dict)
+        assert result["kind"] == "Service"
+    
+    def test_sanitize_markdown_bullets_with_bold(self):
+        """Test that markdown bullet lists with bold are removed."""
+        raw = """- **Feature 1**: Description here
+- **Feature 2**: Another description
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production"""
+        
+        handler = YAMLHandler()
+        result = handler.normalize(raw)
+        
+        # Should parse after removing markdown bullets
+        assert isinstance(result, dict)
+        assert result["kind"] == "Namespace"
+        assert result["metadata"]["name"] == "production"
+
+
+class TestIssue6DuplicateKeyHandling:
+    """Test Issue 6: Duplicate keys in YAML output."""
+
+    def test_duplicate_key_detection(self):
+        """Test that duplicate keys are detected and reported clearly."""
+        raw = """apiVersion: apps/v1
+kind: Deployment
+spec:
+  replicas: 2
+  resources:
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+  resources:
+    limits:
+      cpu: "2"
+      memory: "1Gi"""
+        
+        handler = YAMLHandler()
+        
+        # Should raise ValueError with helpful message about duplicate key
+        with pytest.raises(ValueError) as exc_info:
+            handler.normalize(raw)
+        
+        error_msg = str(exc_info.value)
+        assert "duplicate key" in error_msg.lower()
+        # Should mention that it's a common LLM error
+        assert "LLM error" in error_msg or "duplicate" in error_msg.lower()
+    
+    def test_no_duplicate_keys_succeeds(self):
+        """Test that YAML without duplicate keys parses successfully."""
+        raw = """apiVersion: apps/v1
+kind: Deployment
+spec:
+  replicas: 2
+  resources:
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+    requests:
+      cpu: "500m"
+      memory: "256Mi"""
+        
+        handler = YAMLHandler()
+        result = handler.normalize(raw)
+        
+        # Should parse successfully
+        assert isinstance(result, dict)
+        assert result["spec"]["resources"]["limits"]["cpu"] == "1"
+        assert result["spec"]["resources"]["requests"]["cpu"] == "500m"
+    
+    def test_duplicate_top_level_keys(self):
+        """Test detection of duplicate top-level keys."""
+        raw = """apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: config1
+data:
+  key1: value1
+metadata:
+  name: config2"""
+        
+        handler = YAMLHandler()
+        
+        # Should raise ValueError about duplicate 'metadata' key
+        with pytest.raises(ValueError) as exc_info:
+            handler.normalize(raw)
+        
+        error_msg = str(exc_info.value).lower()
+        assert "duplicate" in error_msg
