@@ -619,11 +619,14 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
-    if format_type in ("yaml", "kubernetes", "helm") and raw.startswith(("---", "apiVersion:", "name:", "replicaCount:")):
-        # FIX 6: Record valid format
-        if llm_output_format_counter:
-            llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
-        return raw
+    # Industry standard: Use strict markers for K8s/Helm YAML validation
+    # Only accept document separator or apiVersion as valid starts (avoid false positives)
+    if format_type in ("yaml", "kubernetes", "helm"):
+        if raw.startswith(("---", "apiVersion:", "# Kubernetes", "# Helm")):
+            # FIX 6: Record valid format
+            if llm_output_format_counter:
+                llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
+            return raw
     if format_type == "json" and raw.startswith(("{", "[")):
         # FIX 6: Record valid format
         if llm_output_format_counter:
@@ -1307,10 +1310,26 @@ class YAMLHandler(FormatHandler):
         
         # Parse YAML using ruamel.yaml for high fidelity
         # FIX 2: Support multi-document YAML with load_all()
+        # Industry standard: Handle multi-doc efficiently with lazy evaluation
         ru_yaml = YAML()
         try:
             # Use load_all() for multi-document support (Kubernetes manifests)
-            documents = list(ru_yaml.load_all(raw))
+            # Load documents incrementally to handle large files efficiently
+            doc_generator = ru_yaml.load_all(raw)
+            
+            # Convert to list but limit to reasonable count (100 docs max for safety)
+            documents = []
+            MAX_YAML_DOCS = 100  # Industry standard: prevent DoS from excessive documents
+            
+            for idx, doc in enumerate(doc_generator):
+                if idx >= MAX_YAML_DOCS:
+                    logger.warning(
+                        f"YAML contains more than {MAX_YAML_DOCS} documents, truncating",
+                        extra={"handler": "YAMLHandler", "yaml_size": len(raw)}
+                    )
+                    break
+                if doc is not None:  # Skip empty documents
+                    documents.append(doc)
             
             if len(documents) == 1:
                 # Single document - return as-is

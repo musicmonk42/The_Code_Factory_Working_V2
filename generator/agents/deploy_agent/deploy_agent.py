@@ -1400,6 +1400,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                     last_error = None
                     last_raw_response = None
                     config_content = ""
+                    original_prompt = None  # Industry standard: Store original to prevent accumulation
                     
                     for attempt in range(MAX_LLM_RETRIES):
                         try:
@@ -1408,14 +1409,19 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                                 LLM_RETRY_COUNT.labels(target=target, attempt=str(attempt + 1)).inc()
                             
                             # --- FIX 3.3: Pass repo_path to prompt agent ---
-                            prompt = await self.prompt_agent(
-                                target=target,
-                                files=[],
-                                repo_path=str(self.repo_path),  # <-- ADDED
-                                instructions=None,
-                                context=context,
-                            )
+                            # Only generate original prompt on first attempt
+                            if original_prompt is None:
+                                original_prompt = await self.prompt_agent(
+                                    target=target,
+                                    files=[],
+                                    repo_path=str(self.repo_path),  # <-- ADDED
+                                    instructions=None,
+                                    context=context,
+                                )
                             # --------------------------------------------
+                            
+                            # Industry standard: Use original prompt, not accumulated version
+                            prompt = original_prompt
                             
                             # FIX 6: Record prompt token count (approximate)
                             if HAS_TIKTOKEN:
@@ -1430,7 +1436,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                             # FIX 4: Build retry prompt with error context on subsequent attempts
                             if attempt > 0 and last_error:
                                 prompt = self._build_retry_prompt(
-                                    prompt, last_raw_response, str(last_error), target
+                                    original_prompt, last_raw_response, str(last_error), target
                                 )
                                 logger.warning(
                                     f"Retrying {target} generation (attempt {attempt + 1}/{MAX_LLM_RETRIES}): {last_error}"

@@ -1908,13 +1908,25 @@ class OmniCoreService:
                 generated_files = payload.get("generated_files", [])
                 if not generated_files and repo_path.exists():
                     try:
-                        # Collect all files in the generated directory
+                        # Collect source files, excluding common non-source directories
+                        # Industry standard: filter out build artifacts, dependencies, VCS
+                        exclude_dirs = {'.git', '.svn', 'node_modules', '__pycache__', '.pytest_cache', 
+                                       'dist', 'build', '.venv', 'venv', '.mypy_cache', '.ruff_cache',
+                                       '.tox', 'htmlcov', '.eggs', '*.egg-info'}
+                        
                         for file_path in repo_path.rglob("*"):
                             if file_path.is_file():
+                                # Skip if any parent directory is in exclude list
+                                if any(part in exclude_dirs for part in file_path.parts):
+                                    continue
+                                # Skip hidden files (except specific configs)
+                                if any(part.startswith('.') and part not in {'.env.example', '.dockerignore'} 
+                                      for part in file_path.parts):
+                                    continue
                                 # Store relative path from repo_path
                                 rel_path = str(file_path.relative_to(repo_path))
                                 generated_files.append(rel_path)
-                        logger.info(f"[DEPLOY] Found {len(generated_files)} files in {code_path}")
+                        logger.info(f"[DEPLOY] Found {len(generated_files)} source files in {code_path}")
                     except Exception as e:
                         logger.warning(f"[DEPLOY] Failed to collect files from {code_path}: {e}")
                 
@@ -2329,13 +2341,25 @@ class OmniCoreService:
             generated_files = []
             if code_path_obj.exists():
                 try:
-                    # Collect all files in the generated directory
+                    # Collect source files, excluding common non-source directories
+                    # Industry standard: filter out build artifacts, dependencies, VCS
+                    exclude_dirs = {'.git', '.svn', 'node_modules', '__pycache__', '.pytest_cache', 
+                                   'dist', 'build', '.venv', 'venv', '.mypy_cache', '.ruff_cache',
+                                   '.tox', 'htmlcov', '.eggs', '*.egg-info'}
+                    
                     for file_path in code_path_obj.rglob("*"):
                         if file_path.is_file():
+                            # Skip if any parent directory is in exclude list
+                            if any(part in exclude_dirs for part in file_path.parts):
+                                continue
+                            # Skip hidden files (except specific configs)
+                            if any(part.startswith('.') and part not in {'.env.example', '.dockerignore'} 
+                                  for part in file_path.parts):
+                                continue
                             # Store relative path from code_path
                             rel_path = str(file_path.relative_to(code_path_obj))
                             generated_files.append(rel_path)
-                    logger.info(f"[DEPLOY_ALL] Found {len(generated_files)} files in {code_path} for target {target}")
+                    logger.info(f"[DEPLOY_ALL] Found {len(generated_files)} source files in {code_path} for target {target}")
                 except Exception as e:
                     logger.warning(f"[DEPLOY_ALL] Failed to collect files from {code_path}: {e}")
             
