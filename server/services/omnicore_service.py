@@ -2000,11 +2000,12 @@ class OmniCoreService:
                         
                         # Parse YAML content to create separate files (deployment.yaml, service.yaml)
                         # The LLM typically generates multi-document YAML separated by "---"
+                        MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
                         yaml_docs = config_content.split("---")
                         for idx, doc in enumerate(yaml_docs):
                             doc = doc.strip()
-                            if not doc or len(doc) < 10:
-                                continue  # Skip empty documents
+                            if not doc or len(doc) < MIN_YAML_DOC_LENGTH:
+                                continue  # Skip empty or trivial documents
                             
                             # Determine filename based on document kind
                             if "kind: Deployment" in doc:
@@ -2048,17 +2049,22 @@ class OmniCoreService:
                         values_path = target_dir / "values.yaml"
                         
                         # Try to extract Chart.yaml and values.yaml from content
+                        # Note: This is a simple parser. A more robust approach would use YAML parsing
+                        # to properly separate files, but this works for common LLM output formats
                         if "Chart.yaml" in config_content and "values.yaml" in config_content:
-                            # Content contains multiple files - parse them
-                            parts = config_content.split("# ")
+                            # Content contains multiple files - try to parse them
+                            # Split on '# ' at the start of a line followed by filename
+                            # This is a heuristic that works with common LLM output but may be fragile
+                            parts = config_content.split("\n# ")
                             for part in parts:
-                                if part.startswith("Chart.yaml"):
-                                    chart_content = part.replace("Chart.yaml", "").strip()
+                                part = "# " + part if not part.startswith("#") else part
+                                if "Chart.yaml" in part[:50]:  # Check first 50 chars
+                                    chart_content = part.replace("# Chart.yaml", "").strip()
                                     async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
                                         await f.write(chart_content)
                                     generated_files.append(str(chart_path.relative_to(repo_path)))
-                                elif part.startswith("values.yaml"):
-                                    values_content = part.replace("values.yaml", "").strip()
+                                elif "values.yaml" in part[:50]:  # Check first 50 chars
+                                    values_content = part.replace("# values.yaml", "").strip()
                                     async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
                                         await f.write(values_content)
                                     generated_files.append(str(values_path.relative_to(repo_path)))
@@ -3867,8 +3873,12 @@ class OmniCoreService:
                 output_path_obj = Path(output_path)
                 
                 # Check for required directories based on stages completed
+                # Only validate artifacts that were actually requested/generated
                 if "deploy" in stages_completed:
-                    # Check for Docker files
+                    # Note: Only check for artifacts based on what targets were run
+                    # The deploy_all runs docker, kubernetes, and helm
+                    
+                    # Check for Docker files (always generated)
                     if not (output_path_obj / "Dockerfile").exists():
                         validation_warnings.append("Dockerfile not found despite deploy stage completing")
                     
