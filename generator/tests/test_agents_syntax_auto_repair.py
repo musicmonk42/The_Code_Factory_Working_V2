@@ -418,6 +418,78 @@ class TestEdgeCases:
         assert not result['was_modified'], "Should not modify balanced quotes"
 
 
+class TestRepairMissingCommas:
+    """Test suite for missing comma repair functionality."""
+    
+    def test_repair_adjacent_strings(self):
+        """Should add comma between adjacent string literals."""
+        code = 'items = ["hello" "world"]'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        assert '"hello", "world"' in repaired, "Should add comma between strings"
+        assert len(fixes) > 0, "Should report fix"
+        assert "Adjacent string literals" in fixes[0]
+    
+    def test_repair_identifier_followed_by_string(self):
+        """Should add comma between identifier and string."""
+        code = 'func(name "value")'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        assert 'name, "value"' in repaired, "Should add comma between identifier and string"
+        assert len(fixes) > 0, "Should report fix"
+    
+    def test_repair_number_followed_by_identifier(self):
+        """Should add comma between number and identifier in collections."""
+        code = '[1 two, 3 four]'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        assert '1, two' in repaired, "Should add comma between number and identifier"
+        assert '3, four' in repaired, "Should add comma between number and identifier"
+        assert len(fixes) > 0, "Should report fix"
+    
+    def test_repair_adjacent_brackets(self):
+        """Should add comma between closing and opening brackets."""
+        code = '[(1, 2) (3, 4)]'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        assert ') (' not in repaired or ', ' in repaired, "Should add comma between bracket pairs"
+        assert len(fixes) > 0, "Should report fix"
+    
+    def test_no_repair_needed(self):
+        """Should not modify code with proper commas."""
+        code = 'func(a, b, c)'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        assert repaired == code, "Should not modify valid code"
+        assert len(fixes) == 0, "Should have no fixes"
+    
+    def test_no_repair_for_operators(self):
+        """Should not add commas where operators are expected."""
+        code = 'x = 1 + 2'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        # Should not break valid expressions with operators
+        assert '1 + 2' in repaired or '1+2' in repaired, "Should preserve operators"
+    
+    def test_unsupported_language(self):
+        """Should return unchanged code for unsupported languages."""
+        code = 'const x = [1 2 3];'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "javascript")
+        
+        assert repaired == code, "Should not modify non-Python code"
+        assert len(fixes) == 0, "Should have no fixes"
+    
+    def test_multiple_missing_commas(self):
+        """Should repair multiple missing commas in one pass."""
+        code = 'items = ["a" "b" "c"]'
+        repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+        
+        # Should have added commas
+        assert fixes, "Should report fixes"
+        # Check that result is better than original
+        assert repaired.count(',') > code.count(','), "Should add commas"
+
+
 class TestIntegrationWithValidation:
     """Test integration with the validation flow."""
     

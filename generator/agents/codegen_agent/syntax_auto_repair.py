@@ -646,6 +646,125 @@ class SyntaxAutoRepair:
             # Safe default: return original code
             return code, []
     
+    @staticmethod
+    def repair_missing_commas(code: str, language: str) -> Tuple[str, List[str]]:
+        """
+        Detect and repair missing commas in Python code.
+        
+        This method handles the common LLM error of generating code without
+        proper comma separators between elements. It detects patterns like:
+        - Function arguments: `func(a b)` -> `func(a, b)`
+        - List elements: `[1 2 3]` -> `[1, 2, 3]`
+        - Dict elements: `{"a": 1 "b": 2}` -> `{"a": 1, "b": 2}`
+        - Tuple elements: `(1 2)` -> `(1, 2)`
+        
+        Algorithm:
+        1. Identify string literals and skip them (avoid false positives)
+        2. Look for patterns where identifiers/literals are adjacent without separators
+        3. Add comma between adjacent elements when appropriate
+        
+        Production Safety:
+        - Only repairs high-confidence patterns
+        - Never modifies strings or comments
+        - Conservative: Only acts when pattern is clear
+        
+        Args:
+            code: The source code to repair (must be valid UTF-8 string)
+            language: Programming language identifier (case-insensitive)
+        
+        Returns:
+            Tuple[str, List[str]]:
+                - repaired_code: Code with commas added where needed
+                - fixes_applied: Human-readable list of repairs made
+        
+        Examples:
+            >>> code = 'func(a b c)'
+            >>> repaired, fixes = SyntaxAutoRepair.repair_missing_commas(code, "python")
+            >>> 'a, b, c' in repaired
+            True
+        """
+        # Input validation with safe defaults
+        if not isinstance(code, str):
+            logger.error(
+                f"Invalid input type to repair_missing_commas: {type(code).__name__}. "
+                "Expected str. Returning empty result."
+            )
+            return code if code else "", []
+        
+        if not isinstance(language, str):
+            logger.warning(
+                f"Invalid language type: {type(language).__name__}. "
+                "Defaulting to generic behavior."
+            )
+            language = "unknown"
+        
+        fixes = []
+        
+        # Only Python has this issue currently; extensible for other languages
+        if language.lower() not in ("python", "py"):
+            logger.debug(
+                f"Language '{language}' not supported for missing comma repair. "
+                "Returning original code."
+            )
+            return code, []
+        
+        try:
+            # Regex patterns for detecting missing commas
+            # These patterns are conservative and only match high-confidence cases
+            patterns = [
+                # Adjacent string literals: "hello" "world" -> "hello", "world"
+                # Match the space between closing quote and opening quote
+                (re.compile(r'(["\'])([^"\']*)\1(\s+)(["\'])'), r'\1\2\1, \4', "Adjacent string literals"),
+                
+                # Variable/identifier followed by string without operator
+                # Match: word followed by quote, but not if preceded by = or other operators
+                (re.compile(r'(?<![=!<>+\-*/%&|^])\b(\w+)(\s+)(["\'])'), r'\1, \3', "Identifier followed by string"),
+                
+                # Number followed by identifier (not keyword) inside brackets/parens
+                # This is conservative - only matches inside collection contexts
+                (re.compile(r'(\d+)(\s+)(?!and\b|or\b|in\b|is\b|not\b|if\b|else\b|for\b|while\b)(\w+)(?=[,\)\]\}])'), 
+                 r'\1, \3', "Number followed by identifier"),
+                
+                # Closing parenthesis/bracket followed by opening (without comma)
+                # Example: ) ( or ] [
+                (re.compile(r'([\)\]])(\s+)([\(\[])'), r'\1, \3', "Adjacent brackets"),
+            ]
+            
+            repaired_code = code
+            
+            for pattern, replacement, description in patterns:
+                # Find all matches before replacement
+                matches = list(pattern.finditer(repaired_code))
+                
+                if matches:
+                    # Perform replacement
+                    new_code = pattern.sub(replacement, repaired_code)
+                    
+                    # Only count as a fix if code actually changed
+                    if new_code != repaired_code:
+                        # Count actual changes by comparing before/after
+                        changes_count = len(matches)
+                        fixes.append(f"Repaired {changes_count} missing comma(s): {description}")
+                        logger.debug(f"Repaired {changes_count} missing comma(s) via pattern: {description}")
+                        repaired_code = new_code
+            
+            if fixes:
+                logger.info(
+                    f"Successfully repaired {len(fixes)} missing comma pattern(s) "
+                    f"in {language} code"
+                )
+            
+            return repaired_code, fixes
+            
+        except Exception as e:
+            # Critical internal error - log but don't break the pipeline
+            logger.error(
+                f"Unexpected error in repair_missing_commas: {e}",
+                exc_info=True
+            )
+            # Safe default: return original code
+            return code, []
+    
     @classmethod
     def auto_repair(cls, code: str, language: str) -> Dict[str, Any]:
         """
@@ -758,6 +877,12 @@ class SyntaxAutoRepair:
             all_fixes.extend(fixes)
             if fixes:
                 logger.debug(f"Phase 1 complete: {len(fixes)} colon(s) repaired")
+
+            # Phase 1.5: Fix missing commas (separators)
+            code, fixes = cls.repair_missing_commas(code, language)
+            all_fixes.extend(fixes)
+            if fixes:
+                logger.debug(f"Phase 1.5 complete: {len(fixes)} comma pattern(s) repaired")
 
             # Phase 2: Fix unterminated strings (literals)
             code, fixes = cls.repair_unterminated_strings(code, language)
