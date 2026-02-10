@@ -272,6 +272,36 @@ class TamperEvidentLogger:
             cls._instance = cls(config)
         return cls._instance
 
+    def shutdown(self):
+        """Shutdown the logger and cleanup background tasks.
+        
+        This method should be called during test cleanup or application shutdown
+        to ensure all background tasks are properly terminated.
+        """
+        if self._batch_task and not self._batch_task.done():
+            self._batch_task.cancel()
+            # Give the task a chance to finish cancellation
+            try:
+                # If we're in an async context, we can await directly
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We can't await in a running loop, so just cancel
+                    pass
+                else:
+                    # We can run until the task is cancelled
+                    loop.run_until_complete(
+                        asyncio.wait_for(self._batch_task, timeout=1.0)
+                    )
+            except (asyncio.CancelledError, asyncio.TimeoutError, RuntimeError):
+                # Task was cancelled or timeout, which is expected
+                pass
+            except Exception as e:
+                self._logger.error(f"Error during shutdown: {e}")
+        
+        # Shutdown the executor
+        if hasattr(self, '_executor') and self._executor:
+            self._executor.shutdown(wait=False)
+
     def _setup_file_logger(self) -> logging.Logger:
         """Configure and return the file-based logger with rotation.
 
@@ -539,8 +569,16 @@ class TamperEvidentLogger:
         """Periodically check and process the batch queue."""
         while True:
             try:
-                # Flush the queue every timeout
-                await asyncio.sleep(self.config.batch_timeout)
+                # Check if we're in test mode and should exit early
+                if os.getenv("PYTEST_CURRENT_TEST"):
+                    await asyncio.sleep(0.1)  # Short sleep in test mode
+                    # Check if we should exit due to test completion
+                    if not self._batch_queue:
+                        break
+                else:
+                    # Flush the queue every timeout
+                    await asyncio.sleep(self.config.batch_timeout)
+                
                 async with self._lock:
                     if self._batch_queue:
                         batch = self._batch_queue

@@ -1,6 +1,7 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """Pytest configuration for self_fixing_engineer tests."""
+import asyncio
 import os
 
 import psutil
@@ -38,3 +39,40 @@ def monitor_memory(request):
     if mem_used > threshold:
         test_name = request.node.name
         print(f"\n⚠️ WARNING: Test '{test_name}' used {mem_used:.1f} MB of memory")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_background_loops():
+    """Clean up all background event loops after the test session.
+    
+    This fixture ensures that background loops from fixer_ast, plugin_manager,
+    and audit_log are properly terminated to prevent test hangs.
+    """
+    yield
+    
+    # Cleanup fixer_ast background loop
+    try:
+        from self_fixing_engineer.self_healing_import_fixer.import_fixer import fixer_ast
+        fixer_ast._shutdown_background_loop()
+    except (ImportError, AttributeError) as e:
+        pass  # Module may not be imported in all test runs
+    
+    # Cleanup PluginManager background loops
+    try:
+        from self_fixing_engineer.simulation.plugins.plugin_manager import PluginManager
+        # Try to stop any existing plugin manager instances
+        if hasattr(PluginManager, '_instances'):
+            for instance in PluginManager._instances:
+                if hasattr(instance, 'stop_background_loop'):
+                    instance.stop_background_loop()
+    except (ImportError, AttributeError) as e:
+        pass  # Module may not be imported in all test runs
+    
+    # Cleanup TamperEvidentLogger instances
+    try:
+        from self_fixing_engineer.arbiter.audit_log import TamperEvidentLogger
+        instance = TamperEvidentLogger._instance
+        if instance and hasattr(instance, 'shutdown'):
+            instance.shutdown()
+    except (ImportError, AttributeError) as e:
+        pass  # Module may not be imported in all test runs
