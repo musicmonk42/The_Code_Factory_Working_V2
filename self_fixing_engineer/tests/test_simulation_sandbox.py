@@ -313,17 +313,6 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
         "asyncio.create_subprocess_exec",
         AsyncMock(return_value=mock_process),
     )
-    monkeypatch.setattr(
-        "self_fixing_engineer.simulation.sandbox.client.BatchV1Api",
-        Mock(
-            return_value=Mock(
-                create_namespaced_job=Mock(),
-                read_namespaced_job_status=Mock(
-                    return_value=Mock(status=Mock(succeeded=1))
-                ),
-            )
-        ),
-    )
     result = await run_in_local_process_sandbox(["echo", "test"], "/tmp")
     assert result["status"] == "COMPLETED"
     assert "output" in result["stdout"]
