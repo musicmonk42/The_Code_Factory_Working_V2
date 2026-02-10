@@ -104,7 +104,7 @@ class ClarifyRequest(BaseModel):
     ambiguities: Optional[List[str]] = Field(None, description="Specific ambiguities to clarify")
     channel: Optional[ClarificationChannel] = Field(
         ClarificationChannel.CLI, 
-        description="Clarification channel (cli, gui, voice, web, slack, email, sms). Default: cli"
+        description="Communication channel for clarification interaction"
     )
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 

@@ -2531,9 +2531,10 @@ class OmniCoreService:
                     
                     # Override interaction channel if specified
                     try:
+                        target_lang = getattr(getattr(clarifier, 'config', None), 'TARGET_LANGUAGE', 'en')
                         clarifier.interaction = get_channel(
                             channel_type=channel,
-                            target_language=clarifier.config.TARGET_LANGUAGE if hasattr(clarifier, 'config') else "en"
+                            target_language=target_lang
                         )
                         logger.info(f"Set clarifier channel to: {channel}")
                     except Exception as channel_error:
