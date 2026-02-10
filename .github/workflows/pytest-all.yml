@@ -664,6 +664,7 @@ jobs:
             -v \
             --tb=line \
             -m "not heavy" \
+            --maxfail=0 \
             --timeout=${TIMEOUT_VALUE} \
             --durations=20 \
             $COVERAGE_ARGS \
