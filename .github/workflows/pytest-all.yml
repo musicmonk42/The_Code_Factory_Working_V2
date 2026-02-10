@@ -791,7 +791,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -831,7 +831,7 @@ jobs:
           }
           
           # Memory cleanup between batches
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2b (Arbiter Redis)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -844,7 +844,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -883,7 +883,7 @@ jobs:
             fi
           }
           
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2c (Arbiter Other)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -896,7 +896,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -948,7 +948,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -995,7 +995,7 @@ jobs:
           }
 
           # Memory cleanup between batches
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2d-2 (Remaining Arbiter Part 2)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1007,7 +1007,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1054,7 +1054,7 @@ jobs:
           }
 
           # Memory cleanup after batch
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2e (Arbiter Growth - Isolated)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1067,7 +1067,7 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1117,7 +1117,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1163,7 +1163,7 @@ jobs:
             fi
           }
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 3b (Mesh Event & Policy)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1176,7 +1176,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1219,7 +1219,7 @@ jobs:
             fi
           }
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 3c (Mesh E2E & Integration)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1232,7 +1232,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1276,7 +1276,7 @@ jobs:
             fi
           }
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1289,7 +1289,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1342,7 +1342,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
