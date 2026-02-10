@@ -1906,7 +1906,8 @@ async def handle_deploy_response(
             placeholder_patterns = [
                 r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
                 r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
-                r'\bplaceholder\s*[:=]',  # "placeholder:" or "placeholder=" (actual unsubstituted values)
+                r':\s*placeholder\b',  # "key: placeholder" (value placeholders in YAML/config)
+                r'=\s*placeholder\b',  # "key=placeholder" (value placeholders in env/config)
                 r'REPLACE_ME',  # Common placeholder pattern
                 r'YOUR_[A-Z_]+',  # YOUR_API_KEY, YOUR_DATABASE, etc.
             ]
