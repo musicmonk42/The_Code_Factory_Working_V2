@@ -261,6 +261,77 @@ make docker-clean
 docker compose down -v
 ```
 
+### Database and Migrations
+
+#### PostgreSQL with Citus Support
+
+The platform now uses `citusdata/citus:12.1` image for PostgreSQL, providing:
+- Standard PostgreSQL functionality
+- Optional Citus extension for distributed SQL
+- Production-ready scale-out capabilities
+
+**Enable Citus features:**
+```bash
+# In docker-compose.yml or .env
+ENABLE_CITUS=1
+```
+
+#### Running Migrations
+
+**Automatic (recommended):**
+Migrations run automatically when the application starts if the `omnicore_engine/migrations` directory exists.
+
+**Manual migration commands:**
+```bash
+# Using Make
+make db-migrate              # Run all pending migrations
+make db-migrate-create       # Create new migration
+make db-migrate-history      # View history
+make db-migrate-current      # Check current version
+
+# Or directly with Alembic
+docker compose exec codefactory alembic upgrade head
+docker compose exec codefactory alembic current
+docker compose exec codefactory alembic history
+```
+
+**Initial setup:**
+```bash
+# First time setup - migrations run automatically
+docker compose up -d
+
+# Or manually trigger
+docker compose exec codefactory alembic upgrade head
+```
+
+#### Database Backup and Restore
+
+**PostgreSQL backup:**
+```bash
+# Backup
+docker compose exec postgres pg_dump -U codefactory codefactory > backup.sql
+
+# Restore
+docker compose exec -i postgres psql -U codefactory codefactory < backup.sql
+
+# Volume backup
+docker run --rm -v postgres-data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/postgres-backup.tar.gz /data
+```
+
+**Migration rollback (use with caution):**
+```bash
+# Rollback one migration
+docker compose exec codefactory alembic downgrade -1
+
+# Or using Make
+make db-migrate-downgrade
+```
+
+For detailed migration documentation:
+- [Alembic Migrations README](./omnicore_engine/migrations/README.md)
+- [DIAGNOSTIC_ISSUES_FIX.md](./DIAGNOSTIC_ISSUES_FIX.md)
+
 ---
 
 ## Kubernetes Deployment
@@ -274,6 +345,7 @@ k8s/
 ├── base/              # Base manifests
 │   ├── api-deployment.yaml
 │   ├── redis-deployment.yaml
+│   ├── migration-job.yaml  # Database migrations
 │   ├── service.yaml
 │   ├── ingress.yaml
 │   ├── configmap.yaml
@@ -285,6 +357,36 @@ k8s/
     ├── staging/
     └── production/
 ```
+
+### Database Migrations
+
+**Pre-deployment migrations (recommended for production):**
+```bash
+# Step 1: Run migrations
+kubectl apply -f k8s/base/migration-job.yaml
+
+# Step 2: Wait for completion
+kubectl wait --for=condition=complete --timeout=300s \
+  job/codefactory-migrations -n codefactory
+
+# Step 3: Deploy application
+kubectl apply -k k8s/overlays/production
+
+# Check migration logs
+kubectl logs job/codefactory-migrations -n codefactory
+```
+
+**Enable Citus support:**
+```bash
+# Update ConfigMap
+kubectl patch configmap codefactory-config -n codefactory \
+  -p '{"data":{"ENABLE_CITUS":"1"}}'
+
+# Restart pods to pick up change
+kubectl rollout restart deployment/codefactory-api -n codefactory
+```
+
+For comprehensive Kubernetes migration guide, see [k8s/MIGRATIONS.md](./k8s/MIGRATIONS.md).
 
 ### Deployment Commands
 
@@ -384,6 +486,7 @@ helm/codefactory/
 ├── values.yaml          # Default values (300+ options)
 ├── templates/           # Kubernetes templates
 │   ├── deployment.yaml
+│   ├── migration-job.yaml  # Database migration job
 │   ├── service.yaml
 │   ├── ingress.yaml
 │   ├── configmap.yaml
@@ -393,6 +496,43 @@ helm/codefactory/
 │   └── pvc.yaml
 └── README.md
 ```
+
+### Database Migrations
+
+The Helm chart supports automatic database migrations:
+
+**Migration as Init Container (recommended):**
+```yaml
+# values.yaml
+migrations:
+  enabled: true
+  runAs: "initContainer"  # Runs before app starts
+```
+
+**Migration as Pre-Install Hook:**
+```yaml
+migrations:
+  enabled: true
+  runAs: "job"
+  job:
+    autoRun: true
+    hook:
+      enabled: true  # Runs before deployment
+```
+
+**Enable Citus support:**
+```yaml
+env:
+  ENABLE_CITUS: "1"
+
+secrets:
+  database:
+    enabled: true
+    urlSecretName: "codefactory-secrets"
+    urlSecretKey: "database-url"
+```
+
+For detailed Helm migration configuration, see [helm/codefactory/README.md](./helm/codefactory/README.md).
 
 ### Installation
 
