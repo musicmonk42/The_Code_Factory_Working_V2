@@ -582,7 +582,10 @@ class LintPlugin(ABC):
                         logger.info(
                             f"Docker not available, using local {tool_name} installation at {shutil.which(tool_binary)}"
                         )
-                        # Run the tool locally without Docker by recursively calling without container
+                        # Recursively call with use_container=False to run tool locally
+                        # This is safe from infinite recursion because:
+                        # 1. use_container=False takes a different code path (non-Docker execution)
+                        # 2. fallback_to_local=False prevents re-entering this fallback logic
                         return await self._run_tool(
                             cmd=cmd,
                             project_dir=project_dir,

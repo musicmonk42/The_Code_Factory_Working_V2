@@ -3006,6 +3006,7 @@ class OmniCoreService:
                         )
                     else:
                         # Check if LLM provider is configured for intelligent test generation
+                        # detect_available_llm_provider() is imported at line 158 from runner.llm_client
                         llm_provider_configured = False
                         try:
                             if self.llm_config and self.llm_config.default_llm_provider:

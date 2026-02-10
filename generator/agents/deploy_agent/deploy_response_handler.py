@@ -88,6 +88,16 @@ from runner.llm_client import call_ensemble_api, call_llm_api  # Use central LLM
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger  # Use central logging and provenance
 
+# PII redaction tokens from Presidio scrubber
+# These should be excluded from placeholder validation as they are legitimate redactions
+PII_REDACTION_TOKENS = {
+    '<PERSON>', '<ORGANIZATION>', '<EMAIL_ADDRESS>', '<LOCATION>',
+    '<DATE_TIME>', '<PHONE_NUMBER>', '<CREDIT_CARD>', '<IP_ADDRESS>',
+    '<URL>', '<US_SSN>', '<US_PASSPORT>', '<IBAN_CODE>', '<NRP>',
+    '<MEDICAL_LICENSE>', '<US_DRIVER_LICENSE>', '<CRYPTO>',
+    '<US_BANK_NUMBER>', '<SWIFT_CODE>', '<ABA_ROUTING_NUMBER>',
+}
+
 # --- Central LLM Metrics Integration -----------------------------------------
 # We want to:
 # - Use the shared LLM_* metrics if available.
@@ -1866,13 +1876,6 @@ async def handle_deploy_response(
             # Validate that output doesn't contain unsubstituted placeholders
             # PII redaction tokens from Presidio should be excluded from this check
             # as they are legitimate redactions, not unsubstituted placeholders
-            pii_redaction_tokens = {
-                '<PERSON>', '<ORGANIZATION>', '<EMAIL_ADDRESS>', '<LOCATION>',
-                '<DATE_TIME>', '<PHONE_NUMBER>', '<CREDIT_CARD>', '<IP_ADDRESS>',
-                '<URL>', '<US_SSN>', '<US_PASSPORT>', '<IBAN_CODE>', '<NRP>',
-                '<MEDICAL_LICENSE>', '<US_DRIVER_LICENSE>', '<CRYPTO>',
-                '<US_BANK_NUMBER>', '<SWIFT_CODE>', '<ABA_ROUTING_NUMBER>',
-            }
             
             # Common environment variable placeholders - substitute with defaults before checking
             common_env_placeholders = {
@@ -1906,8 +1909,8 @@ async def handle_deploy_response(
             for pattern in placeholder_patterns:
                 matches = re.findall(pattern, enriched_final_output_for_validation, re.IGNORECASE | re.MULTILINE)
                 if matches:
-                    # Filter out PII redaction tokens
-                    filtered_matches = [m for m in matches if m.upper() not in pii_redaction_tokens]
+                    # Filter out PII redaction tokens using shared constant
+                    filtered_matches = [m for m in matches if m.upper() not in PII_REDACTION_TOKENS]
                     if filtered_matches:
                         placeholder_found = True
                         placeholder_details.extend(filtered_matches)

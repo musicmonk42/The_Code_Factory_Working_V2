@@ -1909,7 +1909,6 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     """
     from .runner_audit import set_audit_key_id, get_last_audit_hash
 
-    logger = logging.getLogger("runner")
     
     # Check if root logger already has handlers (meaning server logging is configured)
     root_logger = logging.getLogger()
@@ -1917,7 +1916,8 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     
     if server_logging_configured:
         # Server logging is already configured - only configure audit logger
-        logger.info("Root logger already configured (server logging active). Configuring only runner.audit logger.")
+        # Use root logger for this message since runner logger may not have handlers yet
+        root_logger.info("Root logger already configured (server logging active). Configuring only runner.audit logger.")
     else:
         # Configure runner logger normally
         logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels

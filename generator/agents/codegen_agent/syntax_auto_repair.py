@@ -52,6 +52,24 @@ _CONTROL_STRUCTURE_PATTERN = re.compile(
     r'^(if|elif|else|for|while|def|class|try|except|finally|with|async\s+def|async\s+for|async\s+with)\b'
 )
 
+# Truncated Python keywords that should be detected and repaired
+_TRUNCATED_KEYWORDS_STANDALONE = {'de', 'clas', 'retur', 'impo', 'fro', 'defin', 'els', 'eli', 'whil', 'fo'}
+
+# Patterns for truncated keywords in code
+# Map: regex_pattern -> (replacement_keyword, should_remove_if_no_context)
+_TRUNCATED_KEYWORD_PATTERNS = {
+    r'^\s*de\s*$': ('', True),  # Just 'de' alone - remove it
+    r'^\s*clas\s*$': ('', True),  # Just 'clas' alone - remove it
+    r'^\s*retur\s*$': ('', True),  # Just 'retur' alone - remove it
+    r'^\s*impo\s*$': ('', True),  # Just 'impo' alone - remove it
+    r'^\s*fro\s*$': ('', True),  # Just 'fro' alone - remove it
+    r'^\s*defin\s*$': ('', True),  # Just 'defin' alone - remove it
+    # Patterns that can be completed (if followed by valid syntax)
+    r'^\s*de\s+(\w+)\s*\(': ('def', False),  # 'de func()' -> 'def func()'
+    r'^\s*clas\s+(\w+)': ('class', False),  # 'clas MyClass' -> 'class MyClass'
+    r'^\s*defin\s+(\w+)\s*\(': ('def', False),  # 'defin func()' -> 'def func()'
+}
+
 
 class SyntaxAutoRepairError(Exception):
     """Raised when auto-repair encounters an unrecoverable error.
@@ -300,46 +318,32 @@ class SyntaxAutoRepair:
             lines = code.split('\n')
             repaired_lines = []
             
-            # Patterns for truncated keywords
-            # Map truncated -> (full_keyword, require_context)
-            truncated_patterns = {
-                # Stray truncations that should just be removed (no valid completion)
-                r'^\s*de\s*$': ('', True),  # Just 'de' alone - remove it
-                r'^\s*clas\s*$': ('', True),  # Just 'clas' alone - remove it
-                r'^\s*retur\s*$': ('', True),  # Just 'retur' alone - remove it
-                r'^\s*impo\s*$': ('', True),  # Just 'impo' alone - remove it
-                r'^\s*fro\s*$': ('', True),  # Just 'fro' alone - remove it
-                r'^\s*defin\s*$': ('', True),  # Just 'defin' alone - remove it
-                # Patterns that can be completed (if followed by valid syntax)
-                r'^\s*de\s+(\w+)\s*\(': ('def', False),  # 'de func()' -> 'def func()'
-                r'^\s*clas\s+(\w+)': ('class', False),  # 'clas MyClass' -> 'class MyClass'
-                r'^\s*defin\s+(\w+)\s*\(': ('def', False),  # 'defin func()' -> 'def func()'
-            }
-            
             for i, line in enumerate(lines, 1):
                 should_remove = False
                 replacement_line = line
                 
-                # Check for stray single truncated keywords
+                # Check for stray single truncated keywords using shared constant
                 stripped = line.strip()
-                if stripped in ['de', 'clas', 'retur', 'impo', 'fro', 'defin', 'els', 'eli', 'whil', 'fo']:
+                if stripped in _TRUNCATED_KEYWORDS_STANDALONE:
                     # These are standalone truncated keywords - just remove the line
                     should_remove = True
                     fixes.append(f"Line {i}: Removed stray truncated keyword '{stripped}'")
                     logger.debug(f"Removed truncated keyword '{stripped}' at line {i}")
                 else:
                     # Check for patterns that can be completed
-                    for pattern, (replacement, require_remove) in truncated_patterns.items():
+                    for pattern, (replacement, require_remove) in _TRUNCATED_KEYWORD_PATTERNS.items():
                         if re.match(pattern, line):
                             if require_remove or not replacement:
                                 should_remove = True
                                 fixes.append(f"Line {i}: Removed line with truncated keyword")
                                 logger.debug(f"Removed line with truncated pattern at line {i}")
                             else:
-                                # Try to complete the keyword
+                                # Try to complete the keyword - apply substitutions to original line
                                 if replacement == 'def':
+                                    # Handle both 'de ' and 'defin ' patterns
                                     replacement_line = re.sub(r'^\s*de\s+', lambda m: m.group(0).replace('de', 'def'), line)
-                                    replacement_line = re.sub(r'^\s*defin\s+', lambda m: m.group(0).replace('defin', 'def'), replacement_line)
+                                    if replacement_line == line:  # First pattern didn't match, try second
+                                        replacement_line = re.sub(r'^\s*defin\s+', lambda m: m.group(0).replace('defin', 'def'), line)
                                 elif replacement == 'class':
                                     replacement_line = re.sub(r'^\s*clas\s+', lambda m: m.group(0).replace('clas', 'class'), line)
                                 
