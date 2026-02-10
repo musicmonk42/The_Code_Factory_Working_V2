@@ -399,6 +399,9 @@ async def test_concurrent_audit_entries(tmp_path):
         "should_auto_learn",
         AsyncMock(return_value=(True, "allowed")),
     ):
+        # Capture initial merkle root
+        initial_root = audit.system_audit_merkle_tree.get_root()
+        
         # Add entries sequentially to avoid race conditions
         for i in range(5):
             await audit.add_entry_async(f"event{i}", f"name{i}", {"foo": i})
@@ -414,14 +417,14 @@ async def test_concurrent_audit_entries(tmp_path):
 
     # Verify entries were added to the audit's internal list
     total_entries = len(audit.entries)
-    # More lenient assertion - just verify some entries were processed
-    assert total_entries >= 1, f"Expected at least 1 entry, got {total_entries}"
+    # Verify most entries were processed (allow some variation due to async timing)
+    assert total_entries >= 3, f"Expected at least 3 entries (out of 5), got {total_entries}"
 
     # Check that merkle tree was updated
     final_root = audit.system_audit_merkle_tree.get_root()
     assert final_root is not None
     # Verify root changed from initial state
-    assert final_root != "initial_root", "Merkle root should have been updated"
+    assert final_root != initial_root, f"Merkle root should have been updated from {initial_root}"
 
 
 @pytest.mark.asyncio

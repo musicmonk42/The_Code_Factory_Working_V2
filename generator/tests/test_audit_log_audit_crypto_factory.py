@@ -791,7 +791,10 @@ class TestAsyncUtils:
         mock_session.post.assert_called_once()
         call_args = mock_session.post.call_args
         # Verify the endpoint URL was used
-        assert call_args[0][0] == mock_endpoint or call_args.kwargs.get('url') == mock_endpoint
+        if call_args.args:
+            assert call_args.args[0] == mock_endpoint
+        else:
+            assert call_args.kwargs.get('url') == mock_endpoint
 
     async def test_send_alert_failure_with_retries(
         self, monkeypatch, mock_aiohttp_session, mock_settings
