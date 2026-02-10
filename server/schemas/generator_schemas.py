@@ -31,6 +31,17 @@ class GenerationLanguage(str, Enum):
     RUST = "rust"
 
 
+class ClarificationChannel(str, Enum):
+    """Supported clarification channels."""
+    CLI = "cli"
+    GUI = "gui"
+    VOICE = "voice"
+    WEB = "web"
+    SLACK = "slack"
+    EMAIL = "email"
+    SMS = "sms"
+
+
 class CodegenRequest(BaseModel):
     """Request for code generation."""
     requirements: str = Field(..., description="Natural language requirements")
@@ -91,6 +102,10 @@ class ClarifyRequest(BaseModel):
     """Request for requirements clarification."""
     readme_content: Optional[str] = Field(None, description="README/requirements content (optional if files uploaded)")
     ambiguities: Optional[List[str]] = Field(None, description="Specific ambiguities to clarify")
+    channel: Optional[ClarificationChannel] = Field(
+        ClarificationChannel.CLI, 
+        description="Communication channel for clarification interaction"
+    )
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
 
 

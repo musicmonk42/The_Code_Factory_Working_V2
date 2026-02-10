@@ -40,11 +40,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install build tools for any packages that need compiling
 # Update ca-certificates first to avoid SSL issues with pip
 # pkg-config is required for libvirt-python build
+# Audio libraries required for SpeechRecognition/PyAudio (PR #963):
+#   - portaudio19-dev: PortAudio development files for PyAudio compilation
+#   - libasound2-dev: ALSA sound system development files
+#   - flac, libflac-dev: FLAC audio format support
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends \
     build-essential git libmagic1 libvirt-dev pkg-config \
+    portaudio19-dev libasound2-dev flac libflac-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment for dependencies
@@ -224,10 +229,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install ca-certificates first for SSL support
 # Add graphviz for PlantUML diagram generation support
 # Add libvirt-dev and pkg-config for virtualization support (optional)
+# Add libportaudio2 for SpeechRecognition runtime audio support (PR #963)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
- && apt-get install -y --no-install-recommends curl git libmagic1 graphviz libvirt-dev pkg-config \
+ && apt-get install -y --no-install-recommends \
+    curl git libmagic1 graphviz libvirt-dev pkg-config libportaudio2 \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Trivy for security scanning (deployment validation)

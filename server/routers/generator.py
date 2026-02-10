@@ -921,10 +921,14 @@ async def clarify_requirements(
 
     # Process clarification request
     try:
+        # Extract channel from request if provided
+        channel = request.channel.value if request and request.channel else None
+        
         result = await generator_service.clarify_requirements(
             job_id=job_id,
             readme_content=readme_content,
             ambiguities=ambiguities,
+            channel=channel,
         )
         
         # Check if questions were generated and return proper response
