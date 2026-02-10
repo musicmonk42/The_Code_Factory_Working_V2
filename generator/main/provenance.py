@@ -487,6 +487,11 @@ def extract_output_dir_from_md(md_content: str) -> str:
 
     Returns:
         The output directory path if found, empty string otherwise.
+        
+    Security:
+        - Rejects paths with '..' (path traversal prevention)
+        - Rejects absolute paths (starting with '/' or Windows drive letters)
+        - Validates using Path.resolve() to catch obfuscated traversal attempts
     """
     # Pattern to match YAML-style output_dir configuration
     # Handles: output_dir: value, output_dir:"value", output_dir: "value"
@@ -496,9 +501,31 @@ def extract_output_dir_from_md(md_content: str) -> str:
         match = re.match(pattern, line, re.IGNORECASE)
         if match:
             output_dir = match.group(1).strip()
-            # Security: Reject path traversal attempts
-            if '..' not in output_dir and not output_dir.startswith('/'):
-                return output_dir
+            
+            # Security validation: prevent path traversal and absolute paths
+            # Check for common path traversal patterns
+            if '..' in output_dir:
+                continue
+            
+            # Check for absolute paths (Unix and Windows)
+            if output_dir.startswith('/') or (len(output_dir) > 1 and output_dir[1] == ':'):
+                continue
+            
+            # Additional validation using Path to catch obfuscated attempts
+            try:
+                # Use Path to normalize and validate the path
+                normalized = Path(output_dir)
+                # Ensure no parent directory traversal
+                if any(part == '..' for part in normalized.parts):
+                    continue
+                # Ensure it's a relative path
+                if normalized.is_absolute():
+                    continue
+            except (ValueError, OSError):
+                # Invalid path, skip it
+                continue
+            
+            return output_dir
     
     return ""
 

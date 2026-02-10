@@ -376,6 +376,15 @@ output_dir: /absolute/path
         result = extract_output_dir_from_md(md_content)
         assert result == ""
 
+    def test_rejects_windows_absolute_paths(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+output_dir: C:/windows/path
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == ""
+
     def test_returns_empty_when_not_found(self):
         from generator.main.provenance import extract_output_dir_from_md
         
@@ -461,9 +470,8 @@ curl http://localhost:8000/api/users
     def test_incomplete_readme_missing_sections(self):
         from generator.main.provenance import validate_readme_completeness
         
-        readme = """
-# Project
-""" + "x" * 500  # Make it long enough
+        # Create a README that's long enough but missing required sections
+        readme = "# Project\n\n" + ("This is filler content to meet the minimum length requirement. " * 20)
         result = validate_readme_completeness(readme)
         assert result["valid"] is False
         assert any("setup" in err.lower() for err in result["errors"])
@@ -471,21 +479,19 @@ curl http://localhost:8000/api/users
     def test_incomplete_readme_missing_commands(self):
         from generator.main.provenance import validate_readme_completeness
         
-        readme = """
-# Project
-
-## Setup
-Some setup instructions.
-
-## Run
-Run the app.
-
-## Testing
-Test the app.
-
-## Examples
-Some examples.
-""" + "x" * 500
+        # Create README with sections but no commands
+        readme_parts = [
+            "# Project\n\n",
+            "## Setup\n",
+            "Some setup instructions. " * 10,
+            "\n\n## Run\n",
+            "Run the app. " * 10,
+            "\n\n## Testing\n",
+            "Test the app. " * 10,
+            "\n\n## Examples\n",
+            "Some examples. " * 10,
+        ]
+        readme = "".join(readme_parts)
         result = validate_readme_completeness(readme)
         assert result["valid"] is False
         # Should be missing venv, pip, uvicorn, pytest commands

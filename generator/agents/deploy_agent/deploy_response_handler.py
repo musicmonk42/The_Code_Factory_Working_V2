@@ -1088,8 +1088,8 @@ class YAMLHandler(FormatHandler):
         """
         lines = []
         for line in raw.split('\n'):
-            # Skip lines that start with markdown headers (# followed by space)
-            if re.match(r'^\s*#\s+[A-Z]', line):
+            # Skip lines that start with markdown headers (# followed by space and any letter)
+            if re.match(r'^\s*#\s+[A-Za-z]', line):
                 continue
             
             # Remove markdown links: [text](url)
