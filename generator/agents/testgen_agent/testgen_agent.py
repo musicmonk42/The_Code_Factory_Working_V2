@@ -974,9 +974,10 @@ Agent --> Dev : Deliver Report
                     # structural tests that verify file existence and basic properties.
                     # This ensures the test suite always produces meaningful output.
                     
-                    logger.warning(
-                        f"[TESTGEN] Could not parse {file_path}: invalid syntax at line {e.lineno}. "
-                        f"Error: {e.msg}. Generating structural fallback tests.",
+                    # FIX: Log actual file content to help debug false positives
+                    logger.error(
+                        f"[TESTGEN] SyntaxError while parsing {file_path} at line {e.lineno}. "
+                        f"Error: {e.msg}. Content preview (first 500 chars): {content[:500] if content else 'EMPTY'}",
                         extra={
                             "run_id": run_id,
                             "file_path": file_path,
@@ -984,9 +985,19 @@ Agent --> Dev : Deliver Report
                             "error_line": e.lineno,
                             "error_offset": e.offset,
                             "error_text": e.text[:100] if e.text else None,
+                            "content_length": len(content) if content else 0,
                             "recovery_strategy": "fallback_structural_tests"
                         }
                     )
+                    
+                    # IMPORTANT: Only generate fallback tests if this is truly invalid Python
+                    # If content is empty or None, skip fallback generation
+                    if not content or not content.strip():
+                        logger.warning(
+                            f"[TESTGEN] Skipping fallback test generation for {file_path} - empty content",
+                            extra={"run_id": run_id, "file_path": file_path}
+                        )
+                        continue
                     
                     # Generate safe file identifier for test function names
                     # Remove extension, convert path separators and special chars to underscores

@@ -3152,16 +3152,48 @@ class OmniCoreService:
                 
                 report_path = output_dir / "critique_report.json"
                 
-                # Ensure critique_result is serializable
+                # FIX: Enhance critique report to include coverage and test results
+                # This ensures the report complies with the contract requirements
+                enhanced_report = {
+                    "job_id": job_id,
+                    "timestamp": critique_result.get("timestamp") or datetime.utcnow().isoformat(),
+                    "coverage": critique_result.get("coverage", {
+                        "total_lines": 0,
+                        "covered_lines": 0,
+                        "percentage": 0.0
+                    }),
+                    "test_results": critique_result.get("test_results") or payload.get("test_results", {
+                        "total": 0,
+                        "passed": 0,
+                        "failed": 0
+                    }),
+                    "issues": critique_result.get("issues", []),
+                    "fixes_applied": critique_result.get("fixes_applied", []),
+                    "scan_types": scan_types,
+                    "status": critique_result.get("status", "completed"),
+                }
+                
+                # Add original critique_result fields that don't conflict
+                for key, value in critique_result.items():
+                    if key not in enhanced_report:
+                        enhanced_report[key] = value
+                
+                # Ensure enhanced_report is serializable
                 try:
-                    json_str = json.dumps(critique_result, indent=2)
+                    json_str = json.dumps(enhanced_report, indent=2, default=str)
                 except (TypeError, ValueError) as e:
                     logger.error(f"Critique result is not JSON serializable: {e}")
                     # Create a minimal valid report
                     json_str = json.dumps({
+                        "job_id": job_id,
+                        "timestamp": datetime.utcnow().isoformat(),
                         "status": "error",
                         "message": "Failed to serialize critique results",
                         "issues_found": len(critique_result.get("issues", [])),
+                        "coverage": {"total_lines": 0, "covered_lines": 0, "percentage": 0.0},
+                        "test_results": {"total": 0, "passed": 0, "failed": 0},
+                        "issues": [],
+                        "fixes_applied": [],
                         "error": str(e)
                     }, indent=2)
                 
