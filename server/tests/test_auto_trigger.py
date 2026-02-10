@@ -120,7 +120,7 @@ class TestLLMAutoDetection:
     
     def test_get_default_models(self):
         """Test getting default models for each provider."""
-        assert get_default_model_for_provider("openai") == "gpt-4-turbo"
+        assert get_default_model_for_provider("openai") == "gpt-4o"
         assert get_default_model_for_provider("anthropic") == "claude-3-sonnet-20240229"
         assert get_default_model_for_provider("grok") == "grok-beta"
         assert get_default_model_for_provider("google") == "gemini-pro"

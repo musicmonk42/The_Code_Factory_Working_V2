@@ -37,10 +37,14 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Dict, Optional
 from uuid import uuid4
+
+# Database imports for queue functionality
+from omnicore_engine.database.database import Database
+from omnicore_engine.database.models import DispatchEventQueue, DispatchEventStatus
 
 logger = logging.getLogger(__name__)
 
@@ -798,10 +802,6 @@ async def _dispatch_via_database_queue(
         >>> success = await _dispatch_via_database_queue("123", event, "corr-456")
     """
     try:
-        # Import database models and session management
-        from omnicore_engine.database.models import DispatchEventQueue, DispatchEventStatus
-        from omnicore_engine.database.database import Database
-
         # Get database instance
         db = Database()
 
@@ -810,8 +810,6 @@ async def _dispatch_via_database_queue(
             await db.async_init()
 
         # Create queue entry
-        from datetime import datetime, timezone
-
         queue_entry = DispatchEventQueue(
             job_id=job_id,
             event_type=event.get("event_type", "job.completed"),
@@ -885,10 +883,6 @@ async def process_dispatch_queue(batch_size: int = 100, max_runtime: Optional[fl
         ```
     """
     try:
-        from omnicore_engine.database.models import DispatchEventQueue, DispatchEventStatus
-        from omnicore_engine.database.database import Database
-        from datetime import datetime, timezone, timedelta
-
         db = Database()
 
         # Ensure database is initialized
