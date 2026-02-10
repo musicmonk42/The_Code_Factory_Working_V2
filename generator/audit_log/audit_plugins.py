@@ -8,6 +8,7 @@ import json
 import logging
 import multiprocessing
 import os
+import queue
 import sys
 import time
 import traceback
@@ -608,6 +609,12 @@ def _poll_queue(
         # It waits up to `timeout` seconds.
         # The result is expected to be a tuple (modified_data, updated_plugin_instance) or an Exception
         return q.get(timeout=timeout)
+    except queue.Empty:
+        # Explicit handling of empty queue timeout
+        return None
+    except (OSError, EOFError, ValueError):
+        # Handle queue closed or broken pipe errors
+        return None
     except Exception:
         return None  # Return None if timeout/exception occurs during the short poll
 
@@ -680,7 +687,8 @@ async def sandboxed_execute(
             f"Plugin '{plugin_name}' for event '{event}' timed out after {MAX_PLUGIN_TIME_SECONDS} seconds. Process terminated."
         )
         PLUGIN_ERRORS.labels(event=event, plugin=plugin_name, type="timeout").inc()
-        return None  # Return early
+        # Don't return early - let finally block clean up
+        result_or_exception = asyncio.TimeoutError("Plugin execution timed out")
     except Exception as e:
         # Catch any other errors from to_thread or unexpected exit
         if p.exitcode is not None and p.exitcode != 0:
@@ -716,11 +724,13 @@ async def sandboxed_execute(
         # --- END: FIX 3 ---
 
         # CRITICAL: Close and join the queue to prevent resource leaks
+        # Must be done before the process is joined to avoid deadlocks
         try:
+            # Cancel any pending get() operations by closing the queue first
+            q.cancel_join_thread()  # Prevent join_thread from blocking
             q.close()
-            q.join_thread()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Exception while closing queue: {e}")
 
         # --- STATE SYNCHRONIZATION AND RESULT EXTRACTION ---
         if isinstance(result_or_exception, tuple) and len(result_or_exception) == 2:
