@@ -276,7 +276,7 @@ class TestAuditMetrics:
         mock_response = AsyncMock()
         mock_response.status = 200
         # Mock the synchronous requests.post call inside _send_slack_alert
-        with patch("requests.post") as mock_post:
+        with patch("generator.audit_log.audit_metrics.requests.post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=200, raise_for_status=MagicMock()
             )
@@ -305,7 +305,7 @@ class TestAuditMetrics:
         )
 
         with patch(
-            "requests.post",
+            "generator.audit_log.audit_metrics.requests.post",
             side_effect=[
                 mock_fail_response,
                 mock_fail_response,
