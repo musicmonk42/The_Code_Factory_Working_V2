@@ -623,6 +623,11 @@ class PromptTemplateRegistry:
             loaders.append(FileSystemLoader(self.template_dir))
             logger.info(f"Added job-specific template override directory: {self.template_dir}")
         
+        # Ensure we have at least one loader to avoid failures
+        if not loaders:
+            logger.warning(f"No template directories found, using self.template_dir as fallback: {self.template_dir}")
+            loaders.append(FileSystemLoader(self.template_dir))
+        
         env = Environment(
             loader=ChoiceLoader(loaders),
             autoescape=select_autoescape(["html", "xml", "htm", "j2", "jinja2"]),
