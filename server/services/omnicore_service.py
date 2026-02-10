@@ -3430,6 +3430,64 @@ class OmniCoreService:
             # Remove readme_content from codegen payload as it's now in requirements
             codegen_payload.pop("readme_content", None)
 
+            # Ensure requirements is populated before codegen
+            # This handles the case where clarification was skipped and readme_content is empty
+            if not codegen_payload.get("requirements") or len(codegen_payload.get("requirements", "").strip()) == 0:
+                logger.warning(
+                    f"[PIPELINE] Requirements is empty for job {job_id}. "
+                    f"Attempting to load README from job directory."
+                )
+                # Try to read README from job directory
+                job_dir = Path(self.storage_path) / job_id
+                readme_path = None
+                
+                # Priority order for README files
+                readme_patterns = [
+                    "New_Test_README.md",  # Explicitly uploaded README
+                    "README.md",
+                    "readme.md", 
+                    "README.txt",
+                    "readme.txt",
+                ]
+                
+                # Try exact filename matches first
+                for pattern in readme_patterns:
+                    potential_path = job_dir / pattern
+                    if potential_path.exists() and potential_path.is_file():
+                        readme_path = potential_path
+                        break
+                
+                # Fallback: find any .md file
+                if not readme_path and job_dir.exists():
+                    for f in job_dir.glob("*.md"):
+                        if f.is_file():
+                            readme_path = f
+                            break
+                
+                if readme_path and readme_path.exists():
+                    try:
+                        requirements = readme_path.read_text(encoding="utf-8")
+                        codegen_payload["requirements"] = requirements
+                        logger.info(
+                            f"[PIPELINE] Loaded requirements from {readme_path.name} "
+                            f"({len(requirements)} bytes) for job {job_id}"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"[PIPELINE] Error reading README from {readme_path} for job {job_id}: {e}",
+                            extra={"job_id": job_id, "error": str(e)}
+                        )
+                        raise ValueError(
+                            f"No requirements found: Failed to read README file from job directory - {e}"
+                        )
+                else:
+                    error_msg = f"No requirements found: README file is missing from job directory {job_dir}"
+                    logger.error(
+                        f"[PIPELINE] {error_msg}",
+                        extra={"job_id": job_id, "job_dir": str(job_dir)}
+                    )
+                    raise ValueError(error_msg)
+
             # Retry configuration
             max_codegen_retries = 2  # Total attempts = 1 initial + 2 retries = 3
             codegen_attempt = 0

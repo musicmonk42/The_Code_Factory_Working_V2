@@ -391,6 +391,24 @@ async def _resume_pipeline_after_clarification(
         readme_content = job.metadata.get("readme_content", "")
         language = job.metadata.get("language", "python")
 
+        # If README content is missing from metadata, try to load it from disk
+        if not readme_content or len(readme_content.strip()) == 0:
+            logger.warning(
+                f"[Pipeline] README content not found in metadata for job {job_id}. "
+                f"Attempting to load from disk."
+            )
+            readme_content = await generator_service.get_readme_content(job_id)
+            if not readme_content:
+                error_msg = (
+                    f"Cannot resume pipeline: README content not found in metadata "
+                    f"or job directory for job {job_id}"
+                )
+                logger.error(f"[Pipeline] {error_msg}")
+                job.status = JobStatus.FAILED
+                job.metadata["error"] = error_msg
+                job.updated_at = datetime.now(timezone.utc)
+                return
+
         # Supplement README with clarified requirements
         if clarified_requirements:
             clarified = clarified_requirements.get("clarified_requirements", {})
