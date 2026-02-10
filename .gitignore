@@ -289,3 +289,4 @@ uploads/
 # Test artifacts
 mock_history_updater.json
 test_subscription_fix.py
+/tmp/
