@@ -108,6 +108,39 @@ class TestGeminiAdapter:
             assert adapter.circuit_breaker_timeout == 300
             assert adapter.security_config == {}
 
+    def test_init_with_google_api_key(self):
+        """Test initialization with GOOGLE_API_KEY instead of GEMINI_API_KEY."""
+        settings = {"GOOGLE_API_KEY": "google-test-key"}
+
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+            mock_instance = Mock()
+            mock_instance.model = "gemini-1.5-flash"
+            mock_client.return_value = mock_instance
+
+            adapter = GeminiAdapter(settings)
+
+            assert adapter.circuit_breaker_threshold == 5
+            assert adapter.circuit_breaker_timeout == 300
+
+    def test_init_gemini_api_key_takes_precedence(self):
+        """Test that GEMINI_API_KEY takes precedence over GOOGLE_API_KEY when both are set."""
+        settings = {
+            "GEMINI_API_KEY": "gemini-key",
+            "GOOGLE_API_KEY": "google-key"
+        }
+
+        with patch("self_fixing_engineer.arbiter.plugins.gemini_adapter.LLMClient") as mock_client:
+            mock_instance = Mock()
+            mock_instance.model = "gemini-1.5-flash"
+            mock_client.return_value = mock_instance
+
+            # The adapter should use the GEMINI_API_KEY (passed to LLMClient)
+            adapter = GeminiAdapter(settings)
+            
+            # Verify that the correct key was passed to LLMClient
+            call_kwargs = mock_client.call_args[1]
+            assert call_kwargs["api_key"] == "gemini-key"
+
     # --- Input Validation Tests ---
 
     @pytest.mark.asyncio

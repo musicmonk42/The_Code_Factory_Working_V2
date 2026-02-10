@@ -355,6 +355,32 @@ def test_get_provider_with_env_key(mock_load: MagicMock) -> None:
 
 
 @patch("generator.runner.providers.gemini_provider.load_config")
+@patch.dict(os.environ, {"GOOGLE_API_KEY": "google-env-key"})
+def test_get_provider_with_google_api_key(mock_load: MagicMock) -> None:
+    """Test that GOOGLE_API_KEY is recognized as a valid API key source."""
+    if not HAS_GEMINI:
+        pytest.skip("Gemini SDK not installed")
+
+    with patch("google.generativeai.configure"):
+        mock_load.return_value = mock_cfg(None)
+        p = get_provider()
+        assert p.api_key == "google-env-key"
+
+
+@patch("generator.runner.providers.gemini_provider.load_config")
+@patch.dict(os.environ, {"GEMINI_API_KEY": "gemini-key", "GOOGLE_API_KEY": "google-key"})
+def test_get_provider_gemini_takes_precedence(mock_load: MagicMock) -> None:
+    """Test that GEMINI_API_KEY takes precedence over GOOGLE_API_KEY when both are set."""
+    if not HAS_GEMINI:
+        pytest.skip("Gemini SDK not installed")
+
+    with patch("google.generativeai.configure"):
+        mock_load.return_value = mock_cfg(None)
+        p = get_provider()
+        assert p.api_key == "gemini-key"
+
+
+@patch("generator.runner.providers.gemini_provider.load_config")
 @patch.dict(os.environ, clear=True)
 def test_get_provider_no_key(mock_load: MagicMock) -> None:
     if not HAS_GEMINI:
