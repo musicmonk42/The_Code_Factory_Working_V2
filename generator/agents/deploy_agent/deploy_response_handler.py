@@ -655,9 +655,30 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     
     # Last resort for Dockerfile: find first FROM or ARG instruction
     if format_type == "dockerfile":
-        match = re.search(r'^((?:FROM|ARG)\s+.*)$', raw, re.MULTILINE | re.DOTALL)
+        # FIX Issue 1: Enhanced Dockerfile extraction to handle LLM preamble text
+        # Find the first line starting with FROM or ARG (case-insensitive for robustness)
+        match = re.search(r'^(FROM|ARG)\s+', raw, re.MULTILINE | re.IGNORECASE)
         if match:
+            # Extract from the first FROM/ARG to the end
             extracted = raw[match.start():]
+            
+            # Strip trailing explanatory text after Dockerfile content
+            # Look for common patterns that indicate end of Dockerfile:
+            # - Empty line followed by explanatory text (e.g., "This Dockerfile...")
+            # - Common LLM closing phrases
+            trailing_patterns = [
+                r'\n\n(?:This|The above|Note:|Explanation:|To use this)',
+                r'\n\n(?:Here\'s|This is|Above is)',
+                r'\n\n(?:You can|To build|To run)',
+            ]
+            
+            for pattern in trailing_patterns:
+                trail_match = re.search(pattern, extracted, re.IGNORECASE)
+                if trail_match:
+                    extracted = extracted[:trail_match.start()].rstrip()
+                    logger.debug(f"Stripped trailing explanatory text from Dockerfile")
+                    break
+            
             logger.debug(f"Extracted Dockerfile from first FROM/ARG: {len(extracted)} chars")
             # FIX 6: Record prose format
             if llm_output_format_counter:
@@ -1196,6 +1217,43 @@ class YAMLHandler(FormatHandler):
     __version__ = "1.3"  # Incremented for enhanced validation
     __source__ = "built-in"
 
+    def _is_helm_template(self, raw: str) -> bool:
+        """
+        Detect if content is a Helm template with Go/Jinja templating syntax.
+        
+        Helm templates contain Go template syntax like:
+        - {{ .Values.x }}
+        - {{- range $key, $value := .Values.env }}
+        - {{ include "mytemplate" . }}
+        
+        These are NOT valid YAML and should not be parsed as such.
+        
+        Args:
+            raw: Raw content string
+            
+        Returns:
+            True if content appears to be a Helm template, False otherwise
+        """
+        # FIX Issue 3: Detect Helm templates with Go/Jinja templating syntax
+        # Look for common Helm template patterns
+        helm_patterns = [
+            r'\{\{[-\s]*\.Values\.',           # {{ .Values.x }}
+            r'\{\{[-\s]*\.Release\.',          # {{ .Release.Name }}
+            r'\{\{[-\s]*\.Chart\.',            # {{ .Chart.Name }}
+            r'\{\{[-\s]*range\s+',             # {{- range ... }}
+            r'\{\{[-\s]*if\s+',                # {{- if ... }}
+            r'\{\{[-\s]*include\s+',           # {{ include "..." }}
+            r'\{\{[-\s]*define\s+',            # {{ define "..." }}
+            r'\{\{[-\s]*template\s+',          # {{ template "..." }}
+        ]
+        
+        for pattern in helm_patterns:
+            if re.search(pattern, raw):
+                logger.debug(f"Detected Helm template syntax: {pattern}")
+                return True
+        
+        return False
+    
     def _sanitize_yaml_response(self, raw: str) -> str:
         """
         Sanitize YAML response by removing common LLM explanation artifacts.
@@ -1284,6 +1342,26 @@ class YAMLHandler(FormatHandler):
             logger.debug("Stripped trailing ``` from YAML response")
         
         raw = raw.strip()
+        
+        # FIX Issue 3: Detect Helm templates and treat as raw text
+        # Helm templates contain Go/Jinja syntax that is NOT valid YAML
+        if self._is_helm_template(raw):
+            logger.info(
+                "Detected Helm template with Go templating syntax - treating as raw template",
+                extra={
+                    "handler": "YAMLHandler",
+                    "content_length": len(raw),
+                    "content_preview": raw[:100] + "..." if len(raw) > 100 else raw
+                }
+            )
+            # Return the raw template as a dict with metadata
+            # This preserves the template for writing to file without YAML parsing
+            return {
+                "_helm_template": True,
+                "_raw_content": raw,
+                "kind": "HelmTemplate",
+                "content": raw
+            }
         
         # Sanitize: Remove common LLM explanation artifacts before validation
         # This helps when LLM occasionally adds explanatory text
