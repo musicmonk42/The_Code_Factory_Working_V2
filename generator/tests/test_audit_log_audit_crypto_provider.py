@@ -343,22 +343,23 @@ def mock_accessors():
     return master_key_accessor, fallback_secret_accessor
 
 
-@pytest.fixture
-def software_provider(
+@pytest_asyncio.fixture
+async def software_provider(
     mock_settings, mock_factory_imports, mock_keystore, mock_crypto_libs, mock_accessors
 ):
     """
     Provides an initialized SoftwareCryptoProvider instance.
 
     --- FIX ---
-    This fixture is now SYNCHRONOUS and MANUALLY CONSTRUCTS the provider
-    instance without calling __init__. This is critical to avoid the
-    `asyncio.run()` call in __init__ which poisons the event loop for
-    all subsequent `@pytest.mark.asyncio` tests.
+    This fixture is now ASYNC using pytest_asyncio.fixture to properly handle
+    async cleanup without calling asyncio.run() inside an already running
+    async context. The instance is manually constructed without calling __init__
+    to avoid initialization side effects.
 
-    The synchronous init tests (`test_init_*`) will test the real __init__ method.
+    The synchronous init tests (`test_init_*`) will test the real __init__ method
+    by calling it directly, separate from this async fixture.
     The async method tests (`test_sign_*`, `test_verify_*`) will use this
-    "clean" instance.
+    manually constructed instance.
     """
     from generator.audit_log.audit_crypto.audit_crypto_provider import (
         SoftwareCryptoProvider,
@@ -389,9 +390,8 @@ def software_provider(
     try:
         yield provider
     finally:
-        # Cleanup is async, so we must run it.
-        # This is safe *after* the async test has run and its loop is closed.
-        asyncio.run(provider.close())
+        # Cleanup is async - can now be called directly in async fixture
+        await provider.close()
 
 
 @pytest_asyncio.fixture

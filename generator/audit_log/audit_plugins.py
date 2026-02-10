@@ -715,6 +715,13 @@ async def sandboxed_execute(
                     p.join(timeout=1)
         # --- END: FIX 3 ---
 
+        # CRITICAL: Close and join the queue to prevent resource leaks
+        try:
+            q.close()
+            q.join_thread()
+        except Exception:
+            pass
+
         # --- STATE SYNCHRONIZATION AND RESULT EXTRACTION ---
         if isinstance(result_or_exception, tuple) and len(result_or_exception) == 2:
             # Successful run: (modified_data, updated_plugin_instance)

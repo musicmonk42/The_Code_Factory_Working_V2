@@ -112,10 +112,11 @@ def patch_keystore_dependencies(cls):
     # Mock CryptoOperationError from audit_crypto_provider so the tests can
     # catch it without pulling in the full provider stack.
     MockCryptoError = type("CryptoOperationError", (Exception,), {})
-    patch(
+    _crypto_error_patch = patch(
         "generator.audit_log.audit_crypto.audit_crypto_provider.CryptoOperationError",
         MockCryptoError,
-    ).start()
+    )
+    _crypto_error_patch.start()
 
     _PATCHED_KEYSTORE_DEPS = True
     return cls

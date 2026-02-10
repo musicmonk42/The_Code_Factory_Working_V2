@@ -635,7 +635,6 @@ class TestGlobalSecrets:
         key2 = await _ensure_software_key_master()
         assert key is key2  # Should be the same object
 
-    @pytest.mark.skip(reason="Test has pre-existing boto3 mocking issues when run with other tests")
     async def test_ensure_software_key_master_prod_success(
         self, monkeypatch, mock_secrets, mock_boto
     ):
@@ -685,7 +684,6 @@ class TestGlobalSecrets:
         ):
             await _ensure_software_key_master()
 
-    @pytest.mark.skip(reason="Test has pre-existing boto3 mocking issues when run with other tests")
     async def test_ensure_software_key_master_prod_no_boto(
         self, monkeypatch, mock_secrets
     ):
@@ -706,7 +704,6 @@ class TestGlobalSecrets:
         with pytest.raises(CryptoInitializationError, match="boto3 not available"):
             await _ensure_software_key_master()
 
-    @pytest.mark.skip(reason="Test has pre-existing boto3 mocking issues when run with other tests")
     async def test_ensure_software_key_master_prod_kms_decrypt_fail(
         self, monkeypatch, mock_secrets, mock_boto
     ):
