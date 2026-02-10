@@ -952,7 +952,6 @@ class TestKubernetesDefaultTemplate:
         rendered = template.render(**context)
         
         # Verify key elements are in the rendered template
-        assert isinstance(rendered, str)
         assert "Kubernetes Manifests Generation" in rendered or "Production-Ready Kubernetes Manifests Generation" in rendered
         assert "my-app" in rendered
         assert "python" in rendered

@@ -288,7 +288,8 @@ def mock_aiohttp(monkeypatch):
 def mock_aiohttp_session():
     """Mock aiohttp.ClientSession for alert tests."""
     mock_response = MagicMock()
-    mock_response.raise_for_status = MagicMock()  # Non-async mock since it's called as response.raise_for_status()
+    # In aiohttp, raise_for_status() is a synchronous method, not a coroutine
+    mock_response.raise_for_status = MagicMock()
     
     # Create a context manager for session.post()
     mock_post_cm = MagicMock()
