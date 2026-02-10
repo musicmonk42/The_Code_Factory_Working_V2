@@ -202,6 +202,11 @@ class SecurityError(Exception):
     pass
 
 
+# Constants for file parsing and validation
+MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
+HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
+
+
 class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
@@ -2000,7 +2005,6 @@ class OmniCoreService:
                         
                         # Parse YAML content to create separate files (deployment.yaml, service.yaml)
                         # The LLM typically generates multi-document YAML separated by "---"
-                        MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
                         yaml_docs = config_content.split("---")
                         for idx, doc in enumerate(yaml_docs):
                             doc = doc.strip()
@@ -2054,7 +2058,6 @@ class OmniCoreService:
                         # A more robust approach would use YAML parsing library,
                         # but this works for common LLM output patterns.
                         # TODO: Consider implementing proper YAML parsing for better reliability
-                        HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for filename
                         if "Chart.yaml" in config_content and "values.yaml" in config_content:
                             # Content contains multiple files - try to parse them
                             # Split on '# ' at the start of a line followed by filename
