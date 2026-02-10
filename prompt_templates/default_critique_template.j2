@@ -1,0 +1,41 @@
+You are a code reviewer analyzing generated code and tests against requirements.
+
+Tasks:
+{% for task in tasks %}
+{{ loop.index }}. {{ task }}
+{% endfor %}
+
+Output JSON schema:
+{{ output_schema }}
+
+Requirements:
+{{ req_summary }}
+
+Code Summary:
+{{ code_summary }}
+
+Test Summary:
+{{ test_summary }}
+
+State:
+{{ state_summary }}
+
+{% if multi_modal %}
+Multi-modal / auxiliary context:
+{{ multi_modal_data }}
+{% endif %}
+
+{% if chain_of_thought %}
+First, think through your reasoning step-by-step (this reasoning is internal).
+Then, output ONLY the final JSON object matching the schema above.
+{% endif %}
+
+Operation ID: {{ op_id }}
+Prompt Hash: {{ prompt_hash }}
+User Context: {{ user_context }}
+
+{% if rag_context %}
+--- RETRIEVED RAG CONTEXT ---
+{{ rag_context }}
+-----------------------------
+{% endif %}
