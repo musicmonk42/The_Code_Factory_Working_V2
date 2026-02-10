@@ -261,6 +261,9 @@ def mock_aiohttp(monkeypatch):
     # Create the mock session
     mock_session = MagicMock()
     mock_session.post = MagicMock(return_value=mock_post_context)
+    # ADD THESE TWO LINES to make session act as a context manager:
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=None)
 
     # Create the mock ClientSession context manager
     mock_client_session_context = AsyncMock()
