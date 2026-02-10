@@ -49,9 +49,10 @@ services:
     networks:
       - codefactory-network
 
-  # PostgreSQL database (recommended for production)
+  # PostgreSQL database with Citus extension for production scale-out
+  # Using citusdata/citus image provides the Citus extension for distributed SQL
   postgres:
-    image: postgres:15-alpine
+    image: citusdata/citus:12.1
     container_name: codefactory-postgres-prod
     environment:
       POSTGRES_DB: codefactory
@@ -148,6 +149,13 @@ services:
       # ============================================
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}  # Kafka broker addresses
+      
+      # ============================================
+      # Citus Extension Configuration
+      # ============================================
+      # Set to 1 to enable Citus distributed SQL features for production scale-out
+      # Requires postgres service to use citusdata/citus image (already configured)
+      - ENABLE_CITUS=${ENABLE_CITUS:-1}  # Enabled by default in production
       
       # ============================================
       # CORS Configuration
