@@ -251,7 +251,7 @@ def mock_aiohttp(monkeypatch):
     """Mocks aiohttp.ClientSession for testing send_alert."""
     # Create the mock response object
     mock_response = AsyncMock()
-    mock_response.raise_for_status = AsyncMock()
+    mock_response.raise_for_status = MagicMock()
 
     # Create the mock session
     mock_session = MagicMock()

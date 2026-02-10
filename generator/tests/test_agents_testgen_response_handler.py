@@ -82,8 +82,9 @@ sys.modules["runner.runner_logging"] = create_mock_package("runner.runner_loggin
 sys.modules["runner.runner_metrics"] = create_mock_package("runner.runner_metrics")
 sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
 sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
-sys.modules["aiohttp"] = create_mock_package("aiohttp")
-sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
+if "aiohttp" not in sys.modules:
+    sys.modules["aiohttp"] = create_mock_package("aiohttp")
+    sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
 
 # Special handling for watchdog.events - it needs to be inheritable
 watchdog_events_mock = create_mock_package("watchdog.events")
