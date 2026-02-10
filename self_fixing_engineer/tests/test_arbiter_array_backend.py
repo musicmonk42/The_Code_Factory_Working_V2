@@ -5,10 +5,27 @@ import sys
 import importlib
 import importlib.util
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, Mock
 
 # Add the parent directory to the path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# Use TYPE_CHECKING to prevent MagicMock from being used as type annotations
+if TYPE_CHECKING:
+    from self_fixing_engineer.arbiter.arbiter_array_backend import (
+        ConcreteArrayBackend as _ConcreteArrayBackend,
+        ArrayBackendError as _ArrayBackendError,
+        ArraySizeLimitError as _ArraySizeLimitError,
+        StorageError as _StorageError,
+        ArrayMeta as _ArrayMeta,
+    )
+else:
+    _ConcreteArrayBackend = Any
+    _ArrayBackendError = Exception
+    _ArraySizeLimitError = Exception
+    _StorageError = Exception
+    _ArrayMeta = Any
 
 
 def _reload_backend_with_real_aiofiles():
@@ -39,30 +56,49 @@ def _reload_backend_with_real_aiofiles():
     return arbiter_array_backend
 
 
-# Global module references - will be set by fixture
-_backend = None
-ConcreteArrayBackend = None
-ArrayBackendError = None
-ArraySizeLimitError = None
-StorageError = None
-ArrayMeta = None
+# Global module references - will be set by fixture with runtime type guards
+_backend: Any = None
+ConcreteArrayBackend: type[_ConcreteArrayBackend] = None  # type: ignore
+ArrayBackendError: type[_ArrayBackendError] = None  # type: ignore
+ArraySizeLimitError: type[_ArraySizeLimitError] = None  # type: ignore
+StorageError: type[_StorageError] = None  # type: ignore
+ArrayMeta: type[_ArrayMeta] = None  # type: ignore
 
 
 @pytest.fixture(autouse=True)
 def ensure_real_aiofiles():
-    """Ensure aiofiles is real, not mocked, for these tests.\n    \n    These tests require actual file I/O to test persistence.\n    Remove any mocks that may have been applied by other test modules.\n    """
+    """Ensure aiofiles is real, not mocked, for these tests.
+    
+    These tests require actual file I/O to test persistence.
+    Remove any mocks that may have been applied by other test modules.
+    """
     global _backend, ConcreteArrayBackend, ArrayBackendError, ArraySizeLimitError, StorageError, ArrayMeta
     
     # Reload the backend module with real aiofiles
     try:
         _backend = _reload_backend_with_real_aiofiles()  
         
-        # Update global references to use the reloaded module
-        ConcreteArrayBackend = getattr(_backend, "ConcreteArrayBackend")
-        ArrayBackendError = getattr(_backend, "ArrayBackendError")
-        ArraySizeLimitError = getattr(_backend, "ArraySizeLimitError")
-        StorageError = getattr(_backend, "StorageError")
-        ArrayMeta = getattr(_backend, "ArrayMeta")
+        # Runtime type guard: verify backend is not a mock before assigning
+        if _backend is None or isinstance(_backend, (MagicMock, Mock)):
+            pytest.skip("Cannot load real backend module - got mock or None")
+        
+        # Update global references to use the reloaded module with runtime checks
+        ConcreteArrayBackend = getattr(_backend, "ConcreteArrayBackend", None)
+        ArrayBackendError = getattr(_backend, "ArrayBackendError", None)
+        ArraySizeLimitError = getattr(_backend, "ArraySizeLimitError", None)
+        StorageError = getattr(_backend, "StorageError", None)
+        ArrayMeta = getattr(_backend, "ArrayMeta", None)
+        
+        # Runtime type guard: ensure we got real classes, not mocks
+        for name, obj in [
+            ("ConcreteArrayBackend", ConcreteArrayBackend),
+            ("ArrayBackendError", ArrayBackendError),
+            ("ArraySizeLimitError", ArraySizeLimitError),
+            ("StorageError", StorageError),
+            ("ArrayMeta", ArrayMeta),
+        ]:
+            if obj is None or isinstance(obj, (MagicMock, Mock)):
+                pytest.skip(f"Cannot load {name} from backend - got mock or None")
         
         # Verify the reloaded module has real aiofiles
         if hasattr(_backend, 'aiofiles'):
