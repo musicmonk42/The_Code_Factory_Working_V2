@@ -90,7 +90,6 @@ from generator.audit_log.audit_backend.audit_backend_core import (
     ENCRYPTER,
     RETRY_BACKOFF_FACTOR,
     RETRY_MAX_ATTEMPTS,
-    send_alert,
 )
 
 # DO NOT import metrics here - always reference from core module

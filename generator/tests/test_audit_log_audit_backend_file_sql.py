@@ -69,7 +69,6 @@ from generator.audit_log.audit_backend.audit_backend_core import (
     MigrationError,
     SCHEMA_VERSION,
     compute_hash,
-    send_alert,
 )
 from generator.audit_log.audit_backend.audit_backend_file_sql import (
     FileBackend,
