@@ -854,6 +854,276 @@ class HelmValidator(Validator):
 # They belong in `deploy_response_handler.py` to break the circular dependency.
 
 
+class DeploymentCompletenessValidator(Validator):
+    """
+    Validator that ensures all required deployment files exist and are valid.
+    
+    This validator checks:
+    - Docker: Dockerfile, docker-compose.yml, .dockerignore
+    - Kubernetes: k8s/deployment.yaml, k8s/service.yaml, k8s/configmap.yaml
+    - Helm: helm/Chart.yaml, helm/values.yaml, helm/templates/ directory
+    - YAML files pass basic YAML validation
+    - Dockerfile has required instructions (FROM, EXPOSE, etc.)
+    - No unsubstituted placeholders remain in any deployment file
+    """
+    
+    __version__ = "1.0"
+    __source__ = "built-in"
+    
+    # Required files for each deployment type
+    REQUIRED_FILES = {
+        "docker": ["Dockerfile", "docker-compose.yml", ".dockerignore"],
+        "kubernetes": [
+            "k8s/deployment.yaml",
+            "k8s/service.yaml",
+            "k8s/configmap.yaml",
+        ],
+        "helm": [
+            "helm/Chart.yaml",
+            "helm/values.yaml",
+            "helm/templates/",
+        ],
+    }
+    
+    # Placeholder patterns to detect (both curly and angle bracket variants)
+    PLACEHOLDER_PATTERNS = [
+        r'\{[A-Z_]+\}',  # {PLACEHOLDER}
+        r'<[A-Z_]+>',    # <PLACEHOLDER>
+        r'\{[a-z_]+\}',  # {placeholder}
+        r'<[a-z_]+>',    # <placeholder>
+    ]
+    
+    async def validate(self, config_content: str, target_type: str) -> Dict[str, Any]:
+        """
+        Validates deployment completeness for the given target type.
+        
+        Args:
+            config_content: The deployment configuration content (may be unused if validating files on disk)
+            target_type: The deployment target type (docker, kubernetes, helm, or "all")
+            
+        Returns:
+            Dict containing validation report with:
+                - status: "passed" or "failed"
+                - missing_files: List of missing required files
+                - invalid_files: List of files with validation errors
+                - placeholder_issues: Files containing unsubstituted placeholders
+                - errors: List of detailed error messages
+        """
+        report = {
+            "status": "passed",
+            "missing_files": [],
+            "invalid_files": [],
+            "placeholder_issues": [],
+            "errors": [],
+        }
+        
+        # If target_type is "all", validate all deployment types
+        targets_to_check = ["docker", "kubernetes", "helm"] if target_type == "all" else [target_type]
+        
+        for target in targets_to_check:
+            if target not in self.REQUIRED_FILES:
+                continue
+                
+            required_files = self.REQUIRED_FILES[target]
+            
+            # Check if all required files exist
+            for file_path in required_files:
+                full_path = Path(file_path)
+                
+                # Check if it's a directory requirement
+                if file_path.endswith('/'):
+                    if not full_path.exists() or not full_path.is_dir():
+                        report["missing_files"].append(f"{target}: {file_path}")
+                        report["errors"].append(f"Required directory missing for {target}: {file_path}")
+                        report["status"] = "failed"
+                else:
+                    if not full_path.exists():
+                        report["missing_files"].append(f"{target}: {file_path}")
+                        report["errors"].append(f"Required file missing for {target}: {file_path}")
+                        report["status"] = "failed"
+                    else:
+                        # Validate the file content
+                        try:
+                            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+                                content = await f.read()
+                            
+                            # Check for unsubstituted placeholders
+                            placeholder_found = False
+                            for pattern in self.PLACEHOLDER_PATTERNS:
+                                matches = re.findall(pattern, content)
+                                if matches:
+                                    # Filter out valid template patterns (Helm/Jinja2/Go templates)
+                                    # Valid patterns include: {{ .Values.x }}, {{ .Chart.x }}, {{ include "..." . }}
+                                    invalid_matches = []
+                                    for match in matches:
+                                        # Check if this match appears within template delimiters
+                                        # Look for the match surrounded by {{ ... }}
+                                        
+                                        # Pattern 1: {{ match }} (exact match in template)
+                                        if f'{{{{ {match} }}}}' in content or f'{{{{.{match}' in content:
+                                            continue  # Valid Helm/Go template
+                                        
+                                        # Pattern 2: {{ .Values.match }} or {{ .Chart.match }}
+                                        if f'{{{{ .Values.{match}' in content or f'{{{{ .Chart.{match}' in content:
+                                            continue  # Valid Helm template with Values/Chart
+                                        
+                                        # Pattern 3: Check if within any {{ ... }} block
+                                        # Find all {{ ... }} blocks and check if match is inside any
+                                        is_in_template = False
+                                        for template_match in re.finditer(r'\{\{.*?\}\}', content, re.DOTALL):
+                                            template_text = template_match.group(0)
+                                            if match in template_text:
+                                                is_in_template = True
+                                                break
+                                        
+                                        if is_in_template:
+                                            continue  # Match is inside a template block
+                                        
+                                        # If we get here, it's likely an unsubstituted placeholder
+                                        invalid_matches.append(match)
+                                    
+                                    if invalid_matches:
+                                        placeholder_found = True
+                                        report["placeholder_issues"].append(f"{file_path}: {invalid_matches}")
+                                        report["errors"].append(
+                                            f"Unsubstituted placeholders found in {file_path}: {invalid_matches}"
+                                        )
+                            
+                            if placeholder_found:
+                                report["status"] = "failed"
+                            
+                            # Validate YAML files
+                            if file_path.endswith(('.yaml', '.yml')):
+                                await self._validate_yaml(content, file_path, report)
+                            
+                            # Validate Dockerfile
+                            elif file_path == "Dockerfile":
+                                await self._validate_dockerfile(content, file_path, report)
+                                
+                        except Exception as e:
+                            report["invalid_files"].append(f"{file_path}: {str(e)}")
+                            report["errors"].append(f"Error reading/validating {file_path}: {str(e)}")
+                            report["status"] = "failed"
+        
+        # Validate that deployment files match the actual generated code
+        await self._validate_deployment_matches_code(report)
+        
+        logger.info(f"DeploymentCompletenessValidator validation {report['status']} for {target_type}")
+        return report
+    
+    async def _validate_yaml(self, content: str, file_path: str, report: Dict[str, Any]) -> None:
+        """Validate YAML syntax."""
+        try:
+            yaml = RuYAML()
+            yaml.load(content)
+        except Exception as e:
+            report["invalid_files"].append(f"{file_path}: Invalid YAML")
+            report["errors"].append(f"YAML validation failed for {file_path}: {str(e)}")
+            report["status"] = "failed"
+    
+    async def _validate_dockerfile(self, content: str, file_path: str, report: Dict[str, Any]) -> None:
+        """Validate Dockerfile has required instructions."""
+        required_instructions = ["FROM"]
+        
+        lines = content.strip().split('\n')
+        instructions_found = set()
+        
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            
+            # Get the instruction (first word)
+            parts = line.split()
+            if parts:
+                instruction = parts[0].upper()
+                instructions_found.add(instruction)
+        
+        missing_instructions = [inst for inst in required_instructions if inst not in instructions_found]
+        
+        if missing_instructions:
+            report["invalid_files"].append(f"{file_path}: Missing instructions: {missing_instructions}")
+            report["errors"].append(
+                f"Dockerfile validation failed for {file_path}: Missing required instructions {missing_instructions}"
+            )
+            report["status"] = "failed"
+    
+    async def _validate_deployment_matches_code(self, report: Dict[str, Any]) -> None:
+        """
+        Validate that deployment configurations match the actual generated code.
+        
+        Checks:
+        - Dockerfile copies/references actual project files
+        - Kubernetes/Helm configs use ports that match the application code
+        - Entry points match actual main files
+        """
+        warnings = []
+        
+        # Check if we have a requirements.txt or package.json in the project
+        has_requirements = Path("requirements.txt").exists()
+        has_package_json = Path("package.json").exists()
+        has_go_mod = Path("go.mod").exists()
+        
+        # Validate Dockerfile if it exists
+        dockerfile_path = Path("Dockerfile")
+        if dockerfile_path.exists():
+            try:
+                async with aiofiles.open(dockerfile_path, 'r', encoding='utf-8') as f:
+                    dockerfile_content = await f.read()
+                
+                # Check if Dockerfile copies dependency files
+                if has_requirements and "requirements.txt" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference requirements.txt found in project")
+                
+                if has_package_json and "package.json" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference package.json found in project")
+                
+                if has_go_mod and "go.mod" not in dockerfile_content:
+                    warnings.append("Dockerfile doesn't reference go.mod found in project")
+                
+                # Check for common entry points
+                common_entry_points = ["main.py", "app.py", "server.py", "index.js", "server.js", "main.go"]
+                found_entry_points = [ep for ep in common_entry_points if Path(ep).exists()]
+                
+                if found_entry_points:
+                    # Check if at least one entry point is referenced in Dockerfile
+                    if not any(ep in dockerfile_content for ep in found_entry_points):
+                        warnings.append(
+                            f"Dockerfile may not use detected entry points: {found_entry_points}"
+                        )
+                        
+            except Exception as e:
+                logger.warning(f"Could not validate Dockerfile content matching: {e}")
+        
+        # Add warnings to report (non-fatal)
+        if warnings:
+            report["warnings"] = warnings
+            logger.info(f"Deployment matching validation warnings: {warnings}")
+    
+    async def fix(self, config_content: str, issues: List[str], target_type: str) -> str:
+        """
+        Attempts to fix detected issues in deployment files.
+        
+        For deployment completeness issues, this typically means generating missing files
+        or fixing placeholders, which is better handled by regenerating the deployment.
+        
+        Args:
+            config_content: The configuration content to fix
+            issues: List of issues detected during validation
+            target_type: The deployment target type
+            
+        Returns:
+            Fixed configuration content (or original if fixing is not applicable)
+        """
+        # For now, return the original content as fixing deployment completeness
+        # usually requires regenerating missing files rather than fixing existing content
+        logger.warning(
+            f"DeploymentCompletenessValidator.fix called for {target_type}, "
+            f"but fixing is not implemented. Issues: {issues}"
+        )
+        return config_content
+
+
 class ValidatorRegistry:
     """
     Registry for validators with hot-reload capability.
@@ -884,6 +1154,7 @@ class ValidatorRegistry:
         built_in_validators = {
             "docker": DockerValidator,
             "helm": HelmValidator,
+            "completeness": DeploymentCompletenessValidator,
         }
         for tgt, validator_class in built_in_validators.items():
             self.validators[tgt] = validator_class

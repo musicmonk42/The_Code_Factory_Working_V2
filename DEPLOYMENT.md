@@ -649,12 +649,26 @@ make security-scan # Bandit + Safety
 ### Docker
 
 ```bash
-make docker-build     # Build image
-make docker-up        # Start services
-make docker-down      # Stop services
-make docker-logs      # View logs
-make docker-clean     # Remove all
-make docker-validate  # Validate build
+make docker-build         # Build image
+make docker-up            # Start services
+make docker-down          # Stop services
+make docker-logs          # View logs
+make docker-clean         # Remove all
+make docker-validate      # Validate build
+make deployment-validate  # Validate generated deployment files (NEW)
+```
+
+**NEW: Deployment Validation**
+
+The `deployment-validate` command validates generated deployment artifacts from code generation jobs:
+- Checks all required files exist (Dockerfile, docker-compose.yml, K8s manifests, Helm charts)
+- Validates YAML syntax
+- Ensures no unsubstituted placeholders
+- Verifies deployment configs match generated code
+
+```bash
+# After running code generation
+make deployment-validate
 ```
 
 ### Kubernetes

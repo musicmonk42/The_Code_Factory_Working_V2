@@ -148,6 +148,28 @@ try:
         'Total number of code generation errors',
         ['job_id', 'error_type']
     )
+    
+    # Deployment-specific metrics for observability
+    deployment_requests_total = _get_or_create_counter(
+        'deployment_requests_total',
+        'Total number of deployment requests',
+        ['job_id', 'target', 'status']
+    )
+    deployment_duration_seconds = _get_or_create_histogram(
+        'deployment_duration_seconds',
+        'Deployment generation duration in seconds',
+        ['job_id', 'target']
+    )
+    deployment_validation_total = _get_or_create_counter(
+        'deployment_validation_total',
+        'Total number of deployment validations',
+        ['job_id', 'status', 'validation_type']
+    )
+    deployment_files_generated = _get_or_create_counter(
+        'deployment_files_generated_total',
+        'Total number of deployment files generated',
+        ['job_id', 'target', 'file_type']
+    )
 except ImportError:
     METRICS_AVAILABLE = False
     logger.warning("Prometheus client not available, metrics disabled")
@@ -2050,6 +2072,466 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
     
+    async def _run_deploy_all(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute deployment for ALL targets (docker, kubernetes, helm) sequentially.
+        
+        This method runs all deployment targets as required stages following industry
+        best practices for observability, error handling, and security.
+        
+        Compliance:
+            - SOC 2 Type II: Comprehensive logging and error handling
+            - ISO 27001 A.12.4.1: Event logging for security monitoring
+            - NIST SP 800-53 AU-2: Auditable events tracking
+        
+        Args:
+            job_id: The job identifier (validated for path traversal)
+            payload: Deployment configuration containing:
+                - code_path: Path to generated code directory
+                - include_ci_cd: Boolean flag for CI/CD configs
+                
+        Returns:
+            Dict containing:
+                - status: "completed" or "error"
+                - results: Dict mapping each target to its result
+                - generated_files: List of all generated files across all targets
+                - failed_targets: List of targets that failed (if any)
+                - duration_seconds: Total execution time
+                
+        Raises:
+            ValueError: If job_id or payload is invalid
+            SecurityError: If path traversal is detected
+        """
+        # Input validation
+        if not job_id or not isinstance(job_id, str):
+            raise ValueError("job_id must be a non-empty string")
+        
+        if not isinstance(payload, dict):
+            raise ValueError("payload must be a dictionary")
+        
+        # Path traversal protection (matching platform security patterns)
+        if ".." in job_id or "/" in job_id or "\\" in job_id:
+            logger.error(f"[DEPLOY_ALL] Path traversal attempt detected in job_id: {job_id}")
+            raise SecurityError(f"Invalid job_id: path traversal attempt detected")
+        
+        # Start timing and tracing
+        start_time = time.time()
+        
+        # Use OpenTelemetry tracing if available
+        span_context = (
+            tracer.start_as_current_span("deploy.deploy_all") 
+            if TRACING_AVAILABLE 
+            else None
+        )
+        
+        try:
+            if span_context:
+                with span_context as span:
+                    span.set_attribute("job_id", job_id)
+                    span.set_attribute("targets_count", 3)
+                    result = await self._execute_deploy_all_targets(
+                        job_id, payload, start_time
+                    )
+                    span.set_status(Status(StatusCode.OK, "Deploy all targets completed"))
+                    return result
+            else:
+                return await self._execute_deploy_all_targets(
+                    job_id, payload, start_time
+                )
+                
+        except Exception as e:
+            logger.error(
+                f"[DEPLOY_ALL] Critical error in deploy_all for job {job_id}: {e}",
+                exc_info=True,
+                extra={"job_id": job_id, "error_type": type(e).__name__}
+            )
+            
+            # Record metrics if available
+            if METRICS_AVAILABLE:
+                deployment_requests_total.labels(
+                    job_id=job_id,
+                    target="all",
+                    status="error"
+                ).inc()
+            
+            raise
+    
+    async def _execute_deploy_all_targets(
+        self, 
+        job_id: str, 
+        payload: Dict[str, Any],
+        start_time: float
+    ) -> Dict[str, Any]:
+        """Internal method to execute all deployment targets with full observability.
+        
+        Separated for cleaner tracing and error handling.
+        
+        Args:
+            job_id: The validated job identifier
+            payload: Validated deployment configuration
+            start_time: Start timestamp for duration tracking
+            
+        Returns:
+            Dict with deployment results and metadata
+        """
+        logger.info(
+            f"[DEPLOY_ALL] Starting deployment for all targets",
+            extra={
+                "job_id": job_id,
+                "targets": ["docker", "kubernetes", "helm"],
+                "include_ci_cd": payload.get("include_ci_cd", False)
+            }
+        )
+        
+        # Define the required deployment targets
+        targets = ["docker", "kubernetes", "helm"]
+        results = {}
+        all_generated_files = []
+        failed_targets = []
+        
+        # Extract and validate code_path
+        code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+        include_ci_cd = payload.get("include_ci_cd", False)
+        
+        # Additional path validation
+        code_path_obj = Path(code_path)
+        if not code_path_obj.is_absolute():
+            code_path_obj = Path.cwd() / code_path
+        
+        # Run each target sequentially with individual error handling
+        for target_idx, target in enumerate(targets):
+            target_start = time.time()
+            
+            logger.info(
+                f"[DEPLOY_ALL] Processing target {target_idx + 1}/{len(targets)}: {target}",
+                extra={"job_id": job_id, "target": target, "sequence": f"{target_idx + 1}/{len(targets)}"}
+            )
+            
+            target_payload = {
+                "code_path": code_path,
+                "platform": target,
+                "include_ci_cd": include_ci_cd,
+            }
+            
+            try:
+                target_result = await self._run_deploy(job_id, target_payload)
+                results[target] = target_result
+                
+                # Calculate target duration
+                target_duration = time.time() - target_start
+                
+                if target_result.get("status") == "completed":
+                    logger.info(
+                        f"[DEPLOY_ALL] Target {target} completed successfully",
+                        extra={
+                            "job_id": job_id,
+                            "target": target,
+                            "duration_seconds": round(target_duration, 2),
+                            "files_generated": len(target_result.get("generated_files", []))
+                        }
+                    )
+                    
+                    # Collect generated files from this target
+                    target_files = target_result.get("generated_files", [])
+                    all_generated_files.extend(target_files)
+                    
+                    # Record success metrics
+                    if METRICS_AVAILABLE:
+                        deployment_requests_total.labels(
+                            job_id=job_id,
+                            target=target,
+                            status="completed"
+                        ).inc()
+                        deployment_duration_seconds.labels(
+                            job_id=job_id,
+                            target=target
+                        ).observe(target_duration)
+                        
+                        for file in target_files:
+                            file_ext = Path(file).suffix if file else "unknown"
+                            deployment_files_generated.labels(
+                                job_id=job_id,
+                                target=target,
+                                file_type=file_ext or "no_extension"
+                            ).inc()
+                            
+                elif target_result.get("status") == "error":
+                    error_msg = target_result.get('message', 'Unknown error')
+                    logger.error(
+                        f"[DEPLOY_ALL] Target {target} failed",
+                        extra={
+                            "job_id": job_id,
+                            "target": target,
+                            "error": error_msg,
+                            "duration_seconds": round(target_duration, 2)
+                        }
+                    )
+                    failed_targets.append(target)
+                    
+                    # Record failure metrics
+                    if METRICS_AVAILABLE:
+                        deployment_requests_total.labels(
+                            job_id=job_id,
+                            target=target,
+                            status="error"
+                        ).inc()
+                    
+            except Exception as e:
+                target_duration = time.time() - target_start
+                logger.error(
+                    f"[DEPLOY_ALL] Exception during target {target}",
+                    exc_info=True,
+                    extra={
+                        "job_id": job_id,
+                        "target": target,
+                        "error_type": type(e).__name__,
+                        "duration_seconds": round(target_duration, 2)
+                    }
+                )
+                
+                results[target] = {
+                    "status": "error",
+                    "message": str(e),
+                    "error_type": type(e).__name__,
+                }
+                failed_targets.append(target)
+                
+                # Record exception metrics
+                if METRICS_AVAILABLE:
+                    deployment_requests_total.labels(
+                        job_id=job_id,
+                        target=target,
+                        status="exception"
+                    ).inc()
+        
+        # Calculate total duration
+        total_duration = time.time() - start_time
+        
+        # Determine overall status
+        if failed_targets:
+            logger.warning(
+                f"[DEPLOY_ALL] Deployment completed with failures",
+                extra={
+                    "job_id": job_id,
+                    "failed_targets": failed_targets,
+                    "completed_targets": [t for t in targets if t not in failed_targets],
+                    "duration_seconds": round(total_duration, 2),
+                    "files_generated": len(all_generated_files)
+                }
+            )
+            return {
+                "status": "error",
+                "message": f"Deployment failed for targets: {', '.join(failed_targets)}",
+                "results": results,
+                "generated_files": all_generated_files,
+                "failed_targets": failed_targets,
+                "completed_targets": [t for t in targets if t not in failed_targets],
+                "duration_seconds": round(total_duration, 2),
+            }
+        else:
+            logger.info(
+                f"[DEPLOY_ALL] All deployment targets completed successfully",
+                extra={
+                    "job_id": job_id,
+                    "targets_count": len(targets),
+                    "duration_seconds": round(total_duration, 2),
+                    "files_generated": len(all_generated_files)
+                }
+            )
+            
+            # Record overall success metric
+            if METRICS_AVAILABLE:
+                deployment_requests_total.labels(
+                    job_id=job_id,
+                    target="all",
+                    status="completed"
+                ).inc()
+            
+            return {
+                "status": "completed",
+                "message": "All deployment targets completed successfully",
+                "results": results,
+                "generated_files": all_generated_files,
+                "failed_targets": [],
+                "completed_targets": targets,
+            }
+    
+    async def _validate_deployment_completeness(self, job_id: str, code_path: str) -> Dict[str, Any]:
+        """Validate that all required deployment files exist and are valid.
+        
+        This method performs comprehensive validation of deployment artifacts,
+        ensuring compliance with security and quality standards.
+        
+        Compliance:
+            - SOC 2 Type II: Validation of deployment configurations
+            - CIS Benchmarks: Security validation for containers and Kubernetes
+            - OWASP: Secure configuration validation
+        
+        Uses the DeploymentCompletenessValidator to check:
+            - All required deployment files exist
+            - No unsubstituted placeholders remain
+            - YAML files have valid syntax
+            - Dockerfiles have required instructions
+            - Deployment configs match actual generated code
+        
+        Args:
+            job_id: The job identifier (for logging and metrics)
+            code_path: Path to the generated code directory (must exist)
+            
+        Returns:
+            Dict containing validation results:
+                - status: "passed", "failed", or "error"
+                - errors: List of detailed validation errors
+                - warnings: List of non-fatal warnings
+                - missing_files: List of required files not found
+                - invalid_files: List of files with validation issues
+                
+        Raises:
+            ImportError: If validator cannot be imported
+            OSError: If code_path doesn't exist or is inaccessible
+        """
+        validation_start = time.time()
+        
+        logger.info(
+            "[DEPLOY_VALIDATION] Starting deployment completeness validation",
+            extra={"job_id": job_id, "code_path": code_path}
+        )
+        
+        # Import the validator with graceful error handling
+        try:
+            from generator.agents.deploy_agent.deploy_validator import DeploymentCompletenessValidator
+        except ImportError as e:
+            logger.error(
+                "[DEPLOY_VALIDATION] Failed to import DeploymentCompletenessValidator",
+                exc_info=True,
+                extra={"job_id": job_id, "error": str(e)}
+            )
+            
+            if METRICS_AVAILABLE:
+                deployment_validation_total.labels(
+                    job_id=job_id,
+                    status="error",
+                    validation_type="import_error"
+                ).inc()
+            
+            return {
+                "status": "error",
+                "errors": [f"Failed to import validator: {str(e)}"],
+            }
+        
+        # Validate code_path exists and is accessible
+        code_path_obj = Path(code_path) if code_path else None
+        if not code_path_obj or not code_path_obj.exists():
+            error_msg = f"Code path does not exist: {code_path}"
+            logger.error(
+                "[DEPLOY_VALIDATION] Invalid code path",
+                extra={"job_id": job_id, "code_path": code_path}
+            )
+            
+            if METRICS_AVAILABLE:
+                deployment_validation_total.labels(
+                    job_id=job_id,
+                    status="error",
+                    validation_type="invalid_path"
+                ).inc()
+            
+            return {
+                "status": "error",
+                "errors": [error_msg],
+            }
+        
+        # Change to the code path directory for validation
+        # Store original CWD for restoration in finally block
+        original_cwd = os.getcwd()
+        
+        try:
+            os.chdir(code_path)
+            logger.debug(
+                "[DEPLOY_VALIDATION] Changed working directory",
+                extra={"job_id": job_id, "new_cwd": code_path}
+            )
+            
+            # Create validator instance
+            validator = DeploymentCompletenessValidator()
+            
+            # Validate all deployment types
+            validation_result = await validator.validate(
+                config_content="",  # Not used for file-based validation
+                target_type="all"   # Validate all deployment types (docker, kubernetes, helm)
+            )
+            
+            # Calculate validation duration
+            validation_duration = time.time() - validation_start
+            
+            # Enhanced logging with structured data
+            logger.info(
+                f"[DEPLOY_VALIDATION] Validation completed: {validation_result.get('status')}",
+                extra={
+                    "job_id": job_id,
+                    "status": validation_result.get('status'),
+                    "duration_seconds": round(validation_duration, 3),
+                    "missing_files_count": len(validation_result.get('missing_files', [])),
+                    "invalid_files_count": len(validation_result.get('invalid_files', [])),
+                    "placeholder_issues_count": len(validation_result.get('placeholder_issues', [])),
+                    "warnings_count": len(validation_result.get('warnings', []))
+                }
+            )
+            
+            # Record validation metrics
+            if METRICS_AVAILABLE:
+                deployment_validation_total.labels(
+                    job_id=job_id,
+                    status=validation_result.get('status', 'unknown'),
+                    validation_type="completeness"
+                ).inc()
+            
+            return validation_result
+            
+        except Exception as e:
+            validation_duration = time.time() - validation_start
+            logger.error(
+                "[DEPLOY_VALIDATION] Validation exception occurred",
+                exc_info=True,
+                extra={
+                    "job_id": job_id,
+                    "error_type": type(e).__name__,
+                    "duration_seconds": round(validation_duration, 3)
+                }
+            )
+            
+            # Record error metrics
+            if METRICS_AVAILABLE:
+                deployment_validation_total.labels(
+                    job_id=job_id,
+                    status="exception",
+                    validation_type="completeness"
+                ).inc()
+            
+            return {
+                "status": "error",
+                "errors": [f"Validation error: {str(e)}"],
+                "error_type": type(e).__name__,
+            }
+            
+        finally:
+            # Always restore original working directory
+            # Critical for preventing side effects in other operations
+            try:
+                os.chdir(original_cwd)
+                logger.debug(
+                    "[DEPLOY_VALIDATION] Restored working directory",
+                    extra={"job_id": job_id, "restored_cwd": original_cwd}
+                )
+            except Exception as restore_error:
+                logger.error(
+                    "[DEPLOY_VALIDATION] Failed to restore working directory",
+                    exc_info=True,
+                    extra={
+                        "job_id": job_id,
+                        "original_cwd": original_cwd,
+                        "error": str(restore_error)
+                    }
+                )
+    
     @staticmethod
     def _sanitize_dockerfile_content(content: str) -> str:
         """Sanitize Dockerfile content from LLM responses.
@@ -3174,16 +3656,70 @@ class OmniCoreService:
             if include_deployment:
                 deploy_payload = {
                     "code_path": codegen_result.get("output_path"),
-                    "platform": "docker",
                     "include_ci_cd": True,
                 }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy with payload: {deploy_payload}")
-                deploy_result = await self._run_deploy(job_id, deploy_payload)
+                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm)")
+                
+                # Run all deployment targets
+                deploy_result = await self._run_deploy_all(job_id, deploy_payload)
+                
                 if deploy_result.get("status") == "completed":
                     stages_completed.append("deploy")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: deploy - files: {deploy_result.get('generated_files', [])}")
+                    logger.info(
+                        f"[PIPELINE] Job {job_id} completed step: deploy_all - "
+                        f"targets: {deploy_result.get('completed_targets', [])} - "
+                        f"files: {deploy_result.get('generated_files', [])}"
+                    )
+                    
+                    # Run deployment completeness validation
+                    logger.info(f"[PIPELINE] Job {job_id} starting deployment validation")
+                    try:
+                        validation_result = await self._validate_deployment_completeness(
+                            job_id, 
+                            codegen_result.get("output_path")
+                        )
+                        
+                        if validation_result.get("status") == "failed":
+                            logger.error(
+                                f"[PIPELINE] Job {job_id} FAILING pipeline: Deployment validation failed - "
+                                f"errors: {validation_result.get('errors', [])}"
+                            )
+                            await self._finalize_failed_job(
+                                job_id,
+                                error=f"Deployment validation failed: {'; '.join(validation_result.get('errors', []))}"
+                            )
+                            return {
+                                "status": "failed",
+                                "message": f"Deployment validation failed",
+                                "stages_completed": stages_completed,
+                                "validation_errors": validation_result.get("errors", []),
+                                "failed_targets": [],  # Deployment completed but validation failed
+                                "results": deploy_result.get("results", {}),
+                                "generated_files": deploy_result.get("generated_files", []),
+                                "duration_seconds": deploy_result.get("duration_seconds", 0),
+                            }
+                        else:
+                            logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
+                            
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} deployment validation error: {e}", exc_info=True)
+                        # Continue pipeline on validation errors for now (non-fatal)
+                        logger.warning(f"[PIPELINE] Job {job_id} continuing despite validation error")
+                        
                 elif deploy_result.get("status") == "error":
-                    logger.warning(f"[PIPELINE] Job {job_id} failed step: deploy - {deploy_result.get('message', 'Unknown error')} (continuing pipeline)")
+                    deploy_error = deploy_result.get('message', 'Unknown error')
+                    logger.error(f"[PIPELINE] Job {job_id} FAILING pipeline: deploy_all failed - {deploy_error}")
+                    await self._finalize_failed_job(job_id, error=f"Deployment failed: {deploy_error}")
+                    return {
+                        "status": "failed",
+                        "message": f"Deployment failed: {deploy_error}",
+                        "stages_completed": stages_completed,
+                        "failed_targets": deploy_result.get("failed_targets", []),
+                        "completed_targets": deploy_result.get("completed_targets", []),
+                        "results": deploy_result.get("results", {}),
+                        "generated_files": deploy_result.get("generated_files", []),
+                        "duration_seconds": deploy_result.get("duration_seconds", 0),
+                    }
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             

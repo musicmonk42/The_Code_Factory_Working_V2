@@ -229,6 +229,24 @@ docker-validate: ## Validate Docker build and configuration
 	./validate_docker_build.sh
 	@echo "$(GREEN)Docker validation complete!$(NC)"
 
+deployment-validate: ## Validate generated deployment files (Docker, K8s, Helm)
+	@echo "$(BLUE)Validating generated deployment files...$(NC)"
+	@echo "$(YELLOW)This validates deployment artifacts from code generation jobs$(NC)"
+	@if [ -d "./uploads" ]; then \
+		python3 -c "import asyncio; from generator.agents.deploy_agent.deploy_validator import DeploymentCompletenessValidator; \
+		validator = DeploymentCompletenessValidator(); \
+		import sys; \
+		loop = asyncio.get_event_loop(); \
+		result = loop.run_until_complete(validator.validate('', 'all')); \
+		print(f\"Status: {result.get('status')}\"); \
+		errors = result.get('errors', []); \
+		[print(f\"ERROR: {e}\") for e in errors]; \
+		sys.exit(0 if result.get('status') == 'passed' else 1)"; \
+	else \
+		echo "$(YELLOW)No uploads directory found. Run code generation first.$(NC)"; \
+	fi
+	@echo "$(GREEN)Deployment validation complete!$(NC)"
+
 # =============================================================================
 # Development
 # =============================================================================

@@ -1885,6 +1885,10 @@ async def handle_deploy_response(
                 '{NODE_ENV}': 'production',
                 '{PORT}': '8000',
                 '{HOST}': '0.0.0.0',
+                '<PORT_NUMBER>': '8000',
+                '<PORT>': '8000',
+                '<HOST>': '0.0.0.0',
+                '<SERVICE_NAME>': 'app',
             }
             
             # Pre-substitute common environment placeholders in a single pass
