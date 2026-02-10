@@ -336,38 +336,33 @@ The following are MANDATORY checks:
    - Route handlers should only return responses - validation is automatic via Pydantic
    
    CORRECT Pattern (Use This):
-   ```python
-   # app/schemas.py - All validation in schema
-   from pydantic import BaseModel, Field, validator
+   - In app/schemas.py - All validation in schema using @validator:
+     * from pydantic import BaseModel, Field, validator
+     * class EchoRequest(BaseModel):
+     *     message: str = Field(..., min_length=1, max_length=500)
+     *     
+     *     @validator('message')
+     *     def trim_and_validate_message(cls, v):
+     *         # Trim whitespace and validate message is not empty
+     *         v = v.strip()
+     *         if not v:
+     *             raise ValueError('Message cannot be empty after trimming whitespace')
+     *         return v
    
-   class EchoRequest(BaseModel):
-       message: str = Field(..., min_length=1, max_length=500)
-       
-       @validator('message')
-       def trim_and_validate_message(cls, v):
-           """Trim whitespace and validate message is not empty."""
-           v = v.strip()
-           if not v:
-               raise ValueError('Message cannot be empty after trimming whitespace')
-           return v
-   
-   # app/routes.py - No validation logic, just return
-   @router.post('/echo', response_model=dict)
-   async def echo_message(request: EchoRequest):
-       # Pydantic already validated and trimmed - just use the value
-       return {'echo': request.message}
-   ```
+   - In app/routes.py - No validation logic, just return:
+     * @router.post('/echo', response_model=dict)
+     * async def echo_message(request: EchoRequest):
+     *     # Pydantic already validated and trimmed - just use the value
+     *     return {'echo': request.message}
    
    WRONG Pattern (DO NOT USE):
-   ```python
-   # ❌ app/routes.py - Manual validation (WRONG)
-   @router.post('/echo', response_model=dict)
-   async def echo_message(request: EchoRequest):
-       message = request.message.strip()  # ❌ Manual trim
-       if not message or len(message) > 500:  # ❌ Manual validation
-           raise HTTPException(status_code=400, detail='Invalid')
-       return {'echo': message}
-   ```
+   - ❌ app/routes.py - Manual validation (WRONG):
+     * @router.post('/echo', response_model=dict)
+     * async def echo_message(request: EchoRequest):
+     *     message = request.message.strip()  # ❌ Manual trim
+     *     if not message or len(message) > 500:  # ❌ Manual validation
+     *         raise HTTPException(status_code=400, detail='Invalid')
+     *     return {'echo': message}
    
    Validation Rules:
    - Use `@validator('field_name')` decorators for all validation logic
