@@ -841,10 +841,10 @@ def init_llm(provider: Optional[str] = None, model: Optional[str] = None) -> Any
                 raise ImportError(
                     "Missing 'langchain-google-genai'. Install with: pip install langchain-google-genai"
                 ) from e
-            api_key = _cfg("gemini_api_key", "GEMINI_API_KEY")
+            api_key = _cfg("gemini_api_key", "GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             if not api_key:
                 raise ValueError(
-                    "Gemini API key not found in CONFIG['gemini_api_key'] or GEMINI_API_KEY."
+                    "Gemini API key not found in CONFIG['gemini_api_key'], GEMINI_API_KEY, or GOOGLE_API_KEY."
                 )
             llm_instance = ChatGoogleGenerativeAI(model=model, google_api_key=api_key)
 

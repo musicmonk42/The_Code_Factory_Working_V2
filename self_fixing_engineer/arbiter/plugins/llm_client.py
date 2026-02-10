@@ -1311,7 +1311,7 @@ async def main():
         },
         {
             "provider": "gemini",
-            "api_key": os.getenv("GEMINI_API_KEY"),
+            "api_key": os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"),
             "model": "gemini-1.5-flash-latest",
             "weight": 1.0,
             "timeout": 120,

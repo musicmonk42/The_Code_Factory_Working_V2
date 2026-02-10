@@ -358,7 +358,7 @@ def get_provider():
     Loads the API key from config/env and instantiates the provider.
     """
     config = load_config()
-    API_KEY = config.llm_provider_api_key or os.getenv("GEMINI_API_KEY")
+    API_KEY = config.llm_provider_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
     if not HAS_GEMINI:
         logger.error("Google GenerativeAI SDK not found. Skipping GeminiProvider.")
@@ -373,7 +373,7 @@ def get_provider():
         # --- FIX: Pass 'error_code' and 'detail' keywords ---
         raise ConfigurationError(
             error_code="CONFIG_LOAD_KEY_MISSING",
-            detail="GEMINI_API_KEY environment variable or runner config not set.",
+            detail="GEMINI_API_KEY or GOOGLE_API_KEY environment variable or runner config not set.",
         )
 
     return GeminiProvider(api_key=API_KEY)

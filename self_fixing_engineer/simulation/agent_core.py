@@ -559,14 +559,14 @@ class GeminiLLM(LLMBase):
 
     def __init__(self, **config):
         self.config = config
-        self.api_key = config.get("api_key") or os.environ.get("GEMINI_API_KEY")
+        self.api_key = config.get("api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         self.model = config.get("model", "gemini-pro")
 
         if not self.api_key:
             if PRODUCTION_MODE:
                 raise RuntimeError(
                     "CRITICAL: Gemini API key required in production mode. "
-                    "Set GEMINI_API_KEY environment variable."
+                    "Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable."
                 )
             logger.warning("Gemini API key not found, LLM calls will fail or use mock")
 
@@ -686,7 +686,7 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
             return MockLLM(provider="gemini", **kwargs)
 
         # Check if API key is available
-        api_key = kwargs.get("api_key") or os.environ.get("GEMINI_API_KEY")
+        api_key = kwargs.get("api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             logger.warning("Gemini API key not found, using MockLLM")
             return MockLLM(provider="gemini", **kwargs)
