@@ -1480,13 +1480,21 @@ class ExplainAudit:
                 await self._db_client.save_audit_record(record.model_dump())
 
                 if self.knowledge_graph:
-                    await self.knowledge_graph.add_fact(
-                        "AuditRecords",
-                        record.uuid,
-                        record.model_dump(),
-                        source="audit",
-                        timestamp=datetime.utcnow().isoformat(),
-                    )
+                    try:
+                        await self.knowledge_graph.add_fact(
+                            "AuditRecords",
+                            record.uuid,
+                            record.model_dump(),
+                            source="audit",
+                            timestamp=datetime.utcnow().isoformat(),
+                        )
+                    except Exception as kg_error:
+                        # Log error but don't fail the entire flush operation
+                        logger.warning(
+                            f"Failed to add audit record {record.uuid} to knowledge graph: {kg_error}. "
+                            "Continuing with audit processing."
+                        )
+                        AUDIT_ERRORS.labels(error_type="knowledge_graph_add_fact").inc()
 
             logger.info(
                 f"Flushed {len(records_to_flush)} audit records to DB/KG/Blockchain (if enabled)."
