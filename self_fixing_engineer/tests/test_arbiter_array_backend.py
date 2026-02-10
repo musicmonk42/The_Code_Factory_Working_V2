@@ -5,7 +5,7 @@ import sys
 import importlib
 import importlib.util
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from unittest.mock import MagicMock, Mock
 
 # Add the parent directory to the path
@@ -57,12 +57,13 @@ def _reload_backend_with_real_aiofiles():
 
 
 # Global module references - will be set by fixture with runtime type guards
+# Using Optional to properly handle None initialization
 _backend: Any = None
-ConcreteArrayBackend: type[_ConcreteArrayBackend] = None  # type: ignore
-ArrayBackendError: type[_ArrayBackendError] = None  # type: ignore
-ArraySizeLimitError: type[_ArraySizeLimitError] = None  # type: ignore
-StorageError: type[_StorageError] = None  # type: ignore
-ArrayMeta: type[_ArrayMeta] = None  # type: ignore
+ConcreteArrayBackend: Optional[type[_ConcreteArrayBackend]] = None
+ArrayBackendError: Optional[type[_ArrayBackendError]] = None
+ArraySizeLimitError: Optional[type[_ArraySizeLimitError]] = None
+StorageError: Optional[type[_StorageError]] = None
+ArrayMeta: Optional[type[_ArrayMeta]] = None
 
 
 @pytest.fixture(autouse=True)
