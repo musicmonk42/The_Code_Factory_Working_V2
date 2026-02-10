@@ -247,3 +247,72 @@ async def test_deploy_stage_detects_framework_correctly(tmp_path):
             # Verify Dockerfile was generated
             dockerfile_path = test_dir / "Dockerfile"
             assert dockerfile_path.exists(), f"Framework {framework}: Dockerfile not generated"
+
+
+@pytest.mark.asyncio
+async def test_deploy_stage_passes_files_to_agent(tmp_path, sample_codegen_result):
+    """Test that deploy stage passes generated files to DeployAgent.
+    
+    This test verifies:
+    1. The files from codegen_result are extracted
+    2. The file list is passed to run_deployment requirements
+    3. The code_path is passed to run_deployment requirements
+    
+    This is critical for FIX 1 - empty context caused LLM to return prose.
+    """
+    # Import after pytest setup
+    from generator.main.engine import WorkflowEngine
+    
+    config = {
+        "enable_deploy": True,
+        "output_path": str(tmp_path)
+    }
+    
+    # Track the requirements passed to run_deployment
+    captured_requirements = {}
+    
+    # Create a mock DeployAgent that captures the requirements
+    class MockDeployAgent:
+        def __init__(self, repo_path):
+            self.repo_path = repo_path
+        
+        async def _init_db(self):
+            pass
+        
+        async def run_deployment(self, target, requirements):
+            nonlocal captured_requirements
+            captured_requirements = requirements
+            return {
+                "status": "completed",
+                "configs": {
+                    "docker": "FROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nRUN pip install -r requirements.txt\nCMD [\"python\", \"main.py\"]"
+                },
+                "run_id": "test-run-id",
+                "timestamp": "2025-01-01T00:00:00Z"
+            }
+    
+    with patch('generator.main.engine.HAS_DEPLOY_AGENT', True):
+        with patch('generator.main.engine.DeployAgent', MockDeployAgent):
+            engine = WorkflowEngine(config=config)
+            
+            # Run the deploy stage
+            result = await engine._run_deploy_stage(
+                codegen_result=sample_codegen_result,
+                output_path=str(tmp_path),
+                workflow_id="test-deploy-files-001",
+                provenance=None
+            )
+            
+            # Verify that requirements were captured
+            assert captured_requirements, "No requirements were captured - run_deployment was not called"
+            
+            # FIX 1: Verify that 'files' key is present and contains file list
+            assert "files" in captured_requirements, "FIX 1: 'files' key missing from requirements"
+            expected_files = list(sample_codegen_result["files"].keys())
+            assert sorted(captured_requirements["files"]) == sorted(expected_files), \
+                f"FIX 1: Expected files {expected_files}, got {captured_requirements['files']}"
+            
+            # FIX 1: Verify that 'code_path' key is present
+            assert "code_path" in captured_requirements, "FIX 1: 'code_path' key missing from requirements"
+            assert captured_requirements["code_path"] == str(tmp_path), \
+                f"FIX 1: Expected code_path '{tmp_path}', got '{captured_requirements['code_path']}'"
