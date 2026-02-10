@@ -69,8 +69,11 @@ if not quantum_logger.hasHandlers():
     quantum_logger.addHandler(handler)
 
 # --- Metrics (Idempotent and Thread-Safe Registration) ---
-_metrics_registry = CollectorRegistry(auto_describe=True)
+_metrics_registry = None
 _metrics_lock = threading.Lock()
+
+if PROMETHEUS_AVAILABLE:
+    _metrics_registry = CollectorRegistry(auto_describe=True)
 
 if PROMETHEUS_AVAILABLE:
 
@@ -1129,82 +1132,94 @@ def _validate_secure_path_logic(v: str) -> str:
     return v_norm
 
 
-if PYDANTIC_AVAILABLE:
+def _create_run_mutation_params_class():
+    """Factory function to create RunMutationCircuitParams class at runtime."""
+    if PYDANTIC_AVAILABLE:
+        class _RunMutationCircuitParams(BaseModel):
+            code_file: str = Field(
+                ...,
+                min_length=1,
+                max_length=255,
+                description="Path to the code file for mutation.",
+            )
+            backend: str = Field(
+                "auto",
+                pattern="^(auto|qiskit|dwave|scipy)$",
+                description="Backend to use for mutation.",
+            )
+            n_qubits: int = Field(
+                5, ge=1, le=10, description="Number of qubits for Qiskit circuit."
+            )
+            n_vars: int = Field(
+                5, ge=1, le=10, description="Number of variables for D-Wave problem."
+            )
+            backend_config: Dict[str, Any] = Field(
+                default_factory=dict,
+                description="Configuration specific to the chosen backend.",
+            )
 
-    class RunMutationCircuitParams(BaseModel):
-        code_file: str = Field(
-            ...,
-            min_length=1,
-            max_length=255,
-            description="Path to the code file for mutation.",
-        )
-        backend: str = Field(
-            "auto",
-            pattern="^(auto|qiskit|dwave|scipy)$",
-            description="Backend to use for mutation.",
-        )
-        n_qubits: int = Field(
-            5, ge=1, le=10, description="Number of qubits for Qiskit circuit."
-        )
-        n_vars: int = Field(
-            5, ge=1, le=10, description="Number of variables for D-Wave problem."
-        )
-        backend_config: Dict[str, Any] = Field(
-            default_factory=dict,
-            description="Configuration specific to the chosen backend.",
-        )
+            @field_validator("code_file")
+            @classmethod
+            def validate_secure_path(cls, v: str) -> str:
+                return _validate_secure_path_logic(v)
+        return _RunMutationCircuitParams
+    else:
+        class _RunMutationCircuitParams:
+            def __init__(self, **kwargs):
+                self.code_file = kwargs.get("code_file", "N/A")
+                self.backend = kwargs.get("backend", "auto")
+                self.n_qubits = kwargs.get("n_qubits", 5)
+                self.n_vars = kwargs.get("n_vars", 5)
+                self.backend_config = kwargs.get("backend_config", {})
+                self.validate()
 
-        @field_validator("code_file")
-        @classmethod
-        def validate_secure_path(cls, v: str) -> str:
-            return _validate_secure_path_logic(v)
+            def validate(self):
+                self.code_file = _validate_secure_path_logic(self.code_file)
+                if self.backend not in ["auto", "qiskit", "dwave", "scipy"]:
+                    raise ValueError("backend must be one of: auto, qiskit, dwave, scipy")
+                if not (isinstance(self.n_qubits, int) and 1 <= self.n_qubits <= 10):
+                    raise ValueError("n_qubits must be an integer between 1 and 10")
+                if not (isinstance(self.n_vars, int) and 1 <= self.n_vars <= 10):
+                    raise ValueError("n_vars must be an integer between 1 and 10")
+                if not isinstance(self.backend_config, dict):
+                    raise ValueError("backend_config must be a dictionary")
+        return _RunMutationCircuitParams
 
-    class ForecastFailureTrendParams(BaseModel):
-        trend_data: List[float] = Field(
-            ..., min_length=2, description="List of historical trend data points."
-        )
 
-        @field_validator("trend_data")
-        @classmethod
-        def check_trend_data_values(cls, v: List[float]) -> List[float]:
-            if not all(isinstance(x, (int, float)) for x in v):
-                raise ValueError("All trend_data elements must be numbers.")
-            return v
+def _create_forecast_params_class():
+    """Factory function to create ForecastFailureTrendParams class at runtime."""
+    if PYDANTIC_AVAILABLE:
+        class _ForecastFailureTrendParams(BaseModel):
+            trend_data: List[float] = Field(
+                ..., min_length=2, description="List of historical trend data points."
+            )
 
-else:
+            @field_validator("trend_data")
+            @classmethod
+            def check_trend_data_values(cls, v: List[float]) -> List[float]:
+                if not all(isinstance(x, (int, float)) for x in v):
+                    raise ValueError("All trend_data elements must be numbers.")
+                return v
+        return _ForecastFailureTrendParams
+    else:
+        class _ForecastFailureTrendParams:
+            def __init__(self, **kwargs):
+                self.trend_data = kwargs.get("trend_data", [])
+                self.validate()
 
-    class RunMutationCircuitParams:
-        def __init__(self, **kwargs):
-            self.code_file = kwargs.get("code_file", "N/A")
-            self.backend = kwargs.get("backend", "auto")
-            self.n_qubits = kwargs.get("n_qubits", 5)
-            self.n_vars = kwargs.get("n_vars", 5)
-            self.backend_config = kwargs.get("backend_config", {})
-            self.validate()
+            def validate(self):
+                if not isinstance(self.trend_data, list) or len(self.trend_data) < 2:
+                    raise ValueError(
+                        "trend_data must be a list with at least two elements."
+                    )
+                if not all(isinstance(x, (int, float)) for x in self.trend_data):
+                    raise ValueError("All trend_data elements must be numbers.")
+        return _ForecastFailureTrendParams
 
-        def validate(self):
-            self.code_file = _validate_secure_path_logic(self.code_file)
-            if self.backend not in ["auto", "qiskit", "dwave", "scipy"]:
-                raise ValueError("backend must be one of: auto, qiskit, dwave, scipy")
-            if not (isinstance(self.n_qubits, int) and 1 <= self.n_qubits <= 10):
-                raise ValueError("n_qubits must be an integer between 1 and 10")
-            if not (isinstance(self.n_vars, int) and 1 <= self.n_vars <= 10):
-                raise ValueError("n_vars must be an integer between 1 and 10")
-            if not isinstance(self.backend_config, dict):
-                raise ValueError("backend_config must be a dictionary")
 
-    class ForecastFailureTrendParams:
-        def __init__(self, **kwargs):
-            self.trend_data = kwargs.get("trend_data", [])
-            self.validate()
-
-        def validate(self):
-            if not isinstance(self.trend_data, list) or len(self.trend_data) < 2:
-                raise ValueError(
-                    "trend_data must be a list with at least two elements."
-                )
-            if not all(isinstance(x, (int, float)) for x in self.trend_data):
-                raise ValueError("All trend_data elements must be numbers.")
+# Create classes using factory functions - this prevents AST parsing issues with conditional definitions
+RunMutationCircuitParams = _create_run_mutation_params_class()
+ForecastFailureTrendParams = _create_forecast_params_class()
 
 
 # --- Circuit Optimization ---

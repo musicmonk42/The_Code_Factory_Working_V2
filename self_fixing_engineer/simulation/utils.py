@@ -179,9 +179,15 @@ def _load_config() -> UtilsConfig:
 
     if pydantic_available:
         try:
+            # Use Pydantic V2 API (model_validate) if available, otherwise fall back to V1 API (parse_obj)
             if hasattr(UtilsConfig, "model_validate"):
                 return UtilsConfig.model_validate(config_dict)
-            return UtilsConfig.parse_obj(config_dict)
+            elif hasattr(UtilsConfig, "parse_obj"):
+                # Fallback for older Pydantic versions
+                return UtilsConfig.parse_obj(config_dict)
+            else:
+                # Construct directly if no validation method available
+                return UtilsConfig(**config_dict)
         except Exception as e:
             logger.error(f"Configuration validation failed: {e}. Using defaults.")
             return UtilsConfig()

@@ -34,6 +34,21 @@ def cleanup_backend_pool():
     """Fixture to ensure the backend client pool is cleaned up after each test."""
     yield
     asyncio.run(backend_client_pool.close())
+    
+    # Force cleanup of heavy quantum modules to prevent memory accumulation
+    import sys
+    modules_to_unload = ['qiskit', 'qiskit_aer', 'dwave', 'deap']
+    for mod_name in modules_to_unload:
+        if mod_name in sys.modules:
+            try:
+                del sys.modules[mod_name]
+            except Exception:
+                pass  # Ignore errors during module cleanup
+    
+    # Aggressive garbage collection
+    import gc
+    gc.collect(generation=2)
+    gc.collect(generation=2)
 
 
 # --- Tests for get_or_create_metric ---

@@ -2,10 +2,27 @@
 
 """Pytest configuration for self_fixing_engineer tests."""
 import asyncio
+import gc
 import os
 
 import psutil
 import pytest
+
+
+@pytest.fixture(autouse=True, scope="function")
+def aggressive_memory_cleanup():
+    """Aggressively clean up memory between tests to prevent OOM on CI runners.
+    
+    This fixture runs after each test and forces multiple garbage collection cycles
+    to ensure that heavy objects (quantum circuits, large datasets, etc.) are
+    properly cleaned up before the next test starts.
+    """
+    yield
+    # Force full garbage collection (generation 2) multiple times
+    # Multiple cycles help ensure all circular references are cleaned up
+    gc.collect(generation=2)
+    gc.collect(generation=2)
+    gc.collect(generation=2)
 
 
 @pytest.fixture(autouse=True)
