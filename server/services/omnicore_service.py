@@ -3693,6 +3693,10 @@ class OmniCoreService:
                                 "message": f"Deployment validation failed",
                                 "stages_completed": stages_completed,
                                 "validation_errors": validation_result.get("errors", []),
+                                "failed_targets": [],  # Deployment completed but validation failed
+                                "results": deploy_result.get("results", {}),
+                                "generated_files": deploy_result.get("generated_files", []),
+                                "duration_seconds": deploy_result.get("duration_seconds", 0),
                             }
                         else:
                             logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
@@ -3711,6 +3715,10 @@ class OmniCoreService:
                         "message": f"Deployment failed: {deploy_error}",
                         "stages_completed": stages_completed,
                         "failed_targets": deploy_result.get("failed_targets", []),
+                        "completed_targets": deploy_result.get("completed_targets", []),
+                        "results": deploy_result.get("results", {}),
+                        "generated_files": deploy_result.get("generated_files", []),
+                        "duration_seconds": deploy_result.get("duration_seconds", 0),
                     }
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
