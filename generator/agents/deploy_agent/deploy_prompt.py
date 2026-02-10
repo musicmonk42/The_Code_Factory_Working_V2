@@ -600,23 +600,28 @@ class PromptTemplateRegistry:
         """Creates and configures the Jinja2 environment with custom filters.
         
         Uses a ChoiceLoader to search for templates in multiple locations:
-        1. The specified template_dir (repo-specific)
-        2. The project root deploy_templates directory (fallback)
+        1. The project root deploy_templates directory (primary source)
+        2. The specified template_dir (repo-specific overrides)
         """
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
         
-        # Build list of template loaders with fallback to project root
-        loaders = [FileSystemLoader(self.template_dir)]
+        # Build list of template loaders - check project root FIRST for actual templates
+        loaders = []
         
-        # Add project root deploy_templates as fallback
+        # Add project root deploy_templates FIRST (where actual templates exist)
         project_root_templates = PROJECT_ROOT / "deploy_templates"
         # Use Path.resolve() for reliable path comparison
         template_dir_resolved = Path(self.template_dir).resolve()
         project_templates_resolved = project_root_templates.resolve()
-        if project_root_templates.exists() and template_dir_resolved != project_templates_resolved:
+        if project_root_templates.exists():
             loaders.append(FileSystemLoader(str(project_root_templates)))
-            logger.info(f"Added fallback template directory: {project_root_templates}")
+            logger.info(f"Using project root template directory: {project_root_templates}")
+        
+        # Then add job-specific template directory as override (if different from project root)
+        if template_dir_resolved != project_templates_resolved:
+            loaders.append(FileSystemLoader(self.template_dir))
+            logger.info(f"Added job-specific template override directory: {self.template_dir}")
         
         env = Environment(
             loader=ChoiceLoader(loaders),
