@@ -147,14 +147,21 @@ os.makedirs(PROFILES_DIR, exist_ok=True)
 
 # Pydantic for configuration and input validation
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator
+    from pydantic import BaseModel, Field, ValidationError, field_validator, validator
 
     PYDANTIC_AVAILABLE = True
 except ImportError:
-    PYDANTIC_AVAILABLE = False
-    logging.getLogger(__name__).warning(
-        "Pydantic not available. Configuration and input validation will be skipped in sandbox.py."
-    )
+    try:
+        # Fallback for older Pydantic versions that don't have field_validator
+        from pydantic import BaseModel, Field, ValidationError, validator
+
+        PYDANTIC_AVAILABLE = True
+        field_validator = None  # Not available in older versions
+    except ImportError:
+        PYDANTIC_AVAILABLE = False
+        logging.getLogger(__name__).warning(
+            "Pydantic not available. Configuration and input validation will be skipped in sandbox.py."
+        )
 
 # --- Multi-Cloud, Container, and Kernel Integrations ---
 # Docker
@@ -532,7 +539,8 @@ ALLOW_PRIVILEGED_CONTAINERS_GLOBAL = False
 
 if PYDANTIC_AVAILABLE:
 
-    class SandboxPolicy(BaseModel):
+    class _SandboxPolicyModel(BaseModel):
+        """Pydantic-based SandboxPolicy implementation with validation."""
         network_disabled: bool = Field(
             default=False, description="Disable network access for the sandbox"
         )
@@ -553,15 +561,27 @@ if PYDANTIC_AVAILABLE:
             default=DEFAULT_APPARMOR_PROFILE_NAME, description="AppArmor profile name"
         )
 
-        @validator("run_as_user")
-        def validate_run_as_user(cls, v):
-            if v.startswith("0:") or ":0" in v or "root" in v.lower():
-                raise ValueError("Running as root (UID 0) is forbidden")
-            return v
+        # Use field_validator if available (Pydantic V2), otherwise use validator (V1)
+        if field_validator is not None:
+            @field_validator("run_as_user")
+            @classmethod
+            def validate_run_as_user(cls, v):
+                if v.startswith("0:") or ":0" in v or "root" in v.lower():
+                    raise ValueError("Running as root (UID 0) is forbidden")
+                return v
+        else:
+            @validator("run_as_user")
+            def validate_run_as_user(cls, v):
+                if v.startswith("0:") or ":0" in v or "root" in v.lower():
+                    raise ValueError("Running as root (UID 0) is forbidden")
+                return v
+    
+    # Use explicit type aliasing to avoid metaclass conflicts
+    SandboxPolicy = _SandboxPolicyModel
 
-    def _default_policy() -> SandboxPolicy:
+    def _default_policy() -> _SandboxPolicyModel:
         """Return a default SandboxPolicy instance with secure defaults."""
-        return SandboxPolicy(
+        return _SandboxPolicyModel(
             network_disabled=True,
             allow_write=False,
             privileged=False,
@@ -572,7 +592,7 @@ if PYDANTIC_AVAILABLE:
 
 else:
 
-    class SandboxPolicy:
+    class _SandboxPolicyFallback:
         """Fallback SandboxPolicy class when Pydantic is not available."""
 
         def __init__(self, **kwargs):
@@ -589,47 +609,83 @@ else:
 
         def dict(self):
             return self.__dict__
+    
+    # Use explicit type aliasing to avoid metaclass conflicts
+    SandboxPolicy = _SandboxPolicyFallback
 
-    def _default_policy() -> SandboxPolicy:
+    def _default_policy() -> _SandboxPolicyFallback:
         """Return a default SandboxPolicy instance with secure defaults."""
-        return SandboxPolicy()
+        return _SandboxPolicyFallback()
 
 
 if PYDANTIC_AVAILABLE:
 
-    class ContainerValidationConfig(BaseModel):
+    class _ContainerValidationConfigModel(BaseModel):
+        """Pydantic-based ContainerValidationConfig implementation with validation."""
         image: str = Field(..., description="Container image name.")
         command: List[str] = Field(..., description="Container command.")
         kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(
             None, description="Kubernetes pod manifest."
         )
 
-        @validator("image")
-        def validate_image_whitelist(cls, v):
-            if v not in SAFE_IMAGE_WHITELIST:
-                raise ValueError(f"Untrusted image: {v}. Not in whitelist.")
-            return v
+        # Use field_validator if available (Pydantic V2), otherwise use validator (V1)
+        if field_validator is not None:
+            @field_validator("image")
+            @classmethod
+            def validate_image_whitelist(cls, v):
+                if v not in SAFE_IMAGE_WHITELIST:
+                    raise ValueError(f"Untrusted image: {v}. Not in whitelist.")
+                return v
 
-        @validator("command")
-        def validate_command_whitelist(cls, v):
-            if not v:
-                raise ValueError("Command cannot be empty.")
-            cmd_name = v[0]
-            if cmd_name not in SAFE_COMMAND_WHITELIST:
-                raise ValueError(f"Untrusted command: {cmd_name}. Not in whitelist.")
-            return v
+            @field_validator("command")
+            @classmethod
+            def validate_command_whitelist(cls, v):
+                if not v:
+                    raise ValueError("Command cannot be empty.")
+                cmd_name = v[0]
+                if cmd_name not in SAFE_COMMAND_WHITELIST:
+                    raise ValueError(f"Untrusted command: {cmd_name}. Not in whitelist.")
+                return v
 
-        @validator("kubernetes_pod_manifest")
-        def validate_k8s_manifest_safety(cls, v):
-            if v is not None and not _validate_pod_manifest_internal(v):
-                raise ValueError(
-                    "Kubernetes pod manifest fails security compliance checks."
-                )
-            return v
+            @field_validator("kubernetes_pod_manifest")
+            @classmethod
+            def validate_k8s_manifest_safety(cls, v):
+                if v is not None and not _validate_pod_manifest_internal(v):
+                    raise ValueError(
+                        "Kubernetes pod manifest fails security compliance checks."
+                    )
+                return v
+        else:
+            @validator("image")
+            def validate_image_whitelist(cls, v):
+                if v not in SAFE_IMAGE_WHITELIST:
+                    raise ValueError(f"Untrusted image: {v}. Not in whitelist.")
+                return v
+
+            @validator("command")
+            def validate_command_whitelist(cls, v):
+                if not v:
+                    raise ValueError("Command cannot be empty.")
+                cmd_name = v[0]
+                if cmd_name not in SAFE_COMMAND_WHITELIST:
+                    raise ValueError(f"Untrusted command: {cmd_name}. Not in whitelist.")
+                return v
+
+            @validator("kubernetes_pod_manifest")
+            def validate_k8s_manifest_safety(cls, v):
+                if v is not None and not _validate_pod_manifest_internal(v):
+                    raise ValueError(
+                        "Kubernetes pod manifest fails security compliance checks."
+                    )
+                return v
+    
+    # Use explicit type aliasing to avoid metaclass conflicts
+    ContainerValidationConfig = _ContainerValidationConfigModel
 
 else:
 
-    class ContainerValidationConfig:
+    class _ContainerValidationConfigFallback:
+        """Fallback ContainerValidationConfig class when Pydantic is not available."""
         def __init__(
             self,
             image: str,
@@ -639,6 +695,9 @@ else:
             self.image = image
             self.command = command
             self.kubernetes_pod_manifest = kubernetes_pod_manifest
+    
+    # Use explicit type aliasing to avoid metaclass conflicts
+    ContainerValidationConfig = _ContainerValidationConfigFallback
 
 
 def _validate_container_config(image: str, command: List[str]):

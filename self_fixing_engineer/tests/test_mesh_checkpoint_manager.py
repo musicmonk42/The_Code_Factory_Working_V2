@@ -408,6 +408,7 @@ class TestPerformance:
         assert f"{name}:latest" in manager._cache_l1
 
     @pytest.mark.asyncio
+    @pytest.mark.heavy
     async def test_compression(self, manager):
         """Test compression reduces storage size."""
         name = "compression_test"
