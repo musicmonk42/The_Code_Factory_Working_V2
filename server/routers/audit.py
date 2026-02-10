@@ -291,7 +291,7 @@ async def _query_generator_audit_logs(
                         "timestamp": entry.get("timestamp"),
                         "event_type": entry_event_type,
                         "job_id": entry_job_id,
-                        "action": entry.get("action") or entry_event_type,
+                        "action": entry.get("action") if "action" in entry else entry_event_type,
                         "user": entry.get("user", entry.get("user_id", "system")),
                         "status": entry.get("status", "success"),
                         "details": entry.get("details", {}),
