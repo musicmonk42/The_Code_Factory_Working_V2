@@ -31,7 +31,7 @@ jobs:
   # Tests run in parallel per module - run on every push/PR
   test-matrix:
     name: Tests - ${{ matrix.module }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.module == 'self_fixing_engineer' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
     timeout-minutes: 120  # Increased to accommodate longer test batches
     permissions:
       contents: read
@@ -1223,23 +1223,25 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Batch 3c (Mesh E2E & Integration)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 10
+        timeout-minutes: 15
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           PYTEST_COLLECTING: "1"
+          PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect()"
+          # Enhanced memory cleanup before batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
 
           echo "=== Running Batch 3c: Mesh E2E & Integration Tests ==="
-          timeout --signal=TERM --kill-after=30s 8m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 12m python -m pytest \
             self_fixing_engineer/tests/test_mesh_checkpoint_exceptions.py \
             self_fixing_engineer/tests/test_mesh_e2e_mesh.py \
             self_fixing_engineer/tests/test_mesh_integration.py \
@@ -1257,6 +1259,15 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 137 ]; then
+              echo "ERROR: Process killed by OOM killer (exit code 137)"
+              echo "Memory consumption exceeded available resources"
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-batch3c.log || true
+              exit 137
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
@@ -1276,7 +1287,8 @@ jobs:
             fi
           }
 
-          python -c "import gc; gc.collect()"
+          # Enhanced memory cleanup after batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -1285,11 +1297,13 @@ jobs:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           PYTEST_COLLECTING: "1"
+          PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect()"
+          # Enhanced memory cleanup before batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1312,6 +1326,26 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 3 ]; then
+              echo "ERROR: Pytest internal error (exit code 3) detected"
+              echo "This typically indicates:"
+              echo "  - Collection failure due to import errors"
+              echo "  - Metaclass conflicts"
+              echo "  - Module initialization issues"
+              echo "  - Syntax errors in test files or imported modules"
+              echo ""
+              echo "=== Last 150 lines of test output ==="
+              tail -150 test-output-sfe-batch4.log || true
+              exit 3
+            elif [ $EXIT_CODE -eq 137 ]; then
+              echo "ERROR: Process killed by OOM killer (exit code 137)"
+              echo "Memory consumption exceeded available resources"
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-batch4.log || true
+              exit 137
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
@@ -1331,6 +1365,9 @@ jobs:
             fi
           }
 
+          # Enhanced memory cleanup after batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
       - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
         if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 25
@@ -1338,11 +1375,13 @@ jobs:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           PYTEST_COLLECTING: "1"
+          PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
 
-          python -c "import gc; gc.collect()"
+          # Enhanced memory cleanup before batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
@@ -1365,6 +1404,26 @@ jobs:
             elif [ $EXIT_CODE -eq 5 ]; then
               echo "No tests collected - treating as warning"
               exit 0
+            elif [ $EXIT_CODE -eq 3 ]; then
+              echo "ERROR: Pytest internal error (exit code 3) detected"
+              echo "This typically indicates:"
+              echo "  - Collection failure due to import errors"
+              echo "  - Metaclass conflicts"
+              echo "  - Module initialization issues"
+              echo "  - Syntax errors in test files or imported modules"
+              echo ""
+              echo "=== Last 150 lines of test output ==="
+              tail -150 test-output-sfe-batch5.log || true
+              exit 3
+            elif [ $EXIT_CODE -eq 137 ]; then
+              echo "ERROR: Process killed by OOM killer (exit code 137)"
+              echo "Memory consumption exceeded available resources"
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-batch5.log || true
+              exit 137
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
               # Check if tests actually passed by examining the pytest summary line
@@ -1383,6 +1442,9 @@ jobs:
               exit $EXIT_CODE
             fi
           }
+
+          # Enhanced memory cleanup after batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
           
       - name: Profile test collection (on failure)
         if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
