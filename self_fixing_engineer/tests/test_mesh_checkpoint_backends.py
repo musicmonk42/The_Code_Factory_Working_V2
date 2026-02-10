@@ -23,35 +23,12 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 
-# Test configuration
-TEST_DIR = Path(tempfile.mkdtemp(prefix="checkpoint_backends_test_"))
+# Test configuration - generate keys at module level but defer directory creation
 TEST_KEYS = [Fernet.generate_key().decode() for _ in range(3)]
 TEST_HMAC_KEY = os.urandom(32).hex()
 
-# Configure environment before imports - ensure PROD_MODE is false
-TEST_ENV = {
-    "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS[:2]),
-    "CHECKPOINT_HMAC_KEY": TEST_HMAC_KEY,
-    "PROD_MODE": "false",  # Ensure this stays false for tests
-    "ENV": "test",
-    "TENANT": "test_tenant",
-    "CHECKPOINT_MAX_RETRIES": "2",
-    "CHECKPOINT_RETRY_DELAY": "0.01",
-    "CHECKPOINT_DIR": str(TEST_DIR),
-    "CHECKPOINT_DLQ_PATH": str(TEST_DIR / "dlq.jsonl"),
-    # Backend-specific configs - avoid localhost for production checks
-    "CHECKPOINT_S3_BUCKET": "test-checkpoint-bucket",
-    "CHECKPOINT_S3_PREFIX": "checkpoints/",
-    "CHECKPOINT_REDIS_URL": "redis://test-redis:6379",
-    "CHECKPOINT_POSTGRES_DSN": "postgresql://test:test@test-postgres/checkpoints",
-    "CHECKPOINT_GCS_BUCKET": "test-gcs-bucket",
-    "CHECKPOINT_AZURE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=test",
-    "CHECKPOINT_MINIO_ENDPOINT": "test-minio:9000",
-    "CHECKPOINT_ETCD_HOST": "test-etcd",
-}
-
-for key, value in TEST_ENV.items():
-    os.environ[key] = value
+# Global variable to hold test directory (will be set by session fixture)
+TEST_DIR = None
 
 
 # ---- Test Data ----
@@ -74,6 +51,48 @@ class CheckpointTestData:
 
 
 # ---- Fixtures ----
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_dir():
+    """Create and configure test directory for the session."""
+    global TEST_DIR
+
+    # Create temporary directory
+    test_dir = Path(tempfile.mkdtemp(prefix="checkpoint_backends_test_"))
+    TEST_DIR = test_dir
+
+    # Configure environment before imports - ensure PROD_MODE is false
+    TEST_ENV = {
+        "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS[:2]),
+        "CHECKPOINT_HMAC_KEY": TEST_HMAC_KEY,
+        "PROD_MODE": "false",  # Ensure this stays false for tests
+        "ENV": "test",
+        "TENANT": "test_tenant",
+        "CHECKPOINT_MAX_RETRIES": "2",
+        "CHECKPOINT_RETRY_DELAY": "0.01",
+        "CHECKPOINT_DIR": str(TEST_DIR),
+        "CHECKPOINT_DLQ_PATH": str(TEST_DIR / "dlq.jsonl"),
+        # Backend-specific configs - avoid localhost for production checks
+        "CHECKPOINT_S3_BUCKET": "test-checkpoint-bucket",
+        "CHECKPOINT_S3_PREFIX": "checkpoints/",
+        "CHECKPOINT_REDIS_URL": "redis://test-redis:6379",
+        "CHECKPOINT_POSTGRES_DSN": "postgresql://test:test@test-postgres/checkpoints",
+        "CHECKPOINT_GCS_BUCKET": "test-gcs-bucket",
+        "CHECKPOINT_AZURE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=test",
+        "CHECKPOINT_MINIO_ENDPOINT": "test-minio:9000",
+        "CHECKPOINT_ETCD_HOST": "test-etcd",
+    }
+
+    for key, value in TEST_ENV.items():
+        os.environ[key] = value
+
+    yield test_dir
+
+    # Cleanup after all tests
+    if test_dir.exists():
+        import shutil
+        shutil.rmtree(test_dir, ignore_errors=True)
 
 
 @pytest.fixture
