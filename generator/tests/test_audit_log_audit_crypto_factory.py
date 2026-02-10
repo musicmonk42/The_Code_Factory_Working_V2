@@ -255,7 +255,6 @@ def mock_aiohttp(monkeypatch):
 
     # Create the mock session
     mock_session = MagicMock()
-    
     # FIX: Make post return an async context manager that yields mock_response
     mock_post_cm = AsyncMock()
     mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
