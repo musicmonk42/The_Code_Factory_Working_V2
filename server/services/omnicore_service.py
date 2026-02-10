@@ -209,6 +209,43 @@ MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
 HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
 
 
+def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
+    """
+    Load README content from a job directory.
+    
+    Args:
+        job_dir: Path to the job directory
+        
+    Returns:
+        README content as string, or None if not found
+    """
+    if not job_dir.exists():
+        return None
+    
+    # Priority order for README files
+    readme_patterns = ["README.md", "readme.md", "README.txt", "readme.txt"]
+    
+    # Try exact filename matches first
+    for pattern in readme_patterns:
+        readme_path = job_dir / pattern
+        if readme_path.exists() and readme_path.is_file():
+            try:
+                return readme_path.read_text(encoding="utf-8")
+            except Exception as e:
+                logger.error(f"Error reading {readme_path}: {e}")
+                continue
+    
+    # Fallback: find any .md file
+    try:
+        for f in job_dir.glob("*.md"):
+            if f.is_file():
+                return f.read_text(encoding="utf-8")
+    except Exception as e:
+        logger.error(f"Error scanning for .md files in {job_dir}: {e}")
+    
+    return None
+
+
 class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
@@ -3429,6 +3466,31 @@ class OmniCoreService:
             }
             # Remove readme_content from codegen payload as it's now in requirements
             codegen_payload.pop("readme_content", None)
+
+            # Ensure requirements is populated before codegen
+            # This handles the case where clarification was skipped and readme_content is empty
+            if not codegen_payload.get("requirements") or len(codegen_payload.get("requirements", "").strip()) == 0:
+                logger.warning(
+                    f"[PIPELINE] Requirements is empty for job {job_id}. "
+                    f"Attempting to load README from job directory."
+                )
+                # Try to read README from job directory
+                job_dir = Path(self.storage_path) / job_id
+                requirements = _load_readme_from_disk(job_dir)
+                
+                if requirements:
+                    codegen_payload["requirements"] = requirements
+                    logger.info(
+                        f"[PIPELINE] Loaded requirements from job directory "
+                        f"({len(requirements)} bytes) for job {job_id}"
+                    )
+                else:
+                    error_msg = f"No requirements found: README file is missing from job directory {job_dir}"
+                    logger.error(
+                        f"[PIPELINE] {error_msg}",
+                        extra={"job_id": job_id, "job_dir": str(job_dir)}
+                    )
+                    raise ValueError(error_msg)
 
             # Retry configuration
             max_codegen_retries = 2  # Total attempts = 1 initial + 2 retries = 3

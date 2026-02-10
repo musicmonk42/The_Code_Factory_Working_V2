@@ -591,6 +591,61 @@ class GeneratorService:
             "scan_types": scan_types,
         }
 
+    async def get_readme_content(self, job_id: str) -> Optional[str]:
+        """
+        Read README content from job's upload directory.
+        
+        Args:
+            job_id: Unique job identifier
+            
+        Returns:
+            README content as string, or None if not found
+        """
+        job_dir = self.storage_path / job_id
+        
+        if not job_dir.exists():
+            logger.warning(f"Job directory not found: {job_dir}")
+            return None
+        
+        # Priority order for README files
+        readme_patterns = [
+            "README.md",
+            "readme.md", 
+            "README.txt",
+            "readme.txt",
+        ]
+        
+        # Try exact filename matches first
+        for pattern in readme_patterns:
+            readme_path = job_dir / pattern
+            if readme_path.exists() and readme_path.is_file():
+                try:
+                    content = readme_path.read_text(encoding="utf-8")
+                    logger.info(
+                        f"[PIPELINE] Loaded README from {readme_path.name} "
+                        f"({len(content)} bytes) for job {job_id}"
+                    )
+                    return content
+                except Exception as e:
+                    logger.error(f"Error reading {readme_path}: {e}")
+                    continue
+        
+        # Fallback: find any .md file
+        try:
+            for f in job_dir.glob("*.md"):
+                if f.is_file():
+                    content = f.read_text(encoding="utf-8")
+                    logger.info(
+                        f"[PIPELINE] Loaded README from {f.name} "
+                        f"({len(content)} bytes) for job {job_id}"
+                    )
+                    return content
+        except Exception as e:
+            logger.error(f"Error scanning for .md files in {job_dir}: {e}")
+        
+        logger.warning(f"No README file found in job directory: {job_dir}")
+        return None
+
     async def run_full_pipeline(
         self,
         job_id: str,
