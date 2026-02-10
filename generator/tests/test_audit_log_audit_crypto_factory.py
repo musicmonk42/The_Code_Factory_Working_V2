@@ -285,13 +285,12 @@ def mock_aiohttp(monkeypatch):
 
 
 @pytest.fixture
-def mock_aiohttp_session():
+def mock_aiohttp_session(monkeypatch):
     """Mock aiohttp.ClientSession for alert tests."""
     mock_response = MagicMock()
-    # In aiohttp, raise_for_status() is a synchronous method, not a coroutine
     mock_response.raise_for_status = MagicMock()
 
-    # Create a context manager for session.post()
+    # Create async context manager for post
     mock_post_cm = MagicMock()
     mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
     mock_post_cm.__aexit__ = AsyncMock(return_value=None)
@@ -299,13 +298,19 @@ def mock_aiohttp_session():
     mock_session = MagicMock()
     mock_session.post = MagicMock(return_value=mock_post_cm)
 
-    # Create a context manager for ClientSession itself
+    # Create async context manager for session
     mock_session_cm = MagicMock()
     mock_session_cm.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session_cm.__aexit__ = AsyncMock(return_value=None)
 
-    with patch('generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession', return_value=mock_session_cm):
-        yield mock_session, mock_response
+    # Patch at module level where send_alert imports it
+    mock_client_session = MagicMock(return_value=mock_session_cm)
+    monkeypatch.setattr(
+        "generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession",
+        mock_client_session
+    )
+
+    yield mock_session, mock_response
 
 
 @pytest.fixture
