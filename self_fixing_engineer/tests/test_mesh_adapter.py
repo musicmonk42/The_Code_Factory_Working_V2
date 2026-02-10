@@ -64,16 +64,30 @@ async def redis_adapter():
     """Create MeshPubSub with Redis backend."""
     from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
-    adapter = MeshPubSub(
-        backend_url="redis://localhost:6379/15",
-        dead_letter_path=str(TEST_DIR / "redis_dlq.jsonl"),
-        log_payloads=True,
-    )
-    await adapter.connect()
+    # Mock Redis client
+    mock_redis = AsyncMock()
+    mock_redis.ping = AsyncMock(return_value=True)
+    mock_redis.publish = AsyncMock(return_value=1)
+    mock_redis.close = AsyncMock()
+    mock_redis.wait_closed = AsyncMock()
+    
+    # Mock pubsub
+    mock_pubsub = AsyncMock()
+    mock_pubsub.subscribe = AsyncMock()
+    mock_pubsub.get_message = AsyncMock(return_value=None)
+    mock_redis.pubsub = Mock(return_value=mock_pubsub)
 
-    yield adapter
+    with patch("self_fixing_engineer.mesh.mesh_adapter.aioredis.from_url", return_value=mock_redis):
+        adapter = MeshPubSub(
+            backend_url="redis://localhost:6379/15",
+            dead_letter_path=str(TEST_DIR / "redis_dlq.jsonl"),
+            log_payloads=True,
+        )
+        await adapter.connect()
 
-    await adapter.close()
+        yield adapter
+
+        await adapter.close()
 
 
 @pytest_asyncio.fixture
@@ -181,13 +195,20 @@ class TestConnection:
         """Test Redis connection."""
         from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
 
-        adapter = MeshPubSub("redis://localhost:6379/15")
-        await adapter.connect()
+        # Mock Redis client
+        mock_redis = AsyncMock()
+        mock_redis.ping = AsyncMock(return_value=True)
+        mock_redis.close = AsyncMock()
+        mock_redis.wait_closed = AsyncMock()
 
-        assert adapter._client is not None
-        mock_metrics["CONNECT_STATUS"].set.assert_called_with(1)
+        with patch("self_fixing_engineer.mesh.mesh_adapter.aioredis.from_url", return_value=mock_redis):
+            adapter = MeshPubSub("redis://localhost:6379/15")
+            await adapter.connect()
 
-        await adapter.close()
+            assert adapter._client is not None
+            mock_metrics["CONNECT_STATUS"].set.assert_called_with(1)
+
+            await adapter.close()
 
     @pytest.mark.asyncio
     async def test_connection_retry(self):
@@ -201,7 +222,12 @@ class TestConnection:
             call_count += 1
             if call_count < 2:
                 raise ConnectionError("Connection failed")
-            return AsyncMock()
+            # Return properly mocked Redis client
+            mock_redis = AsyncMock()
+            mock_redis.ping = AsyncMock(return_value=True)
+            mock_redis.close = AsyncMock()
+            mock_redis.wait_closed = AsyncMock()
+            return mock_redis
 
         # Updated to use from_url instead of create_redis_pool
         with patch("self_fixing_engineer.mesh.mesh_adapter.aioredis.from_url", side_effect=flaky_connect):
@@ -212,6 +238,9 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_healthcheck(self, redis_adapter):
         """Test health check functionality."""
+        # Mock the ping method to succeed
+        redis_adapter._client.ping = AsyncMock(return_value=True)
+        
         status = await redis_adapter.healthcheck()
 
         assert status["backend"] == "redis"
@@ -228,33 +257,13 @@ class TestPublishing:
     @pytest.mark.asyncio
     async def test_publish_redis(self, redis_adapter, test_message):
         """Test Redis publishing."""
+        # Mock the publish method to succeed
+        redis_adapter._client.publish = AsyncMock(return_value=1)
+        
         await redis_adapter.publish("test_channel", test_message)
 
-        # Verify message in Redis - need to wait for async operations
-        pubsub = redis_adapter._client.pubsub()
-        await pubsub.subscribe("test_channel")
-
-        # Wait for subscription to be ready
-        await asyncio.sleep(0.1)
-
-        # Publish again to receive
-        await redis_adapter.publish("test_channel", test_message)
-
-        # Try to get message with a short wait
-        await asyncio.sleep(0.1)
-        msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1)
-
-        # If still None, it might be because Redis is not actually running
-        # In that case, we'll mock the test
-        if msg is None:
-            # Mock the publish to verify it was called - use AsyncMock!
-            with patch.object(
-                redis_adapter._client, "publish", new_callable=AsyncMock
-            ) as mock_publish:
-                await redis_adapter.publish("test_channel", test_message)
-                mock_publish.assert_called_once()
-        else:
-            assert msg is not None
+        # Verify publish was called
+        redis_adapter._client.publish.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_publish_kafka(self, mock_kafka_adapter, test_message):
@@ -276,8 +285,8 @@ class TestPublishing:
         async def mock_publish(channel, data):
             published_data.append((channel, data))
 
-        with patch.object(redis_adapter._client, "publish", side_effect=mock_publish):
-            await redis_adapter.publish("encrypted_channel", test_message)
+        redis_adapter._client.publish = AsyncMock(side_effect=mock_publish)
+        await redis_adapter.publish("encrypted_channel", test_message)
 
         assert len(published_data) == 1
         channel, raw_data = published_data[0]
@@ -300,6 +309,9 @@ class TestPublishing:
             data: dict
 
         redis_adapter.event_schema = MessageSchema.model_validate
+
+        # Mock Redis publish
+        redis_adapter._client.publish = AsyncMock(return_value=1)
 
         # Valid message
         valid_msg = {"id": "1", "type": "test", "data": {}}
@@ -331,15 +343,40 @@ class TestSubscription:
                 received.append(msg)
                 break
 
+        # Mock pubsub to return a message
+        mock_pubsub = AsyncMock()
+        mock_pubsub.subscribe = AsyncMock()
+        
+        # Prepare encrypted message
+        payload = redis_adapter._prepare_payload(test_message)
+        mock_message = {"data": payload, "type": "message"}
+        
+        # Return message once then None
+        call_count = 0
+        async def get_message_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                await asyncio.sleep(0.01)  # Small delay
+                return mock_message
+            return None
+        
+        mock_pubsub.get_message = AsyncMock(side_effect=get_message_side_effect)
+        redis_adapter._client.pubsub = Mock(return_value=mock_pubsub)
+
         # Start consumer
         consumer_task = asyncio.create_task(consume())
         await asyncio.sleep(0.1)
 
-        # Publish message
-        await redis_adapter.publish("test_channel", test_message)
-
         # Wait for consumption
-        await asyncio.wait_for(consumer_task, timeout=1)
+        try:
+            await asyncio.wait_for(consumer_task, timeout=1)
+        except asyncio.TimeoutError:
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
         assert len(received) == 1
         assert received[0] == test_message
@@ -438,6 +475,7 @@ class TestDeadLetterQueue:
             "time": time.time(),
         }
 
+        # Mock write to avoid actual Redis operations
         await redis_adapter._write_to_dlq(error_payload)
 
         assert dlq_path.exists()
@@ -523,16 +561,15 @@ class TestReliability:
             # We'll test that it prevents further calls
             circuit_breakers["redis"].breaker.current_state
 
-            # Simulate failures
+            # Simulate failures using AsyncMock
             failure_count = 0
-            with patch.object(
-                redis_adapter._client, "publish", side_effect=ConnectionError("Failed")
-            ):
-                for _ in range(10):  # Try more than threshold
-                    try:
-                        await redis_adapter.publish("test", {"data": "test"})
-                    except:
-                        failure_count += 1
+            redis_adapter._client.publish = AsyncMock(side_effect=ConnectionError("Failed"))
+            
+            for _ in range(10):  # Try more than threshold
+                try:
+                    await redis_adapter.publish("test", {"data": "test"})
+                except:
+                    failure_count += 1
 
             # Should have failed some attempts
             assert failure_count > 0
@@ -546,6 +583,9 @@ class TestReliability:
     @pytest.mark.asyncio
     async def test_rate_limiting(self, redis_adapter):
         """Test rate limiting."""
+        # Mock publish to avoid actual Redis calls
+        redis_adapter._client.publish = AsyncMock(return_value=1)
+        
         # Publish many messages quickly
         start = time.time()
 
@@ -655,6 +695,9 @@ class TestPerformance:
         """Test publish latency."""
         msg = {"test": "data"}
 
+        # Mock publish to avoid actual Redis calls
+        redis_adapter._client.publish = AsyncMock(return_value=1)
+
         # Simple timing test without benchmark fixture
         start = time.time()
         await redis_adapter.publish("perf_test", msg)
@@ -670,10 +713,37 @@ class TestPerformance:
         received = []
 
         async def consumer():
+            # Mock pubsub for concurrent test
+            mock_pubsub = AsyncMock()
+            mock_pubsub.subscribe = AsyncMock()
+            
+            # Prepare messages
+            messages = []
+            for i in range(message_count):
+                payload = redis_adapter._prepare_payload({"id": i})
+                messages.append({"data": payload, "type": "message"})
+            
+            # Return messages one by one
+            msg_index = 0
+            async def get_message_side_effect(*args, **kwargs):
+                nonlocal msg_index
+                if msg_index < len(messages):
+                    msg = messages[msg_index]
+                    msg_index += 1
+                    await asyncio.sleep(0.001)  # Small delay
+                    return msg
+                return None
+            
+            mock_pubsub.get_message = AsyncMock(side_effect=get_message_side_effect)
+            redis_adapter._client.pubsub = Mock(return_value=mock_pubsub)
+            
             async for msg in redis_adapter.subscribe("concurrent_test"):
                 received.append(msg)
                 if len(received) >= message_count:
                     break
+
+        # Mock publish to avoid actual Redis calls
+        redis_adapter._client.publish = AsyncMock(return_value=1)
 
         # Start consumer
         consumer_task = asyncio.create_task(consumer())
@@ -688,7 +758,14 @@ class TestPerformance:
         await asyncio.gather(*tasks)
 
         # Wait for all messages
-        await asyncio.wait_for(consumer_task, timeout=5)
+        try:
+            await asyncio.wait_for(consumer_task, timeout=5)
+        except asyncio.TimeoutError:
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
 
         assert len(received) == message_count
 

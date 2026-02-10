@@ -65,8 +65,8 @@ class TestConstants:
 @pytest.fixture
 def mock_tracing():
     """Mock OpenTelemetry tracing."""
-    with patch("mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", True):
-        with patch("mesh.checkpoint.checkpoint_exceptions.trace") as mock_trace:
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", True):
+        with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.trace") as mock_trace:
             mock_span = MagicMock()
             mock_span.is_recording.return_value = True
             mock_trace.get_current_span.return_value = mock_span
@@ -82,9 +82,9 @@ def mock_tracing():
 @pytest.fixture
 def mock_metrics():
     """Mock Prometheus metrics."""
-    with patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", True):
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", True):
         with patch(
-            "mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT"
+            "self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.EXCEPTION_COUNT"
         ) as mock_count:
             mock_count.labels.return_value = mock_count
             yield mock_count
@@ -94,15 +94,15 @@ def mock_metrics():
 def mock_alert_callback():
     """Mock alert callback."""
     callback = AsyncMock()
-    with patch("mesh.checkpoint.checkpoint_exceptions.ALERT_CALLBACK", callback):
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.ALERT_CALLBACK", callback):
         yield callback
 
 
 @pytest.fixture
 def mock_circuit_breaker():
     """Mock circuit breaker."""
-    with patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", True):
-        with patch("mesh.checkpoint.checkpoint_exceptions.BREAKER") as mock_breaker:
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", True):
+        with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.BREAKER") as mock_breaker:
             mock_breaker.call_async = AsyncMock()
             yield mock_breaker
 
@@ -110,8 +110,8 @@ def mock_circuit_breaker():
 @pytest.fixture
 def mock_alert_cache():
     """Mock alert throttling cache."""
-    with patch("mesh.checkpoint.checkpoint_exceptions.CACHE_AVAILABLE", True):
-        with patch("mesh.checkpoint.checkpoint_exceptions.ALERT_CACHE") as mock_cache:
+    with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.CACHE_AVAILABLE", True):
+        with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.ALERT_CACHE") as mock_cache:
             mock_cache.get.return_value = 0
             yield mock_cache
 
@@ -124,7 +124,7 @@ class TestCheckpointError:
 
     def test_initialization(self, mock_tracing, mock_metrics):
         """Test basic exception initialization."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointError,
             CheckpointErrorCode,
         )
@@ -169,7 +169,7 @@ class TestCheckpointError:
 
     def test_string_representation(self):
         """Test JSON string representation."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         error = CheckpointError(TestConstants.MESSAGE, {"key": "value"})
         error_str = str(error)
@@ -182,7 +182,7 @@ class TestCheckpointError:
 
     def test_context_size_limit(self):
         """Test context size validation."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         # Create a context that will definitely exceed 2048 bytes after JSON encoding
         # Use field names that won't trigger any scrubbing patterns
@@ -213,7 +213,7 @@ class TestCheckpointError:
 
     def test_hmac_signing(self):
         """Test HMAC signature generation."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         error = CheckpointError(TestConstants.MESSAGE, {"test": "data"})
         signature = error.sign_context()
@@ -227,7 +227,7 @@ class TestCheckpointError:
 
     def test_exception_chaining(self):
         """Test exception chaining with __cause__."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         try:
             raise KeyError("Original error")
@@ -243,7 +243,7 @@ class TestCheckpointError:
     @pytest.mark.asyncio
     async def test_raise_with_alert(self, mock_alert_callback, mock_alert_cache):
         """Test raise_with_alert mechanism."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         with pytest.raises(CheckpointError) as exc_info:
             await CheckpointError.raise_with_alert(
@@ -261,7 +261,7 @@ class TestCheckpointError:
     @pytest.mark.asyncio
     async def test_alert_throttling(self, mock_alert_callback, mock_alert_cache):
         """Test alert throttling to prevent spam."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         # Simulate high alert count
         mock_alert_cache.get.return_value = 10
@@ -283,12 +283,12 @@ class TestExceptionSubclasses:
 
     def test_audit_error(self):
         """Test CheckpointAuditError for security incidents."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointAuditError,
             CheckpointErrorCode,
         )
 
-        with patch("mesh.checkpoint.checkpoint_exceptions.audit_logger") as mock_audit:
+        with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.audit_logger") as mock_audit:
             error = CheckpointAuditError(
                 "Security breach detected",
                 {"user": "attacker", "action": "unauthorized"},
@@ -304,7 +304,7 @@ class TestExceptionSubclasses:
 
     def test_backend_error(self):
         """Test CheckpointBackendError for storage failures."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointBackendError,
             CheckpointErrorCode,
         )
@@ -318,7 +318,7 @@ class TestExceptionSubclasses:
 
     def test_retryable_error(self):
         """Test CheckpointRetryableError for transient failures."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointBackendError,
             CheckpointErrorCode,
             CheckpointRetryableError,
@@ -332,7 +332,7 @@ class TestExceptionSubclasses:
 
     def test_validation_error(self):
         """Test CheckpointValidationError for schema failures."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointErrorCode,
             CheckpointValidationError,
         )
@@ -355,7 +355,7 @@ class TestRetryDecorator:
     @pytest.mark.asyncio
     async def test_successful_retry(self):
         """Test successful retry after failures."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointRetryableError,
             retry_on_exception,
         )
@@ -377,7 +377,7 @@ class TestRetryDecorator:
     @pytest.mark.asyncio
     async def test_circuit_breaker_integration(self, mock_circuit_breaker):
         """Test circuit breaker with retry decorator."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointBackendError,
             CheckpointErrorCode,
             retry_on_exception,
@@ -404,8 +404,8 @@ class TestRetryDecorator:
     @pytest.mark.asyncio
     async def test_no_tenacity_fallback(self):
         """Test decorator behavior without tenacity."""
-        with patch("mesh.checkpoint.checkpoint_exceptions.TENACITY_AVAILABLE", False):
-            from mesh.checkpoint.checkpoint_exceptions import retry_on_exception
+        with patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.TENACITY_AVAILABLE", False):
+            from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import retry_on_exception
 
             @retry_on_exception(max_attempts=3)
             async def test_function():
@@ -424,7 +424,7 @@ class TestSecurity:
 
     def test_sensitive_data_scrubbing(self):
         """Test comprehensive sensitive data scrubbing."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         error = CheckpointError(TestConstants.MESSAGE, TestConstants.SENSITIVE_CONTEXT)
 
@@ -442,7 +442,7 @@ class TestSecurity:
 
     def test_token_masking(self):
         """Test masking of long string tokens."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         context = {
             "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature",
@@ -478,7 +478,7 @@ class TestEdgeCases:
 
     def test_empty_context(self):
         """Test exception with empty context."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         error = CheckpointError(TestConstants.MESSAGE, {})
 
@@ -489,7 +489,7 @@ class TestEdgeCases:
 
     def test_none_context(self):
         """Test exception with None context."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         error = CheckpointError(TestConstants.MESSAGE, None)
 
@@ -499,7 +499,7 @@ class TestEdgeCases:
 
     def test_custom_error_code(self):
         """Test custom error code handling."""
-        from mesh.checkpoint.checkpoint_exceptions import (
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import (
             CheckpointError,
             CheckpointErrorCode,
         )
@@ -517,14 +517,14 @@ class TestEdgeCases:
     def test_missing_dependencies(self):
         """Test behavior with missing optional dependencies."""
         with (
-            patch("mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False),
+            patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.PROMETHEUS_AVAILABLE", False),
             patch(
-                "mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
+                "self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.OPENTELEMETRY_AVAILABLE", False
             ),
-            patch("mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False),
+            patch("self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions.PYBREAKER_AVAILABLE", False),
         ):
 
-            from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+            from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
             # Should still work without optional features
             error = CheckpointError(TestConstants.MESSAGE)
@@ -548,7 +548,7 @@ class TestPerformance:
     @pytest.mark.skipif(not HAS_BENCHMARK, reason="pytest-benchmark not installed")
     def test_exception_creation_performance(self, benchmark):
         """Benchmark exception creation."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         def create_exception():
             return CheckpointError(
@@ -561,7 +561,7 @@ class TestPerformance:
     @pytest.mark.skipif(not HAS_BENCHMARK, reason="pytest-benchmark not installed")
     def test_context_scrubbing_performance(self, benchmark):
         """Benchmark context scrubbing performance."""
-        from mesh.checkpoint.checkpoint_exceptions import CheckpointError
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_exceptions import CheckpointError
 
         # Create a large context but not so large it exceeds the size limit
         # Reduce the number of fields to stay under the 2048 byte limit
