@@ -1301,6 +1301,8 @@ class YAMLHandler(FormatHandler):
             line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
             
             # Remove markdown italic (*text* or _text_) but preserve the text
+            # Pattern explanation: (?<!\*)\*(?!\*)  matches a single * not adjacent to another *
+            # This captures italic *text* without matching **bold** text
             line = re.sub(r'(?<!\*)\*(?!\*)([^*]+)\*(?!\*)', r'\1', line)  # *text*
             line = re.sub(r'_([^_]+)_', r'\1', line)  # _text_
             
@@ -1414,9 +1416,9 @@ class YAMLHandler(FormatHandler):
         # Industry standard: Handle multi-doc efficiently with lazy evaluation
         ru_yaml = YAML()
         
-        # FIX Issue 6: Configure to allow duplicate keys for detection and merging
+        # FIX Issue 6: Explicitly disallow duplicate keys to ensure they're detected
         # By default, ruamel.yaml raises DuplicateKeyError on duplicates
-        # We'll catch this error and provide a helpful message
+        # We enforce this explicitly and catch the error to provide a helpful message
         ru_yaml.allow_duplicate_keys = False  # Explicitly enforce no duplicates
         
         try:
