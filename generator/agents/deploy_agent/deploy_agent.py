@@ -61,6 +61,13 @@ from .deploy_prompt import DeployPromptAgent
 from .deploy_response_handler import HandlerRegistry, handle_deploy_response
 from .deploy_validator import ValidatorRegistry
 
+# Import PROJECT_ROOT for template directory resolution
+try:
+    from path_setup import PROJECT_ROOT
+except ImportError:
+    # Fallback if path_setup is not available
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
 # Safe tracer import: works even if runner.tracer is not available
 try:
     from runner import tracer as _runner_tracer  # type: ignore[attr-defined]
@@ -586,12 +593,19 @@ class DeployAgent:
         else:
             self.tokenizer = None
 
-        # --- FIX 2: Instantiate the agent with paths based on repo_path ---
-        template_dir = self.repo_path / "deploy_templates"
-        few_shot_dir = self.repo_path / "few_shot_examples"
+        # --- FIX 2: Use project root templates as primary source ---
+        # Check project root deploy_templates first (where actual templates exist)
+        project_template_dir = PROJECT_ROOT / "deploy_templates"
+        if project_template_dir.exists():
+            template_dir = project_template_dir
+            logger.info(f"DeployAgent: Using project root templates at {template_dir}")
+        else:
+            # Fallback to job-specific directory
+            template_dir = self.repo_path / "deploy_templates"
+            template_dir.mkdir(parents=True, exist_ok=True)
+            logger.warning(f"DeployAgent: Project root templates not found, using job-specific directory {template_dir}")
         
-        # Ensure directories exist before initialization
-        template_dir.mkdir(parents=True, exist_ok=True)
+        few_shot_dir = self.repo_path / "few_shot_examples"
         few_shot_dir.mkdir(parents=True, exist_ok=True)
         
         try:

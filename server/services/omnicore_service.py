@@ -3034,11 +3034,35 @@ class OmniCoreService:
                 output_dir = repo_path / "reports"
                 output_dir.mkdir(parents=True, exist_ok=True)
                 
-                report_path = output_dir / "critique_report.json"
-                async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
-                    await f.write(json.dumps(critique_result, indent=2))
+                # Verify directory was created successfully
+                if not output_dir.exists():
+                    logger.error(f"Failed to create reports directory: {output_dir}")
+                    raise RuntimeError(f"Could not create reports directory: {output_dir}")
                 
-                logger.info(f"Generated critique report: {report_path}")
+                report_path = output_dir / "critique_report.json"
+                
+                # Ensure critique_result is serializable
+                try:
+                    json_str = json.dumps(critique_result, indent=2)
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Critique result is not JSON serializable: {e}")
+                    # Create a minimal valid report
+                    json_str = json.dumps({
+                        "status": "error",
+                        "message": "Failed to serialize critique results",
+                        "issues_found": len(critique_result.get("issues", [])),
+                        "error": str(e)
+                    }, indent=2)
+                
+                async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
+                    await f.write(json_str)
+                
+                # Verify file was written successfully
+                if not report_path.exists():
+                    logger.error(f"Critique report file was not created: {report_path}")
+                else:
+                    file_size = report_path.stat().st_size
+                    logger.info(f"Generated critique report: {report_path} ({file_size} bytes)")
                 
                 # [FIX] Add error handling for path resolution
                 try:
