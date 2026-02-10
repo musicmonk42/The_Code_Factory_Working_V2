@@ -251,27 +251,28 @@ def mock_aiohttp(monkeypatch):
     """Mocks aiohttp.ClientSession for testing send_alert."""
     # Create the mock response object
     mock_response = AsyncMock()
-    mock_response.raise_for_status = MagicMock()
-
-    # Create the mock post context manager
-    mock_post_context = AsyncMock()
-    mock_post_context.__aenter__ = AsyncMock(return_value=mock_response)
-    mock_post_context.__aexit__ = AsyncMock(return_value=None)
+    mock_response.raise_for_status = AsyncMock()
 
     # Create the mock session
     mock_session = MagicMock()
-    mock_session.post = MagicMock(return_value=mock_post_context)
-    # ADD THESE TWO LINES to make session act as a context manager:
+    
+    # FIX: Make post return an async context manager that yields mock_response
+    mock_post_cm = AsyncMock()
+    mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_post_cm.__aexit__ = AsyncMock(return_value=None)
+    
+    mock_session.post = MagicMock(return_value=mock_post_cm)
+    
+    # Make session act as a context manager
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
 
-    # Create the mock ClientSession context manager
-    mock_client_session_context = AsyncMock()
-    mock_client_session_context.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_client_session_context.__aexit__ = AsyncMock(return_value=None)
-
-    # Mock ClientSession to return the context manager
-    mock_client_session = MagicMock(return_value=mock_client_session_context)
+    # Mock ClientSession to return mock_session directly wrapped in context manager
+    mock_client_session_instance = MagicMock()
+    mock_client_session_instance.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_client_session_instance.__aexit__ = AsyncMock(return_value=None)
+    
+    mock_client_session = MagicMock(return_value=mock_client_session_instance)
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession",
         mock_client_session,
