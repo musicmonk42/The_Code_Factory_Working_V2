@@ -236,7 +236,7 @@ nats-py==2.11.0
 neo4j==5.28.2
 networkx==3.3
 nltk==3.9.1
-numpy==2.1.2
+numpy>=2.2.0,<3.0.0
 oauthlib==3.3.1
 onnxruntime==1.23.2
 openai==1.107.1
@@ -430,7 +430,9 @@ python-pkcs11==0.7.0
 libvirt-python>=10.0.0  # Requires system packages (libvirt-dev, pkg-config) - now installed in Dockerfile
 paramiko==3.5.0
 fastavro==1.11.1
+apache-avro>=1.11.0  # Provides 'avro' module for Avro file support
 faiss-cpu==1.9.0.post1
+SpeechRecognition>=3.10.0  # Voice input support for VoicePrompt class
 
 # Additional optional dependencies for complete feature support
 plantuml>=0.3.0

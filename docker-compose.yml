@@ -18,9 +18,10 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # PostgreSQL database
+  # PostgreSQL database with Citus extension for production scale-out
+  # Using citusdata/citus image provides the Citus extension for distributed SQL
   postgres:
-    image: postgres:15-alpine
+    image: citusdata/citus:12.1
     container_name: codefactory-postgres
     environment:
       POSTGRES_DB: codefactory
@@ -96,6 +97,11 @@ services:
       # Infrastructure
       - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
       - DB_PATH=${DB_PATH:-postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory}
+      
+      # Citus Extension Configuration
+      # Set to 1 to enable Citus distributed SQL features
+      # Requires postgres service to use citusdata/citus image (already configured)
+      - ENABLE_CITUS=${ENABLE_CITUS:-0}
       
       # Message Bus Configuration
       - MESSAGE_BUS_SHARD_COUNT=${MESSAGE_BUS_SHARD_COUNT:-4}

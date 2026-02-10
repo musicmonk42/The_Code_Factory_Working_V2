@@ -390,6 +390,78 @@ docker-compose -f docker-compose.kafka.yml up -d
 
 For detailed Kafka configuration, troubleshooting, and best practices, see [docs/KAFKA_SETUP.md](./docs/KAFKA_SETUP.md).
 
+### Database and Migrations
+
+The Code Factory platform uses PostgreSQL for persistence with optional Citus extension for distributed SQL capabilities. Database schema is managed using Alembic migrations.
+
+#### Database Setup
+
+**Development (SQLite):**
+```bash
+# SQLite is used by default for development
+# No setup needed - database file created automatically
+```
+
+**Production (PostgreSQL with Citus):**
+```bash
+# Using Docker Compose (recommended)
+docker-compose up -d postgres
+
+# The postgres service now uses citusdata/citus:12.1 image
+# Enable Citus features by setting:
+export ENABLE_CITUS=1
+```
+
+#### Running Migrations
+
+The platform includes Alembic for database schema management:
+
+```bash
+# Run all pending migrations
+make db-migrate
+
+# Create a new migration
+make db-migrate-create
+
+# View migration history
+make db-migrate-history
+
+# Check current version
+make db-migrate-current
+
+# Validate Alembic configuration
+make db-migrate-validate
+```
+
+**Manual Alembic commands:**
+```bash
+alembic upgrade head          # Apply all migrations
+alembic current               # Show current version
+alembic history               # Show migration history
+alembic downgrade -1          # Rollback one migration
+```
+
+#### Citus Distributed SQL
+
+For production scale-out, enable Citus extension:
+
+1. **Docker Compose**: Already configured (uses `citusdata/citus:12.1`)
+2. **Kubernetes**: Set `ENABLE_CITUS=1` in ConfigMap
+3. **Helm**: Configure in values.yaml:
+   ```yaml
+   env:
+     ENABLE_CITUS: "1"
+   ```
+
+The application handles Citus gracefully - it works with or without the extension.
+
+#### Migration Resources
+
+- [Alembic Migrations README](./omnicore_engine/migrations/README.md) - Detailed migration guide
+- [Kubernetes Migrations](./k8s/MIGRATIONS.md) - K8s-specific migration procedures
+- [Helm Chart README](./helm/codefactory/README.md) - Helm deployment with migrations
+- [DIAGNOSTIC_ISSUES_FIX.md](./DIAGNOSTIC_ISSUES_FIX.md) - Recent diagnostic improvements
+
 
 Usage
 CLI Usage
@@ -472,6 +544,28 @@ make docker-down       # Stop all services
 make docker-logs       # View logs
 make docker-clean      # Clean Docker resources
 make docker-validate   # Validate Docker build and configuration
+
+Database:
+make db-migrate        # Run database migrations
+make db-migrate-create # Create a new migration
+make db-migrate-history # Show migration history
+make db-migrate-current # Show current version
+make db-migrate-validate # Validate Alembic configuration
+make db-reset          # Reset database (WARNING: destroys data)
+
+Kubernetes:
+make k8s-deploy-dev    # Deploy to Kubernetes (development)
+make k8s-deploy-staging # Deploy to Kubernetes (staging)
+make k8s-deploy-prod   # Deploy to Kubernetes (production)
+make k8s-status        # Show deployment status
+make k8s-logs          # Show pod logs
+make k8s-validate      # Validate manifests
+
+Helm:
+make helm-install      # Install with Helm
+make helm-lint         # Lint Helm chart
+make helm-template     # Show Helm templates
+make helm-status       # Show release status
 
 Maintenance:
 make clean             # Clean generated files and caches
