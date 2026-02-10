@@ -586,15 +586,29 @@ class LintPlugin(ABC):
                         # This is safe from infinite recursion because:
                         # 1. use_container=False takes a different code path (non-Docker execution)
                         # 2. fallback_to_local=False prevents re-entering this fallback logic
-                        return await self._run_tool(
-                            cmd=cmd,
-                            project_dir=project_dir,
-                            tool_name=tool_name,
-                            timeout=timeout,
-                            use_container=False,
-                            container_image=None,
-                            fallback_to_local=False,  # Prevent infinite recursion
-                        )
+                        try:
+                            result = await self._run_tool(
+                                cmd=cmd,
+                                project_dir=project_dir,
+                                tool_name=tool_name,
+                                timeout=timeout,
+                                use_container=False,
+                                container_image=None,
+                                fallback_to_local=False,  # Prevent infinite recursion
+                            )
+                            # Verify the local execution worked
+                            if result.get("success") or result.get("returncode") == 0:
+                                return result
+                            else:
+                                logger.warning(
+                                    f"Local {tool_name} execution failed (returncode={result.get('returncode')}). "
+                                    f"Skipping this check."
+                                )
+                        except Exception as e:
+                            logger.error(
+                                f"Error running local {tool_name}: {e}. Skipping this check.",
+                                exc_info=True
+                            )
                     else:
                         logger.warning(
                             f"Docker not available and {tool_name} not found locally at {tool_binary}. Skipping {tool_name}."

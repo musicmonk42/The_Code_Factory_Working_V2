@@ -1878,6 +1878,7 @@ async def handle_deploy_response(
             # as they are legitimate redactions, not unsubstituted placeholders
             
             # Common environment variable placeholders - substitute with defaults before checking
+            # Using a single-pass replacement to avoid nested placeholder issues
             common_env_placeholders = {
                 '{BUILD_ENV}': 'production',
                 '{ENVIRONMENT}': 'production',
@@ -1886,14 +1887,21 @@ async def handle_deploy_response(
                 '{HOST}': '0.0.0.0',
             }
             
-            # Pre-substitute common environment placeholders
+            # Pre-substitute common environment placeholders in a single pass
+            # to avoid issues with nested placeholders
             enriched_final_output_for_validation = enriched_final_output
+            substitution_log = []
             for placeholder, default_value in common_env_placeholders.items():
                 if placeholder in enriched_final_output_for_validation:
+                    # Count occurrences before substitution
+                    count = enriched_final_output_for_validation.count(placeholder)
                     enriched_final_output_for_validation = enriched_final_output_for_validation.replace(
                         placeholder, default_value
                     )
-                    logger.debug(f"Pre-substituted placeholder {placeholder} with default {default_value}")
+                    substitution_log.append(f"{placeholder}→{default_value} ({count}x)")
+            
+            if substitution_log:
+                logger.debug(f"Pre-substituted placeholders: {', '.join(substitution_log)}")
             
             placeholder_patterns = [
                 r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.

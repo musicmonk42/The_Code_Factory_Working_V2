@@ -1917,7 +1917,13 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
     if server_logging_configured:
         # Server logging is already configured - only configure audit logger
         # Use root logger for this message since runner logger may not have handlers yet
-        root_logger.info("Root logger already configured (server logging active). Configuring only runner.audit logger.")
+        # Ensure root logger has handlers before logging
+        if root_logger.handlers:
+            root_logger.info("Root logger already configured (server logging active). Configuring only runner.audit logger.")
+        else:
+            # Fallback to stderr if no handlers configured yet (should not happen, but defensive)
+            print("[INFO] Root logger detected but no handlers configured. Configuring runner.audit logger.", 
+                  file=sys.stderr)
     else:
         # Configure runner logger normally
         logger.setLevel(logging.DEBUG)  # All handlers will filter by their own levels
