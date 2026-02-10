@@ -179,6 +179,7 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
 #   - generator/config.yaml (default runner configuration)
 #   - generator/runner/runner_config.yaml (documentation/reference format)
 #   - self_fixing_engineer/crew_config.yaml
+#   - deploy_templates/ (Jinja2 templates for deployment generation)
 #   - audit configurations
 # Use RUNNER_CONFIG_PATH environment variable at runtime to specify custom config location
 COPY . /app

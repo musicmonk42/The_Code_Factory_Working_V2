@@ -332,3 +332,167 @@ class TestValidateDeploymentArtifacts:
         files = {"Dockerfile": "# no FROM"}
         result = validate_deployment_artifacts(files)
         assert result["valid"] is False
+
+
+class TestExtractOutputDir:
+    """Test extract_output_dir_from_md function."""
+
+    def test_extracts_simple_output_dir(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+# Project Spec
+output_dir: generated/hello_generator
+
+## API Endpoints
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == "generated/hello_generator"
+
+    def test_extracts_output_dir_with_quotes(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+output_dir: "my_project"
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == "my_project"
+
+    def test_rejects_path_traversal(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+output_dir: ../../../etc/passwd
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == ""
+
+    def test_rejects_absolute_paths(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+output_dir: /absolute/path
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == ""
+
+    def test_rejects_windows_absolute_paths(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+output_dir: C:/windows/path
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == ""
+
+    def test_returns_empty_when_not_found(self):
+        from generator.main.provenance import extract_output_dir_from_md
+        
+        md_content = """
+# Project without output_dir
+"""
+        result = extract_output_dir_from_md(md_content)
+        assert result == ""
+
+
+class TestValidateReadmeCompleteness:
+    """Test validate_readme_completeness function."""
+
+    def test_valid_complete_readme(self):
+        from generator.main.provenance import validate_readme_completeness
+        
+        readme = """
+# My Project
+
+This is a comprehensive README for my project with detailed instructions.
+
+## Setup
+
+1. Create virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+## Run the Server
+
+Start the development server:
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+The API will be available at http://localhost:8000
+
+## Testing
+
+Run the test suite:
+```bash
+pytest tests/ -v --cov=app
+```
+
+## API Examples
+
+### Health Check
+```bash
+curl http://localhost:8000/health
+```
+
+### Get Users
+```bash
+curl http://localhost:8000/api/users
+```
+"""
+        result = validate_readme_completeness(readme)
+        assert result["valid"] is True
+        assert result["length"] > 500
+        assert "setup" in result["sections_found"]
+        assert "run" in result["sections_found"]
+        assert "test" in result["sections_found"]
+        assert "examples" in result["sections_found"]
+        assert "venv" in result["commands_found"]
+        assert "pip" in result["commands_found"]
+        assert "uvicorn" in result["commands_found"]
+        assert "pytest" in result["commands_found"]
+
+    def test_incomplete_readme_too_short(self):
+        from generator.main.provenance import validate_readme_completeness
+        
+        readme = "# Short README"
+        result = validate_readme_completeness(readme)
+        assert result["valid"] is False
+        assert "too short" in str(result["errors"])
+
+    def test_incomplete_readme_missing_sections(self):
+        from generator.main.provenance import validate_readme_completeness
+        
+        # Create a README that's long enough but missing required sections
+        readme = "# Project\n\n" + ("This is filler content to meet the minimum length requirement. " * 20)
+        result = validate_readme_completeness(readme)
+        assert result["valid"] is False
+        assert any("setup" in err.lower() for err in result["errors"])
+
+    def test_incomplete_readme_missing_commands(self):
+        from generator.main.provenance import validate_readme_completeness
+        
+        # Create README with sections but no commands
+        readme_parts = [
+            "# Project\n\n",
+            "## Setup\n",
+            "Some setup instructions. " * 10,
+            "\n\n## Run\n",
+            "Run the app. " * 10,
+            "\n\n## Testing\n",
+            "Test the app. " * 10,
+            "\n\n## Examples\n",
+            "Some examples. " * 10,
+        ]
+        readme = "".join(readme_parts)
+        result = validate_readme_completeness(readme)
+        assert result["valid"] is False
+        # Should be missing venv, pip, uvicorn, pytest commands
+        assert any("venv" in err.lower() for err in result["errors"])
