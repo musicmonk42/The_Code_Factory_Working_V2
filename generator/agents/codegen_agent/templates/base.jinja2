@@ -140,17 +140,47 @@ Your generated code must meet these enterprise standards:
 
 ---
 
-## FINAL VERIFICATION
+{{ macros.render_readme_requirements(target_language, target_framework) }}
 
-Before submitting your response:
+---
 
-1. ✓ Have you implemented EVERY feature from the requirements?
-2. ✓ Is your JSON properly formatted and escaped?
-3. ✓ Are all files complete with no placeholders?
-4. ✓ Does the code follow {{ target_language }} best practices?
-5. ✓ Is error handling comprehensive?
-6. ✓ Are all dependencies listed in requirements file?
-7. ✓ Is the README clear and complete?
+## FINAL VERIFICATION - MANDATORY CHECKLIST
 
-**Generate the JSON now.**
+Before submitting, verify EVERY item below. Failure on any item = REJECTION:
+
+**Code Completeness:**
+1. ✓ EVERY feature from requirements is fully implemented (no TODOs, no stubs)
+2. ✓ JSON is properly formatted and escaped (\n for newlines, \" for quotes)
+3. ✓ All files complete with working code (no placeholders or comments saying "implement this")
+
+**Code Quality:**
+4. ✓ Follows {{ target_language }} best practices and style guide
+5. ✓ Comprehensive error handling with specific exception types
+6. ✓ All dependencies with versions in requirements file
+
+**Pydantic Validation (CRITICAL):**
+7. ✓ EVERY Pydantic request model uses Field() with constraints
+8. ✓ NO plain type annotations like `message: str` - MUST be `message: str = Field(..., min_length=1, max_length=500)`
+9. ✓ String fields have min_length, max_length, and strip_whitespace=True
+10. ✓ Numeric fields have ge/le/gt/lt constraints where applicable
+11. ✓ Validation is at SCHEMA level, NOT in route handlers
+
+**README Completeness (CRITICAL):**
+12. ✓ README has ALL required sections: Setup, Run Server, Run Tests, API Examples
+13. ✓ Setup section includes virtualenv creation, activation (Windows AND Linux/macOS), and pip install
+14. ✓ Run Server section has exact uvicorn/flask/etc command
+15. ✓ Run Tests section has exact pytest/npm test/etc command  
+16. ✓ API Examples has ALL 6 curl commands with REAL data (not placeholders)
+17. ✓ README is substantive (not just section headers - actual content in each section)
+
+**Files Generated:**
+18. ✓ schemas.py or models.py exists with validated Pydantic models
+19. ✓ routes.py or equivalent with endpoint implementations
+20. ✓ requirements.txt with all dependencies
+21. ✓ README.md with complete documentation
+22. ✓ main.py or app.py entry point
+
+**STOP AND RE-CHECK items 7-11 and 12-17. These are the most common failures.**
+
+**Generate the complete, validated JSON now.**
 

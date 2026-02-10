@@ -223,3 +223,124 @@ Before generating code, extract and verify you will implement:
 
 {% endif %}
 {% endmacro %}
+
+{# Macro: README Generation Requirements #}
+{% macro render_readme_requirements(language="python", framework=none) %}
+## README.md GENERATION REQUIREMENTS
+
+The README.md file MUST be comprehensive and include ALL of the following sections:
+
+**CRITICAL**: The README MUST be comprehensive (comprehensive with all required sections fully populated). Include:
+
+### 1. Project Title and Description
+- Clear project name
+- What the project does
+- Key features
+
+### 2. Setup Instructions
+**Prerequisites:**
+{% if language == "python" %}
+- Python 3.10+ required
+- pip package manager
+{% elif language == "javascript" or language == "typescript" %}
+- Node.js 18+ required
+- npm package manager
+{% elif language == "java" %}
+- Java 17+ required
+- Maven or Gradle
+{% endif %}
+
+**Installation Steps:**
+```bash
+# Create virtual environment (Python only)
+{% if language == "python" %}
+python -m venv .venv
+
+# Activate virtual environment
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+{% elif language == "javascript" or language == "typescript" %}
+npm install
+{% elif language == "java" %}
+mvn install
+{% endif %}
+```
+
+### 3. Run Server
+```bash
+{% if framework == "fastapi" %}
+uvicorn app.main:app --reload
+{% elif framework == "flask" %}
+python main.py
+{% elif framework == "express" %}
+npm start
+{% else %}
+# Provide run command
+{% endif %}
+```
+
+### 4. Run Tests
+```bash
+{% if language == "python" %}
+pytest
+{% elif language == "javascript" or language == "typescript" %}
+npm test
+{% elif language == "java" %}
+mvn test
+{% endif %}
+```
+
+### 5. API Examples (curl)
+
+**MANDATORY - ALL 6 CURL EXAMPLES REQUIRED (not placeholders)**:
+Each example MUST be a complete, working curl command. Include:
+
+1. Health check: \`curl http://localhost:8000/health\`
+2. Version: \`curl http://localhost:8000/version\`
+3. Valid request with actual data
+4. Empty/whitespace returning 400 error
+5. Input exceeding max_length returning 400 error
+6. Missing required field returning 422 error
+
+Do NOT use placeholders like "<endpoint>" or "<data>" - provide ACTUAL working examples.
+
+Example format:
+```bash
+# Health Check
+curl http://localhost:8000/health
+
+# Version
+curl http://localhost:8000/version
+
+# Valid Request
+curl -X POST http://localhost:8000/api/endpoint \
+  -H "Content-Type: application/json" \
+  -d '{"message":"hello world"}'
+
+# Empty Message (400 Error)
+curl -X POST http://localhost:8000/api/endpoint \
+  -H "Content-Type: application/json" \
+  -d '{"message":"   "}'
+
+# Too Long (400 Error)
+curl -X POST http://localhost:8000/api/endpoint \
+  -H "Content-Type: application/json" \
+  -d '{"message":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"  # 501 character string}'
+
+# Missing Field (422 Error)
+curl -X POST http://localhost:8000/api/endpoint \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### 6. Configuration
+List environment variables and configuration options
+
+### 7. Project Structure
+Brief overview of directory layout
+
+**Generate the README.md with ALL these sections fully populated.**
+{% endmacro %}
