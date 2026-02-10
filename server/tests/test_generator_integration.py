@@ -340,3 +340,83 @@ class TestGeneratorServiceMethods:
         call_args = generator_service.omnicore_service.route_job.call_args
         assert call_args.kwargs["payload"]["action"] == "submit_clarification_response"
         assert call_args.kwargs["payload"]["response"] == "PostgreSQL"
+
+
+@pytest.mark.asyncio
+class TestReadmeContentLoading:
+    """Test suite for README content loading from disk."""
+
+    @pytest.fixture
+    def generator_service(self, tmp_path):
+        """Create a GeneratorService instance with tmp storage."""
+        from server.services.generator_service import GeneratorService
+        
+        mock_omnicore = AsyncMock()
+        return GeneratorService(storage_path=tmp_path, omnicore_service=mock_omnicore)
+
+    async def test_get_readme_content_success(self, generator_service, tmp_path):
+        """Test successfully loading README content from disk."""
+        # Create a job directory with a README file
+        job_id = "test-job-123"
+        job_dir = tmp_path / job_id
+        job_dir.mkdir()
+        
+        readme_content = "# Test Project\n\nThis is a test README."
+        readme_path = job_dir / "README.md"
+        readme_path.write_text(readme_content)
+        
+        # Test loading the README
+        result = await generator_service.get_readme_content(job_id)
+        
+        assert result == readme_content
+        assert len(result) > 0
+
+    async def test_get_readme_content_priority_order(self, generator_service, tmp_path):
+        """Test README loading respects priority order."""
+        # Create a job directory with multiple README files
+        job_id = "test-job-456"
+        job_dir = tmp_path / job_id
+        job_dir.mkdir()
+        
+        # Create multiple README files
+        (job_dir / "README.md").write_text("Lower priority")
+        (job_dir / "New_Test_README.md").write_text("Higher priority")
+        
+        # Should load the higher priority file
+        result = await generator_service.get_readme_content(job_id)
+        
+        assert result == "Higher priority"
+
+    async def test_get_readme_content_fallback_to_md_files(self, generator_service, tmp_path):
+        """Test fallback to any .md file when standard README names not found."""
+        job_id = "test-job-789"
+        job_dir = tmp_path / job_id
+        job_dir.mkdir()
+        
+        # Create a non-standard .md file
+        custom_content = "# Custom Document"
+        (job_dir / "custom.md").write_text(custom_content)
+        
+        # Should find and load the .md file
+        result = await generator_service.get_readme_content(job_id)
+        
+        assert result == custom_content
+
+    async def test_get_readme_content_not_found(self, generator_service, tmp_path):
+        """Test handling when README file is not found."""
+        job_id = "test-job-notfound"
+        job_dir = tmp_path / job_id
+        job_dir.mkdir()
+        
+        # No README files in directory
+        result = await generator_service.get_readme_content(job_id)
+        
+        assert result is None
+
+    async def test_get_readme_content_job_dir_not_exists(self, generator_service):
+        """Test handling when job directory doesn't exist."""
+        job_id = "nonexistent-job"
+        
+        result = await generator_service.get_readme_content(job_id)
+        
+        assert result is None
