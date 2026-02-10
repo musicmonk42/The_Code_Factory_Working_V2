@@ -31,7 +31,7 @@ jobs:
   # Tests run in parallel per module - run on every push/PR
   test-matrix:
     name: Tests - ${{ matrix.module }}
-    runs-on: ${{ matrix.module == 'self_fixing_engineer' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 120  # Increased to accommodate longer test batches
     permissions:
       contents: read
