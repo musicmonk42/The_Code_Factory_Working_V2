@@ -89,13 +89,13 @@ class GeminiAdapter:
                                        - "SECURITY_CONFIG" (Dict, optional): Configuration for security, including PII rules and compliance frameworks.
 
         Raises:
-            ValueError: If the "GEMINI_API_KEY" is missing from settings or if LLMClient fails to initialize.
+            ValueError: If the "GEMINI_API_KEY" or "GOOGLE_API_KEY" is missing from settings or if LLMClient fails to initialize.
         """
         self.logger = logger
-        api_key = settings.get("GEMINI_API_KEY")
+        api_key = settings.get("GEMINI_API_KEY") or settings.get("GOOGLE_API_KEY")
         if not api_key:
             self.logger.critical(
-                "GEMINI_API_KEY is missing from settings. Cannot initialize GeminiAdapter."
+                "GEMINI_API_KEY or GOOGLE_API_KEY is missing from settings. Cannot initialize GeminiAdapter."
             )
             raise ValueError("Missing API key for Gemini provider.")
 

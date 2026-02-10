@@ -188,7 +188,7 @@ class LLMConfig(BaseModel):
     anthropic_api_key: str = Field(
         default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "")
     )
-    gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
+    gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", ""))
     model: str = "gpt-4o-mini"
     prompt_template: str = "Summarize this {ext} file:\n\n{code}"
     max_code_size: int = 10000

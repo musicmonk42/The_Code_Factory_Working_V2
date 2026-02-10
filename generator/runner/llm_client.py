@@ -484,7 +484,7 @@ class LLMClient:
         else:
             logger.warning(
                 "LLMClient initialization complete but NO providers are available. "
-                "Please check API key configuration (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, etc.)"
+                "Please check API key configuration (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY/GOOGLE_API_KEY, etc.)"
             )
 
     async def count_tokens(self, text: str, model: str) -> int:
