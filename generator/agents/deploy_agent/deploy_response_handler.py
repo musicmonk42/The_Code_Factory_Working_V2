@@ -1068,6 +1068,42 @@ class YAMLHandler(FormatHandler):
     __version__ = "1.3"  # Incremented for enhanced validation
     __source__ = "built-in"
 
+    def _sanitize_yaml_response(self, raw: str) -> str:
+        """
+        Sanitize YAML response by removing common LLM explanation artifacts.
+        
+        Removes markdown-style explanations that sometimes appear in YAML output:
+        - Lines starting with markdown headers (# Header)
+        - Lines with markdown links ([text](url))
+        - Inline code backticks (`code`)
+        - Markdown emphasis patterns
+        
+        This is a best-effort cleanup before strict validation.
+        
+        Args:
+            raw: Raw YAML string potentially containing markdown artifacts
+            
+        Returns:
+            Sanitized YAML string with markdown artifacts removed
+        """
+        lines = []
+        for line in raw.split('\n'):
+            # Skip lines that start with markdown headers (# followed by space)
+            if re.match(r'^\s*#\s+[A-Z]', line):
+                continue
+            
+            # Remove markdown links: [text](url)
+            line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line)
+            
+            # Remove inline code backticks (but preserve YAML values)
+            # Only remove if backticks are mid-line (not YAML block markers)
+            if '`' in line and not line.strip().startswith('`'):
+                line = line.replace('`', '')
+            
+            lines.append(line)
+        
+        return '\n'.join(lines)
+
     def normalize(self, raw: str) -> Any:
         """
         Normalize raw YAML string to Python object with strict validation.
@@ -1120,6 +1156,10 @@ class YAMLHandler(FormatHandler):
             logger.debug("Stripped trailing ``` from YAML response")
         
         raw = raw.strip()
+        
+        # Sanitize: Remove common LLM explanation artifacts before validation
+        # This helps when LLM occasionally adds explanatory text
+        raw = self._sanitize_yaml_response(raw)
         
         # Validate: Reject if contains obvious markdown patterns
         # Check for ** (markdown bold) which should never appear in valid YAML values

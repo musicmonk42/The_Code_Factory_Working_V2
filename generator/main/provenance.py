@@ -472,6 +472,37 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
     return files
 
 
+def extract_output_dir_from_md(md_content: str) -> str:
+    """
+    Extract output_dir from a Markdown spec.
+
+    Parses the specification for output_dir configuration in YAML-style format.
+    Supports patterns like:
+        - `output_dir: generated/hello_generator`
+        - `output_dir: "my_project"`
+        - `output_dir: my-app`
+
+    Args:
+        md_content: Markdown specification content to parse.
+
+    Returns:
+        The output directory path if found, empty string otherwise.
+    """
+    # Pattern to match YAML-style output_dir configuration
+    # Handles: output_dir: value, output_dir:"value", output_dir: "value"
+    pattern = r'^\s*output_dir\s*:\s*["\']?([a-zA-Z0-9_/\-]+)["\']?\s*$'
+    
+    for line in md_content.split('\n'):
+        match = re.match(pattern, line, re.IGNORECASE)
+        if match:
+            output_dir = match.group(1).strip()
+            # Security: Reject path traversal attempts
+            if '..' not in output_dir and not output_dir.startswith('/'):
+                return output_dir
+    
+    return ""
+
+
 def validate_spec_fidelity(
     md_content: str,
     generated_files: Dict[str, str],

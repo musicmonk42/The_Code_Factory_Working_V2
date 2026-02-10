@@ -63,6 +63,7 @@ try:
         validate_spec_fidelity as _validate_spec_fidelity,
         run_fail_fast_validation as _run_fail_fast_validation,
         extract_required_files_from_md as _extract_required_files_from_md,
+        extract_output_dir_from_md as _extract_output_dir_from_md,
     )
     _PROVENANCE_AVAILABLE = True
 except ImportError:
@@ -3295,6 +3296,16 @@ class OmniCoreService:
         try:
             # Ensure agents are loaded before use
             self._ensure_agents_loaded()
+            
+            # Extract output_dir from README if not already set
+            if not payload.get("output_dir") and payload.get("readme_content") and _PROVENANCE_AVAILABLE:
+                extracted_output_dir = _extract_output_dir_from_md(payload["readme_content"])
+                if extracted_output_dir:
+                    payload["output_dir"] = extracted_output_dir
+                    logger.info(
+                        f"[PIPELINE] Extracted output_dir from README: {extracted_output_dir}",
+                        extra={"job_id": job_id, "output_dir": extracted_output_dir}
+                    )
             
             # Run pipeline stages sequentially
             stages_completed = []
