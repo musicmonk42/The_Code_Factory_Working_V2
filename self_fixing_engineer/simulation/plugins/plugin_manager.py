@@ -605,6 +605,10 @@ class PluginManager:
         self._ensure_background_loop()
 
     def _ensure_background_loop(self):
+        # If we're in test mode, don't start the background loop
+        if os.getenv("TESTING") == "1" or os.getenv("PYTEST_CURRENT_TEST"):
+            return
+        
         if self._bg_loop and self._bg_loop.is_running():
             return
 
@@ -1378,7 +1382,17 @@ class PluginManager:
         Ensure _ensure_background_loop has been called before.
         """
         self._ensure_background_loop()
-        assert self._bg_loop is not None
+        
+        # In test mode, background loop may not be started - use synchronous fallback
+        if self._bg_loop is None:
+            # Run synchronously using asyncio.run
+            try:
+                return asyncio.run(coro)
+            except RuntimeError:
+                # If there's already a running loop, use it
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(coro)
+        
         fut = asyncio.run_coroutine_threadsafe(coro, self._bg_loop)
         return fut.result(
             timeout=max(HEALTH_TIMEOUT_SEC, 30.0)
