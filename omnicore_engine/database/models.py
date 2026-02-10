@@ -16,8 +16,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import JSON, Float, ForeignKey, Index, Integer, String, DateTime, Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, declarative_base
+import enum
 
 # DEFENSIVE IMPORT: Try to import from arbiter, fall back to standalone mode
 _ARBITER_AVAILABLE = False
@@ -247,6 +248,131 @@ class SFEAgentState(AgentState):
 
 
 # ----------------------------------------------------------------------
+#  DispatchEventQueue – Guaranteed delivery queue
+# ----------------------------------------------------------------------
+class DispatchEventStatus(enum.Enum):
+    """
+    Status states for dispatch events in the queue.
+
+    State Machine:
+    PENDING -> PROCESSING -> COMPLETED (success)
+               └-> FAILED -> PENDING (retry) -> DEAD_LETTER (max retries exceeded)
+    """
+    PENDING = "pending"       # Awaiting processing
+    PROCESSING = "processing"  # Currently being processed
+    COMPLETED = "completed"    # Successfully delivered
+    FAILED = "failed"          # Delivery failed, will retry
+    DEAD_LETTER = "dead_letter"  # Max retries exceeded, moved to DLQ
+
+
+class DispatchEventQueue(Base):
+    """
+    Persistent queue for job completion events with guaranteed delivery.
+
+    This table implements the outbox pattern for reliable event delivery:
+    - Events are persisted before dispatch attempt
+    - Atomic state transitions prevent duplicate processing
+    - Automatic retry with exponential backoff
+    - Dead letter queue for permanently failed events
+    - Comprehensive audit trail for compliance
+
+    Industry Standards:
+    - Outbox Pattern (Chris Richardson, Microservices Patterns)
+    - Transactional Outbox (Pat Helland, Life Beyond Distributed Transactions)
+    - NIST SP 800-53 AU-2: Event Logging
+    - SOC 2 Type II: Event delivery audit trail
+    - At-least-once delivery semantics
+
+    Table Design:
+    - Optimized for high-throughput append (INSERT)
+    - Efficient queue scanning with status+created_at composite index
+    - Partitionable by created_at for archival
+    - No soft deletes (immutable audit trail)
+
+    Example Usage:
+        ```python
+        # Enqueue event
+        event = DispatchEventQueue(
+            job_id="job-123",
+            event_type="job.completed",
+            payload={"status": "completed", "files": ["app.py"]},
+            status=DispatchEventStatus.PENDING
+        )
+        session.add(event)
+        await session.commit()
+
+        # Process queue
+        events = await session.execute(
+            select(DispatchEventQueue)
+            .where(DispatchEventQueue.status == DispatchEventStatus.PENDING)
+            .order_by(DispatchEventQueue.created_at)
+            .limit(100)
+        )
+        ```
+    """
+
+    __tablename__ = "dispatch_event_queue"
+    __table_args__ = (
+        # Composite index for efficient queue scanning
+        Index("ix_dispatch_queue_status_created", "status", "created_at"),
+        # Index for job_id lookups (debugging, monitoring)
+        Index("ix_dispatch_queue_job_id", "job_id"),
+        # Index for correlation_id tracing
+        Index("ix_dispatch_queue_correlation_id", "correlation_id"),
+        # Index for cleanup of old completed events
+        Index("ix_dispatch_queue_completed_at", "completed_at"),
+        {"extend_existing": True}
+    )
+
+    # Primary key (auto-incrementing for append-only optimization)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+
+    # Event identification
+    job_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # Event payload (JSON blob with job completion data)
+    payload: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+    # Queue state management
+    status: Mapped[DispatchEventStatus] = mapped_column(
+        SQLEnum(DispatchEventStatus),
+        nullable=False,
+        default=DispatchEventStatus.PENDING,
+        index=True
+    )
+
+    # Retry tracking
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    next_retry_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+
+    # Timestamps (UTC)
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime,
+        nullable=False,
+        # Will be set by application code using datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+
+    # Error tracking
+    last_error: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    error_history: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+
+    # Dispatch method tracking (for observability)
+    attempted_methods: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    successful_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<DispatchEventQueue(id={self.id}, job_id={self.job_id!r}, "
+            f"status={self.status.value}, retry={self.retry_count}/{self.max_retries})>"
+        )
+
+
+# ----------------------------------------------------------------------
 #  Export public API
 # ----------------------------------------------------------------------
 __all__ = [
@@ -255,4 +381,6 @@ __all__ = [
     "ExplainAuditRecord",
     "GeneratorAgentState",
     "SFEAgentState",
+    "DispatchEventQueue",
+    "DispatchEventStatus",
 ]

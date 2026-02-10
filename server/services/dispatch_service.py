@@ -437,8 +437,53 @@ async def _dispatch_with_fallback(
                     job_id=job_id, method=DispatchMethod.WEBHOOK, result="failure"
                 ).inc()
     
-    # Method 3: Database queue (last resort - not yet implemented)
-    # TODO: Implement database queue for guaranteed delivery
+    # Method 3: Database queue (last resort - guaranteed delivery)
+    try:
+        success = await _dispatch_via_database_queue(job_id, event, correlation_id)
+        if success:
+            duration = time.time() - start_time
+
+            if METRICS_AVAILABLE:
+                dispatch_attempts_total.labels(
+                    job_id=job_id, method=DispatchMethod.DATABASE, result="success"
+                ).inc()
+                dispatch_duration_seconds.labels(
+                    job_id=job_id, method=DispatchMethod.DATABASE
+                ).observe(duration)
+
+            logger.info(
+                f"✓ Enqueued job {job_id} completion to database queue in {duration:.2f}s. "
+                f"Event will be processed asynchronously.",
+                extra={
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "method": "database",
+                    "duration_seconds": duration
+                }
+            )
+
+            if span:
+                span.set_status(Status(StatusCode.OK))
+                span.set_attribute("dispatch_method", "database")
+
+            return True
+    except Exception as e:
+        logger.error(
+            f"Database queue dispatch failed for job {job_id}: {e}",
+            extra={
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "error": str(e),
+                "method": "database"
+            }
+        )
+
+        if METRICS_AVAILABLE:
+            dispatch_attempts_total.labels(
+                job_id=job_id, method=DispatchMethod.DATABASE, result="failure"
+            ).inc()
+
+    # All methods failed
     logger.warning(
         f"All dispatch methods failed for job {job_id}. "
         f"Event will not be delivered to downstream systems. "
@@ -717,3 +762,349 @@ def get_kafka_health_status() -> Dict[str, Any]:
         status["message"] = "Circuit breaker in half-open state, testing recovery"
     
     return status
+
+
+async def _dispatch_via_database_queue(
+    job_id: str,
+    event: Dict[str, Any],
+    correlation_id: str
+) -> bool:
+    """
+    Persist event to database queue for guaranteed asynchronous delivery.
+
+    This implements the Transactional Outbox pattern for reliable event delivery:
+    - Event is persisted to database before acknowledging success
+    - Separate background processor reads and delivers events
+    - Automatic retry with exponential backoff
+    - Dead letter queue for permanently failed events
+    - At-least-once delivery semantics
+
+    Args:
+        job_id: Unique job identifier
+        event: Event payload to persist
+        correlation_id: Correlation ID for tracing
+
+    Returns:
+        True if event was successfully enqueued
+
+    Industry Standards:
+        - Transactional Outbox Pattern (Chris Richardson)
+        - NIST SP 800-53 AU-9: Protection of Audit Information
+        - At-least-once delivery semantics
+        - ACID guarantees via database transaction
+
+    Example:
+        >>> event = {"job_id": "123", "status": "completed"}
+        >>> success = await _dispatch_via_database_queue("123", event, "corr-456")
+    """
+    try:
+        # Import database models and session management
+        from omnicore_engine.database.models import DispatchEventQueue, DispatchEventStatus
+        from omnicore_engine.database.database import Database
+
+        # Get database instance
+        db = Database()
+
+        # Ensure database is initialized
+        if not db._engine:
+            await db.async_init()
+
+        # Create queue entry
+        from datetime import datetime, timezone
+
+        queue_entry = DispatchEventQueue(
+            job_id=job_id,
+            event_type=event.get("event_type", "job.completed"),
+            correlation_id=correlation_id,
+            payload=event,
+            status=DispatchEventStatus.PENDING,
+            retry_count=0,
+            max_retries=5,
+            created_at=datetime.now(timezone.utc),
+            attempted_methods={}
+        )
+
+        # Persist to database (ACID transaction)
+        async with db.get_session() as session:
+            session.add(queue_entry)
+            await session.commit()
+            await session.refresh(queue_entry)
+
+            logger.debug(
+                f"Event enqueued to database: id={queue_entry.id}, job_id={job_id}",
+                extra={
+                    "correlation_id": correlation_id,
+                    "queue_id": queue_entry.id,
+                    "job_id": job_id
+                }
+            )
+
+        return True
+
+    except Exception as e:
+        logger.error(
+            f"Failed to enqueue event to database: {e}",
+            extra={
+                "correlation_id": correlation_id,
+                "job_id": job_id,
+                "error_type": type(e).__name__
+            },
+            exc_info=True
+        )
+        return False
+
+
+async def process_dispatch_queue(batch_size: int = 100, max_runtime: Optional[float] = None):
+    """
+    Process pending events in the dispatch queue with retry logic.
+
+    This background processor implements:
+    - Batch processing for efficiency
+    - Exponential backoff for retries
+    - Dead letter queue for permanent failures
+    - Graceful shutdown support
+    - Comprehensive observability
+
+    Args:
+        batch_size: Number of events to process per batch
+        max_runtime: Optional max runtime in seconds before returning (for testing)
+
+    Industry Standards:
+        - Worker Pool Pattern for high-throughput processing
+        - Exponential Backoff Algorithm (RFC 2988, RFC 6298)
+        - Circuit Breaker Pattern for downstream protection
+        - NIST SP 800-53 SI-11: Error Handling
+
+    Example Usage:
+        ```python
+        # Start background processor
+        asyncio.create_task(process_dispatch_queue(batch_size=50))
+
+        # Or run for limited time (testing)
+        await process_dispatch_queue(batch_size=10, max_runtime=60)
+        ```
+    """
+    try:
+        from omnicore_engine.database.models import DispatchEventQueue, DispatchEventStatus
+        from omnicore_engine.database.database import Database
+        from datetime import datetime, timezone, timedelta
+
+        db = Database()
+
+        # Ensure database is initialized
+        if not db._engine:
+            await db.async_init()
+
+        logger.info(
+            f"Starting dispatch queue processor (batch_size={batch_size})",
+            extra={"batch_size": batch_size}
+        )
+
+        start_time = time.time()
+        processed_count = 0
+        success_count = 0
+        failure_count = 0
+
+        while True:
+            # Check runtime limit
+            if max_runtime and (time.time() - start_time) >= max_runtime:
+                logger.info(f"Max runtime reached, stopping processor")
+                break
+
+            try:
+                async with db.get_session() as session:
+                    # Fetch pending events (ordered by creation time for FIFO)
+                    from sqlalchemy import select, and_
+
+                    now = datetime.now(timezone.utc)
+
+                    # Select events that are:
+                    # 1. PENDING status, OR
+                    # 2. FAILED status with next_retry_at <= now
+                    result = await session.execute(
+                        select(DispatchEventQueue)
+                        .where(
+                            and_(
+                                DispatchEventQueue.status.in_([
+                                    DispatchEventStatus.PENDING,
+                                    DispatchEventStatus.FAILED
+                                ]),
+                                (DispatchEventQueue.next_retry_at.is_(None)) |
+                                (DispatchEventQueue.next_retry_at <= now)
+                            )
+                        )
+                        .order_by(DispatchEventQueue.created_at)
+                        .limit(batch_size)
+                        .with_for_update(skip_locked=True)  # Prevent concurrent processing
+                    )
+
+                    events = result.scalars().all()
+
+                    if not events:
+                        # No events to process, sleep before next poll
+                        await asyncio.sleep(5)
+                        continue
+
+                    logger.info(f"Processing {len(events)} events from queue")
+
+                    # Process each event
+                    for queue_entry in events:
+                        processed_count += 1
+
+                        try:
+                            # Mark as processing
+                            queue_entry.status = DispatchEventStatus.PROCESSING
+                            queue_entry.updated_at = datetime.now(timezone.utc)
+                            await session.commit()
+
+                            # Attempt dispatch through all available methods
+                            dispatch_success = False
+
+                            # Try Kafka
+                            if kafka_available():
+                                try:
+                                    dispatch_success = await _dispatch_via_kafka(
+                                        queue_entry.payload,
+                                        queue_entry.correlation_id
+                                    )
+                                    if dispatch_success:
+                                        mark_kafka_success()
+                                        queue_entry.successful_method = "kafka"
+                                except Exception as e:
+                                    mark_kafka_failure()
+                                    logger.debug(f"Kafka dispatch failed: {e}")
+
+                            # Try webhook if Kafka failed
+                            if not dispatch_success:
+                                webhook_url = os.getenv("SFE_WEBHOOK_URL")
+                                if webhook_url:
+                                    try:
+                                        dispatch_success = await _dispatch_via_webhook(
+                                            webhook_url,
+                                            queue_entry.payload,
+                                            queue_entry.correlation_id
+                                        )
+                                        if dispatch_success:
+                                            queue_entry.successful_method = "webhook"
+                                    except Exception as e:
+                                        logger.debug(f"Webhook dispatch failed: {e}")
+
+                            # Update queue entry based on result
+                            if dispatch_success:
+                                queue_entry.status = DispatchEventStatus.COMPLETED
+                                queue_entry.completed_at = datetime.now(timezone.utc)
+                                success_count += 1
+
+                                logger.info(
+                                    f"✓ Successfully dispatched queue entry {queue_entry.id} "
+                                    f"for job {queue_entry.job_id} via {queue_entry.successful_method}",
+                                    extra={
+                                        "queue_id": queue_entry.id,
+                                        "job_id": queue_entry.job_id,
+                                        "method": queue_entry.successful_method
+                                    }
+                                )
+                            else:
+                                # Dispatch failed, increment retry count
+                                queue_entry.retry_count += 1
+                                queue_entry.last_error = "All dispatch methods failed"
+
+                                # Check if max retries exceeded
+                                if queue_entry.retry_count >= queue_entry.max_retries:
+                                    queue_entry.status = DispatchEventStatus.DEAD_LETTER
+                                    failure_count += 1
+
+                                    logger.error(
+                                        f"✗ Queue entry {queue_entry.id} moved to dead letter queue "
+                                        f"after {queue_entry.retry_count} retries",
+                                        extra={
+                                            "queue_id": queue_entry.id,
+                                            "job_id": queue_entry.job_id,
+                                            "retry_count": queue_entry.retry_count
+                                        }
+                                    )
+                                else:
+                                    # Schedule retry with exponential backoff
+                                    backoff_seconds = min(300, 2 ** queue_entry.retry_count * 10)
+                                    queue_entry.next_retry_at = now + timedelta(seconds=backoff_seconds)
+                                    queue_entry.status = DispatchEventStatus.FAILED
+
+                                    logger.warning(
+                                        f"Queue entry {queue_entry.id} failed, will retry in {backoff_seconds}s "
+                                        f"(attempt {queue_entry.retry_count}/{queue_entry.max_retries})",
+                                        extra={
+                                            "queue_id": queue_entry.id,
+                                            "job_id": queue_entry.job_id,
+                                            "retry_count": queue_entry.retry_count,
+                                            "next_retry_seconds": backoff_seconds
+                                        }
+                                    )
+
+                            queue_entry.updated_at = datetime.now(timezone.utc)
+                            await session.commit()
+
+                        except Exception as e:
+                            logger.error(
+                                f"Error processing queue entry {queue_entry.id}: {e}",
+                                extra={
+                                    "queue_id": queue_entry.id,
+                                    "error": str(e)
+                                },
+                                exc_info=True
+                            )
+                            # Rollback this entry, continue with next
+                            await session.rollback()
+
+            except Exception as e:
+                logger.error(
+                    f"Error in dispatch queue processor batch: {e}",
+                    extra={"error": str(e)},
+                    exc_info=True
+                )
+                await asyncio.sleep(10)  # Back off on errors
+
+        logger.info(
+            f"Dispatch queue processor stopped. Processed: {processed_count}, "
+            f"Success: {success_count}, Failed: {failure_count}",
+            extra={
+                "processed": processed_count,
+                "success": success_count,
+                "failed": failure_count
+            }
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Fatal error in dispatch queue processor: {e}",
+            exc_info=True
+        )
+
+
+def start_dispatch_queue_processor():
+    """
+    Start the dispatch queue processor as a background task.
+
+    This should be called during application startup to enable
+    guaranteed delivery of events via the database queue.
+
+    Returns:
+        asyncio.Task: Background task handle (can be awaited for cleanup)
+
+    Example:
+        ```python
+        # In FastAPI startup
+        @app.on_event("startup")
+        async def startup():
+            task = start_dispatch_queue_processor()
+            app.state.dispatch_processor = task
+
+        @app.on_event("shutdown")
+        async def shutdown():
+            app.state.dispatch_processor.cancel()
+            await app.state.dispatch_processor
+        ```
+    """
+    task = asyncio.create_task(process_dispatch_queue())
+    logger.info("Started dispatch queue processor as background task")
+    return task
+
