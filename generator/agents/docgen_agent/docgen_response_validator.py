@@ -188,15 +188,15 @@ def setup_nltk_data():
                     # Use threading for cross-platform timeout (works on Windows too)
                     import threading
                     
-                    download_success = [False]
-                    download_error = [None]
+                    # Use a dict for clearer thread communication
+                    download_result = {'success': False, 'error': None}
                     
                     def download_with_timeout():
                         try:
                             nltk.download(name, quiet=True)
-                            download_success[0] = True
+                            download_result['success'] = True
                         except Exception as e:
-                            download_error[0] = e
+                            download_result['error'] = e
                     
                     download_thread = threading.Thread(target=download_with_timeout, daemon=True)
                     download_thread.start()
@@ -207,12 +207,12 @@ def setup_nltk_data():
                             f"NLTK download for '{name}' timed out after 30 seconds. "
                             f"NLP features may be degraded."
                         )
-                    elif download_error[0]:
+                    elif download_result['error']:
                         logger.warning(
-                            f"Failed to download NLTK data '{name}': {download_error[0]}. "
+                            f"Failed to download NLTK data '{name}': {download_result['error']}. "
                             f"NLP features may be degraded."
                         )
-                    elif download_success[0]:
+                    elif download_result['success']:
                         logger.info(f"NLTK data '{name}' downloaded successfully")
                 except Exception as e:
                     logger.warning(

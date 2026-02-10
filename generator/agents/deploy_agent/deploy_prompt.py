@@ -613,15 +613,15 @@ class PromptTemplateRegistry:
         
         # Add project root deploy_templates FIRST (where actual templates exist)
         project_root_templates = PROJECT_ROOT / "deploy_templates"
-        # Use Path.resolve() for reliable path comparison
-        template_dir_resolved = Path(self.template_dir).resolve()
-        project_templates_resolved = project_root_templates.resolve()
         
         if project_root_templates.exists():
             loaders.append(FileSystemLoader(str(project_root_templates)))
             logger.info(f"Using project root template directory: {project_root_templates}")
             
             # Then add job-specific template directory as override (if different from project root)
+            # Use Path.resolve() for reliable path comparison
+            template_dir_resolved = Path(self.template_dir).resolve()
+            project_templates_resolved = project_root_templates.resolve()
             if template_dir_resolved != project_templates_resolved:
                 loaders.append(FileSystemLoader(self.template_dir))
                 logger.info(f"Added job-specific template override directory: {self.template_dir}")
