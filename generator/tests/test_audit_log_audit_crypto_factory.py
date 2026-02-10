@@ -268,7 +268,7 @@ def mock_aiohttp(monkeypatch):
     mock_client_session_instance = MagicMock()
     mock_client_session_instance.__aenter__ = AsyncMock(return_value=mock_session)
     mock_client_session_instance.__aexit__ = AsyncMock(return_value=None)
-    
+
     mock_client_session = MagicMock(return_value=mock_client_session_instance)
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_factory.aiohttp.ClientSession",
