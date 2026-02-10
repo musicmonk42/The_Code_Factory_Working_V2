@@ -342,7 +342,7 @@ async def test_tamper_detection_flags_and_skips(
 
     backend_label = test_backend.__class__.__name__
 
-    # Force metric collection before measuring and ensure we're reading the right counter
+    # Import to get current module reference and ensure we're reading the same counter the code writes to
     import generator.audit_log.audit_backend.audit_backend_core as fresh_core
     metric_counter = fresh_core.BACKEND_TAMPER_DETECTION_FAILURES
     _ = list(metric_counter.collect())
@@ -394,7 +394,7 @@ async def test_retry_operation_respects_limits(monkeypatch):
         attempts["count"] += 1
         raise ValueError("expected failure")
 
-    # Import fresh to ensure we're using the same module instance
+    # Import to get current module reference and ensure we're using the same Counter the code writes to
     import generator.audit_log.audit_backend.audit_backend_core as fresh_core
     
     if hasattr(fresh_core, "RETRY_BACKOFF_FACTOR"):
