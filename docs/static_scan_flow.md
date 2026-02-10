@@ -16,3 +16,9 @@
 - **Are scan results written to files? How does ASE find them?**  
   - Current Bandit/Mypy/Radon flows keep outputs in-memory (stdout) rather than writing to files. The Bandit integrations request JSON output and parse the returned text directly (`fixer_validate.py:759-787`, `gen_agent/agents.py:1657-1673`). No path discovery is required.  
   - If a developer runs tools manually with file outputs, ASE will not auto-discover them; any ingestion would require explicitly providing those paths or wiring a new hook.
+
+- **Post-deploy scanning vs. live memory**  
+  - Static tools are run against code on disk (inside containers, deployed repo copies, uploaded build folders). There is no live-memory scanning. Purpose: catch security/type/risky patterns “post-deploy” before users hit them.
+
+- **Language coverage**  
+  - Bandit/Mypy are Python-only. Other languages rely on their native linters/SAST (e.g., Semgrep/ESLint/GolangCI-Lint) where wired into the pipeline; there is no universal multi-language scanner automatically invoked by ASE—you must hook the appropriate tool per language.
