@@ -225,7 +225,10 @@ if CONFIG_FILE.exists():
             if os.getenv(f"VIZ_{k.upper()}") is not None
         }
         if PYDANTIC_AVAILABLE:
-            CONFIG = WorkflowVizConfig.parse_obj({**file_config, **env_overrides})
+            if hasattr(WorkflowVizConfig, 'model_validate'):
+                CONFIG = WorkflowVizConfig.model_validate({**file_config, **env_overrides})
+            else:
+                CONFIG = WorkflowVizConfig.parse_obj({**file_config, **env_overrides})
         else:
             CONFIG = {**file_config, **env_overrides}
     except (IOError, json.JSONDecodeError, ValidationError) as e:

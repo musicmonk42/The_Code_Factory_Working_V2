@@ -24,13 +24,22 @@ from self_fixing_engineer.simulation.plugins.siem_integration_plugin import (
 
 # A minimal Pydantic model for the config since the real one is now correctly mocked
 # or we assume Pydantic is available in the test environment.
-SIEM_CONFIG_MODEL = PluginGlobalConfig.parse_obj(
-    {
-        "default_siem_type": "splunk",
-        "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
-        "elastic": {"url": "http://mock-elastic.com", "api_key": "mock-api-key"},
-    }
-)
+if hasattr(PluginGlobalConfig, 'model_validate'):
+    SIEM_CONFIG_MODEL = PluginGlobalConfig.model_validate(
+        {
+            "default_siem_type": "splunk",
+            "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
+            "elastic": {"url": "http://mock-elastic.com", "api_key": "mock-api-key"},
+        }
+    )
+else:
+    SIEM_CONFIG_MODEL = PluginGlobalConfig.parse_obj(
+        {
+            "default_siem_type": "splunk",
+            "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
+            "elastic": {"url": "http://mock-elastic.com", "api_key": "mock-api-key"},
+        }
+    )
 
 
 # ==============================================================================
@@ -100,16 +109,28 @@ def mock_external_dependencies():
 
             # This is crucial: we must also patch the config model loaded by the module
             # to ensure the plugin initializes with our mocked env vars during the test.
-            test_config_model = PluginGlobalConfig.parse_obj(
-                {
-                    "default_siem_type": "splunk",
-                    "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
-                    "elastic": {
-                        "url": "http://mock-elastic.com",
-                        "api_key": "mock-api-key",
-                    },
-                }
-            )
+            if hasattr(PluginGlobalConfig, 'model_validate'):
+                test_config_model = PluginGlobalConfig.model_validate(
+                    {
+                        "default_siem_type": "splunk",
+                        "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
+                        "elastic": {
+                            "url": "http://mock-elastic.com",
+                            "api_key": "mock-api-key",
+                        },
+                    }
+                )
+            else:
+                test_config_model = PluginGlobalConfig.parse_obj(
+                    {
+                        "default_siem_type": "splunk",
+                        "splunk": {"url": "http://mock-splunk.com", "token": "mock-token"},
+                        "elastic": {
+                            "url": "http://mock-elastic.com",
+                            "api_key": "mock-api-key",
+                        },
+                    }
+                )
             with patch(f"{plugin_path}.SIEM_CONFIG_MODEL", test_config_model):
                 yield {
                     "mock_splunk_client": mock_splunk_client,
@@ -141,7 +162,10 @@ def test_config_model_validation_success():
             ]
         },
     }
-    config = PluginGlobalConfig.parse_obj(config_data)
+    if hasattr(PluginGlobalConfig, 'model_validate'):
+        config = PluginGlobalConfig.model_validate(config_data)
+    else:
+        config = PluginGlobalConfig.parse_obj(config_data)
     assert config.default_siem_type == "splunk"
     assert config.splunk.url == "https://test.com"
     assert len(config.policy.rules) == 1
@@ -150,7 +174,10 @@ def test_config_model_validation_success():
 def test_config_model_validation_invalid_type():
     """Test that an invalid SIEM type raises a ValidationError."""
     with pytest.raises(ValidationError):
-        PluginGlobalConfig.parse_obj({"default_siem_type": "invalid_siem"})
+        if hasattr(PluginGlobalConfig, 'model_validate'):
+            PluginGlobalConfig.model_validate({"default_siem_type": "invalid_siem"})
+        else:
+            PluginGlobalConfig.parse_obj({"default_siem_type": "invalid_siem"})
 
 
 # ==============================================================================

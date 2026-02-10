@@ -366,9 +366,14 @@ class BaseSIEMClient:
             processed_log_entry = log_entry
             if validate_schema:
                 try:
-                    processed_log_entry = GenericLogEvent.parse_obj(
-                        log_entry
-                    ).model_dump()
+                    if hasattr(GenericLogEvent, 'model_validate'):
+                        processed_log_entry = GenericLogEvent.model_validate(
+                            log_entry
+                        ).model_dump()
+                    else:
+                        processed_log_entry = GenericLogEvent.parse_obj(
+                            log_entry
+                        ).model_dump()
                 except (ValueError, AttributeError) as e:
                     raise SIEMClientValidationError(
                         f"Log entry validation failed: {e}",
@@ -423,7 +428,10 @@ class BaseSIEMClient:
             current_log = log_entry
             if validate_schema:
                 try:
-                    current_log = GenericLogEvent.parse_obj(log_entry).model_dump()
+                    if hasattr(GenericLogEvent, 'model_validate'):
+                        current_log = GenericLogEvent.model_validate(log_entry).model_dump()
+                    else:
+                        current_log = GenericLogEvent.parse_obj(log_entry).model_dump()
                 except (ValueError, AttributeError) as e:
                     all_successful = False
                     failed_logs.append(

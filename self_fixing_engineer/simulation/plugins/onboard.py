@@ -218,7 +218,10 @@ try:
                 env_var = os.environ.get(f"OMNI_{key.upper()}")
                 if env_var:
                     file_config[key] = env_var
-            ONBOARD_DEFAULTS = OnboardConfig.parse_obj(file_config)
+            if hasattr(OnboardConfig, 'model_validate'):
+                ONBOARD_DEFAULTS = OnboardConfig.model_validate(file_config)
+            else:
+                ONBOARD_DEFAULTS = OnboardConfig.parse_obj(file_config)
     else:
         ONBOARD_DEFAULTS = OnboardConfig()
 except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
@@ -399,19 +402,21 @@ async def _generate_config(config_data: Dict[str, Any], filename: str = "config.
 
         # Pydantic validation (best effort)
         try:
-            OnboardConfig.parse_obj(
-                {
-                    "project_type": config_data.get("project_type", ""),
-                    "plugins_dir": config_data.get("plugins_dir", ""),
-                    "results_dir": config_data.get("results_dir", ""),
-                    "notification_backend": config_data.get("notification_backend", {}),
-                    "checkpoint_backend": config_data.get("checkpoint_backend", {}),
-                    "environment_variables": config_data.get(
-                        "environment_variables", {}
-                    ),
-                    "generated_with": config_data.get("generated_with", {}),
-                }
-            )
+            validation_dict = {
+                "project_type": config_data.get("project_type", ""),
+                "plugins_dir": config_data.get("plugins_dir", ""),
+                "results_dir": config_data.get("results_dir", ""),
+                "notification_backend": config_data.get("notification_backend", {}),
+                "checkpoint_backend": config_data.get("checkpoint_backend", {}),
+                "environment_variables": config_data.get(
+                    "environment_variables", {}
+                ),
+                "generated_with": config_data.get("generated_with", {}),
+            }
+            if hasattr(OnboardConfig, 'model_validate'):
+                OnboardConfig.model_validate(validation_dict)
+            else:
+                OnboardConfig.parse_obj(validation_dict)
         except ValidationError as e:
             print_status(f"Generated config failed validation: {e}", "warn")
             logger.warning(f"Config validation warning: {e}")

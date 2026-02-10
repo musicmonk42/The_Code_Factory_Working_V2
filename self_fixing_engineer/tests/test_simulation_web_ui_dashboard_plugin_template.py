@@ -105,7 +105,7 @@ def test_dashboard_config_validation_success():
         "redis_url": "redis://localhost:6379",
         "frontend_version": ">=1.0.0",
     }
-    config = DashboardConfig.parse_obj(config_data)
+    config = DashboardConfig.model_validate(config_data) if hasattr(DashboardConfig, 'model_validate') else DashboardConfig.parse_obj(config_data)
     assert config.websocket_interval_seconds == 0.5
     assert config.state_storage == "redis"
 
