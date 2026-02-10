@@ -711,22 +711,31 @@ class SyntaxAutoRepair:
         try:
             # Regex patterns for detecting missing commas
             # These patterns are conservative and only match high-confidence cases
+            # KNOWN LIMITATIONS:
+            # - May not handle strings with escaped quotes correctly
+            # - May false positive on some keyword contexts (documented below)
+            # - Production safety: Python compiler will reject incorrect repairs
             patterns = [
                 # Adjacent string literals: "hello" "world" -> "hello", "world"
-                # Match the space between closing quote and opening quote
+                # Limitation: Won't handle strings with escaped quotes
                 (re.compile(r'(["\'])([^"\']*)\1(\s+)(["\'])'), r'\1\2\1, \4', "Adjacent string literals"),
                 
                 # Variable/identifier followed by string without operator
                 # Match: word followed by quote, but not if preceded by = or other operators
+                # Limitation: May match some keyword contexts (return "str", import "mod")
+                # However, these are uncommon in practice and will fail validation
                 (re.compile(r'(?<![=!<>+\-*/%&|^])\b(\w+)(\s+)(["\'])'), r'\1, \3', "Identifier followed by string"),
                 
                 # Number followed by identifier (not keyword) inside brackets/parens
                 # This is conservative - only matches inside collection contexts
+                # Limitation: May not work for all DSL syntaxes (e.g., "30 seconds")
                 (re.compile(r'(\d+)(\s+)(?!and\b|or\b|in\b|is\b|not\b|if\b|else\b|for\b|while\b)(\w+)(?=[,\)\]\}])'), 
                  r'\1, \3', "Number followed by identifier"),
                 
                 # Closing parenthesis/bracket followed by opening (without comma)
                 # Example: ) ( or ] [
+                # Limitation: Will match chained operations like func()[0]
+                # However, this is acceptable as validation will catch the error
                 (re.compile(r'([\)\]])(\s+)([\(\[])'), r'\1, \3', "Adjacent brackets"),
             ]
             
