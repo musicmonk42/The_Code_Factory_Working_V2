@@ -538,8 +538,8 @@ ALLOW_PRIVILEGED_CONTAINERS_GLOBAL = False
 
 
 if PYDANTIC_AVAILABLE:
-
-    class _SandboxPolicyModel(BaseModel):
+    # Make SandboxPolicy the actual class, not an alias, to avoid metaclass conflicts
+    class SandboxPolicy(BaseModel):
         """Pydantic-based SandboxPolicy implementation with validation."""
         network_disabled: bool = Field(
             default=False, description="Disable network access for the sandbox"
@@ -575,13 +575,10 @@ if PYDANTIC_AVAILABLE:
                 if v.startswith("0:") or ":0" in v or "root" in v.lower():
                     raise ValueError("Running as root (UID 0) is forbidden")
                 return v
-    
-    # Use explicit type aliasing to avoid metaclass conflicts
-    SandboxPolicy = _SandboxPolicyModel
 
-    def _default_policy() -> _SandboxPolicyModel:
+    def _default_policy() -> SandboxPolicy:
         """Return a default SandboxPolicy instance with secure defaults."""
-        return _SandboxPolicyModel(
+        return SandboxPolicy(
             network_disabled=True,
             allow_write=False,
             privileged=False,
@@ -591,8 +588,8 @@ if PYDANTIC_AVAILABLE:
         )
 
 else:
-
-    class _SandboxPolicyFallback:
+    # Fallback SandboxPolicy class when Pydantic is not available
+    class SandboxPolicy:
         """Fallback SandboxPolicy class when Pydantic is not available."""
 
         def __init__(self, **kwargs):
@@ -609,18 +606,15 @@ else:
 
         def dict(self):
             return self.__dict__
-    
-    # Use explicit type aliasing to avoid metaclass conflicts
-    SandboxPolicy = _SandboxPolicyFallback
 
-    def _default_policy() -> _SandboxPolicyFallback:
+    def _default_policy() -> SandboxPolicy:
         """Return a default SandboxPolicy instance with secure defaults."""
-        return _SandboxPolicyFallback()
+        return SandboxPolicy()
 
 
 if PYDANTIC_AVAILABLE:
-
-    class _ContainerValidationConfigModel(BaseModel):
+    # Make ContainerValidationConfig the actual class, not an alias, to avoid metaclass conflicts
+    class ContainerValidationConfig(BaseModel):
         """Pydantic-based ContainerValidationConfig implementation with validation."""
         image: str = Field(..., description="Container image name.")
         command: List[str] = Field(..., description="Container command.")
@@ -678,13 +672,10 @@ if PYDANTIC_AVAILABLE:
                         "Kubernetes pod manifest fails security compliance checks."
                     )
                 return v
-    
-    # Use explicit type aliasing to avoid metaclass conflicts
-    ContainerValidationConfig = _ContainerValidationConfigModel
 
 else:
-
-    class _ContainerValidationConfigFallback:
+    # Fallback ContainerValidationConfig class when Pydantic is not available
+    class ContainerValidationConfig:
         """Fallback ContainerValidationConfig class when Pydantic is not available."""
         def __init__(
             self,
@@ -695,9 +686,6 @@ else:
             self.image = image
             self.command = command
             self.kubernetes_pod_manifest = kubernetes_pod_manifest
-    
-    # Use explicit type aliasing to avoid metaclass conflicts
-    ContainerValidationConfig = _ContainerValidationConfigFallback
 
 
 def _validate_container_config(image: str, command: List[str]):
