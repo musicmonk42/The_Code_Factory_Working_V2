@@ -2050,6 +2050,153 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
     
+    async def _run_deploy_all(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute deployment for ALL targets (docker, kubernetes, helm) sequentially.
+        
+        This method runs all deployment targets as required stages, not optional.
+        Returns aggregated results from all targets and fails if any required target fails.
+        
+        Args:
+            job_id: The job identifier
+            payload: Deployment configuration containing code_path and other settings
+            
+        Returns:
+            Dict containing:
+                - status: "completed" or "error"
+                - results: Dict mapping each target to its result
+                - generated_files: List of all generated files across all targets
+                - failed_targets: List of targets that failed (if any)
+        """
+        logger.info(f"[DEPLOY_ALL] Starting deployment for all targets for job {job_id}")
+        
+        # Define the required deployment targets
+        targets = ["docker", "kubernetes", "helm"]
+        results = {}
+        all_generated_files = []
+        failed_targets = []
+        
+        code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+        include_ci_cd = payload.get("include_ci_cd", False)
+        
+        # Run each target sequentially
+        for target in targets:
+            logger.info(f"[DEPLOY_ALL] Job {job_id} running target: {target}")
+            target_payload = {
+                "code_path": code_path,
+                "platform": target,
+                "include_ci_cd": include_ci_cd,
+            }
+            
+            try:
+                target_result = await self._run_deploy(job_id, target_payload)
+                results[target] = target_result
+                
+                if target_result.get("status") == "completed":
+                    logger.info(f"[DEPLOY_ALL] Job {job_id} completed target {target}")
+                    # Collect generated files from this target
+                    target_files = target_result.get("generated_files", [])
+                    all_generated_files.extend(target_files)
+                elif target_result.get("status") == "error":
+                    logger.error(f"[DEPLOY_ALL] Job {job_id} failed target {target}: {target_result.get('message', 'Unknown error')}")
+                    failed_targets.append(target)
+                    # Continue to next target even on failure to collect all results
+            except Exception as e:
+                logger.error(f"[DEPLOY_ALL] Job {job_id} exception during target {target}: {e}", exc_info=True)
+                results[target] = {
+                    "status": "error",
+                    "message": str(e),
+                    "error_type": type(e).__name__,
+                }
+                failed_targets.append(target)
+        
+        # Determine overall status
+        if failed_targets:
+            logger.warning(f"[DEPLOY_ALL] Job {job_id} completed with failures in targets: {failed_targets}")
+            return {
+                "status": "error",
+                "message": f"Deployment failed for targets: {', '.join(failed_targets)}",
+                "results": results,
+                "generated_files": all_generated_files,
+                "failed_targets": failed_targets,
+                "completed_targets": [t for t in targets if t not in failed_targets],
+            }
+        else:
+            logger.info(f"[DEPLOY_ALL] Job {job_id} completed all targets successfully")
+            return {
+                "status": "completed",
+                "message": "All deployment targets completed successfully",
+                "results": results,
+                "generated_files": all_generated_files,
+                "failed_targets": [],
+                "completed_targets": targets,
+            }
+    
+    async def _validate_deployment_completeness(self, job_id: str, code_path: str) -> Dict[str, Any]:
+        """
+        Validate that all required deployment files exist and are valid.
+        
+        Uses the DeploymentCompletenessValidator to check:
+        - All required deployment files exist
+        - No unsubstituted placeholders remain
+        - YAML files are valid
+        - Dockerfiles have required instructions
+        
+        Args:
+            job_id: The job identifier
+            code_path: Path to the generated code directory
+            
+        Returns:
+            Dict containing validation results:
+                - status: "passed" or "failed"
+                - errors: List of validation errors
+        """
+        logger.info(f"[DEPLOY_VALIDATION] Starting deployment completeness validation for job {job_id}")
+        
+        # Import the validator
+        try:
+            from generator.agents.deploy_agent.deploy_validator import DeploymentCompletenessValidator
+        except ImportError as e:
+            logger.error(f"[DEPLOY_VALIDATION] Failed to import DeploymentCompletenessValidator: {e}")
+            return {
+                "status": "error",
+                "errors": [f"Failed to import validator: {str(e)}"],
+            }
+        
+        # Change to the code path directory for validation
+        original_cwd = os.getcwd()
+        try:
+            if code_path and Path(code_path).exists():
+                os.chdir(code_path)
+                logger.info(f"[DEPLOY_VALIDATION] Changed directory to {code_path}")
+            
+            # Create validator instance
+            validator = DeploymentCompletenessValidator()
+            
+            # Validate all deployment types
+            validation_result = await validator.validate(
+                config_content="",  # Not used for file-based validation
+                target_type="all"   # Validate all deployment types
+            )
+            
+            logger.info(
+                f"[DEPLOY_VALIDATION] Job {job_id} validation {validation_result.get('status')}: "
+                f"missing={len(validation_result.get('missing_files', []))}, "
+                f"invalid={len(validation_result.get('invalid_files', []))}, "
+                f"placeholders={len(validation_result.get('placeholder_issues', []))}"
+            )
+            
+            return validation_result
+            
+        except Exception as e:
+            logger.error(f"[DEPLOY_VALIDATION] Error during validation: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "errors": [f"Validation error: {str(e)}"],
+            }
+        finally:
+            # Restore original working directory
+            os.chdir(original_cwd)
+    
     @staticmethod
     def _sanitize_dockerfile_content(content: str) -> str:
         """Sanitize Dockerfile content from LLM responses.
@@ -3174,16 +3321,62 @@ class OmniCoreService:
             if include_deployment:
                 deploy_payload = {
                     "code_path": codegen_result.get("output_path"),
-                    "platform": "docker",
                     "include_ci_cd": True,
                 }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy with payload: {deploy_payload}")
-                deploy_result = await self._run_deploy(job_id, deploy_payload)
+                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm)")
+                
+                # Run all deployment targets
+                deploy_result = await self._run_deploy_all(job_id, deploy_payload)
+                
                 if deploy_result.get("status") == "completed":
                     stages_completed.append("deploy")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: deploy - files: {deploy_result.get('generated_files', [])}")
+                    logger.info(
+                        f"[PIPELINE] Job {job_id} completed step: deploy_all - "
+                        f"targets: {deploy_result.get('completed_targets', [])} - "
+                        f"files: {deploy_result.get('generated_files', [])}"
+                    )
+                    
+                    # Run deployment completeness validation
+                    logger.info(f"[PIPELINE] Job {job_id} starting deployment validation")
+                    try:
+                        validation_result = await self._validate_deployment_completeness(
+                            job_id, 
+                            codegen_result.get("output_path")
+                        )
+                        
+                        if validation_result.get("status") == "failed":
+                            logger.error(
+                                f"[PIPELINE] Job {job_id} FAILING pipeline: Deployment validation failed - "
+                                f"errors: {validation_result.get('errors', [])}"
+                            )
+                            await self._finalize_failed_job(
+                                job_id,
+                                error=f"Deployment validation failed: {'; '.join(validation_result.get('errors', []))}"
+                            )
+                            return {
+                                "status": "failed",
+                                "message": f"Deployment validation failed",
+                                "stages_completed": stages_completed,
+                                "validation_errors": validation_result.get("errors", []),
+                            }
+                        else:
+                            logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
+                            
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} deployment validation error: {e}", exc_info=True)
+                        # Continue pipeline on validation errors for now (non-fatal)
+                        logger.warning(f"[PIPELINE] Job {job_id} continuing despite validation error")
+                        
                 elif deploy_result.get("status") == "error":
-                    logger.warning(f"[PIPELINE] Job {job_id} failed step: deploy - {deploy_result.get('message', 'Unknown error')} (continuing pipeline)")
+                    deploy_error = deploy_result.get('message', 'Unknown error')
+                    logger.error(f"[PIPELINE] Job {job_id} FAILING pipeline: deploy_all failed - {deploy_error}")
+                    await self._finalize_failed_job(job_id, error=f"Deployment failed: {deploy_error}")
+                    return {
+                        "status": "failed",
+                        "message": f"Deployment failed: {deploy_error}",
+                        "stages_completed": stages_completed,
+                        "failed_targets": deploy_result.get("failed_targets", []),
+                    }
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
