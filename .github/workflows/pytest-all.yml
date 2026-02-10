@@ -945,7 +945,6 @@ jobs:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           PYTHONMALLOC: "malloc"
-          PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
@@ -1005,7 +1004,6 @@ jobs:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           PYTHONMALLOC: "malloc"
-          PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD"
