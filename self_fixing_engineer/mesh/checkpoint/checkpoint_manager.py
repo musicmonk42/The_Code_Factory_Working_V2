@@ -404,6 +404,16 @@ else:
             yield NullSpan()
 
     tracer = NullTracer()
+    
+    # Mock Status and StatusCode for when OpenTelemetry is not available
+    class StatusCode:
+        OK = "OK"
+        ERROR = "ERROR"
+    
+    class Status:
+        def __init__(self, code, description=""):
+            self.code = code
+            self.description = description
 
 
 # ---- Circuit Breaker Configuration ----
