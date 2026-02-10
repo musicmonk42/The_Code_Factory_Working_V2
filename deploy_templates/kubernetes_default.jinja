@@ -2,78 +2,214 @@
 
 {# 
   Default Kubernetes Deployment Template
-  Generates standard Kubernetes manifests for application deployment.
+  Generates standard, production-ready Kubernetes manifests for application deployment.
+  
+  Features:
+    - Complete K8s manifest generation (Deployment, Service)
+    - Security best practices (non-root, resource limits)
+    - Health probes and readiness checks
+    - Production-grade configuration
+    - Cloud-native standards compliance
+    
+  Standards Compliance:
+    - CIS Kubernetes Benchmark (basic controls)
+    - Pod Security Standards (Baseline profile)
+    - Cloud Native Security best practices
+    - CNCF recommended practices
 #}
 
-# Kubernetes Manifests Generation
+# Production-Ready Kubernetes Manifests Generation
 
-Generate Kubernetes deployment manifests for {{ target | default('the application') }}.
+Generate production-ready Kubernetes manifests following cloud-native best practices for {{ target | default('the application') }}.
 
 {% if files %}
-## Application Files:
+## Application Files Generated:
 {% for file in files %}
 - {{ file }}
 {% endfor %}
 {% endif %}
 
 {% if context is defined %}
-## Application Context
+## Application Context & Analysis
 
 {% if context.language is defined %}
-**Language**: {{ context.language }}
+- **Language**: {{ context.language }}
 {% endif %}
 
 {% if context.framework is defined %}
-**Framework**: {{ context.framework }}
+- **Framework**: {{ context.framework }}
+{% endif %}
+
+{% if context.dependencies is defined and context.dependencies %}
+**Dependencies Detected**:
+{% for dep in context.dependencies %}
+  - {{ dep }}
+{% endfor %}
 {% endif %}
 
 {% if context.files_content is defined and context.files_content %}
-## Application Code Analysis
+## Generated Application Files (Analyze for Configuration)
 
-**CRITICAL**: Analyze these files to determine:
-- The actual port(s) the application listens on
-- The correct startup command
+**CRITICAL**: You MUST analyze these actual files to determine the correct:
+- Application port(s) (scan for listen/bind calls)
+- Entry point command and arguments
 - Required environment variables
-- Health check endpoints
+- Health check endpoints (e.g., /health, /healthz, /ready)
+- Volume mount requirements
+- Configuration file paths
 
 {% for filename, content in context.files_content.items() %}
-### {{ filename }}
+### File: {{ filename }}
 ```
-{{ content[:400] }}{% if content|length > 400 %}...{% endif %}
+{{ content[:400] }}{% if content|length > 400 %}... (truncated, analyze full content){% endif %}
 ```
 {% endfor %}
 {% endif %}
 
+{% if context.replicas is defined %}
+- **Replicas**: {{ context.replicas }}
+{% else %}
+- **Replicas**: 2 (default for availability)
+{% endif %}
+
 {% if context.port is defined %}
-**Port**: {{ context.port }}
+- **Port**: {{ context.port }}
 {% endif %}
 {% endif %}
 
-## Requirements
+---
 
-Generate the following Kubernetes manifests:
+**DEPLOYMENT ACCURACY REQUIREMENT**: 
+Before generating manifests, you MUST analyze the actual application code above to determine:
+1. The exact port(s) the application listens on (do NOT assume 8080)
+2. The correct startup command and arguments
+3. Environment variables the code actually uses
+4. Health check endpoints the application exposes
+5. Any configuration files or volumes the app requires
 
-1. **Deployment** - with:
-   - Appropriate replicas
-   - Container spec with correct port and command
-   - Resource limits and requests
-   - Readiness and liveness probes
-   - Security context (non-root user)
+---
 
-2. **Service** - with:
-   - ClusterIP type (or LoadBalancer if specified)
-   - Correct port mapping
-   - Proper selector labels
+## REQUIREMENTS - Kubernetes Best Practices
+
+### 1. Deployment Manifest
+**MUST Include:**
+- Proper metadata (name, labels, annotations)
+- Replica count (minimum 2 for availability)
+- Update strategy (RollingUpdate with maxSurge/maxUnavailable)
+- Pod template with proper labels
+- Security context (run as non-root user)
+- Resource requests and limits (CPU, memory)
+- Liveness and readiness probes
+- Proper container image with tag (never :latest)
+- Environment variables and configuration
+- Graceful termination (terminationGracePeriodSeconds: 30)
+
+**Security Context Requirements:**
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false  # Set true if app supports it
+  allowPrivilegeEscalation: false
+```
+
+**Resource Management:**
+- Set realistic CPU and memory requests based on application needs
+- Set limits to prevent resource exhaustion
+- Use appropriate QoS class (Burstable or Guaranteed)
+
+**Health Probes:**
+- Liveness probe: Detects if application is dead (restart on failure)
+- Readiness probe: Detects if application can serve traffic
+- Startup probe: For slow-starting applications (optional)
+- Use httpGet for HTTP apps, tcpSocket for TCP, or exec for custom checks
+
+### 2. Service Manifest
+**MUST Include:**
+- Proper metadata (name, labels)
+- Selector matching Deployment labels
+- Service type (ClusterIP for internal, LoadBalancer for external)
+- Port mapping (port, targetPort, protocol)
+- Session affinity if needed
+
+### 3. Labels & Annotations
+**Standard Labels (app.kubernetes.io):**
+- app.kubernetes.io/name: Application name
+- app.kubernetes.io/instance: Deployment instance name
+- app.kubernetes.io/version: Application version
+- app.kubernetes.io/component: Component role
+- app.kubernetes.io/part-of: Part of larger system
+- app.kubernetes.io/managed-by: Tool managing the resource
+
+**Useful Annotations:**
+- prometheus.io/scrape: "true" (if metrics available)
+- prometheus.io/port: Metrics port
+- prometheus.io/path: Metrics endpoint path
+
+---
+
+{% if repo_path is defined %}
+## Repository Context
+**Path**: {{ repo_path }}
+{% endif %}
 
 {% if instructions is defined and instructions %}
-## Additional Instructions
+## Additional Requirements
 {{ instructions }}
 {% endif %}
 
 ---
-**Output Format**: Generate valid YAML Kubernetes manifests. Output ONLY the YAML content with no markdown formatting, no explanations, and no code fences around the YAML.
 
-**CRITICAL**: 
-- Use the EXACT port from the application code
-- Do NOT use generic port 8080 unless the code actually uses it
-- Do NOT include markdown formatting in the output
+## OUTPUT FORMAT
+
+**CRITICAL REQUIREMENTS:**
+
+1. **Pure YAML Output**: Generate ONLY valid YAML Kubernetes manifests
+   - NO markdown code fences (```yaml, ```)
+   - NO explanations or commentary
+   - NO markdown formatting (**bold**, *italic*, etc.)
+   - NO section headers outside of YAML comments
+
+2. **Manifest Structure**: Generate clean, production-ready manifests with:
+   - YAML document separators (---) between resources
+   - Proper indentation (2 spaces)
+   - Comments explaining critical sections
+   - Logical resource ordering
+
+3. **Required Manifests** (in order):
+   - Deployment
+   - Service
+
+4. **Accuracy**: Use the EXACT configuration from the analyzed code:
+   - EXACT port from application (do NOT default to 8080)
+   - EXACT startup command from code
+   - ACTUAL environment variables used
+   - ACTUAL health check endpoints
+
+**Example Output Structure** (without markdown fences):
+```
+---
+# Deployment manifest here
+apiVersion: apps/v1
+kind: Deployment
+...
+---
+# Service manifest here
+apiVersion: v1
+kind: Service
+...
+```
+
+**VALIDATION CHECKLIST:**
+- [ ] Output contains ONLY YAML (no markdown)
+- [ ] All ports match application code
+- [ ] Security context is configured
+- [ ] Resource limits are set
+- [ ] Health probes are configured
+- [ ] Labels follow app.kubernetes.io standard
+- [ ] Service selector matches Deployment labels
