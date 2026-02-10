@@ -263,23 +263,31 @@ async def ensure_metrics_work():
 @pytest_asyncio.fixture(autouse=True)
 async def mock_alerts_and_otel():
     """Mock alerts and tracing for all tests."""
+    # Import fresh to ensure send_alert exists before patching
+    import generator.audit_log.audit_backend.audit_backend_core as test_core
+    import generator.audit_log.audit_backend.audit_backend_file_sql as test_file_sql
+    
+    # Verify send_alert exists before patching
+    if not hasattr(test_core, 'send_alert'):
+        raise RuntimeError("send_alert is not defined in audit_backend_core")
+    
     with (
         patch(
             "generator.audit_log.audit_backend.audit_backend_core.send_alert",
             new_callable=AsyncMock,
-            # Removed create=True to prevent interfering with module initialization
         ) as mock_alert,
         patch(
+            "generator.audit_log.audit_backend.audit_backend_file_sql.send_alert",
+            new_callable=AsyncMock,
+        ) as mock_alert_file,
+        patch(
             "generator.audit_log.audit_backend.audit_backend_core.tracer",
-            # Removed create=True to prevent interfering with module initialization
         ) as mock_tracer,
         patch(
             "generator.audit_log.audit_backend.audit_backend_core.HAS_OPENTELEMETRY",
             True,
-            # Removed create=True to prevent interfering with module initialization
         ),
     ):
-
         mock_span = MagicMock()
         mock_tracer.start_as_current_span.return_value.__enter__.return_value = (
             mock_span

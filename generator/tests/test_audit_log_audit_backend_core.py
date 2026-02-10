@@ -342,19 +342,21 @@ async def test_tamper_detection_flags_and_skips(
 
     backend_label = test_backend.__class__.__name__
 
-    # Force metric collection before measuring
-    _ = list(core.BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    # Import to get current module reference and ensure we're reading the same counter the code writes to
+    import generator.audit_log.audit_backend.audit_backend_core as fresh_core
+    metric_counter = fresh_core.BACKEND_TAMPER_DETECTION_FAILURES
+    _ = list(metric_counter.collect())
 
     before = _counter_total_for_labels(
-        core.BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+        metric_counter, backend=backend_label
     )
 
-    original_compute = core.compute_hash
+    original_compute = fresh_core.compute_hash
 
     def evil_hash(_data: bytes) -> str:
         return "DELIBERATELY_WRONG_HASH"
 
-    monkeypatch.setattr(core, "compute_hash", evil_hash)
+    monkeypatch.setattr(fresh_core, "compute_hash", evil_hash)
     
     # Ensure tamper detection is explicitly enabled
     test_backend.tamper_detection_enabled = True
@@ -363,7 +365,7 @@ async def test_tamper_detection_flags_and_skips(
     assert results == []
 
     # Give scheduled tasks (send_alert via create_task) more time to execute
-    await asyncio.sleep(2.0)  # Increased from 1.0
+    await asyncio.sleep(2.0)
     
     # Force all pending tasks to complete
     pending = [t for t in asyncio.all_tasks() if not t.done()]
@@ -371,17 +373,17 @@ async def test_tamper_detection_flags_and_skips(
         await asyncio.wait(pending, timeout=2.0)
 
     # Force metric collection before assertion
-    _ = list(core.BACKEND_TAMPER_DETECTION_FAILURES.collect())
+    _ = list(metric_counter.collect())
 
     after = _counter_total_for_labels(
-        core.BACKEND_TAMPER_DETECTION_FAILURES, backend=backend_label
+        metric_counter, backend=backend_label
     )
     assert after > before, f"Metric did not increment: before={before}, after={after}"
 
     if mock_send_alert is not None:
         assert mock_send_alert.await_count >= 1
 
-    monkeypatch.setattr(core, "compute_hash", original_compute)
+    monkeypatch.setattr(fresh_core, "compute_hash", original_compute)
 
 
 @pytest.mark.asyncio
@@ -392,42 +394,46 @@ async def test_retry_operation_respects_limits(monkeypatch):
         attempts["count"] += 1
         raise ValueError("expected failure")
 
-    if hasattr(core, "RETRY_BACKOFF_FACTOR"):
-        monkeypatch.setattr(core, "RETRY_BACKOFF_FACTOR", 0.001, raising=False)
-    if hasattr(core, "RETRY_MAX_ATTEMPTS"):
-        monkeypatch.setattr(core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
+    # Import to get current module reference and ensure we're using the same Counter the code writes to
+    import generator.audit_log.audit_backend.audit_backend_core as fresh_core
+    
+    if hasattr(fresh_core, "RETRY_BACKOFF_FACTOR"):
+        monkeypatch.setattr(fresh_core, "RETRY_BACKOFF_FACTOR", 0.001, raising=False)
+    if hasattr(fresh_core, "RETRY_MAX_ATTEMPTS"):
+        monkeypatch.setattr(fresh_core, "RETRY_MAX_ATTEMPTS", 3, raising=False)
 
-    # Force metric collection before measuring
-    _ = list(core.BACKEND_ERRORS.collect())
+    # Use the fresh_core metric counter
+    metric_counter = fresh_core.BACKEND_ERRORS
+    _ = list(metric_counter.collect())
 
     before = _counter_total_for_labels(
-        core.BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+        metric_counter, backend="TestBackend", type="ValueError"
     )
 
     with pytest.raises(ValueError, match="expected failure"):
-        await retry_operation(
+        await fresh_core.retry_operation(
             failing_op,
-            max_attempts=getattr(core, "RETRY_MAX_ATTEMPTS", 3),
-            backoff_factor=getattr(core, "RETRY_BACKOFF_FACTOR", 0.001),
+            max_attempts=getattr(fresh_core, "RETRY_MAX_ATTEMPTS", 3),
+            backoff_factor=getattr(fresh_core, "RETRY_BACKOFF_FACTOR", 0.001),
             backend_name="TestBackend",
             op_name="test_op",
         )
 
-    assert attempts["count"] == getattr(core, "RETRY_MAX_ATTEMPTS", 3)
+    assert attempts["count"] == getattr(fresh_core, "RETRY_MAX_ATTEMPTS", 3)
 
     # Give metrics more time to be collected  
-    await asyncio.sleep(1.0)  # Increased from 0.5
+    await asyncio.sleep(1.0)
 
-    # FIX: Force all pending tasks to complete
+    # Force all pending tasks to complete
     pending = [t for t in asyncio.all_tasks() if not t.done()]
     if pending:
         await asyncio.wait(pending, timeout=1.0)
 
     # Force metric collection before assertion
-    _ = list(core.BACKEND_ERRORS.collect())
+    _ = list(metric_counter.collect())
 
     after = _counter_total_for_labels(
-        core.BACKEND_ERRORS, backend="TestBackend", type="ValueError"
+        metric_counter, backend="TestBackend", type="ValueError"
     )
     # The counter increments on EACH attempt, so with 3 max attempts we expect 3 increments
     assert after >= before + 3, f"Expected at least {before + 3} errors, got {after} (before={before})"
