@@ -1,10 +1,11 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import asyncio
+import gc
 import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from self_fixing_engineer.simulation.sandbox import (
@@ -70,6 +71,14 @@ def reset_audit_hmac_key():
     global _audit_hmac_key
     _audit_hmac_key = None
     yield
+
+
+@pytest.fixture(autouse=True)
+def cleanup_memory():
+    """Fixture to clean up memory after each test to prevent OOM issues."""
+    yield
+    # Force garbage collection after each test
+    gc.collect()
 
 
 # --- Tests for SandboxPolicy ---
@@ -171,17 +180,19 @@ def test_verify_audit_log_integrity_mismatch(mock_glob, mock_audit_log, monkeypa
 async def test_cleanup_sandbox_docker(monkeypatch):
     """Test cleanup of Docker sandbox."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
+    
+    # Use Mock instead of MagicMock to reduce memory footprint
+    mock_container = Mock()
+    mock_container.stop = Mock()
+    mock_container.remove = Mock()
+    
+    mock_client = Mock()
+    mock_client.containers = Mock()
+    mock_client.containers.get = Mock(return_value=mock_container)
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.docker.from_env",
-        MagicMock(
-            return_value=MagicMock(
-                containers=MagicMock(
-                    get=MagicMock(
-                        return_value=MagicMock(stop=MagicMock(), remove=MagicMock())
-                    )
-                )
-            )
-        ),
+        Mock(return_value=mock_client),
     )
     _active_sandboxes["test_id"] = {"type": "docker", "container_id": "test_container"}
     await cleanup_sandbox("test_id")
@@ -195,20 +206,19 @@ async def test_cleanup_sandbox_docker(monkeypatch):
 async def test_run_in_docker_sandbox_success(monkeypatch):
     """Test successful Docker sandbox execution."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
+    
+    # Use Mock instead of MagicMock to reduce memory footprint
+    mock_container = Mock()
+    mock_container.wait = Mock(return_value={"StatusCode": 0})
+    mock_container.logs = Mock(return_value=b"output")
+    
+    mock_client = Mock()
+    mock_client.containers = Mock()
+    mock_client.containers.run = Mock(return_value=mock_container)
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.docker.from_env",
-        MagicMock(
-            return_value=MagicMock(
-                containers=MagicMock(
-                    run=MagicMock(
-                        return_value=MagicMock(
-                            wait=MagicMock(return_value={"StatusCode": 0}),
-                            logs=MagicMock(return_value=b"output"),
-                        )
-                    )
-                )
-            )
-        ),
+        Mock(return_value=mock_client),
     )
     result = await run_in_docker_sandbox(["echo", "test"], "/tmp")
     assert result["status"] == "COMPLETED"
@@ -222,20 +232,19 @@ async def test_run_in_docker_sandbox_success(monkeypatch):
 async def test_run_in_podman_sandbox_success(monkeypatch):
     """Test successful Podman sandbox execution."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.PODMAN_AVAILABLE", True)
+    
+    # Use Mock instead of MagicMock to reduce memory footprint
+    mock_container = Mock()
+    mock_container.wait = Mock(return_value={"StatusCode": 0})
+    mock_container.logs = Mock(return_value=b"output")
+    
+    mock_client = Mock()
+    mock_client.containers = Mock()
+    mock_client.containers.run = Mock(return_value=mock_container)
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.podman.Client",
-        MagicMock(
-            return_value=MagicMock(
-                containers=MagicMock(
-                    run=MagicMock(
-                        return_value=MagicMock(
-                            wait=MagicMock(return_value={"StatusCode": 0}),
-                            logs=MagicMock(return_value=b"output"),
-                        )
-                    )
-                )
-            )
-        ),
+        Mock(return_value=mock_client),
     )
     result = await run_in_podman_sandbox(["echo", "test"], "/tmp")
     assert result["status"] == "COMPLETED"
@@ -249,34 +258,41 @@ async def test_run_in_podman_sandbox_success(monkeypatch):
 async def test_deploy_to_kubernetes_success(monkeypatch):
     """Test successful Kubernetes deployment."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.KUBERNETES_AVAILABLE", True)
-    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.kube_config.load_kube_config", MagicMock())
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.kube_config.load_kube_config", Mock())
+    
+    # Use Mock instead of MagicMock to reduce memory footprint
+    mock_pod = Mock()
+    mock_pod.metadata = Mock()
+    mock_pod.metadata.name = "mock-pod"
+    
+    mock_pod_status = Mock()
+    mock_pod_status.status = Mock()
+    mock_pod_status.status.phase = "Succeeded"
+    
+    mock_list_result = Mock()
+    mock_list_result.items = [mock_pod]
+    
+    mock_core_api = Mock()
+    mock_core_api.read_namespaced_pod_status = Mock(return_value=mock_pod_status)
+    mock_core_api.read_namespaced_pod_log = Mock(return_value="output")
+    mock_core_api.list_namespaced_pod = Mock(return_value=mock_list_result)
+    
+    mock_job_status = Mock()
+    mock_job_status.status = Mock()
+    mock_job_status.status.succeeded = 1
+    
+    mock_batch_api = Mock()
+    mock_batch_api.create_namespaced_job = Mock()
+    mock_batch_api.read_namespaced_job_status = Mock(return_value=mock_job_status)
+    mock_batch_api.delete_namespaced_job = Mock()
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.client.CoreV1Api",
-        MagicMock(
-            return_value=MagicMock(
-                read_namespaced_pod_status=MagicMock(
-                    return_value=MagicMock(status=MagicMock(phase="Succeeded"))
-                ),
-                read_namespaced_pod_log=MagicMock(return_value="output"),
-                list_namespaced_pod=MagicMock(
-                    return_value=MagicMock(
-                        items=[MagicMock(metadata=MagicMock(name="mock-pod"))]
-                    )
-                ),
-            )
-        ),
+        Mock(return_value=mock_core_api),
     )
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.client.BatchV1Api",
-        MagicMock(
-            return_value=MagicMock(
-                create_namespaced_job=MagicMock(),
-                read_namespaced_job_status=MagicMock(
-                    return_value=MagicMock(status=MagicMock(succeeded=1))
-                ),
-                delete_namespaced_job=MagicMock(),
-            )
-        ),
+        Mock(return_value=mock_batch_api),
     )
     result = await deploy_to_kubernetes(["echo", "test"], "/tmp")
     assert result["status"] == "COMPLETED"
@@ -289,24 +305,13 @@ async def test_deploy_to_kubernetes_success(monkeypatch):
 @pytest.mark.asyncio
 async def test_run_in_local_process_sandbox_success(monkeypatch):
     """Test successful local process sandbox execution."""
+    mock_process = Mock()
+    mock_process.returncode = 0
+    mock_process.communicate = AsyncMock(return_value=(b"output", b""))
+    
     monkeypatch.setattr(
         "asyncio.create_subprocess_exec",
-        AsyncMock(
-            return_value=MagicMock(
-                returncode=0, communicate=AsyncMock(return_value=(b"output", b""))
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        "self_fixing_engineer.simulation.sandbox.client.BatchV1Api",
-        MagicMock(
-            return_value=MagicMock(
-                create_namespaced_job=MagicMock(),
-                read_namespaced_job_status=MagicMock(
-                    return_value=MagicMock(status=MagicMock(succeeded=1))
-                ),
-            )
-        ),
+        AsyncMock(return_value=mock_process),
     )
     result = await run_in_local_process_sandbox(["echo", "test"], "/tmp")
     assert result["status"] == "COMPLETED"
@@ -320,13 +325,13 @@ async def test_run_in_local_process_sandbox_success(monkeypatch):
 async def test_burst_to_cloud_aws_success(monkeypatch):
     """Test successful cloud burst to AWS."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AWS_AVAILABLE", True)
+    
+    mock_client = Mock()
+    mock_client.submit_job = Mock(return_value={"jobId": "test_id"})
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.boto3.client",
-        MagicMock(
-            return_value=MagicMock(
-                submit_job=MagicMock(return_value={"jobId": "test_id"})
-            )
-        ),
+        Mock(return_value=mock_client),
     )
     result = await burst_to_cloud({"job_name": "test"}, "aws")
     assert result["status"] == "CLOUD_BURST_INITIATED"
@@ -341,7 +346,7 @@ async def test_run_chaos_experiment_success(monkeypatch):
     """Test successful chaos experiment run."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.GREMLIN_AVAILABLE", True)
     monkeypatch.setattr(
-        "self_fixing_engineer.simulation.sandbox.gremlin.GremlinClient", MagicMock(return_value=MagicMock())
+        "self_fixing_engineer.simulation.sandbox.gremlin.GremlinClient", Mock(return_value=Mock())
     )
     monkeypatch.setenv("GREMLIN_TEAM_ID", "test")
     monkeypatch.setenv("GREMLIN_API_KEY", "test")
@@ -389,9 +394,14 @@ def test_get_audit_hmac_key_env(monkeypatch):
 async def test_check_external_services_async_success(monkeypatch):
     """Test successful external services check."""
     monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.DOCKER_AVAILABLE", True)
+    monkeypatch.setattr("self_fixing_engineer.simulation.sandbox.AWS_AVAILABLE", False)
+    
+    mock_client = Mock()
+    mock_client.ping = Mock()
+    
     monkeypatch.setattr(
         "self_fixing_engineer.simulation.sandbox.docker.from_env",
-        MagicMock(return_value=MagicMock(ping=MagicMock())),
+        Mock(return_value=mock_client),
     )
     await check_external_services_async()  # No exception raised
 
