@@ -1906,10 +1906,9 @@ async def handle_deploy_response(
             placeholder_patterns = [
                 r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
                 r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
-                r'placeholder',  # Generic "placeholder" text
+                r'\bplaceholder\s*[:=]',  # "placeholder:" or "placeholder=" (actual unsubstituted values)
                 r'REPLACE_ME',  # Common placeholder pattern
-                r'TODO:.*',  # TODO comments
-                r'FIXME:.*',  # FIXME comments
+                r'YOUR_[A-Z_]+',  # YOUR_API_KEY, YOUR_DATABASE, etc.
             ]
 
             placeholder_found = False
