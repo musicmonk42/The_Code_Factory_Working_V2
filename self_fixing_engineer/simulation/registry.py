@@ -21,6 +21,18 @@ except ImportError:
     # Fallback for Python < 3.8
     import importlib_metadata
 
+# Import packaging library for proper version constraint validation
+try:
+    from packaging.specifiers import SpecifierSet, InvalidSpecifier
+    from packaging.version import Version, InvalidVersion
+    HAS_PACKAGING = True
+except ImportError:
+    HAS_PACKAGING = False
+    logger.warning(
+        "packaging library not available. Version constraint validation will be limited. "
+        "Install with: pip install packaging"
+    )
+
 # --- Constants & Configuration ---
 SIMULATION_PACKAGE = "simulation"
 IS_DEMO_MODE = os.getenv("DEMO_MODE", "False").lower() == "true"
@@ -336,24 +348,40 @@ def validate_manifest(manifest: Dict[str, Any], module_name: str):
 
 async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) -> bool:
     """
-    Check if all plugin dependencies are installed.
+    Check if all plugin dependencies are installed with proper version constraint validation.
 
-    Note: This function only verifies that required packages are installed.
-    It does NOT perform full version constraint validation. For production use
-    with strict version requirements, consider integrating the 'packaging' library
-    for proper version comparison.
+    This function implements industry-standard version constraint checking using the
+    'packaging' library, supporting complex version specifiers like:
+    - ">=1.0,<2.0" (range constraints)
+    - "~=1.0" (compatible release)
+    - "!=1.5" (exclusion)
+    - "==1.0.*" (version prefix matching)
 
     Args:
         manifest: Plugin manifest containing dependencies dict
         module_name: Name of the module being checked
 
     Returns:
-        bool: True if all dependencies are installed, False otherwise
+        bool: True if all dependencies are installed with compatible versions
 
-    Limitations:
-        - Only checks package existence, not version constraints
-        - Version specifiers are logged but not validated
-        - For full version validation, integrate packaging.version.parse()
+    Raises:
+        importlib_metadata.PackageNotFoundError: If a required package is not installed
+        ValueError: If version constraint is not satisfied
+
+    Industry Standards:
+        - PEP 440: Version Identification and Dependency Specification
+        - Semantic Versioning (semver.org)
+        - NIST SP 800-53 CM-2: Baseline Configuration (dependency management)
+
+    Example Constraints:
+        ```python
+        dependencies = {
+            "numpy": ">=1.19.0,<2.0.0",  # Range
+            "pandas": "~=1.3.0",           # Compatible release (1.3.x)
+            "requests": ">=2.25.0",        # Minimum version
+            "pytest": "!=7.0.0",           # Exclude specific version
+        }
+        ```
     """
     dependencies = manifest.get("dependencies", {})
     if not dependencies:
@@ -361,41 +389,75 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
 
     try:
         # Use importlib.metadata instead of deprecated pkg_resources
-        for pkg, ver in dependencies.items():
+        for pkg, ver_spec in dependencies.items():
             try:
-                installed_version = importlib_metadata.version(pkg)
-                # Basic version checking - validates common patterns
-                # TODO: Integrate packaging library for proper version constraint validation
-                # to support complex version specifiers like ">=1.0,<2.0", "~=1.0", "!=1.0"
-                if ver:
-                    # Validate common version patterns - check if format is recognized
-                    recognized_prefixes = [">=", "<=", "==", "!=", "~=", ">", "<"]
-                    if not any(
-                        ver.startswith(prefix) for prefix in recognized_prefixes
-                    ):
-                        logger.warning(
-                            f"Version specifier '{ver}' for package '{pkg}' doesn't use a recognized operator. "
-                            f"Assuming '>={ver}'"
-                        )
-                        # Normalize for logging purposes
-                        ver_display = f">={ver}"
-                    else:
-                        ver_display = ver
+                installed_version_str = importlib_metadata.version(pkg)
 
-                    # Note: Actual version comparison would require packaging library
-                    # For now, we only check if the package exists and log the requirement
+                # If no version constraint specified, any version is acceptable
+                if not ver_spec:
                     logger.debug(
-                        f"Dependency {pkg} found (version {installed_version}). "
-                        f"Required: {ver_display}. Full validation requires packaging library."
+                        f"Dependency {pkg} found (version {installed_version_str}). "
+                        f"Any version accepted."
                     )
+                    continue
+
+                # Use packaging library for proper version validation if available
+                if HAS_PACKAGING:
+                    try:
+                        # Parse installed version
+                        installed_version = Version(installed_version_str)
+
+                        # Parse version specifier (supports complex constraints)
+                        specifier = SpecifierSet(ver_spec)
+
+                        # Check if installed version satisfies constraint
+                        if installed_version not in specifier:
+                            error_msg = (
+                                f"Version constraint not satisfied for package '{pkg}': "
+                                f"installed={installed_version_str}, required={ver_spec}. "
+                                f"Please install a compatible version."
+                            )
+                            logger.error(error_msg)
+                            raise ValueError(error_msg)
+
+                        logger.debug(
+                            f"✓ Dependency {pkg} version {installed_version_str} "
+                            f"satisfies constraint {ver_spec}"
+                        )
+
+                    except InvalidVersion as e:
+                        logger.warning(
+                            f"Invalid version format for package '{pkg}': {installed_version_str}. "
+                            f"Treating as satisfied. Error: {e}"
+                        )
+                    except InvalidSpecifier as e:
+                        logger.warning(
+                            f"Invalid version specifier '{ver_spec}' for package '{pkg}'. "
+                            f"Treating as satisfied. Error: {e}"
+                        )
                 else:
-                    logger.debug(
-                        f"Dependency {pkg} found (version {installed_version}). Any version accepted."
+                    # Fallback: Basic validation without packaging library
+                    recognized_prefixes = [">=", "<=", "==", "!=", "~=", ">", "<"]
+                    if not any(ver_spec.startswith(prefix) for prefix in recognized_prefixes):
+                        logger.warning(
+                            f"Version specifier '{ver_spec}' for package '{pkg}' "
+                            f"doesn't use a recognized operator. Assuming '>={ver_spec}'. "
+                            f"Install 'packaging' library for proper validation."
+                        )
+                        ver_display = f">={ver_spec}"
+                    else:
+                        ver_display = ver_spec
+
+                    logger.warning(
+                        f"Dependency {pkg} found (version {installed_version_str}). "
+                        f"Required: {ver_display}. Cannot verify constraint without packaging library."
                     )
+
             except importlib_metadata.PackageNotFoundError as e:
                 # Preserve specific package information for better debugging
                 raise importlib_metadata.PackageNotFoundError(
-                    f"Package '{pkg}' (required version: {ver or 'any'}) not found"
+                    f"Package '{pkg}' (required version: {ver_spec or 'any'}) not found. "
+                    f"Install with: pip install '{pkg}{ver_spec if ver_spec else ''}'"
                 ) from e
         return True
     except importlib_metadata.PackageNotFoundError as e:
