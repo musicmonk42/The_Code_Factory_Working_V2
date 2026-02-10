@@ -494,15 +494,25 @@ class TestSubscription:
 
         with patch("event_bus.get_redis_client", return_value=mock_redis_client):
             task = await subscribe_event("test", handler)
-            # Wait longer for message to be processed (increased from 0.1 to 0.3)
-            await asyncio.sleep(0.3)
+            
+            # Use polling mechanism instead of hard-coded sleep for more reliable testing
+            max_wait = 1.0  # Maximum 1 second
+            poll_interval = 0.05  # Check every 50ms
+            elapsed = 0.0
+            
+            while len(received) == 0 and elapsed < max_wait:
+                await asyncio.sleep(poll_interval)
+                elapsed += poll_interval
+            
+            # Cancel the task after receiving message or timeout
             if not task.done():
                 task.cancel()
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-            assert len(received) == 1
+            
+            assert len(received) == 1, f"Expected 1 message, got {len(received)} after {elapsed:.2f}s"
             assert received[0] == test_data
 
 

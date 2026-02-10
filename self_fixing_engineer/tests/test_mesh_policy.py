@@ -612,6 +612,7 @@ class TestProductionMode:
         test_code = """
 import os
 import sys
+import traceback
 
 # Add current directory to Python path for module imports
 sys.path.insert(0, os.getcwd())
@@ -638,8 +639,9 @@ except SystemExit as e:
         sys.exit(100)  # Use 100 to indicate expected failure
     sys.exit(0)
 except Exception as e:
-    # Unexpected error
+    # Unexpected error - include traceback
     print(f"Unexpected error: {e}", file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
     sys.exit(1)
 """
 
