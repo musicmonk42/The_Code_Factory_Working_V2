@@ -25,6 +25,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import uuid
 from datetime import (  # *** FIX: Added timezone for Python 3.12+ compatibility ***
@@ -36,6 +37,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import aiofiles  # <--- ADDED FIX
 import tiktoken  # For token counting
+
+# Import TOML library (tomllib for Python 3.11+, tomli for older versions)
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    try:
+        import tomli as tomllib  # Fallback for Python 3.10
+    except ImportError:
+        tomllib = None  # No TOML support
 
 # Optional: light-weight stubs for aiohttp so imports don't blow up in tests
 try:
@@ -399,7 +409,7 @@ async def get_language(content: str) -> str:
 
 async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
     """
-    Parses common dependency files (e.g., requirements.txt, package.json, go.mod, Cargo.toml, pom.xml)
+    Parses common dependency files (e.g., requirements.txt, package.json, go.mod, Cargo.toml, pom.xml, pyproject.toml)
     to extract project dependencies.
     """
     deps_info: Dict[str, Any] = {}
@@ -414,6 +424,44 @@ async def get_dependencies(files_to_check: List[str], repo_path: str) -> str:
 
             if file_name == "requirements.txt":
                 deps_info["python"] = content.strip().splitlines()
+            elif file_name == "pyproject.toml":
+                # Parse pyproject.toml for Python dependencies
+                if tomllib is not None:
+                    try:
+                        # tomllib expects bytes
+                        toml_data = tomllib.loads(content)
+
+                        # Extract dependencies from different possible locations
+                        python_deps = []
+
+                        # Poetry format: [tool.poetry.dependencies]
+                        if "tool" in toml_data and "poetry" in toml_data["tool"]:
+                            poetry_deps = toml_data["tool"]["poetry"].get("dependencies", {})
+                            for dep, ver in poetry_deps.items():
+                                if dep != "python":  # Skip python version itself
+                                    if isinstance(ver, dict):
+                                        # Handle complex version specs like {version = "^1.0", optional = true}
+                                        ver_str = ver.get("version", "")
+                                        python_deps.append(f"{dep} {ver_str}")
+                                    else:
+                                        python_deps.append(f"{dep} {ver}")
+
+                        # PEP 621 format: [project.dependencies]
+                        if "project" in toml_data:
+                            project_deps = toml_data["project"].get("dependencies", [])
+                            python_deps.extend(project_deps)
+
+                        # Setuptools format: [project.dependencies] or [options.install_requires]
+                        if "options" in toml_data:
+                            install_requires = toml_data["options"].get("install_requires", [])
+                            python_deps.extend(install_requires)
+
+                        if python_deps:
+                            deps_info["python"] = python_deps
+                    except Exception as e:
+                        logger.warning(f"Failed to parse pyproject.toml: {e}")
+                else:
+                    logger.warning("pyproject.toml found but tomllib/tomli not available")
             elif file_name == "package.json":
                 package_json_data = json.loads(content)
                 deps_info["javascript"] = {
