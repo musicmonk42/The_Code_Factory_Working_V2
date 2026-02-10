@@ -569,6 +569,86 @@ async def scan_config_for_findings(
     return findings
 
 
+# --- FIX 3: LLM Output Format Extraction ---
+
+def extract_config_from_response(raw_response: str, format_type: str) -> str:
+    """
+    Extract structured content from LLM response that may contain prose.
+    
+    This function handles cases where the LLM wraps valid configuration in
+    markdown code blocks, adds explanatory text before/after the config,
+    or otherwise pollutes the output with non-configuration text.
+    
+    Args:
+        raw_response: Raw response from LLM that may contain prose
+        format_type: Expected format type ("dockerfile", "yaml", "kubernetes", "helm", "json", "hcl")
+        
+    Returns:
+        Extracted configuration string, or original if already clean
+        
+    Examples:
+        >>> extract_config_from_response("FROM python:3.11", "dockerfile")
+        "FROM python:3.11"
+        
+        >>> extract_config_from_response("Here is a Dockerfile:\\n```dockerfile\\nFROM python:3.11\\n```", "dockerfile")
+        "FROM python:3.11"
+    """
+    raw = raw_response.strip()
+    
+    # Check if response is already pure config (starts with expected instruction)
+    if format_type == "dockerfile" and raw.startswith(("FROM", "ARG")):
+        return raw
+    if format_type in ("yaml", "kubernetes", "helm") and raw.startswith(("---", "apiVersion:", "name:", "replicaCount:")):
+        return raw
+    if format_type == "json" and raw.startswith(("{", "[")):
+        return raw
+    if format_type == "hcl" and (raw.startswith("resource") or raw.startswith("provider") or raw.startswith("terraform")):
+        return raw
+    
+    # Try to extract from markdown code blocks
+    # Match ```dockerfile, ```yaml, ```json, ```hcl, or generic ```
+    code_block_match = re.search(
+        r'```(?:dockerfile|yaml|yml|json|hcl|terraform)?\s*\n(.*?)```',
+        raw,
+        re.DOTALL
+    )
+    if code_block_match:
+        extracted = code_block_match.group(1).strip()
+        logger.debug(f"Extracted config from markdown code block: {len(extracted)} chars")
+        return extracted
+    
+    # Last resort for Dockerfile: find first FROM or ARG instruction
+    if format_type == "dockerfile":
+        match = re.search(r'^((?:FROM|ARG)\s+.*)$', raw, re.MULTILINE | re.DOTALL)
+        if match:
+            extracted = raw[match.start():]
+            logger.debug(f"Extracted Dockerfile from first FROM/ARG: {len(extracted)} chars")
+            return extracted
+    
+    # Last resort for YAML: find first --- or apiVersion
+    if format_type in ("yaml", "kubernetes", "helm"):
+        match = re.search(r'^(---\s*\n|apiVersion:)', raw, re.MULTILINE)
+        if match:
+            extracted = raw[match.start():]
+            logger.debug(f"Extracted YAML from first --- or apiVersion: {len(extracted)} chars")
+            return extracted
+    
+    # Last resort for JSON: find first { or [
+    if format_type == "json":
+        match = re.search(r'^\s*([{\[])', raw, re.MULTILINE)
+        if match:
+            extracted = raw[match.start():]
+            logger.debug(f"Extracted JSON from first brace/bracket: {len(extracted)} chars")
+            return extracted
+    
+    # Return as-is for handler to validate/fail
+    logger.debug(f"No extraction patterns matched for {format_type}, returning original")
+    return raw
+
+
+# --- End of FIX 3 ---
+
+
 class FormatHandler(ABC):
     """Abstract base class for format handlers (e.g., Dockerfile, YAML, JSON, HCL)."""
 
@@ -1181,22 +1261,40 @@ class YAMLHandler(FormatHandler):
             )
         
         # Parse YAML using ruamel.yaml for high fidelity
+        # FIX 2: Support multi-document YAML with load_all()
         ru_yaml = YAML()
         try:
-            parsed_data = ru_yaml.load(raw)
+            # Use load_all() for multi-document support (Kubernetes manifests)
+            documents = list(ru_yaml.load_all(raw))
             
-            # Log successful parse for observability
-            logger.debug(
-                "YAML parsed successfully",
-                extra={
-                    "yaml_size_bytes": len(raw),
-                    "yaml_lines": len(raw.split('\n')),
-                    "result_type": type(parsed_data).__name__,
-                    "handler": "YAMLHandler"
-                }
-            )
-            
-            return parsed_data
+            if len(documents) == 1:
+                # Single document - return as-is
+                parsed_data = documents[0]
+                logger.debug(
+                    "Single YAML document parsed successfully",
+                    extra={
+                        "yaml_size_bytes": len(raw),
+                        "yaml_lines": len(raw.split('\n')),
+                        "result_type": type(parsed_data).__name__,
+                        "handler": "YAMLHandler"
+                    }
+                )
+                return parsed_data
+            elif len(documents) > 1:
+                # Multiple documents - return as list for Kubernetes manifests
+                logger.debug(
+                    f"Parsed {len(documents)} YAML documents",
+                    extra={
+                        "yaml_size_bytes": len(raw),
+                        "yaml_lines": len(raw.split('\n')),
+                        "documents_count": len(documents),
+                        "handler": "YAMLHandler"
+                    }
+                )
+                return documents
+            else:
+                # Empty document
+                raise ValueError("Empty YAML document")
             
         except Exception as e:
             # Provide detailed error for debugging
@@ -1952,8 +2050,11 @@ async def handle_deploy_response(
 
         try:
             # 1. Normalize the raw response
+            # FIX 3: Extract config from response before scrubbing/normalizing
+            extracted_raw = extract_config_from_response(raw_response, output_format)
+            
             # scrub_text is strictly required to be applied here.
-            scrubbed_raw_response = scrub_text(raw_response)
+            scrubbed_raw_response = scrub_text(extracted_raw)
 
             handler_calls.labels(format=output_format, operation="normalize").inc()
             start_normalize = time.time()
