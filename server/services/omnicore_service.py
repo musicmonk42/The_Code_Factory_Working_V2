@@ -2049,17 +2049,21 @@ class OmniCoreService:
                         values_path = target_dir / "values.yaml"
                         
                         # Try to extract Chart.yaml and values.yaml from content
-                        # Note: This is a simple parser. A more robust approach would use YAML parsing
-                        # to properly separate files, but this works for common LLM output formats
+                        # Note: This is a simple heuristic parser that assumes LLM output format:
+                        # Expected format: "# Chart.yaml\n<content>\n# values.yaml\n<content>"
+                        # A more robust approach would use YAML parsing library,
+                        # but this works for common LLM output patterns.
+                        # TODO: Consider implementing proper YAML parsing for better reliability
+                        HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for filename
                         if "Chart.yaml" in config_content and "values.yaml" in config_content:
                             # Content contains multiple files - try to parse them
                             # Split on '# ' at the start of a line followed by filename
-                            # This is a heuristic that works with common LLM output but may be fragile
+                            # This heuristic works with common LLM output but may be fragile
                             parts = config_content.split("\n# ")
                             for part in parts:
                                 part = "# " + part if not part.startswith("#") else part
-                                # Safe bounds checking: only check first 50 chars if part is long enough
-                                part_prefix = part[:min(50, len(part))]
+                                # Safe bounds checking: only check first N chars if part is long enough
+                                part_prefix = part[:min(HELM_FILE_HEADER_CHECK_LENGTH, len(part))]
                                 if "Chart.yaml" in part_prefix:
                                     chart_content = part.replace("# Chart.yaml", "").strip()
                                     async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
