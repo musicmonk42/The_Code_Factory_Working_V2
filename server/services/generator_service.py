@@ -198,7 +198,7 @@ class GeneratorService:
         ]
 
     async def clarify_requirements(
-        self, job_id: str, readme_content: str, ambiguities: Optional[List[str]] = None
+        self, job_id: str, readme_content: str, ambiguities: Optional[List[str]] = None, channel: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Run the clarifier agent to analyze and clarify requirements via OmniCore.
@@ -211,6 +211,7 @@ class GeneratorService:
             job_id: Unique job identifier
             readme_content: README content to clarify
             ambiguities: Optional list of detected ambiguities to clarify
+            channel: Optional clarification channel (cli, gui, voice, web, slack, email, sms)
 
         Returns:
             Clarification results with clarified requirements
@@ -219,7 +220,7 @@ class GeneratorService:
             >>> # Route through OmniCore to generator.clarifier
             >>> # await omnicore.route_to_generator('clarify', {...})
         """
-        logger.info(f"Running clarifier for job {job_id} via OmniCore")
+        logger.info(f"Running clarifier for job {job_id} via OmniCore (channel: {channel or 'default'})")
 
         # Route through OmniCore if available
         if self.omnicore_service:
@@ -230,6 +231,10 @@ class GeneratorService:
                     "readme_content": readme_content,
                     "ambiguities": ambiguities or [],
                 }
+                # Add channel if specified
+                if channel:
+                    payload["channel"] = channel
+                    
                 result = await self.omnicore_service.route_job(
                     job_id=job_id,
                     source_module="api",

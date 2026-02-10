@@ -2499,7 +2499,7 @@ class OmniCoreService:
         
         Args:
             job_id: Job identifier
-            payload: Parameters including readme_content, ambiguities
+            payload: Parameters including readme_content, ambiguities, channel
         
         Returns:
             Dict with status and clarification questions
@@ -2509,6 +2509,9 @@ class OmniCoreService:
         
         try:
             readme_content = payload.get("readme_content", "")
+            channel = payload.get("channel", "cli")  # Default to CLI if not specified
+            
+            logger.info(f"Running clarifier for job {job_id} with channel: {channel}")
             
             if not readme_content:
                 return {
@@ -2521,9 +2524,24 @@ class OmniCoreService:
                 logger.info(f"Running LLM-based clarifier for job {job_id}")
                 try:
                     from generator.clarifier.clarifier import Clarifier
+                    from generator.clarifier.clarifier_user_prompt import get_channel
                     
                     # Create clarifier instance with auto-detection
                     clarifier = await Clarifier.create()
+                    
+                    # Override interaction channel if specified
+                    try:
+                        clarifier.interaction = get_channel(
+                            channel_type=channel,
+                            target_language=clarifier.config.TARGET_LANGUAGE if hasattr(clarifier, 'config') else "en"
+                        )
+                        logger.info(f"Set clarifier channel to: {channel}")
+                    except Exception as channel_error:
+                        logger.warning(
+                            f"Could not set channel to {channel}: {channel_error}. "
+                            f"Using default channel.",
+                            exc_info=True
+                        )
                     
                     # Check if LLM is actually available (not just rule-based fallback)
                     has_llm = hasattr(clarifier, 'llm') and clarifier.llm is not None
@@ -2537,7 +2555,7 @@ class OmniCoreService:
                             
                             logger.info(
                                 f"LLM-based clarifier generated {len(questions)} questions for job {job_id}",
-                                extra={"method": "llm", "questions_count": len(questions)}
+                                extra={"method": "llm", "questions_count": len(questions), "channel": channel}
                             )
                             
                             # Store session
@@ -2549,6 +2567,7 @@ class OmniCoreService:
                                 "status": "in_progress",
                                 "created_at": datetime.now().isoformat(),
                                 "method": "llm",
+                                "channel": channel,
                             }
                             
                             return {
@@ -2558,6 +2577,7 @@ class OmniCoreService:
                                 "confidence": 0.65,
                                 "questions_count": len(questions),
                                 "method": "llm",
+                                "channel": channel,
                             }
                         except Exception as llm_error:
                             logger.warning(
@@ -2589,6 +2609,7 @@ class OmniCoreService:
                 "status": "in_progress",
                 "created_at": datetime.now().isoformat(),
                 "method": "rule_based",
+                "channel": channel,
             }
             
             result = {
@@ -2598,6 +2619,7 @@ class OmniCoreService:
                 "confidence": 0.65,  # Low confidence indicates need for clarification
                 "questions_count": len(questions),
                 "method": "rule_based",
+                "channel": channel,
             }
             
             logger.info(f"Clarifier completed for job {job_id} with {len(questions)} questions")

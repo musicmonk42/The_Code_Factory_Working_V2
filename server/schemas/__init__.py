@@ -23,6 +23,7 @@ from .fixes import (
     RollbackRequest,
 )
 from .generator_schemas import (
+    ClarificationChannel,
     ClarificationResponseRequest,
     ClarifyRequest,
     CodegenRequest,
