@@ -238,10 +238,6 @@ async def _query_generator_audit_logs(
         # Import generator's AUDIT_LOG singleton
         from generator.audit_log.audit_log import AUDIT_LOG
         
-        # Get logs from the backend
-        # Note: get_recent_history() requires credentials but we can call it without
-        # or we can directly read from the backend
-        
         # Try to get the log file path from the backend
         if hasattr(AUDIT_LOG, 'backend') and hasattr(AUDIT_LOG.backend, 'log_file'):
             log_file = Path(AUDIT_LOG.backend.log_file)
@@ -280,7 +276,7 @@ async def _query_generator_audit_logs(
                     
                     # Check job_id (could be in details or top-level)
                     entry_job_id = entry.get("job_id") or entry.get("details", {}).get("job_id")
-                    if job_id and job_id not in str(entry_job_id):
+                    if job_id and str(entry_job_id) != job_id:
                         continue
                     
                     # Parse timestamp for range filtering
@@ -295,7 +291,7 @@ async def _query_generator_audit_logs(
                         "timestamp": entry.get("timestamp"),
                         "event_type": entry_event_type,
                         "job_id": entry_job_id,
-                        "action": entry.get("action", entry_event_type),
+                        "action": entry.get("action") or entry_event_type,
                         "user": entry.get("user", entry.get("user_id", "system")),
                         "status": entry.get("status", "success"),
                         "details": entry.get("details", {}),
