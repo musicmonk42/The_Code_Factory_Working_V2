@@ -742,20 +742,30 @@ class SyntaxAutoRepair:
             repaired_code = code
             
             for pattern, replacement, description in patterns:
-                # Find all matches before replacement
-                matches = list(pattern.finditer(repaired_code))
+                # Apply pattern repeatedly until no more matches found
+                # This is necessary because matches can overlap after replacement
+                max_iterations = 100  # Safety limit to prevent infinite loops
+                iteration = 0
+                total_fixes = 0
                 
-                if matches:
+                while iteration < max_iterations:
+                    matches = list(pattern.finditer(repaired_code))
+                    if not matches:
+                        break  # No more matches found
+                    
                     # Perform replacement
                     new_code = pattern.sub(replacement, repaired_code)
                     
-                    # Only count as a fix if code actually changed
-                    if new_code != repaired_code:
-                        # Count actual changes by comparing before/after
-                        changes_count = len(matches)
-                        fixes.append(f"Repaired {changes_count} missing comma(s): {description}")
-                        logger.debug(f"Repaired {changes_count} missing comma(s) via pattern: {description}")
-                        repaired_code = new_code
+                    if new_code == repaired_code:
+                        break  # No changes made, avoid infinite loop
+                    
+                    total_fixes += len(matches)
+                    repaired_code = new_code
+                    iteration += 1
+                
+                if total_fixes > 0:
+                    fixes.append(f"Repaired {total_fixes} missing comma(s): {description}")
+                    logger.debug(f"Repaired {total_fixes} missing comma(s) via pattern: {description} (in {iteration} iteration(s))")
             
             if fixes:
                 logger.info(
