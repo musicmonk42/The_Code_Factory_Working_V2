@@ -441,6 +441,8 @@ class TestCryptoProviderABC:
         )
 
         class TestProvider(CryptoProvider):
+            __module__ = __name__
+
             async def sign(self, data, key_id):
                 pass
 
