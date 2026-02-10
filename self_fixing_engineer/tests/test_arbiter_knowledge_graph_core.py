@@ -77,8 +77,25 @@ setup_langchain_mocks()
 sys.modules["self_fixing_engineer.arbiter.models"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.models.redis_client"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.models.audit_ledger_client"] = MagicMock()
-sys.modules["redis"] = MagicMock()
-sys.modules["redis.asyncio"] = MagicMock()
+
+# IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+# portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+mock_redis_base = MagicMock()
+mock_redis_async = MagicMock()
+
+# Create redis.client with proper PubSubWorkerThread class for type annotations
+mock_redis_client = types.ModuleType("redis.client")
+
+class PubSubWorkerThread:
+    """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+    pass
+
+mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis_base.client = mock_redis_client
+
+sys.modules["redis"] = mock_redis_base
+sys.modules["redis.asyncio"] = mock_redis_async
+sys.modules["redis.client"] = mock_redis_client
 sys.modules["asyncpg"] = MagicMock()
 
 import asyncio

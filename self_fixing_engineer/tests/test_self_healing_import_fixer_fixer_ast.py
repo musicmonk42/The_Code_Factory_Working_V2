@@ -22,11 +22,27 @@ import_fixer_dir = os.path.join(parent_dir, "import_fixer")
 sys.path.insert(0, import_fixer_dir)
 
 # Mock redis module before importing fixer_ast
+# IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+# portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+import types
+
 mock_redis_module = MagicMock()
 mock_redis_async = MagicMock()
 mock_redis_module.asyncio = mock_redis_async
+
+# Create redis.client with proper PubSubWorkerThread class for type annotations
+mock_redis_client = types.ModuleType("redis.client")
+
+class PubSubWorkerThread:
+    """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+    pass
+
+mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis_module.client = mock_redis_client
+
 sys.modules["redis"] = mock_redis_module
 sys.modules["redis.asyncio"] = mock_redis_async
+sys.modules["redis.client"] = mock_redis_client
 
 # Mock core dependencies
 sys.modules["core_utils"] = MagicMock()

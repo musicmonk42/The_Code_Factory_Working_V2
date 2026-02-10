@@ -114,6 +114,10 @@ def setup_mocks():
             _ORIGINAL_MODULES[mod] = sys.modules[mod]
 
     # Redis mocks with real exceptions
+    # IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+    # portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+    import types
+
     mock_redis = MagicMock()
     mock_redis_async = MagicMock()
     mock_redis_exceptions = MagicMock()
@@ -122,11 +126,22 @@ def setup_mocks():
     mock_redis_exceptions.RedisError = RedisError
     mock_redis_exceptions.ResponseError = ResponseError
 
+    # Create redis.client with proper PubSubWorkerThread class for type annotations
+    mock_redis_client = types.ModuleType("redis.client")
+
+    class PubSubWorkerThread:
+        """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+        pass
+
+    mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+    mock_redis.client = mock_redis_client
+
     sys.modules["redis"] = mock_redis
     sys.modules["redis.asyncio"] = mock_redis_async
     sys.modules["redis.asyncio"].Redis = MagicMock()
     sys.modules["redis.asyncio"].ConnectionPool = MagicMock()
     sys.modules["redis.asyncio"].ClusterConnectionPool = MagicMock()
+    sys.modules["redis.client"] = mock_redis_client
     sys.modules["redis.exceptions"] = mock_redis_exceptions
 
     # NOTE: Do NOT mock cryptography.fernet - other tests need the real module

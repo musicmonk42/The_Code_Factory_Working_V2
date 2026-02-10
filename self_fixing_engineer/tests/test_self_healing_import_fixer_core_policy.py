@@ -53,6 +53,10 @@ sys.modules["core_audit"] = MockCoreAudit()
 sys.modules["core_secrets"] = MockCoreSecrets()
 
 # Mock boto3 and redis
+# IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+# portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+import types
+
 mock_boto3 = Mock()
 mock_redis = Mock()
 mock_redis_async = Mock()
@@ -62,10 +66,21 @@ mock_redis_instance.get = AsyncMock(return_value=None)
 mock_redis_instance.setex = AsyncMock()
 mock_redis_async.Redis = Mock(return_value=mock_redis_instance)
 
+# Create redis.client with proper PubSubWorkerThread class for type annotations
+mock_redis_client = types.ModuleType("redis.client")
+
+class PubSubWorkerThread:
+    """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+    pass
+
+mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis.client = mock_redis_client
+
 sys.modules["boto3"] = mock_boto3
 sys.modules["botocore.exceptions"] = Mock()
 sys.modules["redis"] = mock_redis
 sys.modules["redis.asyncio"] = mock_redis_async
+sys.modules["redis.client"] = mock_redis_client
 
 # Load core_policy with patched imports
 core_policy_path = os.path.join(analyzer_dir, "core_policy.py")

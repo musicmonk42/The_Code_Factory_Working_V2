@@ -37,8 +37,26 @@ sys.modules["plugins.core_audit"] = MagicMock(audit_logger=mock_audit_logger)
 sys.modules["plugins.core_secrets"] = MagicMock(SECRETS_MANAGER=mock_secrets_manager)
 
 # Mock redis before import
-sys.modules["redis"] = MagicMock()
-sys.modules["redis.asyncio"] = MagicMock()
+# IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+# portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+import types
+
+mock_redis_base = MagicMock()
+mock_redis_async = MagicMock()
+
+# Create redis.client with proper PubSubWorkerThread class for type annotations
+mock_redis_client = types.ModuleType("redis.client")
+
+class PubSubWorkerThread:
+    """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+    pass
+
+mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis_base.client = mock_redis_client
+
+sys.modules["redis"] = mock_redis_base
+sys.modules["redis.asyncio"] = mock_redis_async
+sys.modules["redis.client"] = mock_redis_client
 
 # Set up required environment variables BEFORE importing the plugin
 os.environ["PAGERDUTY_ROUTING_KEY_SECRET_ID"] = "PAGERDUTY_ROUTING_KEY"

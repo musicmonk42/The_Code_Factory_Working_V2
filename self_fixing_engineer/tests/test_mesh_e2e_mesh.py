@@ -68,12 +68,30 @@ os.environ.update(
 )
 
 # Mock redis.asyncio module before importing mesh components
+# IMPORTANT: Must provide real classes for redis.client types to avoid breaking
+# portalocker's type annotations (typing.Optional[PubSubWorkerThread])
+import types
+
 mock_redis_module = MagicMock()
 mock_redis_module.from_url = AsyncMock()
 mock_redis_module.Redis = MagicMock()
 mock_redis_module.ConnectionPool = MagicMock()
+
+mock_redis_base = MagicMock()
+
+# Create redis.client with proper PubSubWorkerThread class for type annotations
+mock_redis_client = types.ModuleType("redis.client")
+
+class PubSubWorkerThread:
+    """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
+    pass
+
+mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis_base.client = mock_redis_client
+
 sys.modules["redis.asyncio"] = mock_redis_module
-sys.modules["redis"] = MagicMock()
+sys.modules["redis"] = mock_redis_base
+sys.modules["redis.client"] = mock_redis_client
 
 # Import mesh components after environment setup and mocking
 from self_fixing_engineer.mesh import event_bus, mesh_adapter, mesh_policy
