@@ -64,6 +64,7 @@ try:
         run_fail_fast_validation as _run_fail_fast_validation,
         extract_required_files_from_md as _extract_required_files_from_md,
         extract_output_dir_from_md as _extract_output_dir_from_md,
+        validate_readme_completeness as _validate_readme_completeness,
     )
     _PROVENANCE_AVAILABLE = True
 except ImportError:
@@ -3638,7 +3639,39 @@ class OmniCoreService:
                 except Exception as spec_err:
                     logger.warning(f"[PIPELINE] Job {job_id} spec validation error: {spec_err}")
             
-            # 2d. Write provenance metadata
+            # 2d. README completeness validation
+            if output_path_for_validation and _PROVENANCE_AVAILABLE:
+                try:
+                    gen_dir = Path(output_path_for_validation)
+                    readme_path = gen_dir / "README.md"
+                    
+                    if readme_path.exists():
+                        readme_content = readme_path.read_text(encoding="utf-8")
+                        readme_result = _validate_readme_completeness(readme_content)
+                        
+                        if readme_result.get("valid", True):
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} README validation passed - "
+                                f"length: {readme_result['length']}, "
+                                f"sections: {readme_result['sections_found']}, "
+                                f"commands: {readme_result['commands_found']}",
+                                extra={"job_id": job_id, "readme_validation": readme_result}
+                            )
+                        else:
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} README validation found issues: "
+                                f"{readme_result.get('errors', [])}",
+                                extra={"job_id": job_id, "readme_validation": readme_result}
+                            )
+                    else:
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} README.md not found at {readme_path}",
+                            extra={"job_id": job_id}
+                        )
+                except Exception as readme_err:
+                    logger.warning(f"[PIPELINE] Job {job_id} README validation error: {readme_err}")
+            
+            # 2e. Write provenance metadata
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
                     tracker = ProvenanceTracker(job_id=job_id)

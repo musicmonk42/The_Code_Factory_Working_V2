@@ -503,6 +503,98 @@ def extract_output_dir_from_md(md_content: str) -> str:
     return ""
 
 
+def validate_readme_completeness(readme_content: str) -> Dict[str, Any]:
+    """
+    Validate that generated README.md is complete and production-ready.
+    
+    Checks for required sections and commands to ensure the README provides
+    adequate setup and usage instructions. A complete README is essential for
+    production deployments and developer onboarding.
+    
+    Required Elements:
+        - Minimum length: 500 characters
+        - Setup section (virtual environment, dependencies)
+        - Run server instructions
+        - Testing instructions
+        - API examples (curl commands)
+        - Required commands: python -m venv, pip install, uvicorn, pytest, curl
+    
+    Args:
+        readme_content: Content of the generated README.md file
+        
+    Returns:
+        Validation result dictionary with:
+        - valid: bool indicating if README meets all requirements
+        - errors: list of missing elements
+        - warnings: list of optional improvements
+        - length: actual character count
+        - sections_found: list of required sections that were found
+        - commands_found: list of required commands that were found
+        
+    Example:
+        >>> result = validate_readme_completeness(readme_content)
+        >>> if not result['valid']:
+        ...     print(f"README incomplete: {result['errors']}")
+    """
+    errors = []
+    warnings = []
+    sections_found = []
+    commands_found = []
+    
+    # 1. Check minimum length
+    length = len(readme_content)
+    if length < 500:
+        errors.append(f"README too short ({length} chars, minimum 500)")
+    
+    # 2. Check for required sections (case-insensitive)
+    readme_lower = readme_content.lower()
+    
+    required_sections = {
+        "setup": ["setup", "installation", "install", "getting started"],
+        "run": ["run", "running", "start", "usage"],
+        "test": ["test", "testing"],
+        "examples": ["example", "api example", "curl"],
+    }
+    
+    for section_key, patterns in required_sections.items():
+        found = any(pattern in readme_lower for pattern in patterns)
+        if found:
+            sections_found.append(section_key)
+        else:
+            errors.append(f"Missing required section: {section_key}")
+    
+    # 3. Check for required commands
+    required_commands = {
+        "venv": ["python -m venv", "python3 -m venv", "virtualenv"],
+        "pip": ["pip install", "pip3 install"],
+        "uvicorn": ["uvicorn", "python -m uvicorn"],
+        "pytest": ["pytest", "python -m pytest"],
+        "curl": ["curl"],
+    }
+    
+    for cmd_key, patterns in required_commands.items():
+        found = any(pattern in readme_content for pattern in patterns)
+        if found:
+            commands_found.append(cmd_key)
+        else:
+            # curl is only a warning since it's for examples
+            if cmd_key == "curl":
+                warnings.append(f"No curl examples found (recommended)")
+            else:
+                errors.append(f"Missing required command: {cmd_key}")
+    
+    valid = len(errors) == 0
+    
+    return {
+        "valid": valid,
+        "errors": errors,
+        "warnings": warnings,
+        "length": length,
+        "sections_found": sections_found,
+        "commands_found": commands_found,
+    }
+
+
 def validate_spec_fidelity(
     md_content: str,
     generated_files: Dict[str, str],
