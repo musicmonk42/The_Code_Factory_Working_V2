@@ -139,19 +139,24 @@ except ImportError:
             Add a fact to the knowledge graph.
             
             Args:
-                domain: Fact domain/category
-                key: Unique fact identifier
+                domain: Fact domain/category (should not contain ':')
+                key: Unique fact identifier (should not contain ':')
                 data: Fact data
                 **kwargs: Additional parameters (e.g., source, timestamp)
             
             Returns:
                 Status dictionary with operation result
             """
-            fact_id = f"{domain}:{key}"
+            # Sanitize domain and key to avoid ambiguous identifiers
+            # Replace colons with underscores if present
+            safe_domain = domain.replace(':', '_') if ':' in domain else domain
+            safe_key = key.replace(':', '_') if ':' in key else key
+            
+            fact_id = f"{safe_domain}:{safe_key}"
             # Store fact as a node
             await self.add_node(fact_id, {
-                "domain": domain,
-                "key": key,
+                "domain": safe_domain,
+                "key": safe_key,
                 "data": data,
                 **kwargs
             })
