@@ -1131,12 +1131,12 @@ class YAMLHandler(FormatHandler):
                 for i, line in enumerate(raw.split('\n'))
                 if "**" in line
             ]
-            context = "\\n  ".join(lines_with_markdown[:3])  # Show first 3 occurrences
+            context = "\n  ".join(lines_with_markdown[:3])  # Show first 3 occurrences
             
             raise ValueError(
                 f"Invalid output: Response contains Markdown formatting (** detected). "
-                f"Expected pure YAML without markdown bold syntax or bullets.\\n"
-                f"  {context}\\n"
+                f"Expected pure YAML without markdown bold syntax or bullets.\n"
+                f"  {context}\n"
                 f"Ensure LLM outputs ONLY YAML without markdown formatting."
             )
         
