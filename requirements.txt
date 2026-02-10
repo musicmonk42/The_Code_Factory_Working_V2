@@ -236,7 +236,9 @@ nats-py==2.11.0
 neo4j==5.28.2
 networkx==3.3
 nltk==3.9.1
-numpy>=2.2.0,<3.0.0
+# Pinned to 2.1.2 for compatibility with scipy, scikit-learn, onnxruntime binary wheels
+# NumPy 2.2+ removed numpy._core.tests module which breaks pre-compiled dependencies
+numpy==2.1.2
 oauthlib==3.3.1
 onnxruntime==1.23.2
 openai==1.107.1
