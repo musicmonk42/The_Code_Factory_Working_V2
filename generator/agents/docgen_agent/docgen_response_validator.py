@@ -185,23 +185,38 @@ def setup_nltk_data():
             else:
                 try:
                     logger.info(f"NLTK data '{name}' not found. Attempting download...")
-                    # Use timeout to prevent hanging
-                    import signal
-                    def timeout_handler(signum, frame):
-                        raise TimeoutError("NLTK download timed out")
+                    # Use threading for cross-platform timeout (works on Windows too)
+                    import threading
                     
-                    # Set 30 second timeout for download
-                    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-                    signal.alarm(30)
-                    try:
-                        nltk.download(name, quiet=True)
+                    download_success = [False]
+                    download_error = [None]
+                    
+                    def download_with_timeout():
+                        try:
+                            nltk.download(name, quiet=True)
+                            download_success[0] = True
+                        except Exception as e:
+                            download_error[0] = e
+                    
+                    download_thread = threading.Thread(target=download_with_timeout, daemon=True)
+                    download_thread.start()
+                    download_thread.join(timeout=30)  # 30 second timeout
+                    
+                    if download_thread.is_alive():
+                        logger.warning(
+                            f"NLTK download for '{name}' timed out after 30 seconds. "
+                            f"NLP features may be degraded."
+                        )
+                    elif download_error[0]:
+                        logger.warning(
+                            f"Failed to download NLTK data '{name}': {download_error[0]}. "
+                            f"NLP features may be degraded."
+                        )
+                    elif download_success[0]:
                         logger.info(f"NLTK data '{name}' downloaded successfully")
-                    finally:
-                        signal.alarm(0)  # Cancel alarm
-                        signal.signal(signal.SIGALRM, old_handler)
-                except (TimeoutError, Exception) as e:
+                except Exception as e:
                     logger.warning(
-                        f"Failed to download NLTK data '{name}': {e}. "
+                        f"Error during NLTK download for '{name}': {e}. "
                         f"NLP features may be degraded."
                     )
 

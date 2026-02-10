@@ -602,6 +602,8 @@ class PromptTemplateRegistry:
         Uses a ChoiceLoader to search for templates in multiple locations:
         1. The project root deploy_templates directory (primary source)
         2. The specified template_dir (repo-specific overrides)
+        
+        Falls back to template_dir only if project root doesn't exist.
         """
         if not os.path.exists(self.template_dir):
             os.makedirs(self.template_dir, exist_ok=True)
@@ -614,18 +616,22 @@ class PromptTemplateRegistry:
         # Use Path.resolve() for reliable path comparison
         template_dir_resolved = Path(self.template_dir).resolve()
         project_templates_resolved = project_root_templates.resolve()
+        
         if project_root_templates.exists():
             loaders.append(FileSystemLoader(str(project_root_templates)))
             logger.info(f"Using project root template directory: {project_root_templates}")
-        
-        # Then add job-specific template directory as override (if different from project root)
-        if template_dir_resolved != project_templates_resolved:
-            loaders.append(FileSystemLoader(self.template_dir))
-            logger.info(f"Added job-specific template override directory: {self.template_dir}")
-        
-        # Ensure we have at least one loader to avoid failures
-        if not loaders:
-            logger.warning(f"No template directories found, using self.template_dir as fallback: {self.template_dir}")
+            
+            # Then add job-specific template directory as override (if different from project root)
+            if template_dir_resolved != project_templates_resolved:
+                loaders.append(FileSystemLoader(self.template_dir))
+                logger.info(f"Added job-specific template override directory: {self.template_dir}")
+        else:
+            # Fallback: Use self.template_dir as primary if project root doesn't exist
+            # This can happen in development or testing environments
+            logger.warning(
+                f"Project root templates not found at {project_root_templates}. "
+                f"Using template_dir as primary: {self.template_dir}"
+            )
             loaders.append(FileSystemLoader(self.template_dir))
         
         env = Environment(
