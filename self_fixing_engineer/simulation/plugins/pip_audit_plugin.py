@@ -161,7 +161,10 @@ def _load_config() -> PipAuditConfig:
 
     if pydantic_available:
         try:
-            cfg = PipAuditConfig.parse_obj(config_dict)
+            if hasattr(PipAuditConfig, 'model_validate'):
+                cfg = PipAuditConfig.model_validate(config_dict)
+            else:
+                cfg = PipAuditConfig.parse_obj(config_dict)
         except Exception as e:  # Catching a mock ValidationError is not allowed
             logger.error(f"Configuration validation failed: {e}. Using defaults.")
             cfg = PipAuditConfig()

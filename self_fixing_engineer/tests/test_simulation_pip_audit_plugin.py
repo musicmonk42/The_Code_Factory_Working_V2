@@ -115,7 +115,7 @@ def test_pip_audit_config_validation_success():
         "retry_attempts": 3,
         "redis_cache_url": "redis://mock-redis:6379",
     }
-    config = PipAuditConfig.parse_obj(config_data)
+    config = PipAuditConfig.model_validate(config_data) if hasattr(PipAuditConfig, 'model_validate') else PipAuditConfig.parse_obj(config_data)
     assert config.default_scan_method == "requirements"
     assert config.retry_attempts == 3
 
@@ -123,7 +123,10 @@ def test_pip_audit_config_validation_success():
 def test_pip_audit_config_invalid_scan_method():
     """Test that an invalid scan_method raises a ValidationError."""
     with pytest.raises(ValidationError):
-        PipAuditConfig.parse_obj({"default_scan_method": "invalid"})
+        if hasattr(PipAuditConfig, 'model_validate'):
+            PipAuditConfig.model_validate({"default_scan_method": "invalid"})
+        else:
+            PipAuditConfig.parse_obj({"default_scan_method": "invalid"})
 
 
 def test_load_config_from_env_override():

@@ -85,12 +85,17 @@ if PROMETHEUS_AVAILABLE:
         with _metrics_lock:
             try:
                 existing_metric = _metrics_registry._names_to_collectors[name]
-                if metric_type and isinstance(existing_metric, metric_type):
-                    return existing_metric
+                # Check if metric_type is actually a type (not None or Mock) before using isinstance
+                if metric_type is not None and type(metric_type) is type:
+                    if isinstance(existing_metric, metric_type):
+                        return existing_metric
+                    else:
+                        quantum_logger.warning(
+                            f"Metric '{name}' already registered with a different type. Reusing existing."
+                        )
+                        return existing_metric
                 else:
-                    quantum_logger.warning(
-                        f"Metric '{name}' already registered with a different type. Reusing existing."
-                    )
+                    # If metric_type is not a valid type, return existing metric
                     return existing_metric
             except KeyError:
                 if metric_type == Histogram:

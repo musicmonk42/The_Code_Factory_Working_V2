@@ -703,7 +703,10 @@ if PYDANTIC_AVAILABLE:
         final_config_to_parse = {
             k: v for k, v in migrated_config.items() if v is not None
         }
-        SIEM_CONFIG_MODEL = PluginGlobalConfig.parse_obj(final_config_to_parse)
+        if hasattr(PluginGlobalConfig, 'model_validate'):
+            SIEM_CONFIG_MODEL = PluginGlobalConfig.model_validate(final_config_to_parse)
+        else:
+            SIEM_CONFIG_MODEL = PluginGlobalConfig.parse_obj(final_config_to_parse)
 
         logger.info(
             "SIEM_CONFIG_MODEL validated and migrated successfully with Pydantic."
@@ -2025,7 +2028,10 @@ async def _monitor_config_changes():
                         current_config_dict
                     )
                     migrated_new_config.pop("_CONFIG_VERSION", None)
-                    new_config_model = PluginGlobalConfig.parse_obj(migrated_new_config)
+                    if hasattr(PluginGlobalConfig, 'model_validate'):
+                        new_config_model = PluginGlobalConfig.model_validate(migrated_new_config)
+                    else:
+                        new_config_model = PluginGlobalConfig.parse_obj(migrated_new_config)
                 else:
                     new_config_model = current_config_dict
                 _siem_plugin_instance = GenericSIEMIntegrationPlugin(new_config_model)
@@ -2051,7 +2057,10 @@ def register_plugin_entrypoints(register_func: Callable):
         if PYDANTIC_AVAILABLE:
             migrated_config = PluginGlobalConfig.migrate_config(initial_raw_config)
             migrated_config.pop("_CONFIG_VERSION", None)
-            processed_config = PluginGlobalConfig.parse_obj(migrated_config)
+            if hasattr(PluginGlobalConfig, 'model_validate'):
+                processed_config = PluginGlobalConfig.model_validate(migrated_config)
+            else:
+                processed_config = PluginGlobalConfig.parse_obj(migrated_config)
         else:
             processed_config = initial_raw_config
         _siem_plugin_instance = GenericSIEMIntegrationPlugin(processed_config)

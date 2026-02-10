@@ -381,7 +381,7 @@ class MultiModalConfig(BaseModel):
                     )
 
         try:
-            return cls.parse_obj(config_data)
+            return cls.model_validate(config_data) if hasattr(cls, 'model_validate') else cls.parse_obj(config_data)
         except ValidationError as e:
             logging.error(f"Configuration validation failed: {e}")
             raise

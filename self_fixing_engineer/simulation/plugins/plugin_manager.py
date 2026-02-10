@@ -702,7 +702,10 @@ class PluginManager:
         # Structural validation
         if pydantic_available:
             try:
-                PluginManifest.parse_obj(manifest)
+                if hasattr(PluginManifest, 'model_validate'):
+                    PluginManifest.model_validate(manifest)
+                else:
+                    PluginManifest.parse_obj(manifest)
             except ValidationError as e:
                 plugin_logger.error(f"Manifest failed Pydantic validation: {e}")
                 return False

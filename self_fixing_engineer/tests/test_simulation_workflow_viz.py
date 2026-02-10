@@ -156,7 +156,7 @@ def test_workflow_viz_config_validation_success():
         "plotly_preferred": False,
         "graph_layout": "spring",
     }
-    config = WorkflowVizConfig.parse_obj(config_data)
+    config = WorkflowVizConfig.model_validate(config_data) if hasattr(WorkflowVizConfig, 'model_validate') else WorkflowVizConfig.parse_obj(config_data)
     assert config.default_backend == "streamlit"
     assert config.plotly_preferred is False
 
