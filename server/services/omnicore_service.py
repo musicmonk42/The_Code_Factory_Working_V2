@@ -1988,23 +1988,109 @@ class OmniCoreService:
                 output_dir = repo_path
                 
                 for target, config_content in configs.items():
-                    # Determine filename based on target
+                    # FIX: Determine filename and subdirectory based on target
+                    # Kubernetes and Helm files should go into subdirectories
                     if target == "docker" or target == "dockerfile":
                         filename = "Dockerfile"
+                        target_dir = output_dir
                     elif target == "kubernetes" or target == "k8s":
-                        filename = "deployment.yaml"
+                        # FIX: Kubernetes files go into k8s/ subdirectory
+                        target_dir = output_dir / "k8s"
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Parse YAML content to create separate files (deployment.yaml, service.yaml)
+                        # The LLM typically generates multi-document YAML separated by "---"
+                        yaml_docs = config_content.split("---")
+                        for idx, doc in enumerate(yaml_docs):
+                            doc = doc.strip()
+                            if not doc or len(doc) < 10:
+                                continue  # Skip empty documents
+                            
+                            # Determine filename based on document kind
+                            if "kind: Deployment" in doc:
+                                doc_filename = "deployment.yaml"
+                            elif "kind: Service" in doc:
+                                doc_filename = "service.yaml"
+                            elif "kind: Ingress" in doc:
+                                doc_filename = "ingress.yaml"
+                            elif "kind: ConfigMap" in doc:
+                                doc_filename = "configmap.yaml"
+                            else:
+                                doc_filename = f"resource-{idx}.yaml"
+                            
+                            file_path = target_dir / doc_filename
+                            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                                await f.write(doc)
+                            
+                            try:
+                                rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
+                                generated_files.append(rel_path)
+                            except ValueError as e:
+                                logger.warning(f"[DEPLOY] File {file_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
+                                generated_files.append(str(file_path))
+                            logger.info(f"Generated kubernetes file: {file_path}")
+                        
+                        continue  # Skip the default file writing below
+                    elif target == "helm":
+                        # FIX: Helm files go into helm/ subdirectory
+                        target_dir = output_dir / "helm"
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        templates_dir = target_dir / "templates"
+                        templates_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        # Parse and organize helm files
+                        # The LLM typically generates all helm files in one response
+                        # We need to split Chart.yaml, values.yaml, and templates
+                        
+                        # For now, write the content to Chart.yaml and create a basic structure
+                        # A more sophisticated approach would parse the LLM output and organize files
+                        chart_path = target_dir / "Chart.yaml"
+                        values_path = target_dir / "values.yaml"
+                        
+                        # Try to extract Chart.yaml and values.yaml from content
+                        if "Chart.yaml" in config_content and "values.yaml" in config_content:
+                            # Content contains multiple files - parse them
+                            parts = config_content.split("# ")
+                            for part in parts:
+                                if part.startswith("Chart.yaml"):
+                                    chart_content = part.replace("Chart.yaml", "").strip()
+                                    async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
+                                        await f.write(chart_content)
+                                    generated_files.append(str(chart_path.relative_to(repo_path)))
+                                elif part.startswith("values.yaml"):
+                                    values_content = part.replace("values.yaml", "").strip()
+                                    async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
+                                        await f.write(values_content)
+                                    generated_files.append(str(values_path.relative_to(repo_path)))
+                        else:
+                            # Write entire content as Chart.yaml for now
+                            async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
+                                await f.write(config_content)
+                            generated_files.append(str(chart_path.relative_to(repo_path)))
+                            
+                            # Create default values.yaml
+                            default_values = "# Helm values\nreplicaCount: 2\n"
+                            async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
+                                await f.write(default_values)
+                            generated_files.append(str(values_path.relative_to(repo_path)))
+                        
+                        logger.info(f"Generated helm files in: {target_dir}")
+                        continue  # Skip the default file writing below
                     elif target == "docker-compose":
                         filename = "docker-compose.yml"
+                        target_dir = output_dir
                     elif target == "terraform":
                         filename = "main.tf"
+                        target_dir = output_dir
                     else:
                         filename = f"{target}.config"
+                        target_dir = output_dir
                     
                     # Sanitize Dockerfile content: strip markdown/images/mermaid tokens
                     if filename == "Dockerfile":
                         config_content = self._sanitize_dockerfile_content(config_content)
                     
-                    file_path = output_dir / filename
+                    file_path = target_dir / filename
                     
                     # Write the file
                     async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
@@ -3774,12 +3860,71 @@ class OmniCoreService:
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             
             output_path = codegen_result.get("output_path")
+            
+            # FIX: Add final validation to verify all expected files and directories exist
+            validation_warnings = []
+            if output_path:
+                output_path_obj = Path(output_path)
+                
+                # Check for required directories based on stages completed
+                if "deploy" in stages_completed:
+                    # Check for Docker files
+                    if not (output_path_obj / "Dockerfile").exists():
+                        validation_warnings.append("Dockerfile not found despite deploy stage completing")
+                    
+                    # Check for Kubernetes directory and files
+                    k8s_dir = output_path_obj / "k8s"
+                    if not k8s_dir.exists():
+                        validation_warnings.append("k8s/ directory not found despite deploy stage completing")
+                    else:
+                        if not (k8s_dir / "deployment.yaml").exists():
+                            validation_warnings.append("k8s/deployment.yaml not found")
+                        if not (k8s_dir / "service.yaml").exists():
+                            validation_warnings.append("k8s/service.yaml not found")
+                    
+                    # Check for Helm directory and files
+                    helm_dir = output_path_obj / "helm"
+                    if not helm_dir.exists():
+                        validation_warnings.append("helm/ directory not found despite deploy stage completing")
+                    else:
+                        if not (helm_dir / "Chart.yaml").exists():
+                            validation_warnings.append("helm/Chart.yaml not found")
+                        if not (helm_dir / "values.yaml").exists():
+                            validation_warnings.append("helm/values.yaml not found")
+                
+                if "docgen" in stages_completed:
+                    docs_dir = output_path_obj / "docs"
+                    if not docs_dir.exists():
+                        validation_warnings.append("docs/ directory not found despite docgen stage completing")
+                
+                if "critique" in stages_completed:
+                    reports_dir = output_path_obj / "reports"
+                    if not reports_dir.exists():
+                        validation_warnings.append("reports/ directory not found despite critique stage completing")
+                    else:
+                        if not (reports_dir / "critique_report.json").exists():
+                            validation_warnings.append("reports/critique_report.json not found")
+                
+                # Log warnings if any
+                if validation_warnings:
+                    logger.warning(
+                        f"[PIPELINE] Validation warnings for job {job_id}",
+                        extra={
+                            "job_id": job_id,
+                            "warnings": validation_warnings,
+                            "stages_completed": stages_completed
+                        }
+                    )
+                else:
+                    logger.info(f"[PIPELINE] All expected files and directories validated for job {job_id}")
 
             # Store stages_completed in job metadata for the single finalizer in generator.py
             if job_id in jobs_db:
                 job = jobs_db[job_id]
                 job.metadata["stages_completed"] = stages_completed
                 job.metadata["output_path"] = output_path
+                if validation_warnings:
+                    job.metadata["validation_warnings"] = validation_warnings
 
             # NOTE: Do NOT call _finalize_successful_job here.
             # Finalization is handled by finalize_job_success() in generator.py
@@ -3789,6 +3934,7 @@ class OmniCoreService:
                 "status": "completed",
                 "stages_completed": stages_completed,
                 "output_path": output_path,
+                "validation_warnings": validation_warnings,
             }
             
         except Exception as e:
