@@ -357,10 +357,6 @@ pydantic>=2.0.0
         assert "pytest" in deps
         assert "fastapi" in deps
 
-    # <--- FIX: Mark test as expected to fail (XFAIL)
-    @pytest.mark.xfail(
-        reason="Function get_dependencies does not support pyproject.toml"
-    )
     @pytest.mark.asyncio
     async def test_detect_dependencies_with_pyproject(self, temp_repo):
         """Test detecting dependencies from pyproject.toml."""

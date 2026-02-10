@@ -45,16 +45,22 @@ logger = logging.getLogger(__name__)
 
 # Local utility module (assumed to exist outside audit_backends package)
 _audit_utils_imported = False
+# Initialize send_alert as None first to ensure it's always a module attribute
+send_alert = None
+compute_hash = None
+
 try:
-    from audit_utils import compute_hash, send_alert
+    from audit_utils import compute_hash as _compute_hash
+    compute_hash = _compute_hash
     _audit_utils_imported = True
+    # Note: audit_utils.py doesn't export send_alert, so we'll use fallback
 except ImportError:
     logging.warning(
         "audit_utils.py not found. Tamper detection and alerting features will use fallback implementations."
     )
 
 # Define fallback implementations if not imported
-if not _audit_utils_imported:
+if not _audit_utils_imported or compute_hash is None:
     import hashlib
 
     def compute_hash(data: bytes) -> str:
@@ -65,19 +71,20 @@ if not _audit_utils_imported:
         h.update(data)
         return h.hexdigest()
 
-    async def send_alert(message: str, severity: str = "warning") -> None:
-        """
-        Minimal alert hook.
+# Always define send_alert as a fallback since audit_utils doesn't export it
+async def send_alert(message: str, severity: str = "warning") -> None:
+    """
+    Minimal alert hook.
 
-        In production, override via audit_utils or env-specific wiring to:
-        - push to Slack/Teams
-        - send email
-        - hit incident webhook, etc.
-        """
-        logger.log(
-            logging.WARNING if severity in ("low", "warning") else logging.ERROR,
-            f"[ALERT:{severity.upper()}] {message}",
-        )
+    In production, override via audit_utils or env-specific wiring to:
+    - push to Slack/Teams
+    - send email
+    - hit incident webhook, etc.
+    """
+    logger.log(
+        logging.WARNING if severity in ("low", "warning") else logging.ERROR,
+        f"[ALERT:{severity.upper()}] {message}",
+    )
 
 # --- START: ADDED HELPER FUNCTION (Modified to use universal safe_metric) ---
 def safe_metric(metric_type, name, description, labelnames=()):
