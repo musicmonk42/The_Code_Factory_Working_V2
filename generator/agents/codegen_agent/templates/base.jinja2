@@ -140,6 +140,10 @@ Your generated code must meet these enterprise standards:
 
 ---
 
+{{ macros.render_readme_requirements(target_language, target_framework) }}
+
+---
+
 ## FINAL VERIFICATION
 
 Before submitting your response:
@@ -150,7 +154,8 @@ Before submitting your response:
 4. ✓ Does the code follow {{ target_language }} best practices?
 5. ✓ Is error handling comprehensive?
 6. ✓ Are all dependencies listed in requirements file?
-7. ✓ Is the README clear and complete?
+7. ✓ Is the README clear and complete with ALL required sections (Setup, Run, Test, 6+ curl examples)?
+8. ✓ Do ALL Pydantic models use Field() with proper constraints (min_length, max_length, etc.)?
 
 **Generate the JSON now.**
 

@@ -105,7 +105,7 @@ project/
 
 ### FastAPI Best Practices
 
-**1. Pydantic Models for Validation**
+**1. Pydantic Models for Validation with Field Constraints**
 ```python
 from pydantic import BaseModel, Field, validator
 
@@ -122,10 +122,21 @@ class CalculationRequest(BaseModel):
             }
         }
 
+class MessageRequest(BaseModel):
+    \"\"\"Request model with string validation constraints.\"\"\"
+    message: str = Field(..., min_length=1, max_length=500, strip_whitespace=True, description="Message text")
+    
 class CalculationResponse(BaseModel):
     \"\"\"Response model for calculations.\"\"\"
     result: float
     operation: str
+
+**CRITICAL: Use Field Constraints for ALL Pydantic Models**
+- String fields: Always specify min_length and max_length where appropriate
+- Numeric fields: Use ge (>=), le (<=), gt (>), lt (<) for range validation
+- Example: \`age: int = Field(..., ge=0, le=150)\`
+- Example: \`email: str = Field(..., min_length=5, max_length=255, regex="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$")\`
+- Use strip_whitespace=True for string fields to handle leading/trailing spaces
 ```
 
 **2. Endpoint Implementation with Error Handling**

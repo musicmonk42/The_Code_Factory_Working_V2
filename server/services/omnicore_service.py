@@ -3657,6 +3657,7 @@ class OmniCoreService:
                 deploy_payload = {
                     "code_path": codegen_result.get("output_path"),
                     "include_ci_cd": True,
+                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm)")
                 
@@ -3729,6 +3730,7 @@ class OmniCoreService:
                     "code_path": codegen_result.get("output_path"),
                     "doc_type": "api",
                     "format": "markdown",
+                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
                 docgen_result = await self._run_docgen(job_id, docgen_payload)
@@ -3759,6 +3761,7 @@ class OmniCoreService:
                     "validation_results": val_result,
                     "stages_completed": stages_completed,
                     "stages_failed": stages_failed,
+                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
                 critique_result = await self._run_critique(job_id, critique_payload)
