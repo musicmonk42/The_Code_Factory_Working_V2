@@ -689,6 +689,36 @@ class FormatHandler(ABC):
             ) from e
 
 
+def validate_dockerfile(content: str) -> bool:
+    """Validate Dockerfile starts correctly.
+    
+    Ensures that the first non-comment, non-empty line starts with FROM or ARG,
+    and that no invalid characters like '!' appear at the start.
+    
+    Args:
+        content: Raw Dockerfile content
+        
+    Returns:
+        True if valid
+        
+    Raises:
+        ValueError: If Dockerfile has invalid start instruction
+    """
+    lines = content.strip().split('\n')
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith('#'):
+            continue
+        # First non-comment line must start with a valid instruction
+        valid_starts = ('FROM', 'ARG')
+        if not any(stripped.upper().startswith(s) for s in valid_starts):
+            raise ValueError(
+                f"Invalid Dockerfile: First instruction must be FROM or ARG, got: {stripped[:50]}"
+            )
+        break
+    return True
+
+
 class DockerfileHandler(FormatHandler):
     __version__ = "1.1"  # Example version bump
     __source__ = "built-in"
@@ -726,6 +756,9 @@ class DockerfileHandler(FormatHandler):
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
         # Remove leading "!" token (common LLM error)
         sanitized = re.sub(r'^!+\s*', '', sanitized)
+        
+        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
+        validate_dockerfile(sanitized)
         
         # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
         lines = []
@@ -957,6 +990,23 @@ class YAMLHandler(FormatHandler):
 
     def normalize(self, raw: str) -> Any:
         """Normalizes raw YAML string to a Python object using ruamel.yaml for fidelity."""
+        # Strip markdown code fences if present
+        raw = raw.strip()
+        if raw.startswith("```yaml"):
+            raw = raw[7:]
+        if raw.startswith("```"):
+            raw = raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        raw = raw.strip()
+        
+        # Reject if contains obvious markdown patterns
+        if "**" in raw or "- **" in raw:
+            raise ValueError(
+                "Invalid output: Response contains Markdown formatting. "
+                "Expected pure YAML without ** or markdown bullets."
+            )
+        
         ru_yaml = YAML()
         try:
             return ru_yaml.load(raw)
