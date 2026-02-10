@@ -5,7 +5,8 @@
 
 .PHONY: help install install-dev test lint format clean docker-build docker-up docker-down deploy-staging deploy-production \
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
-	helm-install helm-uninstall helm-template helm-lint helm-package helm-status
+	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
+	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -253,14 +254,38 @@ health-check: ## Run health check on all services
 # Database
 # =============================================================================
 
-db-migrate: ## Run database migrations
-	@echo "$(BLUE)Running database migrations...$(NC)"
-	# Add migration commands here
+db-migrate: ## Run database migrations with Alembic
+	@echo "$(BLUE)Running database migrations with Alembic...$(NC)"
+	alembic upgrade head
 	@echo "$(GREEN)Migrations complete!$(NC)"
+
+db-migrate-create: ## Create a new database migration
+	@echo "$(BLUE)Creating new migration...$(NC)"
+	@read -p "Enter migration message: " msg; \
+	alembic revision --autogenerate -m "$$msg"
+	@echo "$(GREEN)Migration created!$(NC)"
+
+db-migrate-history: ## Show migration history
+	@echo "$(BLUE)Migration history:$(NC)"
+	alembic history
+
+db-migrate-current: ## Show current migration version
+	@echo "$(BLUE)Current migration version:$(NC)"
+	alembic current
+
+db-migrate-downgrade: ## Downgrade database by one migration
+	@echo "$(YELLOW)Downgrading database by one migration...$(NC)"
+	alembic downgrade -1
+	@echo "$(GREEN)Downgrade complete!$(NC)"
+
+db-migrate-validate: ## Validate Alembic configuration
+	@echo "$(BLUE)Validating Alembic configuration...$(NC)"
+	@python3 -c "from alembic.config import Config; from alembic.script import ScriptDirectory; cfg = Config('alembic.ini'); ScriptDirectory.from_config(cfg); print('✓ Alembic configuration is valid')"
+	@echo "$(GREEN)Validation complete!$(NC)"
 
 db-reset: ## Reset database (WARNING: destroys data)
 	@echo "$(RED)Resetting database...$(NC)"
-	rm -f dev.db deploy_agent_history.db mock_history.db
+	rm -f dev.db deploy_agent_history.db mock_history.db omnicore.db test_omnicore.db
 	@echo "$(GREEN)Database reset!$(NC)"
 
 # =============================================================================

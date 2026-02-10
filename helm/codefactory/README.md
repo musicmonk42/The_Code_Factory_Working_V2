@@ -145,6 +145,29 @@ The command removes all the Kubernetes components associated with the chart and 
 | `monitoring.serviceMonitor.interval`      | Scrape interval                          | `30s`    |
 | `monitoring.serviceMonitor.scrapeTimeout` | Scrape timeout                           | `10s`    |
 
+### Migration Parameters
+
+| Name                                      | Description                                    | Value            |
+|-------------------------------------------|------------------------------------------------|------------------|
+| `migrations.enabled`                      | Enable database migrations                     | `true`           |
+| `migrations.runAs`                        | How to run migrations (initContainer/job/none) | `initContainer`  |
+| `migrations.job.autoRun`                  | Auto-run migrations on helm upgrade            | `true`           |
+| `migrations.job.ttlSecondsAfterFinished`  | TTL for completed job pods                     | `300`            |
+| `migrations.job.backoffLimit`             | Number of retries for failed jobs              | `3`              |
+| `migrations.job.hook.enabled`             | Use Helm hooks for migration job               | `true`           |
+| `migrations.job.hook.weight`              | Hook weight (lower runs first)                 | `"-5"`           |
+| `migrations.resources.limits.cpu`         | CPU limit for migration container              | `500m`           |
+| `migrations.resources.limits.memory`      | Memory limit for migration container           | `1Gi`            |
+
+### Environment Variables
+
+| Name                     | Description                              | Default Value |
+|--------------------------|------------------------------------------|---------------|
+| `env.ENABLE_CITUS`       | Enable Citus distributed SQL features    | `"0"`         |
+| `env.ENABLE_DATABASE`    | Enable database support                  | `"1"`         |
+| `env.PRODUCTION_MODE`    | Run in production mode                   | `"1"`         |
+| `env.LOG_LEVEL`          | Logging level                            | `"INFO"`      |
+
 ## Configuration and Installation Details
 
 ### Secrets Management
@@ -204,6 +227,22 @@ autoscaling:
   minReplicas: 3
   maxReplicas: 10
 
+# Enable Citus for distributed SQL
+env:
+  ENABLE_CITUS: "1"
+
+# Configure database migrations
+migrations:
+  enabled: true
+  runAs: "initContainer"  # or "job" for separate migration job
+
+# Enable database connection
+secrets:
+  database:
+    enabled: true
+    urlSecretName: "codefactory-secrets"
+    urlSecretKey: "database-url"
+
 ingress:
   enabled: true
   hosts:
@@ -223,6 +262,60 @@ Install with custom values:
 helm install codefactory ./helm/codefactory \
   --namespace codefactory \
   --values values-custom.yaml
+```
+
+### Database Migrations
+
+The chart supports automatic database migrations using Alembic. Migrations can run in two ways:
+
+1. **Init Container (Recommended)**: Migrations run before the main application starts
+   ```yaml
+   migrations:
+     enabled: true
+     runAs: "initContainer"
+   ```
+
+2. **Separate Job**: Migrations run as a Helm hook before deployment
+   ```yaml
+   migrations:
+     enabled: true
+     runAs: "job"
+     job:
+       autoRun: true
+       hook:
+         enabled: true
+   ```
+
+**Database Setup:**
+
+For PostgreSQL with Citus support (recommended for production scale-out):
+```bash
+kubectl create secret generic codefactory-secrets \
+  --from-literal=database-url="postgresql+asyncpg://codefactory:CHANGE_ME@postgres:5432/codefactory" \
+  -n codefactory
+```
+
+Enable Citus in your values:
+```yaml
+env:
+  ENABLE_CITUS: "1"
+```
+
+**Manual Migration Commands:**
+
+To run migrations manually:
+```bash
+# Connect to a pod
+kubectl exec -it deployment/codefactory -n codefactory -- bash
+
+# Run migrations
+alembic upgrade head
+
+# View migration history
+alembic history
+
+# Check current version
+alembic current
 ```
 
 ### Upgrading

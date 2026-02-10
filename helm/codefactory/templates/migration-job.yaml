@@ -1,0 +1,72 @@
+{{- if and .Values.migrations.enabled (eq .Values.migrations.runAs "job") }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "codefactory.fullname" . }}-migrations
+  labels:
+    {{- include "codefactory.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  {{- if .Values.migrations.job.hook.enabled }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "{{ .Values.migrations.job.hook.weight }}"
+    "helm.sh/hook-delete-policy": "{{ .Values.migrations.job.hook.deletePolicy }}"
+  {{- end }}
+  {{- with .Values.migrations.job.annotations }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.migrations.job.autoRun }}
+  ttlSecondsAfterFinished: {{ .Values.migrations.job.ttlSecondsAfterFinished }}
+  {{- end }}
+  backoffLimit: {{ .Values.migrations.job.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "codefactory.labels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "codefactory.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: migrations
+        image: "{{ .Values.migrations.image.repository | default .Values.image.repository }}:{{ .Values.migrations.image.tag | default .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.migrations.image.pullPolicy | default .Values.image.pullPolicy }}
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Running database migrations with Alembic..."
+            cd /app
+            alembic upgrade head
+            echo "Migrations completed successfully"
+        env:
+          {{- if .Values.secrets.database.enabled }}
+          - name: DB_PATH
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.database.urlSecretName }}
+                key: {{ .Values.secrets.database.urlSecretKey }}
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.database.urlSecretName }}
+                key: {{ .Values.secrets.database.urlSecretKey }}
+          {{- end }}
+          # Add other environment variables needed for migrations
+          - name: APP_ENV
+            value: "{{ .Values.env.APP_ENV }}"
+          - name: LOG_LEVEL
+            value: "{{ .Values.env.LOG_LEVEL }}"
+        resources:
+          {{- toYaml .Values.migrations.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+{{- end }}

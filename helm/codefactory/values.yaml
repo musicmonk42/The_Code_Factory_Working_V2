@@ -212,6 +212,7 @@ env:
   ENABLE_FEATURE_STORE: "0"
   ENABLE_LIBVIRT: "0"
   ENABLE_KAFKA: "0"
+  ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
   
   # Audit Crypto Configuration
   AUDIT_CRYPTO_MODE: "software"
@@ -297,6 +298,38 @@ redis:
       requests:
         cpu: 250m
         memory: 256Mi
+
+# Database migrations with Alembic
+migrations:
+  enabled: true
+  # Run migrations as an init container (recommended) or separate Job
+  runAs: "initContainer"  # Options: "initContainer", "job", "none"
+  # Image configuration (uses same image as main app by default)
+  image:
+    # Leave empty to use main app image
+    repository: ""
+    tag: ""
+    pullPolicy: ""
+  # Job-specific configuration (only used if runAs: "job")
+  job:
+    # Automatically run migrations on helm upgrade
+    autoRun: true
+    # Keep successful job pods for debugging
+    ttlSecondsAfterFinished: 300
+    backoffLimit: 3
+    annotations: {}
+    # Use hook to run migrations before deployment
+    hook:
+      enabled: true
+      weight: "-5"
+      deletePolicy: "before-hook-creation"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
 
 # Monitoring
 monitoring:
