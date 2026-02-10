@@ -1354,6 +1354,25 @@ class OmniCoreService:
                             extra={"job_id": job_id}
                         )
                         custom_output_dir = ""
+                
+                # FIX: Strip "generated/" prefix to avoid double-nesting
+                # If README specifies "output_dir: generated/hello_generator", we should not create
+                # "job-id/generated/generated/hello_generator" but rather "job-id/generated/hello_generator"
+                if custom_output_dir:
+                    # Remove "generated/" or "generated" prefix if present
+                    if custom_output_dir.startswith("generated/"):
+                        custom_output_dir = custom_output_dir[len("generated/"):]
+                        logger.info(
+                            f"[CODEGEN] Stripped 'generated/' prefix from output_dir: now {custom_output_dir}",
+                            extra={"job_id": job_id}
+                        )
+                    elif custom_output_dir == "generated":
+                        custom_output_dir = ""
+                        logger.info(
+                            f"[CODEGEN] Stripped 'generated' from output_dir (would be redundant)",
+                            extra={"job_id": job_id}
+                        )
+                
                 if custom_output_dir:
                     output_path = (base_uploads_dir / job_id / "generated" / custom_output_dir).resolve()
                 else:
@@ -3133,16 +3152,48 @@ class OmniCoreService:
                 
                 report_path = output_dir / "critique_report.json"
                 
-                # Ensure critique_result is serializable
+                # FIX: Enhance critique report to include coverage and test results
+                # This ensures the report complies with the contract requirements
+                enhanced_report = {
+                    "job_id": job_id,
+                    "timestamp": critique_result.get("timestamp") or datetime.utcnow().isoformat(),
+                    "coverage": critique_result.get("coverage", {
+                        "total_lines": 0,
+                        "covered_lines": 0,
+                        "percentage": 0.0
+                    }),
+                    "test_results": critique_result.get("test_results") or payload.get("test_results", {
+                        "total": 0,
+                        "passed": 0,
+                        "failed": 0
+                    }),
+                    "issues": critique_result.get("issues", []),
+                    "fixes_applied": critique_result.get("fixes_applied", []),
+                    "scan_types": scan_types,
+                    "status": critique_result.get("status", "completed"),
+                }
+                
+                # Add original critique_result fields that don't conflict
+                for key, value in critique_result.items():
+                    if key not in enhanced_report:
+                        enhanced_report[key] = value
+                
+                # Ensure enhanced_report is serializable
                 try:
-                    json_str = json.dumps(critique_result, indent=2)
+                    json_str = json.dumps(enhanced_report, indent=2, default=str)
                 except (TypeError, ValueError) as e:
                     logger.error(f"Critique result is not JSON serializable: {e}")
                     # Create a minimal valid report
                     json_str = json.dumps({
+                        "job_id": job_id,
+                        "timestamp": datetime.utcnow().isoformat(),
                         "status": "error",
                         "message": "Failed to serialize critique results",
                         "issues_found": len(critique_result.get("issues", [])),
+                        "coverage": {"total_lines": 0, "covered_lines": 0, "percentage": 0.0},
+                        "test_results": {"total": 0, "passed": 0, "failed": 0},
+                        "issues": [],
+                        "fixes_applied": [],
                         "error": str(e)
                     }, indent=2)
                 

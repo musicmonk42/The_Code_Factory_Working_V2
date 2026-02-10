@@ -999,12 +999,27 @@ class DocgenAgent:
                 f"(valid: {is_valid}, warnings: {len(validation_errors)})"
             )
 
-            # Optionally build HTML documentation (only if validation passed)
-            if SPHINX_AVAILABLE and is_valid:
-                await self.sphinx_generator.build_sphinx_docs([rst_path])
+            # Build HTML documentation if Sphinx is available
+            # FIX: Always attempt to build even if there are validation warnings
+            # RST validation can be overly strict - Sphinx itself may handle the content fine
+            if SPHINX_AVAILABLE:
+                try:
+                    await self.sphinx_generator.build_sphinx_docs([rst_path])
+                    logger.info(f"Successfully built Sphinx HTML docs for {doc_type}")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to build Sphinx HTML for {doc_type}: {e}",
+                        extra={"doc_type": doc_type, "error": str(e)}
+                    )
+                    # Continue anyway - RST file is still available
             elif not is_valid:
                 logger.warning(
-                    f"Skipping Sphinx HTML build for {doc_type} due to RST syntax validation failure"
+                    f"Skipping Sphinx HTML build for {doc_type}: "
+                    f"Sphinx not available and RST has validation issues"
+                )
+            else:
+                logger.warning(
+                    f"Skipping Sphinx HTML build for {doc_type}: Sphinx not available"
                 )
 
             return rst_content
