@@ -952,9 +952,20 @@ class DeploymentCompletenessValidator(Validator):
                             for pattern in self.PLACEHOLDER_PATTERNS:
                                 matches = re.findall(pattern, content)
                                 if matches:
-                                    # Filter out common valid patterns (e.g., Jinja2 templates in Helm)
-                                    # Exclude patterns like {{ .Values.x }} which are valid Helm syntax
-                                    invalid_matches = [m for m in matches if not m.startswith('{{') and not m.endswith('}}')]
+                                    # Filter out common valid patterns (e.g., Jinja2/Go templates in Helm)
+                                    # Check if the match appears in a Helm/Jinja2 template context
+                                    # by looking for {{ placeholder }} patterns in the surrounding text
+                                    invalid_matches = []
+                                    for match in matches:
+                                        # Check if this match is part of a Helm/Jinja2 template
+                                        # Look for patterns like {{ .Values.something }} or {{ match }}
+                                        helm_pattern = re.escape(match)
+                                        # Check if surrounded by double braces or has .Values/.Chart prefix
+                                        if not re.search(rf'\{{\{{.*{helm_pattern}.*\}}\}}', content):
+                                            # Also check for Go template patterns with dot notation
+                                            if not re.search(rf'\{{\{{.*\..*{helm_pattern}.*\}}\}}', content):
+                                                invalid_matches.append(match)
+                                    
                                     if invalid_matches:
                                         placeholder_found = True
                                         report["placeholder_issues"].append(f"{file_path}: {invalid_matches}")
