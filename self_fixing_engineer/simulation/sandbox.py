@@ -541,6 +541,17 @@ if PYDANTIC_AVAILABLE:
     # Make SandboxPolicy the actual class, not an alias, to avoid metaclass conflicts
     class SandboxPolicy(BaseModel):
         """Pydantic-based SandboxPolicy implementation with validation."""
+        
+        # Pydantic V2 configuration - use model_config for better compatibility
+        try:
+            # Try Pydantic V2 style configuration
+            model_config = {"arbitrary_types_allowed": True, "validate_assignment": True}
+        except Exception:
+            # Fallback for Pydantic V1
+            class Config:
+                arbitrary_types_allowed = True
+                validate_assignment = True
+        
         network_disabled: bool = Field(
             default=False, description="Disable network access for the sandbox"
         )
@@ -616,6 +627,17 @@ if PYDANTIC_AVAILABLE:
     # Make ContainerValidationConfig the actual class, not an alias, to avoid metaclass conflicts
     class ContainerValidationConfig(BaseModel):
         """Pydantic-based ContainerValidationConfig implementation with validation."""
+        
+        # Pydantic V2 configuration - use model_config for better compatibility
+        try:
+            # Try Pydantic V2 style configuration
+            model_config = {"arbitrary_types_allowed": True, "validate_assignment": True}
+        except Exception:
+            # Fallback for Pydantic V1
+            class Config:
+                arbitrary_types_allowed = True
+                validate_assignment = True
+        
         image: str = Field(..., description="Container image name.")
         command: List[str] = Field(..., description="Container command.")
         kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(
