@@ -114,15 +114,27 @@ The Helm chart should include:
 {% endif %}
 
 ---
-**Output Format**: Generate the Helm chart values.yaml or the complete chart structure as requested. Use proper YAML formatting with comments explaining configuration options.
 
-**CRITICAL VALIDATION**: Your generated Helm chart MUST:
-1. Use the EXACT container port(s) from the application code
-2. Set the correct image repository and tag based on the project
-3. Include ALL environment variables the application code references
-4. Configure health checks at endpoints the application actually exposes
-5. Set resource limits appropriate for the detected language/framework
-6. Use service names and labels that match the application name
-7. Include ConfigMaps/Secrets for any configuration files the app needs
+## STRICT OUTPUT FORMAT - CRITICAL
+
+Your response MUST:
+1. Start IMMEDIATELY with valid YAML (no preamble)
+2. Begin with `---` or a top-level key (e.g., `replicaCount:`, `image:`)
+3. Contain ONLY valid YAML configuration
+4. Have NO markdown code fences (```)
+5. Have NO explanations or commentary before or after the YAML
+
+WRONG EXAMPLES:
+- "Here is the Helm values.yaml..."
+- "To create a Helm chart..."
+- "```yaml"
+
+CORRECT: Your response starts directly with YAML:
+replicaCount: 2
+image:
+  repository: my-app
+  tag: "1.0.0"
 
 Base ALL configuration on the actual generated code, not generic templates.
+
+BEGIN YOUR HELM CONFIGURATION NOW:

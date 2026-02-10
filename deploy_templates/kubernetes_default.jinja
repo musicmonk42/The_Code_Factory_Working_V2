@@ -165,7 +165,7 @@ securityContext:
 
 ---
 
-## OUTPUT FORMAT
+## STRICT OUTPUT FORMAT - CRITICAL
 
 **CRITICAL REQUIREMENTS:**
 
@@ -191,19 +191,41 @@ securityContext:
    - ACTUAL environment variables used
    - ACTUAL health check endpoints
 
-**Example Output Structure** (without markdown fences):
-```
+**Example Output Format:**
+
+Your response should start directly with YAML document separators and manifests:
+
 ---
-# Deployment manifest here
 apiVersion: apps/v1
 kind: Deployment
-...
+metadata:
+  name: my-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+      - name: my-app
+        image: my-app:1.0.0
+        ports:
+        - containerPort: 8000
 ---
-# Service manifest here
 apiVersion: v1
 kind: Service
-...
-```
+metadata:
+  name: my-app
+spec:
+  selector:
+    app: my-app
+  ports:
+  - port: 80
+    targetPort: 8000
 
 **VALIDATION CHECKLIST:**
 - [ ] Output contains ONLY YAML (no markdown)
@@ -213,3 +235,5 @@ kind: Service
 - [ ] Health probes are configured
 - [ ] Labels follow app.kubernetes.io standard
 - [ ] Service selector matches Deployment labels
+
+BEGIN YOUR KUBERNETES MANIFESTS NOW:

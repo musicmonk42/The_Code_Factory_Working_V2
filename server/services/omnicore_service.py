@@ -1904,14 +1904,42 @@ class OmniCoreService:
                 await agent._init_db()
                 
                 # Prepare requirements for deployment
+                # FIX 1: Get list of generated files from payload or scan code_path
+                generated_files = payload.get("generated_files", [])
+                if not generated_files and repo_path.exists():
+                    try:
+                        # Collect source files, excluding common non-source directories
+                        # Industry standard: filter out build artifacts, dependencies, VCS
+                        exclude_dirs = {'.git', '.svn', 'node_modules', '__pycache__', '.pytest_cache', 
+                                       'dist', 'build', '.venv', 'venv', '.mypy_cache', '.ruff_cache',
+                                       '.tox', 'htmlcov', '.eggs', '*.egg-info'}
+                        
+                        for file_path in repo_path.rglob("*"):
+                            if file_path.is_file():
+                                # Skip if any parent directory is in exclude list
+                                if any(part in exclude_dirs for part in file_path.parts):
+                                    continue
+                                # Skip hidden files (except specific configs)
+                                if any(part.startswith('.') and part not in {'.env.example', '.dockerignore'} 
+                                      for part in file_path.parts):
+                                    continue
+                                # Store relative path from repo_path
+                                rel_path = str(file_path.relative_to(repo_path))
+                                generated_files.append(rel_path)
+                        logger.info(f"[DEPLOY] Found {len(generated_files)} source files in {code_path}")
+                    except Exception as e:
+                        logger.warning(f"[DEPLOY] Failed to collect files from {code_path}: {e}")
+                
                 requirements = {
                     "pipeline_steps": ["generate", "validate"],
                     "platform": platform,
                     "include_ci_cd": include_ci_cd,
+                    "files": generated_files,  # FIX 1: Pass actual file list
+                    "code_path": code_path,
                 }
                 
                 # Run the deployment generation
-                logger.info(f"[DEPLOY] Running deploy agent for job {job_id} with target={platform}")
+                logger.info(f"[DEPLOY] Running deploy agent for job {job_id} with target={platform}, files={len(generated_files)}")
                 deploy_result = await agent.run_deployment(target=platform, requirements=requirements)
                 logger.info(f"[DEPLOY] Deploy agent returned result with keys: {list(deploy_result.keys())}")
                 
@@ -2309,10 +2337,37 @@ class OmniCoreService:
                 extra={"job_id": job_id, "target": target, "sequence": f"{target_idx + 1}/{len(targets)}"}
             )
             
+            # FIX 1: Get list of generated files from code_path for deploy_all
+            generated_files = []
+            if code_path_obj.exists():
+                try:
+                    # Collect source files, excluding common non-source directories
+                    # Industry standard: filter out build artifacts, dependencies, VCS
+                    exclude_dirs = {'.git', '.svn', 'node_modules', '__pycache__', '.pytest_cache', 
+                                   'dist', 'build', '.venv', 'venv', '.mypy_cache', '.ruff_cache',
+                                   '.tox', 'htmlcov', '.eggs', '*.egg-info'}
+                    
+                    for file_path in code_path_obj.rglob("*"):
+                        if file_path.is_file():
+                            # Skip if any parent directory is in exclude list
+                            if any(part in exclude_dirs for part in file_path.parts):
+                                continue
+                            # Skip hidden files (except specific configs)
+                            if any(part.startswith('.') and part not in {'.env.example', '.dockerignore'} 
+                                  for part in file_path.parts):
+                                continue
+                            # Store relative path from code_path
+                            rel_path = str(file_path.relative_to(code_path_obj))
+                            generated_files.append(rel_path)
+                    logger.info(f"[DEPLOY_ALL] Found {len(generated_files)} source files in {code_path} for target {target}")
+                except Exception as e:
+                    logger.warning(f"[DEPLOY_ALL] Failed to collect files from {code_path}: {e}")
+            
             target_payload = {
                 "code_path": code_path,
                 "platform": target,
                 "include_ci_cd": include_ci_cd,
+                "generated_files": generated_files,  # FIX 1: Pass files list
             }
             
             try:
@@ -3823,12 +3878,14 @@ class OmniCoreService:
             logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
             
             if include_deployment:
+                # FIX 1: Pass generated files from codegen to deployment
                 deploy_payload = {
                     "code_path": codegen_result.get("output_path"),
                     "include_ci_cd": True,
                     "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
+                    "generated_files": codegen_result.get("file_names", []),  # FIX 1: Pass file list
                 }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm)")
+                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm) with {len(deploy_payload.get('generated_files', []))} files")
                 
                 # Run all deployment targets
                 deploy_result = await self._run_deploy_all(job_id, deploy_payload)

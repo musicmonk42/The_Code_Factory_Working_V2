@@ -111,16 +111,23 @@ The Dockerfile must include:
 {% endif %}
 
 ---
-**Output Format**: Generate ONLY the Dockerfile content. No explanations, comments outside the Dockerfile, or markdown formatting. The output should be ready to save as a `Dockerfile`.
 
-**CRITICAL VALIDATION**: Your generated Dockerfile MUST:
-1. Use the EXACT entry point found in the actual code files
-2. Expose the EXACT port(s) the application uses (scan code for listen/bind calls)
-3. Install the EXACT dependencies from requirements.txt/package.json/go.mod (with versions)
-4. Copy ALL necessary files that the application references
-5. Use the correct base image for the detected language/framework
-6. Include the actual environment variables the code expects
-7. Match the directory structure the code uses
+## STRICT OUTPUT FORMAT - CRITICAL
 
-If you cannot determine any of these from the provided files, make reasonable inferences based on the language/framework conventions, but prefer accuracy over generic templates.
+Your response MUST:
+1. Start IMMEDIATELY with `FROM ` or `ARG ` on line 1
+2. Contain ONLY valid Dockerfile instructions
+3. Have NO text before the first instruction
+4. Have NO markdown code fences (```)
+5. Have NO explanations or commentary
+
+WRONG EXAMPLES:
+- "Here is a Dockerfile for..."
+- "To create a Dockerfile..."
+- "```dockerfile"
+
+CORRECT: Your response starts directly with:
+FROM python:3.11-slim
+
+BEGIN YOUR DOCKERFILE NOW:
 

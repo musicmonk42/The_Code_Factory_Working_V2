@@ -207,6 +207,40 @@ DEPLOY_ERRORS = _get_or_create_metric(
     ["error_type"],
 )
 
+# --- FIX 4: Add MAX_LLM_RETRIES constant ---
+MAX_LLM_RETRIES = 3
+# --- End of FIX 4 constant ---
+
+# --- FIX 6: Add new Prometheus metrics ---
+PROMPT_TOKEN_COUNT = _get_or_create_metric(
+    prometheus_client.Histogram,
+    "deploy_prompt_token_count",
+    "Token count of deployment prompts",
+    ["target"],
+)
+
+CONTEXT_FILES_COUNT = _get_or_create_metric(
+    prometheus_client.Gauge,
+    "deploy_context_files_count",
+    "Number of files included in deployment context",
+    ["target"],
+)
+
+LLM_OUTPUT_FORMAT = _get_or_create_metric(
+    prometheus_client.Counter,
+    "deploy_llm_output_format_total",
+    "Classification of LLM output format",
+    ["target", "format_type"],  # format_type: valid, prose, markdown_wrapped, empty
+)
+
+LLM_RETRY_COUNT = _get_or_create_metric(
+    prometheus_client.Counter,
+    "deploy_llm_retry_total",
+    "Number of LLM retries for deployment generation",
+    ["target", "attempt"],
+)
+# --- End of FIX 6 metrics ---
+
 
 # --- Scrubbing / Logging --------------------------------------------
 def scrub_text(text: str) -> str:
@@ -1286,6 +1320,43 @@ Respond in plain prose only (no JSON / no code fences).
                 raise
 
     # --- run_deployment ---------------------------------------------
+    
+    def _build_retry_prompt(
+        self, original_prompt: str, failed_output: str, error: str, target: str
+    ) -> str:
+        """
+        Build a retry prompt with error context for self-healing.
+        
+        FIX 4: This method creates an enhanced prompt that includes the error
+        from the previous attempt, helping the LLM correct its output format.
+        
+        Args:
+            original_prompt: The original prompt that was sent
+            failed_output: The LLM's failed output (first 300 chars)
+            error: The error message from the failed attempt
+            target: The target deployment type (docker, kubernetes, helm)
+            
+        Returns:
+            Enhanced prompt with error context and correction instructions
+        """
+        return f"""Your previous response was INVALID and could not be parsed.
+
+ERROR: {error}
+
+Your previous (incorrect) response started with:
+{failed_output[:300] if failed_output else "(empty)"}...
+
+CRITICAL CORRECTIONS REQUIRED:
+- Output ONLY the {target} configuration content
+- NO explanations, NO markdown code fences, NO prose
+- Start IMMEDIATELY with the first valid instruction
+- For Dockerfile: Start with FROM or ARG
+- For YAML: Start with --- or apiVersion:
+
+{original_prompt}
+
+BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
+    
     async def run_deployment(
         self, target: str, requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1313,6 +1384,10 @@ Respond in plain prose only (no JSON / no code fences).
                 logger.info(f"[DEPLOY_AGENT] Found plugin for target '{target}': {plugin.name if hasattr(plugin, 'name') else 'unknown'}")
 
                 context = await self.gather_context([])
+                
+                # FIX 6: Record context files count
+                files_list = requirements.get("files", [])
+                CONTEXT_FILES_COUNT.labels(target=target).set(len(files_list))
 
                 steps = requirements.get(
                     "pipeline_steps",
@@ -1321,39 +1396,99 @@ Respond in plain prose only (no JSON / no code fences).
                 config_content = requirements.get("config", "")
 
                 if "generate" in steps:
-                    # --- FIX 3.3: Pass repo_path to prompt agent ---
-                    prompt = await self.prompt_agent(
-                        target=target,
-                        files=[],
-                        repo_path=str(self.repo_path),  # <-- ADDED
-                        instructions=None,
-                        context=context,
-                    )
-                    # --------------------------------------------
-                    prompt = scrub_text(prompt)
-                    try:
-                        resp = await call_llm_api(prompt, "gpt-4o", stream=False)
-                        LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
-                    except Exception as le:
-                        LLM_ERRORS_TOTAL.labels(
-                            provider="deploy",
-                            model="gpt-4o",
-                            error_type=type(le).__name__,
-                        ).inc()
-                        raise LLMError("LLM call failed during run_deployment") from le
-                    raw = resp.get("content", "")
-                    # --- FIX: Pass singleton handler_registry ---
-                    handled = await handle_deploy_response(
-                        raw_response=raw,
-                        handler_registry=self.handler_registry,
-                        output_format=target,
-                        to_format=target,
-                        repo_path=str(self.repo_path),
-                        run_id=self.run_id,
-                    )
-                    # --------------------------------------------
-                    config_content = handled["final_config_output"]
-                    logger.info(f"[DEPLOY_AGENT] Config generated, length: {len(config_content)} chars")
+                    # FIX 4: Add retry logic with self-healing prompts
+                    last_error = None
+                    last_raw_response = None
+                    config_content = ""
+                    original_prompt = None  # Industry standard: Store original to prevent accumulation
+                    
+                    for attempt in range(MAX_LLM_RETRIES):
+                        try:
+                            # FIX 6: Record retry attempt
+                            if attempt > 0:
+                                LLM_RETRY_COUNT.labels(target=target, attempt=str(attempt + 1)).inc()
+                            
+                            # --- FIX 3.3: Pass repo_path to prompt agent ---
+                            # Only generate original prompt on first attempt
+                            if original_prompt is None:
+                                original_prompt = await self.prompt_agent(
+                                    target=target,
+                                    files=[],
+                                    repo_path=str(self.repo_path),  # <-- ADDED
+                                    instructions=None,
+                                    context=context,
+                                )
+                            # --------------------------------------------
+                            
+                            # Industry standard: Use original prompt, not accumulated version
+                            prompt = original_prompt
+                            
+                            # FIX 6: Record prompt token count (approximate)
+                            if HAS_TIKTOKEN:
+                                try:
+                                    encoding = tiktoken.encoding_for_model("gpt-4")
+                                    token_count = len(encoding.encode(prompt))
+                                    PROMPT_TOKEN_COUNT.labels(target=target).observe(token_count)
+                                    logger.debug(f"[DEPLOY_AGENT] Prompt token count: {token_count}")
+                                except Exception as e:
+                                    logger.debug(f"[DEPLOY_AGENT] Could not count tokens: {e}")
+                            
+                            # FIX 4: Build retry prompt with error context on subsequent attempts
+                            if attempt > 0 and last_error:
+                                prompt = self._build_retry_prompt(
+                                    original_prompt, last_raw_response, str(last_error), target
+                                )
+                                logger.warning(
+                                    f"Retrying {target} generation (attempt {attempt + 1}/{MAX_LLM_RETRIES}): {last_error}"
+                                )
+                            
+                            prompt = scrub_text(prompt)
+                            try:
+                                resp = await call_llm_api(prompt, "gpt-4o", stream=False)
+                                LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
+                            except Exception as le:
+                                LLM_ERRORS_TOTAL.labels(
+                                    provider="deploy",
+                                    model="gpt-4o",
+                                    error_type=type(le).__name__,
+                                ).inc()
+                                raise LLMError("LLM call failed during run_deployment") from le
+                            
+                            raw = resp.get("content", "")
+                            last_raw_response = raw
+                            
+                            # --- FIX: Pass singleton handler_registry ---
+                            handled = await handle_deploy_response(
+                                raw_response=raw,
+                                handler_registry=self.handler_registry,
+                                output_format=target,
+                                to_format=target,
+                                repo_path=str(self.repo_path),
+                                run_id=self.run_id,
+                            )
+                            # --------------------------------------------
+                            config_content = handled["final_config_output"]
+                            logger.info(
+                                f"[DEPLOY_AGENT] Config generated successfully on attempt {attempt + 1}, "
+                                f"length: {len(config_content)} chars"
+                            )
+                            # Success - break out of retry loop
+                            break
+                            
+                        except ValueError as e:
+                            last_error = e
+                            logger.warning(
+                                f"[DEPLOY_AGENT] Generation attempt {attempt + 1}/{MAX_LLM_RETRIES} failed: {e}"
+                            )
+                            if attempt >= MAX_LLM_RETRIES - 1:
+                                # Final attempt failed - re-raise
+                                logger.error(
+                                    f"[DEPLOY_AGENT] All {MAX_LLM_RETRIES} attempts failed for {target}"
+                                )
+                                raise
+                            # Otherwise, continue to next attempt
+                            continue
+                    # End of FIX 4 retry loop
 
                 if "validate" in steps:
                     vres = await self.validate_configs_final(config_content, target)
