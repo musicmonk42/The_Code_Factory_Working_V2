@@ -2058,12 +2058,14 @@ class OmniCoreService:
                             parts = config_content.split("\n# ")
                             for part in parts:
                                 part = "# " + part if not part.startswith("#") else part
-                                if "Chart.yaml" in part[:50]:  # Check first 50 chars
+                                # Safe bounds checking: only check first 50 chars if part is long enough
+                                part_prefix = part[:min(50, len(part))]
+                                if "Chart.yaml" in part_prefix:
                                     chart_content = part.replace("# Chart.yaml", "").strip()
                                     async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
                                         await f.write(chart_content)
                                     generated_files.append(str(chart_path.relative_to(repo_path)))
-                                elif "values.yaml" in part[:50]:  # Check first 50 chars
+                                elif "values.yaml" in part_prefix:
                                     values_content = part.replace("# values.yaml", "").strip()
                                     async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
                                         await f.write(values_content)
@@ -3817,7 +3819,8 @@ class OmniCoreService:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
             # 5. Docgen (if requested)
-            if payload.get("include_docs", False):
+            # FIX: Default to True since documentation is a core pipeline feature
+            if payload.get("include_docs", True):
                 docgen_payload = {
                     "code_path": codegen_result.get("output_path"),
                     "doc_type": "api",
@@ -3833,7 +3836,8 @@ class OmniCoreService:
                     logger.warning(f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')} (continuing pipeline)")
             
             # 6. Critique (if requested)
-            if payload.get("run_critique", False):
+            # FIX: Default to True since critique is a core pipeline feature for quality
+            if payload.get("run_critique", True):
                 # Enrich critique with test and validation results for better context
                 # Only mark stages as "failed" if they were expected (via include_* flags) but not completed
                 stages_failed = []
@@ -3841,7 +3845,7 @@ class OmniCoreService:
                     stages_failed.append("testgen")
                 if payload.get("include_deployment", True) and "deploy" not in stages_completed:
                     stages_failed.append("deploy")
-                if payload.get("include_docgen", False) and "docgen" not in stages_completed:
+                if payload.get("include_docs", True) and "docgen" not in stages_completed:
                     stages_failed.append("docgen")
                 
                 critique_payload = {

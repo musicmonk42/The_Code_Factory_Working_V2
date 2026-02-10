@@ -295,13 +295,17 @@ mvn test
 
 ### 5. API Examples (curl)
 
-**MANDATORY**: Include at least 6 curl examples demonstrating:
-1. Health check endpoint
-2. Version endpoint  
-3. Valid request to main endpoint
-4. Empty/whitespace validation error (400)
-5. Too long input validation error (400)
-6. Missing required field error (422)
+**MANDATORY - ALL 6 CURL EXAMPLES REQUIRED (not placeholders)**:
+Each example MUST be a complete, working curl command. Include:
+
+1. Health check: \`curl http://localhost:8000/health\`
+2. Version: \`curl http://localhost:8000/version\`
+3. Valid request with actual data
+4. Empty/whitespace returning 400 error
+5. Input exceeding max_length returning 400 error
+6. Missing required field returning 422 error
+
+Do NOT use placeholders like "<endpoint>" or "<data>" - provide ACTUAL working examples.
 
 Example format:
 ```bash
