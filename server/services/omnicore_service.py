@@ -1354,6 +1354,25 @@ class OmniCoreService:
                             extra={"job_id": job_id}
                         )
                         custom_output_dir = ""
+                
+                # FIX: Strip "generated/" prefix to avoid double-nesting
+                # If README specifies "output_dir: generated/hello_generator", we should not create
+                # "job-id/generated/generated/hello_generator" but rather "job-id/generated/hello_generator"
+                if custom_output_dir:
+                    # Remove "generated/" or "generated" prefix if present
+                    if custom_output_dir.startswith("generated/"):
+                        custom_output_dir = custom_output_dir[len("generated/"):]
+                        logger.info(
+                            f"[CODEGEN] Stripped 'generated/' prefix from output_dir: now {custom_output_dir}",
+                            extra={"job_id": job_id}
+                        )
+                    elif custom_output_dir == "generated":
+                        custom_output_dir = ""
+                        logger.info(
+                            f"[CODEGEN] Stripped 'generated' from output_dir (would be redundant)",
+                            extra={"job_id": job_id}
+                        )
+                
                 if custom_output_dir:
                     output_path = (base_uploads_dir / job_id / "generated" / custom_output_dir).resolve()
                 else:

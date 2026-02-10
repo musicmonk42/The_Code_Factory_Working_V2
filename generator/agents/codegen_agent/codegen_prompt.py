@@ -256,32 +256,126 @@ The following are MANDATORY checks:
    - tests/test_version.py (version endpoint tests)
    - tests/test_echo.py (echo endpoint tests if /echo is required)
    - requirements.txt (dependencies)
-   - README.md (setup and usage instructions)
+   - README.md (COMPREHENSIVE - see requirements below)
    - .env.example (example environment variables with NO real secrets)
 
-6. INPUT VALIDATION (for Pydantic models):
-   - For /echo endpoint specifically:
-     * Use plain `message: str` in the Pydantic model with NO field-level constraints
-     * Perform ALL validation manually in the route handler using `HTTPException(status_code=400)`
-     * In the route handler, strip whitespace and check: if not message.strip(): raise HTTPException(400)
-     * Check length after stripping: if len(message.strip()) > 500: raise HTTPException(400)
-     * Add a global exception handler to convert FastAPI's 422 responses to 400:
-       ```python
-       from fastapi.exceptions import RequestValidationError
-       from fastapi.responses import JSONResponse
+5a. README.md REQUIREMENTS (CRITICAL):
+   The README.md MUST be comprehensive and include ALL of the following sections:
+   
+   ```markdown
+   # {Project Name}
+   
+   {Brief description of what the service does}
+   
+   ## Setup
+   
+   \```bash
+   cd generated/{service_name}
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+   pip install -r requirements.txt
+   \```
+   
+   ## Run
+   
+   \```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000
+   \```
+   
+   ## Test
+   
+   \```bash
+   pytest tests/ -v
+   \```
+   
+   ## API Endpoints
+   
+   ### Health Check
+   \```bash
+   curl http://localhost:8000/health
+   # Response: {"ok": true}
+   \```
+   
+   ### Version
+   \```bash
+   curl http://localhost:8000/version
+   # Response: {"name": "{service_name}", "version": "0.1.0"}
+   \```
+   
+   ### {Each Additional Endpoint}
+   \```bash
+   curl -X POST http://localhost:8000/{endpoint} \\
+     -H "Content-Type: application/json" \\
+     -d '{example payload}'
+   # Response: {example response}
+   \```
+   
+   ## Project Structure
+   
+   \```
+   {service_name}/
+   ├── app/
+   │   ├── main.py       # FastAPI app with middleware
+   │   ├── routes.py     # API endpoints
+   │   └── schemas.py    # Pydantic models with validation
+   ├── tests/
+   │   ├── test_health.py
+   │   ├── test_version.py
+   │   └── test_{endpoint}.py
+   ├── requirements.txt
+   └── README.md
+   \```
+   ```
+   
+   DO NOT generate placeholder READMEs with missing sections.
+   EVERY section above MUST be included with actual content.
+
+6. INPUT VALIDATION (CRITICAL - Use Pydantic validators ONLY):
+   - ALL validation MUST be implemented in the Pydantic schema using @validator decorators
+   - NEVER add manual validation logic in route handlers
+   - Route handlers should only return responses - validation is automatic via Pydantic
+   
+   CORRECT Pattern (Use This):
+   ```python
+   # app/schemas.py - All validation in schema
+   from pydantic import BaseModel, Field, validator
+   
+   class EchoRequest(BaseModel):
+       message: str = Field(..., min_length=1, max_length=500)
        
-       @app.exception_handler(RequestValidationError)
-       async def validation_exception_handler(request, exc):
-           return JSONResponse(
-               status_code=400, 
-               content={"detail": "Invalid request", "errors": exc.errors()}
-           )
-       ```
-   - For other endpoints (non-echo):
-     * Use field constraints for string inputs as appropriate
-     * Use `constr(strip_whitespace=True, min_length=1, max_length=500)` for required text fields
-     * Use `Field(..., min_length=1)` with `@field_validator` for stripping whitespace
-     * Never accept empty or whitespace-only strings for required text inputs
+       @validator('message')
+       def trim_and_validate_message(cls, v):
+           """Trim whitespace and validate message is not empty."""
+           v = v.strip()
+           if not v:
+               raise ValueError('Message cannot be empty after trimming whitespace')
+           return v
+   
+   # app/routes.py - No validation logic, just return
+   @router.post('/echo', response_model=dict)
+   async def echo_message(request: EchoRequest):
+       # Pydantic already validated and trimmed - just use the value
+       return {'echo': request.message}
+   ```
+   
+   WRONG Pattern (DO NOT USE):
+   ```python
+   # ❌ app/routes.py - Manual validation (WRONG)
+   @router.post('/echo', response_model=dict)
+   async def echo_message(request: EchoRequest):
+       message = request.message.strip()  # ❌ Manual trim
+       if not message or len(message) > 500:  # ❌ Manual validation
+           raise HTTPException(status_code=400, detail='Invalid')
+       return {'echo': message}
+   ```
+   
+   Validation Rules:
+   - Use `@validator('field_name')` decorators for all validation logic
+   - Trim whitespace in validators using `.strip()`
+   - Validate min/max length after trimming
+   - Return the validated (and trimmed) value from the validator
+   - Use `Field(..., min_length=1, max_length=500)` for basic constraints
+   - Validators run BEFORE Field constraints, so trim first, then Field checks length
    
    - For test boundary cases:
      * CRITICAL: Use `"x" * N` for max-length boundary tests, NOT `"" * N`
