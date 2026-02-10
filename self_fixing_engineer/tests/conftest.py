@@ -54,7 +54,7 @@ def cleanup_background_loops():
     try:
         from self_fixing_engineer.self_healing_import_fixer.import_fixer import fixer_ast
         fixer_ast._shutdown_background_loop()
-    except (ImportError, AttributeError) as e:
+    except (ImportError, AttributeError):
         pass  # Module may not be imported in all test runs
     
     # Cleanup PluginManager background loops
@@ -65,7 +65,7 @@ def cleanup_background_loops():
             for instance in PluginManager._instances:
                 if hasattr(instance, 'stop_background_loop'):
                     instance.stop_background_loop()
-    except (ImportError, AttributeError) as e:
+    except (ImportError, AttributeError):
         pass  # Module may not be imported in all test runs
     
     # Cleanup TamperEvidentLogger instances
@@ -74,5 +74,5 @@ def cleanup_background_loops():
         instance = TamperEvidentLogger._instance
         if instance and hasattr(instance, 'shutdown'):
             instance.shutdown()
-    except (ImportError, AttributeError) as e:
+    except (ImportError, AttributeError):
         pass  # Module may not be imported in all test runs

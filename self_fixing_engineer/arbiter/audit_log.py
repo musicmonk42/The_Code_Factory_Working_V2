@@ -572,14 +572,15 @@ class TamperEvidentLogger:
                 # Check if we're in test mode and should exit early
                 if os.getenv("PYTEST_CURRENT_TEST"):
                     await asyncio.sleep(0.1)  # Short sleep in test mode
-                    # Check if we should exit due to test completion
-                    if not self._batch_queue:
-                        break
                 else:
                     # Flush the queue every timeout
                     await asyncio.sleep(self.config.batch_timeout)
                 
                 async with self._lock:
+                    # In test mode, exit if queue is empty
+                    if os.getenv("PYTEST_CURRENT_TEST") and not self._batch_queue:
+                        break
+                    
                     if self._batch_queue:
                         batch = self._batch_queue
                         self._batch_queue = []
