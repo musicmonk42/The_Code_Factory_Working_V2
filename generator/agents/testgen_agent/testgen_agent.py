@@ -417,10 +417,22 @@ class TestgenAgent:
             # Ensure the path is relative and doesn't have leading slashes
             fp_cleaned = fp.lstrip('/')
             full_path = (self.repo_path / fp_cleaned).resolve()
+            repo_path_resolved = self.repo_path.resolve()
             
             # Validate the resolved path is within repo_path (security check)
-            if not str(full_path).startswith(str(self.repo_path)):
-                raise ValueError(f"Path traversal attempt detected: {fp}")
+            # Use resolve() on both paths to handle symlinks correctly
+            try:
+                # Python 3.9+ has is_relative_to
+                if hasattr(full_path, 'is_relative_to'):
+                    if not full_path.is_relative_to(repo_path_resolved):
+                        raise ValueError(f"Path traversal attempt detected: {fp}")
+                else:
+                    # Fallback for Python < 3.9
+                    if not str(full_path).startswith(str(repo_path_resolved) + "/"):
+                        if full_path != repo_path_resolved:  # Allow exact match
+                            raise ValueError(f"Path traversal attempt detected: {fp}")
+            except ValueError:
+                raise
             
             if not full_path.is_file():
                 raise FileNotFoundError(f"Code file not found: {full_path} (from {fp})")

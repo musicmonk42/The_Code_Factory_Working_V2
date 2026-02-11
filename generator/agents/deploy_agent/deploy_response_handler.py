@@ -743,8 +743,6 @@ def _sanitize_llm_output(raw_output: str) -> str:
         >>> _sanitize_llm_output(raw)
         'apiVersion: v1'
     """
-    import re
-    
     # Strip mermaid blocks completely (they're not part of the config)
     raw_output = re.sub(r'```mermaid[\s\S]*?```', '', raw_output, flags=re.MULTILINE)
     

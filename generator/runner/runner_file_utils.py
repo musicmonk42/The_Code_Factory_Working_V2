@@ -1020,6 +1020,10 @@ async def save_files_to_output(
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB per file limit
 MAX_FILES_PER_BATCH = 1000  # Maximum files in a single materialization
 MAX_PATH_LENGTH = 255  # Maximum filename length (POSIX limit)
+
+# Build and cache directories that should not be moved during output layout enforcement
+EXCLUDED_BUILD_DIRS = {'__pycache__', '.pytest_cache', '.git', 'node_modules', '.mypy_cache', '.ruff_cache'}
+
 DANGEROUS_EXTENSIONS = {'.exe', '.dll', '.so', '.dylib', '.bat', '.cmd', '.sh', '.ps1'}
 ALLOWED_EXTENSIONS = {'.py', '.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.html', '.css', '.js', '.ts', '.jsx', '.tsx'}
 
@@ -1484,7 +1488,7 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
                 continue
             
             # Skip common build/cache directories that shouldn't be moved
-            if item.name in ['__pycache__', '.pytest_cache', '.git', 'node_modules']:
+            if item.name in EXCLUDED_BUILD_DIRS:
                 logger.debug(f"Skipping build/cache directory: {item.name}")
                 continue
             
