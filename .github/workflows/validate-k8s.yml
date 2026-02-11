@@ -154,7 +154,7 @@ jobs:
         run: |
           echo "🔍 Validating k8s/base/*.yaml files against K8s 1.29.0 schema..."
           for file in k8s/base/*.yaml; do
-            if [ -f "$file" ]; then
+            if [ -f "$file" ] && [ "$(basename "$file")" != "kustomization.yaml" ]; then
               echo "  Validating $file..."
               kubeconform -strict -kubernetes-version 1.29.0 "$file"
             fi
