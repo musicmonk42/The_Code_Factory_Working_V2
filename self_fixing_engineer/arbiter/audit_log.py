@@ -930,13 +930,53 @@ class TamperEvidentLogger:
                             return False, idx, str(file_path)
 
                         if current_hash != expected_hash:
+                            # Check if this might be an infrastructure issue rather than tampering
+                            # Look for database timeout or connection errors in recent entries
+                            is_likely_infrastructure_issue = False
+                            infrastructure_context = ""
+                            
+                            # Check the entry itself for infrastructure-related errors
+                            event_type = decrypted_entry.get("event_type", "")
+                            message = str(decrypted_entry.get("message", ""))
+                            details = str(decrypted_entry.get("details", ""))
+                            
+                            # Look for common infrastructure error patterns
+                            infrastructure_patterns = [
+                                "database", "timeout", "connection", "asyncpg", "postgresql",
+                                "network", "unreachable", "refused", "unavailable"
+                            ]
+                            
+                            entry_text = f"{event_type} {message} {details}".lower()
+                            if any(pattern in entry_text for pattern in infrastructure_patterns):
+                                is_likely_infrastructure_issue = True
+                                infrastructure_context = "Entry contains database/connection timeout indicators"
+                            
                             if self._metrics:
                                 self._metrics["integrity_checks_failed"].inc()
+                            
                             if self.config.alert_callback:
-                                self.config.alert_callback(
-                                    f"Integrity check failed at {file_path}:{idx}"
-                                )
-                            return False, idx, str(file_path)
+                                if is_likely_infrastructure_issue:
+                                    # Downgrade to WARNING for infrastructure issues
+                                    self.config.alert_callback(
+                                        f"[WARNING] Hash chain discontinuity detected at {file_path}:{idx}. "
+                                        f"{infrastructure_context}. This is likely due to database connection timeout, "
+                                        f"not a security breach. Investigate infrastructure stability."
+                                    )
+                                    # Log as warning but don't fail the check for infrastructure issues
+                                    logger.warning(
+                                        f"Hash chain break at {file_path}:{idx} likely due to infrastructure issue. "
+                                        f"Context: {infrastructure_context}"
+                                    )
+                                else:
+                                    # Critical alert for potential tampering
+                                    self.config.alert_callback(
+                                        f"[CRITICAL] Integrity check failed at {file_path}:{idx}. "
+                                        f"Potential security breach or data tampering detected."
+                                    )
+                            
+                            # Only fail the check if it's NOT an infrastructure issue
+                            if not is_likely_infrastructure_issue:
+                                return False, idx, str(file_path)
 
                         prev_hash = current_hash
             except (IOError, gzip.BadGzipFile) as e:

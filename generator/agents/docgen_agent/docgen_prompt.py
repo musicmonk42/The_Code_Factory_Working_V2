@@ -613,7 +613,8 @@ class PromptTemplateRegistry:
         
         Uses a ChoiceLoader to search for templates in multiple locations:
         1. The specified plugin_dir (repo-specific)
-        2. The project root prompt_templates directory (fallback)
+        2. The agent-specific prompt_templates directory (agent defaults)
+        3. The project root prompt_templates directory (fallback)
         """
         if not os.path.exists(self.plugin_dir):
             os.makedirs(self.plugin_dir, exist_ok=True)
@@ -621,12 +622,19 @@ class PromptTemplateRegistry:
         # Build list of template loaders with fallback to project root
         loaders = [FileSystemLoader(self.plugin_dir)]
         
-        # Add project root prompt_templates as fallback
-        project_root_templates = PROJECT_ROOT / "prompt_templates"
-        # Use Path.resolve() for reliable path comparison
+        # Add agent-specific prompt_templates directory as fallback
+        # This allows the agent to have its own default templates
+        agent_templates_dir = Path(__file__).parent / "prompt_templates"
         plugin_dir_resolved = Path(self.plugin_dir).resolve()
+        agent_templates_resolved = agent_templates_dir.resolve()
+        if agent_templates_dir.exists() and plugin_dir_resolved != agent_templates_resolved:
+            loaders.append(FileSystemLoader(str(agent_templates_dir)))
+            logger.info(f"Added agent template directory: {agent_templates_dir}")
+        
+        # Add project root prompt_templates as final fallback
+        project_root_templates = PROJECT_ROOT / "prompt_templates"
         project_templates_resolved = project_root_templates.resolve()
-        if project_root_templates.exists() and plugin_dir_resolved != project_templates_resolved:
+        if project_root_templates.exists() and plugin_dir_resolved != project_templates_resolved and agent_templates_resolved != project_templates_resolved:
             loaders.append(FileSystemLoader(str(project_root_templates)))
             logger.info(f"Added fallback template directory: {project_root_templates}")
         

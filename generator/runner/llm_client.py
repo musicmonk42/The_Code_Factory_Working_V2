@@ -757,16 +757,28 @@ class LLMClient:
         # Run all calls in parallel
         task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for result in task_results:
+        # Track which providers failed and why
+        failed_providers = []
+        for idx, result in enumerate(task_results):
             if isinstance(result, Dict):
                 results.append(result)
             elif isinstance(result, Exception):
+                # Get the provider/model info for this failed task
+                provider = models[idx].get("provider", "unknown")
+                model = models[idx].get("model", "unknown")
+                error_msg = str(result)
+                failed_providers.append(f"{provider}/{model}: {error_msg}")
                 logger.warning(
-                    f"Ensemble call failed for one provider: {result}", exc_info=result
+                    f"Ensemble call failed for provider={provider}, model={model}: {result}", 
+                    exc_info=result
                 )
 
         if not results:
-            raise LLMError("All ensemble calls failed")
+            # Provide detailed error message listing all failed providers
+            failure_details = "; ".join(failed_providers)
+            error_message = f"All ensemble calls failed. Attempted {len(models)} provider(s): {failure_details}"
+            logger.error(error_message)
+            raise LLMError(error_message)
 
         if voting_strategy == "majority":
             contents = [r["content"] for r in results if "content" in r]
@@ -966,7 +978,18 @@ async def call_ensemble_api(
                         instance_id=f"fallback-{os.getpid()}"
                     )
             _async_client = LLMClient(config)
-    return await _async_client.call_ensemble_api(prompt, models, voting_strategy, stream=stream, **kwargs)
+    
+    # Call the ensemble API and provide additional context on failure
+    try:
+        return await _async_client.call_ensemble_api(prompt, models, voting_strategy, stream=stream, **kwargs)
+    except LLMError as e:
+        # Add additional logging for module-level context
+        model_list = ", ".join([f"{m.get('provider', 'unknown')}/{m.get('model', 'unknown')}" for m in models])
+        logger.error(
+            f"Module-level ensemble API call failed. Attempted models: [{model_list}]. "
+            f"Check API key configuration and provider availability. Error: {e}"
+        )
+        raise
 
 
 async def shutdown_llm_client():
