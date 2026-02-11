@@ -319,6 +319,69 @@ class TestLLMClient:
             assert len(result["ensemble_results"]) == 2  # Only 2 non-exception results
 
     @pytest.mark.asyncio
+    async def test_call_ensemble_api_missing_provider(self, initialized_client):
+        """Test that ensemble API correctly infers provider when missing from model config."""
+        
+        # Mock call_llm_api to track what parameters it's called with
+        call_log = []
+        
+        async def mock_call_llm_api_internal(
+            prompt, model=None, stream=False, provider=None, **kwargs
+        ):
+            call_log.append({"model": model, "provider": provider})
+            return {"content": f"response_from_{provider}_{model}"}
+        
+        with patch.object(
+            initialized_client, "call_llm_api", side_effect=mock_call_llm_api_internal
+        ):
+            # Test 1: Model config with missing provider should use config default
+            models = [
+                {"model": "gpt-4o"},  # Should use default provider from config
+                {"model": "claude-3-opus"},  # Should also use default provider
+            ]
+            
+            result = await initialized_client.call_ensemble_api(
+                "test prompt", models, "majority"
+            )
+            
+            # Verify that default provider was used for all models
+            assert len(call_log) == 2
+            assert call_log[0]["provider"] == "openai"  # Default from config
+            assert call_log[0]["model"] == "gpt-4o"
+            assert call_log[1]["provider"] == "openai"  # Default from config
+            assert call_log[1]["model"] == "claude-3-opus"
+            
+            # Test 2: Explicit provider should not be overridden
+            call_log.clear()
+            models = [{"provider": "custom", "model": "gpt-4o"}]
+            
+            result = await initialized_client.call_ensemble_api(
+                "test prompt", models, "first"
+            )
+            
+            # Should use the explicit provider
+            assert len(call_log) == 1
+            assert call_log[0]["provider"] == "custom"
+            assert call_log[0]["model"] == "gpt-4o"
+            
+            # Test 3: Missing model should skip the config
+            call_log.clear()
+            models = [
+                {"model": "gpt-4o"},  # Valid
+                {"provider": "openai"},  # Missing model - should be skipped
+                {"model": "claude-3-opus"},  # Valid
+            ]
+            
+            result = await initialized_client.call_ensemble_api(
+                "test prompt", models, "majority"
+            )
+            
+            # Only 2 calls should be made (the one with missing model is skipped)
+            assert len(call_log) == 2
+            assert call_log[0]["model"] == "gpt-4o"
+            assert call_log[1]["model"] == "claude-3-opus"
+
+    @pytest.mark.asyncio
     async def test_health_check(self, initialized_client, mock_provider):
         mock_provider.health_check.return_value = True
         assert await initialized_client.health_check("mock_provider") is True

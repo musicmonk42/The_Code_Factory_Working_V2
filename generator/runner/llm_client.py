@@ -727,30 +727,20 @@ class LLMClient:
 
         # Create tasks for all models
         for m in models:
-            # FIX: Add defensive .get() with fallback for provider and model keys
             provider = m.get("provider")
             model = m.get("model")
             
-            # Infer provider from model name if not specified
-            if model and not provider:
-                # Map common model prefixes to providers
-                if model.startswith("gpt-") or model.startswith("o1"):
-                    provider = "openai"
-                elif model.startswith("claude"):
-                    provider = "claude"
-                elif model.startswith("gemini"):
-                    provider = "gemini"
-                elif model.startswith("grok"):
-                    provider = "grok"
-                else:
-                    # Fall back to default provider from config
-                    provider = getattr(self.config, 'llm_provider', 'openai') or "openai"
-                logger.info(f"Inferred provider '{provider}' for model '{model}'")
+            # Infer default provider if not specified
+            if not provider:
+                provider = getattr(self.config, 'llm_provider', 'openai') or 'openai'
+                logger.info(
+                    f"Model configuration missing 'provider', using default: {provider}"
+                )
             
-            # Skip malformed model configurations with warning
-            if not provider or not model:
+            # Skip only if model is missing (provider is now guaranteed)
+            if not model:
                 logger.warning(
-                    f"Skipping malformed model configuration (missing provider or model): {m}"
+                    f"Skipping model configuration with missing 'model' key: {m}"
                 )
                 continue
             
