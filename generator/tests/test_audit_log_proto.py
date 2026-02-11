@@ -137,7 +137,20 @@ def event_loop():
     """Create an instance of the default event loop for the test session."""
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
-    loop.close()
+
+    # Clean up any pending tasks before closing the loop
+    try:
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+
+        # Give tasks a chance to handle cancellation
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except Exception:
+        pass
+    finally:
+        loop.close()
 
 
 @pytest.fixture(autouse=True)
@@ -333,21 +346,38 @@ async def grpc_server(
     audit_log_instance, mock_audit_log_backend
 ):  # Removed mock_audit_log_crypto
     """Start a gRPC server for testing."""
+    server = None
+    server_task = None
     try:
-        from generator.audit_log.audit_log import serve_grpc_server
+        from generator.audit_log.audit_log import audit_log_pb2_grpc, AuditLogServicer, GRPC_PORT
+        import concurrent.futures
+        from grpc import aio as grpc_aio
 
-        server_task = asyncio.create_task(serve_grpc_server())
-        # Give server time to start
-        await asyncio.sleep(0.5)
-        yield
-        # Cancel with timeout to prevent hanging
-        server_task.cancel()
-        try:
-            await asyncio.wait_for(server_task, timeout=2.0)
-        except (asyncio.CancelledError, asyncio.TimeoutError):
-            pass
+        # Create and start gRPC server manually for better control
+        server = grpc_aio.server(
+            concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        )
+
+        audit_log_pb2_grpc.add_AuditServiceServicer_to_server(
+            AuditLogServicer(audit_log_instance), server
+        )
+
+        server.add_insecure_port(f"[::]:{GRPC_PORT}")
+        await server.start()
+
+        # Give server time to fully start
+        await asyncio.sleep(0.2)
+        yield server
+
     except Exception as e:
         pytest.skip(f"Cannot start gRPC server: {e}")
+    finally:
+        # Properly stop the server
+        if server is not None:
+            try:
+                await server.stop(grace=0.5)
+            except Exception:
+                pass
 
 
 @pytest_asyncio.fixture
