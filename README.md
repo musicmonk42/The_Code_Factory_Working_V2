@@ -12,6 +12,7 @@ Table of Contents
 **Quick Links**
 - [QUICKSTART.md](./docs/QUICKSTART.md) - Get started in 5 minutes
 - [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Production deployment guide
+- [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md) - Comprehensive scalability guide
 - [Manual SFE Dispatch](./docs/MANUAL_SFE_DISPATCH.md) - Control when jobs are sent to Self-Fixing Engineer
 - [Makefile Commands](#makefile-commands) - Common development commands
 
@@ -98,6 +99,9 @@ RCG generates artifacts from a README (main.py).
 OmniCore serializes outputs and routes them to SFE via message bus (start_workflow → sfe_workflow).
 SFE analyzes, fixes, and optimizes code, storing checkpoints (CheckpointContract.sol).
 
+
+**Scalability & Performance**:
+For detailed information about the platform's enterprise-scale architecture, including horizontal scaling, message queuing, auto-scaling, and performance optimization, see [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md).
 
 Getting Started
 
