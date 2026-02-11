@@ -141,6 +141,8 @@ except ImportError as e:
 
 try:
     from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic.dataclasses import dataclass
+    from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -265,7 +267,8 @@ class RabbitMQSettings(BaseSettings):
 
     @classmethod
     @field_validator("url")
-    def validate_url_in_prod(cls, v, values):
+    def validate_url_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         if values.get("url_secret_id"):
             url_from_secret = SECRETS_MANAGER.get_secret(
                 values["url_secret_id"], required=True if PRODUCTION_MODE else False
@@ -330,7 +333,8 @@ class RabbitMQSettings(BaseSettings):
 
     @classmethod
     @field_validator("exchange_name")
-    def validate_exchange_name_in_prod(cls, v, values):
+    def validate_exchange_name_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         if PRODUCTION_MODE:
             if "*" in v or "?" in v:
                 raise ValueError(

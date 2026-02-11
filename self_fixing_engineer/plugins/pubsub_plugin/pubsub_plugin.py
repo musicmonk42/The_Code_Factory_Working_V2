@@ -143,6 +143,8 @@ except ImportError as e:
 
 try:
     from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic.dataclasses import dataclass
+    from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -260,7 +262,8 @@ class PubSubSettings(BaseSettings):
 
     @classmethod
     @field_validator("project_id")
-    def validate_project_id_in_prod(cls, v, values):
+    def validate_project_id_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         # Cache allowed project IDs
         async def _get_allowed_project_ids():
             if REDIS_CLIENT:
@@ -303,7 +306,8 @@ class PubSubSettings(BaseSettings):
 
     @classmethod
     @field_validator("topic_id")
-    def validate_topic_id_in_prod(cls, v, values):
+    def validate_topic_id_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         # Cache allowed topic IDs
         async def _get_allowed_topic_ids():
             if REDIS_CLIENT:
