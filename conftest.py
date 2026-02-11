@@ -382,7 +382,7 @@ def setup_test_environment():
     os.environ["SKIP_AUDIT_INIT"] = "1"
     os.environ["NO_MONITORING"] = "1"
     
-    # Set audit crypto environment variables (required for audit_crypto_provider tests)
+    # Set audit crypto environment variables (required for audit crypto tests)
     os.environ["AUDIT_CRYPTO_PROVIDER_TYPE"] = "software"
     os.environ["AUDIT_CRYPTO_DEFAULT_ALGO"] = "ed25519"
     os.environ["AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS"] = "86400"
