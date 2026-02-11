@@ -28,6 +28,9 @@ const generateFailureRate = new Rate('generate_failures');
 const listGenerationsFailureRate = new Rate('list_generations_failures');
 const generateDuration = new Trend('generate_duration');
 const e2eGenerationDuration = new Trend('e2e_generation_duration');
+// Note: k6 Rate.add(1) = "pass", Rate.add(0) = "fail". rate = passes/(passes+fails).
+// For e2e_generation_failures, we add(1) on success and add(0) on failure,
+// so the threshold 'rate>0.95' means "more than 95% of jobs should succeed".
 const e2eGenerationFailures = new Rate('e2e_generation_failures');
 const pollingIterations = new Trend('polling_iterations');
 
@@ -79,7 +82,7 @@ export const options = {
         'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
         // E2E thresholds
         'e2e_generation_duration': [`p(95)<${E2E_THRESHOLD_MS}`],
-        'e2e_generation_failures': ['rate<0.05'],
+        'e2e_generation_failures': ['rate>0.95'],
     },
 };
 
@@ -158,7 +161,7 @@ function pollForCompletion(jobId, startTime) {
             const body = JSON.parse(response.body);
             const status = body.status;
             
-            if (status === 'completed') {
+            if (status === 'completed' || status === 'success') {
                 completed = true;
                 break;
             } else if (status === 'failed') {
@@ -184,11 +187,11 @@ function pollForCompletion(jobId, startTime) {
     // Check if timed out
     if (!completed && !failed) {
         console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
-        e2eGenerationFailures.add(1);
+        e2eGenerationFailures.add(0);  // 0 = fail in k6 Rate (timed out)
         return false;
     }
     
-    e2eGenerationFailures.add(failed ? 1 : 0);
+    e2eGenerationFailures.add(completed ? 1 : 0);  // 1 = pass in k6 Rate (completed), 0 = fail (job failed)
     return completed;
 }
 
