@@ -22,6 +22,7 @@ import os
 import re
 import threading
 import time
+import yaml
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2695,7 +2696,6 @@ class OmniCoreService:
                         # The HelmHandler returns structured data with Chart.yaml, values.yaml, templates
                         try:
                             # Try to parse as JSON first (structured response)
-                            import json
                             helm_data = json.loads(config_content)
                             
                             # Write Chart.yaml
@@ -2703,7 +2703,6 @@ class OmniCoreService:
                                 chart_file = target_dir / "Chart.yaml"
                                 async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
                                     if isinstance(helm_data["Chart.yaml"], dict):
-                                        import yaml
                                         await f.write(yaml.dump(helm_data["Chart.yaml"], default_flow_style=False))
                                     else:
                                         await f.write(str(helm_data["Chart.yaml"]))
@@ -2715,7 +2714,6 @@ class OmniCoreService:
                                 values_file = target_dir / "values.yaml"
                                 async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
                                     if isinstance(helm_data["values.yaml"], dict):
-                                        import yaml
                                         await f.write(yaml.dump(helm_data["values.yaml"], default_flow_style=False))
                                     else:
                                         await f.write(str(helm_data["values.yaml"]))
@@ -2741,7 +2739,6 @@ class OmniCoreService:
                             # Try to split by file markers (# Chart.yaml, # values.yaml, etc.)
                             if "# Chart.yaml" in config_content or "# values.yaml" in config_content:
                                 # Parse structured YAML with file markers
-                                import re
                                 sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', config_content)
                                 
                                 current_file = None
@@ -2783,48 +2780,6 @@ class OmniCoreService:
                                     await f.write("# Helm chart values\nreplicaCount: 1\n")
                                 generated_files.append(str(values_file.relative_to(repo_path)))
                         
-                        continue  # Skip the default file writing below
-                        chart_path = target_dir / "Chart.yaml"
-                        values_path = target_dir / "values.yaml"
-                        
-                        # Try to extract Chart.yaml and values.yaml from content
-                        # Note: This is a simple heuristic parser that assumes LLM output format:
-                        # Expected format: "# Chart.yaml\n<content>\n# values.yaml\n<content>"
-                        # A more robust approach would use YAML parsing library,
-                        # but this works for common LLM output patterns.
-                        # TODO: Consider implementing proper YAML parsing for better reliability
-                        if "Chart.yaml" in config_content and "values.yaml" in config_content:
-                            # Content contains multiple files - try to parse them
-                            # Split on '# ' at the start of a line followed by filename
-                            # This heuristic works with common LLM output but may be fragile
-                            parts = config_content.split("\n# ")
-                            for part in parts:
-                                part = "# " + part if not part.startswith("#") else part
-                                # Safe bounds checking: only check first N chars if part is long enough
-                                part_prefix = part[:min(HELM_FILE_HEADER_CHECK_LENGTH, len(part))]
-                                if "Chart.yaml" in part_prefix:
-                                    chart_content = part.replace("# Chart.yaml", "").strip()
-                                    async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
-                                        await f.write(chart_content)
-                                    generated_files.append(str(chart_path.relative_to(repo_path)))
-                                elif "values.yaml" in part_prefix:
-                                    values_content = part.replace("# values.yaml", "").strip()
-                                    async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
-                                        await f.write(values_content)
-                                    generated_files.append(str(values_path.relative_to(repo_path)))
-                        else:
-                            # Write entire content as Chart.yaml for now
-                            async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
-                                await f.write(config_content)
-                            generated_files.append(str(chart_path.relative_to(repo_path)))
-                            
-                            # Create default values.yaml
-                            default_values = "# Helm values\nreplicaCount: 2\n"
-                            async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
-                                await f.write(default_values)
-                            generated_files.append(str(values_path.relative_to(repo_path)))
-                        
-                        logger.info(f"Generated helm files in: {target_dir}")
                         continue  # Skip the default file writing below
                     elif target == "docker-compose":
                         filename = "docker-compose.yml"
