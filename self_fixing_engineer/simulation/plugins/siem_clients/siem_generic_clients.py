@@ -14,7 +14,7 @@ from pydantic import (  # Re-import for local schemas
     Field,
     HttpUrl,
     ValidationError,
-    validator,
+    field_validator,
 )
 
 # Import base classes and utilities from siem_base
@@ -69,7 +69,8 @@ class SplunkConfig(BaseModel):
     sourcetype: str = Field("_json", description="Event sourcetype.")
     index: Optional[str] = Field(None, description="Splunk index to send data to.")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url_security_and_dummy(cls, v):
         if PRODUCTION_MODE:
             v_str = str(v).lower()
@@ -81,7 +82,8 @@ class SplunkConfig(BaseModel):
                 )
         return v
 
-    @validator("token")
+    @field_validator("token")
+    @classmethod
     def validate_token_not_dummy(cls, v):
         if PRODUCTION_MODE and any(s in v.lower() for s in ("dummy", "mock", "test")):
             raise ValueError("Dummy/test token detected. Not allowed in production.")
@@ -97,7 +99,8 @@ class ElasticConfig(BaseModel):
     password: Optional[str] = Field(None, description="Password for Basic Auth.")
     index: str = Field("sfe-logs", description="Default index name.")
 
-    @validator("url")
+    @field_validator("url")
+    @classmethod
     def validate_url_security_and_dummy(cls, v):
         if PRODUCTION_MODE:
             v_str = str(v).lower()
@@ -109,7 +112,8 @@ class ElasticConfig(BaseModel):
                 )
         return v
 
-    @validator("api_key", "password")
+    @field_validator("api_key", "password")
+    @classmethod
     def validate_credentials_not_dummy(cls, v, field):
         if (
             PRODUCTION_MODE
@@ -121,7 +125,8 @@ class ElasticConfig(BaseModel):
             )
         return v
 
-    @validator("api_key", "username", "password", always=True)
+    @field_validator("api_key", "username", "password", mode='before')
+    @classmethod
     def validate_auth_method_presence(cls, v, values):
         if not values.get("api_key") and not (
             values.get("username") and values.get("password")
@@ -155,7 +160,8 @@ class DatadogConfig(BaseModel):
         default_factory=list, description="List of global tags for logs."
     )
 
-    @validator("url", "query_url")
+    @field_validator("url", "query_url")
+    @classmethod
     def validate_urls_security_and_dummy(cls, v):
         if PRODUCTION_MODE:
             v_str = str(v).lower()
@@ -167,7 +173,8 @@ class DatadogConfig(BaseModel):
                 )
         return v
 
-    @validator("api_key", "application_key")
+    @field_validator("api_key", "application_key")
+    @classmethod
     def validate_keys_not_dummy(cls, v, field):
         if PRODUCTION_MODE and any(s in v.lower() for s in ("dummy", "mock", "test")):
             raise ValueError(
