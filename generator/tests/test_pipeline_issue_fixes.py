@@ -23,8 +23,7 @@ from generator.agents.deploy_agent.deploy_response_handler import (
     HandlerRegistry,
     handle_deploy_response,
 )
-from generator.agents.testgen_agent.testgen_agent import TestGenAgent
-from runner.runner_config import RunnerConfig
+from generator.agents.testgen_agent.testgen_agent import TestgenAgent
 
 
 class TestDeployBasePlaceholderFix:
@@ -115,14 +114,19 @@ class TestFallbackTestSyntax:
     """Test that fallback test generation produces valid Python syntax."""
 
     @pytest.fixture
-    def testgen_agent(self):
-        """Create a TestGenAgent instance."""
-        config = RunnerConfig(
-            backend="docker",
-            framework="pytest",
-            instance_id="test-instance"
-        )
-        return TestGenAgent(config=config)
+    def temp_repo(self):
+        """Create a temporary repository for testing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            (repo_path / ".git").mkdir()
+            (repo_path / "README.md").write_text("# Test Repo")
+            yield repo_path
+
+    @pytest.fixture
+    def testgen_agent(self, temp_repo):
+        """Create a TestgenAgent instance."""
+        # Note: TestgenAgent requires repo_path, not RunnerConfig
+        return TestGenAgent(repo_path=str(temp_repo), arbiter_bridge=None)
 
     @pytest.mark.asyncio
     async def test_fallback_test_has_valid_syntax(self, testgen_agent):
