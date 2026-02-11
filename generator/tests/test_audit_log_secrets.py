@@ -56,8 +56,20 @@ from generator.audit_log.audit_crypto.secrets import (
 @pytest.fixture(autouse=True)
 def mock_log_action(mocker):
     """Auto-mock the log_action import in the secrets module."""
+    # Create a shared mock
+    mock_log = AsyncMock()
+    
+    # Patch at the secrets module level where it's imported
     mocker.patch(
-        "generator.audit_log.audit_crypto.secrets.log_action", new_callable=AsyncMock
+        "generator.audit_log.audit_crypto.secrets.log_action", mock_log
+    )
+    # Also patch the _log_action cached value in the parent package
+    mocker.patch(
+        "generator.audit_log._log_action", mock_log
+    )
+    # And patch the _get_log_action function to return our mock
+    mocker.patch(
+        "generator.audit_log._get_log_action", return_value=mock_log
     )
 
 

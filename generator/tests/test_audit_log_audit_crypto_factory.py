@@ -50,6 +50,10 @@ def clean_environment(monkeypatch):
 
     monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
     monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    # Also reset failure caching state to prevent state leakage between tests
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_FAILURE", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_ERROR", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_PERMANENT_FAILURE", False)
 
     # 3. Reset the factory instance cache
     audit_crypto_factory.crypto_provider_factory._instances.clear()
@@ -59,6 +63,9 @@ def clean_environment(monkeypatch):
     # Post-test cleanup
     monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
     monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_FAILURE", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_ERROR", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_PERMANENT_FAILURE", False)
     audit_crypto_factory.crypto_provider_factory._instances.clear()
 
 
