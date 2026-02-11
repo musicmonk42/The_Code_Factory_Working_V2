@@ -796,6 +796,12 @@ k6 run -e MAX_VUS=200 loadtest.js
 # Run with custom URL and VUs
 k6 run -e API_URL=http://myserver:8000 -e MAX_VUS=50 loadtest.js
 
+# Skip polling (fire-and-forget mode, only measures request acceptance time)
+k6 run -e SKIP_POLLING=true loadtest.js
+
+# Customize polling timeout and e2e threshold
+k6 run -e POLL_TIMEOUT_S=120 -e E2E_THRESHOLD_MS=60000 loadtest.js
+
 # Run with JSON output for analysis
 k6 run loadtest.js --out json=results.json
 
@@ -811,7 +817,10 @@ The load test script (`loadtest.js`) tests these endpoints:
 |----------|--------|-------------|
 | `/health` | GET | Health check endpoint |
 | `/api/v1/generate` | POST | Code generation (main workload) |
+| `/api/v1/generations/{job_id}` | GET | Poll for job completion (unless `SKIP_POLLING=true`) |
 | `/api/v1/generations` | GET | List generations |
+
+**New in v1.1**: The load test now includes end-to-end (e2e) polling to measure the actual time it takes for jobs to complete, not just the time for the API to accept the request. This can be disabled with `SKIP_POLLING=true` for backward compatibility.
 
 #### Load Profile
 
@@ -832,8 +841,20 @@ The test uses staged ramp-up with configurable maximum virtual users (VUs):
 
 Tests fail if these thresholds are exceeded:
 
-- **p95 Response Time**: < 500ms (95th percentile)
+- **p95 Response Time**: < 500ms (95th percentile for individual API requests)
 - **Error Rate**: < 1% (request failure rate)
+- **E2E Generation Duration**: < 30 seconds (95th percentile for complete job processing, configurable via `E2E_THRESHOLD_MS`)
+- **E2E Generation Failures**: < 5% (jobs that fail or timeout)
+
+#### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_URL` | `http://localhost:8000` | Base URL for the API server |
+| `MAX_VUS` | `100` | Maximum number of virtual users |
+| `SKIP_POLLING` | `false` | Skip polling for job completion (fire-and-forget mode) |
+| `POLL_TIMEOUT_S` | `60` | Maximum time in seconds to wait for job completion |
+| `E2E_THRESHOLD_MS` | `30000` | p95 threshold in milliseconds for end-to-end job completion |
 
 ### Interpreting Results
 
@@ -859,6 +880,7 @@ vus_max........................: 100     min=100  max=100
 
 #### Key Metrics
 
+**Request-level metrics** (individual API calls):
 - **http_req_duration**: Response time statistics
   - `p(95)`: 95th percentile - should be < 500ms
   - `avg`: Average response time
@@ -867,17 +889,28 @@ vus_max........................: 100     min=100  max=100
 - **http_reqs**: Total requests made and requests per second
 - **checks**: Percentage of successful validation checks
 
+**End-to-end metrics** (complete job processing, new in v1.1):
+- **e2e_generation_duration**: Time from job submission to completion
+  - `p(95)`: 95th percentile - should be < 30s (configurable)
+  - Measures actual backend processing time, not just API response time
+- **e2e_generation_failures**: Percentage of jobs that failed or timed out - should be < 5%
+- **polling_iterations**: Number of poll requests needed per job (useful for tuning polling interval)
+
 #### What Good Results Look Like
 
 ✅ **Pass criteria:**
-- p95 response time < 500ms
+- p95 response time < 500ms (for API requests)
+- p95 e2e generation time < 30s (for complete job processing)
 - Error rate < 1%
+- E2E generation failure rate < 5%
 - All checks passing (100%)
 - Consistent performance across all stages
 
 ❌ **Warning signs:**
-- p95 > 500ms: Performance degradation under load
+- p95 response time > 500ms: Performance degradation under load
+- p95 e2e time > 30s: Backend processing bottlenecks
 - Error rate > 1%: System stability issues
+- E2E failure rate > 5%: Job processing issues or timeouts
 - Increasing response times: Resource saturation
 - Failed checks: API returning invalid responses
 
