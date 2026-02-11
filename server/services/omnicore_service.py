@@ -3079,6 +3079,71 @@ class OmniCoreService:
                 target_result = await self._run_deploy(job_id, target_payload)
                 results[target] = target_result
                 
+                # FIX Bug 5: Track failures and validate deployment artifacts
+                if target_result.get("status") == "failed":
+                    failed_targets.append(target)
+                    logger.error(
+                        f"[DEPLOY_ALL] Target {target} failed",
+                        extra={
+                            "job_id": job_id,
+                            "target": target,
+                            "error": target_result.get("error", "Unknown error")
+                        }
+                    )
+                else:
+                    # Track generated files
+                    target_files = target_result.get("generated_files", [])
+                    all_generated_files.extend(target_files)
+                    logger.info(
+                        f"[DEPLOY_ALL] Target {target} completed with {len(target_files)} files",
+                        extra={"job_id": job_id, "target": target, "duration": time.time() - target_start}
+                    )
+                    
+            except Exception as e:
+                # FIX Bug 5: Track exceptions as failures
+                failed_targets.append(target)
+                logger.exception(
+                    f"[DEPLOY_ALL] Target {target} raised exception: {e}",
+                    extra={"job_id": job_id, "target": target}
+                )
+                results[target] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "target": target
+                }
+        
+        # FIX Bug 5: Check if any critical targets failed
+        # For now, all three targets (docker, kubernetes, helm) are considered required
+        if failed_targets:
+            error_msg = f"Deployment failed for targets: {', '.join(failed_targets)}"
+            logger.error(
+                f"[DEPLOY_ALL] {error_msg}",
+                extra={
+                    "job_id": job_id,
+                    "failed_targets": failed_targets,
+                    "successful_targets": [t for t in targets if t not in failed_targets]
+                }
+            )
+            # Return failure status but include partial results
+            return {
+                "status": "failed",
+                "error": error_msg,
+                "failed_targets": failed_targets,
+                "results": results,
+                "generated_files": all_generated_files,
+                "duration": time.time() - start_time
+            }
+        
+        logger.info(
+            f"[DEPLOY_ALL] All deployment targets completed successfully",
+            extra={
+                "job_id": job_id,
+                "targets": targets,
+                "total_files": len(all_generated_files),
+                "duration": time.time() - start_time
+            }
+        )
+                
                 # Calculate target duration
                 target_duration = time.time() - target_start
                 
@@ -5109,8 +5174,10 @@ class OmniCoreService:
             
             output_path = codegen_result.get("output_path")
             
-            # FIX: Add final validation to verify all expected files and directories exist
+            # FIX Bug 5: Validate deployment artifacts and raise errors for missing required files
             validation_warnings = []
+            validation_errors = []
+            
             if output_path:
                 output_path_obj = Path(output_path)
                 
@@ -5122,27 +5189,32 @@ class OmniCoreService:
                     
                     # Check for Docker files (always generated)
                     if not (output_path_obj / "Dockerfile").exists():
-                        validation_warnings.append("Dockerfile not found despite deploy stage completing")
+                        validation_errors.append("Dockerfile not found despite deploy stage completing")
                     
                     # Check for Kubernetes directory and files
                     k8s_dir = output_path_obj / "k8s"
                     if not k8s_dir.exists():
-                        validation_warnings.append("k8s/ directory not found despite deploy stage completing")
+                        validation_errors.append("k8s/ directory not found despite deploy stage completing")
                     else:
                         if not (k8s_dir / "deployment.yaml").exists():
-                            validation_warnings.append("k8s/deployment.yaml not found")
+                            validation_errors.append("k8s/deployment.yaml not found")
                         if not (k8s_dir / "service.yaml").exists():
-                            validation_warnings.append("k8s/service.yaml not found")
+                            validation_errors.append("k8s/service.yaml not found")
                     
                     # Check for Helm directory and files
                     helm_dir = output_path_obj / "helm"
                     if not helm_dir.exists():
-                        validation_warnings.append("helm/ directory not found despite deploy stage completing")
+                        validation_errors.append("helm/ directory not found despite deploy stage completing")
                     else:
                         if not (helm_dir / "Chart.yaml").exists():
-                            validation_warnings.append("helm/Chart.yaml not found")
+                            validation_errors.append("helm/Chart.yaml not found")
                         if not (helm_dir / "values.yaml").exists():
-                            validation_warnings.append("helm/values.yaml not found")
+                            validation_errors.append("helm/values.yaml not found")
+                        templates_dir = helm_dir / "templates"
+                        if not templates_dir.exists():
+                            validation_warnings.append("helm/templates/ directory not found")
+                        elif not any(templates_dir.glob("*.yaml")):
+                            validation_warnings.append("helm/templates/ directory is empty")
                 
                 if "docgen" in stages_completed:
                     docs_dir = output_path_obj / "docs"
@@ -5167,6 +5239,30 @@ class OmniCoreService:
                             "stages_completed": stages_completed
                         }
                     )
+                
+                # FIX Bug 5: Raise errors for missing deployment artifacts
+                if validation_errors:
+                    error_msg = f"[PIPELINE] Critical validation errors for job {job_id}: {', '.join(validation_errors)}"
+                    logger.error(
+                        error_msg,
+                        extra={
+                            "job_id": job_id,
+                            "errors": validation_errors,
+                            "stages_completed": stages_completed
+                        }
+                    )
+                    # Update job status to failed
+                    if job_id in jobs_db:
+                        job = jobs_db[job_id]
+                        job.status = JobStatus.FAILED
+                        job.error = error_msg
+                        job.result = {
+                            "error": "Deployment artifacts validation failed",
+                            "missing_artifacts": validation_errors,
+                            "stages_completed": stages_completed
+                        }
+                    # Don't raise exception here - just mark job as failed and continue
+                    # This allows cleanup to proceed normally
                 else:
                     logger.info(f"[PIPELINE] All expected files and directories validated for job {job_id}")
 
