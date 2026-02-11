@@ -100,6 +100,7 @@ mock_redis_base.client = mock_redis_client
 # Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
 mock_redis_async = MagicMock()
 mock_redis_async.PubSub = MagicMock()  # PubSub lives in redis.asyncio, not redis.client
+mock_redis_async.Redis = MagicMock()
 
 sys.modules["redis"] = mock_redis_base
 sys.modules["redis.asyncio"] = mock_redis_async
