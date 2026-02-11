@@ -722,7 +722,16 @@ Files to process:
 Additional instructions: {{ instructions }}
 
 Please generate a valid {{ target }} configuration based on the above information.
-Output only the configuration content, no explanations."""
+
+CRITICAL OUTPUT REQUIREMENTS:
+- Output ONLY the raw configuration content (Dockerfile, YAML, JSON, HCL, etc.)
+- Do NOT include any markdown formatting (no ```, no code blocks, no **bold**, no _italic_)
+- Do NOT include mermaid diagrams or any other diagrams
+- Do NOT include explanatory text before or after the configuration
+- Do NOT wrap the output in markdown code fences
+- Output should be ready to write directly to a file without any modifications
+
+Begin your response with the actual configuration content (e.g., "FROM" for Dockerfile, "apiVersion:" for Kubernetes YAML)."""
                 # Use Jinja2 to create a template from string
                 from jinja2 import Template as JinjaTemplate
 

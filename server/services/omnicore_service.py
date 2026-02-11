@@ -227,6 +227,7 @@ HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
 # Constants for README generation
 MAX_FILES_IN_README = 10  # Maximum files to list in README
 MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
+MIN_README_LENGTH = 500  # Minimum length for a complete README (characters)
 
 
 def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
@@ -584,6 +585,79 @@ See LICENSE file for details.
 For issues or questions, please refer to the project documentation or contact the development team.
 """
     return readme
+
+
+def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, Any]:
+    """
+    Create a placeholder critique report structure.
+    
+    This helper function creates a standardized placeholder report when
+    critique is skipped, fails, or is not requested. This ensures that
+    reports/critique_report.json always exists with a valid structure
+    that conforms to the expected report schema.
+    
+    Industry Standards Applied:
+    - Input validation: Ensures parameters are valid
+    - Schema compliance: Report structure matches successful critique reports
+    - Defensive programming: Returns valid report even with invalid inputs
+    - ISO 8601 timestamps: Industry standard for date/time representation
+    
+    Args:
+        job_id: The job identifier (should not be empty)
+        message: The reason the critique was not performed (descriptive text)
+        
+    Returns:
+        Dictionary containing the placeholder report structure with all
+        required fields populated with appropriate default values.
+        
+    Example:
+        >>> report = _create_placeholder_critique_report("job-123", "Critique not requested")
+        >>> assert report["job_id"] == "job-123"
+        >>> assert report["status"] == "skipped"
+        >>> assert "timestamp" in report
+    
+    Raises:
+        ValueError: If job_id is empty or None (defensive programming)
+    """
+    # Input validation - Industry Standard: Fail fast with clear errors
+    if not job_id:
+        raise ValueError("job_id cannot be empty or None")
+    
+    if not isinstance(job_id, str):
+        raise TypeError(f"job_id must be a string, got {type(job_id)}")
+    
+    # Allow empty message but log warning
+    if not message:
+        logger.warning(f"Creating placeholder report for job {job_id} with empty message")
+        message = "No message provided"
+    
+    # Create report with standardized structure
+    report = {
+        "job_id": job_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": "skipped",
+        "message": message,
+        "issues_found": 0,
+        "issues_fixed": 0,
+        "coverage": {
+            "total_lines": 0,
+            "covered_lines": 0,
+            "percentage": 0.0
+        },
+        "test_results": {
+            "total": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "issues": [],
+        "fixes_applied": [],
+        "scan_types": []
+    }
+    
+    logger.debug(f"Created placeholder critique report for job {job_id}: {message}")
+    
+    return report
+
 
 
 class OmniCoreService:
@@ -2460,20 +2534,9 @@ class OmniCoreService:
                     logger.warning(f"Deploy agent returned no configurations for job {job_id}")
                     generated_files = []
                     if platform in ("docker", "dockerfile"):
-                        # FIX Issue 4: Use project subdirectory for fallback files too
-                        project_name = payload.get("output_dir", "hello_generator")
-                        if not project_name:
-                            project_name = "hello_generator"
-                        
-                        project_dir = repo_path / "generated" / project_name
-                        if not project_dir.exists():
-                            alt_project_dir = repo_path / project_name
-                            if alt_project_dir.exists():
-                                project_dir = alt_project_dir
-                            else:
-                                project_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        output_dir = project_dir
+                        # FIX Issue 3: Fix output directory double-nesting for fallback files
+                        # Use repo_path directly as it already points to the correct directory
+                        output_dir = repo_path
                         
                         # Default Dockerfile
                         default_dockerfile = (
@@ -2540,26 +2603,13 @@ class OmniCoreService:
                 
                 generated_files = []
                 
-                # FIX Issue 4: Write deployment configs to project subdirectory
-                # Extract project name from payload or default to "hello_generator"
-                project_name = payload.get("output_dir", "hello_generator")
-                if not project_name:
-                    project_name = "hello_generator"
-                
-                # Deployment files should go into generated/<project_name>/, not generated/
-                project_dir = repo_path / "generated" / project_name
-                if not project_dir.exists():
-                    # Fallback: if project_dir doesn't exist, try alternate locations
-                    alt_project_dir = repo_path / project_name
-                    if alt_project_dir.exists():
-                        project_dir = alt_project_dir
-                    else:
-                        # Create the expected structure
-                        project_dir.mkdir(parents=True, exist_ok=True)
-                        logger.info(f"[DEPLOY] Created project directory: {project_dir}")
-                
-                output_dir = project_dir
-                logger.info(f"[DEPLOY] Writing deployment configs to: {output_dir} (project_name={project_name})")
+                # FIX Issue 3: Fix output directory double-nesting
+                # The repo_path (code_path from payload) already points to the correct directory
+                # (e.g., ./uploads/{job_id}/generated/hello_generator)
+                # We should write deployment files directly to this directory, not create
+                # another generated/hello_generator subdirectory inside it.
+                output_dir = repo_path
+                logger.info(f"[DEPLOY] Writing deployment configs to: {output_dir}")
                 
                 for target, config_content in configs.items():
                     # FIX: Determine filename and subdirectory based on target
@@ -4464,6 +4514,80 @@ class OmniCoreService:
                 except Exception as readme_err:
                     logger.warning(f"[PIPELINE] Job {job_id} README validation error: {readme_err}")
             
+            # FIX Issue 4: README Regeneration
+            # If README is incomplete or missing, regenerate it
+            if output_path_for_validation:
+                try:
+                    gen_dir = Path(output_path_for_validation)
+                    readme_path = gen_dir / "README.md"
+                    should_regenerate = False
+                    
+                    if not readme_path.exists():
+                        logger.warning(f"[PIPELINE] Job {job_id} README.md missing, will generate")
+                        should_regenerate = True
+                    else:
+                        # Check if existing README is incomplete
+                        # This check runs regardless of _PROVENANCE_AVAILABLE
+                        readme_content = readme_path.read_text(encoding="utf-8")
+                        
+                        if _PROVENANCE_AVAILABLE:
+                            readme_result = _validate_readme_completeness(readme_content)
+                            
+                            if not readme_result.get("valid", True):
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} README incomplete, will regenerate. "
+                                    f"Errors: {readme_result.get('errors', [])}",
+                                    extra={"job_id": job_id, "readme_errors": readme_result.get('errors', [])}
+                                )
+                                should_regenerate = True
+                        else:
+                            # Fallback: Simple length check if validation not available
+                            if len(readme_content) < MIN_README_LENGTH:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} README too short ({len(readme_content)} chars), will regenerate"
+                                )
+                                should_regenerate = True
+                    
+                    if should_regenerate:
+                        # Generate comprehensive README
+                        project_name = payload.get("output_dir", "hello_generator")
+                        if not project_name:
+                            project_name = "hello_generator"
+                        
+                        comprehensive_readme = _generate_fallback_readme(
+                            project_name=project_name,
+                            language="python",
+                            output_path=str(gen_dir)
+                        )
+                        
+                        # Write the new README
+                        readme_path.write_text(comprehensive_readme, encoding="utf-8")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} generated comprehensive README with all required sections",
+                            extra={"job_id": job_id, "readme_path": str(readme_path), "length": len(comprehensive_readme)}
+                        )
+                        
+                        # Validate the new README
+                        if _PROVENANCE_AVAILABLE:
+                            new_readme_result = _validate_readme_completeness(comprehensive_readme)
+                            if new_readme_result.get("valid", True):
+                                logger.info(
+                                    f"[PIPELINE] Job {job_id} regenerated README validated successfully - "
+                                    f"sections: {new_readme_result['sections_found']}, "
+                                    f"commands: {new_readme_result['commands_found']}",
+                                    extra={"job_id": job_id, "readme_validation": new_readme_result}
+                                )
+                            else:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} regenerated README still has issues: {new_readme_result.get('errors', [])}",
+                                    extra={"job_id": job_id}
+                                )
+                except Exception as readme_regen_err:
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} README regeneration error: {readme_regen_err}",
+                        exc_info=True
+                    )
+            
             # 2e. Write provenance metadata
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
@@ -4826,6 +4950,44 @@ class OmniCoreService:
                     logger.info(f"[PIPELINE] Job {job_id} completed step: critique")
                 elif critique_result.get("status") == "error":
                     logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
+                    # FIX Issue 5: Generate placeholder critique report if critique failed
+                    output_path = codegen_result.get("output_path")
+                    if output_path:
+                        try:
+                            output_path_obj = Path(output_path)
+                            reports_dir = output_path_obj / "reports"
+                            reports_dir.mkdir(parents=True, exist_ok=True)
+                            report_path = reports_dir / "critique_report.json"
+                            
+                            # Only create placeholder if report doesn't exist
+                            if not report_path.exists():
+                                placeholder_report = _create_placeholder_critique_report(
+                                    job_id, "Critique stage failed or was skipped"
+                                )
+                                report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                                logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report at {report_path}")
+                        except Exception as e:
+                            logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
+            else:
+                # FIX Issue 5: Generate placeholder critique report if critique was not requested
+                logger.info(f"[PIPELINE] Job {job_id} skipping critique step (run_critique={payload.get('run_critique', True)})")
+                output_path = codegen_result.get("output_path")
+                if output_path:
+                    try:
+                        output_path_obj = Path(output_path)
+                        reports_dir = output_path_obj / "reports"
+                        reports_dir.mkdir(parents=True, exist_ok=True)
+                        report_path = reports_dir / "critique_report.json"
+                        
+                        # Only create placeholder if report doesn't exist
+                        if not report_path.exists():
+                            placeholder_report = _create_placeholder_critique_report(
+                                job_id, "Critique stage was not requested"
+                            )
+                            report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                            logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report (critique not requested) at {report_path}")
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
             
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             

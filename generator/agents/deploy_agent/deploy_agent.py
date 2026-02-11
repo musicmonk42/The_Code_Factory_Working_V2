@@ -1124,9 +1124,16 @@ Respond in plain prose only (no JSON / no code fences).
                                 start_llm = time.time()
                                 try:
                                     if ensemble:
+                                        # FIX Issue 1: Add provider to model configuration
+                                        # Use centralized utility for provider inference (Industry Standard: DRY principle)
+                                        from generator.utils.llm_provider_utils import create_model_config
+                                        
+                                        # Create properly formatted model configuration
+                                        model_config = create_model_config(llm_model)
+                                        
                                         resp = await call_ensemble_api(
                                             prompt,
-                                            [{"model": llm_model}],
+                                            [model_config],  # FIX: Use validated model config
                                             voting_strategy="majority",
                                             stream=stream,
                                         )
