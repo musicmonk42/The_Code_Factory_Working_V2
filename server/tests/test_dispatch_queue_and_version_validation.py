@@ -114,7 +114,6 @@ class TestDatabaseQueueDispatch:
             mock_db._engine = MagicMock()
 
             # Create a real DispatchEventQueue instance for attribute tracking
-            from omnicore_engine.database.models import DispatchEventQueue
             mock_entry = DispatchEventQueue(
                 job_id="test-job-123",
                 event_type="job.completed",
@@ -123,7 +122,7 @@ class TestDatabaseQueueDispatch:
                 status=DispatchEventStatus.PENDING,
                 retry_count=0,
                 max_retries=5,
-                created_at=datetime.now(timezone.utc)
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
             )
             mock_entry.id = 1
 
@@ -161,7 +160,6 @@ class TestDatabaseQueueDispatch:
             mock_db._engine = MagicMock()
 
             # Create a real DispatchEventQueue instance that will fail dispatch
-            from omnicore_engine.database.models import DispatchEventQueue
             mock_entry = DispatchEventQueue(
                 job_id="test-job-123",
                 event_type="job.completed",
@@ -170,7 +168,7 @@ class TestDatabaseQueueDispatch:
                 status=DispatchEventStatus.PENDING,
                 retry_count=2,  # Already failed twice
                 max_retries=5,
-                created_at=datetime.now(timezone.utc)
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
             )
             mock_entry.id = 1
 
@@ -214,7 +212,6 @@ class TestDatabaseQueueDispatch:
             mock_db._engine = MagicMock()
 
             # Create a real DispatchEventQueue instance at max retries
-            from omnicore_engine.database.models import DispatchEventQueue
             mock_entry = DispatchEventQueue(
                 job_id="test-job-123",
                 event_type="job.completed",
@@ -223,7 +220,7 @@ class TestDatabaseQueueDispatch:
                 status=DispatchEventStatus.FAILED,
                 retry_count=4,  # One more will hit max
                 max_retries=5,
-                created_at=datetime.now(timezone.utc)
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
             )
             mock_entry.id = 1
 

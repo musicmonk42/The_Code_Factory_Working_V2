@@ -390,16 +390,16 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
     for pkg, ver_spec in dependencies.items():
         try:
             installed_version_str = importlib_metadata.version(pkg)
-            
+
             if not ver_spec:
                 logger.debug(f"Dependency {pkg} found (version {installed_version_str}). Any version accepted.")
                 continue
-            
+
             if HAS_PACKAGING:
                 try:
                     installed_version = Version(installed_version_str)
                     specifier = SpecifierSet(ver_spec)
-                    
+
                     if installed_version not in specifier:
                         error_msg = (
                             f"Version constraint not satisfied for package '{pkg}': "
@@ -408,9 +408,9 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                         )
                         logger.error(error_msg)
                         raise ValueError(error_msg)
-                    
+
                     logger.debug(f"✓ Dependency {pkg} version {installed_version_str} satisfies constraint {ver_spec}")
-                
+
                 except (InvalidVersion, InvalidSpecifier) as e:
                     logger.warning(f"Invalid version/specifier for '{pkg}': {e}. Treating as satisfied.")
             else:
@@ -430,14 +430,14 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                     f"Dependency {pkg} found (version {installed_version_str}). "
                     f"Required: {ver_display}. Cannot verify constraint without packaging library."
                 )
-        
+
         except importlib_metadata.PackageNotFoundError as e:
             # Re-raise with additional context
             raise importlib_metadata.PackageNotFoundError(
                 f"Package '{pkg}' (required version: {ver_spec or 'any'}) not found. "
                 f"Install with: pip install '{pkg}{ver_spec if ver_spec else ''}'"
             ) from e
-    
+
     return True
 
 
