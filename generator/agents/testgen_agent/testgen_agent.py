@@ -818,22 +818,17 @@ Agent --> Dev : Deliver Report
                 # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
                 # Wrap with asyncio.wait_for to enforce timeout
                 # FIX Issue 1: Add provider to model configuration for call_ensemble_api
-                # Map model name to provider based on model prefix
-                provider = "openai"  # default
-                if llm_model.startswith("claude"):
-                    provider = "claude"
-                elif llm_model.startswith("gemini"):
-                    provider = "gemini"
-                elif llm_model.startswith("grok"):
-                    provider = "grok"
-                elif llm_model.startswith("gpt") or llm_model.startswith("o1"):
-                    provider = "openai"
+                # Use centralized utility for provider inference (Industry Standard: DRY principle)
+                from generator.utils.llm_provider_utils import create_model_config
                 
                 try:
+                    # Create properly formatted model configuration with provider inference
+                    model_config = create_model_config(llm_model)
+                    
                     response = await asyncio.wait_for(
                         call_ensemble_api(
                             prompt=prompt,
-                            models=[{"provider": provider, "model": llm_model}],  # FIX: Added provider key
+                            models=[model_config],  # FIX: Use validated model config
                             voting_strategy="majority",  # Default strategy
                             stream=stream,
                         ),

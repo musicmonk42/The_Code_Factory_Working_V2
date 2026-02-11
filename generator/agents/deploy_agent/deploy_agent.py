@@ -1125,19 +1125,15 @@ Respond in plain prose only (no JSON / no code fences).
                                 try:
                                     if ensemble:
                                         # FIX Issue 1: Add provider to model configuration
-                                        provider = "openai"  # default
-                                        if llm_model.startswith("claude"):
-                                            provider = "claude"
-                                        elif llm_model.startswith("gemini"):
-                                            provider = "gemini"
-                                        elif llm_model.startswith("grok"):
-                                            provider = "grok"
-                                        elif llm_model.startswith("gpt") or llm_model.startswith("o1"):
-                                            provider = "openai"
+                                        # Use centralized utility for provider inference (Industry Standard: DRY principle)
+                                        from generator.utils.llm_provider_utils import create_model_config
+                                        
+                                        # Create properly formatted model configuration
+                                        model_config = create_model_config(llm_model)
                                         
                                         resp = await call_ensemble_api(
                                             prompt,
-                                            [{"provider": provider, "model": llm_model}],  # FIX: Added provider key
+                                            [model_config],  # FIX: Use validated model config
                                             voting_strategy="majority",
                                             stream=stream,
                                         )
