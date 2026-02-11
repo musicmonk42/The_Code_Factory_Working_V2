@@ -126,7 +126,7 @@ class TestFallbackTestSyntax:
     def testgen_agent(self, temp_repo):
         """Create a TestgenAgent instance."""
         # Note: TestgenAgent requires repo_path, not RunnerConfig
-        return TestGenAgent(repo_path=str(temp_repo), arbiter_bridge=None)
+        return TestgenAgent(repo_path=str(temp_repo), arbiter_bridge=None)
 
     @pytest.mark.asyncio
     async def test_fallback_test_has_valid_syntax(self, testgen_agent):
