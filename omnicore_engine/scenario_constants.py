@@ -7,7 +7,7 @@ from multiprocessing import (
 )  # To avoid name collision with standard Lock
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 if TYPE_CHECKING:
     try:
@@ -38,7 +38,8 @@ class ScenarioMetric(BaseModel):
         ..., description="Aggregation method for multiverse"
     )
 
-    @validator("range")
+    @classmethod
+    @field_validator("range")
     def validate_range(cls, v):
         """
         Validates that the range is a list of two floats where the first element is

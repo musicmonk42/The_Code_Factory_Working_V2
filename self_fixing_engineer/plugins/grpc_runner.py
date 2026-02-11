@@ -197,12 +197,12 @@ try:
 
     # FIX: Pydantic V2 compatibility - Extra is now ConfigDict
     try:
-        from pydantic import BaseModel, Field, ValidationError, validator, ConfigDict
+        from pydantic import BaseModel, Field, ValidationError, field_validator, ConfigDict
 
         # Pydantic V2
         PYDANTIC_V2 = True
     except ImportError:
-        from pydantic import BaseModel, Extra, Field, ValidationError, validator
+        from pydantic import BaseModel, Extra, Field, ValidationError, field_validator
 
         # Pydantic V1
         PYDANTIC_V2 = False
@@ -313,7 +313,8 @@ else:
     whitelisted_commands: List[str] = Field(default_factory=list)
     is_demo_plugin: bool = Field(False)
 
-    @validator("name", "entrypoint", "health_check", "api_version")
+    @classmethod
+    @field_validator("name", "entrypoint", "health_check", "api_version")
     def no_dummy_in_prod(cls, v):
         if PRODUCTION_MODE and any(k in v.lower() for k in ("dummy", "test", "mock")):
             raise ValueError(f"Dummy/test field '{v}' not allowed in production.")
