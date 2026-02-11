@@ -50,6 +50,7 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (
     YAML as RuYAML,
+    YAMLError as RuamelYAMLError,  # FIX: Import correct exception for YAML parsing errors
 )  # For advanced YAML operations (preserving comments)
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -729,7 +730,7 @@ class KubernetesValidator(Validator):
                             target=target_type, issue_type_category="K8sStructure"
                         ).inc(len(report["lint_issues"]))
                         
-            except yaml.YAMLError as e:
+            except RuamelYAMLError as e:
                 report["lint_status"] = "failed"
                 report["lint_output"] = f"YAML parsing error: {e}"
                 report["lint_issues"].append(f"Invalid YAML syntax: {e}")

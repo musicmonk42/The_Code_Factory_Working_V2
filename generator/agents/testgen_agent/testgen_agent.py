@@ -442,10 +442,17 @@ class TestgenAgent:
                     content = await f.read()
                     # Return the original relative path as key, not the cleaned one
                     # This maintains compatibility with existing code
-                    return fp, scrub_text(content)
+                    # 
+                    # FIX: Do NOT scrub source code files that will be parsed by ast.parse()
+                    # Presidio's PII detection incorrectly flags code entities (imports, class names)
+                    # as PERSON/ORGANIZATION/etc., corrupting code with [REDACTED] placeholders.
+                    # This causes SyntaxError in ast.parse() and breaks test generation.
+                    # Scrubbing should only be applied to text sent to LLMs or external outputs,
+                    # not to code files that will be parsed programmatically.
+                    return fp, content
             except Exception as e:
                 raise ValueError(
-                    f"Error reading or scrubbing file {full_path}: {e}"
+                    f"Error reading file {full_path}: {e}"
                 ) from e
 
         tasks = [read_and_scrub_file(fp) for fp in target_files]
