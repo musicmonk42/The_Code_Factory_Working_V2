@@ -586,6 +586,44 @@ For issues or questions, please refer to the project documentation or contact th
     return readme
 
 
+def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, Any]:
+    """
+    Create a placeholder critique report structure.
+    
+    This helper function creates a standardized placeholder report when
+    critique is skipped, fails, or is not requested. This ensures that
+    reports/critique_report.json always exists with a valid structure.
+    
+    Args:
+        job_id: The job identifier
+        message: The reason the critique was not performed
+        
+    Returns:
+        Dictionary containing the placeholder report structure
+    """
+    return {
+        "job_id": job_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": "skipped",
+        "message": message,
+        "issues_found": 0,
+        "issues_fixed": 0,
+        "coverage": {
+            "total_lines": 0,
+            "covered_lines": 0,
+            "percentage": 0.0
+        },
+        "test_results": {
+            "total": 0,
+            "passed": 0,
+            "failed": 0
+        },
+        "issues": [],
+        "fixes_applied": [],
+        "scan_types": []
+    }
+
+
 class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
@@ -4451,18 +4489,28 @@ class OmniCoreService:
                     if not readme_path.exists():
                         logger.warning(f"[PIPELINE] Job {job_id} README.md missing, will generate")
                         should_regenerate = True
-                    elif _PROVENANCE_AVAILABLE:
+                    else:
                         # Check if existing README is incomplete
+                        # This check runs regardless of _PROVENANCE_AVAILABLE
                         readme_content = readme_path.read_text(encoding="utf-8")
-                        readme_result = _validate_readme_completeness(readme_content)
                         
-                        if not readme_result.get("valid", True):
-                            logger.warning(
-                                f"[PIPELINE] Job {job_id} README incomplete, will regenerate. "
-                                f"Errors: {readme_result.get('errors', [])}",
-                                extra={"job_id": job_id, "readme_errors": readme_result.get('errors', [])}
-                            )
-                            should_regenerate = True
+                        if _PROVENANCE_AVAILABLE:
+                            readme_result = _validate_readme_completeness(readme_content)
+                            
+                            if not readme_result.get("valid", True):
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} README incomplete, will regenerate. "
+                                    f"Errors: {readme_result.get('errors', [])}",
+                                    extra={"job_id": job_id, "readme_errors": readme_result.get('errors', [])}
+                                )
+                                should_regenerate = True
+                        else:
+                            # Fallback: Simple length check if validation not available
+                            if len(readme_content) < 500:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} README too short ({len(readme_content)} chars), will regenerate"
+                                )
+                                should_regenerate = True
                     
                     if should_regenerate:
                         # Generate comprehensive README
@@ -4877,27 +4925,9 @@ class OmniCoreService:
                             
                             # Only create placeholder if report doesn't exist
                             if not report_path.exists():
-                                placeholder_report = {
-                                    "job_id": job_id,
-                                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                                    "status": "skipped",
-                                    "message": "Critique stage failed or was skipped",
-                                    "issues_found": 0,
-                                    "issues_fixed": 0,
-                                    "coverage": {
-                                        "total_lines": 0,
-                                        "covered_lines": 0,
-                                        "percentage": 0.0
-                                    },
-                                    "test_results": {
-                                        "total": 0,
-                                        "passed": 0,
-                                        "failed": 0
-                                    },
-                                    "issues": [],
-                                    "fixes_applied": [],
-                                    "scan_types": []
-                                }
+                                placeholder_report = _create_placeholder_critique_report(
+                                    job_id, "Critique stage failed or was skipped"
+                                )
                                 report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
                                 logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report at {report_path}")
                         except Exception as e:
@@ -4915,27 +4945,9 @@ class OmniCoreService:
                         
                         # Only create placeholder if report doesn't exist
                         if not report_path.exists():
-                            placeholder_report = {
-                                "job_id": job_id,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                                "status": "skipped",
-                                "message": "Critique stage was not requested",
-                                "issues_found": 0,
-                                "issues_fixed": 0,
-                                "coverage": {
-                                    "total_lines": 0,
-                                    "covered_lines": 0,
-                                    "percentage": 0.0
-                                },
-                                "test_results": {
-                                    "total": 0,
-                                    "passed": 0,
-                                    "failed": 0
-                                },
-                                "issues": [],
-                                "fixes_applied": [],
-                                "scan_types": []
-                            }
+                            placeholder_report = _create_placeholder_critique_report(
+                                job_id, "Critique stage was not requested"
+                            )
                             report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
                             logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report (critique not requested) at {report_path}")
                     except Exception as e:
