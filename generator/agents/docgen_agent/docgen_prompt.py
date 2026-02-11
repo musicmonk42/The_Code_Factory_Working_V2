@@ -197,6 +197,16 @@ COMMON_SENSITIVE_PATTERNS_REF = [
     r"\b(?:\d{3}[- ]?\d{2}[- ]?\d{4})\b",  # SSN-like patterns
 ]
 
+# Canonical doc_type mapping to ensure template names match regardless of input casing
+DOC_TYPE_CANONICAL = {
+    "readme": "README",
+    "api": "API",
+    "api_reference": "API",
+    "developer": "DEVELOPER",
+    "dev": "DEVELOPER",
+    "user": "README",
+}
+
 
 def scrub_text(text: str) -> str:
     """
@@ -674,7 +684,6 @@ class PromptTemplateRegistry:
         except Exception as e:
             # Defense-in-depth: Try case-insensitive fallback
             try:
-                import os
                 template_dir = Path(self.plugin_dir)
                 if template_dir.exists():
                     for file in template_dir.iterdir():
@@ -1064,15 +1073,7 @@ class DocGenPromptAgent:
             # Gather comprehensive context data
             context_data = await self.gather_context(target_files, str(self.repo_path))
 
-            # Canonical doc_type mapping to ensure template names match regardless of input casing
-            DOC_TYPE_CANONICAL = {
-                "readme": "README",
-                "api": "API",
-                "api_reference": "API",
-                "developer": "DEVELOPER",
-                "dev": "DEVELOPER",
-                "user": "README",
-            }
+            # Use canonical doc_type mapping to normalize template names
             doc_type_normalized = DOC_TYPE_CANONICAL.get(doc_type.lower(), doc_type)
             full_template_name = f"{doc_type_normalized}_{template_name}"
             template = self.template_registry.get_template(full_template_name)
