@@ -307,7 +307,7 @@ async def test_scan_for_vulnerabilities_success(temp_dir: Path):
     result = await scan_for_vulnerabilities(
         code_file, scan_type="code"
     )  # FIX: Add await
-    # FIX: In testing mode, the function returns 0 vulnerabilities (line 1146 of runner_security_utils.py)
+    # FIX: In testing mode, the function returns 0 vulnerabilities by design for safety
     assert result["vulnerabilities_found"] == 0
     assert result["status"] == "completed"
 
