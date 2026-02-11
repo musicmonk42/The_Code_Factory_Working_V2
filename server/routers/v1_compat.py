@@ -12,15 +12,25 @@ Routes:
 - GET /api/v1/generations - List all jobs (generations)
 - GET /api/v1/generations/{job_id} - Get job status
 - POST /api/v1/sfe/checkpoint - Create SFE checkpoint (for compatibility)
+
+Design Principles:
+- Follows RESTful API design patterns
+- Provides clear error messages with appropriate HTTP status codes
+- Implements proper input validation using Pydantic models
+- Uses dependency injection for service layer integration
+- Maintains consistency with existing router patterns in the codebase
+- Logs all significant operations for observability
+- Gracefully handles errors without exposing internal details
 """
 
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, validator
 
 from server.schemas import (
     Job,
@@ -36,32 +46,114 @@ from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/v1", tags=["API v1 (Compatibility)"])
+router = APIRouter(
+    prefix="/v1",
+    tags=["API v1 (Compatibility)"],
+    responses={
+        500: {"description": "Internal server error"},
+        503: {"description": "Service temporarily unavailable"},
+    },
+)
+
+# UUID validation pattern (RFC 4122)
+UUID_PATTERN = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    re.IGNORECASE
+)
+
+# Supported programming languages
+SUPPORTED_LANGUAGES = {"python", "javascript", "typescript", "go", "java", "rust"}
 
 
 class V1GenerateRequest(BaseModel):
-    """Simplified generation request for v1 API."""
-    requirements: str = Field(..., description="Natural language requirements")
-    language: str = Field("python", description="Target programming language")
-    framework: Optional[str] = Field(None, description="Optional framework")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    """
+    Simplified generation request for v1 API.
+    
+    Validates input to ensure requirements are non-empty and language is supported.
+    """
+    requirements: str = Field(
+        ...,
+        min_length=1,
+        max_length=10000,
+        description="Natural language requirements for code generation"
+    )
+    language: str = Field(
+        "python",
+        description="Target programming language"
+    )
+    framework: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="Optional framework (e.g., flask, react)"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Additional metadata for the generation job"
+    )
+    
+    @validator('requirements')
+    def validate_requirements(cls, v):
+        """Ensure requirements are not just whitespace."""
+        if not v or not v.strip():
+            raise ValueError("Requirements cannot be empty or whitespace only")
+        return v.strip()
+    
+    @validator('language')
+    def validate_language(cls, v):
+        """Validate programming language is supported."""
+        language_lower = v.lower()
+        if language_lower not in SUPPORTED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_LANGUAGES))
+            raise ValueError(
+                f"Language '{v}' is not supported. Supported languages: {supported}"
+            )
+        return language_lower
 
 
 class V1GenerateResponse(BaseModel):
-    """Response from v1 generate endpoint."""
-    id: str = Field(..., description="Job/generation ID")
+    """
+    Response from v1 generate endpoint.
+    
+    Returns the newly created job ID and status information.
+    """
+    id: str = Field(..., description="Job/generation ID (UUID format)")
     status: str = Field(..., description="Initial status (typically 'pending' or 'running')")
-    message: str = Field(..., description="Status message")
+    message: str = Field(..., description="Human-readable status message")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "pending",
+                "message": "Code generation job created. Use GET /api/v1/generations/{job_id} to check status."
+            }
+        }
 
 
 class V1GenerationListItem(BaseModel):
-    """Generation list item for v1 API."""
-    id: str
-    status: str
-    requirements: Optional[str] = None
-    language: Optional[str] = None
-    created_at: str
-    updated_at: str
+    """
+    Generation list item for v1 API.
+    
+    Represents a single generation job in list responses.
+    """
+    id: str = Field(..., description="Job/generation ID")
+    status: str = Field(..., description="Current job status")
+    requirements: Optional[str] = Field(None, description="Original requirements")
+    language: Optional[str] = Field(None, description="Target programming language")
+    created_at: str = Field(..., description="ISO 8601 timestamp of creation")
+    updated_at: str = Field(..., description="ISO 8601 timestamp of last update")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "completed",
+                "requirements": "Create a Flask app with /hello endpoint",
+                "language": "python",
+                "created_at": "2025-02-11T04:12:00Z",
+                "updated_at": "2025-02-11T04:15:30Z"
+            }
+        }
 
 
 def get_generator_service() -> GeneratorService:
@@ -210,22 +302,43 @@ async def list_generations(
     return result
 
 
-@router.get("/generations/{job_id}", response_model=V1GenerationListItem)
+@router.get(
+    "/generations/{job_id}",
+    response_model=V1GenerationListItem,
+    responses={
+        200: {"description": "Generation job found"},
+        400: {"description": "Invalid job ID format"},
+        404: {"description": "Generation job not found"},
+    }
+)
 async def get_generation_status(job_id: str) -> V1GenerationListItem:
     """
     Get the status of a specific generation job (v1 API).
     
     **Path Parameters:**
-    - job_id: Unique job identifier
+    - job_id: Unique job identifier (UUID format)
     
     **Returns:**
     - Generation job details and current status
     
     **Errors:**
+    - 400: Invalid job ID format (not a valid UUID)
     - 404: Job not found
     """
+    # Validate job_id is a valid UUID
+    if not UUID_PATTERN.match(job_id):
+        logger.warning(f"Invalid job ID format received: {job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid job ID format. Expected UUID, got: {job_id[:50]}"
+        )
+    
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Generation {job_id} not found")
+        logger.info(f"Job not found: {job_id}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Generation {job_id} not found"
+        )
     
     job = jobs_db[job_id]
     
@@ -241,20 +354,62 @@ async def get_generation_status(job_id: str) -> V1GenerationListItem:
 
 # SFE compatibility endpoints
 class SFECheckpointRequest(BaseModel):
-    """Request for creating an SFE checkpoint."""
-    type: str = Field(..., description="Checkpoint type")
-    data: Dict[str, Any] = Field(..., description="Checkpoint data")
+    """
+    Request for creating an SFE checkpoint.
+    
+    Validates checkpoint type and data structure.
+    """
+    type: str = Field(
+        ...,
+        min_length=1,
+        max_length=50,
+        description="Checkpoint type (e.g., 'test', 'backup', 'milestone')"
+    )
+    data: Dict[str, Any] = Field(
+        ...,
+        description="Checkpoint data as a dictionary"
+    )
+    
+    @validator('type')
+    def validate_type(cls, v):
+        """Ensure checkpoint type is not just whitespace."""
+        if not v or not v.strip():
+            raise ValueError("Checkpoint type cannot be empty or whitespace only")
+        return v.strip()
 
 
 class SFECheckpointResponse(BaseModel):
-    """Response from SFE checkpoint creation."""
-    id: str = Field(..., description="Checkpoint ID")
+    """
+    Response from SFE checkpoint creation.
+    
+    Returns the checkpoint ID and confirmation message.
+    """
+    id: str = Field(..., description="Checkpoint ID (UUID format)")
     type: str = Field(..., description="Checkpoint type")
-    status: str = Field(..., description="Status")
-    message: str = Field(..., description="Status message")
+    status: str = Field(..., description="Checkpoint status")
+    message: str = Field(..., description="Human-readable confirmation message")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "type": "test",
+                "status": "created",
+                "message": "SFE checkpoint created successfully with type 'test'"
+            }
+        }
 
 
-@router.post("/sfe/checkpoint", response_model=SFECheckpointResponse, status_code=201)
+@router.post(
+    "/sfe/checkpoint",
+    response_model=SFECheckpointResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        201: {"description": "Checkpoint created successfully"},
+        400: {"description": "Invalid request data"},
+        500: {"description": "Internal server error"},
+    }
+)
 async def create_sfe_checkpoint(
     request: SFECheckpointRequest,
 ) -> SFECheckpointResponse:
@@ -265,20 +420,45 @@ async def create_sfe_checkpoint(
     this would integrate with the actual SFE checkpoint mechanism.
     
     **Request Body:**
-    - type: Checkpoint type (e.g., "test", "backup")
+    - type: Checkpoint type (e.g., "test", "backup", "milestone")
     - data: Checkpoint data as a dictionary
     
     **Returns:**
     - Checkpoint ID and status (201 Created)
+    
+    **Example Request:**
+    ```json
+    {
+        "type": "test",
+        "data": {"test": "checkpoint", "version": "1.0"}
+    }
+    ```
     """
-    checkpoint_id = str(uuid4())
-    
-    logger.info(f"Created v1 SFE checkpoint {checkpoint_id} of type {request.type}")
-    
-    return SFECheckpointResponse(
-        id=checkpoint_id,
-        type=request.type,
-        status="created",
-        message=f"SFE checkpoint created successfully with type '{request.type}'",
-    )
+    try:
+        checkpoint_id = str(uuid4())
+        
+        logger.info(
+            f"Created v1 SFE checkpoint {checkpoint_id} of type {request.type}",
+            extra={
+                "checkpoint_id": checkpoint_id,
+                "checkpoint_type": request.type,
+                "data_keys": list(request.data.keys())
+            }
+        )
+        
+        return SFECheckpointResponse(
+            id=checkpoint_id,
+            type=request.type,
+            status="created",
+            message=f"SFE checkpoint created successfully with type '{request.type}'",
+        )
+    except Exception as e:
+        logger.error(
+            f"Failed to create SFE checkpoint: {str(e)}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create checkpoint. Please try again later."
+        )
 
