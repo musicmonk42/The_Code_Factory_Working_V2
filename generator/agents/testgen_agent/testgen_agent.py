@@ -1211,14 +1211,14 @@ class Test{file_stem.title()}Structure:
     def test_{file_stem}_exists(self, file_path):
         """Verify that the source file exists in the expected location."""
         assert os.path.exists(file_path), (
-            f"Source file {{file_path}} does not exist. "
-            f"Expected at: {{os.path.abspath(file_path)}}"
+            f"Source file {{{{file_path}}}} does not exist. "
+            f"Expected at: {{{{os.path.abspath(file_path)}}}}"
         )
     
     def test_{file_stem}_is_file(self, file_path):
         """Verify that the path points to a file, not a directory."""
         assert os.path.isfile(file_path), (
-            f"Path {{file_path}} exists but is not a regular file"
+            f"Path {{{{file_path}}}} exists but is not a regular file"
         )
     
     def test_{file_stem}_not_empty(self, file_path):
@@ -1227,16 +1227,16 @@ class Test{file_stem.title()}Structure:
             content = f.read()
         
         assert len(content) > 0, (
-            f"Source file {{file_path}} exists but is empty"
+            f"Source file {{{{file_path}}}} exists but is empty"
         )
         assert content.strip(), (
-            f"Source file {{file_path}} contains only whitespace"
+            f"Source file {{{{file_path}}}} contains only whitespace"
         )
     
     def test_{file_stem}_has_python_extension(self, file_path):
         """Verify file has .py extension."""
         assert file_path.endswith('.py'), (
-            f"File {{file_path}} does not have .py extension"
+            f"File {{{{file_path}}}} does not have .py extension"
         )
     
     def test_{file_stem}_readable(self, file_path):
@@ -1245,9 +1245,9 @@ class Test{file_stem.title()}Structure:
             with open(file_path, 'r', encoding='utf-8') as f:
                 _ = f.read()
         except UnicodeDecodeError as e:
-            pytest.fail(f"File {{file_path}} is not valid UTF-8: {{e}}")
+            pytest.fail(f"File {{{{file_path}}}} is not valid UTF-8: {{{{e}}}}")
         except IOError as e:
-            pytest.fail(f"Cannot read file {{file_path}}: {{e}}")
+            pytest.fail(f"Cannot read file {{{{file_path}}}}: {{{{e}}}}")
     
     @pytest.mark.skip(reason="Source file has syntax errors - cannot import")
     def test_{file_stem}_import(self, file_path):
@@ -1281,16 +1281,16 @@ def test_{file_stem}_syntax_error_documentation():
     This test always passes but logs information about why
     full test generation was not possible.
     """
-    error_info = {{
+    error_info = {{{{
         "file": "{file_path}",
         "error_line": {e.lineno},
         "error_message": "{e.msg}",
         "error_type": "SyntaxError",
         "recovery_strategy": "structural_fallback_tests"
-    }}
+    }}}}
     
     # Test passes - this is informational
-    assert True, f"Syntax error context: {{error_info}}"
+    assert True, f"Syntax error context: {{{{error_info}}}}"
 '''
                     
                     # Generate test file path following pytest conventions
