@@ -74,35 +74,9 @@ mock_pkcs11.ffi = SimpleNamespace(new=MagicMock())
 
 
 # --- Pytest Fixtures ---
-
-
-@pytest.fixture(autouse=True, scope="session")
-def prometheus_registry_mock():
-    """
-    Prevent "Duplicated timeseries" errors by patching the global
-    Prometheus registry before any modules are imported.
-    """
-    with patch("prometheus_client.CollectorRegistry.register", MagicMock()):
-        yield
-
-
-@pytest.fixture(autouse=True, scope="session")
-def set_required_env_vars_for_collection():
-    """
-    Sets minimal required environment variables *before* any modules are imported.
-    This prevents ConfigurationError during pytest collection, which happens
-    before any test fixtures are run.
-    """
-    from _pytest.monkeypatch import MonkeyPatch
-
-    mp = MonkeyPatch()
-    mp.setenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software")
-    mp.setenv("AUDIT_CRYPTO_DEFAULT_ALGO", "ed25519")
-    mp.setenv("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
-    mp.setenv("AUDIT_LOG_DEV_MODE", "true")
-    mp.setenv("AUDIT_CRYPTO_HSM_ENABLED", "false")  # Default to false
-    yield
-    mp.undo()
+# NOTE: Session-scoped fixtures for prometheus mocking and environment variables
+# are defined in generator/tests/conftest.py and conftest.py.
+# Do NOT redefine them here to avoid conflicts with --import-mode=importlib.
 
 
 @pytest.fixture
