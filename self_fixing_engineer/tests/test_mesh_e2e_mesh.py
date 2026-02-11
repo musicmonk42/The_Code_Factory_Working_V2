@@ -72,13 +72,6 @@ os.environ.update(
 # portalocker's type annotations (typing.Optional[PubSubWorkerThread])
 import types
 
-mock_redis_module = MagicMock()
-mock_redis_module.from_url = AsyncMock()
-mock_redis_module.Redis = MagicMock()
-mock_redis_module.ConnectionPool = MagicMock()
-
-mock_redis_base = MagicMock()
-
 # Create redis.client with proper PubSubWorkerThread class for type annotations
 mock_redis_client = types.ModuleType("redis.client")
 
@@ -92,6 +85,15 @@ class Redis:
 
 mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
 mock_redis_client.Redis = Redis
+
+# Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
+mock_redis_module = MagicMock()
+mock_redis_module.from_url = AsyncMock()
+mock_redis_module.Redis = MagicMock()
+mock_redis_module.ConnectionPool = MagicMock()
+mock_redis_module.PubSub = MagicMock()  # PubSub lives in redis.asyncio, not redis.client
+
+mock_redis_base = MagicMock()
 mock_redis_base.client = mock_redis_client
 
 sys.modules["redis.asyncio"] = mock_redis_module

@@ -81,7 +81,6 @@ sys.modules["self_fixing_engineer.arbiter.models.audit_ledger_client"] = MagicMo
 # IMPORTANT: Must provide real classes for redis.client types to avoid breaking
 # portalocker's type annotations (typing.Optional[PubSubWorkerThread])
 mock_redis_base = MagicMock()
-mock_redis_async = MagicMock()
 
 # Create redis.client with proper PubSubWorkerThread class for type annotations
 mock_redis_client = types.ModuleType("redis.client")
@@ -97,6 +96,10 @@ class Redis:
 mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
 mock_redis_client.Redis = Redis
 mock_redis_base.client = mock_redis_client
+
+# Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
+mock_redis_async = MagicMock()
+mock_redis_async.PubSub = MagicMock()  # PubSub lives in redis.asyncio, not redis.client
 
 sys.modules["redis"] = mock_redis_base
 sys.modules["redis.asyncio"] = mock_redis_async
