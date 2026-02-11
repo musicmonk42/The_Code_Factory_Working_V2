@@ -387,122 +387,58 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
     if not dependencies:
         return True
 
-    try:
-        # Use importlib.metadata instead of deprecated pkg_resources
-        for pkg, ver_spec in dependencies.items():
-            try:
-                installed_version_str = importlib_metadata.version(pkg)
-
-                # If no version constraint specified, any version is acceptable
-                if not ver_spec:
-                    logger.debug(
-                        f"Dependency {pkg} found (version {installed_version_str}). "
-                        f"Any version accepted."
-                    )
-                    continue
-
-                # Use packaging library for proper version validation if available
-                if HAS_PACKAGING:
-                    try:
-                        # Parse installed version
-                        installed_version = Version(installed_version_str)
-
-                        # Parse version specifier (supports complex constraints)
-                        specifier = SpecifierSet(ver_spec)
-
-                        # Check if installed version satisfies constraint
-                        if installed_version not in specifier:
-                            error_msg = (
-                                f"Version constraint not satisfied for package '{pkg}': "
-                                f"installed={installed_version_str}, required={ver_spec}. "
-                                f"Please install a compatible version."
-                            )
-                            logger.error(error_msg)
-                            raise ValueError(error_msg)
-
-                        logger.debug(
-                            f"✓ Dependency {pkg} version {installed_version_str} "
-                            f"satisfies constraint {ver_spec}"
-                        )
-
-                    except InvalidVersion as e:
-                        logger.warning(
-                            f"Invalid version format for package '{pkg}': {installed_version_str}. "
-                            f"Treating as satisfied. Error: {e}"
-                        )
-                    except InvalidSpecifier as e:
-                        logger.warning(
-                            f"Invalid version specifier '{ver_spec}' for package '{pkg}'. "
-                            f"Treating as satisfied. Error: {e}"
-                        )
-                else:
-                    # Fallback: Basic validation without packaging library
-                    recognized_prefixes = [">=", "<=", "==", "!=", "~=", ">", "<"]
-                    if not any(ver_spec.startswith(prefix) for prefix in recognized_prefixes):
-                        logger.warning(
-                            f"Version specifier '{ver_spec}' for package '{pkg}' "
-                            f"doesn't use a recognized operator. Assuming '>={ver_spec}'. "
-                            f"Install 'packaging' library for proper validation."
-                        )
-                        ver_display = f">={ver_spec}"
-                    else:
-                        ver_display = ver_spec
-
-                    logger.warning(
-                        f"Dependency {pkg} found (version {installed_version_str}). "
-                        f"Required: {ver_display}. Cannot verify constraint without packaging library."
-                    )
-
-            except importlib_metadata.PackageNotFoundError as e:
-                # Preserve specific package information for better debugging
-                raise importlib_metadata.PackageNotFoundError(
-                    f"Package '{pkg}' (required version: {ver_spec or 'any'}) not found. "
-                    f"Install with: pip install '{pkg}{ver_spec if ver_spec else ''}'"
-                ) from e
-        return True
-    except importlib_metadata.PackageNotFoundError as e:
-        # Extract package details for audit logging
-        error_msg = str(e)
-        # Parse package details from error message
-        # Note: String parsing is fragile; consider structured exception handling in future
+    for pkg, ver_spec in dependencies.items():
         try:
-            pkg_name = error_msg.split("'")[1] if "'" in error_msg else "unknown"
-            required_ver = (
-                error_msg.split("required version: ")[1].split(")")[0]
-                if "required version:" in error_msg
-                else "unknown"
-            )
-        except (IndexError, AttributeError):
-            # Fallback if parsing fails
-            pkg_name = "unknown"
-            required_ver = "unknown"
-            logger.warning(
-                f"Failed to parse dependency error details from: {error_msg}"
-            )
+            installed_version_str = importlib_metadata.version(pkg)
 
-        await audit_logger.emit_audit_event(
-            "plugin_dependency_missing",
-            {
-                "module": module_name,
-                "dependency": pkg_name,
-                "required_version": required_ver,
-                "error": "Dependency not found",
-                "full_error": error_msg,
-            },
-            severity="ERROR",
-        )
-        return False
-    except Exception as e:
-        await audit_logger.emit_audit_event(
-            "plugin_dependency_check_failed",
-            {
-                "module": module_name,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            },
-            severity="ERROR",
-        )
-        return False
+            if not ver_spec:
+                logger.debug(f"Dependency {pkg} found (version {installed_version_str}). Any version accepted.")
+                continue
+
+            if HAS_PACKAGING:
+                try:
+                    installed_version = Version(installed_version_str)
+                    specifier = SpecifierSet(ver_spec)
+
+                    if installed_version not in specifier:
+                        error_msg = (
+                            f"Version constraint not satisfied for package '{pkg}': "
+                            f"installed={installed_version_str}, required={ver_spec}. "
+                            f"Please install a compatible version."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+
+                    logger.debug(f"✓ Dependency {pkg} version {installed_version_str} satisfies constraint {ver_spec}")
+
+                except (InvalidVersion, InvalidSpecifier) as e:
+                    logger.warning(f"Invalid version/specifier for '{pkg}': {e}. Treating as satisfied.")
+            else:
+                # Fallback: basic validation without packaging library
+                recognized_prefixes = [">=", "<=", "==", "!=", "~=", ">", "<"]
+                if not any(ver_spec.startswith(prefix) for prefix in recognized_prefixes):
+                    logger.warning(
+                        f"Version specifier '{ver_spec}' for package '{pkg}' "
+                        f"doesn't use a recognized operator. Assuming '>={ver_spec}'. "
+                        f"Install 'packaging' library for proper validation."
+                    )
+                    ver_display = f">={ver_spec}"
+                else:
+                    ver_display = ver_spec
+
+                logger.warning(
+                    f"Dependency {pkg} found (version {installed_version_str}). "
+                    f"Required: {ver_display}. Cannot verify constraint without packaging library."
+                )
+
+        except importlib_metadata.PackageNotFoundError as e:
+            # Re-raise with additional context
+            raise importlib_metadata.PackageNotFoundError(
+                f"Package '{pkg}' (required version: {ver_spec or 'any'}) not found. "
+                f"Install with: pip install '{pkg}{ver_spec if ver_spec else ''}'"
+            ) from e
+
+    return True
 
 
 # --- Registry ---

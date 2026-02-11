@@ -91,8 +91,8 @@ class TestDatabaseQueueDispatch:
         """Test handling of database errors during enqueueing."""
         mock_db, mock_session = mock_database
 
-        # Simulate database error
-        mock_session.add.side_effect = Exception("Database connection failed")
+        # Simulate database error on commit, not add
+        mock_session.commit.side_effect = Exception("Database connection failed")
 
         result = await _dispatch_via_database_queue(
             "test-job-123",
@@ -113,15 +113,18 @@ class TestDatabaseQueueDispatch:
             mock_db = MockDatabase.return_value
             mock_db._engine = MagicMock()
 
-            # Create mock queue entry
-            mock_entry = MagicMock(spec=DispatchEventQueue)
+            # Create a real DispatchEventQueue instance for attribute tracking
+            mock_entry = DispatchEventQueue(
+                job_id="test-job-123",
+                event_type="job.completed",
+                correlation_id="corr-456",
+                payload={"event_type": "job.completed"},
+                status=DispatchEventStatus.PENDING,
+                retry_count=0,
+                max_retries=5,
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
+            )
             mock_entry.id = 1
-            mock_entry.job_id = "test-job-123"
-            mock_entry.status = DispatchEventStatus.PENDING
-            mock_entry.retry_count = 0
-            mock_entry.max_retries = 5
-            mock_entry.payload = {"event_type": "job.completed"}
-            mock_entry.correlation_id = "corr-456"
 
             # Mock session
             mock_session = AsyncMock()
@@ -156,15 +159,18 @@ class TestDatabaseQueueDispatch:
             mock_db = MockDatabase.return_value
             mock_db._engine = MagicMock()
 
-            # Create mock queue entry that will fail dispatch
-            mock_entry = MagicMock(spec=DispatchEventQueue)
+            # Create a real DispatchEventQueue instance that will fail dispatch
+            mock_entry = DispatchEventQueue(
+                job_id="test-job-123",
+                event_type="job.completed",
+                correlation_id="corr-456",
+                payload={"event_type": "job.completed"},
+                status=DispatchEventStatus.PENDING,
+                retry_count=2,  # Already failed twice
+                max_retries=5,
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
+            )
             mock_entry.id = 1
-            mock_entry.job_id = "test-job-123"
-            mock_entry.status = DispatchEventStatus.PENDING
-            mock_entry.retry_count = 2  # Already failed twice
-            mock_entry.max_retries = 5
-            mock_entry.payload = {"event_type": "job.completed"}
-            mock_entry.correlation_id = "corr-456"
 
             mock_session = AsyncMock()
             mock_result = AsyncMock()
@@ -205,15 +211,18 @@ class TestDatabaseQueueDispatch:
             mock_db = MockDatabase.return_value
             mock_db._engine = MagicMock()
 
-            # Create mock queue entry at max retries
-            mock_entry = MagicMock(spec=DispatchEventQueue)
+            # Create a real DispatchEventQueue instance at max retries
+            mock_entry = DispatchEventQueue(
+                job_id="test-job-123",
+                event_type="job.completed",
+                correlation_id="corr-456",
+                payload={"event_type": "job.completed"},
+                status=DispatchEventStatus.FAILED,
+                retry_count=4,  # One more will hit max
+                max_retries=5,
+                created_at=datetime(2024, 1, 1, tzinfo=timezone.utc)
+            )
             mock_entry.id = 1
-            mock_entry.job_id = "test-job-123"
-            mock_entry.status = DispatchEventStatus.FAILED
-            mock_entry.retry_count = 4  # One more will hit max
-            mock_entry.max_retries = 5
-            mock_entry.payload = {"event_type": "job.completed"}
-            mock_entry.correlation_id = "corr-456"
 
             mock_session = AsyncMock()
             mock_result = AsyncMock()
