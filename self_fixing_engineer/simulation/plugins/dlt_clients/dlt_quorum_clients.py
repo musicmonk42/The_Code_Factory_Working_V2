@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Final, List, Literal, Optional
 from urllib.parse import urlparse
 
 from eth_account import Account
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # --- Strict Dependency Check for web3.py ---
 # WEB3_AVAILABLE is now determined by the critical import check in dlt_base.py
@@ -344,14 +344,16 @@ class QuorumConfig(BaseModel):
     temp_file_ttl: float = Field(3600.0, ge=60.0)
     cleanup_interval: float = Field(300.0, ge=30.0)
 
-    @validator("rpc_url")
+    @classmethod
+    @field_validator("rpc_url")
     def validate_rpc_url_scheme(cls, v):
         parsed = urlparse(v)
         if parsed.scheme not in ("http", "https"):
             raise ValueError("rpc_url must use http or https scheme")
         return v
 
-    @validator("contract_abi_path", pre=True, always=True)
+    @classmethod
+    @field_validator("contract_abi_path", mode='before')
     def validate_contract_abi_source(cls, v, values):
         if not v and not values.get("contract_abi_secret_id"):
             raise ValueError(
@@ -363,7 +365,8 @@ class QuorumConfig(BaseModel):
             )
         return v
 
-    @validator("private_key", pre=True, always=True)
+    @classmethod
+    @field_validator("private_key", mode='before')
     def validate_private_key_source(cls, v, values):
         if not v and not values.get("private_key_secret_id"):
             raise ValueError(
@@ -377,7 +380,8 @@ class QuorumConfig(BaseModel):
             raise ValueError("private_key must be a 64-character hex string.")
         return v
 
-    @validator("privacy_group_id", "private_for", always=True)
+    @classmethod
+    @field_validator("privacy_group_id", "private_for")
     def validate_privacy_settings_completeness(cls, v, values):
         privacy_group_id = values.get("privacy_group_id")
         private_for = values.get("private_for")
@@ -411,7 +415,8 @@ class QuorumConfig(BaseModel):
                 )
         return v
 
-    @validator("secrets_providers")
+    @classmethod
+    @field_validator("secrets_providers")
     def validate_secrets_providers_list(cls, v, values):
         if values.get("contract_abi_secret_id") or values.get("private_key_secret_id"):
             if not v:

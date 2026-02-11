@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Conditional imports for Google Cloud Libraries
 try:
@@ -270,7 +270,8 @@ class JobConfig(BaseModel):
         False, description="Retain local archive after upload"
     )
 
-    @validator("image_url")
+    @classmethod
+    @field_validator("image_url")
     def validate_image_url(cls, v):
         # Allow gcr.io and {region}-docker.pkg.dev with multiple path segments and optional tag/digest
         image_re = re.compile(
@@ -282,19 +283,22 @@ class JobConfig(BaseModel):
             )
         return v
 
-    @validator("project_id")
+    @classmethod
+    @field_validator("project_id")
     def validate_project_id(cls, v):
         if not re.match(r"^[a-z][a-z0-9-]{4,61}[a-z0-9]$", v):
             raise ValueError("Invalid GCP project_id format")
         return v
 
-    @validator("location")
+    @classmethod
+    @field_validator("location")
     def validate_location(cls, v):
         if not _LOCATION_RE.match(v):
             raise ValueError("Invalid GCP location format (e.g., us-central1)")
         return v
 
-    @validator("input_gcs_bucket", "output_gcs_bucket", always=True)
+    @classmethod
+    @field_validator("input_gcs_bucket", "output_gcs_bucket")
     def validate_bucket(cls, v):
         if v is None:
             return v
