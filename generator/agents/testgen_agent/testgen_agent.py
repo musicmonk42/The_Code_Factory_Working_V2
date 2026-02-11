@@ -1629,7 +1629,7 @@ def test_{file_stem}_syntax_error_documentation():
                     )
 
                     try:
-                        generated_tests_this_attempt = parse_llm_response(
+                        generated_tests_this_attempt = await parse_llm_response(
                             llm_response_from_generation.get("content", ""),
                             language=language,
                         )
@@ -1661,7 +1661,7 @@ def test_{file_stem}_syntax_error_documentation():
                                 run_id,
                                 "self_heal",
                             )
-                            generated_tests_this_attempt = parse_llm_response(
+                            generated_tests_this_attempt = await parse_llm_response(
                                 healed_llm_response.get("content", ""),
                                 language=language,
                             )

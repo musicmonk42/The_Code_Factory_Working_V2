@@ -790,7 +790,7 @@ class KubernetesValidator(Validator):
             start_time = time.time()
             fixed_response = await call_ensemble_api(
                 fix_prompt,
-                [{"model": "gpt-4o"}],
+                [{"provider": "openai", "model": "gpt-4o"}],
                 voting_strategy="majority",
                 stream=False,
             )
@@ -960,7 +960,7 @@ class HelmValidator(Validator):
             # --- Use call_ensemble_api for LLM-based fixing ---
             fixed_response = await call_ensemble_api(
                 fix_prompt,
-                [{"model": "gpt-4o"}],
+                [{"provider": "openai", "model": "gpt-4o"}],
                 voting_strategy="majority",
                 stream=False,
             )
