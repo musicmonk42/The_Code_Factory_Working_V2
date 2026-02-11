@@ -740,6 +740,8 @@ class LLMClient:
                     provider = "claude"
                 elif model.startswith("gemini"):
                     provider = "gemini"
+                elif model.startswith("grok"):
+                    provider = "grok"
                 else:
                     # Fall back to default provider from config
                     provider = getattr(self.config, 'llm_provider', 'openai') or "openai"

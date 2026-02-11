@@ -911,6 +911,85 @@ Agent --> Dev : Deliver Report
 
     # --- END FIX ---
 
+    async def _create_llm_fallback_response(
+        self,
+        code_files: Dict[str, str],
+        language: str,
+        run_id: str,
+        error: Exception,
+        start_time: float,
+        log_extra: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a response using rule-based fallback when LLM fails.
+        
+        Args:
+            code_files: Dictionary of file paths to file contents
+            language: Programming language
+            run_id: Run identifier
+            error: The exception that triggered the fallback
+            start_time: Start time of the generation attempt
+            log_extra: Extra logging context
+            
+        Returns:
+            Response dictionary with rule-based tests and report
+        """
+        # Fall back to rule-based generation
+        basic_tests = await self._generate_basic_tests(code_files, language, run_id)
+        
+        await add_provenance(
+            "llm_fallback_to_rule_based",
+            {
+                "run_id": run_id,
+                "reason": str(error),
+                "tests_generated": len(basic_tests),
+                "test_files": list(basic_tests.keys()),
+            },
+            **log_extra,
+        )
+        
+        # Create a simple validation report
+        validation_report = {
+            "status": "completed",
+            "message": "Rule-based tests generated after LLM failure",
+            "tests_count": len(basic_tests),
+            "llm_error": str(error),
+        }
+        
+        # Create explainability report
+        error_message = str(error)[:100]
+        explainability_report = f"""# Test Generation Report
+
+## Summary
+- **Status**: Success (Fallback to rule-based generation)
+- **Tests Generated**: {len(basic_tests)} test files
+- **LLM Used**: No (LLM call failed: {error_message})
+- **Generation Method**: Rule-based AST parsing
+
+## Generated Test Files
+{chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
+
+## Notes
+- Tests are basic stubs that need to be implemented
+- LLM-based generation failed, so rule-based fallback was used
+- To troubleshoot LLM issues, check API keys and model configurations
+"""
+        
+        return {
+            "status": "success",
+            "generated_tests": basic_tests,
+            "final_validation_report": validation_report,
+            "explainability_report": explainability_report,
+            "duration_seconds": time.time() - start_time,
+            "run_id": run_id,
+            "history_summary": [{
+                "action": "llm_fallback_to_rule_based",
+                "status": "completed",
+                "tests_count": len(basic_tests),
+                "llm_error": str(error)[:200],
+            }],
+        }
+
     async def _generate_basic_tests(
         self, code_files: Dict[str, str], language: str, run_id: str
     ) -> Dict[str, str]:

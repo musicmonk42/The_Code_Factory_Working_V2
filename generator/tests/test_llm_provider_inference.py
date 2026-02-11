@@ -5,6 +5,7 @@ Test provider inference in call_ensemble_api
 Tests that model configurations without provider are automatically inferred.
 """
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -153,6 +154,19 @@ class TestProviderInference:
             
             assert result["content"] == "test_response"
 
+    async def test_infer_provider_for_grok_models(self, initialized_client):
+        """Test that grok prefixed models are inferred as grok provider."""
+        
+        async def mock_call_llm_api(prompt, model=None, stream=False, provider=None, **kwargs):
+            assert provider == "grok", f"Expected provider='grok', got provider='{provider}'"
+            return {"content": "test_response"}
+
+        with patch.object(initialized_client, "call_llm_api", side_effect=mock_call_llm_api):
+            models = [{"model": "grok-beta"}]
+            result = await initialized_client.call_ensemble_api("test prompt", models, "majority")
+            
+            assert result["content"] == "test_response"
+
     async def test_fallback_to_config_default_provider(self, initialized_client):
         """Test that unknown models fallback to config default provider."""
         
@@ -232,6 +246,3 @@ class TestProviderInference:
             # Should succeed with only the valid model
             assert result["content"] == "test_response"
             assert len(result["ensemble_results"]) == 1
-
-
-import asyncio
