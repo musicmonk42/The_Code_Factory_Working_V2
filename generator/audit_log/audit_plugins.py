@@ -604,8 +604,6 @@ def _poll_queue(
     q: multiprocessing.Queue, timeout: float
 ) -> Optional[Union[tuple, Exception]]:
     """Non-blocking poll with proper timeout handling."""
-    import time
-    
     start_time = time.time()
     
     while (time.time() - start_time) < timeout:
@@ -732,12 +730,12 @@ async def sandboxed_execute(
 
         # CRITICAL: Close and join the queue to prevent resource leaks
         try:
-            # First, try to drain any remaining items
-            while not q.empty():
-                try:
+            # Drain any remaining items without checking empty() first to avoid race condition
+            try:
+                while True:
                     q.get_nowait()
-                except queue.Empty:
-                    break
+            except queue.Empty:
+                pass  # Queue is now empty
             
             # Cancel pending join_thread operations
             q.cancel_join_thread()
