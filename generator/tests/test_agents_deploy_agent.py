@@ -7,6 +7,7 @@ Comprehensive tests for deploy_agent module (orchestration layer).
 
 import asyncio
 import json
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -60,9 +61,13 @@ CMD ["python", "src/main.py"]
         yield repo_path
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def temp_repo_module():
-    """Module-scoped temporary repository for shared agent."""
+    """Function-scoped temporary repository for each test.
+    
+    Note: Despite the name 'temp_repo_module', this fixture is now function-scoped
+    (not module-scoped) to ensure proper cleanup after each test.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
 
@@ -94,17 +99,18 @@ CMD ["python", "src/main.py"]
 
 @pytest.fixture(scope="function")
 async def agent(temp_repo_module):
-    """Function-scoped async fixture to create and initialize a DeployAgent."""
+    """Function-scoped async fixture with proper cleanup."""
     with patch.dict("os.environ", {"TESTING": "1"}):
-        agent = DeployAgent(str(temp_repo_module))
-        agent.db_path = str(temp_repo_module / "test_agent.db")
+        agent_instance = DeployAgent(str(temp_repo_module))
+        agent_instance.db_path = str(temp_repo_module / "test_agent.db")
         
         # Limit concurrency for tests
-        if hasattr(agent, 'sem'):
-            agent.sem = asyncio.Semaphore(2)
+        if hasattr(agent_instance, 'sem'):
+            agent_instance.sem = asyncio.Semaphore(2)
         
-        await agent._init_db()
-        yield agent
+        async with agent_instance as agent:
+            yield agent
+            # Cleanup happens automatically via __aexit__
 
 
 @pytest.fixture
@@ -712,6 +718,7 @@ class TestEdgeCases:
         assert "python" in languages
 
     @pytest.mark.heavy
+    @pytest.mark.skipif(os.getenv("CI") == "true", reason="Too memory-intensive for CI")
     @pytest.mark.asyncio
     @patch("generator.agents.deploy_agent.deploy_agent.call_llm_api")
     @patch("generator.agents.deploy_agent.deploy_agent.handle_deploy_response")

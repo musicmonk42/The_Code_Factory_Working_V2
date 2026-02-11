@@ -9,6 +9,7 @@ ensuring that prometheus_client stubs are available during test collection.
 
 import sys
 import os
+import gc
 import importlib.machinery
 import importlib.util
 import multiprocessing
@@ -372,3 +373,12 @@ def cleanup_watchdog_at_session_end():
     yield
     _cleanup_watchdog_observers()
     _cleanup_multiprocessing_resources()
+
+
+@pytest.fixture(autouse=True)
+def cleanup_memory_after_test():
+    """Force garbage collection after each test to prevent memory accumulation."""
+    yield
+    # Run GC twice to catch circular references
+    gc.collect()
+    gc.collect()
