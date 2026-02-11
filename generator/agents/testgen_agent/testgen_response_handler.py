@@ -133,9 +133,10 @@ def normalize_test_filename(filename: str, language: str) -> str:
     
     This function ensures test files follow the lowercase `test_` prefix convention
     required by pytest and other testing frameworks. It handles common issues like:
-    - Capital letters at the start (Test.py -> test.py)
+    - Capital letters at the start (Test.py -> test_module.py)
     - Missing test_ prefix (Calculator.py -> test_calculator.py)
     - Improper casing (TestCalculator.py -> test_calculator.py)
+    - Uppercase TEST_ prefix (TEST_calculator.py -> test_calculator.py)
     
     Args:
         filename: Original filename from LLM response
@@ -150,6 +151,8 @@ def normalize_test_filename(filename: str, language: str) -> str:
         >>> normalize_test_filename("TestCalculator.py", "python")
         'test_calculator.py'
         >>> normalize_test_filename("calculator.py", "python")
+        'test_calculator.py'
+        >>> normalize_test_filename("TEST_calculator.py", "python")
         'test_calculator.py'
     """
     ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
@@ -168,14 +171,15 @@ def normalize_test_filename(filename: str, language: str) -> str:
         rest = name_without_ext[4:]  # Remove "Test" prefix
         # Convert PascalCase to snake_case
         normalized_name = "test_" + re.sub(r'(?<!^)(?=[A-Z])', '_', rest).lower()
-    elif not name_without_ext.startswith("test_"):
+    elif name_without_ext.lower().startswith("test_"):
+        # Already has test_ prefix (case-insensitive), just ensure lowercase
+        # This handles both "test_calculator" and "TEST_calculator"
+        normalized_name = name_without_ext.lower()
+    else:
         # "calculator" -> "test_calculator"
         # Convert PascalCase to snake_case first if needed
         snake_case = re.sub(r'(?<!^)(?=[A-Z])', '_', name_without_ext).lower()
         normalized_name = f"test_{snake_case}"
-    else:
-        # Already has test_ prefix, just ensure lowercase
-        normalized_name = name_without_ext.lower()
     
     result = f"{normalized_name}.{ext}"
     

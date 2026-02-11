@@ -628,7 +628,7 @@ class TestFilenameNormalization:
         from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
         
         result = normalize_test_filename("TEST_calculator.py", "python")
-        assert result == "test_test_calculator.py"  # Expected behavior
+        assert result == "test_calculator.py"
 
     def test_normalize_javascript(self):
         """Test normalizing JavaScript test files."""
