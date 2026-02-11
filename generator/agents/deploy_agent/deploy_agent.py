@@ -1461,17 +1461,149 @@ spec:
     port: 80
     targetPort: 8000
   type: LoadBalancer
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {project_name}-config
+data:
+  config.yaml: |
+    # Application configuration
+    environment: production
+    log_level: info
 """
         
         elif target == "helm":
-            # Fallback Helm Chart.yaml
-            return f"""apiVersion: v2
-name: {project_name}
-description: A Helm chart for {project_name}
-type: application
-version: 0.1.0
-appVersion: "1.0"
+            # FIX Bug 3 & 4: Complete Helm chart structure fallback
+            # Return JSON structure for proper file organization
+            return json.dumps({
+                "Chart.yaml": {
+                    "apiVersion": "v2",
+                    "name": project_name,
+                    "description": f"A Helm chart for {project_name}",
+                    "type": "application",
+                    "version": "0.1.0",
+                    "appVersion": "1.0.0"
+                },
+                "values.yaml": {
+                    "replicaCount": 2,
+                    "image": {
+                        "repository": project_name,
+                        "pullPolicy": "IfNotPresent",
+                        "tag": "latest"
+                    },
+                    "service": {
+                        "type": "LoadBalancer",
+                        "port": 80,
+                        "targetPort": 8000
+                    },
+                    "resources": {
+                        "limits": {
+                            "cpu": "500m",
+                            "memory": "512Mi"
+                        },
+                        "requests": {
+                            "cpu": "250m",
+                            "memory": "256Mi"
+                        }
+                    }
+                },
+                "templates": {
+                    "deployment.yaml": f"""apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{{{ include "{project_name}.fullname" . }}}}
+  labels:
+    {{{{- include "{project_name}.labels" . | nindent 4 }}}}
+spec:
+  replicas: {{{{ .Values.replicaCount }}}}
+  selector:
+    matchLabels:
+      {{{{- include "{project_name}.selectorLabels" . | nindent 6 }}}}
+  template:
+    metadata:
+      labels:
+        {{{{- include "{project_name}.selectorLabels" . | nindent 8 }}}}
+    spec:
+      containers:
+      - name: {{{{ .Chart.Name }}}}
+        image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
+        imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
+        ports:
+        - name: http
+          containerPort: {{{{ .Values.service.targetPort }}}}
+          protocol: TCP
+        resources:
+          {{{{- toYaml .Values.resources | nindent 10 }}}}
+""",
+                    "service.yaml": f"""apiVersion: v1
+kind: Service
+metadata:
+  name: {{{{ include "{project_name}.fullname" . }}}}
+  labels:
+    {{{{- include "{project_name}.labels" . | nindent 4 }}}}
+spec:
+  type: {{{{ .Values.service.type }}}}
+  ports:
+    - port: {{{{ .Values.service.port }}}}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{{{- include "{project_name}.selectorLabels" . | nindent 4 }}}}
+""",
+                    "_helpers.tpl": f"""{{{{/*
+Expand the name of the chart.
+*/}}}}
+{{{{- define "{project_name}.name" -}}}}
+{{{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+
+{{{{/*
+Create a default fully qualified app name.
+*/}}}}
+{{{{- define "{project_name}.fullname" -}}}}
+{{{{- if .Values.fullnameOverride }}}}
+{{{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}}}
+{{{{- else }}}}
+{{{{- $name := default .Chart.Name .Values.nameOverride }}}}
+{{{{- if contains $name .Release.Name }}}}
+{{{{- .Release.Name | trunc 63 | trimSuffix "-" }}}}
+{{{{- else }}}}
+{{{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+{{{{- end }}}}
+{{{{- end }}}}
+
+{{{{/*
+Create chart name and version as used by the chart label.
+*/}}}}
+{{{{- define "{project_name}.chart" -}}}}
+{{{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+
+{{{{/*
+Common labels
+*/}}}}
+{{{{- define "{project_name}.labels" -}}}}
+helm.sh/chart: {{{{ include "{project_name}.chart" . }}}}
+{{{{ include "{project_name}.selectorLabels" . }}}}
+{{{{- if .Chart.AppVersion }}}}
+app.kubernetes.io/version: {{{{ .Chart.AppVersion | quote }}}}
+{{{{- end }}}}
+app.kubernetes.io/managed-by: {{{{ .Release.Service }}}}
+{{{{- end }}}}
+
+{{{{/*
+Selector labels
+*/}}}}
+{{{{- define "{project_name}.selectorLabels" -}}}}
+app.kubernetes.io/name: {{{{ include "{project_name}.name" . }}}}
+app.kubernetes.io/instance: {{{{ .Release.Name }}}}
+{{{{- end }}}}
 """
+                }
+            }, indent=2)
         
         else:
             logger.warning(f"[DEPLOY_AGENT] No fallback template available for target: {target}")
