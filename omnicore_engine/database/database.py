@@ -500,10 +500,15 @@ class Database:
             # asyncpg uses server_settings for PostgreSQL configuration
             # - command_timeout: Maximum time (seconds) for individual query execution
             # - statement_timeout: PostgreSQL server-side query timeout (milliseconds)
+            # Read from environment variables with sensible defaults (60s for Railway compatibility)
+            command_timeout = int(os.getenv("DB_COMMAND_TIMEOUT", "60"))
+            connect_timeout = int(os.getenv("DB_CONNECT_TIMEOUT", "30"))
+            
             engine_params["connect_args"] = {
-                "command_timeout": 30,  # Per-query timeout in seconds
+                "command_timeout": command_timeout,  # Per-query timeout in seconds
+                "timeout": connect_timeout,  # Connection timeout in seconds
                 "server_settings": {
-                    "statement_timeout": "30000",  # Server-side query timeout in milliseconds
+                    "statement_timeout": str(command_timeout * 1000),  # Server-side query timeout in milliseconds
                 },
             }
             self.engine: AsyncEngine = create_async_engine(
@@ -511,7 +516,8 @@ class Database:
             )
             self.is_postgres = True
             logger.info(
-                f"Database initialized with PostgreSQL (asyncpg) engine: {self.db_path.split('@')[-1]}"
+                f"Database initialized with PostgreSQL (asyncpg) engine: {self.db_path.split('@')[-1]} "
+                f"(command_timeout={command_timeout}s, connect_timeout={connect_timeout}s)"
             )
         elif self.db_path.startswith("sqlite+aiosqlite://"):
             sqlite_db_file = self.db_path.replace("sqlite+aiosqlite:///", "")
