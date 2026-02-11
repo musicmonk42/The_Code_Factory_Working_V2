@@ -284,14 +284,27 @@ class ResponseParser(ABC):
         logger.info(
             f"Attempting LLM auto-healing for malformed response in {language}."
         )
+        # FIX Issue 2: Improve auto-healing prompt to be more specific about syntax errors
+        # Compute file extension once for clarity
+        file_ext = LANGUAGE_CONFIG.get(language, {}).get('ext', 'txt')
         heal_prompt = f"""
 The following LLM response failed to parse with error: {error}
 
 Original Response:
 {malformed_response}
 
-Please fix this response to be valid {language} test code wrapped in proper markdown code blocks.
-Return only the corrected response with proper file names and code structure.
+Please fix this response to be valid {language} test code. Follow these requirements:
+1. Ensure all code has correct {language} syntax (no syntax errors)
+2. Wrap each test file in markdown code blocks with the format:
+   ```{language}
+   # filename.{file_ext}
+   <valid code here>
+   ```
+3. Remove any explanatory text outside the code blocks
+4. Ensure proper indentation and formatting
+5. Return ONLY the corrected test code in markdown code blocks, no additional commentary
+
+Fix the syntax errors and return valid {language} test code.
 """
 
         for attempt in range(MAX_HEAL_ATTEMPTS):
@@ -346,6 +359,38 @@ Return only the corrected response with proper file names and code structure.
 
         logger.error(f"LLM auto-healing failed after {MAX_HEAL_ATTEMPTS} attempts.")
         return None
+
+
+def _strip_markdown_fences(content: str) -> str:
+    """
+    Strip markdown code fences from content.
+    
+    This addresses Issue 2: Test Generation Syntax Errors
+    LLM responses sometimes have nested or extra markdown fences that cause syntax errors.
+    
+    Args:
+        content: Code content that may have markdown fences
+        
+    Returns:
+        Content with markdown fences removed
+        
+    Example:
+        >>> _strip_markdown_fences("```python\\nprint('hello')\\n```")
+        "print('hello')"
+    """
+    # Strip leading/trailing whitespace first
+    content = content.strip()
+    
+    # Remove opening fence at the start of the string (```python, ```py, ```objective-c, ```f#, etc.)
+    # Use \A to match only the start of the string, not any line
+    # Use [a-zA-Z0-9_+#-]* to handle language identifiers with hyphens, plus, and hash (objective-c, c++, f#, etc.)
+    content = re.sub(r'\A```[a-zA-Z0-9_+#-]*\s*\n?', '', content)
+    
+    # Remove closing fence at the end of the string
+    # Use \Z to match only the end of the string, not any line
+    content = re.sub(r'\n?```\s*\Z', '', content)
+    
+    return content.strip()
 
 
 class DefaultResponseParser(ResponseParser):
@@ -422,9 +467,11 @@ class DefaultResponseParser(ResponseParser):
                 else:
                     filename = f"test_file_{i+1}.{ext}"
 
-                # Apply filename normalization
+                # Apply filename normalization and strip any remaining fences
                 normalized_filename = normalize_test_filename(filename, language)
-                parsed_files[normalized_filename] = code_content.strip()
+                # FIX Issue 2: Strip markdown fences from code content
+                cleaned_content = _strip_markdown_fences(code_content.strip())
+                parsed_files[normalized_filename] = cleaned_content
 
             if parsed_files:
                 logger.info(f"Successfully parsed {len(parsed_files)} code blocks.")
@@ -437,9 +484,11 @@ class DefaultResponseParser(ResponseParser):
         if file_matches:
             parsed_files = {}
             for filename, content in file_matches:
-                # Apply filename normalization
+                # Apply filename normalization and strip fences
                 normalized_filename = normalize_test_filename(filename, language)
-                parsed_files[normalized_filename] = content.strip()
+                # FIX Issue 2: Strip markdown fences from content
+                cleaned_content = _strip_markdown_fences(content.strip())
+                parsed_files[normalized_filename] = cleaned_content
 
             if parsed_files:
                 logger.info(
@@ -453,7 +502,9 @@ class DefaultResponseParser(ResponseParser):
             logger.warning(
                 f"Could not parse structured response. Treating as single file: {single_filename}"
             )
-            return {single_filename: response.strip()}
+            # FIX Issue 2: Strip markdown fences from entire response
+            cleaned_response = _strip_markdown_fences(response.strip())
+            return {single_filename: cleaned_response}
 
         raise ValueError("Failed to parse LLM response using any available strategy.")
 

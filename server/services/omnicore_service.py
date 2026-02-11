@@ -4826,7 +4826,7 @@ class OmniCoreService:
                 try:
                     docgen_payload = {
                         "code_path": codegen_result.get("output_path"),
-                        "doc_type": "api",
+                        "doc_type": "readme",  # FIX Issue 3: Generate README instead of API docs
                         "format": "markdown",
                         "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                     }
