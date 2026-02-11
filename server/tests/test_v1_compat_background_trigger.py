@@ -30,16 +30,6 @@ def client():
 class TestV1CompatBackgroundTrigger:
     """Test suite for v1 compat API background pipeline trigger."""
     
-    def test_import_no_circular_dependency(self):
-        """Test that importing v1_compat router doesn't cause circular import."""
-        from server.routers.v1_compat import router
-        assert router is not None
-        
-    def test_trigger_pipeline_background_imported(self):
-        """Test that _trigger_pipeline_background is properly imported."""
-        from server.routers import v1_compat
-        assert hasattr(v1_compat, '_trigger_pipeline_background')
-        
     @patch('server.routers.v1_compat._trigger_pipeline_background')
     @patch('server.services.omnicore_service.OmniCoreService')
     def test_create_generation_triggers_background_task(
@@ -75,18 +65,31 @@ class TestV1CompatBackgroundTrigger:
         assert job.metadata["requirements"] == "Create a simple Hello World function"
         assert job.metadata["language"] == "python"
         
-        # Verify background task was triggered
+        # Verify background task was triggered exactly once
         # Note: In FastAPI TestClient, background tasks are executed immediately
         # We verify the mock was called with the correct parameters
-        assert mock_trigger.call_count >= 1, "Background task should have been triggered"
+        assert mock_trigger.call_count == 1, "Background task should have been triggered exactly once"
         
         # Verify the call was made with correct arguments
         call_args = mock_trigger.call_args
-        if call_args:
-            # Check that job_id and readme_content were passed
-            call_kwargs = call_args.kwargs if hasattr(call_args, 'kwargs') else call_args[1]
-            assert 'job_id' in call_kwargs or len(call_args.args) > 0
-            assert 'readme_content' in call_kwargs or len(call_args.args) > 1
+        assert call_args is not None, "Background task should have been called"
+        
+        # Check parameter values
+        call_kwargs = call_args.kwargs if hasattr(call_args, 'kwargs') else call_args[1]
+        
+        # Verify job_id parameter
+        if 'job_id' in call_kwargs:
+            assert call_kwargs['job_id'] == job_id, "job_id parameter should match created job"
+        elif len(call_args.args) > 0:
+            assert call_args.args[0] == job_id, "job_id argument should match created job"
+        
+        # Verify readme_content parameter
+        if 'readme_content' in call_kwargs:
+            assert call_kwargs['readme_content'] == "Create a simple Hello World function", \
+                "readme_content should match request requirements"
+        elif len(call_args.args) > 1:
+            assert call_args.args[1] == "Create a simple Hello World function", \
+                "readme_content argument should match request requirements"
         
         # Cleanup
         if job_id in jobs_db:
