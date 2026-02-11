@@ -4113,11 +4113,9 @@ class OmniCoreService:
                             )
                             testgen_result = await self._run_testgen(job_id, testgen_payload)
                             if testgen_result.get("status") == "completed":
-                                stages_completed.append("testgen")
-                                logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
-                                
                                 # BUG FIX: Check if tests actually passed, not just if testgen completed
                                 # Even if testgen "completed", tests may have failed
+                                test_execution_failed = False
                                 if payload.get("include_tests", True):
                                     # Extract test results from testgen_result
                                     result_data = testgen_result.get("result", {})
@@ -4134,15 +4132,35 @@ class OmniCoreService:
                                         fail_count = top_level_results.get("failed", 0) or top_level_results.get("fail_count", 0)
                                     
                                     if fail_count > 0:
+                                        # Test execution failed - use specific marker
+                                        test_execution_failed = True
                                         logger.error(
                                             f"[PIPELINE] Job {job_id} testgen completed but {fail_count} test(s) failed. "
-                                            f"Marking stage as failed but continuing pipeline."
+                                            f"Marking stage as execution_failed but continuing pipeline.",
+                                            extra={
+                                                "job_id": job_id,
+                                                "fail_count": fail_count,
+                                                "failure_type": "test_execution",
+                                            }
                                         )
-                                        stages_completed.append("testgen:failed")
+                                        stages_completed.append("testgen:execution_failed")
+                                
+                                # Only mark as successful if tests passed (or weren't checked)
+                                if not test_execution_failed:
+                                    stages_completed.append("testgen")
+                                    logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
                             elif testgen_result.get("status") == "error":
+                                # Test generation failed - use specific marker
                                 testgen_error = testgen_result.get('message', 'Unknown error')
-                                logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}")
-                                stages_completed.append("testgen:failed")
+                                logger.error(
+                                    f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "error": testgen_error,
+                                        "failure_type": "generation_error",
+                                    }
+                                )
+                                stages_completed.append("testgen:error")
                                 logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure")
                     else:
                         logger.warning(
@@ -4159,9 +4177,10 @@ class OmniCoreService:
                             "stage": "testgen",
                             "error_type": type(e).__name__,
                             "output_path": output_path if 'output_path' in locals() else None,
+                            "failure_type": "exception",
                         }
                     )
-                    stages_completed.append("testgen:failed")
+                    stages_completed.append("testgen:exception")
                     logger.warning(
                         f"[PIPELINE] Job {job_id} continuing pipeline despite testgen exception",
                         extra={"job_id": job_id, "remaining_stages": ["deploy", "docgen", "critique"]}
@@ -4222,8 +4241,15 @@ class OmniCoreService:
                             
                     elif deploy_result.get("status") == "error":
                         deploy_error = deploy_result.get('message', 'Unknown error')
-                        logger.error(f"[PIPELINE] Job {job_id} deploy_all failed - {deploy_error}")
-                        stages_completed.append("deploy:failed")
+                        logger.error(
+                            f"[PIPELINE] Job {job_id} deploy_all failed - {deploy_error}",
+                            extra={
+                                "job_id": job_id,
+                                "error": deploy_error,
+                                "failure_type": "generation_error",
+                            }
+                        )
+                        stages_completed.append("deploy:error")
                         logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite deploy failure")
                 except Exception as e:
                     # Industry Standard: Comprehensive error logging with structured context
@@ -4235,9 +4261,10 @@ class OmniCoreService:
                             "stage": "deploy",
                             "error_type": type(e).__name__,
                             "code_path": codegen_result.get("output_path") if codegen_result else None,
+                            "failure_type": "exception",
                         }
                     )
-                    stages_completed.append("deploy:failed")
+                    stages_completed.append("deploy:exception")
                     logger.warning(
                         f"[PIPELINE] Job {job_id} continuing pipeline despite deploy exception",
                         extra={"job_id": job_id, "remaining_stages": ["docgen", "critique"]}
@@ -4264,8 +4291,15 @@ class OmniCoreService:
                         stages_completed.append("docgen")
                         logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")
                     elif docgen_result.get("status") == "error":
-                        logger.error(f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')}")
-                        stages_completed.append("docgen:failed")
+                        logger.error(
+                            f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')}",
+                            extra={
+                                "job_id": job_id,
+                                "error": docgen_result.get('message'),
+                                "failure_type": "generation_error",
+                            }
+                        )
+                        stages_completed.append("docgen:error")
                         logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite docgen failure")
                 except Exception as e:
                     # Industry Standard: Structured error logging with full context
@@ -4277,9 +4311,10 @@ class OmniCoreService:
                             "stage": "docgen",
                             "error_type": type(e).__name__,
                             "code_path": codegen_result.get("output_path") if codegen_result else None,
+                            "failure_type": "exception",
                         }
                     )
-                    stages_completed.append("docgen:failed")
+                    stages_completed.append("docgen:exception")
                     logger.warning(
                         f"[PIPELINE] Job {job_id} continuing pipeline despite docgen exception",
                         extra={"job_id": job_id, "remaining_stages": ["critique"]}

@@ -1137,15 +1137,16 @@ class WorkflowEngine:
                             "error_type": type(e).__name__,
                             "error_message": str(e),
                             "fallback": "direct_runner",
+                            "execution_mode": "direct_runner",
+                            "reason": "omnicore_error",
                         }
                     )
                     # Fall through to direct Runner execution below
-            
-            # Direct Runner execution (fallback or when OmniCore not available)
-            if not _OMNICORE_WORKFLOW_AVAILABLE:
+            elif not _OMNICORE_WORKFLOW_AVAILABLE:
+                # OmniCore not available from the start
                 logger.info(
                     f"Using direct Runner execution for workflow {workflow_id} (OmniCore not available)",
-                    extra={"workflow_id": workflow_id, "execution_mode": "direct_runner"}
+                    extra={"workflow_id": workflow_id, "execution_mode": "direct_runner", "reason": "omnicore_unavailable"}
                 )
             
             # Initialize provenance tracker for pipeline stage logging

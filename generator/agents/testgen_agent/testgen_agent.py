@@ -434,12 +434,9 @@ class TestgenAgent:
             >>> assert "from fastapi import FastAPI" in files["main.py"]
         """
 
-        async def read_and_scrub_file(fp: str) -> Tuple[str, str]:
+        async def read_code_file(fp: str) -> Tuple[str, str]:
             """
             Read a single code file with path validation.
-            
-            Note: Despite the name "scrub" (legacy), this function does NOT scrub content.
-            The name is preserved for backward compatibility with calling code.
             
             Args:
                 fp: Relative file path from repository root
@@ -493,7 +490,7 @@ class TestgenAgent:
                     f"Error reading file {full_path}: {e}"
                 ) from e
 
-        tasks = [read_and_scrub_file(fp) for fp in target_files]
+        tasks = [read_code_file(fp) for fp in target_files]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         code_files_content = {}

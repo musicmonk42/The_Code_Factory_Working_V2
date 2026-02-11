@@ -178,7 +178,7 @@ async def test_pipeline_continues_after_testgen_failure():
             # All stages should have been attempted
             stages = result["stages_completed"]
             assert "codegen" in stages
-            assert "testgen:failed" in stages  # Failed but tracked
+            assert "testgen:error" in stages  # Error status from _run_testgen
             assert "deploy" in stages  # Deploy ran despite testgen failure
             assert "docgen" in stages  # Docgen ran despite testgen failure
             assert "critique" in stages  # Critique ran despite testgen failure
@@ -236,7 +236,7 @@ async def test_pipeline_continues_after_deploy_failure():
             assert result["status"] == "completed"
             
             stages = result["stages_completed"]
-            assert "deploy:failed" in stages
+            assert "deploy:error" in stages  # Error status from _run_deploy_all
             assert "docgen" in stages  # Docgen ran despite deploy failure
             assert "critique" in stages
 
