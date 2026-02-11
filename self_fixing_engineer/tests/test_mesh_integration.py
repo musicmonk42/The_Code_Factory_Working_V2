@@ -181,6 +181,22 @@ class TestFullWorkflow:
 # --- Cleanup ---
 
 
+@pytest.fixture(autouse=True)
+def force_cleanup():
+    """Aggressively clean up after each test to prevent OOM."""
+    yield
+    import gc
+    # Run gc multiple times - sometimes objects need multiple passes
+    for _ in range(3):
+        gc.collect()
+    
+    # Clear any module-level caches
+    import sys
+    for module_name in list(sys.modules.keys()):
+        if 'mesh' in module_name and hasattr(sys.modules[module_name], '_cache'):
+            sys.modules[module_name]._cache.clear()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def cleanup():
     """Cleans up test artifacts after the session."""
