@@ -224,6 +224,10 @@ class SecurityError(Exception):
 MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
 HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
 
+# Constants for README generation
+MAX_FILES_IN_README = 10  # Maximum files to list in README
+MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
+
 
 def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
     """
@@ -290,7 +294,7 @@ def _generate_fallback_readme(project_name: str = "hello_generator",
         if output_path_obj.exists():
             # Scan for Python files
             py_files = list(output_path_obj.rglob("*.py"))
-            file_list = [str(f.relative_to(output_path_obj)) for f in py_files[:10]]  # Limit to 10
+            file_list = [str(f.relative_to(output_path_obj)) for f in py_files[:MAX_FILES_IN_README]]
             
             # Try to extract endpoints from main.py or app/main.py
             for main_file in [output_path_obj / "main.py", output_path_obj / "app" / "main.py"]:
@@ -352,7 +356,7 @@ pip install -r requirements.txt
 ### Dependencies
 
 The project includes the following key dependencies:
-{% for dep in dependencies[:5] %}
+{% for dep in dependencies %}
 - {{ dep }}
 {% endfor %}
 {% endif %}
@@ -466,8 +470,8 @@ For issues or questions, please refer to the project documentation or contact th
             project_name=project_name,
             language=language,
             endpoints=endpoints,
-            dependencies=dependencies,
-            file_list=file_list
+            dependencies=dependencies[:MAX_DEPENDENCIES_IN_README],  # Limit dependencies shown
+            file_list=file_list  # Already limited when created
         )
     
     # Fallback: Simple string formatting without Jinja2
