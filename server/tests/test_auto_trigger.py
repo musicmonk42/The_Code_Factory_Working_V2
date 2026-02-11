@@ -125,7 +125,7 @@ class TestLLMAutoDetection:
         assert get_default_model_for_provider("grok") == "grok-beta"
         assert get_default_model_for_provider("google") == "gemini-pro"
         assert get_default_model_for_provider("ollama") == "codellama"
-        assert get_default_model_for_provider("unknown") == "gpt-4"
+        assert get_default_model_for_provider("unknown") == "gpt-4o"
 
 
 class TestAutoTriggerPipeline:
