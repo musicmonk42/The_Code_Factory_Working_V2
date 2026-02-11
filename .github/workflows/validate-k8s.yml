@@ -1,0 +1,326 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+name: Validate Kubernetes & Helm
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+    paths:
+      - 'helm/**'
+      - 'k8s/**'
+      - 'docs/SCALABLE_ARCHITECTURE.md'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'helm/**'
+      - 'k8s/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helm-lint:
+    name: Helm Lint & Template
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Helm Lint
+        run: |
+          echo "🔍 Running Helm lint on codefactory chart..."
+          helm lint helm/codefactory/
+          echo "✓ Helm lint passed"
+
+      - name: Helm Template - Default Values
+        run: |
+          echo "📄 Templating Helm chart with default values..."
+          helm template codefactory helm/codefactory/ > /tmp/helm-default.yaml
+          echo "✓ Helm template with default values rendered successfully"
+          echo "📊 Template stats:"
+          echo "  Total lines: $(wc -l < /tmp/helm-default.yaml)"
+          echo "  Resources: $(grep -c '^kind:' /tmp/helm-default.yaml || echo 0)"
+
+      - name: Helm Template - Production with Autoscaling
+        run: |
+          echo "📄 Templating Helm chart with production autoscaling values..."
+          helm template codefactory helm/codefactory/ \
+            --set autoscaling.enabled=true \
+            --set autoscaling.minReplicas=3 \
+            --set autoscaling.maxReplicas=10 \
+            --set autoscaling.targetCPUUtilizationPercentage=70 \
+            --set autoscaling.targetMemoryUtilizationPercentage=80 \
+            --set ingress.enabled=true \
+            --set monitoring.serviceMonitor.enabled=true \
+            --set env.ENABLE_CITUS="1" \
+            > /tmp/helm-production.yaml
+          echo "✓ Helm template with production values rendered successfully"
+          
+          echo "🔍 Verifying HPA is present..."
+          if grep -q "kind: HorizontalPodAutoscaler" /tmp/helm-production.yaml; then
+            echo "✓ HorizontalPodAutoscaler found in rendered output"
+          else
+            echo "❌ ERROR: HorizontalPodAutoscaler not found when autoscaling is enabled"
+            exit 1
+          fi
+          
+          echo "🔍 Verifying Deployment does NOT have static replicas when HPA is enabled..."
+          # Extract the Deployment section and check for replicas field
+          if awk '/kind: Deployment/,/^---$/' /tmp/helm-production.yaml | grep -q "^  replicas:"; then
+            echo "❌ ERROR: Deployment has static replicas set when HPA is enabled"
+            exit 1
+          else
+            echo "✓ Deployment does not have static replicas (correctly managed by HPA)"
+          fi
+          
+          echo "🔍 Verifying ServiceMonitor is present..."
+          if grep -q "kind: ServiceMonitor" /tmp/helm-production.yaml; then
+            echo "✓ ServiceMonitor found when monitoring is enabled"
+          else
+            echo "❌ ERROR: ServiceMonitor not found when monitoring is enabled"
+            exit 1
+          fi
+
+      - name: Helm Template - Migrations as Job
+        run: |
+          echo "📄 Templating Helm chart with migrations.runAs=job..."
+          helm template codefactory helm/codefactory/ \
+            --set migrations.runAs=job \
+            > /tmp/helm-migrations-job.yaml
+          echo "✓ Helm template with migrations as job rendered successfully"
+          
+          echo "🔍 Verifying Job resource is present..."
+          if grep -q "kind: Job" /tmp/helm-migrations-job.yaml; then
+            echo "✓ Job resource found when migrations.runAs=job"
+          else
+            echo "❌ ERROR: Job resource not found when migrations.runAs=job"
+            exit 1
+          fi
+
+  kubeconform:
+    name: Kubeconform Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Install kubeconform
+        run: |
+          echo "📦 Installing kubeconform v0.6.4..."
+          curl -sSLO https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz
+          tar xzf kubeconform-linux-amd64.tar.gz
+          sudo mv kubeconform /usr/local/bin/
+          kubeconform -v
+          echo "✓ kubeconform installed"
+
+      - name: Validate Helm Chart - Default Values
+        run: |
+          echo "🔍 Validating Helm chart with default values against K8s 1.29.0 schema..."
+          helm template codefactory helm/codefactory/ | \
+            kubeconform -strict -kubernetes-version 1.29.0 -summary -skip ServiceMonitor
+          echo "✓ Helm chart with default values validated successfully"
+
+      - name: Validate Helm Chart - Production with HPA
+        run: |
+          echo "🔍 Validating Helm chart with production HPA enabled against K8s 1.29.0 schema..."
+          helm template codefactory helm/codefactory/ \
+            --set autoscaling.enabled=true \
+            --set autoscaling.minReplicas=3 \
+            --set autoscaling.maxReplicas=10 \
+            --set autoscaling.targetCPUUtilizationPercentage=70 \
+            --set autoscaling.targetMemoryUtilizationPercentage=80 \
+            --set ingress.enabled=true \
+            --set monitoring.serviceMonitor.enabled=true | \
+            kubeconform -strict -kubernetes-version 1.29.0 -summary -skip ServiceMonitor
+          echo "✓ Helm chart with production HPA validated successfully"
+
+      - name: Validate k8s/base/*.yaml
+        run: |
+          echo "🔍 Validating k8s/base/*.yaml files against K8s 1.29.0 schema..."
+          for file in k8s/base/*.yaml; do
+            if [ -f "$file" ]; then
+              echo "  Validating $file..."
+              kubeconform -strict -kubernetes-version 1.29.0 "$file"
+            fi
+          done
+          echo "✓ All k8s/base/*.yaml files validated successfully"
+
+      - name: Validate k8s/overlays/production/*.yaml
+        run: |
+          echo "🔍 Validating k8s/overlays/production/*.yaml files against K8s 1.29.0 schema..."
+          for file in k8s/overlays/production/*.yaml; do
+            if [ -f "$file" ] && [ "$(basename "$file")" != "kustomization.yaml" ]; then
+              echo "  Validating $file..."
+              kubeconform -strict -kubernetes-version 1.29.0 "$file"
+            fi
+          done
+          echo "✓ All k8s/overlays/production/*.yaml files validated successfully"
+
+  kustomize-build:
+    name: Kustomize Build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        overlay: [development, staging, production]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          echo "📦 Installing kustomize..."
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+          kustomize version
+          echo "✓ kustomize installed"
+
+      - name: Build Kustomize Overlay - ${{ matrix.overlay }}
+        run: |
+          echo "🔨 Building kustomize overlay: ${{ matrix.overlay }}..."
+          kustomize build k8s/overlays/${{ matrix.overlay }}/ > /tmp/kustomize-${{ matrix.overlay }}.yaml
+          echo "✓ Kustomize overlay ${{ matrix.overlay }} built successfully"
+          echo "📊 Build stats:"
+          echo "  Total lines: $(wc -l < /tmp/kustomize-${{ matrix.overlay }}.yaml)"
+          echo "  Resources: $(grep -c '^kind:' /tmp/kustomize-${{ matrix.overlay }}.yaml || echo 0)"
+
+      - name: Verify Production Resources
+        if: matrix.overlay == 'production'
+        run: |
+          echo "🔍 Verifying production-specific resources..."
+          
+          echo "  Checking for HorizontalPodAutoscaler..."
+          if grep -q "kind: HorizontalPodAutoscaler" /tmp/kustomize-production.yaml; then
+            echo "  ✓ HorizontalPodAutoscaler found"
+          else
+            echo "  ❌ ERROR: HorizontalPodAutoscaler not found in production overlay"
+            exit 1
+          fi
+          
+          echo "  Checking for PodDisruptionBudget..."
+          if grep -q "kind: PodDisruptionBudget" /tmp/kustomize-production.yaml; then
+            echo "  ✓ PodDisruptionBudget found"
+          else
+            echo "  ❌ ERROR: PodDisruptionBudget not found in production overlay"
+            exit 1
+          fi
+          
+          echo "  Checking minimum replicas count..."
+          # Extract replicas from Deployment (minReplicas from HPA is in a different section)
+          HPA_MIN_REPLICAS=$(grep -A 20 "kind: HorizontalPodAutoscaler" /tmp/kustomize-production.yaml | grep "minReplicas:" | head -1 | awk '{print $2}')
+          if [ -n "$HPA_MIN_REPLICAS" ] && [ "$HPA_MIN_REPLICAS" -ge 3 ]; then
+            echo "  ✓ HPA minReplicas is $HPA_MIN_REPLICAS (>= 3)"
+          else
+            echo "  ❌ ERROR: HPA minReplicas is not set or less than 3 (found: ${HPA_MIN_REPLICAS:-none})"
+            exit 1
+          fi
+          
+          echo "✓ All production-specific resources verified"
+
+  config-consistency:
+    name: Architecture Config Consistency
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check HPA Thresholds Consistency
+        run: |
+          echo "🔍 Checking HPA thresholds consistency between production overlay and Helm values..."
+          
+          # Extract values from k8s/overlays/production/hpa.yaml
+          KUSTOMIZE_CPU=$(grep -A 3 "name: cpu" k8s/overlays/production/hpa.yaml | grep "averageUtilization:" | awk '{print $2}')
+          KUSTOMIZE_MEMORY=$(grep -A 3 "name: memory" k8s/overlays/production/hpa.yaml | grep "averageUtilization:" | awk '{print $2}')
+          KUSTOMIZE_MAX_REPLICAS=$(grep "maxReplicas:" k8s/overlays/production/hpa.yaml | awk '{print $2}')
+          
+          # Extract values from helm/codefactory/values.yaml
+          HELM_CPU=$(grep "targetCPUUtilizationPercentage:" helm/codefactory/values.yaml | awk '{print $2}')
+          HELM_MEMORY=$(grep "targetMemoryUtilizationPercentage:" helm/codefactory/values.yaml | awk '{print $2}')
+          HELM_MAX_REPLICAS=$(grep "maxReplicas:" helm/codefactory/values.yaml | head -1 | awk '{print $2}')
+          
+          echo "  Kustomize Production HPA: CPU=$KUSTOMIZE_CPU%, Memory=$KUSTOMIZE_MEMORY%, MaxReplicas=$KUSTOMIZE_MAX_REPLICAS"
+          echo "  Helm Default HPA: CPU=$HELM_CPU%, Memory=$HELM_MEMORY%, MaxReplicas=$HELM_MAX_REPLICAS"
+          
+          MISMATCH=0
+          
+          if [ "$KUSTOMIZE_CPU" != "$HELM_CPU" ]; then
+            echo "  ⚠️  WARNING: CPU target mismatch (Kustomize: $KUSTOMIZE_CPU%, Helm: $HELM_CPU%)"
+            MISMATCH=1
+          fi
+          
+          if [ "$KUSTOMIZE_MEMORY" != "$HELM_MEMORY" ]; then
+            echo "  ⚠️  WARNING: Memory target mismatch (Kustomize: $KUSTOMIZE_MEMORY%, Helm: $HELM_MEMORY%)"
+            MISMATCH=1
+          fi
+          
+          if [ "$KUSTOMIZE_MAX_REPLICAS" != "$HELM_MAX_REPLICAS" ]; then
+            echo "  ⚠️  WARNING: MaxReplicas mismatch (Kustomize: $KUSTOMIZE_MAX_REPLICAS, Helm: $HELM_MAX_REPLICAS)"
+            MISMATCH=1
+          fi
+          
+          if [ $MISMATCH -eq 0 ]; then
+            echo "  ✓ HPA thresholds are consistent between Kustomize and Helm"
+          else
+            echo "  ⚠️  HPA thresholds have mismatches (warnings only, not failing build)"
+          fi
+
+      - name: Verify Message Bus Environment Variables
+        run: |
+          echo "🔍 Verifying message bus environment variables in Helm values..."
+          
+          if grep -q "MESSAGE_BUS_SHARD_COUNT:" helm/codefactory/values.yaml; then
+            SHARD_COUNT=$(grep "MESSAGE_BUS_SHARD_COUNT:" helm/codefactory/values.yaml | awk '{print $2}' | tr -d '"')
+            echo "  ✓ MESSAGE_BUS_SHARD_COUNT found (value: $SHARD_COUNT)"
+          else
+            echo "  ❌ ERROR: MESSAGE_BUS_SHARD_COUNT not found in helm/codefactory/values.yaml"
+            exit 1
+          fi
+          
+          if grep -q "MESSAGE_BUS_WORKERS_PER_SHARD:" helm/codefactory/values.yaml; then
+            WORKERS=$(grep "MESSAGE_BUS_WORKERS_PER_SHARD:" helm/codefactory/values.yaml | awk '{print $2}' | tr -d '"')
+            echo "  ✓ MESSAGE_BUS_WORKERS_PER_SHARD found (value: $WORKERS)"
+          else
+            echo "  ❌ ERROR: MESSAGE_BUS_WORKERS_PER_SHARD not found in helm/codefactory/values.yaml"
+            exit 1
+          fi
+          
+          echo "✓ All required message bus environment variables are present"
+
+      - name: Verify Security Context in k8s/base/api-deployment.yaml
+        run: |
+          echo "🔍 Verifying security context in k8s/base/api-deployment.yaml..."
+          
+          # Check pod-level security context
+          if grep -A 5 "securityContext:" k8s/base/api-deployment.yaml | grep -q "runAsNonRoot: true"; then
+            echo "  ✓ runAsNonRoot: true found in pod securityContext"
+          else
+            echo "  ❌ ERROR: runAsNonRoot: true not found in pod securityContext"
+            exit 1
+          fi
+          
+          # Check container-level security context for capabilities
+          if grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:" | grep -q "drop:" && \
+             grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:" | grep -A 1 "drop:" | grep -q "ALL"; then
+            echo "  ✓ capabilities.drop: ALL found in container securityContext"
+          else
+            echo "  ❌ ERROR: capabilities.drop: ALL not found in container securityContext"
+            exit 1
+          fi
+          
+          echo "✓ Security context is properly configured"
