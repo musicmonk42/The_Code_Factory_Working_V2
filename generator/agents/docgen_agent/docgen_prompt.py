@@ -197,6 +197,16 @@ COMMON_SENSITIVE_PATTERNS_REF = [
     r"\b(?:\d{3}[- ]?\d{2}[- ]?\d{4})\b",  # SSN-like patterns
 ]
 
+# Canonical doc_type mapping to ensure template names match regardless of input casing
+DOC_TYPE_CANONICAL = {
+    "readme": "README",
+    "api": "API",
+    "api_reference": "API",
+    "developer": "DEVELOPER",
+    "dev": "DEVELOPER",
+    "user": "README",
+}
+
 
 def scrub_text(text: str) -> str:
     """
@@ -672,6 +682,21 @@ class PromptTemplateRegistry:
             logger.debug(f"Template '{full_template_file_name}' loaded successfully.")
             return template
         except Exception as e:
+            # Defense-in-depth: Try case-insensitive fallback
+            try:
+                template_dir = Path(self.plugin_dir)
+                if template_dir.exists():
+                    for file in template_dir.iterdir():
+                        if file.name.lower() == full_template_file_name.lower() and file.is_file():
+                            logger.warning(
+                                f"Template '{full_template_file_name}' not found, but found case-insensitive match: '{file.name}'. "
+                                f"Using '{file.name}' instead. Consider normalizing doc_type casing."
+                            )
+                            template = self.env.get_template(file.name)
+                            return template
+            except Exception as fallback_error:
+                logger.debug(f"Case-insensitive fallback failed: {fallback_error}")
+
             error_msg = f"Required template '{full_template_file_name}' not found in '{self.plugin_dir}' or failed to load: {e}. Please ensure this template file exists and is valid."
             logger.error(error_msg, exc_info=True)
             raise ValueError(error_msg)
@@ -1048,7 +1073,9 @@ class DocGenPromptAgent:
             # Gather comprehensive context data
             context_data = await self.gather_context(target_files, str(self.repo_path))
 
-            full_template_name = f"{doc_type}_{template_name}"
+            # Use canonical doc_type mapping to normalize template names
+            doc_type_normalized = DOC_TYPE_CANONICAL.get(doc_type.lower(), doc_type)
+            full_template_name = f"{doc_type_normalized}_{template_name}"
             template = self.template_registry.get_template(full_template_name)
 
             scrubbed_instructions = scrub_text(instructions) if instructions else None

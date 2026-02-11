@@ -44,6 +44,7 @@ except ModuleNotFoundError:
 # --- FIX: Replace local audit_log with runner.runner_audit utility alias ---
 # Use the clearer alias as requested for global audit/telemetry logging.
 # Import from runner_audit to avoid circular dependency with runner_logging
+# Since run_all_lints_and_checks is async, we need to await the async log_audit_event
 from runner.runner_audit import log_audit_event as log_action
 
 # --- END FIX ---
@@ -1252,7 +1253,7 @@ async def run_all_lints_and_checks(
         total_errors = len(final_errors)
         errors_by_severity = CollectionsCounter(e["severity"] for e in final_errors)
         # Use runner-provided audit logging utility
-        log_action(
+        await log_action(
             "All Lints and Checks Completed",
             {
                 "language": language,

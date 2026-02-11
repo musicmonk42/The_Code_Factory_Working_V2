@@ -42,8 +42,8 @@ try:
 
     # Assuming this is the canonical path provided by the user for the test runner sandbox
     from runner.runner_core import run_tests_in_sandbox
-    # FIX: Import log_audit_event from runner_audit to avoid circular dependency
-    from runner.runner_audit import log_audit_event as log_action
+    # FIX: Import log_audit_event_sync from runner_audit for use in sync contexts
+    from runner.runner_audit import log_audit_event_sync as log_action
     from runner.runner_security_utils import (
         scan_for_vulnerabilities,
         redact_secrets as scrub_pii_and_secrets,
