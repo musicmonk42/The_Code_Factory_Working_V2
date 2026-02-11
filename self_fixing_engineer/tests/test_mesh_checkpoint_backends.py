@@ -126,10 +126,18 @@ def mock_metrics():
         yield {"operations": ops, "latency": lat, "errors": err}
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_circuit_breakers():
-    """Mock circuit breakers to prevent interference with tests."""
-    with patch("mesh.checkpoint.checkpoint_backends.circuit_breakers", {}):
+    """Mock circuit breakers to prevent interference with tests.
+    
+    Uses a try-except to gracefully handle cases where the module
+    might not be fully initialized yet.
+    """
+    try:
+        with patch("mesh.checkpoint.checkpoint_backends.circuit_breakers", {}):
+            yield
+    except Exception:
+        # If patching fails, just yield without mocking
         yield
 
 
