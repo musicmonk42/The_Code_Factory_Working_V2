@@ -29,7 +29,7 @@ from typing import Dict, List, Optional, Any
 from uuid import uuid4
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, validator
 
 from server.schemas import (
@@ -43,6 +43,7 @@ from server.schemas import (
 from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db
+from server.routers.generator import _trigger_pipeline_background
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,7 @@ def get_omnicore_service() -> OmniCoreService:
 @router.post("/generate", response_model=V1GenerateResponse, status_code=202)
 async def create_generation(
     request: V1GenerateRequest,
+    background_tasks: BackgroundTasks,
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> V1GenerateResponse:
@@ -239,9 +241,15 @@ async def create_generation(
     except Exception as e:
         logger.warning(f"Failed to emit job.created event for v1 generation {job_id}: {e}")
     
-    # Initiate code generation (async, don't wait for completion)
-    # Note: In a real production system, this would be queued via background tasks
-    # For now, we just return the job ID and the client can poll for status
+    # Trigger the generation pipeline as a background task
+    # Uses the requirements text as the README content for the pipeline
+    background_tasks.add_task(
+        _trigger_pipeline_background,
+        job_id=job_id,
+        readme_content=request.requirements,
+        generator_service=generator_service,
+    )
+    logger.info(f"Background pipeline triggered for v1 generation job {job_id}")
     
     return V1GenerateResponse(
         id=job_id,
