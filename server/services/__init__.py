@@ -18,7 +18,7 @@ All services follow industry best practices:
 """
 
 from .generator_service import GeneratorService, get_generator_service
-from .omnicore_service import OmniCoreService, get_omnicore_service
+from .omnicore_service import OmniCoreService, get_omnicore_service, get_omnicore_service_async
 from .sfe_service import SFEService
 
 # Import job finalization service functions
@@ -43,6 +43,7 @@ __all__ = [
     "get_generator_service",
     "OmniCoreService",
     "get_omnicore_service",
+    "get_omnicore_service_async",
     "SFEService",
     
     # Job finalization
