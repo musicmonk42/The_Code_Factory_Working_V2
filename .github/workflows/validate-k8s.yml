@@ -222,7 +222,7 @@ jobs:
           fi
           
           echo "  Checking minimum replicas count..."
-          # Extract replicas from Deployment (minReplicas from HPA is in a different section)
+          # Extract minReplicas from HPA resource (using -A 20 to capture full HPA spec section)
           HPA_MIN_REPLICAS=$(grep -A 20 "kind: HorizontalPodAutoscaler" /tmp/kustomize-production.yaml | grep "minReplicas:" | head -1 | awk '{print $2}')
           if [ -n "$HPA_MIN_REPLICAS" ] && [ "$HPA_MIN_REPLICAS" -ge 3 ]; then
             echo "  ✓ HPA minReplicas is $HPA_MIN_REPLICAS (>= 3)"
@@ -306,7 +306,7 @@ jobs:
         run: |
           echo "🔍 Verifying security context in k8s/base/api-deployment.yaml..."
           
-          # Extract all securityContext sections for efficiency
+          # Extract all securityContext sections for efficiency (using -A 10 to capture full securityContext blocks)
           SECURITY_CONTEXTS=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml)
           
           # Check pod-level security context
@@ -317,7 +317,7 @@ jobs:
             exit 1
           fi
           
-          # Check container-level security context for capabilities
+          # Check container-level security context for capabilities (using -A 5 to capture capabilities block)
           CAPABILITIES_SECTION=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:")
           if echo "$CAPABILITIES_SECTION" | grep -q "drop:" && echo "$CAPABILITIES_SECTION" | grep -A 1 "drop:" | grep -q "ALL"; then
             echo "  ✓ capabilities.drop: ALL found in container securityContext"
