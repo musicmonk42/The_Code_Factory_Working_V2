@@ -548,7 +548,7 @@ def _create_pydantic_classes():
                 network_disabled: bool = True,
                 allow_write: bool = False,
                 privileged: bool = False,
-                run_as_user: str = None,
+                run_as_user: Optional[str] = None,
                 seccomp_profile: Optional[str] = None,
                 apparmor_profile: Optional[str] = None,
             ):
