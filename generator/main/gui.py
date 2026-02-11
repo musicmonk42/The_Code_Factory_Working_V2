@@ -658,8 +658,7 @@ class MainApp(App):
             app_logger.addHandler(self.tui_log_handler)
 
         self.runner = Runner(load_config(RUNNER_CONFIG_PATH))
-        from generator.intent_parser.intent_parser import IntentParser
-
+        # Note: IntentParser is already imported at module level (real or dummy)
         self.intent_parser = IntentParser()
         self.clarifier_table.add_columns("ID", "Question", "Status")
 
