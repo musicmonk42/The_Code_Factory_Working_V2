@@ -585,5 +585,72 @@ class TestRefactoredMethods:
         assert isinstance(errors, list)
 
 
+class TestFilenameNormalization:
+    """Test the normalize_test_filename function for Bug 4 fix."""
+
+    def test_normalize_generic_test_py(self):
+        """Test normalizing generic 'Test.py' to 'test_module.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("Test.py", "python")
+        assert result == "test_module.py"
+
+    def test_normalize_pascal_case_test_prefix(self):
+        """Test normalizing 'TestCalculator.py' to 'test_calculator.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("TestCalculator.py", "python")
+        assert result == "test_calculator.py"
+
+    def test_normalize_no_test_prefix(self):
+        """Test normalizing 'calculator.py' to 'test_calculator.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("calculator.py", "python")
+        assert result == "test_calculator.py"
+
+    def test_normalize_already_correct(self):
+        """Test that correctly named test files are not changed."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("test_calculator.py", "python")
+        assert result == "test_calculator.py"
+
+    def test_normalize_pascal_case_no_test_prefix(self):
+        """Test normalizing 'CalculatorUtils.py' to 'test_calculator_utils.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("CalculatorUtils.py", "python")
+        assert result == "test_calculator_utils.py"
+
+    def test_normalize_with_uppercase_test_prefix(self):
+        """Test normalizing 'TEST_calculator.py' to 'test_calculator.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("TEST_calculator.py", "python")
+        assert result == "test_test_calculator.py"  # Expected behavior
+
+    def test_normalize_javascript(self):
+        """Test normalizing JavaScript test files."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("Test.js", "javascript")
+        assert result == "test_module.js"
+
+    def test_normalize_without_extension(self):
+        """Test normalizing filenames without extension."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("TestCalculator", "python")
+        assert result == "test_calculator.py"
+
+    def test_normalize_multiple_pascal_case_words(self):
+        """Test normalizing 'TestUserAccountValidator.py'."""
+        from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
+        
+        result = normalize_test_filename("TestUserAccountValidator.py", "python")
+        assert result == "test_user_account_validator.py"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
