@@ -428,8 +428,11 @@ class TestParserTab:
 
             # Verify file exists
             assert Path(file_path).exists()
-            # Verify API was called
+            # Verify API was called with file data (files= parameter is used for file uploads)
             assert mock_api.called
+            # Verify the API was called with files parameter for file upload
+            call_kwargs = mock_api.call_args.kwargs if mock_api.call_args else {}
+            assert "files" in call_kwargs, "API should be called with 'files' parameter for file upload"
 
 
 class TestClarifierTab:
@@ -444,7 +447,7 @@ class TestClarifierTab:
         app = MainApp()
         async with app.run_test() as pilot:
             await asyncio.sleep(0.01)  # Wait for on_mount to add columns
-            # add_row is NOT async, don't await it
+            # Textual's DataTable.add_row is synchronous, not async
             app.clarifier_table.add_row(
                 "q123", "Test Question?", "Pending", key="q123"
             )
