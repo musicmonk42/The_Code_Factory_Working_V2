@@ -90,7 +90,12 @@ class PubSubWorkerThread:
     """Stub class for redis.client.PubSubWorkerThread to satisfy type annotations."""
     pass
 
+class Redis:
+    """Stub class for redis.client.Redis to satisfy type annotations (used by portalocker)."""
+    pass
+
 mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
+mock_redis_client.Redis = Redis
 mock_redis_base.client = mock_redis_client
 
 sys.modules["redis"] = mock_redis_base
