@@ -80,6 +80,9 @@ from hypothesis import HealthCheck, given, settings  # Added HealthCheck import
 from hypothesis.strategies import dictionaries, text
 from prometheus_client import REGISTRY
 
+# Add module-level timeout
+pytestmark = pytest.mark.timeout(120)  # 2 minute max per test in this file
+
 # --------------------------------------------------------------------------- #
 # 1. Make the *generator* package importable from the repo root
 # --------------------------------------------------------------------------- #
