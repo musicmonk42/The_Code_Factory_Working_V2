@@ -605,6 +605,22 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     """
     raw = raw_response.strip()
     
+    # FIX Issue 2: Early detection of mermaid diagrams and markdown contamination
+    # Reject responses that look like markdown explanations rather than config
+    if '```mermaid' in raw.lower() or '``` mermaid' in raw.lower():
+        logger.error(f"Response contains mermaid diagram, rejecting: {raw[:200]}")
+        raise ValueError(
+            "Invalid LLM response: Contains mermaid diagram instead of configuration. "
+            "Expected pure configuration content (Dockerfile, YAML, etc.) without diagrams or markdown formatting."
+        )
+    
+    # Check for multiple code blocks which indicates explanatory markdown document
+    code_block_count = raw.count('```')
+    if code_block_count > 2:  # More than one code block (open + close)
+        logger.warning(
+            f"Response contains {code_block_count // 2} code blocks, may be markdown document rather than config"
+        )
+    
     # Check if empty
     if not raw:
         # FIX 6: Record LLM output format classification
@@ -743,11 +759,18 @@ def _sanitize_llm_output(raw_output: str) -> str:
         >>> _sanitize_llm_output(raw)
         'apiVersion: v1'
     """
+    # FIX Issue 2: Enhanced mermaid and markdown block detection
     # Strip mermaid blocks completely (they're not part of the config)
-    raw_output = re.sub(r'```mermaid[\s\S]*?```', '', raw_output, flags=re.MULTILINE)
+    # Use case-insensitive matching and handle variations like "```mermaid" or "``` mermaid"
+    raw_output = re.sub(r'```\s*mermaid[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
     
     # Strip other common diagram/visualization blocks
-    raw_output = re.sub(r'```(dot|plantuml|graphviz)[\s\S]*?```', '', raw_output, flags=re.MULTILINE)
+    raw_output = re.sub(r'```\s*(dot|plantuml|graphviz)[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # Strip any remaining triple backtick blocks that aren't YAML/Dockerfile content
+    # This catches explanatory text blocks and other non-config markdown
+    # Match blocks that start with ```<non-config-language>
+    raw_output = re.sub(r'```\s*(bash|sh|python|javascript|json)[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
     
     # Strip code fences wrapping the actual content
     # Match: ```yaml (or ```yml, ```dockerfile, etc.) at start of line
@@ -1326,8 +1349,17 @@ class YAMLHandler(FormatHandler):
             Sanitized YAML string with markdown artifacts removed
         """
         lines = []
+        in_mermaid_block = False  # Track if we're inside a mermaid block
         for line in raw.split('\n'):
-            # FIX Issue 5: Enhanced markdown detection and stripping
+            # FIX Issue 2: Enhanced markdown detection and stripping
+            # Skip mermaid diagram blocks completely
+            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+                in_mermaid_block = True
+                continue
+            if in_mermaid_block:
+                if '```' in line:
+                    in_mermaid_block = False
+                continue
             
             # Skip lines that start with markdown headers (# followed by space and any letter)
             if re.match(r'^\s*#\s+[A-Za-z]', line):
