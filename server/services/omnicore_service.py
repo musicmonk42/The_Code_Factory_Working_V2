@@ -2618,33 +2618,59 @@ class OmniCoreService:
                         filename = "Dockerfile"
                         target_dir = output_dir
                     elif target == "kubernetes" or target == "k8s":
-                        # FIX: Kubernetes files go into k8s/ subdirectory
+                        # FIX Bug 3 & 4: Kubernetes files go into k8s/ subdirectory with improved YAML splitting
                         target_dir = output_dir / "k8s"
                         target_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Parse YAML content to create separate files (deployment.yaml, service.yaml)
                         # The LLM typically generates multi-document YAML separated by "---"
                         yaml_docs = config_content.split("---")
+                        doc_count = 0
+                        
                         for idx, doc in enumerate(yaml_docs):
                             doc = doc.strip()
+                            
+                            # FIX Bug 3: Handle edge cases in YAML splitting
+                            # Skip empty documents or those that are too short to be valid
                             if not doc or len(doc) < MIN_YAML_DOC_LENGTH:
-                                continue  # Skip empty or trivial documents
+                                logger.debug(f"Skipping empty/short K8s YAML document {idx}")
+                                continue
                             
                             # Determine filename based on document kind
-                            if "kind: Deployment" in doc:
-                                doc_filename = "deployment.yaml"
-                            elif "kind: Service" in doc:
-                                doc_filename = "service.yaml"
-                            elif "kind: Ingress" in doc:
-                                doc_filename = "ingress.yaml"
-                            elif "kind: ConfigMap" in doc:
-                                doc_filename = "configmap.yaml"
-                            else:
-                                doc_filename = f"resource-{idx}.yaml"
+                            # Use case-insensitive search for better compatibility
+                            doc_lower = doc.lower()
                             
+                            # Try to extract the kind field more robustly
+                            kind_match = re.search(r'kind:\s*(\w+)', doc, re.IGNORECASE)
+                            kind = kind_match.group(1) if kind_match else None
+                            
+                            if kind:
+                                # Map kind to filename
+                                kind_to_filename = {
+                                    "Deployment": "deployment.yaml",
+                                    "Service": "service.yaml",
+                                    "Ingress": "ingress.yaml",
+                                    "ConfigMap": "configmap.yaml",
+                                    "Secret": "secret.yaml",
+                                    "HorizontalPodAutoscaler": "hpa.yaml",
+                                    "PersistentVolumeClaim": "pvc.yaml",
+                                    "ServiceAccount": "serviceaccount.yaml",
+                                    "Role": "role.yaml",
+                                    "RoleBinding": "rolebinding.yaml",
+                                    "NetworkPolicy": "networkpolicy.yaml",
+                                }
+                                doc_filename = kind_to_filename.get(kind, f"{kind.lower()}.yaml")
+                            else:
+                                # Fallback: use index-based name if kind is not found
+                                doc_filename = f"resource-{doc_count}.yaml"
+                                logger.warning(f"Could not determine kind for K8s document {idx}, using fallback filename")
+                            
+                            # Write the document to file
                             file_path = target_dir / doc_filename
                             async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                                 await f.write(doc)
+                            
+                            doc_count += 1
                             
                             try:
                                 rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
@@ -2652,22 +2678,112 @@ class OmniCoreService:
                             except ValueError as e:
                                 logger.warning(f"[DEPLOY] File {file_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
                                 generated_files.append(str(file_path))
-                            logger.info(f"Generated kubernetes file: {file_path}")
+                            logger.info(f"Generated kubernetes file: {file_path} (kind: {kind or 'unknown'})")
+                        
+                        if doc_count == 0:
+                            logger.warning(f"[DEPLOY] No valid Kubernetes documents found in content for target {target}")
                         
                         continue  # Skip the default file writing below
                     elif target == "helm":
-                        # FIX: Helm files go into helm/ subdirectory
+                        # FIX Bug 3 & 4: Helm files go into helm/ subdirectory with proper chart structure
                         target_dir = output_dir / "helm"
                         target_dir.mkdir(parents=True, exist_ok=True)
                         templates_dir = target_dir / "templates"
                         templates_dir.mkdir(parents=True, exist_ok=True)
                         
-                        # Parse and organize helm files
-                        # The LLM typically generates all helm files in one response
-                        # We need to split Chart.yaml, values.yaml, and templates
+                        # Parse Helm chart content from LLM
+                        # The HelmHandler returns structured data with Chart.yaml, values.yaml, templates
+                        try:
+                            # Try to parse as JSON first (structured response)
+                            import json
+                            helm_data = json.loads(config_content)
+                            
+                            # Write Chart.yaml
+                            if "Chart.yaml" in helm_data:
+                                chart_file = target_dir / "Chart.yaml"
+                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                    if isinstance(helm_data["Chart.yaml"], dict):
+                                        import yaml
+                                        await f.write(yaml.dump(helm_data["Chart.yaml"], default_flow_style=False))
+                                    else:
+                                        await f.write(str(helm_data["Chart.yaml"]))
+                                generated_files.append(str(chart_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file: {chart_file}")
+                            
+                            # Write values.yaml
+                            if "values.yaml" in helm_data:
+                                values_file = target_dir / "values.yaml"
+                                async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                    if isinstance(helm_data["values.yaml"], dict):
+                                        import yaml
+                                        await f.write(yaml.dump(helm_data["values.yaml"], default_flow_style=False))
+                                    else:
+                                        await f.write(str(helm_data["values.yaml"]))
+                                generated_files.append(str(values_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file: {values_file}")
+                            
+                            # Write template files
+                            if "templates" in helm_data and isinstance(helm_data["templates"], dict):
+                                for template_name, template_content in helm_data["templates"].items():
+                                    # Ensure template name is just the filename
+                                    if "/" in template_name:
+                                        template_name = template_name.split("/")[-1]
+                                    template_file = templates_dir / template_name
+                                    async with aiofiles.open(template_file, "w", encoding="utf-8") as f:
+                                        await f.write(str(template_content))
+                                    generated_files.append(str(template_file.relative_to(repo_path)))
+                                    logger.info(f"Generated helm template: {template_file}")
+                        except (json.JSONDecodeError, ValueError):
+                            # Fallback: treat as raw YAML content for Chart.yaml
+                            # Split by common delimiters or file markers
+                            logger.warning("[DEPLOY] Helm content not in expected JSON format, using fallback parsing")
+                            
+                            # Try to split by file markers (# Chart.yaml, # values.yaml, etc.)
+                            if "# Chart.yaml" in config_content or "# values.yaml" in config_content:
+                                # Parse structured YAML with file markers
+                                import re
+                                sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', config_content)
+                                
+                                current_file = None
+                                for i, section in enumerate(sections):
+                                    if i % 2 == 1:  # File name
+                                        current_file = section.strip()
+                                    elif current_file and section.strip():  # File content
+                                        if current_file.startswith("templates/"):
+                                            # Template file
+                                            template_name = current_file.replace("templates/", "")
+                                            template_file = templates_dir / template_name
+                                            async with aiofiles.open(template_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(template_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm template: {template_file}")
+                                        elif current_file == "Chart.yaml":
+                                            chart_file = target_dir / "Chart.yaml"
+                                            async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(chart_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm file: {chart_file}")
+                                        elif current_file == "values.yaml":
+                                            values_file = target_dir / "values.yaml"
+                                            async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(values_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm file: {values_file}")
+                            else:
+                                # Final fallback: write entire content as Chart.yaml
+                                chart_file = target_dir / "Chart.yaml"
+                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                    await f.write(config_content)
+                                generated_files.append(str(chart_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file (fallback): {chart_file}")
+                                
+                                # Create minimal values.yaml
+                                values_file = target_dir / "values.yaml"
+                                async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                    await f.write("# Helm chart values\nreplicaCount: 1\n")
+                                generated_files.append(str(values_file.relative_to(repo_path)))
                         
-                        # For now, write the content to Chart.yaml and create a basic structure
-                        # A more sophisticated approach would parse the LLM output and organize files
+                        continue  # Skip the default file writing below
                         chart_path = target_dir / "Chart.yaml"
                         values_path = target_dir / "values.yaml"
                         
