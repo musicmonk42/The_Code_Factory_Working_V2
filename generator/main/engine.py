@@ -1137,7 +1137,6 @@ class WorkflowEngine:
                             "error_type": type(e).__name__,
                             "error_message": str(e),
                             "fallback": "direct_runner",
-                            "execution_mode": "direct_runner",
                             "reason": "omnicore_error",
                         }
                     )

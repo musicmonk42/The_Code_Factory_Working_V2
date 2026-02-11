@@ -442,7 +442,9 @@ class TestgenAgent:
                 fp: Relative file path from repository root
             
             Returns:
-                Tuple of (original_path, file_content)
+                Tuple of (original_path, file_content) where:
+                - original_path: The file path as provided (preserves relative path format)
+                - file_content: Raw file content without any modifications
             
             Raises:
                 ValueError: If path is outside repository or file cannot be read

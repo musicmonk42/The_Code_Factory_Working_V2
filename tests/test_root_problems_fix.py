@@ -246,12 +246,13 @@ async def test_pipeline_continues_after_deploy_failure():
 # ============================================================================
 
 def test_generator_plugin_wrapper_import():
-    """Test that generator_plugin_wrapper can be imported successfully."""
-    # This test validates that the import added to server/main.py will succeed
+    """Test that generator_plugin_wrapper can be imported and is functional."""
     try:
         import generator.agents.generator_plugin_wrapper
-        # If we get here, import succeeded
+        # Verify module has the expected attribute
         assert hasattr(generator.agents.generator_plugin_wrapper, "run_generator_workflow")
+        # Verify it's actually callable
+        assert callable(generator.agents.generator_plugin_wrapper.run_generator_workflow)
     except ImportError as e:
         pytest.fail(f"Failed to import generator_plugin_wrapper: {e}")
 
