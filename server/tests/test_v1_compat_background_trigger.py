@@ -1,0 +1,128 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+"""
+Tests for v1 compatibility API background pipeline trigger.
+
+Verifies that the POST /api/v1/generate endpoint correctly triggers
+the background generation pipeline.
+"""
+
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from server.schemas import Job, JobStatus
+from server.storage import jobs_db
+
+
+@pytest.fixture
+def client():
+    """Create a test client for the FastAPI app.
+    Import deferred to fixture to avoid expensive initialization during collection.
+    Uses context manager to properly trigger lifespan events.
+    """
+    from server.main import app
+    with TestClient(app) as client:
+        yield client
+
+
+class TestV1CompatBackgroundTrigger:
+    """Test suite for v1 compat API background pipeline trigger."""
+    
+    @patch('server.routers.v1_compat._trigger_pipeline_background')
+    @patch('server.services.omnicore_service.OmniCoreService')
+    def test_create_generation_triggers_background_task(
+        self, mock_omnicore_class, mock_trigger, client
+    ):
+        """Test that POST /api/v1/generate triggers background pipeline."""
+        # Setup mock OmniCore service
+        mock_omnicore = Mock()
+        mock_omnicore.emit_event = AsyncMock()
+        mock_omnicore_class.return_value = mock_omnicore
+        
+        # Make request
+        response = client.post(
+            "/api/v1/generate",
+            json={
+                "requirements": "Create a simple Hello World function",
+                "language": "python",
+                "framework": "flask"
+            }
+        )
+        
+        # Check response
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        assert data["status"] == "pending"
+        job_id = data["id"]
+        
+        # Verify job was created
+        assert job_id in jobs_db
+        job = jobs_db[job_id]
+        assert job.status == JobStatus.PENDING
+        assert job.metadata["requirements"] == "Create a simple Hello World function"
+        assert job.metadata["language"] == "python"
+        
+        # Verify background task was triggered exactly once
+        # Note: In FastAPI TestClient, background tasks are executed immediately
+        # We verify the mock was called with the correct parameters
+        assert mock_trigger.call_count == 1, "Background task should have been triggered exactly once"
+        
+        # Verify the call was made with correct arguments
+        call_args = mock_trigger.call_args
+        assert call_args is not None, "Background task should have been called"
+        
+        # Check parameter values
+        call_kwargs = call_args.kwargs if hasattr(call_args, 'kwargs') else call_args[1]
+        
+        # Verify job_id parameter
+        if 'job_id' in call_kwargs:
+            assert call_kwargs['job_id'] == job_id, "job_id parameter should match created job"
+        elif len(call_args.args) > 0:
+            assert call_args.args[0] == job_id, "job_id argument should match created job"
+        
+        # Verify readme_content parameter
+        if 'readme_content' in call_kwargs:
+            assert call_kwargs['readme_content'] == "Create a simple Hello World function", \
+                "readme_content should match request requirements"
+        elif len(call_args.args) > 1:
+            assert call_args.args[1] == "Create a simple Hello World function", \
+                "readme_content argument should match request requirements"
+        
+        # Cleanup
+        if job_id in jobs_db:
+            del jobs_db[job_id]
+    
+    def test_create_generation_with_minimal_payload(self, client):
+        """Test POST /api/v1/generate with minimal payload."""
+        response = client.post(
+            "/api/v1/generate",
+            json={
+                "requirements": "Create a test app",
+                "language": "python"
+            }
+        )
+        
+        assert response.status_code == 202
+        data = response.json()
+        assert "id" in data
+        job_id = data["id"]
+        
+        # Cleanup
+        if job_id in jobs_db:
+            del jobs_db[job_id]
+    
+    def test_create_generation_validates_language(self, client):
+        """Test that invalid language is rejected."""
+        response = client.post(
+            "/api/v1/generate",
+            json={
+                "requirements": "Create a test app",
+                "language": "invalid_language"
+            }
+        )
+        
+        # Should return validation error
+        assert response.status_code == 422
