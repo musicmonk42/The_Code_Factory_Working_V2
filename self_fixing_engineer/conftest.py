@@ -98,13 +98,34 @@ def pytest_collection_finish(session):
     Clear PYTEST_COLLECTING so that actual test runs can load components.
     """
     os.environ.pop("PYTEST_COLLECTING", None)
-    # Now trigger component loading for arbiter if it's been imported
+
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_arbiter_components():
+    """
+    Initialize arbiter components after collection is complete.
+    
+    This fixture runs once per session, after collection and after mocks are cleaned up.
+    It respects the PYTEST_COLLECTING_ONLY environment variable to avoid loading
+    components during --collect-only runs.
+    
+    The fixture is autouse so it runs automatically before any test without needing
+    to be explicitly requested.
+    """
+    # Skip component loading if we're only collecting tests
+    if os.getenv("PYTEST_COLLECTING_ONLY"):
+        yield
+        return
+    
+    # Load components now that collection is complete and mocks are cleaned up
     try:
         from self_fixing_engineer.arbiter import _load_components, _components_loaded
         if not _components_loaded:
             _load_components()
     except ImportError:
         pass
+    
+    yield
 
 
 @pytest.fixture(scope="function", autouse=True)
