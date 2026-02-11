@@ -238,6 +238,7 @@ reasoner.log.*
 # Backup files - IDE and editor backup files should not be committed
 *.bak
 *.backup
+*_old.*
 *.swp
 *.swo
 *~
