@@ -2594,6 +2594,8 @@ async def handle_deploy_response(
                 '<PORT>': '8000',
                 '<HOST>': '0.0.0.0',
                 '<SERVICE_NAME>': 'app',
+                '{BASE_IMAGE}': 'python:3.11-slim',
+                '<BASE_IMAGE>': 'python:3.11-slim',
             }
             
             # Pre-substitute common environment placeholders in a single pass
