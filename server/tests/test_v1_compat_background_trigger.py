@@ -7,9 +7,7 @@ Verifies that the POST /api/v1/generate endpoint correctly triggers
 the background generation pipeline.
 """
 
-import io
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, Mock, patch, call
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
