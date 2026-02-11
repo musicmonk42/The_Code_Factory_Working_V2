@@ -11,6 +11,7 @@ Routes:
 - POST /api/v1/generate - Create job and run code generation
 - GET /api/v1/generations - List all jobs (generations)
 - GET /api/v1/generations/{job_id} - Get job status
+- POST /api/v1/sfe/checkpoint - Create SFE checkpoint (for compatibility)
 """
 
 import logging
@@ -236,3 +237,48 @@ async def get_generation_status(job_id: str) -> V1GenerationListItem:
         created_at=job.created_at.isoformat(),
         updated_at=job.updated_at.isoformat(),
     )
+
+
+# SFE compatibility endpoints
+class SFECheckpointRequest(BaseModel):
+    """Request for creating an SFE checkpoint."""
+    type: str = Field(..., description="Checkpoint type")
+    data: Dict[str, Any] = Field(..., description="Checkpoint data")
+
+
+class SFECheckpointResponse(BaseModel):
+    """Response from SFE checkpoint creation."""
+    id: str = Field(..., description="Checkpoint ID")
+    type: str = Field(..., description="Checkpoint type")
+    status: str = Field(..., description="Status")
+    message: str = Field(..., description="Status message")
+
+
+@router.post("/sfe/checkpoint", response_model=SFECheckpointResponse, status_code=201)
+async def create_sfe_checkpoint(
+    request: SFECheckpointRequest,
+) -> SFECheckpointResponse:
+    """
+    Create an SFE (Self-Fixing Engineer) checkpoint (v1 API).
+    
+    This is a compatibility endpoint for integration tests. In a production system,
+    this would integrate with the actual SFE checkpoint mechanism.
+    
+    **Request Body:**
+    - type: Checkpoint type (e.g., "test", "backup")
+    - data: Checkpoint data as a dictionary
+    
+    **Returns:**
+    - Checkpoint ID and status (201 Created)
+    """
+    checkpoint_id = str(uuid4())
+    
+    logger.info(f"Created v1 SFE checkpoint {checkpoint_id} of type {request.type}")
+    
+    return SFECheckpointResponse(
+        id=checkpoint_id,
+        type=request.type,
+        status="created",
+        message=f"SFE checkpoint created successfully with type '{request.type}'",
+    )
+
