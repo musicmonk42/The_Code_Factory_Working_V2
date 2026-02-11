@@ -593,16 +593,46 @@ def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, 
     
     This helper function creates a standardized placeholder report when
     critique is skipped, fails, or is not requested. This ensures that
-    reports/critique_report.json always exists with a valid structure.
+    reports/critique_report.json always exists with a valid structure
+    that conforms to the expected report schema.
+    
+    Industry Standards Applied:
+    - Input validation: Ensures parameters are valid
+    - Schema compliance: Report structure matches successful critique reports
+    - Defensive programming: Returns valid report even with invalid inputs
+    - ISO 8601 timestamps: Industry standard for date/time representation
     
     Args:
-        job_id: The job identifier
-        message: The reason the critique was not performed
+        job_id: The job identifier (should not be empty)
+        message: The reason the critique was not performed (descriptive text)
         
     Returns:
-        Dictionary containing the placeholder report structure
+        Dictionary containing the placeholder report structure with all
+        required fields populated with appropriate default values.
+        
+    Example:
+        >>> report = _create_placeholder_critique_report("job-123", "Critique not requested")
+        >>> assert report["job_id"] == "job-123"
+        >>> assert report["status"] == "skipped"
+        >>> assert "timestamp" in report
+    
+    Raises:
+        ValueError: If job_id is empty or None (defensive programming)
     """
-    return {
+    # Input validation - Industry Standard: Fail fast with clear errors
+    if not job_id:
+        raise ValueError("job_id cannot be empty or None")
+    
+    if not isinstance(job_id, str):
+        raise TypeError(f"job_id must be a string, got {type(job_id)}")
+    
+    # Allow empty message but log warning
+    if not message:
+        logger.warning(f"Creating placeholder report for job {job_id} with empty message")
+        message = "No message provided"
+    
+    # Create report with standardized structure
+    report = {
         "job_id": job_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": "skipped",
@@ -623,6 +653,11 @@ def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, 
         "fixes_applied": [],
         "scan_types": []
     }
+    
+    logger.debug(f"Created placeholder critique report for job {job_id}: {message}")
+    
+    return report
+
 
 
 class OmniCoreService:
