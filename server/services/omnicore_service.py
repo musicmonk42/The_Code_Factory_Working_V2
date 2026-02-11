@@ -2456,7 +2456,20 @@ class OmniCoreService:
                     logger.warning(f"Deploy agent returned no configurations for job {job_id}")
                     generated_files = []
                     if platform in ("docker", "dockerfile"):
-                        output_dir = repo_path
+                        # FIX Issue 4: Use project subdirectory for fallback files too
+                        project_name = payload.get("output_dir", "hello_generator")
+                        if not project_name:
+                            project_name = "hello_generator"
+                        
+                        project_dir = repo_path / "generated" / project_name
+                        if not project_dir.exists():
+                            alt_project_dir = repo_path / project_name
+                            if alt_project_dir.exists():
+                                project_dir = alt_project_dir
+                            else:
+                                project_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        output_dir = project_dir
                         
                         # Default Dockerfile
                         default_dockerfile = (
@@ -2523,9 +2536,26 @@ class OmniCoreService:
                 
                 generated_files = []
                 
-                # Write generated configs to the generated/ directory root
-                # so they appear at generated/Dockerfile, generated/docker-compose.yml etc.
-                output_dir = repo_path
+                # FIX Issue 4: Write deployment configs to project subdirectory
+                # Extract project name from payload or default to "hello_generator"
+                project_name = payload.get("output_dir", "hello_generator")
+                if not project_name:
+                    project_name = "hello_generator"
+                
+                # Deployment files should go into generated/<project_name>/, not generated/
+                project_dir = repo_path / "generated" / project_name
+                if not project_dir.exists():
+                    # Fallback: if project_dir doesn't exist, try alternate locations
+                    alt_project_dir = repo_path / project_name
+                    if alt_project_dir.exists():
+                        project_dir = alt_project_dir
+                    else:
+                        # Create the expected structure
+                        project_dir.mkdir(parents=True, exist_ok=True)
+                        logger.info(f"[DEPLOY] Created project directory: {project_dir}")
+                
+                output_dir = project_dir
+                logger.info(f"[DEPLOY] Writing deployment configs to: {output_dir} (project_name={project_name})")
                 
                 for target, config_content in configs.items():
                     # FIX: Determine filename and subdirectory based on target
