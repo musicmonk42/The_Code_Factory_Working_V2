@@ -17,7 +17,7 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 # Import from the correct location - analyzer.analyzer
-from self_healing_import_fixer.analyzer.analyzer import (
+from self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer import (
     AnalyzerCriticalError,
     load_config,
     main,
@@ -105,7 +105,7 @@ def invalid_schema_config_path(tmp_path):
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function"""
-    with patch("self_healing_import_fixer.analyzer.analyzer.alert_operator") as mock:
+    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.alert_operator") as mock:
         yield mock
 
 
@@ -113,7 +113,7 @@ def mock_alert_operator():
 def mock_audit_logger():
     """Mock the audit_logger"""
     mock_logger = MagicMock()
-    with patch("self_healing_import_fixer.analyzer.analyzer.audit_logger", mock_logger):
+    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.audit_logger", mock_logger):
         yield mock_logger
 
 
@@ -274,7 +274,7 @@ def test_prod_mode_blocks_mock_llm(tmp_path):
             "os.path.exists", return_value=False
         ):  # Make it think file doesn't exist
             with patch(
-                "self_healing_import_fixer.analyzer.analyzer.boto3"
+                "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
             ) as mock_boto3:
                 # Mock SSM to return config with mock endpoint
                 mock_client = MagicMock()
@@ -345,8 +345,8 @@ def test_production_mode_flag_precedence():
         ]
 
         with patch("sys.argv", cli_args):
-            with patch("self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
-                with patch("self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
+            with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
+                with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
                     # This should run with PRODUCTION_MODE set to True due to CLI flag
                     try:
                         main(standalone_mode=False)
@@ -373,8 +373,8 @@ def test_main_analyze_action_success(tmp_path):
     config_path = str(config_file)
 
     with patch("sys.argv", ["analyzer.py", "analyze", "--config", config_path]):
-        with patch("self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
-            with patch("self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
+        with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
+            with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
                 try:
                     main(standalone_mode=False)
                 except SystemExit as e:
