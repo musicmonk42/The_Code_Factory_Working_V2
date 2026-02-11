@@ -104,6 +104,8 @@ class KubernetesPlugin(TargetPlugin):
         """
         Generate Kubernetes manifests.
         
+        FIX Bug 3 & 4: Generate actual YAML content instead of just metadata.
+        
         Args:
             target_files: Application files to deploy
             instructions: Custom deployment instructions
@@ -111,35 +113,144 @@ class KubernetesPlugin(TargetPlugin):
             previous_configs: Previously generated configurations
             
         Returns:
-            Dictionary containing generated K8s manifests
+            Multi-document YAML string with K8s manifests
         """
         logger.info("Generating Kubernetes manifests for %d files", len(target_files))
         
         # Extract context
         app_name = context.get("app_name", "myapp")
         namespace = context.get("namespace", app_name)
-        replicas = context.get("replicas", 3)
+        replicas = context.get("replicas", 2)
         port = context.get("port", 8000)
         image = context.get("image", f"{app_name}:latest")
         
-        # Generate manifest content
-        manifests = {
-            "status": "generated",
-            "resource_count": len(self.SUPPORTED_RESOURCES),
-            "namespace": namespace,
-            "app_name": app_name,
-            "generated_resources": [
-                "Namespace", "Deployment", "Service", 
-                "ConfigMap", "NetworkPolicy", "HPA", "PDB"
-            ]
-        }
+        # Generate actual YAML manifests
+        deployment_yaml = f"""---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {app_name}
+  namespace: {namespace}
+  labels:
+    app: {app_name}
+spec:
+  replicas: {replicas}
+  selector:
+    matchLabels:
+      app: {app_name}
+  template:
+    metadata:
+      labels:
+        app: {app_name}
+    spec:
+      containers:
+      - name: {app_name}
+        image: {image}
+        ports:
+        - containerPort: {port}
+          name: http
+        env:
+        - name: PORT
+          value: "{port}"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {port}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {port}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+"""
+
+        service_yaml = f"""---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {app_name}-service
+  namespace: {namespace}
+  labels:
+    app: {app_name}
+spec:
+  selector:
+    app: {app_name}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: {port}
+    name: http
+  type: LoadBalancer
+"""
+
+        configmap_yaml = f"""---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {app_name}-config
+  namespace: {namespace}
+data:
+  config.yaml: |
+    environment: production
+    log_level: info
+    port: {port}
+"""
+
+        hpa_yaml = f"""---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {app_name}-hpa
+  namespace: {namespace}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {app_name}
+  minReplicas: {replicas}
+  maxReplicas: {replicas * 3}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+"""
+
+        # Combine all manifests into multi-document YAML
+        manifests_yaml = f"{deployment_yaml}\n{service_yaml}\n{configmap_yaml}\n{hpa_yaml}"
         
         logger.info(
             "Generated K8s manifests: namespace=%s, replicas=%d, port=%d",
             namespace, replicas, port
         )
         
-        return manifests
+        # Return as string (will be parsed by KubernetesHandler)
+        return manifests_yaml
     
     async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """

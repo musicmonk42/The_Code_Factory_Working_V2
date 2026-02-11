@@ -99,6 +99,8 @@ class HelmPlugin(TargetPlugin):
         """
         Generate Helm chart structure.
         
+        FIX Bug 3 & 4: Generate actual file contents instead of just metadata.
+        
         Args:
             target_files: Application files
             instructions: Custom chart instructions
@@ -106,7 +108,7 @@ class HelmPlugin(TargetPlugin):
             previous_configs: Previous configurations
             
         Returns:
-            Dictionary containing Helm chart structure
+            JSON string containing structured Helm chart with actual file contents
         """
         logger.info("Generating Helm chart for %d files", len(target_files))
         
@@ -115,38 +117,225 @@ class HelmPlugin(TargetPlugin):
         chart_version = context.get("version", "0.1.0")
         app_version = context.get("app_version", self.DEFAULT_APP_VERSION)
         description = context.get("description", f"Helm chart for {chart_name}")
+        port = context.get("port", 8000)
         
-        chart = {
-            "status": "generated",
-            "chart_name": chart_name,
-            "chart_version": chart_version,
-            "app_version": app_version,
-            "api_version": self.CHART_API_VERSION,
+        # Generate actual Helm chart files
+        chart_yaml = {
+            "apiVersion": self.CHART_API_VERSION,
+            "name": chart_name,
             "description": description,
-            "structure": {
-                "Chart.yaml": "Chart metadata and version info",
-                "values.yaml": "Default configuration values",
-                "templates/deployment.yaml": "Deployment template",
-                "templates/service.yaml": "Service template",
-                "templates/ingress.yaml": "Ingress template",
-                "templates/_helpers.tpl": "Template helpers",
-                "README.md": "Chart documentation"
+            "type": "application",
+            "version": chart_version,
+            "appVersion": app_version
+        }
+        
+        values_yaml = {
+            "replicaCount": 2,
+            "image": {
+                "repository": chart_name,
+                "pullPolicy": "IfNotPresent",
+                "tag": app_version
             },
-            "features": [
-                "configurable_replicas",
-                "resource_limits",
-                "ingress_support",
-                "service_account",
-                "autoscaling_optional"
-            ]
+            "service": {
+                "type": "LoadBalancer",
+                "port": 80,
+                "targetPort": port
+            },
+            "ingress": {
+                "enabled": False,
+                "className": "nginx",
+                "annotations": {},
+                "hosts": [
+                    {
+                        "host": f"{chart_name}.example.com",
+                        "paths": [
+                            {
+                                "path": "/",
+                                "pathType": "Prefix"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "resources": {
+                "limits": {
+                    "cpu": "500m",
+                    "memory": "512Mi"
+                },
+                "requests": {
+                    "cpu": "250m",
+                    "memory": "256Mi"
+                }
+            },
+            "autoscaling": {
+                "enabled": True,
+                "minReplicas": 2,
+                "maxReplicas": 6,
+                "targetCPUUtilizationPercentage": 80
+            }
+        }
+        
+        deployment_template = f"""apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{{{ include "{chart_name}.fullname" . }}}}
+  labels:
+    {{{{- include "{chart_name}.labels" . | nindent 4 }}}}
+spec:
+  {{{{- if not .Values.autoscaling.enabled }}}}
+  replicas: {{{{ .Values.replicaCount }}}}
+  {{{{- end }}}}
+  selector:
+    matchLabels:
+      {{{{- include "{chart_name}.selectorLabels" . | nindent 6 }}}}
+  template:
+    metadata:
+      labels:
+        {{{{- include "{chart_name}.selectorLabels" . | nindent 8 }}}}
+    spec:
+      containers:
+      - name: {{{{ .Chart.Name }}}}
+        image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
+        imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
+        ports:
+        - name: http
+          containerPort: {{{{ .Values.service.targetPort }}}}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          {{{{- toYaml .Values.resources | nindent 10 }}}}
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+"""
+
+        service_template = f"""apiVersion: v1
+kind: Service
+metadata:
+  name: {{{{ include "{chart_name}.fullname" . }}}}
+  labels:
+    {{{{- include "{chart_name}.labels" . | nindent 4 }}}}
+spec:
+  type: {{{{ .Values.service.type }}}}
+  ports:
+    - port: {{{{ .Values.service.port }}}}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{{{- include "{chart_name}.selectorLabels" . | nindent 4 }}}}
+"""
+
+        helpers_template = f"""{{{{/*
+Expand the name of the chart.
+*/}}}}
+{{{{- define "{chart_name}.name" -}}}}
+{{{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+
+{{{{/*
+Create a default fully qualified app name.
+*/}}}}
+{{{{- define "{chart_name}.fullname" -}}}}
+{{{{- if .Values.fullnameOverride }}}}
+{{{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}}}
+{{{{- else }}}}
+{{{{- $name := default .Chart.Name .Values.nameOverride }}}}
+{{{{- if contains $name .Release.Name }}}}
+{{{{- .Release.Name | trunc 63 | trimSuffix "-" }}}}
+{{{{- else }}}}
+{{{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+{{{{- end }}}}
+{{{{- end }}}}
+
+{{{{/*
+Create chart name and version as used by the chart label.
+*/}}}}
+{{{{- define "{chart_name}.chart" -}}}}
+{{{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}}}
+{{{{- end }}}}
+
+{{{{/*
+Common labels
+*/}}}}
+{{{{- define "{chart_name}.labels" -}}}}
+helm.sh/chart: {{{{ include "{chart_name}.chart" . }}}}
+{{{{ include "{chart_name}.selectorLabels" . }}}}
+{{{{- if .Chart.AppVersion }}}}
+app.kubernetes.io/version: {{{{ .Chart.AppVersion | quote }}}}
+{{{{- end }}}}
+app.kubernetes.io/managed-by: {{{{ .Release.Service }}}}
+{{{{- end }}}}
+
+{{{{/*
+Selector labels
+*/}}}}
+{{{{- define "{chart_name}.selectorLabels" -}}}}
+app.kubernetes.io/name: {{{{ include "{chart_name}.name" . }}}}
+app.kubernetes.io/instance: {{{{ .Release.Name }}}}
+{{{{- end }}}}
+"""
+
+        hpa_template = f"""{{{{- if .Values.autoscaling.enabled }}}}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{{{ include "{chart_name}.fullname" . }}}}
+  labels:
+    {{{{- include "{chart_name}.labels" . | nindent 4 }}}}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{{{ include "{chart_name}.fullname" . }}}}
+  minReplicas: {{{{ .Values.autoscaling.minReplicas }}}}
+  maxReplicas: {{{{ .Values.autoscaling.maxReplicas }}}}
+  metrics:
+  {{{{- if .Values.autoscaling.targetCPUUtilizationPercentage }}}}
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{{{ .Values.autoscaling.targetCPUUtilizationPercentage }}}}
+  {{{{- end }}}}
+{{{{- end }}}}
+"""
+
+        # Return structured chart with actual file contents as JSON
+        chart_structure = {
+            "Chart.yaml": chart_yaml,
+            "values.yaml": values_yaml,
+            "templates": {
+                "deployment.yaml": deployment_template,
+                "service.yaml": service_template,
+                "hpa.yaml": hpa_template,
+                "_helpers.tpl": helpers_template
+            }
         }
         
         logger.info(
             "Generated Helm chart: name=%s, version=%s, templates=%d",
-            chart_name, chart_version, len(chart["structure"])
+            chart_name, chart_version, len(chart_structure["templates"])
         )
         
-        return chart
+        # Return as JSON string (will be parsed by HelmHandler)
+        return json.dumps(chart_structure, indent=2)
     
     async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
