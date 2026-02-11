@@ -22,6 +22,9 @@ from typing import Any, Callable, Dict, Optional
 
 import aiohttp
 
+# Import trace for re-export (needed by tests)
+import opentelemetry.trace as trace
+
 # Ensure `time` is available as a builtin for tests that forget to import it
 if not hasattr(builtins, "time"):
     builtins.time = time
