@@ -12,7 +12,6 @@ Tests cover:
 """
 
 import asyncio
-import importlib
 import json
 import os
 import tempfile
@@ -75,17 +74,11 @@ def setup_test_dir():
 @pytest_asyncio.fixture
 async def checkpoint_manager():
     """Create a CheckpointManager instance for testing."""
-    # Import after environment setup
-    # Use importlib.reload to ensure modules pick up the test environment variables
-    from self_fixing_engineer.mesh.checkpoint import checkpoint_exceptions
-    from self_fixing_engineer.mesh.checkpoint import checkpoint_manager as manager_module
-    from self_fixing_engineer.mesh.checkpoint import checkpoint_utils
+    # Import the manager module - environment variables should already be set
+    # by the session-scoped setup_test_dir fixture
+    from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
 
-    importlib.reload(checkpoint_utils)
-    importlib.reload(checkpoint_exceptions)
-    importlib.reload(manager_module)
-
-    manager = manager_module.CheckpointManager(
+    manager = CheckpointManager(
         backend_type="local",
         keep_versions=5,
         enable_compression=True,
