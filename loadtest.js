@@ -159,17 +159,17 @@ function pollForCompletion(jobId, startTime) {
         
         try {
             const body = JSON.parse(response.body);
-            const status = body.status;
+            const jobStatus = body.status;
             
-            if (status === 'completed' || status === 'success') {
+            if (jobStatus === 'completed' || jobStatus === 'success') {
                 completed = true;
                 break;
-            } else if (status === 'failed') {
-                console.warn(`Job failed: jobId=${jobId}, error=${body.error || 'unknown'}`);
+            } else if (jobStatus === 'failed' || jobStatus === 'cancelled') {
+                console.warn(`Job failed: jobId=${jobId}, status=${jobStatus}, error=${body.error || 'unknown'}`);
                 failed = true;
                 break;
             }
-            // Continue polling for 'pending', 'running' statuses
+            // Continue polling for 'pending', 'running', 'needs_clarification' statuses
         } catch (e) {
             console.warn(`Failed to parse poll response: jobId=${jobId}, error=${e.message}`);
             failed = true;
@@ -184,14 +184,19 @@ function pollForCompletion(jobId, startTime) {
     e2eGenerationDuration.add(elapsedTime);
     pollingIterations.add(iterations);
     
-    // Check if timed out
-    if (!completed && !failed) {
-        console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
-        e2eGenerationFailures.add(0);  // 0 = fail in k6 Rate (timed out)
-        return false;
+    // Record success/failure
+    // k6 Rate: add(1) = "pass" (counted in passes), add(0) = "fail" (counted in fails)
+    // threshold 'rate>0.95' means: passes/(passes+fails) > 0.95
+    if (completed) {
+        e2eGenerationFailures.add(1);  // Success: add(1) = pass in k6
+    } else {
+        // Timed out or job failed
+        if (!failed) {
+            console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
+        }
+        e2eGenerationFailures.add(0);  // Failure: add(0) = fail in k6
     }
     
-    e2eGenerationFailures.add(completed ? 1 : 0);  // 1 = pass in k6 Rate (completed), 0 = fail (job failed)
     return completed;
 }
 
