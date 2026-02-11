@@ -64,9 +64,9 @@ const thresholds = {
     'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
     // Less than 1% request failure rate
     'http_req_failed': [`rate<${ERROR_RATE_THRESHOLD}`],
-    'health_check_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
-    'generate_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
-    'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+    'health_check_failures': [`rate>${1 - ERROR_RATE_THRESHOLD}`],
+    'generate_failures': [`rate>${1 - ERROR_RATE_THRESHOLD}`],
+    'list_generations_failures': [`rate>${1 - ERROR_RATE_THRESHOLD}`],
 };
 
 // Only add E2E/polling thresholds when polling is enabled
@@ -96,7 +96,7 @@ export const options = {
     ],
     thresholds,
     // Performance optimizations to reduce memory usage and improve stability
-    discardResponseBodies: true,  // Reduce memory usage by discarding response bodies after checks
+    discardResponseBodies: false,  // Keep response bodies for check functions to parse
     noConnectionReuse: false,      // Reuse HTTP connections for better performance
 };
 
@@ -126,8 +126,12 @@ function testHealthEndpoint() {
         timeout: '5s',  // Health endpoint should respond quickly
     });
     
-    const success = check(response, {
+    // Split checks: HTTP status check (for failure rate) and body parsing check (for test quality)
+    const httpSuccess = check(response, {
         'health check status is 200': (r) => r.status === 200,
+    });
+    
+    const bodyCheckSuccess = check(response, {
         'health check has status field': (r) => {
             try {
                 const body = JSON.parse(r.body);
@@ -139,11 +143,12 @@ function testHealthEndpoint() {
     });
     
     // Log failures with response details for debugging
-    if (!success) {
-        console.warn(`Health check failed: status=${response.status}, body=${response.body}`);
+    if (!httpSuccess || !bodyCheckSuccess) {
+        console.warn(`Health check failed: httpSuccess=${httpSuccess}, bodyCheckSuccess=${bodyCheckSuccess}, status=${response.status}, body=${response.body}`);
     }
     
-    healthCheckFailureRate.add(!success);
+    // Record failure rate based on HTTP status success (not body parsing)
+    healthCheckFailureRate.add(httpSuccess);
 }
 
 /**
@@ -233,8 +238,12 @@ function testGenerateEndpoint() {
     const startTime = Date.now();
     const response = http.post(`${API_URL}/api/v1/generate`, payload, params);
     
-    const success = check(response, {
+    // Split checks: HTTP status check (for failure rate) and body parsing check (for test quality)
+    const httpSuccess = check(response, {
         'generate status is 200 or 202': (r) => r.status === 200 || r.status === 202,
+    });
+    
+    const bodyCheckSuccess = check(response, {
         'generate response has id': (r) => {
             try {
                 const body = JSON.parse(r.body);
@@ -246,17 +255,18 @@ function testGenerateEndpoint() {
     });
     
     // Log failures with response details for debugging
-    if (!success) {
-        console.warn(`Generate endpoint failed: status=${response.status}, body=${response.body}`);
+    if (!httpSuccess || !bodyCheckSuccess) {
+        console.warn(`Generate endpoint failed: httpSuccess=${httpSuccess}, bodyCheckSuccess=${bodyCheckSuccess}, status=${response.status}, body=${response.body}`);
     }
     
-    generateFailureRate.add(!success);
+    // Record failure rate based on HTTP status success (not body parsing)
+    generateFailureRate.add(httpSuccess);
     if (response.timings.duration) {
         generateDuration.add(response.timings.duration);
     }
     
     // Poll for completion if enabled and job was submitted successfully
-    if (!SKIP_POLLING && success && (response.status === 200 || response.status === 202)) {
+    if (!SKIP_POLLING && httpSuccess && (response.status === 200 || response.status === 202)) {
         try {
             const body = JSON.parse(response.body);
             const jobId = body.id;
@@ -278,8 +288,12 @@ function testListGenerationsEndpoint() {
         timeout: '10s',  // List endpoint should respond quickly
     });
     
-    const success = check(response, {
+    // Split checks: HTTP status check (for failure rate) and body parsing check (for test quality)
+    const httpSuccess = check(response, {
         'list generations status is 200': (r) => r.status === 200,
+    });
+    
+    const bodyCheckSuccess = check(response, {
         'list generations returns array': (r) => {
             try {
                 const body = JSON.parse(r.body);
@@ -291,11 +305,12 @@ function testListGenerationsEndpoint() {
     });
     
     // Log failures with response details for debugging
-    if (!success) {
-        console.warn(`List generations endpoint failed: status=${response.status}, body=${response.body}`);
+    if (!httpSuccess || !bodyCheckSuccess) {
+        console.warn(`List generations endpoint failed: httpSuccess=${httpSuccess}, bodyCheckSuccess=${bodyCheckSuccess}, status=${response.status}, body=${response.body}`);
     }
     
-    listGenerationsFailureRate.add(!success);
+    // Record failure rate based on HTTP status success (not body parsing)
+    listGenerationsFailureRate.add(httpSuccess);
 }
 
 /**
