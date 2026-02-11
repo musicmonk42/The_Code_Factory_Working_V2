@@ -1437,6 +1437,38 @@ class OmniCoreService:
                                             language=language
                                         ).inc()
                                 total_bytes_written = mat_result.get("total_bytes_written", 0)
+                                
+                                # FIX Issue 1: Enforce output layout after materialization
+                                # Ensure all generated files are under the project subdirectory
+                                # Extract project name from custom_output_dir or use default
+                                project_name = custom_output_dir if custom_output_dir else "hello_generator"
+                                # If output_path already ends with the project name, use parent
+                                if output_path.name == project_name:
+                                    # Files are already in the right place
+                                    logger.debug(f"Output path already ends with project name: {project_name}")
+                                else:
+                                    # Files might be at the wrong level - enforce layout
+                                    try:
+                                        from generator.runner.runner_file_utils import _enforce_output_layout
+                                        layout_result = _enforce_output_layout(output_path, project_name)
+                                        if not layout_result.get("success"):
+                                            logger.warning(
+                                                f"[CODEGEN] Output layout enforcement had errors: {layout_result.get('errors')}",
+                                                extra={"job_id": job_id}
+                                            )
+                                        elif layout_result.get("files_moved"):
+                                            logger.info(
+                                                f"[CODEGEN] Enforced output layout: moved {len(layout_result['files_moved'])} items to {project_name}/",
+                                                extra={
+                                                    "job_id": job_id,
+                                                    "files_moved": layout_result["files_moved"],
+                                                    "project_name": project_name
+                                                }
+                                            )
+                                            # Update output_path to point to the project subdirectory
+                                            output_path = output_path / project_name
+                                    except ImportError:
+                                        logger.warning("[CODEGEN] _enforce_output_layout not available, skipping layout enforcement")
                             else:
                                 for err in mat_result.get("errors", []):
                                     files_failed.append({"filename": "(materializer)", "error": err})

@@ -1428,6 +1428,123 @@ async def materialize_file_map(
     return result
 
 
+def _enforce_output_layout(output_path: Path, project_name: str = "hello_generator") -> Dict[str, Any]:
+    """
+    Ensure all generated files are under the project subdirectory.
+    
+    This function addresses Issue 1: Output Directory Mis-management
+    
+    The specification requires all outputs under `generated/hello_generator` with nothing
+    outside. However, the engine sometimes writes files into the output_path root without
+    enforcing the project subdirectory. This causes:
+    - Archives containing `generated/generated/hello_generator` (double nesting)
+    - `generated/app` together with unrelated top-level `tests/` and `New_Test_README.md`
+    
+    This function moves all files from output_path root to the project subdirectory.
+    
+    Args:
+        output_path: The output directory path (e.g., /uploads/job-123/generated)
+        project_name: The project subdirectory name (default: "hello_generator")
+        
+    Returns:
+        Dict with:
+            - success: bool - whether the enforcement succeeded
+            - files_moved: List[str] - files that were moved
+            - errors: List[str] - any errors encountered
+            
+    Example:
+        Before: /uploads/job-123/generated/
+                    app/
+                    tests/
+                    README.md
+                    
+        After:  /uploads/job-123/generated/
+                    hello_generator/
+                        app/
+                        tests/
+                        README.md
+    """
+    result = {
+        "success": True,
+        "files_moved": [],
+        "errors": [],
+    }
+    
+    try:
+        output_path = Path(output_path).resolve()
+        project_dir = output_path / project_name
+        
+        # Create project directory if it doesn't exist
+        project_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Move files from output_path root to project_dir
+        for item in output_path.iterdir():
+            # Skip the project directory itself and hidden files
+            if item == project_dir or item.name.startswith('.'):
+                continue
+            
+            # Skip common build/cache directories that shouldn't be moved
+            if item.name in ['__pycache__', '.pytest_cache', '.git', 'node_modules']:
+                logger.debug(f"Skipping build/cache directory: {item.name}")
+                continue
+            
+            try:
+                target = project_dir / item.name
+                
+                # If target already exists, handle it carefully
+                if target.exists():
+                    if item.is_dir() and target.is_dir():
+                        # Merge directories by moving individual files
+                        logger.info(f"Merging directory {item.name} into project subdirectory")
+                        for sub_item in item.rglob('*'):
+                            if sub_item.is_file():
+                                relative_path = sub_item.relative_to(item)
+                                sub_target = target / relative_path
+                                sub_target.parent.mkdir(parents=True, exist_ok=True)
+                                shutil.move(str(sub_item), str(sub_target))
+                        # Remove the now-empty source directory
+                        shutil.rmtree(str(item))
+                    else:
+                        # File collision - keep the one in project_dir, remove the other
+                        logger.warning(
+                            f"File collision: {item.name} exists in both locations, "
+                            f"keeping version in {project_name}/"
+                        )
+                        if item.is_dir():
+                            shutil.rmtree(str(item))
+                        else:
+                            item.unlink()
+                else:
+                    # Simple move
+                    shutil.move(str(item), str(target))
+                    result["files_moved"].append(item.name)
+                    logger.debug(f"Moved {item.name} to {project_name}/")
+                    
+            except Exception as e:
+                error_msg = f"Failed to move {item.name}: {e}"
+                result["errors"].append(error_msg)
+                result["success"] = False
+                logger.error(error_msg, exc_info=True)
+        
+        if result["files_moved"]:
+            logger.info(
+                f"Output layout enforced: moved {len(result['files_moved'])} items to {project_name}/",
+                extra={
+                    "project_name": project_name,
+                    "files_moved": result["files_moved"],
+                }
+            )
+        else:
+            logger.debug(f"Output layout already correct: all files under {project_name}/")
+            
+    except Exception as e:
+        result["success"] = False
+        result["errors"].append(f"Failed to enforce output layout: {e}")
+        logger.error(f"Failed to enforce output layout: {e}", exc_info=True)
+    
+    return result
+
+
 @util_decorator("validate_generated_project")
 async def validate_generated_project(
     output_dir: Union[str, Path],
