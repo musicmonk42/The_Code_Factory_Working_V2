@@ -119,6 +119,9 @@ def clean_history_and_handlers():
         for handler in list(logger.handlers):
             handler.close()
             logger.removeHandler(handler)
+        # Clear filters too
+        for filter in list(logger.filters):
+            logger.removeFilter(filter)
 
     yield
 
@@ -128,6 +131,9 @@ def clean_history_and_handlers():
         for handler in list(logger.handlers):
             handler.close()
             logger.removeHandler(handler)
+        # Clear filters after test too
+        for filter in list(logger.filters):
+            logger.removeFilter(filter)
 
 
 @pytest.fixture
