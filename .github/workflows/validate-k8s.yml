@@ -249,10 +249,10 @@ jobs:
           KUSTOMIZE_MEMORY=$(grep -A 3 "name: memory" k8s/overlays/production/hpa.yaml | grep "averageUtilization:" | awk '{print $2}')
           KUSTOMIZE_MAX_REPLICAS=$(grep "maxReplicas:" k8s/overlays/production/hpa.yaml | awk '{print $2}')
           
-          # Extract values from helm/codefactory/values.yaml
-          HELM_CPU=$(grep "targetCPUUtilizationPercentage:" helm/codefactory/values.yaml | awk '{print $2}')
-          HELM_MEMORY=$(grep "targetMemoryUtilizationPercentage:" helm/codefactory/values.yaml | awk '{print $2}')
-          HELM_MAX_REPLICAS=$(grep "maxReplicas:" helm/codefactory/values.yaml | head -1 | awk '{print $2}')
+          # Extract values from helm/codefactory/values.yaml autoscaling section
+          HELM_CPU=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "targetCPUUtilizationPercentage:" | awk '{print $2}')
+          HELM_MEMORY=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "targetMemoryUtilizationPercentage:" | awk '{print $2}')
+          HELM_MAX_REPLICAS=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "maxReplicas:" | awk '{print $2}')
           
           echo "  Kustomize Production HPA: CPU=$KUSTOMIZE_CPU%, Memory=$KUSTOMIZE_MEMORY%, MaxReplicas=$KUSTOMIZE_MAX_REPLICAS"
           echo "  Helm Default HPA: CPU=$HELM_CPU%, Memory=$HELM_MEMORY%, MaxReplicas=$HELM_MAX_REPLICAS"
@@ -306,8 +306,11 @@ jobs:
         run: |
           echo "🔍 Verifying security context in k8s/base/api-deployment.yaml..."
           
+          # Extract all securityContext sections for efficiency
+          SECURITY_CONTEXTS=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml)
+          
           # Check pod-level security context
-          if grep -A 5 "securityContext:" k8s/base/api-deployment.yaml | grep -q "runAsNonRoot: true"; then
+          if echo "$SECURITY_CONTEXTS" | grep -q "runAsNonRoot: true"; then
             echo "  ✓ runAsNonRoot: true found in pod securityContext"
           else
             echo "  ❌ ERROR: runAsNonRoot: true not found in pod securityContext"
@@ -315,8 +318,8 @@ jobs:
           fi
           
           # Check container-level security context for capabilities
-          if grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:" | grep -q "drop:" && \
-             grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:" | grep -A 1 "drop:" | grep -q "ALL"; then
+          CAPABILITIES_SECTION=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:")
+          if echo "$CAPABILITIES_SECTION" | grep -q "drop:" && echo "$CAPABILITIES_SECTION" | grep -A 1 "drop:" | grep -q "ALL"; then
             echo "  ✓ capabilities.drop: ALL found in container securityContext"
           else
             echo "  ❌ ERROR: capabilities.drop: ALL not found in container securityContext"
