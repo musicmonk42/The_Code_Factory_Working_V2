@@ -95,6 +95,9 @@ export const options = {
         { duration: '30s', target: 0 },
     ],
     thresholds,
+    // Performance optimizations to reduce memory usage and improve stability
+    discardResponseBodies: true,  // Reduce memory usage by discarding response bodies after checks
+    noConnectionReuse: false,      // Reuse HTTP connections for better performance
 };
 
 /**
@@ -120,6 +123,7 @@ export default function () {
 function testHealthEndpoint() {
     const response = http.get(`${API_URL}/health`, {
         tags: { type: 'health' },
+        timeout: '5s',  // Health endpoint should respond quickly
     });
     
     const success = check(response, {
@@ -160,6 +164,7 @@ function pollForCompletion(jobId, startTime) {
         
         const response = http.get(`${API_URL}/api/v1/generations/${jobId}`, {
             tags: { type: 'poll' },
+            timeout: '10s',  // Polling requests should be fast
         });
         
         if (response.status !== 200) {
@@ -222,6 +227,7 @@ function testGenerateEndpoint() {
             'Content-Type': 'application/json',
         },
         tags: { type: 'generate' },
+        timeout: '30s',  // Code generation can be slower, allow more time
     };
     
     const startTime = Date.now();
@@ -269,6 +275,7 @@ function testGenerateEndpoint() {
 function testListGenerationsEndpoint() {
     const response = http.get(`${API_URL}/api/v1/generations`, {
         tags: { type: 'list' },
+        timeout: '10s',  // List endpoint should respond quickly
     });
     
     const success = check(response, {
@@ -305,7 +312,9 @@ export function setup() {
     console.log(`  - GET ${API_URL}/api/v1/generations`);
     
     // Verify the API is reachable
-    const response = http.get(`${API_URL}/health`);
+    const response = http.get(`${API_URL}/health`, {
+        timeout: '5s',  // Health endpoint should respond quickly
+    });
     if (response.status !== 200) {
         throw new Error(`API health check failed with status ${response.status}. Is the server running?`);
     }
