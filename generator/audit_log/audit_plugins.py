@@ -134,7 +134,7 @@ PLUGIN_CONFIG = "plugins.json"  # Config for enabled plugins/policies
 # NOTE: MAX_PLUGIN_CPU_SECONDS is enforced as an integer
 MAX_PLUGIN_CPU_SECONDS = 1  # For CPU accounting (if delegating to subprocesses)
 MAX_PLUGIN_MEM_BYTES = 100 * 1024 * 1024  # 100MB (100 MB)
-MAX_PLUGIN_TIME_SECONDS = 5  # Seconds timeout
+MAX_PLUGIN_TIME_SECONDS = 2  # Reduced from 5 to 2 seconds
 # Default policy controls; these can be overridden per plugin in plugins.json
 POLICY_CONTROLS = {"modify": False, "redact": True, "augment": True}
 
@@ -603,20 +603,27 @@ def _sandboxed_worker(
 def _poll_queue(
     q: multiprocessing.Queue, timeout: float
 ) -> Optional[Union[tuple, Exception]]:
-    """Synchronous, blocking poll with a fixed timeout."""
-    try:
-        # The internal queue.get() call should not be indefinite if a timeout is provided.
-        # It waits up to `timeout` seconds.
-        # The result is expected to be a tuple (modified_data, updated_plugin_instance) or an Exception
-        return q.get(timeout=timeout)
-    except queue.Empty:
-        # Explicit handling of empty queue timeout
-        return None
-    except (OSError, EOFError, ValueError):
-        # Handle queue closed or broken pipe errors
-        return None
-    except Exception:
-        return None  # Return None if timeout/exception occurs during the short poll
+    """Non-blocking poll with proper timeout handling."""
+    import time
+    
+    start_time = time.time()
+    
+    while (time.time() - start_time) < timeout:
+        try:
+            # Use very short timeout to allow interruption
+            return q.get(timeout=0.05)  # 50ms non-blocking poll
+        except queue.Empty:
+            # Check if total timeout exceeded
+            if (time.time() - start_time) >= timeout:
+                return None
+            continue  # Try again
+        except (OSError, EOFError, ValueError):
+            # Handle queue closed or broken pipe
+            return None
+        except Exception:
+            return None
+    
+    return None  # Timeout reached
 
 
 async def sandboxed_execute(
@@ -653,19 +660,19 @@ async def sandboxed_execute(
 
     try:
         while (time.perf_counter() - start_time) < MAX_PLUGIN_TIME_SECONDS:
+            # Check if process died before polling
+            if not p.is_alive():
+                result_or_exception = RuntimeError(
+                    f"Plugin process {p.name} (PID: {p.pid}) terminated prematurely"
+                )
+                break
+            
             # Run the blocking poll with a short timeout in a separate thread
             result = await asyncio.to_thread(_poll_queue, q, polling_interval)
 
             if result is not None:
                 result_or_exception = result
                 break  # Got result, exit loop
-
-            # Check if the child process exited prematurely without sending a result
-            if not p.is_alive():
-                result_or_exception = RuntimeError(
-                    "Plugin process terminated before sending result."
-                )
-                break
 
         # Check for final timeout
         if result_or_exception is None:
@@ -724,10 +731,16 @@ async def sandboxed_execute(
         # --- END: FIX 3 ---
 
         # CRITICAL: Close and join the queue to prevent resource leaks
-        # Must be done before the process is joined to avoid deadlocks
         try:
-            # Cancel any pending get() operations by closing the queue first
-            q.cancel_join_thread()  # Prevent join_thread from blocking
+            # First, try to drain any remaining items
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Cancel pending join_thread operations
+            q.cancel_join_thread()
             q.close()
         except Exception as e:
             logger.debug(f"Exception while closing queue: {e}")
