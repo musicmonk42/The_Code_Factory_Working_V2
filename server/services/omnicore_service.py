@@ -2290,9 +2290,30 @@ class OmniCoreService:
                     }
                 
                 # Write generated tests to files
+                # FIX Issue 3: Write tests into project subdirectory, not repo root
+                # Extract project_name from payload or default to "hello_generator"
+                project_name = payload.get("output_dir", "hello_generator")
+                if not project_name:
+                    project_name = "hello_generator"
+                
+                # Tests should go into generated/<project_name>/tests, not generated/tests
+                project_dir = repo_path / "generated" / project_name
+                if not project_dir.exists():
+                    # Fallback: if project_dir doesn't exist, try to find it
+                    # This handles cases where code was generated directly in repo_path/generated
+                    alt_project_dir = repo_path / project_name
+                    if alt_project_dir.exists():
+                        project_dir = alt_project_dir
+                    else:
+                        # Create the expected structure
+                        project_dir.mkdir(parents=True, exist_ok=True)
+                        logger.info(f"[TESTGEN] Created project directory: {project_dir}")
+                
                 generated_files = []
-                tests_dir = repo_path / "tests"
+                tests_dir = project_dir / "tests"
                 tests_dir.mkdir(parents=True, exist_ok=True)
+                
+                logger.info(f"[TESTGEN] Writing tests to: {tests_dir} (project_name={project_name})")
                 
                 # Create __init__.py in tests directory
                 init_file = tests_dir / "__init__.py"
@@ -4871,6 +4892,43 @@ class OmniCoreService:
             if output_path:
                 output_dir = Path(output_path)
                 if output_dir.exists():
+                    # FIX Issue 3: Final enforcement of output layout after all stages complete
+                    # This catches any stray files written outside the project subdirectory
+                    # Extract project name from job metadata or use default
+                    project_name = job.metadata.get("output_dir", "hello_generator")
+                    if not project_name:
+                        project_name = "hello_generator"
+                    
+                    try:
+                        if _MATERIALIZER_AVAILABLE:
+                            logger.info(f"[FINALIZE] Running final layout enforcement for job {job_id}")
+                            from generator.runner.runner_file_utils import _enforce_output_layout
+                            layout_result = _enforce_output_layout(output_dir, project_name)
+                            
+                            if layout_result.get("success"):
+                                if layout_result.get("files_moved"):
+                                    logger.info(
+                                        f"[FINALIZE] Layout enforcement moved {len(layout_result['files_moved'])} items "
+                                        f"into {project_name}/ subdirectory",
+                                        extra={
+                                            "job_id": job_id,
+                                            "files_moved": layout_result["files_moved"]
+                                        }
+                                    )
+                                else:
+                                    logger.debug(f"[FINALIZE] Layout already correct for job {job_id}")
+                            else:
+                                logger.warning(
+                                    f"[FINALIZE] Layout enforcement had errors for job {job_id}: "
+                                    f"{layout_result.get('errors', [])}",
+                                    extra={"job_id": job_id, "errors": layout_result.get("errors")}
+                                )
+                        else:
+                            logger.debug("[FINALIZE] _enforce_output_layout not available, skipping final layout check")
+                    except Exception as layout_err:
+                        # Don't fail job finalization if layout enforcement fails
+                        logger.warning(f"[FINALIZE] Layout enforcement error for job {job_id}: {layout_err}")
+                    
                     artifacts = list(output_dir.rglob('*'))
                     # Exclude existing _output.zip files to avoid nested zips
                     artifact_files = [f for f in artifacts if f.is_file() and not f.name.endswith('_output.zip')]
