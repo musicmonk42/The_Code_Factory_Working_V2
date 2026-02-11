@@ -17,7 +17,7 @@ Routes:
 import logging
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -107,7 +107,7 @@ async def create_generation(
     """
     # Create a new job
     job_id = str(uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     
     # Store requirements in metadata for tracking
     metadata = request.metadata or {}
