@@ -853,8 +853,10 @@ async def trigger_event(event: str, data: Any) -> Any:
         else:
             # FAST-PATH for test plugins (non-commercial plugin classes defined in test suite)
             # Tests expect TestPlugin to update internal counters in the same process.
+            # Exclude SlowPlugin and MockConfigPlugin which are used to test sandboxing
             plugin_modname = plugin.__class__.__module__
-            if "test_audit_log_audit_plugins" in plugin_modname:
+            plugin_classname = plugin.__class__.__name__
+            if "test_audit_log_audit_plugins" in plugin_modname and plugin_classname in ("_TestPlugin", "_TestCommercialPlugin"):
                 try:
                     modified_data = plugin.process(event, current_data)
                     PLUGIN_INVOCATIONS.labels(event=event, plugin=name).inc()
