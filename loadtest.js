@@ -27,12 +27,19 @@ const healthCheckFailureRate = new Rate('health_check_failures');
 const generateFailureRate = new Rate('generate_failures');
 const listGenerationsFailureRate = new Rate('list_generations_failures');
 const generateDuration = new Trend('generate_duration');
+const e2eGenerationDuration = new Trend('e2e_generation_duration');
+const e2eGenerationFailures = new Rate('e2e_generation_failures');
+const pollingIterations = new Trend('polling_iterations');
 
 // Configuration
 const API_URL = __ENV.API_URL || 'http://localhost:8000';
 const MAX_VUS = parseInt(__ENV.MAX_VUS || '100', 10);  // Maximum virtual users
 const P95_THRESHOLD_MS = 500;  // 95th percentile response time threshold
 const ERROR_RATE_THRESHOLD = 0.01;  // 1% error rate threshold
+const POLL_TIMEOUT_S = parseInt(__ENV.POLL_TIMEOUT_S || '60', 10);  // Polling timeout in seconds
+const POLL_INTERVAL_S = 2;  // Polling interval in seconds
+const SKIP_POLLING = __ENV.SKIP_POLLING === 'true';  // Skip polling if true
+const E2E_THRESHOLD_MS = parseInt(__ENV.E2E_THRESHOLD_MS || '30000', 10);  // E2E p95 threshold
 
 // Calculate intermediate VU targets based on MAX_VUS
 const VU_WARMUP = Math.floor(MAX_VUS * 0.1);  // 10% of max
@@ -61,6 +68,7 @@ export const options = {
         'http_req_duration{type:health}': [`p(95)<${P95_THRESHOLD_MS}`],
         'http_req_duration{type:generate}': [`p(95)<${P95_THRESHOLD_MS}`],
         'http_req_duration{type:list}': [`p(95)<${P95_THRESHOLD_MS}`],
+        'http_req_duration{type:poll}': [`p(95)<${P95_THRESHOLD_MS}`],
         // Overall p95 should be under threshold
         'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
         // Less than 1% request failure rate
@@ -68,6 +76,9 @@ export const options = {
         'health_check_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
         'generate_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
         'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+        // E2E thresholds
+        'e2e_generation_duration': [`p(95)<${E2E_THRESHOLD_MS}`],
+        'e2e_generation_failures': ['rate<0.05'],
     },
 };
 
@@ -117,6 +128,68 @@ function testHealthEndpoint() {
 }
 
 /**
+ * Poll for generation job completion
+ * @param {string} jobId - The job ID to poll
+ * @param {number} startTime - The timestamp when the job was submitted
+ * @returns {boolean} - True if job completed successfully, false otherwise
+ */
+function pollForCompletion(jobId, startTime) {
+    const maxAttempts = Math.ceil(POLL_TIMEOUT_S / POLL_INTERVAL_S);
+    let iterations = 0;
+    let completed = false;
+    let failed = false;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        sleep(POLL_INTERVAL_S);
+        iterations++;
+        
+        const response = http.get(`${API_URL}/api/v1/generations/${jobId}`, {
+            tags: { type: 'poll' },
+        });
+        
+        if (response.status !== 200) {
+            console.warn(`Poll request failed: status=${response.status}, jobId=${jobId}`);
+            failed = true;
+            break;
+        }
+        
+        try {
+            const body = JSON.parse(response.body);
+            const status = body.status;
+            
+            if (status === 'completed') {
+                completed = true;
+                break;
+            } else if (status === 'failed') {
+                console.warn(`Job failed: jobId=${jobId}, error=${body.error || 'unknown'}`);
+                failed = true;
+                break;
+            }
+            // Continue polling for 'pending', 'running' statuses
+        } catch (e) {
+            console.warn(`Failed to parse poll response: jobId=${jobId}, error=${e.message}`);
+            failed = true;
+            break;
+        }
+    }
+    
+    // Record metrics
+    const elapsedTime = Date.now() - startTime;
+    e2eGenerationDuration.add(elapsedTime);
+    pollingIterations.add(iterations);
+    
+    // Check if timed out
+    if (!completed && !failed) {
+        console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
+        e2eGenerationFailures.add(1);
+        return false;
+    }
+    
+    e2eGenerationFailures.add(failed ? 1 : 0);
+    return completed;
+}
+
+/**
  * Test the code generation endpoint (POST /api/v1/generate)
  * This is the main workload endpoint as seen in run_integration_tests.py
  */
@@ -134,6 +207,7 @@ function testGenerateEndpoint() {
         tags: { type: 'generate' },
     };
     
+    const startTime = Date.now();
     const response = http.post(`${API_URL}/api/v1/generate`, payload, params);
     
     const success = check(response, {
@@ -156,6 +230,19 @@ function testGenerateEndpoint() {
     generateFailureRate.add(!success);
     if (response.timings.duration) {
         generateDuration.add(response.timings.duration);
+    }
+    
+    // Poll for completion if enabled and job was submitted successfully
+    if (!SKIP_POLLING && success && (response.status === 200 || response.status === 202)) {
+        try {
+            const body = JSON.parse(response.body);
+            const jobId = body.id;
+            if (jobId) {
+                pollForCompletion(jobId, startTime);
+            }
+        } catch (e) {
+            console.warn(`Failed to parse generate response for polling: ${e.message}`);
+        }
     }
 }
 
@@ -193,9 +280,11 @@ function testListGenerationsEndpoint() {
 export function setup() {
     console.log(`Starting load test against ${API_URL}`);
     console.log(`Max virtual users: ${MAX_VUS} (warmup: ${VU_WARMUP}, medium: ${VU_MEDIUM})`);
+    console.log(`Polling: ${SKIP_POLLING ? 'disabled' : 'enabled'} (timeout: ${POLL_TIMEOUT_S}s, interval: ${POLL_INTERVAL_S}s)`);
     console.log('Testing endpoints:');
     console.log(`  - GET ${API_URL}/health`);
     console.log(`  - POST ${API_URL}/api/v1/generate`);
+    console.log(`  - GET ${API_URL}/api/v1/generations/{job_id} (polling)`);
     console.log(`  - GET ${API_URL}/api/v1/generations`);
     
     // Verify the API is reachable
