@@ -28,8 +28,8 @@ const generateFailureRate = new Rate('generate_failures');
 const listGenerationsFailureRate = new Rate('list_generations_failures');
 const generateDuration = new Trend('generate_duration');
 const e2eGenerationDuration = new Trend('e2e_generation_duration');
-// Note: k6 Rate.add(1) = "pass", Rate.add(0) = "fail". rate = passes/(passes+fails).
-// For e2e_generation_failures, we add(1) on success and add(0) on failure,
+// Note: k6 Rate.add(true) = "pass", Rate.add(false) = "fail". rate = passes/(passes+fails).
+// For e2e_generation_failures, we add(true) on success and add(false) on failure,
 // so the threshold 'rate>0.95' means "more than 95% of jobs should succeed".
 const e2eGenerationFailures = new Rate('e2e_generation_failures');
 const pollingIterations = new Trend('polling_iterations');
@@ -185,17 +185,14 @@ function pollForCompletion(jobId, startTime) {
     pollingIterations.add(iterations);
     
     // Record success/failure
-    // k6 Rate: add(1) = "pass" (counted in passes), add(0) = "fail" (counted in fails)
-    // threshold 'rate>0.95' means: passes/(passes+fails) > 0.95
-    if (completed) {
-        e2eGenerationFailures.add(1);  // Success: add(1) = pass in k6
-    } else {
-        // Timed out or job failed
-        if (!failed) {
-            console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
-        }
-        e2eGenerationFailures.add(0);  // Failure: add(0) = fail in k6
+    // k6 Rate.add(true) = "pass" (counted in passes), Rate.add(false) = "fail" (counted in fails)
+    // threshold 'rate>0.95' means: passes/(passes+fails) > 0.95, i.e., >95% of jobs should complete
+    if (!completed && !failed) {
+        console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
     }
+    // Use boolean directly - consistent with other Rate metrics in this file
+    // (e.g., healthCheckFailureRate.add(!success) also passes a boolean)
+    e2eGenerationFailures.add(completed);
     
     return completed;
 }
