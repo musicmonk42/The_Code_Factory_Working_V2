@@ -98,15 +98,16 @@ jobs:
             exit 1
           fi
           
-          # Wait for server to be ready (max 120 seconds)
+          # Wait for server to be ready (max 120 seconds: 60 attempts × 2s)
           echo "Waiting for API server to be ready..."
           max_attempts=60
           attempt=0
           while [ $attempt -lt $max_attempts ]; do
-            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+            # Check if health endpoint responds with 200 OK
+            if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
               echo "✓ API server is ready"
               
-              # Verify the health response
+              # Verify the health response content
               health_response=$(curl -s http://localhost:8000/health)
               echo "Health check response: $health_response"
               
