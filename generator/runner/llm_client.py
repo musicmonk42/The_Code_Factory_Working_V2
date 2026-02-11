@@ -731,6 +731,22 @@ class LLMClient:
             provider = m.get("provider")
             model = m.get("model")
             
+            # Infer provider from model name if not specified
+            if model and not provider:
+                # Map common model prefixes to providers
+                if model.startswith("gpt-") or model.startswith("o1"):
+                    provider = "openai"
+                elif model.startswith("claude"):
+                    provider = "claude"
+                elif model.startswith("gemini"):
+                    provider = "gemini"
+                elif model.startswith("grok"):
+                    provider = "grok"
+                else:
+                    # Fall back to default provider from config
+                    provider = getattr(self.config, 'llm_provider', 'openai') or "openai"
+                logger.info(f"Inferred provider '{provider}' for model '{model}'")
+            
             # Skip malformed model configurations with warning
             if not provider or not model:
                 logger.warning(

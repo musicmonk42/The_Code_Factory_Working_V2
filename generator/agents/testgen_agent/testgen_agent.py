@@ -127,7 +127,7 @@ def _get_presidio_anonymizer():
 
 
 from runner.llm_client import call_ensemble_api
-from runner.runner_errors import LLMError
+from runner.runner_errors import ConfigurationError, LLMError
 
 # --- CENTRAL RUNNER FOUNDATION ---
 # FIX: Import add_provenance from runner_audit to avoid circular dependency
@@ -911,6 +911,85 @@ Agent --> Dev : Deliver Report
 
     # --- END FIX ---
 
+    async def _create_llm_fallback_response(
+        self,
+        code_files: Dict[str, str],
+        language: str,
+        run_id: str,
+        error: Exception,
+        start_time: float,
+        log_extra: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Create a response using rule-based fallback when LLM fails.
+        
+        Args:
+            code_files: Dictionary of file paths to file contents
+            language: Programming language
+            run_id: Run identifier
+            error: The exception that triggered the fallback
+            start_time: Start time of the generation attempt
+            log_extra: Extra logging context
+            
+        Returns:
+            Response dictionary with rule-based tests and report
+        """
+        # Fall back to rule-based generation
+        basic_tests = await self._generate_basic_tests(code_files, language, run_id)
+        
+        await add_provenance(
+            "llm_fallback_to_rule_based",
+            {
+                "run_id": run_id,
+                "reason": str(error),
+                "tests_generated": len(basic_tests),
+                "test_files": list(basic_tests.keys()),
+            },
+            **log_extra,
+        )
+        
+        # Create a simple validation report
+        validation_report = {
+            "status": "completed",
+            "message": "Rule-based tests generated after LLM failure",
+            "tests_count": len(basic_tests),
+            "llm_error": str(error),
+        }
+        
+        # Create explainability report
+        error_message = str(error)[:100]
+        explainability_report = f"""# Test Generation Report
+
+## Summary
+- **Status**: Success (Fallback to rule-based generation)
+- **Tests Generated**: {len(basic_tests)} test files
+- **LLM Used**: No (LLM call failed: {error_message})
+- **Generation Method**: Rule-based AST parsing
+
+## Generated Test Files
+{chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
+
+## Notes
+- Tests are basic stubs that need to be implemented
+- LLM-based generation failed, so rule-based fallback was used
+- To troubleshoot LLM issues, check API keys and model configurations
+"""
+        
+        return {
+            "status": "success",
+            "generated_tests": basic_tests,
+            "final_validation_report": validation_report,
+            "explainability_report": explainability_report,
+            "duration_seconds": time.time() - start_time,
+            "run_id": run_id,
+            "history_summary": [{
+                "action": "llm_fallback_to_rule_based",
+                "status": "completed",
+                "tests_count": len(basic_tests),
+                "llm_error": str(error)[:200],
+            }],
+        }
+
     async def _generate_basic_tests(
         self, code_files: Dict[str, str], language: str, run_id: str
     ) -> Dict[str, str]:
@@ -1576,13 +1655,28 @@ def test_{file_stem}_syntax_error_documentation():
                         logger.info(
                             "Calling LLM for initial test generation.", extra=log_extra
                         )
-                        llm_response_from_generation = await self._call_llm_with_retry(
-                            generation_prompt,
-                            language,
-                            policy.generation_llm_model,
-                            run_id,
-                            "generation",
-                        )
+                        try:
+                            llm_response_from_generation = await self._call_llm_with_retry(
+                                generation_prompt,
+                                language,
+                                policy.generation_llm_model,
+                                run_id,
+                                "generation",
+                            )
+                        except (LLMError, ConfigurationError, Exception) as e:
+                            # Catch LLM and configuration errors, fall back to rule-based generation
+                            if isinstance(e, (LLMError, ConfigurationError)):
+                                logger.warning(
+                                    f"LLM call failed during initial generation, falling back to rule-based generation: {e}",
+                                    extra=log_extra
+                                )
+                                span.add_event("LLM generation failed, falling back to rule-based")
+                                return await self._create_llm_fallback_response(
+                                    code_files, language, run_id, e, start_time, log_extra
+                                )
+                            else:
+                                # Re-raise if not an LLM-related error
+                                raise
                     else:
                         span.add_event(
                             f"Building refinement prompt for attempt {attempt}."
@@ -1610,13 +1704,28 @@ def test_{file_stem}_syntax_error_documentation():
                             f"Calling LLM for refinement attempt {attempt}.",
                             extra=log_extra,
                         )
-                        llm_response_from_generation = await self._call_llm_with_retry(
-                            refinement_prompt,
-                            language,
-                            policy.refinement_llm_model,
-                            run_id,
-                            "refinement",
-                        )
+                        try:
+                            llm_response_from_generation = await self._call_llm_with_retry(
+                                refinement_prompt,
+                                language,
+                                policy.refinement_llm_model,
+                                run_id,
+                                "refinement",
+                            )
+                        except (LLMError, ConfigurationError, Exception) as e:
+                            # Catch LLM and configuration errors, fall back to rule-based generation
+                            if isinstance(e, (LLMError, ConfigurationError)):
+                                logger.warning(
+                                    f"LLM call failed during refinement, falling back to rule-based generation: {e}",
+                                    extra=log_extra
+                                )
+                                span.add_event("LLM refinement failed, falling back to rule-based")
+                                return await self._create_llm_fallback_response(
+                                    code_files, language, run_id, e, start_time, log_extra
+                                )
+                            else:
+                                # Re-raise if not an LLM-related error
+                                raise
 
                     history.append(
                         {
