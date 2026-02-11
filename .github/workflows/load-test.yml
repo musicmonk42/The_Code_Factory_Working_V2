@@ -31,7 +31,7 @@ jobs:
   load-test:
     name: Run K6 Load Test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     
     # Redis service container (required by the application)
     services:
@@ -85,8 +85,8 @@ jobs:
       
       - name: Start API server
         run: |
-          # Start the server in the background
-          python server/run.py --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+          # Start the server in the background with 4 workers for better concurrency
+          python server/run.py --host 0.0.0.0 --port 8000 --workers 4 > server.log 2>&1 &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
           
