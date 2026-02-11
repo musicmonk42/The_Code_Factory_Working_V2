@@ -682,7 +682,6 @@ jobs:
             -m "not heavy" \
             --maxfail=0 \
             --timeout=${TIMEOUT_VALUE} \
-            --timeout-func-only \
             --durations=20 \
             $COVERAGE_ARGS \
             $IGNORE_ARGS \
