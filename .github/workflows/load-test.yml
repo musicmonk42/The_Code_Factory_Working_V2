@@ -126,6 +126,8 @@ jobs:
         run: |
           # Run k6 with JSON output for artifact storage
           echo "Running load test against $TARGET_URL with max $MAX_VUS virtual users"
+          # SKIP_POLLING defaults to true (API responsiveness mode).
+          # To enable E2E polling, add: -e SKIP_POLLING=false
           k6 run loadtest.js \
             -e API_URL=$TARGET_URL \
             -e MAX_VUS=$MAX_VUS \

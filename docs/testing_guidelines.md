@@ -783,9 +783,29 @@ python server/run.py --reload
 
 #### 3. Run the Load Test
 
+The load test has two modes:
+
+**API Responsiveness Mode (Default):**
+- Measures request acceptance, latency, error rates, and throughput
+- Does NOT wait for background job completion
+- Best for measuring server capacity under load
+- Fast execution (~8 minutes)
+
+**E2E Pipeline Completion Mode (Opt-in):**
+- Measures full pipeline completion time (clarification, codegen, tests, docs, etc.)
+- Requires functional LLM backend
+- Jobs must complete within polling timeout (default 60s)
+- Slower execution with polling overhead
+
 ```bash
-# Run with default settings (http://localhost:8000, max 100 VUs)
+# Default: API responsiveness mode (no polling)
 k6 run loadtest.js
+
+# Enable E2E polling to measure full pipeline completion time
+k6 run -e SKIP_POLLING=false loadtest.js
+
+# E2E mode with custom timeout (e.g., 5 minutes for LLM-heavy pipelines)
+k6 run -e SKIP_POLLING=false -e POLL_TIMEOUT_S=300 -e E2E_THRESHOLD_MS=300000 loadtest.js
 
 # Run against a different URL
 k6 run -e API_URL=http://myserver:8000 loadtest.js
@@ -795,12 +815,6 @@ k6 run -e MAX_VUS=200 loadtest.js
 
 # Run with custom URL and VUs
 k6 run -e API_URL=http://myserver:8000 -e MAX_VUS=50 loadtest.js
-
-# Skip polling (fire-and-forget mode, only measures request acceptance time)
-k6 run -e SKIP_POLLING=true loadtest.js
-
-# Customize polling timeout and e2e threshold
-k6 run -e POLL_TIMEOUT_S=120 -e E2E_THRESHOLD_MS=60000 loadtest.js
 
 # Run with JSON output for analysis
 k6 run loadtest.js --out json=results.json
@@ -817,10 +831,14 @@ The load test script (`loadtest.js`) tests these endpoints:
 |----------|--------|-------------|
 | `/health` | GET | Health check endpoint |
 | `/api/v1/generate` | POST | Code generation (main workload) |
-| `/api/v1/generations/{job_id}` | GET | Poll for job completion (unless `SKIP_POLLING=true`) |
+| `/api/v1/generations/{job_id}` | GET | Poll for job completion (only when `SKIP_POLLING=false`) |
 | `/api/v1/generations` | GET | List generations |
 
-**New in v1.1**: The load test now includes end-to-end (e2e) polling to measure the actual time it takes for jobs to complete, not just the time for the API to accept the request. This can be disabled with `SKIP_POLLING=true` for backward compatibility.
+**Load Test Modes:**
+
+- **API Responsiveness (Default):** `SKIP_POLLING` defaults to `true`. Measures request acceptance latency, error rates, and throughput without waiting for background jobs to complete. This is the standard load test mode.
+
+- **E2E Pipeline Completion (Opt-in):** Use `-e SKIP_POLLING=false` to enable polling. Measures the full time for jobs to complete through all pipeline stages (clarification, codegen, tests, docs, critique). Requires a functional LLM backend and sufficient time for jobs to complete.
 
 #### Load Profile
 
@@ -839,12 +857,16 @@ The test uses staged ramp-up with configurable maximum virtual users (VUs):
 
 #### Thresholds
 
-Tests fail if these thresholds are exceeded:
-
+**API Responsiveness Mode (default):**
 - **p95 Response Time**: < 500ms (95th percentile for individual API requests)
 - **Error Rate**: < 1% (request failure rate)
+
+**E2E Pipeline Completion Mode (when `SKIP_POLLING=false`):**
+- **p95 Response Time**: < 500ms (95th percentile for individual API requests)
+- **p95 Polling Response Time**: < 1000ms (95th percentile for polling requests)
+- **Error Rate**: < 1% (request failure rate)
 - **E2E Generation Duration**: < 30 seconds (95th percentile for complete job processing, configurable via `E2E_THRESHOLD_MS`)
-- **E2E Generation Failures**: < 5% (jobs that fail or timeout)
+- **E2E Generation Failures**: > 95% success rate (jobs that complete successfully)
 
 #### Environment Variables
 
@@ -852,9 +874,9 @@ Tests fail if these thresholds are exceeded:
 |----------|---------|-------------|
 | `API_URL` | `http://localhost:8000` | Base URL for the API server |
 | `MAX_VUS` | `100` | Maximum number of virtual users |
-| `SKIP_POLLING` | `false` | Skip polling for job completion (fire-and-forget mode) |
-| `POLL_TIMEOUT_S` | `60` | Maximum time in seconds to wait for job completion |
-| `E2E_THRESHOLD_MS` | `30000` | p95 threshold in milliseconds for end-to-end job completion |
+| `SKIP_POLLING` | `true` | When `true` (default), skip polling for job completion (API responsiveness mode). Set to `false` to enable E2E pipeline completion mode. |
+| `POLL_TIMEOUT_S` | `60` | Maximum time in seconds to wait for job completion (only used when `SKIP_POLLING=false`) |
+| `E2E_THRESHOLD_MS` | `30000` | p95 threshold in milliseconds for end-to-end job completion (only used when `SKIP_POLLING=false`) |
 
 ### Interpreting Results
 
@@ -880,7 +902,7 @@ vus_max........................: 100     min=100  max=100
 
 #### Key Metrics
 
-**Request-level metrics** (individual API calls):
+**Request-level metrics** (individual API calls - available in both modes):
 - **http_req_duration**: Response time statistics
   - `p(95)`: 95th percentile - should be < 500ms
   - `avg`: Average response time
@@ -889,20 +911,26 @@ vus_max........................: 100     min=100  max=100
 - **http_reqs**: Total requests made and requests per second
 - **checks**: Percentage of successful validation checks
 
-**End-to-end metrics** (complete job processing, new in v1.1):
+**End-to-end metrics** (complete job processing - only when `SKIP_POLLING=false`):
 - **e2e_generation_duration**: Time from job submission to completion
   - `p(95)`: 95th percentile - should be < 30s (configurable)
   - Measures actual backend processing time, not just API response time
-- **e2e_generation_failures**: Percentage of jobs that failed or timed out - should be < 5%
+- **e2e_generation_failures**: Success rate of jobs (threshold: >95% success)
 - **polling_iterations**: Number of poll requests needed per job (useful for tuning polling interval)
 
 #### What Good Results Look Like
 
-✅ **Pass criteria:**
+✅ **API Responsiveness Mode (default):**
+- p95 response time < 500ms (for API requests)
+- Error rate < 1%
+- All checks passing (100%)
+- Consistent performance across all stages
+
+✅ **E2E Pipeline Completion Mode (when `SKIP_POLLING=false`):**
 - p95 response time < 500ms (for API requests)
 - p95 e2e generation time < 30s (for complete job processing)
 - Error rate < 1%
-- E2E generation failure rate < 5%
+- E2E generation success rate > 95%
 - All checks passing (100%)
 - Consistent performance across all stages
 
