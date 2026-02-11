@@ -285,6 +285,8 @@ class ResponseParser(ABC):
             f"Attempting LLM auto-healing for malformed response in {language}."
         )
         # FIX Issue 2: Improve auto-healing prompt to be more specific about syntax errors
+        # Compute file extension once for clarity
+        file_ext = LANGUAGE_CONFIG.get(language, {}).get('ext', 'txt')
         heal_prompt = f"""
 The following LLM response failed to parse with error: {error}
 
@@ -295,7 +297,7 @@ Please fix this response to be valid {language} test code. Follow these requirem
 1. Ensure all code has correct {language} syntax (no syntax errors)
 2. Wrap each test file in markdown code blocks with the format:
    ```{language}
-   # filename.{LANGUAGE_CONFIG.get(language, {}).get('ext', 'txt')}
+   # filename.{file_ext}
    <valid code here>
    ```
 3. Remove any explanatory text outside the code blocks
@@ -379,11 +381,13 @@ def _strip_markdown_fences(content: str) -> str:
     # Strip leading/trailing whitespace first
     content = content.strip()
     
-    # Remove opening fence (```python, ```py, etc.)
-    content = re.sub(r'^```\w*\s*\n?', '', content, flags=re.MULTILINE)
+    # Remove opening fence at the start of the string (```python, ```py, etc.)
+    # Use \A to match only the start of the string, not any line
+    content = re.sub(r'\A```\w*\s*\n?', '', content)
     
-    # Remove closing fence
-    content = re.sub(r'\n?```\s*$', '', content, flags=re.MULTILINE)
+    # Remove closing fence at the end of the string
+    # Use \Z to match only the end of the string, not any line
+    content = re.sub(r'\n?```\s*\Z', '', content)
     
     return content.strip()
 
