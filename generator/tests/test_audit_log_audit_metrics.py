@@ -217,7 +217,7 @@ class TestAuditMetrics:
             # FIX 1: LOG_WRITES now correctly takes a label
             LOG_WRITES.labels(action="user_login").inc()
             ERROR_TYPES.labels(type="network_issue").inc()
-            PLUGIN_INVOCATIONS.labels(plugin="data_enrichment").inc()
+            PLUGIN_INVOCATIONS.labels(event="pre_append", plugin="data_enrichment").inc()
             CRYPTO_FAILURES.labels(op="sign_fail").inc()
             PERF_SCORE.set(85.5)
 
@@ -238,7 +238,7 @@ class TestAuditMetrics:
         )
         assert (
             REGISTRY.get_sample_value(
-                "audit_plugin_invocations_total", {"plugin": "data_enrichment"}
+                "audit_plugin_invocations_total", {"event": "pre_append", "plugin": "data_enrichment"}
             )
             == 1.0
         )

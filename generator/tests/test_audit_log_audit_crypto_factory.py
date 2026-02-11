@@ -50,6 +50,10 @@ def clean_environment(monkeypatch):
 
     monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
     monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    # Also reset failure caching state to prevent state leakage between tests
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_FAILURE", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_ERROR", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_PERMANENT_FAILURE", False)
 
     # 3. Reset the factory instance cache
     audit_crypto_factory.crypto_provider_factory._instances.clear()
@@ -59,6 +63,9 @@ def clean_environment(monkeypatch):
     # Post-test cleanup
     monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER", None)
     monkeypatch.setattr(audit_crypto_factory, "_FALLBACK_HMAC_SECRET", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_FAILURE", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_LAST_ERROR", None)
+    monkeypatch.setattr(audit_crypto_factory, "_SOFTWARE_KEY_MASTER_PERMANENT_FAILURE", False)
     audit_crypto_factory.crypto_provider_factory._instances.clear()
 
 
@@ -699,6 +706,11 @@ class TestGlobalSecrets:
         )
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", False
+        )
+        # Also mock _ensure_boto3 to return False (simulate boto3 not available)
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_boto3",
+            lambda: False,
         )
 
         with pytest.raises(CryptoInitializationError, match="boto3 not available"):

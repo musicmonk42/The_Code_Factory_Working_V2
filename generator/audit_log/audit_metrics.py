@@ -188,7 +188,7 @@ APPEND_SIZE = Histogram("audit_append_size_bytes", "Size of appended entries")
 LOG_GROWTH = Gauge("audit_log_growth_bytes_per_min", "Log growth rate")
 ERROR_TYPES = safe_counter("audit_error_types_total", "Errors by type", ["type"])
 PLUGIN_INVOCATIONS = safe_counter(
-    "audit_plugin_invocations_total", "Plugin calls", ["plugin"]
+    "audit_plugin_invocations_total", "Plugin calls", ["event", "plugin"]
 )
 CRYPTO_FAILURES = safe_counter(
     "audit_crypto_failures_total", "Crypto operation failures", ["op"]
@@ -858,7 +858,7 @@ async def main():
             LOG_ERRORS.inc()
         if i % 5 == 0:
             CRYPTO_FAILURES.labels(op="sign_fail").inc()
-        PLUGIN_INVOCATIONS.labels(plugin="data_enrichment").inc()
+        PLUGIN_INVOCATIONS.labels(event="pre_append", plugin="data_enrichment").inc()
 
         if i > 20 and i < 30:
             await asyncio.sleep(0.1 + (i % 5) * 0.05)
