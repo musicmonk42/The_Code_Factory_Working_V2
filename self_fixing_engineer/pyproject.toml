@@ -54,9 +54,8 @@ dependencies = [
     "SQLAlchemy>=2.0,<3.0",
     "psycopg2-binary",
     "aiosqlite",
-    "redis",
+    "redis>=5.0.0,<6.0.0",
     "aiofiles",
-    "aioredis",
     # Cloud & Infrastructure
     "boto3",
     "aioboto3",

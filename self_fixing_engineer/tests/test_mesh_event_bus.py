@@ -119,7 +119,6 @@ def setup_mocks():
     import types
 
     mock_redis = MagicMock()
-    mock_redis_async = MagicMock()
     mock_redis_exceptions = MagicMock()
     mock_redis_exceptions.ConnectionError = ConnectionError
     mock_redis_exceptions.TimeoutError = TimeoutError
@@ -141,11 +140,15 @@ def setup_mocks():
     mock_redis_client.Redis = Redis
     mock_redis.client = mock_redis_client
 
+    # Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
+    mock_redis_async = MagicMock()
+    mock_redis_async.Redis = MagicMock()
+    mock_redis_async.ConnectionPool = MagicMock()
+    mock_redis_async.ClusterConnectionPool = MagicMock()
+    mock_redis_async.PubSub = MagicMock()  # PubSub lives in redis.asyncio, not redis.client
+
     sys.modules["redis"] = mock_redis
     sys.modules["redis.asyncio"] = mock_redis_async
-    sys.modules["redis.asyncio"].Redis = MagicMock()
-    sys.modules["redis.asyncio"].ConnectionPool = MagicMock()
-    sys.modules["redis.asyncio"].ClusterConnectionPool = MagicMock()
     sys.modules["redis.client"] = mock_redis_client
     sys.modules["redis.exceptions"] = mock_redis_exceptions
 

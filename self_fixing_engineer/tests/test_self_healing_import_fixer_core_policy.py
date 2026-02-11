@@ -59,12 +59,6 @@ import types
 
 mock_boto3 = Mock()
 mock_redis = Mock()
-mock_redis_async = Mock()
-mock_redis_instance = AsyncMock()
-mock_redis_instance.ping = AsyncMock()
-mock_redis_instance.get = AsyncMock(return_value=None)
-mock_redis_instance.setex = AsyncMock()
-mock_redis_async.Redis = Mock(return_value=mock_redis_instance)
 
 # Create redis.client with proper PubSubWorkerThread class for type annotations
 mock_redis_client = types.ModuleType("redis.client")
@@ -80,6 +74,15 @@ class Redis:
 mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
 mock_redis_client.Redis = Redis
 mock_redis.client = mock_redis_client
+
+# Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
+mock_redis_async = Mock()
+mock_redis_instance = AsyncMock()
+mock_redis_instance.ping = AsyncMock()
+mock_redis_instance.get = AsyncMock(return_value=None)
+mock_redis_instance.setex = AsyncMock()
+mock_redis_async.Redis = Mock(return_value=mock_redis_instance)
+mock_redis_async.PubSub = Mock()  # PubSub lives in redis.asyncio, not redis.client
 
 sys.modules["boto3"] = mock_boto3
 sys.modules["botocore.exceptions"] = Mock()
