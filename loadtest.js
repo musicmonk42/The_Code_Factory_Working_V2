@@ -29,24 +29,29 @@ const generateDuration = new Trend('generate_duration');
 
 // Configuration
 const API_URL = __ENV.API_URL || 'http://localhost:8000';
+const MAX_VUS = parseInt(__ENV.MAX_VUS || '100', 10);  // Maximum virtual users
 const P95_THRESHOLD_MS = 500;  // 95th percentile response time threshold
 const ERROR_RATE_THRESHOLD = 0.01;  // 1% error rate threshold
+
+// Calculate intermediate VU targets based on MAX_VUS
+const VU_WARMUP = Math.floor(MAX_VUS * 0.1);  // 10% of max
+const VU_MEDIUM = Math.floor(MAX_VUS * 0.5);  // 50% of max
 
 // Test options with staged ramp-up
 export const options = {
     stages: [
-        // Warm-up phase: Ramp up to 10 users over 30 seconds
-        { duration: '30s', target: 10 },
-        // Maintain 10 users for 1 minute
-        { duration: '1m', target: 10 },
-        // Scale up to 50 users over 1 minute
-        { duration: '1m', target: 50 },
-        // Maintain 50 users for 2 minutes
-        { duration: '2m', target: 50 },
-        // Scale up to 100 users over 1 minute
-        { duration: '1m', target: 100 },
-        // Maintain 100 users for 2 minutes
-        { duration: '2m', target: 100 },
+        // Warm-up phase: Ramp up to 10% of max users over 30 seconds
+        { duration: '30s', target: VU_WARMUP },
+        // Maintain warmup level for 1 minute
+        { duration: '1m', target: VU_WARMUP },
+        // Scale up to 50% of max users over 1 minute
+        { duration: '1m', target: VU_MEDIUM },
+        // Maintain medium level for 2 minutes
+        { duration: '2m', target: VU_MEDIUM },
+        // Scale up to max users over 1 minute
+        { duration: '1m', target: MAX_VUS },
+        // Maintain peak load for 2 minutes
+        { duration: '2m', target: MAX_VUS },
         // Ramp down to 0 users over 30 seconds
         { duration: '30s', target: 0 },
     ],
@@ -171,6 +176,7 @@ function testListGenerationsEndpoint() {
  */
 export function setup() {
     console.log(`Starting load test against ${API_URL}`);
+    console.log(`Max virtual users: ${MAX_VUS} (warmup: ${VU_WARMUP}, medium: ${VU_MEDIUM})`);
     console.log('Testing endpoints:');
     console.log(`  - GET ${API_URL}/health`);
     console.log(`  - POST ${API_URL}/api/v1/generate`);

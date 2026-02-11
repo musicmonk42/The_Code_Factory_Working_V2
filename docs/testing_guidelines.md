@@ -784,14 +784,17 @@ python server/run.py --reload
 #### 3. Run the Load Test
 
 ```bash
-# Run with default settings (http://localhost:8000)
+# Run with default settings (http://localhost:8000, max 100 VUs)
 k6 run loadtest.js
 
 # Run against a different URL
 k6 run -e API_URL=http://myserver:8000 loadtest.js
 
-# Run with custom virtual users
-k6 run --vus 200 loadtest.js
+# Run with custom maximum virtual users (adjusts all stages proportionally)
+k6 run -e MAX_VUS=200 loadtest.js
+
+# Run with custom URL and VUs
+k6 run -e API_URL=http://myserver:8000 -e MAX_VUS=50 loadtest.js
 
 # Run with JSON output for analysis
 k6 run loadtest.js --out json=results.json
@@ -809,16 +812,17 @@ The load test script (`loadtest.js`) tests these endpoints:
 
 #### Load Profile
 
-The test uses staged ramp-up:
+The test uses staged ramp-up with configurable maximum virtual users (VUs):
 
-1. **Warm-up**: 0 → 10 VUs over 30 seconds
-2. **Sustain**: 10 VUs for 1 minute
-3. **Scale**: 10 → 50 VUs over 1 minute
-4. **Sustain**: 50 VUs for 2 minutes
-5. **Scale**: 50 → 100 VUs over 1 minute
-6. **Peak**: 100 VUs for 2 minutes
-7. **Ramp-down**: 100 → 0 VUs over 30 seconds
+1. **Warm-up**: 0 → 10% of MAX_VUS over 30 seconds
+2. **Sustain**: Hold at 10% for 1 minute
+3. **Scale**: 10% → 50% of MAX_VUS over 1 minute
+4. **Sustain**: Hold at 50% for 2 minutes
+5. **Scale**: 50% → 100% of MAX_VUS over 1 minute
+6. **Peak**: Hold at 100% (MAX_VUS) for 2 minutes
+7. **Ramp-down**: 100% → 0 VUs over 30 seconds
 
+**Default MAX_VUS**: 100 (can be customized via `-e MAX_VUS=N`)  
 **Total duration**: ~8 minutes
 
 #### Thresholds
