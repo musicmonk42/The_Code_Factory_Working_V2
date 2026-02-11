@@ -290,6 +290,11 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fil
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
+# Add generator/scripts directory to path for script tests
+scripts_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts")
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
 # This will trigger other initialization in the root conftest
 import conftest as root_conftest
 
