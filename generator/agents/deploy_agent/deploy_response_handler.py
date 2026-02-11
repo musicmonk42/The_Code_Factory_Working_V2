@@ -36,7 +36,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime  # Needed for provenance timestamp
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import aiofiles  # Explicitly imported for async file operations
 import hcl2  # For HCL (Terraform) parsing
@@ -1745,6 +1745,310 @@ class YAMLHandler(FormatHandler):
         return issues
 
 
+class KubernetesHandler(FormatHandler):
+    """
+    FIX Bug 3: Dedicated handler for Kubernetes manifests.
+    
+    Handles multi-document YAML specific to Kubernetes, with proper validation
+    and splitting of resources into separate files.
+    """
+    __version__ = "1.0"
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """Parse Kubernetes YAML, supporting multi-document format."""
+        # Sanitize the input
+        raw = self._sanitize_yaml_response(raw)
+        
+        # Parse multi-document YAML (Kubernetes commonly uses --- separators)
+        ru_yaml = YAML()
+        ru_yaml.allow_duplicate_keys = False
+        
+        documents = []
+        try:
+            doc_generator = ru_yaml.load_all(raw)
+            for doc in doc_generator:
+                if doc is not None and isinstance(doc, dict):
+                    # Validate it's a valid K8s resource
+                    if "apiVersion" in doc and "kind" in doc:
+                        documents.append(doc)
+                    else:
+                        logger.warning(
+                            f"Skipping invalid Kubernetes resource: missing apiVersion or kind",
+                            extra={"doc_keys": list(doc.keys()) if isinstance(doc, dict) else None}
+                        )
+        except Exception as e:
+            raise ValueError(f"Failed to parse Kubernetes YAML: {e}")
+        
+        if not documents:
+            raise ValueError("No valid Kubernetes resources found in YAML")
+        
+        return documents if len(documents) > 1 else documents[0]
+
+    def _sanitize_yaml_response(self, raw: str) -> str:
+        """Remove common LLM artifacts from YAML response."""
+        # Remove markdown code blocks
+        raw = re.sub(r'^```(?:yaml|yml)?\s*\n', '', raw, flags=re.MULTILINE)
+        raw = re.sub(r'\n```\s*$', '', raw, flags=re.MULTILINE)
+        return raw.strip()
+
+    def validate(self, data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
+        """Validate Kubernetes manifests."""
+        docs = data if isinstance(data, list) else [data]
+        
+        for idx, doc in enumerate(docs):
+            if not isinstance(doc, dict):
+                raise ValueError(f"Document {idx} is not a dictionary")
+            
+            # Required fields for K8s resources
+            if "apiVersion" not in doc:
+                raise ValueError(f"Document {idx} missing required field 'apiVersion'")
+            if "kind" not in doc:
+                raise ValueError(f"Document {idx} missing required field 'kind'")
+            if "metadata" not in doc:
+                raise ValueError(f"Document {idx} missing required field 'metadata'")
+            if not doc.get("metadata", {}).get("name"):
+                raise ValueError(f"Document {idx} missing metadata.name")
+
+    def convert(self, data: Union[Dict[str, Any], List[Dict[str, Any]]], to_format: str) -> str:
+        """Convert Kubernetes manifest to requested format."""
+        if to_format == "json":
+            return json.dumps(data, indent=2)
+        elif to_format in ("yaml", "yml"):
+            from io import StringIO
+            string_stream = StringIO()
+            ru_yaml = YAML()
+            
+            if isinstance(data, list):
+                # Multi-document YAML
+                for doc in data:
+                    ru_yaml.dump(doc, string_stream)
+                    string_stream.write("---\n")
+            else:
+                ru_yaml.dump(data, string_stream)
+            
+            return string_stream.getvalue()
+        raise ValueError(f"KubernetesHandler does not support conversion to '{to_format}'")
+
+    def extract_sections(self, data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> Dict[str, str]:
+        """Extract sections from Kubernetes manifests."""
+        sections = {}
+        docs = data if isinstance(data, list) else [data]
+        
+        for idx, doc in enumerate(docs):
+            kind = doc.get("kind", "unknown")
+            name = doc.get("metadata", {}).get("name", f"resource-{idx}")
+            section_key = f"{kind}_{name}"
+            sections[section_key] = json.dumps(doc, indent=2)
+        
+        return sections
+
+    def lint(self, data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> List[str]:
+        """Lint Kubernetes manifests for common issues."""
+        issues = []
+        docs = data if isinstance(data, list) else [data]
+        
+        for idx, doc in enumerate(docs):
+            kind = doc.get("kind", "unknown")
+            
+            # Check for resource limits in workload resources
+            if kind in ("Deployment", "StatefulSet", "DaemonSet", "Pod"):
+                if kind == "Pod":
+                    containers = doc.get("spec", {}).get("containers", [])
+                else:
+                    containers = doc.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+                
+                for container in containers:
+                    if not container.get("resources"):
+                        issues.append(f"{kind} container '{container.get('name')}' missing resource limits")
+        
+        return issues
+
+
+class HelmHandler(FormatHandler):
+    """
+    FIX Bug 3: Dedicated handler for Helm charts.
+    
+    Handles Helm chart structure including Chart.yaml, values.yaml, and templates.
+    Returns structured data for proper file organization.
+    """
+    __version__ = "1.0"
+    __source__ = "built-in"
+
+    def normalize(self, raw: str) -> Dict[str, Any]:
+        """
+        Parse Helm chart content.
+        
+        Expects either:
+        1. A structured response with separate Chart.yaml, values.yaml, templates
+        2. A single YAML document that we'll structure appropriately
+        """
+        raw = self._sanitize_yaml_response(raw)
+        
+        # Try to parse as structured Helm response
+        ru_yaml = YAML()
+        
+        try:
+            # Check if the response contains multiple files indicated by comments or sections
+            # Look for common patterns like "# Chart.yaml", "# values.yaml", etc.
+            if "# Chart.yaml" in raw or "# values.yaml" in raw:
+                # Parse structured response
+                return self._parse_structured_helm(raw)
+            else:
+                # Single YAML - treat as Chart.yaml
+                data = ru_yaml.load(raw)
+                if not isinstance(data, dict):
+                    raise ValueError("Helm chart content must be a dictionary")
+                
+                # Check if it's a Chart.yaml or values.yaml based on content
+                if "apiVersion" in data and "name" in data and "version" in data:
+                    # This is a Chart.yaml
+                    return {
+                        "Chart.yaml": data,
+                        "values.yaml": {},
+                        "templates": {}
+                    }
+                else:
+                    # Assume it's values.yaml
+                    return {
+                        "Chart.yaml": self._default_chart_yaml(),
+                        "values.yaml": data,
+                        "templates": {}
+                    }
+        except Exception as e:
+            raise ValueError(f"Failed to parse Helm chart content: {e}")
+
+    def _sanitize_yaml_response(self, raw: str) -> str:
+        """Remove common LLM artifacts from YAML response."""
+        raw = re.sub(r'^```(?:yaml|yml)?\s*\n', '', raw, flags=re.MULTILINE)
+        raw = re.sub(r'\n```\s*$', '', raw, flags=re.MULTILINE)
+        return raw.strip()
+
+    def _parse_structured_helm(self, raw: str) -> Dict[str, Any]:
+        """Parse a structured Helm response with multiple files."""
+        result = {
+            "Chart.yaml": {},
+            "values.yaml": {},
+            "templates": {}
+        }
+        
+        # Split by file markers
+        sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', raw)
+        
+        ru_yaml = YAML()
+        current_file = None
+        
+        for i, section in enumerate(sections):
+            if i % 2 == 1:  # File name
+                current_file = section.strip()
+            elif current_file and section.strip():  # File content
+                try:
+                    if current_file.startswith("templates/"):
+                        result["templates"][current_file] = section.strip()
+                    elif current_file == "Chart.yaml":
+                        result["Chart.yaml"] = ru_yaml.load(section.strip())
+                    elif current_file == "values.yaml":
+                        result["values.yaml"] = ru_yaml.load(section.strip())
+                except Exception as e:
+                    logger.warning(f"Failed to parse {current_file}: {e}")
+        
+        # Ensure Chart.yaml has required fields
+        if not result["Chart.yaml"]:
+            result["Chart.yaml"] = self._default_chart_yaml()
+        
+        return result
+
+    def _default_chart_yaml(self) -> Dict[str, Any]:
+        """Generate default Chart.yaml structure."""
+        return {
+            "apiVersion": "v2",
+            "name": "app",
+            "description": "A Helm chart for Kubernetes",
+            "type": "application",
+            "version": "0.1.0",
+            "appVersion": "1.0.0"
+        }
+
+    def validate(self, data: Dict[str, Any]) -> None:
+        """Validate Helm chart structure."""
+        # Ensure it has the expected structure
+        if not isinstance(data, dict):
+            raise ValueError("Helm chart data must be a dictionary")
+        
+        # Check for required components
+        if "Chart.yaml" not in data:
+            raise ValueError("Helm chart missing Chart.yaml")
+        
+        chart = data.get("Chart.yaml", {})
+        if not isinstance(chart, dict):
+            raise ValueError("Chart.yaml must be a dictionary")
+        
+        # Validate Chart.yaml required fields
+        required_chart_fields = ["apiVersion", "name", "version"]
+        for field in required_chart_fields:
+            if field not in chart:
+                raise ValueError(f"Chart.yaml missing required field: {field}")
+
+    def convert(self, data: Dict[str, Any], to_format: str) -> str:
+        """Convert Helm chart to requested format."""
+        if to_format == "json":
+            return json.dumps(data, indent=2)
+        elif to_format in ("yaml", "yml"):
+            # Return as multi-section YAML
+            from io import StringIO
+            string_stream = StringIO()
+            ru_yaml = YAML()
+            
+            # Write Chart.yaml
+            string_stream.write("# Chart.yaml\n")
+            ru_yaml.dump(data.get("Chart.yaml", {}), string_stream)
+            string_stream.write("\n---\n")
+            
+            # Write values.yaml
+            string_stream.write("# values.yaml\n")
+            ru_yaml.dump(data.get("values.yaml", {}), string_stream)
+            
+            # Write templates
+            for template_name, template_content in data.get("templates", {}).items():
+                string_stream.write(f"\n---\n# {template_name}\n")
+                string_stream.write(template_content)
+            
+            return string_stream.getvalue()
+        raise ValueError(f"HelmHandler does not support conversion to '{to_format}'")
+
+    def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Extract sections from Helm chart."""
+        sections = {}
+        
+        if "Chart.yaml" in data:
+            sections["Chart.yaml"] = json.dumps(data["Chart.yaml"], indent=2)
+        if "values.yaml" in data:
+            sections["values.yaml"] = json.dumps(data["values.yaml"], indent=2)
+        if "templates" in data:
+            for name, content in data["templates"].items():
+                sections[f"templates/{name}"] = content
+        
+        return sections
+
+    def lint(self, data: Dict[str, Any]) -> List[str]:
+        """Lint Helm chart for common issues."""
+        issues = []
+        
+        chart = data.get("Chart.yaml", {})
+        if not chart.get("description"):
+            issues.append("Chart.yaml missing description")
+        
+        values = data.get("values.yaml", {})
+        if not values:
+            issues.append("values.yaml is empty - consider adding default values")
+        
+        templates = data.get("templates", {})
+        if not templates:
+            issues.append("No templates defined in Helm chart")
+        
+        return issues
+
+
 class JSONHandler(FormatHandler):
     __version__ = "1.0"
     __source__ = "built-in"
@@ -1903,9 +2207,13 @@ class HandlerRegistry:
         self.handler_info.clear()
 
         # 2. Load built-in handlers first
+        # FIX Bug 3 & 4: Add dedicated handlers for Kubernetes and Helm
         built_in_handlers = {
             "dockerfile": DockerfileHandler,
             "yaml": YAMLHandler,
+            "kubernetes": KubernetesHandler,  # Dedicated K8s handler
+            "k8s": KubernetesHandler,         # Alias for kubernetes
+            "helm": HelmHandler,              # Dedicated Helm handler
             "json": JSONHandler,
             "hcl": HCLHandler,
             "markdown": MarkdownHandler,
@@ -1920,9 +2228,6 @@ class HandlerRegistry:
         # 2.5. Register common aliases for convenience and compatibility
         handler_aliases = {
             "docker": "dockerfile",  # Map 'docker' to 'dockerfile'
-            "k8s": "yaml",  # Map 'k8s' to 'yaml'
-            "kubernetes": "yaml",  # Map 'kubernetes' to 'yaml'
-            "helm": "yaml",  # Map 'helm' to 'yaml'
             "md": "markdown",  # Map 'md' to 'markdown' (if markdown handler exists)
             "docs": "markdown",  # Map 'docs' to 'markdown' (if markdown handler exists)
         }
