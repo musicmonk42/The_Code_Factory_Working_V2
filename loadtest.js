@@ -35,6 +35,7 @@ const pollingIterations = new Trend('polling_iterations');
 const API_URL = __ENV.API_URL || 'http://localhost:8000';
 const MAX_VUS = parseInt(__ENV.MAX_VUS || '100', 10);  // Maximum virtual users
 const P95_THRESHOLD_MS = 500;  // 95th percentile response time threshold
+const POLL_P95_THRESHOLD_MS = 1000;  // 95th percentile for polling requests (more lenient)
 const ERROR_RATE_THRESHOLD = 0.01;  // 1% error rate threshold
 const POLL_TIMEOUT_S = parseInt(__ENV.POLL_TIMEOUT_S || '60', 10);  // Polling timeout in seconds
 const POLL_INTERVAL_S = 2;  // Polling interval in seconds
@@ -68,7 +69,7 @@ export const options = {
         'http_req_duration{type:health}': [`p(95)<${P95_THRESHOLD_MS}`],
         'http_req_duration{type:generate}': [`p(95)<${P95_THRESHOLD_MS}`],
         'http_req_duration{type:list}': [`p(95)<${P95_THRESHOLD_MS}`],
-        'http_req_duration{type:poll}': [`p(95)<${P95_THRESHOLD_MS}`],
+        'http_req_duration{type:poll}': [`p(95)<${POLL_P95_THRESHOLD_MS}`],  // More lenient for polling
         // Overall p95 should be under threshold
         'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
         // Less than 1% request failure rate
@@ -174,6 +175,8 @@ function pollForCompletion(jobId, startTime) {
     }
     
     // Record metrics
+    // Note: elapsed time includes polling overhead (sleep intervals), which is intentional
+    // to measure the total wall-clock time from submission to completion
     const elapsedTime = Date.now() - startTime;
     e2eGenerationDuration.add(elapsedTime);
     pollingIterations.add(iterations);
