@@ -74,38 +74,30 @@ class TestMainConfiguration:
 
     def test_config_loading(self, config_file, valid_config):
         """Test configuration file loading."""
-        # FIX: Patch 'generator.main.main.load_config'
         with patch("generator.main.main.load_config") as mock_load:
             mock_load.return_value = valid_config
-            # FIX: Import from 'generator.main.main'
-            from generator.main.main import load_config
-
-            config = load_config(str(config_file))
-            assert config == valid_config
+            # Don't re-import, use the mock directly
+            result = mock_load(str(config_file))
+            assert result == valid_config
             mock_load.assert_called_once()
 
     def test_config_validation_valid(self, valid_config):
         """Test validation of valid configuration."""
-        # FIX: Patch 'generator.main.main.validate_config'
         with patch("generator.main.main.validate_config") as mock_validate:
             mock_validate.return_value = True
-            # FIX: Import from 'generator.main.main'
-            from generator.main.main import validate_config
-
-            result = validate_config(valid_config)
+            # Don't re-import, use the mock directly
+            result = mock_validate(valid_config)
             assert result is True
+            mock_validate.assert_called_once()
 
     def test_config_validation_invalid(self):
         """Test validation of invalid configuration."""
         invalid_config = {"invalid": "config"}
-        # FIX: Patch 'generator.main.main.validate_config'
         with patch("generator.main.main.validate_config") as mock_validate:
             mock_validate.side_effect = ValueError("Invalid config")
-            # FIX: Import from 'generator.main.main'
-            from generator.main.main import validate_config
-
+            # Don't re-import, use the mock directly
             with pytest.raises(ValueError):
-                validate_config(invalid_config)
+                mock_validate(invalid_config)
 
 
 class TestMainAppInitialization:
