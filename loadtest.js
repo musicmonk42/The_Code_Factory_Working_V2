@@ -29,6 +29,8 @@ const generateDuration = new Trend('generate_duration');
 
 // Configuration
 const API_URL = __ENV.API_URL || 'http://localhost:8000';
+const P95_THRESHOLD_MS = 500;  // 95th percentile response time threshold
+const ERROR_RATE_THRESHOLD = 0.01;  // 1% error rate threshold
 
 // Test options with staged ramp-up
 export const options = {
@@ -49,17 +51,17 @@ export const options = {
         { duration: '30s', target: 0 },
     ],
     thresholds: {
-        // 95th percentile response time should be under 500ms
-        'http_req_duration{type:health}': ['p(95)<500'],
-        'http_req_duration{type:generate}': ['p(95)<500'],
-        'http_req_duration{type:list}': ['p(95)<500'],
-        // Overall p95 should be under 500ms
-        'http_req_duration': ['p(95)<500'],
+        // 95th percentile response time should be under threshold
+        'http_req_duration{type:health}': [`p(95)<${P95_THRESHOLD_MS}`],
+        'http_req_duration{type:generate}': [`p(95)<${P95_THRESHOLD_MS}`],
+        'http_req_duration{type:list}': [`p(95)<${P95_THRESHOLD_MS}`],
+        // Overall p95 should be under threshold
+        'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
         // Less than 1% request failure rate
-        'http_req_failed': ['rate<0.01'],
-        'health_check_failures': ['rate<0.01'],
-        'generate_failures': ['rate<0.01'],
-        'list_generations_failures': ['rate<0.01'],
+        'http_req_failed': [`rate<${ERROR_RATE_THRESHOLD}`],
+        'health_check_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+        'generate_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+        'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
     },
 };
 

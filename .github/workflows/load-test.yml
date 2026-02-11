@@ -116,14 +116,25 @@ jobs:
           k6 version
       
       - name: Run k6 load test
+        id: k6_test
+        continue-on-error: true
         run: |
           # Run k6 with JSON output for artifact storage
           echo "Running load test against $TARGET_URL with max $MAX_VUS virtual users"
           k6 run loadtest.js \
             -e API_URL=$TARGET_URL \
             --out json=loadtest-results.json \
-            --summary-export=loadtest-summary.json \
-            || true  # Don't fail the workflow if thresholds are not met
+            --summary-export=loadtest-summary.json
+      
+      - name: Check test results
+        if: always()
+        run: |
+          if [ "${{ steps.k6_test.outcome }}" == "failure" ]; then
+            echo "⚠️ Load test thresholds were exceeded!"
+            echo "This indicates potential performance issues under load."
+            echo "Review the test summary and artifacts for details."
+            echo ""
+          fi
       
       - name: Display test summary
         if: always()
