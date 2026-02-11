@@ -161,6 +161,11 @@ function pollForCompletion(jobId, startTime) {
             const body = JSON.parse(response.body);
             const jobStatus = body.status;
             
+            // Diagnostic: log the actual status value received
+            if (iterations <= 3) {
+                console.log(`[DIAG] Poll #${iterations} for jobId=${jobId}: status="${jobStatus}", full_body=${JSON.stringify(body)}`);
+            }
+            
             if (jobStatus === 'completed' || jobStatus === 'success') {
                 completed = true;
                 break;
@@ -177,6 +182,9 @@ function pollForCompletion(jobId, startTime) {
         }
     }
     
+    // Diagnostic: log final state after polling loop
+    console.log(`[DIAG] Poll result for jobId=${jobId}: completed=${completed}, failed=${failed}, iterations=${iterations}`);
+    
     // Record metrics
     // Note: elapsed time includes polling overhead (sleep intervals), which is intentional
     // to measure the total wall-clock time from submission to completion
@@ -185,14 +193,12 @@ function pollForCompletion(jobId, startTime) {
     pollingIterations.add(iterations);
     
     // Record success/failure
-    // k6 Rate.add(true) = "pass" (counted in passes), Rate.add(false) = "fail" (counted in fails)
-    // threshold 'rate>0.95' means: passes/(passes+fails) > 0.95, i.e., >95% of jobs should complete
+    // k6 Rate.add(true) = "pass", Rate.add(false) = "fail"
+    // threshold 'rate>0.95' means: passes/(passes+fails) > 0.95
     if (!completed && !failed) {
         console.warn(`Job timed out after ${POLL_TIMEOUT_S}s: jobId=${jobId}`);
     }
-    // Use boolean directly - consistent with other Rate metrics in this file
-    // (e.g., healthCheckFailureRate.add(!success) also passes a boolean)
-    e2eGenerationFailures.add(completed);
+    e2eGenerationFailures.add(completed);  // boolean: true=pass, false=fail
     
     return completed;
 }
