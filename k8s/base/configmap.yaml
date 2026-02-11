@@ -34,6 +34,9 @@ data:
   DB_POOL_MAX_OVERFLOW: "20"
   DB_RETRY_ATTEMPTS: "3"
   DB_RETRY_DELAY: "1.0"
+  # Connection timeouts for cloud deployments
+  DB_CONNECT_TIMEOUT: "30"  # Connection timeout in seconds
+  DB_COMMAND_TIMEOUT: "60"  # Query execution timeout in seconds
   
   # ============================================
   # Message Bus Configuration

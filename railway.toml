@@ -90,6 +90,11 @@ DB_POOL_MAX_OVERFLOW = "20"
 DB_RETRY_ATTEMPTS = "3"
 DB_RETRY_DELAY = "1.0"
 
+# Database connection timeouts for Railway deployment
+# Increased from defaults to handle Railway's network latency
+DB_CONNECT_TIMEOUT = "30"  # Connection timeout in seconds (default: 10)
+DB_COMMAND_TIMEOUT = "60"  # Query execution timeout in seconds (default: 30)
+
 # === Message Bus Configuration (CRITICAL for event loop fix) ===
 MESSAGE_BUS_SHARD_COUNT = "8"
 MESSAGE_BUS_WORKERS_PER_SHARD = "4"
