@@ -696,7 +696,7 @@ class PromptTemplateRegistry:
                             return template
             except Exception as fallback_error:
                 logger.debug(f"Case-insensitive fallback failed: {fallback_error}")
-            
+
             error_msg = f"Required template '{full_template_file_name}' not found in '{self.plugin_dir}' or failed to load: {e}. Please ensure this template file exists and is valid."
             logger.error(error_msg, exc_info=True)
             raise ValueError(error_msg)
