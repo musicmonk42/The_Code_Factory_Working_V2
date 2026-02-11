@@ -227,6 +227,7 @@ HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
 # Constants for README generation
 MAX_FILES_IN_README = 10  # Maximum files to list in README
 MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
+MIN_README_LENGTH = 500  # Minimum length for a complete README (characters)
 
 
 def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
@@ -4506,7 +4507,7 @@ class OmniCoreService:
                                 should_regenerate = True
                         else:
                             # Fallback: Simple length check if validation not available
-                            if len(readme_content) < 500:
+                            if len(readme_content) < MIN_README_LENGTH:
                                 logger.warning(
                                     f"[PIPELINE] Job {job_id} README too short ({len(readme_content)} chars), will regenerate"
                                 )
