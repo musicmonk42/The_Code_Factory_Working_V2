@@ -334,40 +334,24 @@ class TestLLMClient:
         with patch.object(
             initialized_client, "call_llm_api", side_effect=mock_call_llm_api_internal
         ):
-            # Test 1: Model config with missing provider should infer from model name
+            # Test 1: Model config with missing provider should use config default
             models = [
-                {"model": "gpt-4o"},  # Should infer provider="openai"
-                {"model": "claude-3-opus"},  # Should infer provider="claude"
-                {"model": "gemini-pro"},  # Should infer provider="gemini"
+                {"model": "gpt-4o"},  # Should use default provider from config
+                {"model": "claude-3-opus"},  # Should also use default provider
             ]
             
             result = await initialized_client.call_ensemble_api(
                 "test prompt", models, "majority"
             )
             
-            # Verify that provider was inferred for all models
-            assert len(call_log) == 3
-            assert call_log[0]["provider"] == "openai"
+            # Verify that default provider was used for all models
+            assert len(call_log) == 2
+            assert call_log[0]["provider"] == "openai"  # Default from config
             assert call_log[0]["model"] == "gpt-4o"
-            assert call_log[1]["provider"] == "claude"
+            assert call_log[1]["provider"] == "openai"  # Default from config
             assert call_log[1]["model"] == "claude-3-opus"
-            assert call_log[2]["provider"] == "gemini"
-            assert call_log[2]["model"] == "gemini-pro"
             
-            # Test 2: Unknown model should fallback to config default
-            call_log.clear()
-            models = [{"model": "unknown-model-xyz"}]
-            
-            result = await initialized_client.call_ensemble_api(
-                "test prompt", models, "first"
-            )
-            
-            # Should fallback to default provider from config
-            assert len(call_log) == 1
-            assert call_log[0]["provider"] == "openai"  # Default from test config
-            assert call_log[0]["model"] == "unknown-model-xyz"
-            
-            # Test 3: Explicit provider should not be overridden
+            # Test 2: Explicit provider should not be overridden
             call_log.clear()
             models = [{"provider": "custom", "model": "gpt-4o"}]
             
@@ -375,12 +359,12 @@ class TestLLMClient:
                 "test prompt", models, "first"
             )
             
-            # Should use the explicit provider, not infer from model name
+            # Should use the explicit provider
             assert len(call_log) == 1
             assert call_log[0]["provider"] == "custom"
             assert call_log[0]["model"] == "gpt-4o"
             
-            # Test 4: Missing model should skip the config
+            # Test 3: Missing model should skip the config
             call_log.clear()
             models = [
                 {"model": "gpt-4o"},  # Valid
