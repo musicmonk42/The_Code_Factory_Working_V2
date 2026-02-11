@@ -3787,7 +3787,8 @@ class OmniCoreService:
                         try:
                             detected_ambiguities = await clarifier.detect_ambiguities(readme_content)
                             # Generate questions based on detected ambiguities
-                            questions = await clarifier.generate_questions(detected_ambiguities)
+                            # Bug 3 Fix: Pass readme_content for context
+                            questions = await clarifier.generate_questions(detected_ambiguities, readme_content)
                             
                             logger.info(
                                 f"LLM-based clarifier generated {len(questions)} questions for job {job_id}",
@@ -3869,60 +3870,98 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
     
-    def _generate_clarification_questions(self, requirements: str) -> List[str]:
+    def _generate_clarification_questions(self, requirements: str) -> List[Dict[str, str]]:
         """
         Generate clarification questions based on requirements content.
         This is a rule-based approach. In production, this would use LLM.
+        Returns list of dicts with 'id', 'question', and 'category' keys.
         """
         questions = []
         req_lower = requirements.lower()
+        question_counter = 1
         
-        # Database questions
-        if any(word in req_lower for word in ['database', 'data', 'store', 'save', 'persist']):
-            if not any(db in req_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis']):
-                questions.append("What type of database would you like to use? (e.g., PostgreSQL, MongoDB, MySQL)")
+        # Database questions - expanded keywords for Bug 4
+        if any(word in req_lower for word in ['database', 'data', 'store', 'save', 'persist', 'storage', 'db']):
+            # Expanded DB detection to include more variants
+            if not any(db in req_lower for db in ['mysql', 'postgres', 'postgresql', 'mongodb', 'sqlite', 'redis', 'dynamodb', 'firestore', 'cassandra', 'mariadb']):
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What type of database would you like to use? (e.g., PostgreSQL, MongoDB, MySQL)",
+                    "category": "database"
+                })
+                question_counter += 1
         
-        # Authentication questions
-        if any(word in req_lower for word in ['user', 'login', 'auth', 'account', 'sign']):
-            if not any(auth in req_lower for auth in ['jwt', 'oauth', 'session', 'token', 'saml']):
-                questions.append("What authentication method should be used? (e.g., JWT, OAuth 2.0, session-based)")
+        # Authentication questions - expanded keywords
+        if any(word in req_lower for word in ['user', 'login', 'auth', 'account', 'sign', 'authentication', 'credential']):
+            if not any(auth in req_lower for auth in ['jwt', 'oauth', 'session', 'token', 'saml', 'auth0', 'cognito', 'firebase auth']):
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What authentication method should be used? (e.g., JWT, OAuth 2.0, session-based)",
+                    "category": "authentication"
+                })
+                question_counter += 1
         
-        # API questions
-        if any(word in req_lower for word in ['api', 'endpoint', 'rest', 'graphql']):
-            if 'rest' not in req_lower and 'graphql' not in req_lower:
-                questions.append("Should the API be RESTful or GraphQL?")
+        # API questions - expanded keywords
+        if any(word in req_lower for word in ['api', 'endpoint', 'rest', 'graphql', 'service']):
+            if 'rest' not in req_lower and 'graphql' not in req_lower and 'grpc' not in req_lower:
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "Should the API be RESTful or GraphQL?",
+                    "category": "api"
+                })
+                question_counter += 1
         
-        # Frontend questions
-        if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard']):
-            if not any(fw in req_lower for fw in ['react', 'vue', 'angular', 'svelte', 'next']):
-                questions.append("What frontend framework would you prefer? (e.g., React, Vue.js, Angular)")
+        # Frontend questions - expanded keywords
+        if any(word in req_lower for word in ['web', 'frontend', 'ui', 'interface', 'dashboard', 'client', 'browser']):
+            if not any(fw in req_lower for fw in ['react', 'vue', 'angular', 'svelte', 'next', 'nextjs', 'nuxt', 'gatsby']):
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What frontend framework would you prefer? (e.g., React, Vue.js, Angular)",
+                    "category": "frontend"
+                })
+                question_counter += 1
         
-        # Deployment questions
-        if any(word in req_lower for word in ['deploy', 'host', 'production', 'server']):
-            if not any(platform in req_lower for platform in ['docker', 'kubernetes', 'aws', 'azure', 'heroku']):
-                questions.append("What deployment platform will you use? (e.g., Docker, Kubernetes, AWS, Heroku)")
+        # Deployment questions - expanded keywords
+        if any(word in req_lower for word in ['deploy', 'host', 'production', 'server', 'cloud', 'infrastructure']):
+            if not any(platform in req_lower for platform in ['docker', 'kubernetes', 'k8s', 'aws', 'azure', 'gcp', 'heroku', 'vercel', 'netlify']):
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What deployment platform will you use? (e.g., Docker, Kubernetes, AWS, Heroku)",
+                    "category": "deployment"
+                })
+                question_counter += 1
         
         # Testing questions
         if 'test' in req_lower:
-            if not any(test_type in req_lower for test_type in ['unit', 'integration', 'e2e', 'end-to-end']):
-                questions.append("What types of tests should be included? (e.g., unit tests, integration tests, e2e tests)")
+            if not any(test_type in req_lower for test_type in ['unit', 'integration', 'e2e', 'end-to-end', 'pytest', 'jest', 'mocha']):
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What types of tests should be included? (e.g., unit tests, integration tests, e2e tests)",
+                    "category": "testing"
+                })
+                question_counter += 1
         
         # Performance questions
         if any(word in req_lower for word in ['performance', 'scale', 'load', 'concurrent']):
-            questions.append("What are your expected performance requirements? (e.g., number of concurrent users, response time SLAs)")
+            questions.append({
+                "id": f"q{question_counter}",
+                "question": "What are your expected performance requirements? (e.g., number of concurrent users, response time SLAs)",
+                "category": "performance"
+            })
+            question_counter += 1
         
         # Security questions
         if any(word in req_lower for word in ['secure', 'security', 'encrypt', 'protect']):
             if 'encrypt' not in req_lower:
-                questions.append("What security measures are required? (e.g., data encryption at rest/in transit, HTTPS, rate limiting)")
+                questions.append({
+                    "id": f"q{question_counter}",
+                    "question": "What security measures are required? (e.g., data encryption at rest/in transit, HTTPS, rate limiting)",
+                    "category": "security"
+                })
+                question_counter += 1
         
-        # If no specific questions, ask general ones
-        if not questions:
-            questions = [
-                "What is the primary programming language you'd like to use?",
-                "Who are the target users of this application?",
-                "Are there any specific third-party integrations required?",
-            ]
+        # Bug 2 Fix: Remove generic fallback - return empty list if no ambiguities detected
+        # This allows the pipeline to proceed without unnecessary clarification
         
         return questions[:5]  # Limit to 5 questions max
     
@@ -5917,20 +5956,25 @@ class OmniCoreService:
         question_id = payload.get("question_id", "")
         response = payload.get("response", "")
         
-        if not question_id or not response:
+        # Bug 5 Fix: Allow question_id without response (for skip/empty answers)
+        if not question_id:
             return {
                 "status": "error",
-                "message": "question_id and response are required",
+                "message": "question_id is required",
             }
         
-        # Store the answer
-        session["answers"][question_id] = response
+        # Store the answer - use "[SKIPPED]" marker for empty/skip responses
+        if not response or response.strip() == "":
+            session["answers"][question_id] = "[SKIPPED]"
+            logger.info(f"Question {question_id} skipped for job {job_id}")
+        else:
+            session["answers"][question_id] = response
+            logger.info(f"Stored answer for {job_id}, question {question_id}")
+        
         session["updated_at"] = datetime.now().isoformat()
         
-        logger.info(f"Stored answer for {job_id}, question {question_id}")
-        
-        # Check if all questions answered
-        if len(session["answers"]) == len(session["questions"]):
+        # Check if all questions answered (including skipped ones)
+        if len(session["answers"]) >= len(session["questions"]):
             session["status"] = "completed"
             return {
                 "status": "completed",
@@ -5959,38 +6003,52 @@ class OmniCoreService:
             if q_idx < len(session["questions"]):
                 question = session["questions"][q_idx]
                 
-                # Categorize the answer based on question content
-                q_lower = question.lower()
-                if "database" in q_lower:
-                    requirements["clarified_requirements"]["database"] = answer
-                elif "auth" in q_lower or "login" in q_lower:
-                    requirements["clarified_requirements"]["authentication"] = answer
-                elif "api" in q_lower:
-                    requirements["clarified_requirements"]["api_type"] = answer
-                elif "frontend" in q_lower or "framework" in q_lower:
-                    requirements["clarified_requirements"]["frontend_framework"] = answer
-                elif "deploy" in q_lower or "platform" in q_lower:
-                    requirements["clarified_requirements"]["deployment_platform"] = answer
-                elif "test" in q_lower:
-                    requirements["clarified_requirements"]["testing_strategy"] = answer
-                elif "performance" in q_lower:
-                    requirements["clarified_requirements"]["performance_requirements"] = answer
-                elif "security" in q_lower:
-                    requirements["clarified_requirements"]["security_requirements"] = answer
-                elif "language" in q_lower:
-                    requirements["clarified_requirements"]["programming_language"] = answer
-                elif "user" in q_lower:
-                    requirements["clarified_requirements"]["target_users"] = answer
-                elif "integration" in q_lower:
-                    requirements["clarified_requirements"]["third_party_integrations"] = answer
+                # Handle both dict format (new rule-based) and string format (legacy/LLM)
+                if isinstance(question, dict):
+                    q_text = question.get("question", "")
+                    q_category = question.get("category", "")
+                    
+                    # Use category if available, otherwise fall back to text matching
+                    if q_category:
+                        requirements["clarified_requirements"][q_category] = answer
+                    else:
+                        q_lower = q_text.lower()
+                        self._categorize_answer(requirements, q_lower, answer)
                 else:
-                    # Generic answer
+                    # Legacy string format
+                    q_lower = str(question).lower()
+                    self._categorize_answer(requirements, q_lower, answer)
                     requirements["clarified_requirements"][f"answer_{q_idx + 1}"] = answer
         
         requirements["confidence"] = 0.95  # High confidence after clarification
         requirements["status"] = "clarified"
         
         return requirements
+    
+    def _categorize_answer(self, requirements: Dict[str, Any], q_lower: str, answer: str) -> None:
+        """Helper method to categorize answers based on question text."""
+        if "database" in q_lower:
+            requirements["clarified_requirements"]["database"] = answer
+        elif "auth" in q_lower or "login" in q_lower:
+            requirements["clarified_requirements"]["authentication"] = answer
+        elif "api" in q_lower:
+            requirements["clarified_requirements"]["api_type"] = answer
+        elif "frontend" in q_lower or "framework" in q_lower:
+            requirements["clarified_requirements"]["frontend_framework"] = answer
+        elif "deploy" in q_lower or "platform" in q_lower:
+            requirements["clarified_requirements"]["deployment_platform"] = answer
+        elif "test" in q_lower:
+            requirements["clarified_requirements"]["testing_strategy"] = answer
+        elif "performance" in q_lower:
+            requirements["clarified_requirements"]["performance_requirements"] = answer
+        elif "security" in q_lower:
+            requirements["clarified_requirements"]["security_requirements"] = answer
+        elif "language" in q_lower:
+            requirements["clarified_requirements"]["programming_language"] = answer
+        elif "user" in q_lower:
+            requirements["clarified_requirements"]["target_users"] = answer
+        elif "integration" in q_lower:
+            requirements["clarified_requirements"]["third_party_integrations"] = answer
 
 
 # Module-level singleton for OmniCoreService
