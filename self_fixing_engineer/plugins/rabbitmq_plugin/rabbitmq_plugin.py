@@ -141,7 +141,6 @@ except ImportError as e:
 
 try:
     from pydantic import BaseModel, Field, ValidationError, field_validator
-    from pydantic.dataclasses import dataclass
     from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
