@@ -26,36 +26,60 @@ from cryptography.fernet import Fernet
 
 # --- Test Configuration ---
 
-TEST_DIR = Path(tempfile.mkdtemp(prefix="mesh_integration_test_"))
-TEST_KEYS = [Fernet.generate_key().decode() for _ in range(2)]
+@pytest.fixture(scope="session")
+def test_dir():
+    """Create test directory once per session."""
+    temp_dir = Path(tempfile.mkdtemp(prefix="mesh_integration_test_"))
+    yield temp_dir
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
-# Configure environment variables for all components
-TEST_ENV = {
-    "PROD_MODE": "false",
-    "ENV": "integration",
-    "TENANT": "integration_tenant",
-    # Shared Keys
-    "EVENT_BUS_ENCRYPTION_KEY": TEST_KEYS[0],
-    "POLICY_ENCRYPTION_KEY": ",".join(TEST_KEYS),
-    "CHECKPOINT_ENCRYPTION_KEYS": ",".join(TEST_KEYS),
-    # Backend Config
-    "MESH_BACKEND_URL": os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/13"),
-    "CHECKPOINT_BACKEND": "local",
-    "CHECKPOINT_DIR": str(TEST_DIR / "checkpoints"),
-}
 
-for key, value in TEST_ENV.items():
-    os.environ[key] = value
+@pytest.fixture(scope="session")
+def test_keys():
+    """Generate encryption keys once per session."""
+    return [Fernet.generate_key().decode() for _ in range(2)]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_env(test_dir, test_keys):
+    """Configure environment variables for all tests."""
+    TEST_ENV = {
+        "PROD_MODE": "false",
+        "ENV": "integration",
+        "TENANT": "integration_tenant",
+        "EVENT_BUS_ENCRYPTION_KEY": test_keys[0],
+        "POLICY_ENCRYPTION_KEY": ",".join(test_keys),
+        "CHECKPOINT_ENCRYPTION_KEYS": ",".join(test_keys),
+        "MESH_BACKEND_URL": os.environ.get("TEST_REDIS_URL", "redis://localhost:6379/13"),
+        "CHECKPOINT_BACKEND": "local",
+        "CHECKPOINT_DIR": str(test_dir / "checkpoints"),
+    }
+    
+    original_env = {}
+    for key, value in TEST_ENV.items():
+        original_env[key] = os.environ.get(key)
+        os.environ[key] = value
+    
+    yield
+    
+    # Restore original environment
+    for key, value in original_env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
 
 # --- Fixtures ---
-
-# Import modules after setting the environment
-from self_fixing_engineer.mesh import checkpoint_manager, event_bus, mesh_policy
 
 
 @pytest_asyncio.fixture(scope="function")
 async def policy_enforcer():
     """Fixture for a configured MeshPolicyEnforcer."""
+    # Import here to avoid module-level side effects
+    from self_fixing_engineer.mesh import mesh_policy
+    
     backend = mesh_policy.MeshPolicyBackend(backend_type="local")
     enforcer = mesh_policy.MeshPolicyEnforcer(
         policy_id="integration_policy", backend=backend
@@ -74,11 +98,23 @@ async def policy_enforcer():
     await enforcer.load_policy()
 
     yield enforcer
+    
+    # Explicit async cleanup
+    try:
+        if hasattr(backend, 'close'):
+            await backend.close()
+        if hasattr(enforcer, 'close'):
+            await enforcer.close()
+    except Exception:
+        pass
 
 
 @pytest_asyncio.fixture(scope="function")
 async def checkpoint_manager_service():
     """Fixture for a configured CheckpointManager."""
+    # Import here to avoid module-level side effects
+    from self_fixing_engineer.mesh import checkpoint_manager
+    
     manager = checkpoint_manager.CheckpointManager(backend_type="local")
     await manager.initialize()
     yield manager
@@ -97,6 +133,8 @@ class TestPolicyAndEvents:
         Verify that an event can be published and received after a successful
         policy check.
         """
+        from self_fixing_engineer.mesh import event_bus
+        
         # 1. Enforce the policy
         is_allowed = await policy_enforcer.enforce_policy("publish_event")
         assert is_allowed, "Policy should grant permission to publish"
@@ -123,6 +161,8 @@ class TestCheckpointAndEvents:
         Verify that saving a checkpoint can trigger a corresponding event,
         simulating an audit or notification system.
         """
+        from self_fixing_engineer.mesh import event_bus
+        
         checkpoint_name = "trigger_event_checkpoint"
         checkpoint_state = {"step": "completed", "result": "success"}
 
@@ -154,6 +194,8 @@ class TestFullWorkflow:
         3. An event is published to notify other systems of the state change.
         4. A subscriber receives the event and verifies its content.
         """
+        from self_fixing_engineer.mesh import event_bus
+        
         workflow_id = "workflow_123"
         initial_state = {"step": 1, "status": "pending"}
         updated_state = {"step": 2, "status": "processed"}
@@ -195,11 +237,3 @@ def force_cleanup():
     for module_name in list(sys.modules.keys()):
         if 'mesh' in module_name and hasattr(sys.modules[module_name], '_cache'):
             sys.modules[module_name]._cache.clear()
-
-
-@pytest.fixture(scope="module", autouse=True)
-def cleanup():
-    """Cleans up test artifacts after the session."""
-    yield
-    if TEST_DIR.exists():
-        shutil.rmtree(TEST_DIR, ignore_errors=True)
