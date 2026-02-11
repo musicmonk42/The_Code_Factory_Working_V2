@@ -17,9 +17,11 @@ from typing import Any, Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 try:
     from importlib import metadata as importlib_metadata
+    from importlib.metadata import PackageNotFoundError
 except ImportError:
     # Fallback for Python < 3.8
     import importlib_metadata
+    from importlib_metadata import PackageNotFoundError
 
 # Import packaging library for proper version constraint validation
 try:
@@ -431,9 +433,9 @@ async def check_plugin_dependencies(manifest: Dict[str, Any], module_name: str) 
                     f"Required: {ver_display}. Cannot verify constraint without packaging library."
                 )
 
-        except importlib_metadata.PackageNotFoundError as e:
+        except PackageNotFoundError as e:
             # Re-raise with additional context
-            raise importlib_metadata.PackageNotFoundError(
+            raise PackageNotFoundError(
                 f"Package '{pkg}' (required version: {ver_spec or 'any'}) not found. "
                 f"Install with: pip install '{pkg}{ver_spec if ver_spec else ''}'"
             ) from e

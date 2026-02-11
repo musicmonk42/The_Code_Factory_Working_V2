@@ -127,13 +127,17 @@ class TestDatabaseQueueDispatch:
             mock_entry.id = 1
 
             # Mock session
-            mock_session = AsyncMock()
-            mock_result = AsyncMock()
+            mock_session = MagicMock()
+            mock_session.commit = AsyncMock()
+            mock_session.execute = AsyncMock()
+            mock_session.rollback = AsyncMock()
+            mock_result = MagicMock()
             mock_result.scalars.return_value.all.return_value = [mock_entry]
             mock_session.execute.return_value = mock_result
 
             mock_db.get_session.return_value = AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_session)
+                __aenter__=AsyncMock(return_value=mock_session),
+                __aexit__=AsyncMock()
             )
 
             # Kafka succeeds
@@ -172,13 +176,21 @@ class TestDatabaseQueueDispatch:
             )
             mock_entry.id = 1
 
-            mock_session = AsyncMock()
-            mock_result = AsyncMock()
-            mock_result.scalars.return_value.all.return_value = [mock_entry]
-            mock_session.execute.return_value = mock_result
+            mock_session = MagicMock()
+            mock_session.commit = AsyncMock()
+            mock_session.execute = AsyncMock()
+            mock_session.rollback = AsyncMock()
+            
+            # Mock result to return event once, then empty
+            mock_result_with_event = MagicMock()
+            mock_result_with_event.scalars.return_value.all.return_value = [mock_entry]
+            mock_result_empty = MagicMock()
+            mock_result_empty.scalars.return_value.all.return_value = []
+            mock_session.execute.side_effect = [mock_result_with_event] + [mock_result_empty] * 100
 
             mock_db.get_session.return_value = AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_session)
+                __aenter__=AsyncMock(return_value=mock_session),
+                __aexit__=AsyncMock()
             )
 
             # Both dispatch methods fail
@@ -224,13 +236,21 @@ class TestDatabaseQueueDispatch:
             )
             mock_entry.id = 1
 
-            mock_session = AsyncMock()
-            mock_result = AsyncMock()
-            mock_result.scalars.return_value.all.return_value = [mock_entry]
-            mock_session.execute.return_value = mock_result
+            mock_session = MagicMock()
+            mock_session.commit = AsyncMock()
+            mock_session.execute = AsyncMock()
+            mock_session.rollback = AsyncMock()
+            
+            # Mock result to return event once, then empty
+            mock_result_with_event = MagicMock()
+            mock_result_with_event.scalars.return_value.all.return_value = [mock_entry]
+            mock_result_empty = MagicMock()
+            mock_result_empty.scalars.return_value.all.return_value = []
+            mock_session.execute.side_effect = [mock_result_with_event] + [mock_result_empty] * 100
 
             mock_db.get_session.return_value = AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_session)
+                __aenter__=AsyncMock(return_value=mock_session),
+                __aexit__=AsyncMock()
             )
 
             # Dispatch fails
