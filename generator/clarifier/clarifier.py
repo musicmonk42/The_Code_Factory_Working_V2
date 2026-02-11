@@ -1513,28 +1513,40 @@ Format your response as a JSON array of strings, for example:
             except Exception as e:
                 self.logger.warning(f"LLM-based ambiguity detection failed: {e}, using rule-based fallback")
         
-        # Fallback to rule-based detection
+        # Fallback to rule-based detection - Bug 4: Expanded keyword matching
         ambiguities = []
         content_lower = readme_content.lower()
         
-        # Check for missing technical specifications
-        if not any(db in content_lower for db in ['mysql', 'postgres', 'mongodb', 'sqlite', 'redis', 'database']):
-            ambiguities.append("Database technology not specified")
+        # Check for missing technical specifications - expanded synonyms
+        # Bug 4 Fix: Expanded database keyword detection
+        db_keywords = ['mysql', 'postgres', 'postgresql', 'mongodb', 'sqlite', 'redis', 'database', 
+                      'dynamodb', 'firestore', 'cassandra', 'mariadb', 'couchdb', 'neo4j', 'influxdb']
+        if not any(db in content_lower for db in db_keywords):
+            # Only flag if data storage is implied
+            if any(word in content_lower for word in ['data', 'store', 'persist', 'save', 'storage', 'db']):
+                ambiguities.append("Database technology not specified")
         
-        if any(word in content_lower for word in ['api', 'endpoint']) and \
-           not any(spec in content_lower for spec in ['rest', 'graphql']):
+        # API type detection - expanded
+        if any(word in content_lower for word in ['api', 'endpoint', 'service']) and \
+           not any(spec in content_lower for spec in ['rest', 'restful', 'graphql', 'grpc', 'soap']):
             ambiguities.append("API type (REST/GraphQL) not specified")
         
-        if any(word in content_lower for word in ['web', 'frontend', 'ui']) and \
-           not any(fw in content_lower for fw in ['react', 'vue', 'angular', 'svelte']):
+        # Frontend framework detection - expanded
+        frontend_frameworks = ['react', 'vue', 'angular', 'svelte', 'next', 'nextjs', 'nuxt', 'gatsby', 'ember']
+        if any(word in content_lower for word in ['web', 'frontend', 'ui', 'client', 'browser']) and \
+           not any(fw in content_lower for fw in frontend_frameworks):
             ambiguities.append("Frontend framework not specified")
         
-        if any(word in content_lower for word in ['auth', 'login', 'user']) and \
-           not any(auth in content_lower for auth in ['jwt', 'oauth', 'session']):
+        # Authentication method detection - expanded
+        auth_methods = ['jwt', 'oauth', 'session', 'token', 'saml', 'auth0', 'cognito', 'firebase auth', 'okta']
+        if any(word in content_lower for word in ['auth', 'login', 'user', 'authentication', 'credential']) and \
+           not any(auth in content_lower for auth in auth_methods):
             ambiguities.append("Authentication method not specified")
         
-        if any(word in content_lower for word in ['deploy', 'production']) and \
-           not any(platform in content_lower for platform in ['docker', 'kubernetes', 'aws', 'heroku']):
+        # Deployment platform detection - expanded
+        deploy_platforms = ['docker', 'kubernetes', 'k8s', 'aws', 'heroku', 'azure', 'gcp', 'vercel', 'netlify', 'digitalocean']
+        if any(word in content_lower for word in ['deploy', 'production', 'host', 'cloud', 'infrastructure']) and \
+           not any(platform in content_lower for platform in deploy_platforms):
             ambiguities.append("Deployment platform not specified")
 
         # FIX Issue 1: Remove generic fallback - only return actual ambiguities found
@@ -1542,12 +1554,13 @@ Format your response as a JSON array of strings, for example:
         self.logger.info(f"Rule-based detection found {len(ambiguities)} ambiguities")
         return ambiguities[:5]  # Limit to 5 for rule-based
 
-    async def generate_questions(self, ambiguities: List[str]) -> List[Dict[str, Any]]:
+    async def generate_questions(self, ambiguities: List[str], readme_content: str = "") -> List[Dict[str, Any]]:
         """
         Generate clarification questions for detected ambiguities.
         
         Args:
             ambiguities: List of ambiguities to generate questions for
+            readme_content: Original README content for context (Bug 3 fix)
             
         Returns:
             List of question dictionaries with 'question' and 'category' keys
@@ -1557,10 +1570,15 @@ Format your response as a JSON array of strings, for example:
         # Try LLM-based question generation if available
         if self.llm and hasattr(self.llm, 'generate'):
             try:
+                # Bug 3 Fix: Include README content in the prompt for context
                 prompt = f"""Generate specific clarification questions for the following ambiguities.
 Each question should be clear, actionable, and help resolve the ambiguity.
+Reference the original requirements when formulating questions.
 
-Ambiguities:
+Original Requirements:
+{readme_content}
+
+Detected Ambiguities:
 {json.dumps(ambiguities, indent=2)}
 
 Format your response as a JSON array of objects with 'question' and 'category' fields, for example:
