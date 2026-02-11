@@ -197,6 +197,15 @@ except ImportError:
 # In-memory storage for clarification sessions
 _clarification_sessions = {}
 
+# Constants for configurable timeouts
+DEFAULT_TESTGEN_TIMEOUT = int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "120"))
+DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
+DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "90"))
+DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
+
+# Constants for clarification session cleanup
+CLARIFICATION_SESSION_TTL_SECONDS = int(os.getenv("CLARIFICATION_SESSION_TTL_SECONDS", "3600"))  # 1 hour default
+
 
 # Custom exception for security violations
 class SecurityError(Exception):
@@ -296,6 +305,16 @@ class OmniCoreService:
             "metrics": False,
             "audit": False,
         }
+        
+        # Initialize storage path (following GeneratorService pattern)
+        # Use centralized config if available, otherwise fallback to default
+        self.storage_path = self.agent_config.upload_dir if self.agent_config else Path("./uploads")
+        self.storage_path.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Storage path initialized: {self.storage_path}")
+        
+        # Initialize Kafka producer if configured
+        self.kafka_producer = None
+        self._init_kafka_producer()
         
         # Validate LLM provider configuration
         self._validate_llm_configuration()
@@ -408,6 +427,32 @@ class OmniCoreService:
             logger.info(status_message)
         else:
             logger.warning(status_message)
+    
+    def _init_kafka_producer(self):
+        """Initialize Kafka producer if configured."""
+        try:
+            kafka_enabled = os.getenv("KAFKA_ENABLED", "false").lower() == "true"
+            if kafka_enabled:
+                bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+                # Import and initialize only if enabled
+                try:
+                    from aiokafka import AIOKafkaProducer
+                    # Note: Actual connection happens in async context via start()
+                    # For now, we just store the configuration
+                    self.kafka_producer = {
+                        "bootstrap_servers": bootstrap_servers,
+                        "enabled": True,
+                    }
+                    logger.info(f"Kafka producer configured with servers: {bootstrap_servers}")
+                except ImportError:
+                    logger.warning("aiokafka not installed - Kafka producer unavailable")
+                    self.kafka_producer = None
+            else:
+                logger.info("Kafka disabled - SFE dispatch will use HTTP fallback")
+                self.kafka_producer = None
+        except Exception as e:
+            logger.warning(f"Failed to initialize Kafka producer: {e}")
+            self.kafka_producer = None
     
     def _load_agents(self):
         """
@@ -1836,8 +1881,8 @@ class OmniCoreService:
             }
         
         try:
-            # Wrap test generation with 120-second timeout
-            async with asyncio.timeout(120):
+            # Wrap test generation with configurable timeout
+            async with asyncio.timeout(DEFAULT_TESTGEN_TIMEOUT):
                 code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
                 test_type = payload.get("test_type", "unit")
                 coverage_target = float(payload.get("coverage_target", 80.0))
@@ -1996,8 +2041,8 @@ class OmniCoreService:
             }
         
         try:
-            # Wrap deploy generation with 90-second timeout
-            async with asyncio.timeout(90):
+            # Wrap deploy generation with configurable timeout
+            async with asyncio.timeout(DEFAULT_DEPLOY_TIMEOUT):
                 code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
                 platform = payload.get("platform", "docker")
                 include_ci_cd = payload.get("include_ci_cd", False)
@@ -2866,8 +2911,8 @@ class OmniCoreService:
             }
         
         try:
-            # Wrap docgen with 90-second timeout
-            async with asyncio.timeout(90):
+            # Wrap docgen with configurable timeout
+            async with asyncio.timeout(DEFAULT_DOCGEN_TIMEOUT):
                 code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
                 doc_type = payload.get("doc_type", "api")
                 format = payload.get("format", "markdown")
@@ -3120,8 +3165,8 @@ class OmniCoreService:
             }
         
         try:
-            # Wrap critique with 90-second timeout
-            async with asyncio.timeout(90):
+            # Wrap critique with configurable timeout
+            async with asyncio.timeout(DEFAULT_CRITIQUE_TIMEOUT):
                 code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
                 scan_types = payload.get("scan_types", ["security", "quality"])
                 auto_fix = payload.get("auto_fix", False)
@@ -3498,6 +3543,85 @@ class OmniCoreService:
             ]
         
         return questions[:5]  # Limit to 5 questions max
+    
+    async def cleanup_expired_clarification_sessions(self, max_age_seconds: int = CLARIFICATION_SESSION_TTL_SECONDS) -> int:
+        """
+        Clean up clarification sessions older than max_age_seconds.
+        
+        Should be called periodically (e.g., every 10 minutes) to prevent memory exhaustion.
+        
+        Args:
+            max_age_seconds: Maximum age in seconds before a session is considered expired
+        
+        Returns:
+            Number of sessions cleaned up
+        """
+        now = datetime.now(timezone.utc)
+        expired = []
+        
+        for job_id, session in _clarification_sessions.items():
+            try:
+                created_at_str = session.get("created_at", "")
+                # Parse ISO format datetime (may or may not have timezone)
+                if created_at_str:
+                    # Try parsing with timezone first
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str)
+                        # If no timezone, assume UTC
+                        if created_at.tzinfo is None:
+                            created_at = created_at.replace(tzinfo=timezone.utc)
+                    except ValueError:
+                        # Fallback to parsing without timezone and assume UTC
+                        created_at = datetime.fromisoformat(created_at_str).replace(tzinfo=timezone.utc)
+                    
+                    if (now - created_at).total_seconds() > max_age_seconds:
+                        expired.append(job_id)
+                else:
+                    # No timestamp - mark for cleanup
+                    expired.append(job_id)
+            except (ValueError, TypeError, AttributeError) as e:
+                # Invalid timestamp - mark for cleanup
+                logger.warning(f"Invalid timestamp in session {job_id}: {e}")
+                expired.append(job_id)
+        
+        for job_id in expired:
+            del _clarification_sessions[job_id]
+            logger.info(f"Cleaned up expired clarification session for job {job_id}")
+        
+        if expired:
+            logger.info(f"Cleaned up {len(expired)} expired clarification sessions")
+        
+        return len(expired)
+    
+    async def start_periodic_session_cleanup(
+        self,
+        interval_seconds: int = 600,  # 10 minutes default
+        max_age_seconds: int = CLARIFICATION_SESSION_TTL_SECONDS
+    ) -> None:
+        """
+        Start a background task to periodically clean up expired clarification sessions.
+        
+        Args:
+            interval_seconds: How often to run cleanup (default: 10 minutes)
+            max_age_seconds: Maximum session age before cleanup (default: 1 hour)
+        """
+        logger.info(
+            f"Starting periodic clarification session cleanup "
+            f"(interval: {interval_seconds}s, max_age: {max_age_seconds}s)"
+        )
+        
+        while True:
+            try:
+                await asyncio.sleep(interval_seconds)
+                cleaned = await self.cleanup_expired_clarification_sessions(max_age_seconds)
+                if cleaned > 0:
+                    logger.info(f"Periodic cleanup: removed {cleaned} expired sessions")
+            except asyncio.CancelledError:
+                logger.info("Periodic cleanup task cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic cleanup: {e}", exc_info=True)
+                # Continue running despite errors
     
     async def _run_full_pipeline(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute full generation pipeline."""
@@ -5339,11 +5463,24 @@ class OmniCoreService:
 # Module-level singleton for OmniCoreService
 _instance: Optional["OmniCoreService"] = None
 _instance_lock = threading.Lock()
+_async_instance_lock: Optional[asyncio.Lock] = None
+
+
+def _get_async_lock() -> Optional[asyncio.Lock]:
+    """Get or create async lock for current event loop."""
+    global _async_instance_lock
+    if _async_instance_lock is None:
+        try:
+            asyncio.get_running_loop()
+            _async_instance_lock = asyncio.Lock()
+        except RuntimeError:
+            return None
+    return _async_instance_lock
 
 
 def get_omnicore_service() -> OmniCoreService:
     """
-    Get or create the singleton OmniCoreService instance.
+    Get or create the singleton OmniCoreService instance (sync-safe).
     
     This function implements a thread-safe singleton pattern to ensure
     only one OmniCoreService instance is created, preventing multiple
@@ -5363,4 +5500,31 @@ def get_omnicore_service() -> OmniCoreService:
         with _instance_lock:
             if _instance is None:
                 _instance = OmniCoreService()
+    return _instance
+
+
+async def get_omnicore_service_async() -> OmniCoreService:
+    """
+    Get or create the singleton OmniCoreService instance (async-safe).
+    
+    This function implements an asyncio-safe singleton pattern for use in
+    async contexts, preventing event loop blocking from threading locks.
+    
+    Returns:
+        OmniCoreService: The singleton OmniCore service instance
+        
+    Example:
+        >>> service = await get_omnicore_service_async()
+        >>> result = await service.route_job(...)
+    """
+    global _instance
+    if _instance is None:
+        lock = _get_async_lock()
+        if lock:
+            async with lock:
+                if _instance is None:
+                    _instance = OmniCoreService()
+        else:
+            # Fallback to sync if no event loop
+            return get_omnicore_service()
     return _instance
