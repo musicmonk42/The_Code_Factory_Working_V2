@@ -337,11 +337,14 @@ async def grpc_server(
         from generator.audit_log.audit_log import serve_grpc_server
 
         server_task = asyncio.create_task(serve_grpc_server())
+        # Give server time to start
+        await asyncio.sleep(0.5)
         yield
+        # Cancel with timeout to prevent hanging
         server_task.cancel()
         try:
-            await server_task
-        except asyncio.CancelledError:
+            await asyncio.wait_for(server_task, timeout=2.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
             pass
     except Exception as e:
         pytest.skip(f"Cannot start gRPC server: {e}")
@@ -350,17 +353,27 @@ async def grpc_server(
 @pytest_asyncio.fixture
 async def grpc_channel():
     """Create a gRPC test channel."""
+    channel = None
     try:
-        async with insecure_channel(f"localhost:{GRPC_PORT}") as channel:
-            yield channel
+        channel = insecure_channel(f"localhost:{GRPC_PORT}")
+        # Give channel time to connect
+        await asyncio.sleep(0.2)
+        yield channel
     except Exception as e:
         pytest.skip(f"Cannot create gRPC channel: {e}")
+    finally:
+        if channel is not None:
+            try:
+                await asyncio.wait_for(channel.close(), timeout=1.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
 
 
 class TestAuditLogProto:
     """Test suite for audit_log.proto."""
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)  # Add 60 second timeout to prevent hanging
     async def test_log_action_unary(
         self,
         grpc_channel,
@@ -405,6 +418,7 @@ class TestAuditLogProto:
             raise AssertionError(f"gRPC LogAction test failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_log_stream(
         self,
         grpc_channel,
@@ -444,6 +458,7 @@ class TestAuditLogProto:
             raise AssertionError(f"gRPC LogStream test failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_tamper_detection(
         self,
         grpc_channel,
@@ -489,6 +504,7 @@ class TestAuditLogProto:
                 raise AssertionError(f"Tamper detection test setup failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_unauthorized_access(
         self, grpc_channel, mock_audit_log_backend, mock_metrics, grpc_server
     ):
@@ -518,6 +534,7 @@ class TestAuditLogProto:
                 raise AssertionError(f"Authorization test failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_invalid_message_serialization(
         self, grpc_channel, mock_audit_log_backend, mock_metrics, grpc_server
     ):
@@ -545,6 +562,7 @@ class TestAuditLogProto:
             raise AssertionError(f"JSON validation test failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_concurrent_log_actions(
         self,
         grpc_channel,
@@ -588,6 +606,7 @@ class TestAuditLogProto:
             raise AssertionError(f"Concurrent gRPC test failed: {e}")
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(60)
     async def test_message_provenance(
         self, grpc_channel, mock_presidio, mock_audit_log_backend, grpc_server
     ):
