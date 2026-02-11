@@ -1,0 +1,165 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+name: Load Test - K6
+
+# Triggers for the workflow
+on:
+  # Allow manual triggering with customizable parameters
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target API URL to test'
+        required: false
+        default: 'http://localhost:8000'
+        type: string
+      vus:
+        description: 'Maximum number of virtual users'
+        required: false
+        default: '50'
+        type: string
+  # Weekly schedule: Every Monday at 3 AM UTC
+  schedule:
+    - cron: '0 3 * * 1'
+
+env:
+  PYTHON_VERSION: '3.11'
+
+permissions:
+  contents: read
+
+jobs:
+  load-test:
+    name: Run K6 Load Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    # Redis service container (required by the application)
+    services:
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    
+    env:
+      # Test environment variables
+      TESTING: '1'
+      CI: '1'
+      SKIP_AUDIT_INIT: '1'
+      OTEL_SDK_DISABLED: '1'
+      REDIS_URL: redis://localhost:6379
+      ENCRYPTION_KEY: "0mRtqFHlMkj0xTZO14sBFr1H6jkmmI0LWyK97sGyGew="
+      APP_ENV: test
+      SKIP_IMPORT_TIME_VALIDATION: '1'
+      SKIP_BACKGROUND_TASKS: '1'
+      NO_MONITORING: '1'
+      DISABLE_TELEMETRY: '1'
+      # Target URL for load test (from inputs or default)
+      TARGET_URL: ${{ github.event.inputs.target_url || 'http://localhost:8000' }}
+      MAX_VUS: ${{ github.event.inputs.vus || '50' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Start API server
+        run: |
+          # Start the server in the background
+          python server/run.py --host 0.0.0.0 --port 8000 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          
+          # Wait for server to be ready (max 60 seconds)
+          echo "Waiting for API server to be ready..."
+          max_attempts=30
+          attempt=0
+          while [ $attempt -lt $max_attempts ]; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✓ API server is ready"
+              break
+            fi
+            attempt=$((attempt + 1))
+            if [ $attempt -eq $max_attempts ]; then
+              echo "✗ API server failed to start within 60 seconds"
+              exit 1
+            fi
+            echo "Waiting for server... (attempt $attempt/$max_attempts)"
+            sleep 2
+          done
+      
+      - name: Install k6
+        run: |
+          # Install k6 using official installation script
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+          
+          # Verify installation
+          k6 version
+      
+      - name: Run k6 load test
+        id: k6_test
+        continue-on-error: true
+        run: |
+          # Run k6 with JSON output for artifact storage
+          echo "Running load test against $TARGET_URL with max $MAX_VUS virtual users"
+          k6 run loadtest.js \
+            -e API_URL=$TARGET_URL \
+            -e MAX_VUS=$MAX_VUS \
+            --out json=loadtest-results.json \
+            --summary-export=loadtest-summary.json
+      
+      - name: Check test results
+        if: always()
+        run: |
+          if [ "${{ steps.k6_test.outcome }}" == "failure" ]; then
+            echo "⚠️ Load test thresholds were exceeded!"
+            echo "This indicates potential performance issues under load."
+            echo "Review the test summary and artifacts for details."
+            echo ""
+          fi
+      
+      - name: Display test summary
+        if: always()
+        run: |
+          if [ -f loadtest-summary.json ]; then
+            echo "=== Load Test Summary ==="
+            cat loadtest-summary.json | python -m json.tool
+          fi
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results-${{ github.run_number }}
+          path: |
+            loadtest-results.json
+            loadtest-summary.json
+          retention-days: 30
+      
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -n "$SERVER_PID" ]; then
+            echo "Stopping API server (PID: $SERVER_PID)"
+            kill $SERVER_PID || true
+            wait $SERVER_PID 2>/dev/null || true
+          fi

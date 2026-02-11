@@ -2,8 +2,8 @@
 
 # Testing Guidelines - The Code Factory
 
-**Version**: 1.0  
-**Last Updated**: 2026-02-05
+**Version**: 1.1  
+**Last Updated**: 2026-02-11
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@
 5. [Running Tests](#running-tests)
 6. [Best Practices](#best-practices)
 7. [CI/CD Integration](#cicd-integration)
+8. [Load Testing](#load-testing)
 
 ---
 
@@ -716,6 +717,282 @@ pytest --cov=generator
 # Run in parallel
 pytest -n auto
 ```
+
+---
+
+## Load Testing
+
+The Code Factory includes K6-based load testing to verify scalability under increasing user loads.
+
+### Overview
+
+Load tests simulate multiple concurrent users making API requests to test the system's performance, reliability, and scalability. The tests use staged ramp-up to gradually increase load and verify that response times and error rates remain within acceptable thresholds.
+
+### Prerequisites
+
+To run load tests locally, you need:
+- K6 installed (see [Installation](#installing-k6))
+- Python 3.11+
+- Redis running (via Docker or local install)
+- API server running
+
+### Installing k6
+
+#### macOS
+```bash
+brew install k6
+```
+
+#### Linux (Debian/Ubuntu)
+```bash
+sudo gpg -k
+sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+sudo apt-get update
+sudo apt-get install k6
+```
+
+#### Windows
+```powershell
+choco install k6
+```
+
+For other installation methods, see: https://k6.io/docs/get-started/installation/
+
+### Running Load Tests Locally
+
+#### 1. Start Required Services
+
+```bash
+# Start Redis
+docker-compose up -d redis
+
+# Or use local Redis
+redis-server
+```
+
+#### 2. Start the API Server
+
+```bash
+# Start the server
+python server/run.py --host 0.0.0.0 --port 8000
+
+# Or with auto-reload for development
+python server/run.py --reload
+```
+
+#### 3. Run the Load Test
+
+```bash
+# Run with default settings (http://localhost:8000, max 100 VUs)
+k6 run loadtest.js
+
+# Run against a different URL
+k6 run -e API_URL=http://myserver:8000 loadtest.js
+
+# Run with custom maximum virtual users (adjusts all stages proportionally)
+k6 run -e MAX_VUS=200 loadtest.js
+
+# Run with custom URL and VUs
+k6 run -e API_URL=http://myserver:8000 -e MAX_VUS=50 loadtest.js
+
+# Run with JSON output for analysis
+k6 run loadtest.js --out json=results.json
+```
+
+### Load Test Configuration
+
+The load test script (`loadtest.js`) tests these endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check endpoint |
+| `/api/v1/generate` | POST | Code generation (main workload) |
+| `/api/v1/generations` | GET | List generations |
+
+#### Load Profile
+
+The test uses staged ramp-up with configurable maximum virtual users (VUs):
+
+1. **Warm-up**: 0 → 10% of MAX_VUS over 30 seconds
+2. **Sustain**: Hold at 10% for 1 minute
+3. **Scale**: 10% → 50% of MAX_VUS over 1 minute
+4. **Sustain**: Hold at 50% for 2 minutes
+5. **Scale**: 50% → 100% of MAX_VUS over 1 minute
+6. **Peak**: Hold at 100% (MAX_VUS) for 2 minutes
+7. **Ramp-down**: 100% → 0 VUs over 30 seconds
+
+**Default MAX_VUS**: 100 (can be customized via `-e MAX_VUS=N`)  
+**Total duration**: ~8 minutes
+
+#### Thresholds
+
+Tests fail if these thresholds are exceeded:
+
+- **p95 Response Time**: < 500ms (95th percentile)
+- **Error Rate**: < 1% (request failure rate)
+
+### Interpreting Results
+
+After running a load test, k6 displays a summary:
+
+```
+✓ health check status is 200
+✓ generate status is 200 or 202
+✓ list generations status is 200
+
+checks.........................: 100.00% ✓ 45000  ✗ 0
+data_received..................: 15 MB   31 kB/s
+data_sent......................: 7.5 MB  15 kB/s
+http_req_blocked...............: avg=1.2ms   min=1µs     med=4µs     max=500ms  p(90)=8µs    p(95)=12µs
+http_req_duration..............: avg=120ms   min=50ms    med=100ms   max=800ms  p(90)=200ms  p(95)=300ms
+http_req_failed................: 0.00%   ✓ 0      ✗ 45000
+http_reqs......................: 45000   91.836734/s
+iteration_duration.............: avg=1.2s    min=1.05s   med=1.15s   max=2s     p(90)=1.3s   p(95)=1.5s
+iterations.....................: 15000   30.612245/s
+vus............................: 100     min=0    max=100
+vus_max........................: 100     min=100  max=100
+```
+
+#### Key Metrics
+
+- **http_req_duration**: Response time statistics
+  - `p(95)`: 95th percentile - should be < 500ms
+  - `avg`: Average response time
+  - `max`: Maximum response time observed
+- **http_req_failed**: Percentage of failed requests - should be < 1%
+- **http_reqs**: Total requests made and requests per second
+- **checks**: Percentage of successful validation checks
+
+#### What Good Results Look Like
+
+✅ **Pass criteria:**
+- p95 response time < 500ms
+- Error rate < 1%
+- All checks passing (100%)
+- Consistent performance across all stages
+
+❌ **Warning signs:**
+- p95 > 500ms: Performance degradation under load
+- Error rate > 1%: System stability issues
+- Increasing response times: Resource saturation
+- Failed checks: API returning invalid responses
+
+### Running Load Tests in CI/CD
+
+Load tests are configured to run:
+- **Weekly**: Every Monday at 3 AM UTC
+- **Manually**: Via GitHub Actions `workflow_dispatch`
+
+#### Triggering Manual Load Tests
+
+1. Go to GitHub Actions in the repository
+2. Select "Load Test - K6" workflow
+3. Click "Run workflow"
+4. (Optional) Customize parameters:
+   - **target_url**: URL to test (default: http://localhost:8000)
+   - **vus**: Max virtual users (default: 50)
+5. Click "Run workflow" to start
+
+#### Viewing CI Results
+
+After a workflow run:
+1. Go to the workflow run page
+2. Download the artifacts:
+   - `loadtest-results.json`: Detailed per-request data
+   - `loadtest-summary.json`: Summary statistics
+3. Review the test summary in the workflow logs
+
+### Customizing Load Tests
+
+#### Adjusting Load Profile
+
+Edit `loadtest.js` to modify the load profile:
+
+```javascript
+export const options = {
+    stages: [
+        { duration: '30s', target: 10 },   // Ramp to 10 users
+        { duration: '2m', target: 50 },    // Ramp to 50 users
+        // Add more stages as needed
+    ],
+};
+```
+
+#### Adjusting Thresholds
+
+Modify thresholds in `loadtest.js`:
+
+```javascript
+thresholds: {
+    'http_req_duration': ['p(95)<1000'],  // Increase to 1 second
+    'http_req_failed': ['rate<0.05'],     // Allow 5% failure rate
+},
+```
+
+#### Testing Different Endpoints
+
+Add new test functions in `loadtest.js`:
+
+```javascript
+function testMyEndpoint() {
+    const response = http.get(`${API_URL}/my/endpoint`, {
+        tags: { type: 'custom' },
+    });
+    
+    check(response, {
+        'my endpoint status is 200': (r) => r.status === 200,
+    });
+}
+```
+
+### Best Practices
+
+1. **Start Small**: Begin with low VU counts and gradually increase
+2. **Monitor Resources**: Watch CPU, memory, and Redis during tests
+3. **Test Realistic Scenarios**: Use payloads similar to production usage
+4. **Run Regularly**: Schedule weekly tests to catch performance regressions
+5. **Baseline Metrics**: Establish baseline performance for comparison
+6. **Test Different Scales**: Test at different load levels (small/medium/large)
+
+### Troubleshooting
+
+#### Server Not Ready
+```bash
+# Problem: Load test fails because server isn't ready
+# Solution: Wait for health check before running test
+while ! curl -s http://localhost:8000/health > /dev/null; do
+    echo "Waiting for server..."
+    sleep 2
+done
+k6 run loadtest.js
+```
+
+#### High Error Rates
+```bash
+# Problem: Many requests fail during load test
+# Possible causes:
+# 1. Server not scaled properly (increase workers)
+# 2. Redis connection pool exhausted
+# 3. Rate limiting triggered (check Flask-Limiter config)
+# 4. Database connection limits reached
+```
+
+#### Slow Response Times
+```bash
+# Problem: p95 > 500ms
+# Check:
+# 1. Redis latency: redis-cli --latency
+# 2. CPU usage: top or htop
+# 3. Database query times
+# 4. Network latency if testing remote server
+```
+
+### Related Documentation
+
+- [SCALABLE_ARCHITECTURE.md](./SCALABLE_ARCHITECTURE.md) - Scaling tiers and architecture
+- [DEPLOYMENT.md](../DEPLOYMENT.md) - Production deployment guidelines
+- [ci_compatibility.md](./ci_compatibility.md) - CI/CD configuration
 
 ---
 
