@@ -3564,25 +3564,21 @@ class OmniCoreService:
                 created_at_str = session.get("created_at", "")
                 # Parse ISO format datetime (may or may not have timezone)
                 if created_at_str:
-                    # Try parsing with timezone first
                     try:
                         created_at = datetime.fromisoformat(created_at_str)
                         # If no timezone, assume UTC
                         if created_at.tzinfo is None:
                             created_at = created_at.replace(tzinfo=timezone.utc)
-                    except ValueError:
-                        # Fallback to parsing without timezone and assume UTC
-                        created_at = datetime.fromisoformat(created_at_str).replace(tzinfo=timezone.utc)
-                    
-                    if (now - created_at).total_seconds() > max_age_seconds:
+                        
+                        if (now - created_at).total_seconds() > max_age_seconds:
+                            expired.append(job_id)
+                    except (ValueError, TypeError):
+                        # Invalid timestamp format - mark for cleanup
+                        logger.warning(f"Invalid timestamp in session {job_id}: {created_at_str}")
                         expired.append(job_id)
                 else:
                     # No timestamp - mark for cleanup
                     expired.append(job_id)
-            except (ValueError, TypeError, AttributeError) as e:
-                # Invalid timestamp - mark for cleanup
-                logger.warning(f"Invalid timestamp in session {job_id}: {e}")
-                expired.append(job_id)
         
         for job_id in expired:
             del _clarification_sessions[job_id]
@@ -5464,17 +5460,20 @@ class OmniCoreService:
 _instance: Optional["OmniCoreService"] = None
 _instance_lock = threading.Lock()
 _async_instance_lock: Optional[asyncio.Lock] = None
+_async_lock_creation_lock = threading.Lock()
 
 
 def _get_async_lock() -> Optional[asyncio.Lock]:
-    """Get or create async lock for current event loop."""
+    """Get or create async lock for current event loop (thread-safe)."""
     global _async_instance_lock
     if _async_instance_lock is None:
-        try:
-            asyncio.get_running_loop()
-            _async_instance_lock = asyncio.Lock()
-        except RuntimeError:
-            return None
+        with _async_lock_creation_lock:  # Protect lock creation from race conditions
+            if _async_instance_lock is None:
+                try:
+                    asyncio.get_running_loop()
+                    _async_instance_lock = asyncio.Lock()
+                except RuntimeError:
+                    return None
     return _async_instance_lock
 
 
