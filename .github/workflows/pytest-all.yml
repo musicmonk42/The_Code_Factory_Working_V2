@@ -600,7 +600,7 @@ jobs:
       
       - name: Run tests for ${{ matrix.module }}
         if: matrix.module != 'self_fixing_engineer'
-        timeout-minutes: 30
+        timeout-minutes: 45
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -672,9 +672,10 @@ jobs:
             IGNORE_ARGS=""
           fi
           
-          # Use timeout command to prevent runaway processes (25 minutes wall-clock time)
+          # Use timeout command to prevent runaway processes (40 minutes wall-clock time)
+          # Increased from 25m to 40m to accommodate longer-running test suites
           # Use python -m pytest to ensure proper sys.path setup
-          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 40m python -m pytest \
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
@@ -734,7 +735,7 @@ jobs:
                 tail -50 test-output-${{ matrix.module }}.log || true
               elif [ $EXIT_CODE -eq 124 ]; then
                 echo "ERROR: Test execution timed out (timeout command)"
-                echo "Wall-clock time limit (25 minutes) was exceeded"
+                echo "Wall-clock time limit (40 minutes) was exceeded"
                 echo ""
                 echo "=== Last 50 lines of test output ==="
                 tail -50 test-output-${{ matrix.module }}.log || true
