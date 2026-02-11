@@ -127,6 +127,68 @@ LANGUAGE_CONFIG = {
 PARSER_REGISTRY: Dict[str, type] = {}
 
 
+def normalize_test_filename(filename: str, language: str) -> str:
+    """
+    Normalize test file names to follow proper testing conventions.
+    
+    This function ensures test files follow the lowercase `test_` prefix convention
+    required by pytest and other testing frameworks. It handles common issues like:
+    - Capital letters at the start (Test.py -> test_module.py)
+    - Missing test_ prefix (Calculator.py -> test_calculator.py)
+    - Improper casing (TestCalculator.py -> test_calculator.py)
+    - Uppercase TEST_ prefix (TEST_calculator.py -> test_calculator.py)
+    
+    Args:
+        filename: Original filename from LLM response
+        language: Programming language (e.g., "python", "javascript")
+        
+    Returns:
+        Normalized filename with proper test_ prefix
+        
+    Examples:
+        >>> normalize_test_filename("Test.py", "python")
+        'test_module.py'
+        >>> normalize_test_filename("TestCalculator.py", "python")
+        'test_calculator.py'
+        >>> normalize_test_filename("calculator.py", "python")
+        'test_calculator.py'
+        >>> normalize_test_filename("TEST_calculator.py", "python")
+        'test_calculator.py'
+    """
+    ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
+    
+    # Remove extension
+    name_without_ext = filename
+    if filename.endswith(f".{ext}"):
+        name_without_ext = filename[:-len(ext)-1]
+    
+    # Handle common problematic patterns
+    if name_without_ext == "Test":
+        # Generic "Test.py" -> "test_module.py"
+        normalized_name = "test_module"
+    elif name_without_ext.startswith("Test") and len(name_without_ext) > 4:
+        # "TestCalculator" -> "test_calculator"
+        rest = name_without_ext[4:]  # Remove "Test" prefix
+        # Convert PascalCase to snake_case
+        normalized_name = "test_" + re.sub(r'(?<!^)(?=[A-Z])', '_', rest).lower()
+    elif name_without_ext.lower().startswith("test_"):
+        # Already has test_ prefix (case-insensitive), just ensure lowercase
+        # This handles both "test_calculator" and "TEST_calculator"
+        normalized_name = name_without_ext.lower()
+    else:
+        # "calculator" -> "test_calculator"
+        # Convert PascalCase to snake_case first if needed
+        snake_case = re.sub(r'(?<!^)(?=[A-Z])', '_', name_without_ext).lower()
+        normalized_name = f"test_{snake_case}"
+    
+    result = f"{normalized_name}.{ext}"
+    
+    if result != filename:
+        logger.info(f"Normalized test filename: {filename} -> {result}")
+    
+    return result
+
+
 # Health Endpoints for Kubernetes
 async def healthz(request):
     """Kubernetes liveness/readiness probe on port 8081."""
@@ -316,7 +378,12 @@ class DefaultResponseParser(ResponseParser):
             parsed = json.loads(response)
             if isinstance(parsed, dict):
                 logger.debug("Successfully parsed response as JSON.")
-                return {k: str(v) for k, v in parsed.items() if isinstance(k, str)}
+                # Apply filename normalization
+                return {
+                    normalize_test_filename(k, language): str(v) 
+                    for k, v in parsed.items() 
+                    if isinstance(k, str)
+                }
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -329,7 +396,9 @@ class DefaultResponseParser(ResponseParser):
                     name = file_node.get("name")
                     content_node = file_node.find("content")
                     if name and content_node is not None and content_node.text:
-                        files[name] = content_node.text.strip()
+                        # Apply filename normalization
+                        normalized_name = normalize_test_filename(name, language)
+                        files[normalized_name] = content_node.text.strip()
                 if files:
                     logger.info(f"Successfully parsed {len(files)} files from XML.")
                     return files
@@ -353,7 +422,9 @@ class DefaultResponseParser(ResponseParser):
                 else:
                     filename = f"test_file_{i+1}.{ext}"
 
-                parsed_files[filename] = code_content.strip()
+                # Apply filename normalization
+                normalized_filename = normalize_test_filename(filename, language)
+                parsed_files[normalized_filename] = code_content.strip()
 
             if parsed_files:
                 logger.info(f"Successfully parsed {len(parsed_files)} code blocks.")
@@ -366,7 +437,9 @@ class DefaultResponseParser(ResponseParser):
         if file_matches:
             parsed_files = {}
             for filename, content in file_matches:
-                parsed_files[filename] = content.strip()
+                # Apply filename normalization
+                normalized_filename = normalize_test_filename(filename, language)
+                parsed_files[normalized_filename] = content.strip()
 
             if parsed_files:
                 logger.info(
