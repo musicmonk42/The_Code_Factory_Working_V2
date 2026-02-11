@@ -142,7 +142,8 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator
+    from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -258,8 +259,10 @@ class PubSubSettings(BaseSettings):
         description="Secret ID for GCP credentials (e.g., service account key JSON) in a secure vault.",
     )
 
-    @validator("project_id")
-    def validate_project_id_in_prod(cls, v, values):
+    @classmethod
+    @field_validator("project_id")
+    def validate_project_id_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         # Cache allowed project IDs
         async def _get_allowed_project_ids():
             if REDIS_CLIENT:
@@ -300,8 +303,10 @@ class PubSubSettings(BaseSettings):
                 )
         return v
 
-    @validator("topic_id")
-    def validate_topic_id_in_prod(cls, v, values):
+    @classmethod
+    @field_validator("topic_id")
+    def validate_topic_id_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         # Cache allowed topic IDs
         async def _get_allowed_topic_ids():
             if REDIS_CLIENT:
@@ -342,7 +347,8 @@ class PubSubSettings(BaseSettings):
                 )
         return v
 
-    @validator("gcp_credentials_secret_id")
+    @classmethod
+    @field_validator("gcp_credentials_secret_id")
     def validate_gcp_credentials_source(cls, v):
         # Credentials & Secret Management: Fail startup if credentials are missing or not loaded securely.
         if PRODUCTION_MODE and not v:
@@ -351,7 +357,8 @@ class PubSubSettings(BaseSettings):
             )
         return v
 
-    @validator("dry_run")
+    @classmethod
+    @field_validator("dry_run")
     def validate_dry_run_in_prod(cls, v):
         # Dry Run and Main/Example: The dry_run setting must not be present or executable in production builds.
         if PRODUCTION_MODE and v:
@@ -457,7 +464,8 @@ class AuditEvent(BaseModel):
     details: Dict[str, Any] = Field(default_factory=dict)
     schema_version: int = Field(settings.audit_schema_version, const=True)
 
-    @validator("details")
+    @classmethod
+    @field_validator("details")
     def validate_details_for_pii(cls, v):
         scrubbed_data = scrub_sensitive_data(v)
         if scrubbed_data != v:

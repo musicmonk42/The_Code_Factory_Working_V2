@@ -20,7 +20,7 @@ import time
 from datetime import datetime
 from typing import Any, Dict, Final, List, Literal, Optional, Type
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .dlt_base import (
     AUDIT,
@@ -164,7 +164,8 @@ class FactoryConfig(BaseModel):
     config_version: str = "1.0"
     use_multiprocessing: bool = False  # For temp file management, if needed
 
-    @validator("secrets_providers")
+    @classmethod
+    @field_validator("secrets_providers")
     def validate_secrets_providers_list(cls, v, values):
         if v:
             for provider in v:
@@ -186,13 +187,15 @@ class FactoryConfig(BaseModel):
                     )
         return v
 
-    @validator("config_version")
+    @classmethod
+    @field_validator("config_version")
     def validate_config_version_value(cls, v):
         if v != "1.0":
             raise ValueError("Only config_version '1.0' is supported")
         return v
 
-    @validator("off_chain_storage_type")
+    @classmethod
+    @field_validator("off_chain_storage_type")
     def validate_off_chain_storage_type_in_prod(cls, v):
         if PRODUCTION_MODE and v == "in_memory":
             raise ValueError(

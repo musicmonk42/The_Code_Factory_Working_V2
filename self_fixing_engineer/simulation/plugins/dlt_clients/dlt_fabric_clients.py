@@ -31,7 +31,7 @@ from pydantic import (
     Field,
     ValidationError,
     model_validator,
-    validator,
+    field_validator,
 )
 
 from .dlt_base import (
@@ -120,7 +120,8 @@ class FabricPeerConfig(BaseModel):
     ssl_target_name_override: Optional[str] = None
     tls_cacerts: Optional[str] = None
 
-    @validator("url", pre=True)
+    @classmethod
+    @field_validator("url", mode='before')
     def validate_url(cls, v):
         if isinstance(v, str):
             # Basic validation for gRPC URLs
@@ -146,7 +147,8 @@ class FabricOrdererConfig(BaseModel):
     ssl_target_name_override: Optional[str] = None
     tls_cacerts: Optional[str] = None
 
-    @validator("url", pre=True)
+    @classmethod
+    @field_validator("url", mode='before')
     def validate_url(cls, v):
         if isinstance(v, str):
             # Basic validation for gRPC URLs
@@ -217,7 +219,8 @@ class FabricConfig(BaseModel):
                 raise ValueError("REST mode requires: rest_api_url")
         return self
 
-    @validator("cert_path", "key_path")
+    @classmethod
+    @field_validator("cert_path", "key_path")
     def validate_paths(cls, v, values):
         if v and values.get("mode") == "sdk":
             # Only validate path existence in production mode

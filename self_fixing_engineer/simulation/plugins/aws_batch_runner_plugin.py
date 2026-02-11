@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
 from prometheus_client import Counter, Histogram
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 try:
     import boto3
@@ -223,7 +223,8 @@ class JobConfig(BaseModel):
         2.0, ge=0.0, le=30.0, description="Max jitter added/subtracted to poll interval"
     )
 
-    @validator("jobDefinition", "jobQueue")
+    @classmethod
+    @field_validator("jobDefinition", "jobQueue")
     def validate_identifier_or_arn(cls, v):
         is_arn = v.startswith("arn:aws:batch:")
         is_simple_name = re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$", v)
@@ -231,7 +232,8 @@ class JobConfig(BaseModel):
             raise ValueError("Invalid Batch ARN or name format")
         return v
 
-    @validator("input_s3_bucket", "output_s3_bucket")
+    @classmethod
+    @field_validator("input_s3_bucket", "output_s3_bucket")
     def validate_bucket_name(cls, v):
         if v is None:
             return v

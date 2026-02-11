@@ -27,7 +27,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Final, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
 
 # web3 sync API (we will run calls in executor)
 from web3 import HTTPProvider, Web3
@@ -317,7 +317,8 @@ class EVMConfig(BaseModel):
     # Security
     allow_insecure_http: bool = False
 
-    @validator("rpc_url")
+    @classmethod
+    @field_validator("rpc_url")
     def validate_rpc_url_scheme(cls, v, values):
         parsed = urlparse(str(v))
         if parsed.scheme not in ("http", "https"):
@@ -332,7 +333,8 @@ class EVMConfig(BaseModel):
             )
         return v
 
-    @validator("private_key", pre=True, always=True)
+    @classmethod
+    @field_validator("private_key", mode='before')
     def validate_private_key_presence(cls, v, values):
         # In production, require secrets provider; no inline private key allowed
         if PRODUCTION_MODE:
@@ -363,7 +365,8 @@ class EVMConfig(BaseModel):
             )
         return v
 
-    @validator("secrets_provider")
+    @classmethod
+    @field_validator("secrets_provider")
     def validate_secrets_provider_type(cls, v, values):
         if v and v not in ("aws", "azure", "gcp"):
             raise ValueError("secrets_provider must be one of 'aws', 'azure', 'gcp'.")
@@ -381,7 +384,8 @@ class EVMConfig(BaseModel):
             )
         return v
 
-    @validator("rpc_url")
+    @classmethod
+    @field_validator("rpc_url")
     def validate_rpc_url_not_mock(cls, v):
         s = str(v).lower()
         if PRODUCTION_MODE and any(

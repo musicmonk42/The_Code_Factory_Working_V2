@@ -30,7 +30,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from server.schemas import (
     Job,
@@ -92,14 +92,16 @@ class V1GenerateRequest(BaseModel):
         description="Additional metadata for the generation job"
     )
     
-    @validator('requirements')
+    @classmethod
+    @field_validator('requirements')
     def validate_requirements(cls, v):
         """Ensure requirements are not just whitespace."""
         if not v or not v.strip():
             raise ValueError("Requirements cannot be empty or whitespace only")
         return v.strip()
     
-    @validator('language')
+    @classmethod
+    @field_validator('language')
     def validate_language(cls, v):
         """Validate programming language is supported."""
         language_lower = v.lower()
@@ -378,7 +380,8 @@ class SFECheckpointRequest(BaseModel):
         description="Checkpoint data as a dictionary"
     )
     
-    @validator('type')
+    @classmethod
+    @field_validator('type')
     def validate_type(cls, v):
         """Ensure checkpoint type is not just whitespace."""
         if not v or not v.strip():

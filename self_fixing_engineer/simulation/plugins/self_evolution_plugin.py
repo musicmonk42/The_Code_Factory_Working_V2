@@ -395,6 +395,7 @@ if pydantic_available:
             EvolutionConfig.check_retry_settings = check_retry_settings
     elif not PYDANTIC_V2 and validator is not None:
 
+        @classmethod
         @validator("redis_cache_url")
         def validate_redis_url(cls, v):
             if v is not None and not v.startswith(("redis://", "rediss://")):

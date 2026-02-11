@@ -140,7 +140,8 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from pydantic import BaseModel, Field, ValidationError, validator
+    from pydantic import BaseModel, Field, ValidationError, field_validator
+    from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -263,8 +264,10 @@ class RabbitMQSettings(BaseSettings):
         False, description="If true, events are logged but not sent to RabbitMQ."
     )
 
-    @validator("url")
-    def validate_url_in_prod(cls, v, values):
+    @classmethod
+    @field_validator("url")
+    def validate_url_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         if values.get("url_secret_id"):
             url_from_secret = SECRETS_MANAGER.get_secret(
                 values["url_secret_id"], required=True if PRODUCTION_MODE else False
@@ -327,8 +330,10 @@ class RabbitMQSettings(BaseSettings):
             await REDIS_CLIENT.setex(cache_key, 3600, json.dumps(allowed_names))
         return allowed_names
 
-    @validator("exchange_name")
-    def validate_exchange_name_in_prod(cls, v, values):
+    @classmethod
+    @field_validator("exchange_name")
+    def validate_exchange_name_in_prod(cls, v, info: ValidationInfo):
+        values = info.data if info and hasattr(info, 'data') else {}
         if PRODUCTION_MODE:
             if "*" in v or "?" in v:
                 raise ValueError(
@@ -347,7 +352,8 @@ class RabbitMQSettings(BaseSettings):
                 )
         return v
 
-    @validator("allowed_routing_keys")
+    @classmethod
+    @field_validator("allowed_routing_keys")
     def validate_allowed_routing_keys_regex(cls, v):
         if v:
             for pattern_str in v:
@@ -359,7 +365,8 @@ class RabbitMQSettings(BaseSettings):
                     )
         return v
 
-    @validator("dry_run")
+    @classmethod
+    @field_validator("dry_run")
     def validate_dry_run_in_prod(cls, v):
         if PRODUCTION_MODE and v:
             raise ValueError("In PRODUCTION_MODE, 'dry_run' must be False.")
@@ -464,7 +471,8 @@ class AuditEvent(BaseModel):
         None, description="HMAC signature of the event payload."
     )
 
-    @validator("details")
+    @classmethod
+    @field_validator("details")
     def validate_details_for_pii(cls, v):
         scrubbed_data = scrub_sensitive_data(v)
         if scrubbed_data != v:

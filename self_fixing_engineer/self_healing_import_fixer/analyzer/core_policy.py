@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Literal, Optional, Set
 
 import boto3
 from botocore.exceptions import ClientError
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Make Redis optional
 try:
@@ -203,13 +203,13 @@ class PolicyRule(BaseModel):
         None, description="Apply naming convention to modules, functions, or classes."
     )
 
-    @validator(
+    @classmethod
+    @field_validator(
         "allow_imports",
         "deny_imports",
         "target_modules",
         "pattern",
-        pre=True,
-        each_item=False,
+        mode="before",
     )
     def validate_regex_patterns(cls, v):
         if v is not None:
@@ -232,7 +232,8 @@ class ArchitecturalPolicy(BaseModel):
         None, description="HMAC signature of the policy content."
     )
 
-    @validator("policies", pre=True)
+    @classmethod
+    @field_validator("policies", mode="before")
     def ensure_policy_rules(cls, v):
         if isinstance(v, list):
             return [

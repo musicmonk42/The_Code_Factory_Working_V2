@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Final, List, Literal, Optional, Tuple
 
 import aiohttp
-from pydantic import BaseModel, Field, HttpUrl, ValidationError, validator
+from pydantic import BaseModel, Field, HttpUrl, ValidationError, field_validator
 
 # Import base classes and utilities from siem_base
 from .siem_base import (
@@ -213,7 +213,8 @@ class AzureSentinelConfig(BaseModel):
     )
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
-    @validator("workspace_id")
+    @field_validator("workspace_id")
+    @classmethod
     def validate_workspace_id_not_dummy(cls, v):
         if PRODUCTION_MODE and not re.match(
             r"^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$", v
@@ -223,7 +224,8 @@ class AzureSentinelConfig(BaseModel):
             )
         return v
 
-    @validator("log_type")
+    @field_validator("log_type")
+    @classmethod
     def validate_log_type_format(cls, v):
         if not v.endswith("_CL"):
             raise ValueError("Custom Log Table Name must end with '_CL'.")
@@ -233,7 +235,8 @@ class AzureSentinelConfig(BaseModel):
             )
         return v
 
-    @validator("shared_key", always=True)
+    @field_validator("shared_key", mode='before')
+    @classmethod
     def validate_shared_key_source(cls, v, values):
         if PRODUCTION_MODE:
             if not values.get("shared_key_secret_id"):
@@ -252,7 +255,8 @@ class AzureSentinelConfig(BaseModel):
                 )
         return v
 
-    @validator("secrets_providers")
+    @field_validator("secrets_providers")
+    @classmethod
     def validate_secrets_providers_list(cls, v, values):
         if values.get("shared_key_secret_id"):
             if not v:
@@ -279,7 +283,8 @@ class AzureEventGridConfig(BaseModel):
     )
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
-    @validator("endpoint")
+    @field_validator("endpoint")
+    @classmethod
     def validate_endpoint_not_dummy(cls, v):
         if PRODUCTION_MODE and (
             "dummy" in str(v).lower()
@@ -292,7 +297,8 @@ class AzureEventGridConfig(BaseModel):
             )
         return v
 
-    @validator("key", always=True)
+    @field_validator("key", mode='before')
+    @classmethod
     def validate_key_source(cls, v, values):
         if PRODUCTION_MODE:
             if not values.get("key_secret_id"):
@@ -308,7 +314,8 @@ class AzureEventGridConfig(BaseModel):
                 raise ValueError("Dummy/fake key detected. Not allowed in production.")
         return v
 
-    @validator("secrets_providers")
+    @field_validator("secrets_providers")
+    @classmethod
     def validate_secrets_providers_list(cls, v, values):
         if values.get("key_secret_id"):
             if not v:
@@ -322,7 +329,8 @@ class AzureEventGridConfig(BaseModel):
                     )
         return v
 
-    @validator("topic_name")
+    @field_validator("topic_name")
+    @classmethod
     def validate_topic_name_format(cls, v):
         if PRODUCTION_MODE and not re.match(r"^[a-zA-Z0-9-]{3,50}$", v):
             raise ValueError(
@@ -344,7 +352,8 @@ class AzureServiceBusConfig(BaseModel):
     )
     secrets_provider_config: Optional[Dict[str, Any]] = None
 
-    @validator("connection_string", always=True)
+    @field_validator("connection_string", mode='before')
+    @classmethod
     def validate_connection_string_source(cls, v, values):
         if PRODUCTION_MODE:
             if not values.get("connection_string_secret_id") and not values.get(
@@ -361,7 +370,8 @@ class AzureServiceBusConfig(BaseModel):
                 )
         return v
 
-    @validator("queue_name", "topic_name", always=True)
+    @field_validator("queue_name", "topic_name", mode='before')
+    @classmethod
     def validate_queue_or_topic(cls, v, values):
         if not values.get("queue_name") and not values.get("topic_name"):
             raise ValueError("Either 'queue_name' or 'topic_name' must be configured.")
@@ -371,7 +381,8 @@ class AzureServiceBusConfig(BaseModel):
             )
         return v
 
-    @validator("namespace_fqdn")
+    @field_validator("namespace_fqdn")
+    @classmethod
     def validate_namespace_fqdn_not_dummy(cls, v):
         if (
             PRODUCTION_MODE
@@ -388,7 +399,8 @@ class AzureServiceBusConfig(BaseModel):
             )
         return v
 
-    @validator("queue_name", "topic_name")
+    @field_validator("queue_name", "topic_name")
+    @classmethod
     def validate_name_format(cls, v, field):
         if PRODUCTION_MODE and v and not re.match(r"^[a-zA-Z0-9-._]{1,260}$", v):
             raise ValueError(

@@ -18,7 +18,7 @@ from pydantic import (
     BaseModel,
     Field,
     ValidationError,
-    validator,
+    field_validator,
 )  # Re-import for local schemas
 
 # Import base classes and utilities from siem_base
@@ -107,13 +107,15 @@ class AwsCloudWatchConfig(BaseModel):
         None  # Config for secrets backends (e.g., vault_url, project_id)
     )
 
-    @validator("region_name", "log_group_name", "log_stream_name")
+    @field_validator("region_name", "log_group_name", "log_stream_name")
+    @classmethod
     def validate_non_empty(cls, v):
         if not v:
             raise ValueError("Field must not be empty.")
         return v
 
-    @validator("log_group_name", "log_stream_name")
+    @field_validator("log_group_name", "log_stream_name")
+    @classmethod
     def validate_arn_compliance(cls, v, field):
         if PRODUCTION_MODE:
             # CloudWatch Log Group and Stream names have specific allowed characters
@@ -130,7 +132,8 @@ class AwsCloudWatchConfig(BaseModel):
                 )
         return v
 
-    @validator("auto_create_log_group", "auto_create_log_stream")
+    @field_validator("auto_create_log_group", "auto_create_log_stream")
+    @classmethod
     def validate_auto_create_in_prod(cls, v, field):
         if PRODUCTION_MODE and v:
             raise ValueError(
@@ -138,7 +141,8 @@ class AwsCloudWatchConfig(BaseModel):
             )
         return v
 
-    @validator("aws_access_key_id", "aws_secret_access_key", always=True)
+    @field_validator("aws_access_key_id", "aws_secret_access_key", mode='before')
+    @classmethod
     def validate_aws_credentials_source(cls, v, values):
         if PRODUCTION_MODE:
             # BLOCKER: Require KMS/IAM role-based credentials only. Abort if ENV or plaintext creds are present.
@@ -151,7 +155,8 @@ class AwsCloudWatchConfig(BaseModel):
                     )
         return v
 
-    @validator("secrets_providers")
+    @field_validator("secrets_providers")
+    @classmethod
     def validate_secrets_providers_list(cls, v, values):
         if values.get("aws_credentials_secret_id"):
             if not v:

@@ -15,7 +15,7 @@ from pydantic import (
     BaseModel,
     Field,
     ValidationError,
-    validator,
+    field_validator,
 )  # Re-import for local schemas
 
 # Import base classes and utilities from siem_base
@@ -151,7 +151,8 @@ class GcpLoggingConfig(BaseModel):
         None  # Config for secrets backends (e.g., vault_url, project_id)
     )
 
-    @validator("project_id")
+    @field_validator("project_id")
+    @classmethod
     def validate_project_id_format(cls, v):
         if PRODUCTION_MODE and not re.match(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$", v):
             raise ValueError(
@@ -159,7 +160,8 @@ class GcpLoggingConfig(BaseModel):
             )
         return v
 
-    @validator("log_name")
+    @field_validator("log_name")
+    @classmethod
     def validate_log_name_format(cls, v):
         if PRODUCTION_MODE and not re.match(r"^[a-zA-Z0-9-._/]+$", v):
             raise ValueError(
@@ -167,7 +169,8 @@ class GcpLoggingConfig(BaseModel):
             )
         return v
 
-    @validator("credentials_path", always=True)
+    @field_validator("credentials_path", mode='before')
+    @classmethod
     def validate_credentials_source(cls, v, values):
         if PRODUCTION_MODE:
             if not values.get("credentials_secret_id"):
@@ -180,7 +183,8 @@ class GcpLoggingConfig(BaseModel):
                 )
         return v
 
-    @validator("secrets_providers")
+    @field_validator("secrets_providers")
+    @classmethod
     def validate_secrets_providers_list(cls, v, values):
         if values.get("credentials_secret_id"):
             if not v:

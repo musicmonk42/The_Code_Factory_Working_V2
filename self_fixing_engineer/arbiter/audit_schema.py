@@ -34,14 +34,14 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 try:
-    from pydantic import BaseModel, Field, validator
+    from pydantic import BaseModel, Field, field_validator
     PYDANTIC_AVAILABLE = True
 except ImportError:
     # Fallback for environments without Pydantic
     PYDANTIC_AVAILABLE = False
     BaseModel = object
     Field = lambda *args, **kwargs: None
-    validator = lambda *args, **kwargs: lambda f: f
+    field_validator = lambda *args, **kwargs: lambda f: f
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,8 @@ if PYDANTIC_AVAILABLE:
                 datetime: lambda v: v.isoformat(),
             }
         
-        @validator('timestamp', pre=True)
+        @classmethod
+        @field_validator('timestamp', mode='before')
         def ensure_timezone(cls, v):
             """Ensure timestamp has timezone info."""
             if isinstance(v, datetime) and v.tzinfo is None:

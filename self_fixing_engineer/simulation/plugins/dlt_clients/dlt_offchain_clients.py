@@ -14,7 +14,7 @@ from contextlib import suppress
 from datetime import datetime
 from typing import Any, Dict, Final, List, Literal, Optional
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from .dlt_base import (
     AUDIT,
@@ -300,7 +300,8 @@ class S3Config(BaseModel):
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
 
-    @validator("aws_access_key_id", "aws_secret_access_key", always=True)
+    @classmethod
+    @field_validator("aws_access_key_id", "aws_secret_access_key")
     def validate_aws_credentials_source(cls, v, values):
         if PRODUCTION_MODE and not values.get("aws_credentials_secret_id"):
             raise ValueError(
@@ -308,7 +309,8 @@ class S3Config(BaseModel):
             )
         return v
 
-    @validator("secrets_providers")
+    @classmethod
+    @field_validator("secrets_providers")
     def validate_secrets_providers_list(cls, v, values):
         if values.get("aws_credentials_secret_id"):
             if not v:
@@ -345,7 +347,8 @@ class GCSConfig(BaseModel):
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
 
-    @validator("credentials_path", always=True)
+    @classmethod
+    @field_validator("credentials_path")
     def validate_gcs_credentials_source(cls, v, values):
         if PRODUCTION_MODE and not values.get("credentials_secret_id"):
             raise ValueError(
@@ -353,7 +356,8 @@ class GCSConfig(BaseModel):
             )
         return v
 
-    @validator("secrets_providers")
+    @classmethod
+    @field_validator("secrets_providers")
     def validate_secrets_providers_list(cls, v, values):
         if values.get("credentials_secret_id"):
             if not v:
@@ -389,7 +393,8 @@ class AzureBlobConfig(BaseModel):
     log_format: str = "json"
     temp_file_ttl: float = Field(3600.0, ge=60.0)
 
-    @validator("connection_string", always=True)
+    @classmethod
+    @field_validator("connection_string")
     def validate_azure_connection_string_source(cls, v, values):
         if PRODUCTION_MODE and not values.get("connection_string_secret_id"):
             raise ValueError(
@@ -397,7 +402,8 @@ class AzureBlobConfig(BaseModel):
             )
         return v
 
-    @validator("secrets_providers")
+    @classmethod
+    @field_validator("secrets_providers")
     def validate_secrets_providers_list(cls, v, values):
         if values.get("connection_string_secret_id"):
             if not v:
