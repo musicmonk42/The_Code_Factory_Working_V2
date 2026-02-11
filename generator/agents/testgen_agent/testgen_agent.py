@@ -271,7 +271,7 @@ class Policy:
     )
     max_refinements: int = 3
     generation_llm_model: str = "gpt-4o"
-    critique_llm_model: str = "claude-3-5-sonnet-20240620"
+    critique_llm_model: str = "gpt-4o"
     refinement_llm_model: str = "gpt-4o"
     self_heal_llm_model: str = "gpt-4o"
     llm_retries: int = 3
