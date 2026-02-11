@@ -50,6 +50,7 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (
     YAML as RuYAML,
+    YAMLError as RuamelYAMLError,  # FIX: Import correct exception for YAML parsing errors
 )  # For advanced YAML operations (preserving comments)
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -729,13 +730,29 @@ class KubernetesValidator(Validator):
                             target=target_type, issue_type_category="K8sStructure"
                         ).inc(len(report["lint_issues"]))
                         
-            except yaml.YAMLError as e:
+            except RuamelYAMLError as e:
+                # CRITICAL FIX: Use RuamelYAMLError (not yaml.YAMLError)
+                # The validator uses ruamel.yaml (RuYAML) for parsing, which raises
+                # ruamel.yaml.YAMLError. Using yaml.YAMLError would cause NameError
+                # since PyYAML is not imported, leading to incorrect "internal_error"
+                # status instead of proper YAML syntax error reporting.
+                #
+                # Industry Standard: Always catch exceptions from the library you're using
+                # Reference: ruamel.yaml documentation
                 report["lint_status"] = "failed"
                 report["lint_output"] = f"YAML parsing error: {e}"
                 report["lint_issues"].append(f"Invalid YAML syntax: {e}")
                 issue_total_found.labels(
                     target=target_type, issue_type_category="YAMLSyntax"
                 ).inc()
+                logger.error(
+                    f"YAML parsing failed for {target_type}",
+                    extra={
+                        "target_type": target_type,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                )
 
             # 3. Security Findings
             report["security_findings"] = await scan_config_for_findings(

@@ -3579,6 +3579,10 @@ class OmniCoreService:
                 else:
                     # No timestamp - mark for cleanup
                     expired.append(job_id)
+            except Exception as e:
+                # Catch any unexpected errors when processing session
+                logger.error(f"Error processing session {job_id}: {e}")
+                expired.append(job_id)  # Mark for cleanup on error
         
         for job_id in expired:
             del _clarification_sessions[job_id]
@@ -4058,203 +4062,263 @@ class OmniCoreService:
                     logger.warning(f"[PIPELINE] Job {job_id} provenance error: {prov_err}")
             
             # 3. Testgen (if requested)
+            # RESILIENCE FIX: Pipeline continues even if testgen fails
+            # Industry Standard: Fail-safe pipeline design - individual stage failures
+            # should not abort the entire workflow. This ensures maximum output delivery
+            # even when optional stages encounter errors.
             if payload.get("include_tests", True):
-                # FIX: Check if codegen actually produced valid source files
-                output_path = codegen_result.get("output_path")
-                if output_path:
-                    code_path = Path(output_path)
-                    # Look for Python files recursively (supports nested structures like app/)
-                    # Exclude test files from source count to match what _run_testgen does
-                    source_files = [
-                        f for f in code_path.rglob("*.py") 
-                        if not f.name.startswith("test_")
-                    ] if code_path.exists() else []
-                    
-                    if not source_files:
-                        logger.warning(
-                            f"[PIPELINE] Job {job_id} skipping testgen - no source files found in {output_path}",
-                            extra={
-                                "job_id": job_id,
-                                "output_path": str(output_path),
-                                "files_in_directory": [f.name for f in code_path.iterdir()] if code_path.exists() else []
-                            }
-                        )
-                    else:
-                        # Check if LLM provider is configured for intelligent test generation
-                        # detect_available_llm_provider() is imported at line 158 from runner.llm_client
-                        llm_provider_configured = False
-                        try:
-                            if self.llm_config and self.llm_config.default_llm_provider:
-                                llm_provider_configured = True
-                            elif detect_available_llm_provider():
-                                llm_provider_configured = True
-                        except Exception:
-                            pass
+                try:
+                    # Check if codegen actually produced valid source files
+                    output_path = codegen_result.get("output_path")
+                    if output_path:
+                        code_path = Path(output_path)
+                        # Look for Python files recursively (supports nested structures like app/)
+                        # Exclude test files from source count to match what _run_testgen does
+                        source_files = [
+                            f for f in code_path.rglob("*.py") 
+                            if not f.name.startswith("test_")
+                        ] if code_path.exists() else []
                         
-                        testgen_payload = {
-                            "code_path": output_path,
-                            "test_type": "unit",
-                            "coverage_target": 80.0,
-                            "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
-                            "llm_timeout": 120 if llm_provider_configured else 30,  # 2 min for LLM, 30s for rule-based
-                        }
-                        logger.info(
-                            f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files "
-                            f"(LLM-based: {llm_provider_configured})"
-                        )
-                        testgen_result = await self._run_testgen(job_id, testgen_payload)
-                        if testgen_result.get("status") == "completed":
-                            stages_completed.append("testgen")
-                            logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
-                            
-                            # BUG FIX: Check if tests actually passed, not just if testgen completed
-                            # Even if testgen "completed", tests may have failed
-                            if payload.get("include_tests", True):
-                                # Extract test results from testgen_result
-                                result_data = testgen_result.get("result", {})
-                                final_validation_report = result_data.get("final_validation_report", {})
-                                
-                                # Check coverage validation results for test failures
-                                coverage_report = final_validation_report.get("coverage", {})
-                                test_results = coverage_report.get("test_results", {})
-                                fail_count = test_results.get("failed", 0) or test_results.get("fail_count", 0)
-                                
-                                # Also check top-level test results if available
-                                if fail_count == 0 and "test_results" in result_data:
-                                    top_level_results = result_data.get("test_results", {})
-                                    fail_count = top_level_results.get("failed", 0) or top_level_results.get("fail_count", 0)
-                                
-                                if fail_count > 0:
-                                    logger.error(
-                                        f"[PIPELINE] Job {job_id} FAILING pipeline: {fail_count} test(s) failed even though testgen completed. "
-                                        f"include_tests=True requires all tests to pass."
-                                    )
-                                    await self._finalize_failed_job(
-                                        job_id, 
-                                        error=f"Test execution failed: {fail_count} test(s) failed"
-                                    )
-                                    return {
-                                        "status": "failed",
-                                        "message": f"Test execution failed: {fail_count} test(s) failed",
-                                        "stages_completed": stages_completed,
-                                        "test_failures": fail_count,
-                                    }
-                        elif testgen_result.get("status") == "error":
-                            testgen_error = testgen_result.get('message', 'Unknown error')
-                            logger.error(f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}")
-                            
-                            # If tests were explicitly requested (include_tests=True), treat test failure as fatal
-                            if payload.get("include_tests", True):
-                                logger.error(f"[PIPELINE] Job {job_id} FAILING pipeline because include_tests=True and tests failed")
-                                await self._finalize_failed_job(job_id, error=f"Test generation/execution failed: {testgen_error}")
-                                return {
-                                    "status": "failed",
-                                    "message": f"Test generation failed: {testgen_error}",
-                                    "stages_completed": stages_completed,
+                        if not source_files:
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} skipping testgen - no source files found in {output_path}",
+                                extra={
+                                    "job_id": job_id,
+                                    "output_path": str(output_path),
+                                    "files_in_directory": [f.name for f in code_path.iterdir()] if code_path.exists() else []
                                 }
-                            else:
-                                logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure (tests not required)")
-                else:
+                            )
+                        else:
+                            # Check if LLM provider is configured for intelligent test generation
+                            # detect_available_llm_provider() is imported at line 158 from runner.llm_client
+                            llm_provider_configured = False
+                            try:
+                                if self.llm_config and self.llm_config.default_llm_provider:
+                                    llm_provider_configured = True
+                                elif detect_available_llm_provider():
+                                    llm_provider_configured = True
+                            except Exception:
+                                pass
+                            
+                            testgen_payload = {
+                                "code_path": output_path,
+                                "test_type": "unit",
+                                "coverage_target": 80.0,
+                                "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
+                                "llm_timeout": 120 if llm_provider_configured else 30,  # 2 min for LLM, 30s for rule-based
+                            }
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files "
+                                f"(LLM-based: {llm_provider_configured})"
+                            )
+                            testgen_result = await self._run_testgen(job_id, testgen_payload)
+                            if testgen_result.get("status") == "completed":
+                                # BUG FIX: Check if tests actually passed, not just if testgen completed
+                                # Even if testgen "completed", tests may have failed
+                                test_execution_failed = False
+                                if payload.get("include_tests", True):
+                                    # Extract test results from testgen_result
+                                    result_data = testgen_result.get("result", {})
+                                    final_validation_report = result_data.get("final_validation_report", {})
+                                    
+                                    # Check coverage validation results for test failures
+                                    coverage_report = final_validation_report.get("coverage", {})
+                                    test_results = coverage_report.get("test_results", {})
+                                    fail_count = test_results.get("failed", 0) or test_results.get("fail_count", 0)
+                                    
+                                    # Also check top-level test results if available
+                                    if fail_count == 0 and "test_results" in result_data:
+                                        top_level_results = result_data.get("test_results", {})
+                                        fail_count = top_level_results.get("failed", 0) or top_level_results.get("fail_count", 0)
+                                    
+                                    if fail_count > 0:
+                                        # Test execution failed - use specific marker
+                                        test_execution_failed = True
+                                        logger.error(
+                                            f"[PIPELINE] Job {job_id} testgen completed but {fail_count} test(s) failed. "
+                                            f"Marking stage as execution_failed but continuing pipeline.",
+                                            extra={
+                                                "job_id": job_id,
+                                                "fail_count": fail_count,
+                                                "failure_type": "test_execution",
+                                            }
+                                        )
+                                        stages_completed.append("testgen:execution_failed")
+                                
+                                # Only mark as successful if tests passed (or weren't checked)
+                                if not test_execution_failed:
+                                    stages_completed.append("testgen")
+                                    logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
+                            elif testgen_result.get("status") == "error":
+                                # Test generation failed - use specific marker
+                                testgen_error = testgen_result.get('message', 'Unknown error')
+                                logger.error(
+                                    f"[PIPELINE] Job {job_id} failed step: testgen - {testgen_error}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "error": testgen_error,
+                                        "failure_type": "generation_error",
+                                    }
+                                )
+                                stages_completed.append("testgen:error")
+                                logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen failure")
+                    else:
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} skipping testgen - no output path from codegen",
+                            extra={"job_id": job_id}
+                        )
+                except Exception as e:
+                    # Industry Standard: Comprehensive error logging with context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} testgen exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "testgen",
+                            "error_type": type(e).__name__,
+                            "output_path": output_path if 'output_path' in locals() else None,
+                            "failure_type": "exception",
+                        }
+                    )
+                    stages_completed.append("testgen:exception")
                     logger.warning(
-                        f"[PIPELINE] Job {job_id} skipping testgen - no output path from codegen",
-                        extra={"job_id": job_id}
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite testgen exception",
+                        extra={"job_id": job_id, "remaining_stages": ["deploy", "docgen", "critique"]}
                     )
             
             # 4. Deploy (if requested)
+            # RESILIENCE FIX: Pipeline continues even if deployment fails
+            # Industry Standard: Deploy failures shouldn't prevent documentation generation
+            # or critique, allowing maximum value delivery from the pipeline
             # FIX: Default to True since deployment is a core pipeline feature
             # Users who don't want deployment should explicitly set include_deployment=False
             include_deployment = payload.get("include_deployment", True)
             logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
             
             if include_deployment:
-                # FIX 1: Pass generated files from codegen to deployment
-                deploy_payload = {
-                    "code_path": codegen_result.get("output_path"),
-                    "include_ci_cd": True,
-                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
-                    "generated_files": codegen_result.get("file_names", []),  # FIX 1: Pass file list
-                }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm) with {len(deploy_payload.get('generated_files', []))} files")
-                
-                # Run all deployment targets
-                deploy_result = await self._run_deploy_all(job_id, deploy_payload)
-                
-                if deploy_result.get("status") == "completed":
-                    stages_completed.append("deploy")
-                    logger.info(
-                        f"[PIPELINE] Job {job_id} completed step: deploy_all - "
-                        f"targets: {deploy_result.get('completed_targets', [])} - "
-                        f"files: {deploy_result.get('generated_files', [])}"
-                    )
+                try:
+                    # Pass generated files from codegen to deployment
+                    deploy_payload = {
+                        "code_path": codegen_result.get("output_path"),
+                        "include_ci_cd": True,
+                        "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
+                        "generated_files": codegen_result.get("file_names", []),  # FIX 1: Pass file list
+                    }
+                    logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm) with {len(deploy_payload.get('generated_files', []))} files")
                     
-                    # Run deployment completeness validation
-                    logger.info(f"[PIPELINE] Job {job_id} starting deployment validation")
-                    try:
-                        validation_result = await self._validate_deployment_completeness(
-                            job_id, 
-                            codegen_result.get("output_path")
+                    # Run all deployment targets
+                    deploy_result = await self._run_deploy_all(job_id, deploy_payload)
+                    
+                    if deploy_result.get("status") == "completed":
+                        stages_completed.append("deploy")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} completed step: deploy_all - "
+                            f"targets: {deploy_result.get('completed_targets', [])} - "
+                            f"files: {deploy_result.get('generated_files', [])}"
                         )
                         
-                        if validation_result.get("status") == "failed":
-                            logger.error(
-                                f"[PIPELINE] Job {job_id} FAILING pipeline: Deployment validation failed - "
-                                f"errors: {validation_result.get('errors', [])}"
+                        # Run deployment completeness validation
+                        logger.info(f"[PIPELINE] Job {job_id} starting deployment validation")
+                        try:
+                            validation_result = await self._validate_deployment_completeness(
+                                job_id, 
+                                codegen_result.get("output_path")
                             )
-                            await self._finalize_failed_job(
-                                job_id,
-                                error=f"Deployment validation failed: {'; '.join(validation_result.get('errors', []))}"
-                            )
-                            return {
-                                "status": "failed",
-                                "message": f"Deployment validation failed",
-                                "stages_completed": stages_completed,
-                                "validation_errors": validation_result.get("errors", []),
-                                "failed_targets": [],  # Deployment completed but validation failed
-                                "results": deploy_result.get("results", {}),
-                                "generated_files": deploy_result.get("generated_files", []),
-                                "duration_seconds": deploy_result.get("duration_seconds", 0),
-                            }
-                        else:
-                            logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
                             
-                    except Exception as e:
-                        logger.error(f"[PIPELINE] Job {job_id} deployment validation error: {e}", exc_info=True)
-                        # Continue pipeline on validation errors for now (non-fatal)
-                        logger.warning(f"[PIPELINE] Job {job_id} continuing despite validation error")
-                        
-                elif deploy_result.get("status") == "error":
-                    deploy_error = deploy_result.get('message', 'Unknown error')
-                    logger.error(f"[PIPELINE] Job {job_id} FAILING pipeline: deploy_all failed - {deploy_error}")
-                    await self._finalize_failed_job(job_id, error=f"Deployment failed: {deploy_error}")
-                    return {
-                        "status": "failed",
-                        "message": f"Deployment failed: {deploy_error}",
-                        "stages_completed": stages_completed,
-                        "failed_targets": deploy_result.get("failed_targets", []),
-                        "completed_targets": deploy_result.get("completed_targets", []),
-                        "results": deploy_result.get("results", {}),
-                        "generated_files": deploy_result.get("generated_files", []),
-                        "duration_seconds": deploy_result.get("duration_seconds", 0),
-                    }
+                            if validation_result.get("status") == "failed":
+                                logger.error(
+                                    f"[PIPELINE] Job {job_id} deployment validation failed - "
+                                    f"errors: {validation_result.get('errors', [])} - continuing pipeline"
+                                )
+                                stages_completed.append("deploy:validation_failed")
+                            else:
+                                logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
+                                
+                        except Exception as e:
+                            logger.error(f"[PIPELINE] Job {job_id} deployment validation error: {e}", exc_info=True)
+                            # Continue pipeline on validation errors (non-fatal)
+                            logger.warning(f"[PIPELINE] Job {job_id} continuing despite validation error")
+                            
+                    elif deploy_result.get("status") == "error":
+                        deploy_error = deploy_result.get('message', 'Unknown error')
+                        logger.error(
+                            f"[PIPELINE] Job {job_id} deploy_all failed - {deploy_error}",
+                            extra={
+                                "job_id": job_id,
+                                "error": deploy_error,
+                                "failure_type": "generation_error",
+                            }
+                        )
+                        stages_completed.append("deploy:error")
+                        logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite deploy failure")
+                except Exception as e:
+                    # Industry Standard: Comprehensive error logging with structured context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} deploy exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "deploy",
+                            "error_type": type(e).__name__,
+                            "code_path": codegen_result.get("output_path") if codegen_result else None,
+                            "failure_type": "exception",
+                        }
+                    )
+                    stages_completed.append("deploy:exception")
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite deploy exception",
+                        extra={"job_id": job_id, "remaining_stages": ["docgen", "critique"]}
+                    )
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
             # 5. Docgen (if requested)
+            # RESILIENCE FIX: Pipeline continues even if docgen fails
+            # Industry Standard: Documentation generation failure shouldn't prevent
+            # code critique, ensuring comprehensive quality analysis
             # FIX: Default to True since documentation is a core pipeline feature
             if payload.get("include_docs", True):
-                docgen_payload = {
-                    "code_path": codegen_result.get("output_path"),
-                    "doc_type": "api",
-                    "format": "markdown",
-                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
-                }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
-                docgen_result = await self._run_docgen(job_id, docgen_payload)
-                if docgen_result.get("status") == "completed":
-                    stages_completed.append("docgen")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")
-                elif docgen_result.get("status") == "error":
-                    logger.warning(f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')} (continuing pipeline)")
+                try:
+                    docgen_payload = {
+                        "code_path": codegen_result.get("output_path"),
+                        "doc_type": "api",
+                        "format": "markdown",
+                        "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
+                    }
+                    logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
+                    docgen_result = await self._run_docgen(job_id, docgen_payload)
+                    if docgen_result.get("status") == "completed":
+                        stages_completed.append("docgen")
+                        logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")
+                    elif docgen_result.get("status") == "error":
+                        logger.error(
+                            f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')}",
+                            extra={
+                                "job_id": job_id,
+                                "error": docgen_result.get('message'),
+                                "failure_type": "generation_error",
+                            }
+                        )
+                        stages_completed.append("docgen:error")
+                        logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite docgen failure")
+                except Exception as e:
+                    # Industry Standard: Structured error logging with full context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} docgen exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "docgen",
+                            "error_type": type(e).__name__,
+                            "code_path": codegen_result.get("output_path") if codegen_result else None,
+                            "failure_type": "exception",
+                        }
+                    )
+                    stages_completed.append("docgen:exception")
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite docgen exception",
+                        extra={"job_id": job_id, "remaining_stages": ["critique"]}
+                    )
             
             # 6. Critique (if requested)
             # FIX: Default to True since critique is a core pipeline feature for quality
