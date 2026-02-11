@@ -7,14 +7,19 @@
  * concurrent users making API requests. It uses staged ramp-up to gradually
  * increase load and tests key endpoints.
  * 
+ * By default, this measures **API responsiveness** (request acceptance, latency,
+ * error rates) without polling for job completion. To measure full **end-to-end
+ * pipeline completion**, use -e SKIP_POLLING=false.
+ * 
  * Usage:
- *   k6 run loadtest.js
+ *   k6 run loadtest.js                           # API responsiveness mode (default)
+ *   k6 run -e SKIP_POLLING=false loadtest.js     # E2E pipeline completion mode
  * 
  * With custom API URL:
  *   k6 run -e API_URL=http://myserver:8000 loadtest.js
  * 
  * With custom max VUs:
- *   k6 run --vus 100 loadtest.js
+ *   k6 run -e MAX_VUS=200 loadtest.js
  */
 
 import http from 'k6/http';
@@ -42,12 +47,34 @@ const POLL_P95_THRESHOLD_MS = 1000;  // 95th percentile for polling requests (mo
 const ERROR_RATE_THRESHOLD = 0.01;  // 1% error rate threshold
 const POLL_TIMEOUT_S = parseInt(__ENV.POLL_TIMEOUT_S || '60', 10);  // Polling timeout in seconds
 const POLL_INTERVAL_S = 2;  // Polling interval in seconds
-const SKIP_POLLING = __ENV.SKIP_POLLING === 'true';  // Skip polling if true
+const SKIP_POLLING = __ENV.SKIP_POLLING !== 'false';  // Polling is opt-in via SKIP_POLLING=false
 const E2E_THRESHOLD_MS = parseInt(__ENV.E2E_THRESHOLD_MS || '30000', 10);  // E2E p95 threshold
 
 // Calculate intermediate VU targets based on MAX_VUS
 const VU_WARMUP = Math.floor(MAX_VUS * 0.1);  // 10% of max
 const VU_MEDIUM = Math.floor(MAX_VUS * 0.5);  // 50% of max
+
+// Build thresholds - conditionally include E2E/polling thresholds when polling is enabled
+const thresholds = {
+    // 95th percentile response time should be under threshold
+    'http_req_duration{type:health}': [`p(95)<${P95_THRESHOLD_MS}`],
+    'http_req_duration{type:generate}': [`p(95)<${P95_THRESHOLD_MS}`],
+    'http_req_duration{type:list}': [`p(95)<${P95_THRESHOLD_MS}`],
+    // Overall p95 should be under threshold
+    'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
+    // Less than 1% request failure rate
+    'http_req_failed': [`rate<${ERROR_RATE_THRESHOLD}`],
+    'health_check_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+    'generate_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+    'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
+};
+
+// Only add E2E/polling thresholds when polling is enabled
+if (!SKIP_POLLING) {
+    thresholds['http_req_duration{type:poll}'] = [`p(95)<${POLL_P95_THRESHOLD_MS}`];
+    thresholds['e2e_generation_duration'] = [`p(95)<${E2E_THRESHOLD_MS}`];
+    thresholds['e2e_generation_failures'] = ['rate>0.95'];
+}
 
 // Test options with staged ramp-up
 export const options = {
@@ -67,23 +94,7 @@ export const options = {
         // Ramp down to 0 users over 30 seconds
         { duration: '30s', target: 0 },
     ],
-    thresholds: {
-        // 95th percentile response time should be under threshold
-        'http_req_duration{type:health}': [`p(95)<${P95_THRESHOLD_MS}`],
-        'http_req_duration{type:generate}': [`p(95)<${P95_THRESHOLD_MS}`],
-        'http_req_duration{type:list}': [`p(95)<${P95_THRESHOLD_MS}`],
-        'http_req_duration{type:poll}': [`p(95)<${POLL_P95_THRESHOLD_MS}`],  // More lenient for polling
-        // Overall p95 should be under threshold
-        'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
-        // Less than 1% request failure rate
-        'http_req_failed': [`rate<${ERROR_RATE_THRESHOLD}`],
-        'health_check_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
-        'generate_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
-        'list_generations_failures': [`rate<${ERROR_RATE_THRESHOLD}`],
-        // E2E thresholds
-        'e2e_generation_duration': [`p(95)<${E2E_THRESHOLD_MS}`],
-        'e2e_generation_failures': ['rate>0.95'],
-    },
+    thresholds,
 };
 
 /**
@@ -161,11 +172,6 @@ function pollForCompletion(jobId, startTime) {
             const body = JSON.parse(response.body);
             const jobStatus = body.status;
             
-            // Diagnostic: log the actual status value received
-            if (iterations <= 3) {
-                console.log(`[DIAG] Poll #${iterations} for jobId=${jobId}: status="${jobStatus}", full_body=${JSON.stringify(body)}`);
-            }
-            
             if (jobStatus === 'completed' || jobStatus === 'success') {
                 completed = true;
                 break;
@@ -181,9 +187,6 @@ function pollForCompletion(jobId, startTime) {
             break;
         }
     }
-    
-    // Diagnostic: log final state after polling loop
-    console.log(`[DIAG] Poll result for jobId=${jobId}: completed=${completed}, failed=${failed}, iterations=${iterations}`);
     
     // Record metrics
     // Note: elapsed time includes polling overhead (sleep intervals), which is intentional
