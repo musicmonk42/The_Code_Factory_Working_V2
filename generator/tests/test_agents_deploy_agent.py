@@ -63,7 +63,11 @@ CMD ["python", "src/main.py"]
 
 @pytest.fixture
 def temp_repo_module():
-    """Function-scoped temporary repository for each test."""
+    """Function-scoped temporary repository for each test.
+    
+    Note: Despite the name 'temp_repo_module', this fixture is now function-scoped
+    (not module-scoped) to ensure proper cleanup after each test.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
 
@@ -97,13 +101,14 @@ CMD ["python", "src/main.py"]
 async def agent(temp_repo_module):
     """Function-scoped async fixture with proper cleanup."""
     with patch.dict("os.environ", {"TESTING": "1"}):
-        async with DeployAgent(str(temp_repo_module)) as agent:
-            agent.db_path = str(temp_repo_module / "test_agent.db")
-            
-            # Limit concurrency for tests
-            if hasattr(agent, 'sem'):
-                agent.sem = asyncio.Semaphore(2)
-            
+        agent_instance = DeployAgent(str(temp_repo_module))
+        agent_instance.db_path = str(temp_repo_module / "test_agent.db")
+        
+        # Limit concurrency for tests
+        if hasattr(agent_instance, 'sem'):
+            agent_instance.sem = asyncio.Semaphore(2)
+        
+        async with agent_instance as agent:
             yield agent
             # Cleanup happens automatically via __aexit__
 
