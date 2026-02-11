@@ -707,6 +707,11 @@ class TestGlobalSecrets:
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3", False
         )
+        # Also mock _ensure_boto3 to return False (simulate boto3 not available)
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_boto3",
+            lambda: False,
+        )
 
         with pytest.raises(CryptoInitializationError, match="boto3 not available"):
             await _ensure_software_key_master()

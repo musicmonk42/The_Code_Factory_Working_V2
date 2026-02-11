@@ -50,6 +50,7 @@ except ImportError as e:
 
 # We need to mock the external dependencies that audit_keystore imports# This is a helper function to apply all mocks to a test class
 _PATCHED_KEYSTORE_DEPS = False
+_KEYSTORE_PATCHES = []  # Track active patches for cleanup
 
 
 # Decorator to skip tests if imports failed
@@ -60,54 +61,62 @@ def skip_if_import_failed(cls):
     return cls
 
 
-def patch_keystore_dependencies(cls):
-    """
-    Applies all necessary patches for external dependencies
-    (from factory and provider) to a test class.
-
-    IMPORTANT: We start the patches at module import time and
-    simply return the class unmodified, to avoid injecting
-    extra positional arguments into test methods.
-    """
-    global _PATCHED_KEYSTORE_DEPS
-
+def _start_keystore_patches():
+    """Start all keystore patches."""
+    global _PATCHED_KEYSTORE_DEPS, _KEYSTORE_PATCHES
+    
     # Skip patching if imports failed
     if _IMPORT_ERROR:
-        return cls
+        return
 
     if _PATCHED_KEYSTORE_DEPS:
-        # Patches already active; just return the class unchanged.
-        return cls
+        # Patches already active
+        return
 
     # --- Patch the *source* modules so tests see mocks via audit_crypto_factory ---
-    patch(
+    p1 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.log_action",
         new_callable=AsyncMock,
-    ).start()
-    patch(
+    )
+    p1.start()
+    _KEYSTORE_PATCHES.append(p1)
+
+    p2 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.send_alert",
         new_callable=AsyncMock,
-    ).start()
+    )
+    p2.start()
+    _KEYSTORE_PATCHES.append(p2)
 
     # Metrics counters: provide a .labels(...).inc() chain of MagicMocks
-    patch(
+    p3 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.KEY_STORE_COUNT",
         MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
-    ).start()
-    patch(
+    )
+    p3.start()
+    _KEYSTORE_PATCHES.append(p3)
+
+    p4 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.KEY_LOAD_COUNT",
         MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
-    ).start()
-    patch(
+    )
+    p4.start()
+    _KEYSTORE_PATCHES.append(p4)
+
+    p5 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.CRYPTO_ERRORS",
         MagicMock(labels=MagicMock(return_value=MagicMock(inc=MagicMock()))),
-    ).start()
+    )
+    p5.start()
+    _KEYSTORE_PATCHES.append(p5)
 
     # Mock the SensitiveDataFilter import used in the factory
-    patch(
+    p6 = patch(
         "generator.audit_log.audit_crypto.audit_crypto_factory.SensitiveDataFilter",
         MagicMock(),
-    ).start()
+    )
+    p6.start()
+    _KEYSTORE_PATCHES.append(p6)
 
     # Mock CryptoOperationError from audit_crypto_provider so the tests can
     # catch it without pulling in the full provider stack.
@@ -117,13 +126,33 @@ def patch_keystore_dependencies(cls):
         MockCryptoError,
     )
     _crypto_error_patch.start()
+    _KEYSTORE_PATCHES.append(_crypto_error_patch)
 
     _PATCHED_KEYSTORE_DEPS = True
-    return cls
+
+
+def _stop_keystore_patches():
+    """Stop all keystore patches to allow other tests to run cleanly."""
+    global _PATCHED_KEYSTORE_DEPS, _KEYSTORE_PATCHES
+    for p in _KEYSTORE_PATCHES:
+        try:
+            p.stop()
+        except RuntimeError:
+            pass  # Already stopped
+    _KEYSTORE_PATCHES.clear()
+    _PATCHED_KEYSTORE_DEPS = False
+
+
+# Register fixture to start patches before module tests and cleanup after
+@pytest.fixture(scope="module", autouse=True)
+def setup_and_cleanup_keystore_patches():
+    """Setup keystore patches before tests and cleanup after all tests in this module."""
+    _start_keystore_patches()
+    yield
+    _stop_keystore_patches()
 
 
 @skip_if_import_failed
-@patch_keystore_dependencies
 class TestFileSystemKeyStorageBackend(unittest.IsolatedAsyncioTestCase):
     """
     Tests the FileSystemKeyStorageBackend (the "physical" layer).
@@ -359,7 +388,6 @@ class TestFileSystemKeyStorageBackend(unittest.IsolatedAsyncioTestCase):
 
 
 @skip_if_import_failed
-@patch_keystore_dependencies
 class TestKeyStore(unittest.IsolatedAsyncioTestCase):
     """
     Tests the KeyStore (the "logical" layer) with a real
