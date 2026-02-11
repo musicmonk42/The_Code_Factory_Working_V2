@@ -537,45 +537,61 @@ SAFE_COMMAND_WHITELIST = {"python", "pytest", "bash", "sh", "git", "echo"}
 ALLOW_PRIVILEGED_CONTAINERS_GLOBAL = False
 
 
-if PYDANTIC_AVAILABLE:
-    # Determine Pydantic version once at module level
+def _create_pydantic_classes():
+    """Factory function to return appropriate Pydantic classes based on version."""
+    if not PYDANTIC_AVAILABLE:
+        # Return fallback classes
+        class SandboxPolicy:
+            """Fallback SandboxPolicy class when Pydantic is not available."""
+            def __init__(self, **kwargs):
+                self.network_disabled = kwargs.get("network_disabled", True)
+                self.allow_write = kwargs.get("allow_write", False)
+                self.privileged = kwargs.get("privileged", False)
+                self.run_as_user = kwargs.get("run_as_user", DEFAULT_CONTAINER_USER)
+                self.seccomp_profile = kwargs.get(
+                    "seccomp_profile", DEFAULT_SECCOMP_PROFILE_PATH
+                )
+                self.apparmor_profile = kwargs.get(
+                    "apparmor_profile", DEFAULT_APPARMOR_PROFILE_NAME
+                )
+            
+            def dict(self):
+                return self.__dict__
+        
+        class ContainerValidationConfig:
+            """Fallback ContainerValidationConfig class when Pydantic is not available."""
+            def __init__(
+                self,
+                image: str,
+                command: List[str],
+                kubernetes_pod_manifest: Optional[Dict[str, Any]] = None,
+            ):
+                self.image = image
+                self.command = command
+                self.kubernetes_pod_manifest = kubernetes_pod_manifest
+        
+        return SandboxPolicy, ContainerValidationConfig
+    
+    # Determine Pydantic version
     try:
         from pydantic import VERSION
         PYDANTIC_V2 = int(VERSION.split('.')[0]) >= 2
     except:
         PYDANTIC_V2 = False
     
-    # Use consistent configuration approach based on version
     if PYDANTIC_V2:
-        from pydantic import ConfigDict
+        from pydantic import ConfigDict, field_validator
         
         class SandboxPolicy(BaseModel):
             """Pydantic V2-based SandboxPolicy with validation."""
+            model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
             
-            model_config = ConfigDict(
-                arbitrary_types_allowed=True,
-                validate_assignment=True
-            )
-            
-            network_disabled: bool = Field(
-                default=False, description="Disable network access for the sandbox"
-            )
-            allow_write: bool = Field(
-                default=False, description="Allow write access to the filesystem"
-            )
-            privileged: bool = Field(
-                default=False, description="Allow privileged container execution"
-            )
-            run_as_user: str = Field(
-                default=DEFAULT_CONTAINER_USER,
-                description="User ID and group ID in 'uid:gid' format",
-            )
-            seccomp_profile: Optional[str] = Field(
-                default=DEFAULT_SECCOMP_PROFILE_PATH, description="Path to seccomp profile"
-            )
-            apparmor_profile: Optional[str] = Field(
-                default=DEFAULT_APPARMOR_PROFILE_NAME, description="AppArmor profile name"
-            )
+            network_disabled: bool = Field(default=False, description="Disable network access for the sandbox")
+            allow_write: bool = Field(default=False, description="Allow write access to the filesystem")
+            privileged: bool = Field(default=False, description="Allow privileged container execution")
+            run_as_user: str = Field(default=DEFAULT_CONTAINER_USER, description="User ID and group ID in 'uid:gid' format")
+            seccomp_profile: Optional[str] = Field(default=DEFAULT_SECCOMP_PROFILE_PATH, description="Path to seccomp profile")
+            apparmor_profile: Optional[str] = Field(default=DEFAULT_APPARMOR_PROFILE_NAME, description="AppArmor profile name")
 
             @field_validator("run_as_user")
             @classmethod
@@ -586,17 +602,11 @@ if PYDANTIC_AVAILABLE:
         
         class ContainerValidationConfig(BaseModel):
             """Pydantic V2-based ContainerValidationConfig with validation."""
-            
-            model_config = ConfigDict(
-                arbitrary_types_allowed=True,
-                validate_assignment=True
-            )
+            model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
             
             image: str = Field(..., description="Container image name.")
             command: List[str] = Field(..., description="Container command.")
-            kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(
-                None, description="Kubernetes pod manifest."
-            )
+            kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(None, description="Kubernetes pod manifest.")
 
             @field_validator("image")
             @classmethod
@@ -619,38 +629,24 @@ if PYDANTIC_AVAILABLE:
             @classmethod
             def validate_k8s_manifest_safety(cls, v):
                 if v is not None and not _validate_pod_manifest_internal(v):
-                    raise ValueError(
-                        "Kubernetes pod manifest fails security compliance checks."
-                    )
+                    raise ValueError("Kubernetes pod manifest fails security compliance checks.")
                 return v
     
     else:  # Pydantic V1
+        from pydantic import validator
+        
         class SandboxPolicy(BaseModel):
             """Pydantic V1-based SandboxPolicy with validation."""
-            
             class Config:
                 arbitrary_types_allowed = True
                 validate_assignment = True
             
-            network_disabled: bool = Field(
-                default=False, description="Disable network access for the sandbox"
-            )
-            allow_write: bool = Field(
-                default=False, description="Allow write access to the filesystem"
-            )
-            privileged: bool = Field(
-                default=False, description="Allow privileged container execution"
-            )
-            run_as_user: str = Field(
-                default=DEFAULT_CONTAINER_USER,
-                description="User ID and group ID in 'uid:gid' format",
-            )
-            seccomp_profile: Optional[str] = Field(
-                default=DEFAULT_SECCOMP_PROFILE_PATH, description="Path to seccomp profile"
-            )
-            apparmor_profile: Optional[str] = Field(
-                default=DEFAULT_APPARMOR_PROFILE_NAME, description="AppArmor profile name"
-            )
+            network_disabled: bool = Field(default=False, description="Disable network access for the sandbox")
+            allow_write: bool = Field(default=False, description="Allow write access to the filesystem")
+            privileged: bool = Field(default=False, description="Allow privileged container execution")
+            run_as_user: str = Field(default=DEFAULT_CONTAINER_USER, description="User ID and group ID in 'uid:gid' format")
+            seccomp_profile: Optional[str] = Field(default=DEFAULT_SECCOMP_PROFILE_PATH, description="Path to seccomp profile")
+            apparmor_profile: Optional[str] = Field(default=DEFAULT_APPARMOR_PROFILE_NAME, description="AppArmor profile name")
 
             @validator("run_as_user")
             def validate_run_as_user(cls, v):
@@ -660,16 +656,13 @@ if PYDANTIC_AVAILABLE:
         
         class ContainerValidationConfig(BaseModel):
             """Pydantic V1-based ContainerValidationConfig with validation."""
-            
             class Config:
                 arbitrary_types_allowed = True
                 validate_assignment = True
             
             image: str = Field(..., description="Container image name.")
             command: List[str] = Field(..., description="Container command.")
-            kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(
-                None, description="Kubernetes pod manifest."
-            )
+            kubernetes_pod_manifest: Optional[Dict[str, Any]] = Field(None, description="Kubernetes pod manifest.")
 
             @validator("image")
             def validate_image_whitelist(cls, v):
@@ -689,57 +682,25 @@ if PYDANTIC_AVAILABLE:
             @validator("kubernetes_pod_manifest")
             def validate_k8s_manifest_safety(cls, v):
                 if v is not None and not _validate_pod_manifest_internal(v):
-                    raise ValueError(
-                        "Kubernetes pod manifest fails security compliance checks."
-                    )
+                    raise ValueError("Kubernetes pod manifest fails security compliance checks.")
                 return v
-
-    def _default_policy() -> SandboxPolicy:
-        """Return a default SandboxPolicy instance with secure defaults."""
-        return SandboxPolicy(
-            network_disabled=True,
-            allow_write=False,
-            privileged=False,
-            run_as_user=DEFAULT_CONTAINER_USER,
-            seccomp_profile=DEFAULT_SECCOMP_PROFILE_PATH,
-            apparmor_profile=DEFAULT_APPARMOR_PROFILE_NAME,
-        )
-
-else:
-    # Fallback when Pydantic is not available
-    class SandboxPolicy:
-        """Fallback SandboxPolicy class when Pydantic is not available."""
-
-        def __init__(self, **kwargs):
-            self.network_disabled = kwargs.get("network_disabled", True)
-            self.allow_write = kwargs.get("allow_write", False)
-            self.privileged = kwargs.get("privileged", False)
-            self.run_as_user = kwargs.get("run_as_user", DEFAULT_CONTAINER_USER)
-            self.seccomp_profile = kwargs.get(
-                "seccomp_profile", DEFAULT_SECCOMP_PROFILE_PATH
-            )
-            self.apparmor_profile = kwargs.get(
-                "apparmor_profile", DEFAULT_APPARMOR_PROFILE_NAME
-            )
-
-        def dict(self):
-            return self.__dict__
-
-    def _default_policy() -> SandboxPolicy:
-        """Return a default SandboxPolicy instance with secure defaults."""
-        return SandboxPolicy()
     
-    class ContainerValidationConfig:
-        """Fallback ContainerValidationConfig class when Pydantic is not available."""
-        def __init__(
-            self,
-            image: str,
-            command: List[str],
-            kubernetes_pod_manifest: Optional[Dict[str, Any]] = None,
-        ):
-            self.image = image
-            self.command = command
-            self.kubernetes_pod_manifest = kubernetes_pod_manifest
+    return SandboxPolicy, ContainerValidationConfig
+
+# Create classes using factory - only ONE definition in module namespace
+SandboxPolicy, ContainerValidationConfig = _create_pydantic_classes()
+
+
+def _default_policy() -> SandboxPolicy:
+    """Return a default SandboxPolicy instance with secure defaults."""
+    return SandboxPolicy(
+        network_disabled=True,
+        allow_write=False,
+        privileged=False,
+        run_as_user=DEFAULT_CONTAINER_USER,
+        seccomp_profile=DEFAULT_SECCOMP_PROFILE_PATH,
+        apparmor_profile=DEFAULT_APPARMOR_PROFILE_NAME,
+    )
 
 
 
