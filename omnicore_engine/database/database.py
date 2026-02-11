@@ -506,7 +506,7 @@ class Database:
             
             engine_params["connect_args"] = {
                 "command_timeout": command_timeout,  # Per-query timeout in seconds
-                "timeout": connect_timeout,  # Connection timeout in seconds
+                "timeout": connect_timeout,  # Initial connection establishment timeout in seconds
                 "server_settings": {
                     "statement_timeout": str(command_timeout * 1000),  # Server-side query timeout in milliseconds
                 },
