@@ -337,6 +337,34 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             )
 
 
+def _audit_task_done_callback(task: asyncio.Task) -> None:
+    """
+    Log any exception from fire-and-forget audit tasks to prevent silent failures.
+    
+    This callback is attached to audit logging tasks created by log_audit_event_sync().
+    It ensures that any exceptions during audit logging are properly logged rather than
+    being silently discarded, which helps prevent audit hash chain breaks.
+    
+    Args:
+        task: The completed asyncio.Task that was running log_audit_event()
+        
+    Thread Safety:
+        This callback is executed by the event loop and is safe to use from any context.
+    """
+    if task.cancelled():
+        # Task was cancelled - this is expected during shutdown
+        return
+    
+    exc = task.exception()
+    if exc:
+        # An exception occurred during audit logging - log it for visibility
+        # Use the central logger to ensure the error is captured
+        logger.error(
+            f"Audit logging task '{task.get_name()}' failed: {exc}",
+            exc_info=exc
+        )
+
+
 def log_audit_event_sync(action: str, data: Dict[str, Any], **kwargs) -> None:
     """
     Synchronous wrapper for log_audit_event with intelligent event loop detection.
@@ -401,8 +429,13 @@ def log_audit_event_sync(action: str, data: Dict[str, Any], **kwargs) -> None:
         loop = asyncio.get_running_loop()
         
         # STEP 2: If we got here, we're in an async context with a running loop
-        # Create a fire-and-forget task that will execute in the background
-        asyncio.create_task(log_audit_event(action, data, **kwargs))
+        # Create a fire-and-forget task with proper error handling
+        # FIX: Add named task and callback to prevent silent failures and hash chain breaks
+        task = asyncio.create_task(
+            log_audit_event(action, data, **kwargs),
+            name=f"audit_{action}"
+        )
+        task.add_done_callback(_audit_task_done_callback)
         
     except RuntimeError:
         # EXPECTED: No event loop running - this happens in pure sync contexts
