@@ -222,8 +222,8 @@ jobs:
           fi
           
           echo "  Checking minimum replicas count..."
-          # Extract minReplicas from HPA resource (using -A 20 to capture full HPA spec section)
-          HPA_MIN_REPLICAS=$(grep -A 20 "kind: HorizontalPodAutoscaler" /tmp/kustomize-production.yaml | grep "minReplicas:" | head -1 | awk '{print $2}')
+          # Extract minReplicas from HPA resource using yq for reliable YAML parsing
+          HPA_MIN_REPLICAS=$(yq eval 'select(.kind == "HorizontalPodAutoscaler") | .spec.minReplicas' /tmp/kustomize-production.yaml)
           if [ -n "$HPA_MIN_REPLICAS" ] && [ "$HPA_MIN_REPLICAS" -ge 3 ]; then
             echo "  ✓ HPA minReplicas is $HPA_MIN_REPLICAS (>= 3)"
           else
