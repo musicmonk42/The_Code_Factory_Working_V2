@@ -375,23 +375,24 @@ class TestFullDeploymentPipeline:
     ):
         """
         Test generating multiple deployment targets simultaneously:
-        - Docker only (helm has handler conversion issues)
+        - Docker, Kubernetes, and Helm (all targets now have proper handlers)
         """
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
 
-        # FIX: Use only 'docker' target - 'helm' target has YAMLHandler issues
-        # and 'docs' target does not have a registered validator
+        # FIX Bug 3 & 4: Re-enable all deployment targets with proper handlers
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt"],
-            targets=["docker"],
+            targets=["docker", "kubernetes", "helm"],
             doc_type="deployment",
             human_approval=False,
         )
 
-        # Target should be generated
-        assert len(result["configs"]) >= 1
+        # All three targets should be generated
+        assert len(result["configs"]) >= 3
         assert "docker" in result["configs"]
+        assert "kubernetes" in result["configs"]
+        assert "helm" in result["configs"]
 
         # Should be validated
         assert len(result["validations"]) >= 1  # At least docker validated
@@ -913,10 +914,10 @@ class TestReportGenerationIntegration:
         agent = DeployAgent(str(full_test_repo))
         await agent._init_db()  # FIX: Initialize database
 
-        # FIX: Use only 'docker' target - 'helm' target has YAMLHandler issues
+        # FIX Bug 3 & 4: Re-enable all deployment targets with proper handlers
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt", "README.md"],
-            targets=["docker"],
+            targets=["docker", "kubernetes", "helm"],
             doc_type="deployment",
             human_approval=False,
         )

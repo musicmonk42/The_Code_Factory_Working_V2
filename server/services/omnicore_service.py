@@ -22,6 +22,7 @@ import os
 import re
 import threading
 import time
+import yaml
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -2618,33 +2619,59 @@ class OmniCoreService:
                         filename = "Dockerfile"
                         target_dir = output_dir
                     elif target == "kubernetes" or target == "k8s":
-                        # FIX: Kubernetes files go into k8s/ subdirectory
+                        # FIX Bug 3 & 4: Kubernetes files go into k8s/ subdirectory with improved YAML splitting
                         target_dir = output_dir / "k8s"
                         target_dir.mkdir(parents=True, exist_ok=True)
                         
                         # Parse YAML content to create separate files (deployment.yaml, service.yaml)
                         # The LLM typically generates multi-document YAML separated by "---"
                         yaml_docs = config_content.split("---")
+                        doc_count = 0
+                        
                         for idx, doc in enumerate(yaml_docs):
                             doc = doc.strip()
+                            
+                            # FIX Bug 3: Handle edge cases in YAML splitting
+                            # Skip empty documents or those that are too short to be valid
                             if not doc or len(doc) < MIN_YAML_DOC_LENGTH:
-                                continue  # Skip empty or trivial documents
+                                logger.debug(f"Skipping empty/short K8s YAML document {idx}")
+                                continue
                             
                             # Determine filename based on document kind
-                            if "kind: Deployment" in doc:
-                                doc_filename = "deployment.yaml"
-                            elif "kind: Service" in doc:
-                                doc_filename = "service.yaml"
-                            elif "kind: Ingress" in doc:
-                                doc_filename = "ingress.yaml"
-                            elif "kind: ConfigMap" in doc:
-                                doc_filename = "configmap.yaml"
-                            else:
-                                doc_filename = f"resource-{idx}.yaml"
+                            # Use case-insensitive search for better compatibility
+                            doc_lower = doc.lower()
                             
+                            # Try to extract the kind field more robustly
+                            kind_match = re.search(r'kind:\s*(\w+)', doc, re.IGNORECASE)
+                            kind = kind_match.group(1) if kind_match else None
+                            
+                            if kind:
+                                # Map kind to filename
+                                kind_to_filename = {
+                                    "Deployment": "deployment.yaml",
+                                    "Service": "service.yaml",
+                                    "Ingress": "ingress.yaml",
+                                    "ConfigMap": "configmap.yaml",
+                                    "Secret": "secret.yaml",
+                                    "HorizontalPodAutoscaler": "hpa.yaml",
+                                    "PersistentVolumeClaim": "pvc.yaml",
+                                    "ServiceAccount": "serviceaccount.yaml",
+                                    "Role": "role.yaml",
+                                    "RoleBinding": "rolebinding.yaml",
+                                    "NetworkPolicy": "networkpolicy.yaml",
+                                }
+                                doc_filename = kind_to_filename.get(kind, f"{kind.lower()}.yaml")
+                            else:
+                                # Fallback: use index-based name if kind is not found
+                                doc_filename = f"resource-{doc_count}.yaml"
+                                logger.warning(f"Could not determine kind for K8s document {idx}, using fallback filename")
+                            
+                            # Write the document to file
                             file_path = target_dir / doc_filename
                             async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                                 await f.write(doc)
+                            
+                            doc_count += 1
                             
                             try:
                                 rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
@@ -2652,63 +2679,107 @@ class OmniCoreService:
                             except ValueError as e:
                                 logger.warning(f"[DEPLOY] File {file_path} is outside repo_path {repo_path}, using absolute path. Error: {e}")
                                 generated_files.append(str(file_path))
-                            logger.info(f"Generated kubernetes file: {file_path}")
+                            logger.info(f"Generated kubernetes file: {file_path} (kind: {kind or 'unknown'})")
+                        
+                        if doc_count == 0:
+                            logger.warning(f"[DEPLOY] No valid Kubernetes documents found in content for target {target}")
                         
                         continue  # Skip the default file writing below
                     elif target == "helm":
-                        # FIX: Helm files go into helm/ subdirectory
+                        # FIX Bug 3 & 4: Helm files go into helm/ subdirectory with proper chart structure
                         target_dir = output_dir / "helm"
                         target_dir.mkdir(parents=True, exist_ok=True)
                         templates_dir = target_dir / "templates"
                         templates_dir.mkdir(parents=True, exist_ok=True)
                         
-                        # Parse and organize helm files
-                        # The LLM typically generates all helm files in one response
-                        # We need to split Chart.yaml, values.yaml, and templates
-                        
-                        # For now, write the content to Chart.yaml and create a basic structure
-                        # A more sophisticated approach would parse the LLM output and organize files
-                        chart_path = target_dir / "Chart.yaml"
-                        values_path = target_dir / "values.yaml"
-                        
-                        # Try to extract Chart.yaml and values.yaml from content
-                        # Note: This is a simple heuristic parser that assumes LLM output format:
-                        # Expected format: "# Chart.yaml\n<content>\n# values.yaml\n<content>"
-                        # A more robust approach would use YAML parsing library,
-                        # but this works for common LLM output patterns.
-                        # TODO: Consider implementing proper YAML parsing for better reliability
-                        if "Chart.yaml" in config_content and "values.yaml" in config_content:
-                            # Content contains multiple files - try to parse them
-                            # Split on '# ' at the start of a line followed by filename
-                            # This heuristic works with common LLM output but may be fragile
-                            parts = config_content.split("\n# ")
-                            for part in parts:
-                                part = "# " + part if not part.startswith("#") else part
-                                # Safe bounds checking: only check first N chars if part is long enough
-                                part_prefix = part[:min(HELM_FILE_HEADER_CHECK_LENGTH, len(part))]
-                                if "Chart.yaml" in part_prefix:
-                                    chart_content = part.replace("# Chart.yaml", "").strip()
-                                    async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
-                                        await f.write(chart_content)
-                                    generated_files.append(str(chart_path.relative_to(repo_path)))
-                                elif "values.yaml" in part_prefix:
-                                    values_content = part.replace("# values.yaml", "").strip()
-                                    async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
-                                        await f.write(values_content)
-                                    generated_files.append(str(values_path.relative_to(repo_path)))
-                        else:
-                            # Write entire content as Chart.yaml for now
-                            async with aiofiles.open(chart_path, "w", encoding="utf-8") as f:
-                                await f.write(config_content)
-                            generated_files.append(str(chart_path.relative_to(repo_path)))
+                        # Parse Helm chart content from LLM
+                        # The HelmHandler returns structured data with Chart.yaml, values.yaml, templates
+                        try:
+                            # Try to parse as JSON first (structured response)
+                            helm_data = json.loads(config_content)
                             
-                            # Create default values.yaml
-                            default_values = "# Helm values\nreplicaCount: 2\n"
-                            async with aiofiles.open(values_path, "w", encoding="utf-8") as f:
-                                await f.write(default_values)
-                            generated_files.append(str(values_path.relative_to(repo_path)))
+                            # Write Chart.yaml
+                            if "Chart.yaml" in helm_data:
+                                chart_file = target_dir / "Chart.yaml"
+                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                    if isinstance(helm_data["Chart.yaml"], dict):
+                                        await f.write(yaml.dump(helm_data["Chart.yaml"], default_flow_style=False))
+                                    else:
+                                        await f.write(str(helm_data["Chart.yaml"]))
+                                generated_files.append(str(chart_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file: {chart_file}")
+                            
+                            # Write values.yaml
+                            if "values.yaml" in helm_data:
+                                values_file = target_dir / "values.yaml"
+                                async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                    if isinstance(helm_data["values.yaml"], dict):
+                                        await f.write(yaml.dump(helm_data["values.yaml"], default_flow_style=False))
+                                    else:
+                                        await f.write(str(helm_data["values.yaml"]))
+                                generated_files.append(str(values_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file: {values_file}")
+                            
+                            # Write template files
+                            if "templates" in helm_data and isinstance(helm_data["templates"], dict):
+                                for template_name, template_content in helm_data["templates"].items():
+                                    # Ensure template name is just the filename
+                                    if "/" in template_name:
+                                        template_name = template_name.split("/")[-1]
+                                    template_file = templates_dir / template_name
+                                    async with aiofiles.open(template_file, "w", encoding="utf-8") as f:
+                                        await f.write(str(template_content))
+                                    generated_files.append(str(template_file.relative_to(repo_path)))
+                                    logger.info(f"Generated helm template: {template_file}")
+                        except (json.JSONDecodeError, ValueError):
+                            # Fallback: treat as raw YAML content for Chart.yaml
+                            # Split by common delimiters or file markers
+                            logger.warning("[DEPLOY] Helm content not in expected JSON format, using fallback parsing")
+                            
+                            # Try to split by file markers (# Chart.yaml, # values.yaml, etc.)
+                            if "# Chart.yaml" in config_content or "# values.yaml" in config_content:
+                                # Parse structured YAML with file markers
+                                sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', config_content)
+                                
+                                current_file = None
+                                for i, section in enumerate(sections):
+                                    if i % 2 == 1:  # File name
+                                        current_file = section.strip()
+                                    elif current_file and section.strip():  # File content
+                                        if current_file.startswith("templates/"):
+                                            # Template file
+                                            template_name = current_file.replace("templates/", "")
+                                            template_file = templates_dir / template_name
+                                            async with aiofiles.open(template_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(template_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm template: {template_file}")
+                                        elif current_file == "Chart.yaml":
+                                            chart_file = target_dir / "Chart.yaml"
+                                            async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(chart_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm file: {chart_file}")
+                                        elif current_file == "values.yaml":
+                                            values_file = target_dir / "values.yaml"
+                                            async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                                await f.write(section.strip())
+                                            generated_files.append(str(values_file.relative_to(repo_path)))
+                                            logger.info(f"Generated helm file: {values_file}")
+                            else:
+                                # Final fallback: write entire content as Chart.yaml
+                                chart_file = target_dir / "Chart.yaml"
+                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                    await f.write(config_content)
+                                generated_files.append(str(chart_file.relative_to(repo_path)))
+                                logger.info(f"Generated helm file (fallback): {chart_file}")
+                                
+                                # Create minimal values.yaml
+                                values_file = target_dir / "values.yaml"
+                                async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                    await f.write("# Helm chart values\nreplicaCount: 1\n")
+                                generated_files.append(str(values_file.relative_to(repo_path)))
                         
-                        logger.info(f"Generated helm files in: {target_dir}")
                         continue  # Skip the default file writing below
                     elif target == "docker-compose":
                         filename = "docker-compose.yml"
@@ -2962,6 +3033,71 @@ class OmniCoreService:
             try:
                 target_result = await self._run_deploy(job_id, target_payload)
                 results[target] = target_result
+                
+                # FIX Bug 5: Track failures and validate deployment artifacts
+                if target_result.get("status") == "failed":
+                    failed_targets.append(target)
+                    logger.error(
+                        f"[DEPLOY_ALL] Target {target} failed",
+                        extra={
+                            "job_id": job_id,
+                            "target": target,
+                            "error": target_result.get("error", "Unknown error")
+                        }
+                    )
+                else:
+                    # Track generated files
+                    target_files = target_result.get("generated_files", [])
+                    all_generated_files.extend(target_files)
+                    logger.info(
+                        f"[DEPLOY_ALL] Target {target} completed with {len(target_files)} files",
+                        extra={"job_id": job_id, "target": target, "duration": time.time() - target_start}
+                    )
+                    
+            except Exception as e:
+                # FIX Bug 5: Track exceptions as failures
+                failed_targets.append(target)
+                logger.exception(
+                    f"[DEPLOY_ALL] Target {target} raised exception: {e}",
+                    extra={"job_id": job_id, "target": target}
+                )
+                results[target] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "target": target
+                }
+        
+        # FIX Bug 5: Check if any critical targets failed
+        # For now, all three targets (docker, kubernetes, helm) are considered required
+        if failed_targets:
+            error_msg = f"Deployment failed for targets: {', '.join(failed_targets)}"
+            logger.error(
+                f"[DEPLOY_ALL] {error_msg}",
+                extra={
+                    "job_id": job_id,
+                    "failed_targets": failed_targets,
+                    "successful_targets": [t for t in targets if t not in failed_targets]
+                }
+            )
+            # Return failure status but include partial results
+            return {
+                "status": "failed",
+                "error": error_msg,
+                "failed_targets": failed_targets,
+                "results": results,
+                "generated_files": all_generated_files,
+                "duration": time.time() - start_time
+            }
+        
+        logger.info(
+            f"[DEPLOY_ALL] All deployment targets completed successfully",
+            extra={
+                "job_id": job_id,
+                "targets": targets,
+                "total_files": len(all_generated_files),
+                "duration": time.time() - start_time
+            }
+        )
                 
                 # Calculate target duration
                 target_duration = time.time() - target_start
@@ -4993,8 +5129,10 @@ class OmniCoreService:
             
             output_path = codegen_result.get("output_path")
             
-            # FIX: Add final validation to verify all expected files and directories exist
+            # FIX Bug 5: Validate deployment artifacts and raise errors for missing required files
             validation_warnings = []
+            validation_errors = []
+            
             if output_path:
                 output_path_obj = Path(output_path)
                 
@@ -5006,27 +5144,32 @@ class OmniCoreService:
                     
                     # Check for Docker files (always generated)
                     if not (output_path_obj / "Dockerfile").exists():
-                        validation_warnings.append("Dockerfile not found despite deploy stage completing")
+                        validation_errors.append("Dockerfile not found despite deploy stage completing")
                     
                     # Check for Kubernetes directory and files
                     k8s_dir = output_path_obj / "k8s"
                     if not k8s_dir.exists():
-                        validation_warnings.append("k8s/ directory not found despite deploy stage completing")
+                        validation_errors.append("k8s/ directory not found despite deploy stage completing")
                     else:
                         if not (k8s_dir / "deployment.yaml").exists():
-                            validation_warnings.append("k8s/deployment.yaml not found")
+                            validation_errors.append("k8s/deployment.yaml not found")
                         if not (k8s_dir / "service.yaml").exists():
-                            validation_warnings.append("k8s/service.yaml not found")
+                            validation_errors.append("k8s/service.yaml not found")
                     
                     # Check for Helm directory and files
                     helm_dir = output_path_obj / "helm"
                     if not helm_dir.exists():
-                        validation_warnings.append("helm/ directory not found despite deploy stage completing")
+                        validation_errors.append("helm/ directory not found despite deploy stage completing")
                     else:
                         if not (helm_dir / "Chart.yaml").exists():
-                            validation_warnings.append("helm/Chart.yaml not found")
+                            validation_errors.append("helm/Chart.yaml not found")
                         if not (helm_dir / "values.yaml").exists():
-                            validation_warnings.append("helm/values.yaml not found")
+                            validation_errors.append("helm/values.yaml not found")
+                        templates_dir = helm_dir / "templates"
+                        if not templates_dir.exists():
+                            validation_warnings.append("helm/templates/ directory not found")
+                        elif not any(templates_dir.glob("*.yaml")):
+                            validation_warnings.append("helm/templates/ directory is empty")
                 
                 if "docgen" in stages_completed:
                     docs_dir = output_path_obj / "docs"
@@ -5051,6 +5194,30 @@ class OmniCoreService:
                             "stages_completed": stages_completed
                         }
                     )
+                
+                # FIX Bug 5: Raise errors for missing deployment artifacts
+                if validation_errors:
+                    error_msg = f"[PIPELINE] Critical validation errors for job {job_id}: {', '.join(validation_errors)}"
+                    logger.error(
+                        error_msg,
+                        extra={
+                            "job_id": job_id,
+                            "errors": validation_errors,
+                            "stages_completed": stages_completed
+                        }
+                    )
+                    # Update job status to failed
+                    if job_id in jobs_db:
+                        job = jobs_db[job_id]
+                        job.status = JobStatus.FAILED
+                        job.error = error_msg
+                        job.result = {
+                            "error": "Deployment artifacts validation failed",
+                            "missing_artifacts": validation_errors,
+                            "stages_completed": stages_completed
+                        }
+                    # Don't raise exception here - just mark job as failed and continue
+                    # This allows cleanup to proceed normally
                 else:
                     logger.info(f"[PIPELINE] All expected files and directories validated for job {job_id}")
 

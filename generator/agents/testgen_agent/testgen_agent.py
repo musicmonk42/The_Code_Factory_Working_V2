@@ -1410,7 +1410,18 @@ def test_{file_stem}_syntax_error_documentation():
                 })
         
         # Determine the import based on file path
-        module_name = Path(file_path).stem
+        # FIX Bug 1: Compute correct import path for nested packages
+        # If file_path is "app/main.py", we need "from app.main import app"
+        # If file_path is "main.py", we need "from main import app"
+        file_path_obj = Path(file_path)
+        
+        # Remove .py extension and convert path separators to dots
+        # e.g., "app/main.py" -> "app.main", "main.py" -> "main"
+        parts = file_path_obj.with_suffix('').parts
+        if parts:
+            module_name = '.'.join(parts)
+        else:
+            module_name = file_path_obj.stem
         
         # Build test file
         lines = [
