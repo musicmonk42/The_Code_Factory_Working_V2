@@ -127,7 +127,7 @@ def _get_presidio_anonymizer():
 
 
 from runner.llm_client import call_ensemble_api
-from runner.runner_errors import LLMError
+from runner.runner_errors import ConfigurationError, LLMError
 
 # --- CENTRAL RUNNER FOUNDATION ---
 # FIX: Import add_provenance from runner_audit to avoid circular dependency
@@ -1663,71 +1663,17 @@ def test_{file_stem}_syntax_error_documentation():
                                 run_id,
                                 "generation",
                             )
-                        except (LLMError, Exception) as e:
-                            # Catch LLM errors and fall back to rule-based generation
-                            if isinstance(e, LLMError) or "LLM" in str(e) or "model configuration" in str(e).lower():
+                        except (LLMError, ConfigurationError, Exception) as e:
+                            # Catch LLM and configuration errors, fall back to rule-based generation
+                            if isinstance(e, (LLMError, ConfigurationError)):
                                 logger.warning(
                                     f"LLM call failed during initial generation, falling back to rule-based generation: {e}",
                                     extra=log_extra
                                 )
                                 span.add_event("LLM generation failed, falling back to rule-based")
-                                
-                                # Fall back to rule-based generation
-                                basic_tests = await self._generate_basic_tests(code_files, language, run_id)
-                                
-                                await add_provenance(
-                                    "llm_fallback_to_rule_based",
-                                    {
-                                        "run_id": run_id,
-                                        "reason": str(e),
-                                        "tests_generated": len(basic_tests),
-                                        "test_files": list(basic_tests.keys()),
-                                    },
-                                    **log_extra,
+                                return await self._create_llm_fallback_response(
+                                    code_files, language, run_id, e, start_time, log_extra
                                 )
-                                
-                                # Create a simple validation report
-                                validation_report = {
-                                    "status": "completed",
-                                    "message": "Rule-based tests generated after LLM failure",
-                                    "tests_count": len(basic_tests),
-                                    "llm_error": str(e),
-                                }
-                                
-                                # Create explainability report
-                                explainability_report = f"""# Test Generation Report
-
-## Summary
-- **Status**: Success (Fallback to rule-based generation)
-- **Tests Generated**: {len(basic_tests)} test files
-- **LLM Used**: No (LLM call failed: {str(e)[:100]})
-- **Generation Method**: Rule-based AST parsing
-
-## Generated Test Files
-{chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
-
-## Notes
-- Tests are basic stubs that need to be implemented
-- LLM-based generation failed, so rule-based fallback was used
-- To troubleshoot LLM issues, check API keys and model configurations
-"""
-                                
-                                span.set_status(Status(StatusCode.OK, "Rule-based test generation completed (LLM fallback)"))
-                                
-                                return {
-                                    "status": "success",
-                                    "generated_tests": basic_tests,
-                                    "final_validation_report": validation_report,
-                                    "explainability_report": explainability_report,
-                                    "duration_seconds": time.time() - start_time,
-                                    "run_id": run_id,
-                                    "history_summary": [{
-                                        "action": "llm_fallback_to_rule_based",
-                                        "status": "completed",
-                                        "tests_count": len(basic_tests),
-                                        "llm_error": str(e)[:200],
-                                    }],
-                                }
                             else:
                                 # Re-raise if not an LLM-related error
                                 raise
@@ -1766,71 +1712,17 @@ def test_{file_stem}_syntax_error_documentation():
                                 run_id,
                                 "refinement",
                             )
-                        except (LLMError, Exception) as e:
-                            # Catch LLM errors and fall back to rule-based generation
-                            if isinstance(e, LLMError) or "LLM" in str(e) or "model configuration" in str(e).lower():
+                        except (LLMError, ConfigurationError, Exception) as e:
+                            # Catch LLM and configuration errors, fall back to rule-based generation
+                            if isinstance(e, (LLMError, ConfigurationError)):
                                 logger.warning(
                                     f"LLM call failed during refinement, falling back to rule-based generation: {e}",
                                     extra=log_extra
                                 )
                                 span.add_event("LLM refinement failed, falling back to rule-based")
-                                
-                                # Fall back to rule-based generation
-                                basic_tests = await self._generate_basic_tests(code_files, language, run_id)
-                                
-                                await add_provenance(
-                                    "llm_fallback_to_rule_based",
-                                    {
-                                        "run_id": run_id,
-                                        "reason": str(e),
-                                        "tests_generated": len(basic_tests),
-                                        "test_files": list(basic_tests.keys()),
-                                    },
-                                    **log_extra,
+                                return await self._create_llm_fallback_response(
+                                    code_files, language, run_id, e, start_time, log_extra
                                 )
-                                
-                                # Create a simple validation report
-                                validation_report = {
-                                    "status": "completed",
-                                    "message": "Rule-based tests generated after LLM failure",
-                                    "tests_count": len(basic_tests),
-                                    "llm_error": str(e),
-                                }
-                                
-                                # Create explainability report
-                                explainability_report = f"""# Test Generation Report
-
-## Summary
-- **Status**: Success (Fallback to rule-based generation)
-- **Tests Generated**: {len(basic_tests)} test files
-- **LLM Used**: No (LLM call failed during refinement: {str(e)[:100]})
-- **Generation Method**: Rule-based AST parsing
-
-## Generated Test Files
-{chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
-
-## Notes
-- Tests are basic stubs that need to be implemented
-- LLM-based generation failed during refinement, so rule-based fallback was used
-- To troubleshoot LLM issues, check API keys and model configurations
-"""
-                                
-                                span.set_status(Status(StatusCode.OK, "Rule-based test generation completed (LLM fallback)"))
-                                
-                                return {
-                                    "status": "success",
-                                    "generated_tests": basic_tests,
-                                    "final_validation_report": validation_report,
-                                    "explainability_report": explainability_report,
-                                    "duration_seconds": time.time() - start_time,
-                                    "run_id": run_id,
-                                    "history_summary": [{
-                                        "action": "llm_fallback_to_rule_based",
-                                        "status": "completed",
-                                        "tests_count": len(basic_tests),
-                                        "llm_error": str(e)[:200],
-                                    }],
-                                }
                             else:
                                 # Re-raise if not an LLM-related error
                                 raise
