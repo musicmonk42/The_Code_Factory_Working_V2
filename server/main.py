@@ -612,6 +612,17 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.error(f"Message bus verification failed: {e}", exc_info=True)
         logger.warning("Continuing startup - WebSocket events will use fallback mode")
     
+    # Register generator agents as OmniCore plugins
+    # This ensures generator workflow is registered with OmniCore's plugin registry
+    # for unified orchestration, auditing, and lifecycle management
+    try:
+        import generator.agents.generator_plugin_wrapper  # noqa: F401
+        logger.info("✓ Generator plugin wrapper registered with OmniCore")
+    except ImportError as e:
+        logger.warning(f"Generator plugin wrapper not available: {e}")
+    except Exception as e:
+        logger.warning(f"Failed to register generator plugin wrapper: {e}")
+    
     # P2 FIX: Validate Redis connection on startup (explicit PING test)
     redis_url = os.getenv("REDIS_URL")
     if redis_url:
