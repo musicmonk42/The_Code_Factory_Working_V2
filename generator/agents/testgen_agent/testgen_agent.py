@@ -935,7 +935,9 @@ Agent --> Dev : Deliver Report
                     # Check if this is a FastAPI app (detect FastAPI patterns)
                     is_fastapi_app = self._detect_fastapi_app(content)
                     
-                    if is_fastapi_app and file_path in ("main.py", "app.py", "api.py"):
+                    # FIX Issue 2: Improve rule-based fallback to generate FastAPI tests
+                    # for any file containing FastAPI routes, not just specific filenames
+                    if is_fastapi_app:
                         # Generate real FastAPI TestClient tests
                         test_content = self._generate_fastapi_tests(content, file_path)
                         test_file_path = f'tests/test_{Path(file_path).stem}.py'
@@ -1457,13 +1459,33 @@ def test_{file_stem}_syntax_error_documentation():
                     **log_extra,
                 )
 
-                # Force rule-based test generation, skip LLM entirely for reliability
-                if not os.getenv("TESTGEN_FORCE_LLM", "").lower() == "true":
+                # Check if we should use rule-based generation instead of LLM
+                # FIX Issue 2: Use LLM by default when credentials are available
+                # Only use rule-based mode when explicitly requested via env var
+                force_rule_based = os.getenv("TESTGEN_FORCE_RULE_BASED", "").lower() == "true"
+                
+                # Try to detect if LLM is available
+                llm_available = False
+                try:
+                    # Check for common LLM API keys in environment
+                    llm_keys = [
+                        "OPENAI_API_KEY",
+                        "ANTHROPIC_API_KEY", 
+                        "GOOGLE_API_KEY",
+                        "AZURE_OPENAI_API_KEY",
+                    ]
+                    llm_available = any(os.getenv(key) for key in llm_keys)
+                except Exception as e:
+                    logger.debug(f"[TESTGEN] Could not detect LLM availability: {e}")
+                
+                # Use rule-based only if explicitly forced OR if no LLM credentials available
+                if force_rule_based or not llm_available:
+                    reason = "explicitly requested" if force_rule_based else "no LLM credentials found"
                     logger.info(
-                        "[TESTGEN] Using rule-based generation (LLM disabled by default to prevent timeouts)",
+                        f"[TESTGEN] Using rule-based generation ({reason})",
                         extra=log_extra
                     )
-                    span.add_event("Using rule-based test generation (LLM bypassed)")
+                    span.add_event(f"Using rule-based test generation ({reason})")
                     
                     # Generate basic tests without LLM
                     basic_tests = await self._generate_basic_tests(code_files, language, run_id)
@@ -1491,7 +1513,7 @@ def test_{file_stem}_syntax_error_documentation():
 ## Summary
 - **Status**: Success (Rule-based generation)
 - **Tests Generated**: {len(basic_tests)} test files
-- **LLM Used**: No (disabled by default to prevent timeouts)
+- **LLM Used**: No ({reason})
 - **Generation Method**: Rule-based AST parsing
 
 ## Generated Test Files
@@ -1499,8 +1521,8 @@ def test_{file_stem}_syntax_error_documentation():
 
 ## Notes
 - Tests are basic stubs that need to be implemented
-- To enable LLM-based generation, set environment variable: `TESTGEN_FORCE_LLM=true`
-- Rule-based generation ensures reliable test file creation without external API dependencies
+- To force rule-based generation even when LLM is available: `TESTGEN_FORCE_RULE_BASED=true`
+- LLM-based generation provides higher quality tests with meaningful coverage when credentials are available
 """
                     
                     span.set_status(Status(StatusCode.OK, "Rule-based test generation completed"))

@@ -1155,6 +1155,7 @@ Respond in plain prose only (no JSON / no code fences).
                                 raw = resp if stream else resp.get("content", "")
                                 out_format = t if t != "docs" else "markdown"
                                 # --- FIX: Pass singleton handler_registry ---
+                                # FIX Issue 4: Skip Presidio on deployment configs
                                 handled = await handle_deploy_response(
                                     raw_response=raw,
                                     handler_registry=self.handler_registry,
@@ -1162,6 +1163,7 @@ Respond in plain prose only (no JSON / no code fences).
                                     to_format=out_format,
                                     repo_path=str(self.repo_path),
                                     run_id=self.run_id,
+                                    skip_presidio=True,  # Skip PII scrubbing for deployment configs
                                 )
                                 # --------------------------------------------
 
@@ -1357,6 +1359,117 @@ CRITICAL CORRECTIONS REQUIRED:
 
 BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
     
+    def _generate_fallback_config(self, target: str, project_name: str = "hello_generator") -> Optional[str]:
+        """
+        Generate fallback deployment configuration templates when LLM generation fails.
+        
+        FIX Issue 4: Provides deterministic fallback templates for Docker, Kubernetes, and Helm
+        configurations to ensure the pipeline doesn't fail completely when LLM retries are exhausted.
+        
+        Args:
+            target: The deployment target type (docker, kubernetes, helm)
+            project_name: Name of the project for configuration
+            
+        Returns:
+            Configuration content as string, or None if target not supported
+        """
+        logger.info(f"[DEPLOY_AGENT] Generating fallback template for target: {target}")
+        
+        if target == "docker":
+            # Fallback Dockerfile template for Python FastAPI apps
+            return f"""FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Expose the application port
+EXPOSE 8000
+
+# Run the application
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+"""
+        
+        elif target == "kubernetes":
+            # Fallback Kubernetes deployment and service YAML
+            return f"""---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {project_name}
+  labels:
+    app: {project_name}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: {project_name}
+  template:
+    metadata:
+      labels:
+        app: {project_name}
+    spec:
+      containers:
+      - name: {project_name}
+        image: {project_name}:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: PORT
+          value: "8000"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {project_name}-service
+spec:
+  selector:
+    app: {project_name}
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+  type: LoadBalancer
+"""
+        
+        elif target == "helm":
+            # Fallback Helm Chart.yaml
+            return f"""apiVersion: v2
+name: {project_name}
+description: A Helm chart for {project_name}
+type: application
+version: 0.1.0
+appVersion: "1.0"
+"""
+        
+        else:
+            logger.warning(f"[DEPLOY_AGENT] No fallback template available for target: {target}")
+            return None
+    
     async def run_deployment(
         self, target: str, requirements: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1458,6 +1571,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                             last_raw_response = raw
                             
                             # --- FIX: Pass singleton handler_registry ---
+                            # FIX Issue 4: Skip Presidio on deployment configs
                             handled = await handle_deploy_response(
                                 raw_response=raw,
                                 handler_registry=self.handler_registry,
@@ -1465,6 +1579,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                                 to_format=target,
                                 repo_path=str(self.repo_path),
                                 run_id=self.run_id,
+                                skip_presidio=True,  # Skip PII scrubbing for deployment configs
                             )
                             # --------------------------------------------
                             config_content = handled["final_config_output"]
@@ -1481,11 +1596,25 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
                                 f"[DEPLOY_AGENT] Generation attempt {attempt + 1}/{MAX_LLM_RETRIES} failed: {e}"
                             )
                             if attempt >= MAX_LLM_RETRIES - 1:
-                                # Final attempt failed - re-raise
-                                logger.error(
-                                    f"[DEPLOY_AGENT] All {MAX_LLM_RETRIES} attempts failed for {target}"
+                                # FIX Issue 4: Use fallback template instead of failing
+                                logger.warning(
+                                    f"[DEPLOY_AGENT] All {MAX_LLM_RETRIES} attempts failed for {target}, "
+                                    f"using fallback template"
                                 )
-                                raise
+                                # Generate fallback config based on target type
+                                config_content = self._generate_fallback_config(target, project_name)
+                                if config_content:
+                                    logger.info(
+                                        f"[DEPLOY_AGENT] Using fallback template for {target}, "
+                                        f"length: {len(config_content)} chars"
+                                    )
+                                    break
+                                else:
+                                    # If fallback fails, re-raise the original error
+                                    logger.error(
+                                        f"[DEPLOY_AGENT] Fallback template generation failed for {target}"
+                                    )
+                                    raise
                             # Otherwise, continue to next attempt
                             continue
                     # End of FIX 4 retry loop

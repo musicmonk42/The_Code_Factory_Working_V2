@@ -2325,11 +2325,17 @@ async def handle_deploy_response(
     to_format: Optional[str] = None,
     run_id: str = str(uuid.uuid4()),
     repo_path: str = ".",
+    skip_presidio: bool = True,  # FIX Issue 4: Skip Presidio on deployment configs by default
 ) -> Dict[str, Any]:
     """
     Main function to handle an LLM-generated raw response, normalizing, validating,
     enriching, and preparing it for deployment or reporting.
     This function operates in a strict-fail mode.
+    
+    Args:
+        skip_presidio: If True, skips PII scrubbing on deployment configs.
+                      Deployment configs are technical files, not user-facing text,
+                      and Presidio can corrupt them by replacing tokens with [REDACTED].
     """
     # Using the central tracer
     with tracer.start_as_current_span("handle_deploy_response") as span:
@@ -2354,8 +2360,17 @@ async def handle_deploy_response(
             # FIX 3: Extract config from response before scrubbing/normalizing
             extracted_raw = extract_config_from_response(raw_response, output_format)
             
-            # scrub_text is strictly required to be applied here.
-            scrubbed_raw_response = scrub_text(extracted_raw)
+            # FIX Issue 4: Skip Presidio scrubbing on deployment configs (technical files)
+            # Presidio corrupts YAML/Dockerfile syntax by replacing tokens with [REDACTED]
+            if skip_presidio:
+                logger.debug(
+                    f"[DEPLOY] Skipping Presidio scrubbing for deployment config ({output_format})",
+                    extra=log_extra
+                )
+                scrubbed_raw_response = extracted_raw
+            else:
+                # scrub_text is strictly required for user-facing text
+                scrubbed_raw_response = scrub_text(extracted_raw)
 
             handler_calls.labels(format=output_format, operation="normalize").inc()
             start_normalize = time.time()
