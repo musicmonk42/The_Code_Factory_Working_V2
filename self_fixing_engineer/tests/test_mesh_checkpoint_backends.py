@@ -131,13 +131,13 @@ def mock_circuit_breakers():
     """Mock circuit breakers to prevent interference with tests.
     
     Uses a try-except to gracefully handle cases where the module
-    might not be fully initialized yet.
+    might not be fully initialized yet or patching fails.
     """
     try:
         with patch("mesh.checkpoint.checkpoint_backends.circuit_breakers", {}):
             yield
-    except Exception:
-        # If patching fails, just yield without mocking
+    except (AttributeError, ImportError, ModuleNotFoundError):
+        # If patching fails due to module initialization issues, just yield without mocking
         yield
 
 
