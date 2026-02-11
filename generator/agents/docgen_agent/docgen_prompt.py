@@ -682,22 +682,40 @@ class PromptTemplateRegistry:
             logger.debug(f"Template '{full_template_file_name}' loaded successfully.")
             return template
         except Exception as e:
-            # Defense-in-depth: Try case-insensitive fallback
+            # Defense-in-depth: Try case-insensitive fallback across ALL loader directories
+            # FIX: Previously only searched self.plugin_dir, now searches all ChoiceLoader directories
             try:
-                template_dir = Path(self.plugin_dir)
-                if template_dir.exists():
-                    for file in template_dir.iterdir():
-                        if file.name.lower() == full_template_file_name.lower() and file.is_file():
-                            logger.warning(
-                                f"Template '{full_template_file_name}' not found, but found case-insensitive match: '{file.name}'. "
-                                f"Using '{file.name}' instead. Consider normalizing doc_type casing."
-                            )
-                            template = self.env.get_template(file.name)
-                            return template
+                # Collect all directories from the ChoiceLoader
+                search_dirs = []
+                if isinstance(self.env.loader, ChoiceLoader):
+                    for loader in self.env.loader.loaders:
+                        if isinstance(loader, FileSystemLoader):
+                            # FileSystemLoader.searchpath can be a string or list
+                            if isinstance(loader.searchpath, list):
+                                search_dirs.extend(loader.searchpath)
+                            else:
+                                search_dirs.append(loader.searchpath)
+                else:
+                    # Fallback: just use plugin_dir if not using ChoiceLoader
+                    search_dirs = [self.plugin_dir]
+                
+                # Search all directories for case-insensitive match
+                for search_dir in search_dirs:
+                    template_dir = Path(search_dir)
+                    if template_dir.exists():
+                        for file in template_dir.iterdir():
+                            if file.name.lower() == full_template_file_name.lower() and file.is_file():
+                                logger.warning(
+                                    f"Template '{full_template_file_name}' not found, but found case-insensitive match: '{file.name}' in '{search_dir}'. "
+                                    f"Using '{file.name}' instead. Consider normalizing doc_type casing."
+                                )
+                                # Use the actual filename with correct case
+                                template = self.env.get_template(file.name)
+                                return template
             except Exception as fallback_error:
                 logger.debug(f"Case-insensitive fallback failed: {fallback_error}")
 
-            error_msg = f"Required template '{full_template_file_name}' not found in '{self.plugin_dir}' or failed to load: {e}. Please ensure this template file exists and is valid."
+            error_msg = f"Required template '{full_template_file_name}' not found in any loader directory or failed to load: {e}. Please ensure this template file exists and is valid."
             logger.error(error_msg, exc_info=True)
             raise ValueError(error_msg)
 
