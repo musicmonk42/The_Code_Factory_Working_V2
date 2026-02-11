@@ -543,17 +543,21 @@ def _create_pydantic_classes():
         # Return fallback classes
         class SandboxPolicy:
             """Fallback SandboxPolicy class when Pydantic is not available."""
-            def __init__(self, **kwargs):
-                self.network_disabled = kwargs.get("network_disabled", True)
-                self.allow_write = kwargs.get("allow_write", False)
-                self.privileged = kwargs.get("privileged", False)
-                self.run_as_user = kwargs.get("run_as_user", DEFAULT_CONTAINER_USER)
-                self.seccomp_profile = kwargs.get(
-                    "seccomp_profile", DEFAULT_SECCOMP_PROFILE_PATH
-                )
-                self.apparmor_profile = kwargs.get(
-                    "apparmor_profile", DEFAULT_APPARMOR_PROFILE_NAME
-                )
+            def __init__(
+                self,
+                network_disabled: bool = True,
+                allow_write: bool = False,
+                privileged: bool = False,
+                run_as_user: str = None,
+                seccomp_profile: Optional[str] = None,
+                apparmor_profile: Optional[str] = None,
+            ):
+                self.network_disabled = network_disabled
+                self.allow_write = allow_write
+                self.privileged = privileged
+                self.run_as_user = run_as_user if run_as_user is not None else DEFAULT_CONTAINER_USER
+                self.seccomp_profile = seccomp_profile if seccomp_profile is not None else DEFAULT_SECCOMP_PROFILE_PATH
+                self.apparmor_profile = apparmor_profile if apparmor_profile is not None else DEFAULT_APPARMOR_PROFILE_NAME
             
             def dict(self):
                 return self.__dict__
