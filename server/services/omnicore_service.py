@@ -4440,6 +4440,70 @@ class OmniCoreService:
                 except Exception as readme_err:
                     logger.warning(f"[PIPELINE] Job {job_id} README validation error: {readme_err}")
             
+            # FIX Issue 4: README Regeneration
+            # If README is incomplete or missing, regenerate it
+            if output_path_for_validation:
+                try:
+                    gen_dir = Path(output_path_for_validation)
+                    readme_path = gen_dir / "README.md"
+                    should_regenerate = False
+                    
+                    if not readme_path.exists():
+                        logger.warning(f"[PIPELINE] Job {job_id} README.md missing, will generate")
+                        should_regenerate = True
+                    elif _PROVENANCE_AVAILABLE:
+                        # Check if existing README is incomplete
+                        readme_content = readme_path.read_text(encoding="utf-8")
+                        readme_result = _validate_readme_completeness(readme_content)
+                        
+                        if not readme_result.get("valid", True):
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} README incomplete, will regenerate. "
+                                f"Errors: {readme_result.get('errors', [])}",
+                                extra={"job_id": job_id, "readme_errors": readme_result.get('errors', [])}
+                            )
+                            should_regenerate = True
+                    
+                    if should_regenerate:
+                        # Generate comprehensive README
+                        project_name = payload.get("output_dir", "hello_generator")
+                        if not project_name:
+                            project_name = "hello_generator"
+                        
+                        comprehensive_readme = _generate_fallback_readme(
+                            project_name=project_name,
+                            language="python",
+                            output_path=str(gen_dir)
+                        )
+                        
+                        # Write the new README
+                        readme_path.write_text(comprehensive_readme, encoding="utf-8")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} generated comprehensive README with all required sections",
+                            extra={"job_id": job_id, "readme_path": str(readme_path), "length": len(comprehensive_readme)}
+                        )
+                        
+                        # Validate the new README
+                        if _PROVENANCE_AVAILABLE:
+                            new_readme_result = _validate_readme_completeness(comprehensive_readme)
+                            if new_readme_result.get("valid", True):
+                                logger.info(
+                                    f"[PIPELINE] Job {job_id} regenerated README validated successfully - "
+                                    f"sections: {new_readme_result['sections_found']}, "
+                                    f"commands: {new_readme_result['commands_found']}",
+                                    extra={"job_id": job_id, "readme_validation": new_readme_result}
+                                )
+                            else:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} regenerated README still has issues: {new_readme_result.get('errors', [])}",
+                                    extra={"job_id": job_id}
+                                )
+                except Exception as readme_regen_err:
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} README regeneration error: {readme_regen_err}",
+                        exc_info=True
+                    )
+            
             # 2e. Write provenance metadata
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
@@ -4802,6 +4866,80 @@ class OmniCoreService:
                     logger.info(f"[PIPELINE] Job {job_id} completed step: critique")
                 elif critique_result.get("status") == "error":
                     logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
+                    # FIX Issue 5: Generate placeholder critique report if critique failed
+                    output_path = codegen_result.get("output_path")
+                    if output_path:
+                        try:
+                            output_path_obj = Path(output_path)
+                            reports_dir = output_path_obj / "reports"
+                            reports_dir.mkdir(parents=True, exist_ok=True)
+                            report_path = reports_dir / "critique_report.json"
+                            
+                            # Only create placeholder if report doesn't exist
+                            if not report_path.exists():
+                                placeholder_report = {
+                                    "job_id": job_id,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "status": "skipped",
+                                    "message": "Critique stage failed or was skipped",
+                                    "issues_found": 0,
+                                    "issues_fixed": 0,
+                                    "coverage": {
+                                        "total_lines": 0,
+                                        "covered_lines": 0,
+                                        "percentage": 0.0
+                                    },
+                                    "test_results": {
+                                        "total": 0,
+                                        "passed": 0,
+                                        "failed": 0
+                                    },
+                                    "issues": [],
+                                    "fixes_applied": [],
+                                    "scan_types": []
+                                }
+                                report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                                logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report at {report_path}")
+                        except Exception as e:
+                            logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
+            else:
+                # FIX Issue 5: Generate placeholder critique report if critique was not requested
+                logger.info(f"[PIPELINE] Job {job_id} skipping critique step (run_critique={payload.get('run_critique', True)})")
+                output_path = codegen_result.get("output_path")
+                if output_path:
+                    try:
+                        output_path_obj = Path(output_path)
+                        reports_dir = output_path_obj / "reports"
+                        reports_dir.mkdir(parents=True, exist_ok=True)
+                        report_path = reports_dir / "critique_report.json"
+                        
+                        # Only create placeholder if report doesn't exist
+                        if not report_path.exists():
+                            placeholder_report = {
+                                "job_id": job_id,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                                "status": "skipped",
+                                "message": "Critique stage was not requested",
+                                "issues_found": 0,
+                                "issues_fixed": 0,
+                                "coverage": {
+                                    "total_lines": 0,
+                                    "covered_lines": 0,
+                                    "percentage": 0.0
+                                },
+                                "test_results": {
+                                    "total": 0,
+                                    "passed": 0,
+                                    "failed": 0
+                                },
+                                "issues": [],
+                                "fixes_applied": [],
+                                "scan_types": []
+                            }
+                            report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                            logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report (critique not requested) at {report_path}")
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
             
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             
