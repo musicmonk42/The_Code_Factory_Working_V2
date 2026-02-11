@@ -17,33 +17,9 @@ from cryptography.exceptions import InvalidSignature
 # )
 
 # --- START OF FIX ---
-
-
-@pytest.fixture(autouse=True, scope="session")
-def set_required_env_vars_for_collection():
-    """
-    Sets minimal required environment variables *before* any modules are imported.
-    This prevents ConfigurationError during pytest collection phase, which happens
-    before any test fixtures are run.
-
-    Using scope="session" and autouse=True ensures this runs once, very first.
-    We manually create a MonkeyPatch object as the 'monkeypatch' fixture is function-scoped.
-    """
-    from _pytest.monkeypatch import MonkeyPatch
-
-    mp = MonkeyPatch()
-
-    mp.setenv("AUDIT_CRYPTO_PROVIDER_TYPE", "software")
-    mp.setenv("AUDIT_CRYPTO_DEFAULT_ALGO", "ed25519")
-    mp.setenv("AUDIT_CRYPTO_KEY_ROTATION_INTERVAL_SECONDS", "86400")
-    # Set dev mode to bypass production checks (like missing KMS_KEY_ID)
-    mp.setenv("AUDIT_LOG_DEV_MODE", "true")
-
-    yield  # Allow the test session to run
-
-    mp.undo()  # Clean up all monkeypatches at the end of the session
-
-
+# NOTE: Session-scoped fixtures for environment variables
+# are defined in generator/tests/conftest.py and conftest.py.
+# Do NOT redefine them here to avoid conflicts with --import-mode=importlib.
 # --- END OF FIX ---
 
 
