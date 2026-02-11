@@ -28,6 +28,8 @@ import { Rate, Trend } from 'k6/metrics';
 import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 // Custom metrics
+// Note: These metrics are named as "failures" but record success (true=pass) to track success rate.
+// This matches the pattern used by e2e_generation_failures. The threshold rate>0.99 means >99% success.
 const healthCheckFailureRate = new Rate('health_check_failures');
 const generateFailureRate = new Rate('generate_failures');
 const listGenerationsFailureRate = new Rate('list_generations_failures');
@@ -63,6 +65,7 @@ const thresholds = {
     // Overall p95 should be under threshold
     'http_req_duration': [`p(95)<${P95_THRESHOLD_MS}`],
     // Less than 1% request failure rate
+    // Note: Custom failure metrics record success (true=pass, false=fail), so rate>0.99 means >99% success
     'http_req_failed': [`rate<${ERROR_RATE_THRESHOLD}`],
     'health_check_failures': [`rate>${1 - ERROR_RATE_THRESHOLD}`],
     'generate_failures': [`rate>${1 - ERROR_RATE_THRESHOLD}`],
@@ -148,6 +151,7 @@ function testHealthEndpoint() {
     }
     
     // Record failure rate based on HTTP status success (not body parsing)
+    // Note: add(true) records as "pass", add(false) records as "fail" in k6 Rate metrics
     healthCheckFailureRate.add(httpSuccess);
 }
 
@@ -260,6 +264,7 @@ function testGenerateEndpoint() {
     }
     
     // Record failure rate based on HTTP status success (not body parsing)
+    // Note: add(true) records as "pass", add(false) records as "fail" in k6 Rate metrics
     generateFailureRate.add(httpSuccess);
     if (response.timings.duration) {
         generateDuration.add(response.timings.duration);
@@ -310,6 +315,7 @@ function testListGenerationsEndpoint() {
     }
     
     // Record failure rate based on HTTP status success (not body parsing)
+    // Note: add(true) records as "pass", add(false) records as "fail" in k6 Rate metrics
     listGenerationsFailureRate.add(httpSuccess);
 }
 
