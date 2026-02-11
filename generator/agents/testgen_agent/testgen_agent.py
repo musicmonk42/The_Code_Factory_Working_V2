@@ -407,16 +407,41 @@ class TestgenAgent:
     async def _load_code_files(self, target_files: List[str]) -> Dict[str, str]:
         """
         Asynchronously loads and scrubs content from target code files.
+        
+        FIX Issue 5: Ensure code file paths are resolved correctly relative to repo_path
+        and validate that files exist and are readable before attempting to parse them.
         """
 
         async def read_and_scrub_file(fp: str) -> Tuple[str, str]:
-            full_path = self.repo_path / fp
+            # FIX Issue 5: Resolve path correctly relative to base directory
+            # Ensure the path is relative and doesn't have leading slashes
+            fp_cleaned = fp.lstrip('/')
+            full_path = (self.repo_path / fp_cleaned).resolve()
+            repo_path_resolved = self.repo_path.resolve()
+            
+            # Validate the resolved path is within repo_path (security check)
+            # Use resolve() on both paths to handle symlinks correctly
+            try:
+                # Python 3.9+ has is_relative_to
+                if hasattr(full_path, 'is_relative_to'):
+                    if not full_path.is_relative_to(repo_path_resolved):
+                        raise ValueError(f"Path traversal attempt detected: {fp}")
+                else:
+                    # Fallback for Python < 3.9
+                    if not str(full_path).startswith(str(repo_path_resolved) + "/"):
+                        if full_path != repo_path_resolved:  # Allow exact match
+                            raise ValueError(f"Path traversal attempt detected: {fp}")
+            except ValueError:
+                raise
+            
             if not full_path.is_file():
-                raise FileNotFoundError(f"Code file not found: {full_path}")
+                raise FileNotFoundError(f"Code file not found: {full_path} (from {fp})")
 
             try:
                 async with aiofiles.open(full_path, "r", encoding="utf-8") as f:
                     content = await f.read()
+                    # Return the original relative path as key, not the cleaned one
+                    # This maintains compatibility with existing code
                     return fp, scrub_text(content)
             except Exception as e:
                 raise ValueError(
@@ -954,12 +979,15 @@ Agent --> Dev : Deliver Report
                         test_lines.append('')
                     
                     # Create test file path
-                    test_file_path = file_path.replace('.py', '_test.py')
-                    if not test_file_path.startswith('test_'):
-                        # Put test file in tests directory
-                        parts = test_file_path.split('/')
-                        filename = parts[-1]
-                        test_file_path = 'tests/test_' + filename
+                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Extract just the filename from the path for consistency
+                    file_name = Path(file_path).name
+                    file_stem_name = file_name.replace('.py', '')
+                    test_file_path = f'tests/test_{file_stem_name}.py'
+                    
+                    # If the path already started with test_, avoid double prefix
+                    if file_stem_name.startswith('test_'):
+                        test_file_path = f'tests/{file_stem_name}.py'
                     
                     basic_tests[test_file_path] = '\n'.join(test_lines)
                     
@@ -1134,12 +1162,13 @@ def test_{file_stem}_syntax_error_documentation():
 '''
                     
                     # Generate test file path following pytest conventions
-                    test_file_path = file_path.replace('.py', '_test.py')
-                    if not test_file_path.startswith('test_'):
-                        # Put test file in tests directory
-                        parts = test_file_path.split('/')
-                        filename = parts[-1]
-                        test_file_path = 'tests/test_' + filename.lstrip('_')
+                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Extract just the filename from the path
+                    file_name = Path(file_path).name
+                    # Remove .py extension
+                    file_stem_name = file_name.replace('.py', '')
+                    # Create test file in tests/ directory
+                    test_file_path = f'tests/test_{file_stem_name}.py'
                     
                     basic_tests[test_file_path] = fallback_test
                     

@@ -718,6 +718,56 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
 # --- End of FIX 3 ---
 
 
+def _sanitize_llm_output(raw_output: str) -> str:
+    """
+    Remove Markdown code fences and artifacts from LLM output before YAML parsing.
+    
+    This function addresses Issue 4: LLM Deploy Output Not Sanitized
+    
+    LLM responses sometimes contain Markdown artifacts like:
+    - Mermaid diagrams (```mermaid...```)
+    - Code fences wrapping the actual content (```yaml...```)
+    - Explanatory text before/after the actual config
+    
+    These artifacts cause YAML parsing failures with errors like:
+    "found character '`' that cannot start any token"
+    
+    Args:
+        raw_output: Raw LLM output potentially containing Markdown artifacts
+        
+    Returns:
+        Sanitized output with Markdown artifacts removed
+        
+    Example:
+        >>> raw = "```mermaid\\ngraph TD;\\n```\\n```yaml\\napiVersion: v1\\n```"
+        >>> _sanitize_llm_output(raw)
+        'apiVersion: v1'
+    """
+    # Strip mermaid blocks completely (they're not part of the config)
+    raw_output = re.sub(r'```mermaid[\s\S]*?```', '', raw_output, flags=re.MULTILINE)
+    
+    # Strip other common diagram/visualization blocks
+    raw_output = re.sub(r'```(dot|plantuml|graphviz)[\s\S]*?```', '', raw_output, flags=re.MULTILINE)
+    
+    # Strip code fences wrapping the actual content
+    # Match: ```yaml (or ```yml, ```dockerfile, etc.) at start of line
+    raw_output = re.sub(r'^```\w*\n', '', raw_output, flags=re.MULTILINE)
+    # Match: ``` at end of string
+    raw_output = re.sub(r'\n```$', '', raw_output, flags=re.MULTILINE)
+    
+    # Also handle cases where code fence is at the very start/end
+    raw_output = raw_output.strip()
+    if raw_output.startswith('```'):
+        # Find the first newline after the opening fence
+        newline_idx = raw_output.find('\n')
+        if newline_idx != -1:
+            raw_output = raw_output[newline_idx + 1:]
+    if raw_output.endswith('```'):
+        raw_output = raw_output[:-3]
+    
+    return raw_output.strip()
+
+
 class FormatHandler(ABC):
     """Abstract base class for format handlers (e.g., Dockerfile, YAML, JSON, HCL)."""
 
@@ -1391,7 +1441,11 @@ class YAMLHandler(FormatHandler):
             >>> handler.normalize("**bold**: value")  # Markdown detected
             ValueError: Invalid output: Response contains Markdown formatting...
         """
-        # Sanitize: Strip markdown code fences if present
+        # FIX Issue 4: Sanitize LLM output to remove Mermaid diagrams and code fences
+        # This must happen BEFORE any other processing
+        raw = _sanitize_llm_output(raw)
+        
+        # Sanitize: Strip markdown code fences if present (additional cleanup)
         raw = raw.strip()
         
         # Handle various code fence formats

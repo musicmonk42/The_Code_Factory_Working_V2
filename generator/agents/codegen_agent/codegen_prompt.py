@@ -256,11 +256,22 @@ The following are MANDATORY checks:
    - tests/test_version.py (version endpoint tests)
    - tests/test_echo.py (echo endpoint tests if /echo is required)
    - requirements.txt (dependencies)
-   - README.md (COMPREHENSIVE - see requirements below)
+   - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)
    - .env.example (example environment variables with NO real secrets)
 
-5a. README.md REQUIREMENTS (CRITICAL):
-   The README.md MUST be comprehensive and include ALL of the following sections:
+5a. README.md REQUIREMENTS (CRITICAL - PIPELINE WILL FAIL IF INCOMPLETE):
+   ⚠️ IMPORTANT: The README.md is NOT optional and MUST NOT be a stub.
+   ⚠️ A README with missing sections will cause contract validation to FAIL.
+   
+   The README.md MUST be comprehensive and include ALL of the following sections with ACTUAL content:
+   
+   REQUIRED SECTIONS (ALL MUST BE PRESENT):
+   1. Title and Description
+   2. Setup instructions (venv creation, pip install)
+   3. Run instructions (uvicorn command with actual service name)
+   4. Test instructions (pytest command)
+   5. API Endpoints section with curl examples for EVERY endpoint
+   6. Project Structure section showing the actual file tree
    
    ```markdown
    # {Project Name}
@@ -327,8 +338,19 @@ The following are MANDATORY checks:
    \```
    ```
    
+   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with venv and pip install commands
+   - [ ] README has Run section with uvicorn command using ACTUAL service name
+   - [ ] README has Test section with pytest command
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree
+   
    DO NOT generate placeholder READMEs with missing sections.
-   EVERY section above MUST be included with actual content.
+   DO NOT use "TODO" or "..." placeholders in README sections.
+   EVERY section above MUST be included with actual, executable content.
+   The README must be complete enough for a new developer to run the service.
 
 6. INPUT VALIDATION (CRITICAL - Use Pydantic validators ONLY):
    - ALL validation MUST be implemented in the Pydantic schema using @validator decorators

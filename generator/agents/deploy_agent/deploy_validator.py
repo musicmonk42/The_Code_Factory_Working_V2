@@ -677,6 +677,143 @@ class DockerValidator(Validator):
             raise RuntimeError(f"Failed to auto-fix Dockerfile issues: {e}") from e
 
 
+class KubernetesValidator(Validator):
+    """Basic Kubernetes manifest validator."""
+    __version__ = "1.0"
+    __source__ = "built-in"
+
+    async def validate(self, config_content: str, target_type: str) -> Dict[str, Any]:
+        """Validates Kubernetes manifests for YAML syntax and basic structure."""
+        report = {
+            "lint_status": "unknown",
+            "lint_output": "",
+            "lint_issues": [],
+            "security_findings": [],
+            "compliance_score": 0.0,
+        }
+
+        try:
+            # 1. Validate YAML syntax
+            try:
+                manifests = list(RuYAML().load_all(config_content))
+                if not manifests:
+                    report["lint_issues"].append("No Kubernetes manifests found in YAML content")
+                    report["lint_status"] = "failed"
+                else:
+                    report["lint_status"] = "success"
+                    
+                    # 2. Validate basic K8s structure
+                    for i, manifest in enumerate(manifests):
+                        if not isinstance(manifest, dict):
+                            report["lint_issues"].append(f"Manifest {i+1} is not a valid dictionary")
+                            continue
+                        
+                        # Check for required K8s fields
+                        if "apiVersion" not in manifest:
+                            report["lint_issues"].append(f"Manifest {i+1} missing 'apiVersion' field")
+                        if "kind" not in manifest:
+                            report["lint_issues"].append(f"Manifest {i+1} missing 'kind' field")
+                        if "metadata" not in manifest:
+                            report["lint_issues"].append(f"Manifest {i+1} missing 'metadata' field")
+                        
+                        # Log successful validation
+                        if all(k in manifest for k in ["apiVersion", "kind", "metadata"]):
+                            logger.debug(
+                                f"Validated K8s manifest {i+1}: {manifest.get('kind')} "
+                                f"({manifest.get('apiVersion')})"
+                            )
+                    
+                    if report["lint_issues"]:
+                        report["lint_status"] = "warning"
+                        issue_total_found.labels(
+                            target=target_type, issue_type_category="K8sStructure"
+                        ).inc(len(report["lint_issues"]))
+                        
+            except yaml.YAMLError as e:
+                report["lint_status"] = "failed"
+                report["lint_output"] = f"YAML parsing error: {e}"
+                report["lint_issues"].append(f"Invalid YAML syntax: {e}")
+                issue_total_found.labels(
+                    target=target_type, issue_type_category="YAMLSyntax"
+                ).inc()
+
+            # 3. Security Findings
+            report["security_findings"] = await scan_config_for_findings(
+                config_content, target_type, DANGEROUS_CONFIG_PATTERNS
+            )
+
+            # Calculate compliance score
+            total_issues = len(report.get("lint_issues", [])) + len(
+                report.get("security_findings", [])
+            )
+            report["compliance_score"] = (
+                1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
+            )
+
+        except Exception as e:
+            report["lint_status"] = "internal_error"
+            report["lint_output"] = f"Internal validation error: {e}"
+            logger.error(
+                "Internal error during Kubernetes validation: %s", e, exc_info=True
+            )
+            report["lint_issues"].append(f"Internal validator error: {e}")
+            issue_total_found.labels(
+                target=target_type, issue_type_category="InternalError"
+            ).inc()
+
+        return report
+
+    async def fix(
+        self, config_content: str, issues: List[str], target_type: str
+    ) -> str:
+        """Attempts to fix Kubernetes manifest issues using an LLM."""
+        fix_prompt = f"Fix these issues in the Kubernetes manifest YAML:\n{json.dumps(issues, indent=2)}\n\nOriginal Kubernetes YAML:\n```yaml\n{config_content}\n```\n\nProvide ONLY the corrected Kubernetes YAML content. Do not add any conversational text or markdown wrappers."
+
+        try:
+            start_time = time.time()
+            fixed_response = await call_ensemble_api(
+                fix_prompt,
+                [{"model": "gpt-4o"}],
+                voting_strategy="majority",
+                stream=False,
+            )
+
+            LLM_CALLS_TOTAL.labels(
+                provider="deploy_validator", model="gpt-4o"
+            ).inc()
+            LLM_LATENCY_SECONDS.labels(
+                provider="deploy_validator", model="gpt-4o"
+            ).observe(time.time() - start_time)
+            await add_provenance("fix_kubernetes_config", {"action": "fix_kubernetes_config", "model": "gpt-4o"})
+
+            fixed_config_content = fixed_response.get("content", "").strip()
+
+            if not fixed_config_content:
+                LLM_ERRORS_TOTAL.labels(
+                    provider="deploy_validator",
+                    model="gpt-4o",
+                ).inc()
+                raise ValueError("LLM returned empty content for Kubernetes fix.")
+
+            # Clean up potential markdown fences
+            fixed_config_content = re.sub(
+                r"^```(yaml|yml)?\n", "", fixed_config_content, flags=re.IGNORECASE
+            )
+            fixed_config_content = re.sub(r"\n```$", "", fixed_config_content)
+
+            return fixed_config_content
+        except Exception as e:
+            if not isinstance(e, LLMError):
+                LLM_ERRORS_TOTAL.labels(
+                    provider="deploy_validator",
+                    model="gpt-4o",
+                ).inc()
+            logger.error(
+                "Failed to fix Kubernetes manifest issues using LLM: %s", e, exc_info=True
+            )
+            raise RuntimeError(f"Failed to auto-fix Kubernetes manifest issues: {e}") from e
+
+
 class HelmValidator(Validator):
     __version__ = "1.1"
     __source__ = "built-in"
@@ -1153,6 +1290,7 @@ class ValidatorRegistry:
         # 2. Load built-in validators first
         built_in_validators = {
             "docker": DockerValidator,
+            "kubernetes": KubernetesValidator,
             "helm": HelmValidator,
             "completeness": DeploymentCompletenessValidator,
         }
