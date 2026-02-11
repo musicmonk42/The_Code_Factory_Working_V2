@@ -135,21 +135,32 @@ fake = Faker()
 @pytest.fixture(scope="function")
 def event_loop():
     """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
-
-    # Clean up any pending tasks before closing the loop
+    
+    # Clean up any pending tasks with timeout
     try:
         pending = asyncio.all_tasks(loop)
-        for task in pending:
-            task.cancel()
-
-        # Give tasks a chance to handle cancellation
         if pending:
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-    except Exception:
+            for task in pending:
+                task.cancel()
+            
+            # Wait for cancellation with a strict timeout
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    asyncio.gather(*pending, return_exceptions=True),
+                    timeout=2.0  # 2 second timeout for cleanup
+                )
+            )
+    except (asyncio.TimeoutError, RuntimeError, Exception):
+        # Force close if cleanup hangs
         pass
     finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except:
+            pass
         loop.close()
 
 
@@ -347,16 +358,15 @@ async def grpc_server(
 ):  # Removed mock_audit_log_crypto
     """Start a gRPC server for testing."""
     server = None
-    server_task = None
+    executor = None
     try:
         from generator.audit_log.audit_log import audit_log_pb2_grpc, AuditLogServicer, GRPC_PORT
         import concurrent.futures
         from grpc import aio as grpc_aio
 
-        # Create and start gRPC server manually for better control
-        server = grpc_aio.server(
-            concurrent.futures.ThreadPoolExecutor(max_workers=2)
-        )
+        # Create executor separately so we can clean it up
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        server = grpc_aio.server(executor)
 
         audit_log_pb2_grpc.add_AuditServiceServicer_to_server(
             AuditLogServicer(audit_log_instance), server
@@ -364,7 +374,7 @@ async def grpc_server(
 
         server.add_insecure_port(f"[::]:{GRPC_PORT}")
         await server.start()
-
+        
         # Give server time to fully start
         await asyncio.sleep(0.2)
         yield server
@@ -372,11 +382,18 @@ async def grpc_server(
     except Exception as e:
         pytest.skip(f"Cannot start gRPC server: {e}")
     finally:
-        # Properly stop the server
+        # Properly stop the server with aggressive timeout
         if server is not None:
             try:
-                await server.stop(grace=0.5)
-            except Exception:
+                await asyncio.wait_for(server.stop(grace=0.1), timeout=2.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
+        
+        # Shutdown executor to stop all threads
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except:
                 pass
 
 
