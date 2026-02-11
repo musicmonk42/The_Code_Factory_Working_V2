@@ -93,8 +93,13 @@ class Redis:
     """Stub class for redis.client.Redis to satisfy type annotations (used by portalocker)."""
     pass
 
+class PubSub:
+    """Stub class for redis.client.PubSub to satisfy type annotations (used by portalocker)."""
+    pass
+
 mock_redis_client.PubSubWorkerThread = PubSubWorkerThread
 mock_redis_client.Redis = Redis
+mock_redis_client.PubSub = PubSub
 mock_redis_base.client = mock_redis_client
 
 # Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
