@@ -86,22 +86,57 @@ jobs:
       - name: Start API server
         run: |
           # Start the server in the background
-          python server/run.py --host 0.0.0.0 --port 8000 &
+          python server/run.py --host 0.0.0.0 --port 8000 > server.log 2>&1 &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
           
-          # Wait for server to be ready (max 60 seconds)
+          # Verify process started
+          if ! ps -p $SERVER_PID > /dev/null; then
+            echo "✗ Server process failed to start"
+            echo "=== Server Logs ==="
+            cat server.log
+            exit 1
+          fi
+          
+          # Wait for server to be ready (max 120 seconds)
           echo "Waiting for API server to be ready..."
-          max_attempts=30
+          max_attempts=60
           attempt=0
           while [ $attempt -lt $max_attempts ]; do
             if curl -s http://localhost:8000/health > /dev/null 2>&1; then
               echo "✓ API server is ready"
-              break
+              
+              # Verify the health response
+              health_response=$(curl -s http://localhost:8000/health)
+              echo "Health check response: $health_response"
+              
+              # Also check if the server is still running
+              if ps -p $SERVER_PID > /dev/null; then
+                echo "✓ Server process is running (PID: $SERVER_PID)"
+                break
+              else
+                echo "✗ Server process died after responding to health check"
+                echo "=== Server Logs ==="
+                cat server.log
+                exit 1
+              fi
             fi
+            
+            # Check if server process is still running
+            if ! ps -p $SERVER_PID > /dev/null; then
+              echo "✗ Server process died during startup"
+              echo "=== Server Logs ==="
+              cat server.log
+              exit 1
+            fi
+            
             attempt=$((attempt + 1))
             if [ $attempt -eq $max_attempts ]; then
-              echo "✗ API server failed to start within 60 seconds"
+              echo "✗ API server failed to start within 120 seconds"
+              echo "=== Server Logs ==="
+              cat server.log
+              echo "=== Process Status ==="
+              ps aux | grep "python server/run.py" || true
               exit 1
             fi
             echo "Waiting for server... (attempt $attempt/$max_attempts)"
@@ -160,6 +195,14 @@ jobs:
             loadtest-results.json
             loadtest-summary.json
           retention-days: 30
+      
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs-${{ github.run_number }}
+          path: server.log
+          retention-days: 7
       
       - name: Stop API server
         if: always()
