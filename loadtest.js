@@ -107,6 +107,11 @@ function testHealthEndpoint() {
         },
     });
     
+    // Log failures with response details for debugging
+    if (!success) {
+        console.warn(`Health check failed: status=${response.status}, body=${response.body}`);
+    }
+    
     healthCheckFailureRate.add(!success);
 }
 
@@ -142,6 +147,11 @@ function testGenerateEndpoint() {
         },
     });
     
+    // Log failures with response details for debugging
+    if (!success) {
+        console.warn(`Generate endpoint failed: status=${response.status}, body=${response.body}`);
+    }
+    
     generateFailureRate.add(!success);
     if (response.timings.duration) {
         generateDuration.add(response.timings.duration);
@@ -167,6 +177,11 @@ function testListGenerationsEndpoint() {
             }
         },
     });
+    
+    // Log failures with response details for debugging
+    if (!success) {
+        console.warn(`List generations endpoint failed: status=${response.status}, body=${response.body}`);
+    }
     
     listGenerationsFailureRate.add(!success);
 }

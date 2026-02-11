@@ -302,6 +302,7 @@ generator_router = None
 jobs_router = None
 omnicore_router = None
 sfe_router = None
+v1_compat_router = None
 
 # Agent loader type placeholder (will be imported lazily)
 AgentType = None
@@ -317,7 +318,7 @@ def _load_routers():
     """
     global _routers_loaded, _router_load_error
     global api_keys_router, audit_router, diagnostics_router, events_router, fixes_router
-    global files_router, generator_router, jobs_router, omnicore_router, sfe_router
+    global files_router, generator_router, jobs_router, omnicore_router, sfe_router, v1_compat_router
     global AgentType, get_agent_loader
     
     # Fast path: already loaded
@@ -343,6 +344,7 @@ def _load_routers():
                 sfe_router as _sfe_router,
             )
             from server.routers.files import router as _files_router
+            from server.routers.v1_compat import router as _v1_compat_router
             from server.utils.agent_loader import AgentType as _AgentType, get_agent_loader as _get_agent_loader
             
             # Assign all values atomically (within the lock)
@@ -356,6 +358,7 @@ def _load_routers():
             jobs_router = _jobs_router
             omnicore_router = _omnicore_router
             sfe_router = _sfe_router
+            v1_compat_router = _v1_compat_router
             AgentType = _AgentType
             get_agent_loader = _get_agent_loader
             
@@ -508,6 +511,7 @@ def _include_routers(app_instance: FastAPI) -> bool:
         app_instance.include_router(jobs_router, prefix="/api")
         app_instance.include_router(omnicore_router, prefix="/api")
         app_instance.include_router(sfe_router, prefix="/api")
+        app_instance.include_router(v1_compat_router, prefix="/api")
         logger.info("✓ All routers included in application")
         return True
     except Exception as e:
