@@ -2,8 +2,8 @@
 
 # Testing Guidelines - The Code Factory
 
-**Version**: 1.0  
-**Last Updated**: 2026-02-05
+**Version**: 1.1  
+**Last Updated**: 2026-02-11
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@
 5. [Running Tests](#running-tests)
 6. [Best Practices](#best-practices)
 7. [CI/CD Integration](#cicd-integration)
+8. [Load Testing](#load-testing)
 
 ---
 
