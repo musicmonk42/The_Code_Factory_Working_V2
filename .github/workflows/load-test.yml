@@ -129,8 +129,7 @@ jobs:
           k6 run loadtest.js \
             -e API_URL=$TARGET_URL \
             -e MAX_VUS=$MAX_VUS \
-            --out json=loadtest-results.json \
-            --summary-export=loadtest-summary.json
+            --out json=loadtest-results.json
       
       - name: Check test results
         if: always()

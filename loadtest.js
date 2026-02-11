@@ -20,6 +20,7 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 // Custom metrics
 const healthCheckFailureRate = new Rate('health_check_failures');
@@ -211,4 +212,22 @@ export function setup() {
  */
 export function teardown(data) {
     console.log('Load test completed');
+}
+
+/**
+ * Custom summary handler - replaces deprecated --summary-export flag.
+ * 
+ * This function is called by k6 at the end of the test run with the
+ * complete test results. It produces both console output and a JSON
+ * summary file with correct threshold boolean values.
+ * 
+ * The deprecated --summary-export flag has a known bug where threshold
+ * pass/fail booleans are inverted in the JSON output. Using handleSummary()
+ * bypasses this bug entirely since we serialize the data ourselves.
+ */
+export function handleSummary(data) {
+    return {
+        'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+        'loadtest-summary.json': JSON.stringify(data, null, 4),
+    };
 }
