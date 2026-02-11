@@ -840,6 +840,17 @@ Agent --> Dev : Deliver Report
                         extra=log_extra
                     )
                     raise  # Re-raise to trigger retry logic
+                except LLMError as e:
+                    # Provide actionable error message for LLM failures
+                    logger.error(
+                        f"[TESTGEN] LLM call failed for model={llm_model}, purpose={purpose}. "
+                        f"Error: {e}. "
+                        f"This may indicate: (1) Invalid/expired API key, (2) Provider rate limits, "
+                        f"(3) Network connectivity issues, or (4) Provider service outage. "
+                        f"Check your API key configuration in environment variables or runner_config.yaml.",
+                        extra=log_extra
+                    )
+                    raise  # Re-raise to trigger retry logic
 
                 # NOTE: All metric tracking is handled internally by call_ensemble_api
                 # and reflected in the provenance log. We remove all manual increments.

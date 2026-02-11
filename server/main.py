@@ -748,9 +748,26 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             elif database_url.startswith("sqlite://"):
                 async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
             
+            # Configure connection timeouts for Railway deployment
+            # These can be overridden via environment variables
+            connect_timeout = int(os.getenv("DB_CONNECT_TIMEOUT", "30"))  # Increased from default 10s
+            command_timeout = int(os.getenv("DB_COMMAND_TIMEOUT", "60"))  # Increased from default 30s
+            
+            connect_args = {}
+            if "asyncpg" in async_url:
+                # asyncpg-specific timeout configuration
+                connect_args = {
+                    "command_timeout": command_timeout,  # Per-query timeout in seconds
+                    "timeout": connect_timeout,  # Connection timeout in seconds
+                }
+                logger.info(f"PostgreSQL connection timeouts: connect={connect_timeout}s, command={command_timeout}s")
+            elif "sqlite" in async_url:
+                connect_args = {"timeout": connect_timeout}
+            
             engine = create_async_engine(
                 async_url,
                 pool_pre_ping=True,
+                connect_args=connect_args,
             )
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
@@ -1570,9 +1587,20 @@ async def detailed_health_check() -> DetailedHealthResponse:
             elif database_url.startswith("sqlite://"):
                 async_url = database_url.replace("sqlite://", "sqlite+aiosqlite://", 1)
             
+            # Use shorter timeouts for liveness checks
+            connect_args = {}
+            if "asyncpg" in async_url:
+                connect_args = {
+                    "command_timeout": 2,
+                    "timeout": 2,
+                }
+            elif "sqlite" in async_url:
+                connect_args = {"timeout": 2}
+            
             engine = create_async_engine(
                 async_url,
                 pool_pre_ping=True,
+                connect_args=connect_args,
             )
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))

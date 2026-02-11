@@ -1,0 +1,188 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{# 
+  Developer Documentation Template
+  Generates comprehensive developer documentation.
+  
+  Features:
+    - Architecture overview
+    - Development setup
+    - Code structure
+    - API integration
+    - Testing guidelines
+    - Contributing workflow
+#}
+
+# Developer Documentation Generation
+
+Generate comprehensive developer documentation for the project.
+
+{% if files %}
+## Project Files:
+{% for file in files %}
+- {{ file }}
+{% endfor %}
+{% endif %}
+
+{% if context is defined %}
+## Project Context
+{% if context.language is defined %}
+- Language: {{ context.language }}
+{% endif %}
+{% if context.framework is defined %}
+- Framework: {{ context.framework }}
+{% endif %}
+{% if context.dependencies is defined and context.dependencies %}
+- Dependencies: {{ context.dependencies | join(', ') }}
+{% endif %}
+{% if context.files_content is defined %}
+### Code Context:
+```
+{{ context.files_content | tojson }}
+```
+{% endif %}
+{% endif %}
+
+## Developer Documentation Requirements
+
+Generate comprehensive developer documentation that includes:
+
+### 1. **Architecture Overview**
+   - High-level system architecture
+   - Component relationships and interactions
+   - Data flow diagrams (described)
+   - Technology stack
+   - Design patterns used
+   - Architectural decisions and rationale
+
+### 2. **Development Environment Setup**
+   - Prerequisites (languages, tools, dependencies)
+   - Step-by-step setup instructions
+   - Environment variables configuration
+   - Database setup
+   - Local development server setup
+   - IDE/editor recommendations and configuration
+
+### 3. **Project Structure**
+   - Directory structure explanation
+   - Key files and their purposes
+   - Module organization
+   - Code organization principles
+   - Configuration files
+
+### 4. **Code Style and Standards**
+   - Coding conventions
+   - Naming conventions
+   - File structure standards
+   - Documentation standards
+   - Code review checklist
+
+### 5. **Core Concepts**
+   - Domain models and entities
+   - Key abstractions
+   - Design patterns
+   - Important algorithms
+   - Business logic explanation
+
+### 6. **API Documentation**
+   - Internal APIs
+   - External APIs
+   - Function signatures
+   - Class interfaces
+   - Event systems
+   - Message formats
+
+### 7. **Database Schema**
+   - Entity relationship diagrams (described)
+   - Table structures
+   - Indexes and constraints
+   - Migration strategy
+   - Data models
+
+### 8. **Testing**
+   - Testing strategy
+   - Unit testing guidelines
+   - Integration testing
+   - E2E testing
+   - Test coverage expectations
+   - Running tests
+   - Writing new tests
+   - Mocking and fixtures
+
+### 9. **Development Workflow**
+   - Git workflow (branching strategy)
+   - Pull request process
+   - Code review process
+   - CI/CD pipeline
+   - Release process
+   - Versioning strategy
+
+### 10. **Building and Deployment**
+   - Build process
+   - Build artifacts
+   - Deployment procedures
+   - Environment configurations
+   - Troubleshooting builds
+
+### 11. **Debugging**
+   - Debugging techniques
+   - Common issues and solutions
+   - Logging and monitoring
+   - Performance profiling
+   - Debug tools and utilities
+
+### 12. **API Integration Guide**
+   - How to integrate with the system
+   - Authentication flow
+   - Example integrations
+   - SDKs and libraries
+   - Error handling
+
+### 13. **Performance Considerations**
+   - Performance best practices
+   - Optimization guidelines
+   - Bottlenecks to avoid
+   - Caching strategies
+   - Resource management
+
+### 14. **Security**
+   - Security best practices
+   - Authentication/authorization
+   - Input validation
+   - Common vulnerabilities to avoid
+   - Security testing
+
+### 15. **Contributing**
+   - How to contribute
+   - Setting up for contribution
+   - Coding standards
+   - Pull request guidelines
+   - Issue reporting
+   - Communication channels
+
+### 16. **Troubleshooting**
+   - Common development issues
+   - Error messages and solutions
+   - FAQ for developers
+   - Where to get help
+
+### 17. **Resources**
+   - Related documentation
+   - External resources
+   - Tutorials
+   - Community links
+   - Further reading
+
+{% if instructions is defined and instructions %}
+## Additional Instructions
+{{ instructions }}
+{% endif %}
+
+{% if few_shot_examples is defined and few_shot_examples %}
+## Example Developer Documentation
+
+{{ few_shot_examples }}
+{% endif %}
+
+---
+**Output Format**: Generate well-structured developer documentation in Markdown format with clear sections, code examples, diagrams (described), and practical guidance. Make it comprehensive yet accessible for developers at various skill levels.
