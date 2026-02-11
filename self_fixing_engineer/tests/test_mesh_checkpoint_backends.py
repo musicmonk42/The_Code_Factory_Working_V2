@@ -126,30 +126,7 @@ def mock_metrics():
         yield {"operations": ops, "latency": lat, "errors": err}
 
 
-@pytest.fixture(autouse=True)
-def mock_tracer():
-    """Mock the tracer to avoid __aenter__ errors."""
-    with patch("mesh.checkpoint.checkpoint_backends.tracer") as mock_tracer:
-        # Create a mock span that can be used as async context manager
-        mock_span = MagicMock()
-        mock_span.set_attribute = MagicMock()
-        mock_span.set_status = MagicMock()
-        mock_span.add_event = MagicMock()
-
-        # Create async context manager for start_as_current_span
-        async def async_context_manager(*args, **kwargs):
-            return mock_span
-
-        mock_tracer.start_as_current_span = MagicMock()
-        mock_tracer.start_as_current_span.return_value.__aenter__ = (
-            async_context_manager
-        )
-        mock_tracer.start_as_current_span.return_value.__aexit__ = AsyncMock()
-
-        yield mock_tracer
-
-
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def mock_circuit_breakers():
     """Mock circuit breakers to prevent interference with tests."""
     with patch("mesh.checkpoint.checkpoint_backends.circuit_breakers", {}):
