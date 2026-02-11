@@ -79,9 +79,16 @@ class TestV1CompatBackgroundTrigger:
         
         # Verify background task was triggered
         # Note: In FastAPI TestClient, background tasks are executed immediately
-        # So we check if the function was called (it may not have been called yet
-        # in the test client, but in production it would be)
-        # The important thing is that the endpoint returns 202 and creates the job
+        # We verify the mock was called with the correct parameters
+        assert mock_trigger.call_count >= 1, "Background task should have been triggered"
+        
+        # Verify the call was made with correct arguments
+        call_args = mock_trigger.call_args
+        if call_args:
+            # Check that job_id and readme_content were passed
+            call_kwargs = call_args.kwargs if hasattr(call_args, 'kwargs') else call_args[1]
+            assert 'job_id' in call_kwargs or len(call_args.args) > 0
+            assert 'readme_content' in call_kwargs or len(call_args.args) > 1
         
         # Cleanup
         if job_id in jobs_db:
