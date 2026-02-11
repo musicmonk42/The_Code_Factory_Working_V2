@@ -48,6 +48,8 @@ from .runner_contracts import (
 
 # --- FIX: Import 'ExecutionError' and alias it to 'TestExecutionError' ---
 from .runner_errors import BackendError, DistributedError
+# Import subprocess_wrapper for re-export
+from .process_utils import subprocess_wrapper
 from .runner_errors import ExecutionError as TestExecutionError
 from .runner_errors import (
     FrameworkError,

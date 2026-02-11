@@ -1964,6 +1964,12 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
             )
 
     redaction_filter = RedactionFilter()
+    
+    # Add the redaction filter to the logger and its common children
+    # This ensures redaction works even when logs are captured by pytest's caplog
+    for logger_name in ["runner", "runner.audit", "runner.action", "runner.pipeline"]:
+        logger_obj = logging.getLogger(logger_name)
+        logger_obj.addFilter(redaction_filter)
 
     # Configure sinks based on RunnerConfig
     sinks_config = runner_config.log_sinks

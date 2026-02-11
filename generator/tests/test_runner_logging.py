@@ -119,6 +119,9 @@ def clean_history_and_handlers():
         for handler in list(logger.handlers):
             handler.close()
             logger.removeHandler(handler)
+        # Clear filters too
+        for filter in list(logger.filters):
+            logger.removeFilter(filter)
 
     yield
 
@@ -128,6 +131,9 @@ def clean_history_and_handlers():
         for handler in list(logger.handlers):
             handler.close()
             logger.removeHandler(handler)
+        # Clear filters after test too
+        for filter in list(logger.filters):
+            logger.removeFilter(filter)
 
 
 @pytest.fixture
@@ -255,8 +261,8 @@ def test_log_action(caplog):  # [FIX] Use caplog, not LOG_HISTORY
 # Tests for log_audit_event (async)
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-# [FIX] Mock the async safe_sign function
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+# [FIX] Mock the async safe_sign function - patch where log_audit_event imports it from
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
     # [FIX] Configure logging to set the key ID from the mock_config
     configure_logging_from_config(mock_config)
@@ -289,7 +295,7 @@ async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
 
 
 @pytest.mark.asyncio
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event_with_bytes(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing bytes objects are successfully serialized."""
     # Configure logging to set the key ID from the mock_config
@@ -334,7 +340,7 @@ async def test_log_audit_event_with_bytes(mock_safe_sign, caplog, mock_config):
 
 
 @pytest.mark.asyncio
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event_with_datetime(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing datetime objects are successfully serialized."""
     from datetime import datetime, timezone
@@ -371,7 +377,7 @@ async def test_log_audit_event_with_datetime(mock_safe_sign, caplog, mock_config
 
 
 @pytest.mark.asyncio
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event_with_set(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing set objects are successfully serialized."""
     configure_logging_from_config(mock_config)
@@ -405,7 +411,7 @@ async def test_log_audit_event_with_set(mock_safe_sign, caplog, mock_config):
 
 
 @pytest.mark.asyncio
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event_with_uuid(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing UUID objects are successfully serialized."""
     import uuid
@@ -442,7 +448,7 @@ async def test_log_audit_event_with_uuid(mock_safe_sign, caplog, mock_config):
 
 
 @pytest.mark.asyncio
-@patch("generator.runner.runner_logging.safe_sign", new_callable=AsyncMock)
+@patch("runner.runner_audit.safe_sign", new_callable=AsyncMock)
 async def test_log_audit_event_with_mixed_non_serializable(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing multiple non-serializable types are handled."""
     import uuid
