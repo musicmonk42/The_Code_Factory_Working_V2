@@ -358,7 +358,6 @@ def _audit_task_done_callback(task: asyncio.Task) -> None:
     exc = task.exception()
     if exc:
         # An exception occurred during audit logging - log it for visibility
-        # Use the central logger to ensure the error is captured
         logger.error(
             f"Audit logging task '{task.get_name()}' failed: {exc}",
             exc_info=exc

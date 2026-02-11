@@ -110,11 +110,13 @@ class TestIssue2AuditLogHashChain:
         with patch('generator.runner.runner_audit.logger') as mock_logger:
             _audit_task_done_callback(mock_task)
             
-            # Verify error was logged
+            # Verify error was logged with task name and exception
             mock_logger.error.assert_called_once()
             call_args = mock_logger.error.call_args[0][0]
             assert "audit_test_action" in call_args
             assert "failed" in call_args
+            # Verify exception details are included
+            assert "Test exception" in str(mock_logger.error.call_args)
     
     def test_audit_task_done_callback_handles_cancellation(self):
         """Test that _audit_task_done_callback ignores cancelled tasks."""
