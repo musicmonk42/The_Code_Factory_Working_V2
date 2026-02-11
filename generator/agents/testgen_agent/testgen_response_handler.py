@@ -381,9 +381,10 @@ def _strip_markdown_fences(content: str) -> str:
     # Strip leading/trailing whitespace first
     content = content.strip()
     
-    # Remove opening fence at the start of the string (```python, ```py, etc.)
+    # Remove opening fence at the start of the string (```python, ```py, ```objective-c, ```f#, etc.)
     # Use \A to match only the start of the string, not any line
-    content = re.sub(r'\A```\w*\s*\n?', '', content)
+    # Use [a-zA-Z0-9_+#-]* to handle language identifiers with hyphens, plus, and hash (objective-c, c++, f#, etc.)
+    content = re.sub(r'\A```[a-zA-Z0-9_+#-]*\s*\n?', '', content)
     
     # Remove closing fence at the end of the string
     # Use \Z to match only the end of the string, not any line
