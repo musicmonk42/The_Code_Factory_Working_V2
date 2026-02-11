@@ -291,3 +291,4 @@ uploads/
 mock_history_updater.json
 test_subscription_fix.py
 /tmp/
+*.tar.gz
