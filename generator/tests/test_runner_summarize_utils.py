@@ -78,7 +78,7 @@ def mock_dependencies():
             "runner.summarize_utils.send_alert", new_callable=AsyncMock
         ) as mock_alert,
         patch(
-            "runner.summarize_utils.redact_secrets", new_callable=AsyncMock
+            "runner.summarize_utils.redact_secrets", new_callable=MagicMock
         ) as mock_redact,
         patch(
             "runner.summarize_utils.collect_feedback", new_callable=MagicMock
@@ -199,11 +199,11 @@ async def test_llm_summarize_failure_fallback(mock_dependencies, caplog):
         # Should fallback to redacted truncation
         assert summary == text[:10]
         # Should log the error
-        assert "LLM-based summarization failed: LLM exploded" in caplog.text
+        assert "All LLM models failed with error: LLM exploded" in caplog.text
 
     # Should increment the error metric
     mock_dependencies["errors"].labels.assert_called_once_with(
-        func="llm_summarize", type="RuntimeError"
+        func="llm_summarize", type="all_models_failed"
     )
     mock_dependencies["errors"].labels.return_value.inc.assert_called_once()
 
