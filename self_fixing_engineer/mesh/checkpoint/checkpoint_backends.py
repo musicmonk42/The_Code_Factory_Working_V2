@@ -273,6 +273,7 @@ class Config:
     POSTGRES_TABLE = os.environ.get("CHECKPOINT_POSTGRES_TABLE", "checkpoints")
     POSTGRES_POOL_SIZE = int(os.environ.get("POSTGRES_POOL_SIZE", "20"))
     POSTGRES_POOL_MAX = int(os.environ.get("POSTGRES_POOL_MAX", "100"))
+    POSTGRES_COMMAND_TIMEOUT = int(os.environ.get("DB_COMMAND_TIMEOUT", os.environ.get("CHECKPOINT_PG_COMMAND_TIMEOUT", "60")))
 
     # GCS
     GCS_BUCKET = os.environ.get("CHECKPOINT_GCS_BUCKET")
@@ -622,7 +623,7 @@ class BackendRegistry:
             Config.POSTGRES_DSN,
             min_size=Config.POSTGRES_POOL_SIZE,
             max_size=Config.POSTGRES_POOL_MAX,
-            command_timeout=60,
+            command_timeout=Config.POSTGRES_COMMAND_TIMEOUT,
         )
 
         # Create table if not exists

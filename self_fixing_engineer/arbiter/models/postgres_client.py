@@ -453,6 +453,7 @@ class PostgresClient:
                         )
                         min_size = max_size
                     timeout = float(os.getenv("PG_POOL_TIMEOUT", "30"))
+                    command_timeout = float(os.getenv("DB_COMMAND_TIMEOUT", os.getenv("PG_COMMAND_TIMEOUT", "60")))
                     ssl_mode = os.getenv(
                         "PG_SSL_MODE",
                         "require" if os.getenv("ENV", "dev") == "prod" else "prefer",
@@ -460,10 +461,11 @@ class PostgresClient:
                     env = os.getenv("ENV", "dev").lower()
 
                     logger.info(
-                        "Pool settings min=%s max=%s timeout=%s ssl_mode=%s env=%s",
+                        "Pool settings min=%s max=%s timeout=%s command_timeout=%s ssl_mode=%s env=%s",
                         min_size,
                         max_size,
                         timeout,
+                        command_timeout,
                         ssl_mode,
                         env,
                     )
@@ -497,6 +499,7 @@ class PostgresClient:
                         min_size=min_size,
                         max_size=max_size,
                         timeout=timeout,
+                        command_timeout=command_timeout,
                         ssl=ssl_context,
                         init=self._init_conn,
                     )
