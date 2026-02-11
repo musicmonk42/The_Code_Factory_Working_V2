@@ -731,12 +731,28 @@ class KubernetesValidator(Validator):
                         ).inc(len(report["lint_issues"]))
                         
             except RuamelYAMLError as e:
+                # CRITICAL FIX: Use RuamelYAMLError (not yaml.YAMLError)
+                # The validator uses ruamel.yaml (RuYAML) for parsing, which raises
+                # ruamel.yaml.YAMLError. Using yaml.YAMLError would cause NameError
+                # since PyYAML is not imported, leading to incorrect "internal_error"
+                # status instead of proper YAML syntax error reporting.
+                #
+                # Industry Standard: Always catch exceptions from the library you're using
+                # Reference: ruamel.yaml documentation
                 report["lint_status"] = "failed"
                 report["lint_output"] = f"YAML parsing error: {e}"
                 report["lint_issues"].append(f"Invalid YAML syntax: {e}")
                 issue_total_found.labels(
                     target=target_type, issue_type_category="YAMLSyntax"
                 ).inc()
+                logger.error(
+                    f"YAML parsing failed for {target_type}",
+                    extra={
+                        "target_type": target_type,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    }
+                )
 
             # 3. Security Findings
             report["security_findings"] = await scan_config_for_findings(

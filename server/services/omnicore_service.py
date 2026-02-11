@@ -3579,6 +3579,10 @@ class OmniCoreService:
                 else:
                     # No timestamp - mark for cleanup
                     expired.append(job_id)
+            except Exception as e:
+                # Catch any unexpected errors when processing session
+                logger.error(f"Error processing session {job_id}: {e}")
+                expired.append(job_id)  # Mark for cleanup on error
         
         for job_id in expired:
             del _clarification_sessions[job_id]
@@ -4058,8 +4062,11 @@ class OmniCoreService:
                     logger.warning(f"[PIPELINE] Job {job_id} provenance error: {prov_err}")
             
             # 3. Testgen (if requested)
+            # RESILIENCE FIX: Pipeline continues even if testgen fails
+            # Industry Standard: Fail-safe pipeline design - individual stage failures
+            # should not abort the entire workflow. This ensures maximum output delivery
+            # even when optional stages encounter errors.
             if payload.get("include_tests", True):
-                # FIX: Wrap testgen in try/except to continue pipeline on failure
                 try:
                     # Check if codegen actually produced valid source files
                     output_path = codegen_result.get("output_path")
@@ -4143,18 +4150,33 @@ class OmniCoreService:
                             extra={"job_id": job_id}
                         )
                 except Exception as e:
-                    logger.error(f"[PIPELINE] Job {job_id} testgen exception: {e}", exc_info=True)
+                    # Industry Standard: Comprehensive error logging with context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} testgen exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "testgen",
+                            "error_type": type(e).__name__,
+                            "output_path": output_path if 'output_path' in locals() else None,
+                        }
+                    )
                     stages_completed.append("testgen:failed")
-                    logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite testgen exception")
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite testgen exception",
+                        extra={"job_id": job_id, "remaining_stages": ["deploy", "docgen", "critique"]}
+                    )
             
             # 4. Deploy (if requested)
+            # RESILIENCE FIX: Pipeline continues even if deployment fails
+            # Industry Standard: Deploy failures shouldn't prevent documentation generation
+            # or critique, allowing maximum value delivery from the pipeline
             # FIX: Default to True since deployment is a core pipeline feature
             # Users who don't want deployment should explicitly set include_deployment=False
             include_deployment = payload.get("include_deployment", True)
             logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
             
             if include_deployment:
-                # FIX: Wrap deploy in try/except to continue pipeline on failure
                 try:
                     # Pass generated files from codegen to deployment
                     deploy_payload = {
@@ -4204,16 +4226,31 @@ class OmniCoreService:
                         stages_completed.append("deploy:failed")
                         logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite deploy failure")
                 except Exception as e:
-                    logger.error(f"[PIPELINE] Job {job_id} deploy exception: {e}", exc_info=True)
+                    # Industry Standard: Comprehensive error logging with structured context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} deploy exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "deploy",
+                            "error_type": type(e).__name__,
+                            "code_path": codegen_result.get("output_path") if codegen_result else None,
+                        }
+                    )
                     stages_completed.append("deploy:failed")
-                    logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite deploy exception")
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite deploy exception",
+                        extra={"job_id": job_id, "remaining_stages": ["docgen", "critique"]}
+                    )
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
             # 5. Docgen (if requested)
+            # RESILIENCE FIX: Pipeline continues even if docgen fails
+            # Industry Standard: Documentation generation failure shouldn't prevent
+            # code critique, ensuring comprehensive quality analysis
             # FIX: Default to True since documentation is a core pipeline feature
             if payload.get("include_docs", True):
-                # FIX: Wrap docgen in try/except to continue pipeline on failure
                 try:
                     docgen_payload = {
                         "code_path": codegen_result.get("output_path"),
@@ -4231,9 +4268,22 @@ class OmniCoreService:
                         stages_completed.append("docgen:failed")
                         logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite docgen failure")
                 except Exception as e:
-                    logger.error(f"[PIPELINE] Job {job_id} docgen exception: {e}", exc_info=True)
+                    # Industry Standard: Structured error logging with full context
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} docgen exception: {e}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "docgen",
+                            "error_type": type(e).__name__,
+                            "code_path": codegen_result.get("output_path") if codegen_result else None,
+                        }
+                    )
                     stages_completed.append("docgen:failed")
-                    logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite docgen exception")
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite docgen exception",
+                        extra={"job_id": job_id, "remaining_stages": ["critique"]}
+                    )
             
             # 6. Critique (if requested)
             # FIX: Default to True since critique is a core pipeline feature for quality

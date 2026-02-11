@@ -406,14 +406,52 @@ class TestgenAgent:
 
     async def _load_code_files(self, target_files: List[str]) -> Dict[str, str]:
         """
-        Asynchronously loads and scrubs content from target code files.
+        Asynchronously loads content from target code files for AST parsing and analysis.
         
-        FIX Issue 5: Ensure code file paths are resolved correctly relative to repo_path
-        and validate that files exist and are readable before attempting to parse them.
+        CRITICAL: This method loads source code files that will be parsed programmatically
+        by Python's ast.parse(). The content MUST NOT be scrubbed/redacted, as PII detection
+        tools like Presidio incorrectly flag code entities (import statements, class names,
+        variable names) as sensitive data, corrupting the code with [REDACTED] placeholders.
+        
+        Security Note:
+        - Source code is never sent to external systems from this method
+        - PII scrubbing should only occur when building LLM prompts or external outputs
+        - This preserves code integrity for static analysis and test generation
+        
+        Args:
+            target_files: List of relative file paths to load (e.g., ["main.py", "app/routes.py"])
+        
+        Returns:
+            Dictionary mapping file paths to their raw content (unscrubbed)
+        
+        Raises:
+            ValueError: If any file cannot be read or is outside the repository path
+            FileNotFoundError: If a specified file does not exist
+        
+        Example:
+            >>> agent = TestgenAgent()
+            >>> files = await agent._load_code_files(["main.py"])
+            >>> assert "from fastapi import FastAPI" in files["main.py"]
         """
 
         async def read_and_scrub_file(fp: str) -> Tuple[str, str]:
-            # FIX Issue 5: Resolve path correctly relative to base directory
+            """
+            Read a single code file with path validation.
+            
+            Note: Despite the name "scrub" (legacy), this function does NOT scrub content.
+            The name is preserved for backward compatibility with calling code.
+            
+            Args:
+                fp: Relative file path from repository root
+            
+            Returns:
+                Tuple of (original_path, file_content)
+            
+            Raises:
+                ValueError: If path is outside repository or file cannot be read
+                FileNotFoundError: If file does not exist
+            """
+            # Resolve path correctly relative to base directory
             # Ensure the path is relative and doesn't have leading slashes
             fp_cleaned = fp.lstrip('/')
             full_path = (self.repo_path / fp_cleaned).resolve()

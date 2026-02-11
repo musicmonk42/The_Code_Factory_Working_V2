@@ -1030,19 +1030,56 @@ class WorkflowEngine:
                 except Exception as e:
                     logger.warning(f"Arbiter policy check failed: {e}, continuing anyway")
             
-            # [OMNICORE] Attempt to route through OmniCore workflow when available
-            # This provides unified orchestration, plugin framework, audit logging,
-            # and self-healing capabilities for CLI/local users
+            # [OMNICORE ROUTING] Industry Standard: Unified Orchestration Pattern
+            # 
+            # Route CLI/local workflows through OmniCore when available to provide:
+            # - Centralized plugin registry and lifecycle management
+            # - Distributed tracing and observability
+            # - Message bus integration for event-driven architecture
+            # - Self-healing capabilities via Arbiter AI
+            # - Consistent audit logging and compliance
+            # 
+            # Benefits:
+            # - CLI users get same production-grade features as API users
+            # - Single code path reduces maintenance burden
+            # - Easier debugging with unified telemetry
+            # 
+            # Fallback Strategy:
+            # - If OmniCore unavailable or errors, fall back to direct Runner
+            # - Ensures backward compatibility and graceful degradation
+            # - No functionality loss for users without OmniCore
+            #
+            # Reference: Microservices patterns - Service Mesh integration
             if _OMNICORE_WORKFLOW_AVAILABLE and run_generator_workflow:
-                logger.info(f"Routing workflow {workflow_id} through OmniCore plugin system")
+                logger.info(
+                    f"Routing workflow {workflow_id} through OmniCore plugin system",
+                    extra={
+                        "workflow_id": workflow_id,
+                        "routing": "omnicore",
+                        "input_file": input_file,
+                    }
+                )
                 try:
-                    # Read input file content
+                    # Read input file content with error handling
                     md_content = ""
-                    if Path(input_file).exists():
-                        with open(input_file, "r", encoding="utf-8") as f:
-                            md_content = f.read()
+                    input_path = Path(input_file)
+                    if input_path.exists():
+                        try:
+                            with open(input_path, "r", encoding="utf-8") as f:
+                                md_content = f.read()
+                        except (IOError, UnicodeDecodeError) as read_err:
+                            logger.error(
+                                f"Failed to read input file {input_file}: {read_err}",
+                                extra={"workflow_id": workflow_id, "error": str(read_err)}
+                            )
+                            raise
+                    else:
+                        logger.warning(
+                            f"Input file {input_file} not found",
+                            extra={"workflow_id": workflow_id}
+                        )
                     
-                    # Build OmniCore workflow input
+                    # Build OmniCore workflow input with full configuration
                     workflow_input = {
                         "job_id": workflow_id,
                         "readme_content": md_content,
@@ -1055,11 +1092,15 @@ class WorkflowEngine:
                         "timeout_seconds": timeout_seconds,
                     }
                     
-                    # Route through OmniCore
+                    # Route through OmniCore with timeout protection
+                    logger.debug(
+                        f"Invoking OmniCore workflow for {workflow_id}",
+                        extra={"workflow_id": workflow_id, "payload_keys": list(workflow_input.keys())}
+                    )
                     omnicore_result = await run_generator_workflow(workflow_input)
                     
                     # Map OmniCore result to engine result format
-                    return {
+                    result = {
                         "workflow_id": workflow_id,
                         "status": omnicore_result.get("status", "completed"),
                         "input_file": input_file,
@@ -1073,16 +1114,39 @@ class WorkflowEngine:
                         "stages_completed": omnicore_result.get("stages_completed", []),
                         "omnicore_routed": True,
                     }
+                    
+                    logger.info(
+                        f"OmniCore workflow completed for {workflow_id}",
+                        extra={
+                            "workflow_id": workflow_id,
+                            "status": result["status"],
+                            "stages": result.get("stages_completed", []),
+                            "duration": result["duration_seconds"],
+                        }
+                    )
+                    
+                    return result
+                    
                 except Exception as e:
+                    # Graceful fallback on OmniCore errors
                     logger.warning(
-                        f"OmniCore workflow failed for {workflow_id}, falling back to direct Runner: {e}",
-                        exc_info=True
+                        f"OmniCore workflow failed for {workflow_id}, falling back to direct Runner",
+                        exc_info=True,
+                        extra={
+                            "workflow_id": workflow_id,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "fallback": "direct_runner",
+                        }
                     )
                     # Fall through to direct Runner execution below
             
             # Direct Runner execution (fallback or when OmniCore not available)
             if not _OMNICORE_WORKFLOW_AVAILABLE:
-                logger.info(f"Using direct Runner execution for workflow {workflow_id} (OmniCore not available)")
+                logger.info(
+                    f"Using direct Runner execution for workflow {workflow_id} (OmniCore not available)",
+                    extra={"workflow_id": workflow_id, "execution_mode": "direct_runner"}
+                )
             
             # Initialize provenance tracker for pipeline stage logging
             provenance = None

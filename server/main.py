@@ -612,16 +612,51 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.error(f"Message bus verification failed: {e}", exc_info=True)
         logger.warning("Continuing startup - WebSocket events will use fallback mode")
     
-    # Register generator agents as OmniCore plugins
-    # This ensures generator workflow is registered with OmniCore's plugin registry
-    # for unified orchestration, auditing, and lifecycle management
+    # ========================================================================
+    # GENERATOR PLUGIN REGISTRATION - Industry Standard Plugin Architecture
+    # ========================================================================
+    # 
+    # Register generator agents with OmniCore's plugin registry at startup.
+    # 
+    # Why this matters:
+    # - Enables unified orchestration across API and CLI workflows
+    # - Provides centralized plugin discovery and lifecycle management  
+    # - Ensures audit logging and observability for all workflows
+    # - Enables self-healing via Arbiter AI integration
+    # 
+    # The @plugin decorator in generator_plugin_wrapper fires on import,
+    # registering run_generator_workflow and all sub-agents with OmniCore.
+    # 
+    # Defensive import pattern:
+    # - Gracefully handles missing dependencies
+    # - Logs warnings but doesn't block startup
+    # - Allows server to function without generator if needed
+    # 
+    # Industry Standards:
+    # - Plugin Architecture Pattern (GOF Design Patterns)
+    # - Dependency Injection / Service Locator
+    # - Fail-safe initialization (continue on non-critical errors)
+    #
+    # Reference: Martin Fowler - Plugin Architecture
+    # ========================================================================
     try:
         import generator.agents.generator_plugin_wrapper  # noqa: F401
         logger.info("✓ Generator plugin wrapper registered with OmniCore")
+        logger.debug(
+            "Generator agents available via OmniCore plugin registry",
+            extra={"plugin": "generator_plugin_wrapper", "status": "registered"}
+        )
     except ImportError as e:
-        logger.warning(f"Generator plugin wrapper not available: {e}")
+        logger.warning(
+            f"Generator plugin wrapper not available: {e}",
+            extra={"plugin": "generator_plugin_wrapper", "error": str(e)}
+        )
     except Exception as e:
-        logger.warning(f"Failed to register generator plugin wrapper: {e}")
+        logger.warning(
+            f"Failed to register generator plugin wrapper: {e}",
+            exc_info=True,
+            extra={"plugin": "generator_plugin_wrapper", "error_type": type(e).__name__}
+        )
     
     # P2 FIX: Validate Redis connection on startup (explicit PING test)
     redis_url = os.getenv("REDIS_URL")
