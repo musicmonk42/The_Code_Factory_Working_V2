@@ -154,7 +154,7 @@ def test_validate_spec_fidelity_processes_ts_js_files():
     content = provenance_path.read_text()
     
     # Check for .ts and .js in file filter
-    assert "endswith(('.py', '.ts', '.js'" in content or "endswith(('.py', '.ts', '.js'" in content, \
+    assert "endswith(('.py', '.ts', '.js'" in content, \
         "Should check for .ts and .js file extensions"
     
     print("✓ test_validate_spec_fidelity_processes_ts_js_files passed")

@@ -322,13 +322,19 @@ def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[D
     ts_js_patterns = [
         r"""app\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",           # Express
         r"""router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",        # Express Router
-        r"""@(Get|Post|Put|Delete|Patch)\s*\(\s*['"]([^'"]+)['"]""",              # NestJS decorators
         r"""server\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",       # Fastify
     ]
+    
+    # NestJS decorator pattern (needs separate handling due to different capture group order)
+    nestjs_pattern = r"""@(Get|Post|Put|Delete|Patch)\s*\(\s*['"]([^'"]+)['"]"""
     
     # Determine which patterns to use based on file extension
     if filename.endswith(('.ts', '.js')):
         patterns = ts_js_patterns
+        # Process NestJS patterns separately
+        nestjs_matches = re.findall(nestjs_pattern, code_content, re.IGNORECASE)
+        for method, path in nestjs_matches:
+            endpoints.append({"method": method.upper(), "path": path})
     else:
         patterns = python_patterns
     
