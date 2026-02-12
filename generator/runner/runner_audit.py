@@ -86,9 +86,58 @@ def _load_audit_config():
 # Load config once
 _AUDIT_CONFIG = _load_audit_config()
 
+# Helper function for parsing boolean values from env vars or config
+def _parse_bool(value) -> bool:
+    """
+    Parse boolean value from various input types.
+    
+    Args:
+        value: Value to parse (bool, str, int, or any other type)
+        
+    Returns:
+        bool: Parsed boolean value
+        
+    Truthy values (case-insensitive strings):
+        - 'true', 't', 'yes', 'y', 'on', '1'
+        
+    Falsy values (case-insensitive strings):
+        - 'false', 'f', 'no', 'n', 'off', '0', '' (empty string)
+        
+    Examples:
+        >>> _parse_bool(True)
+        True
+        >>> _parse_bool('true')
+        True
+        >>> _parse_bool('YES')
+        True
+        >>> _parse_bool('1')
+        True
+        >>> _parse_bool('false')
+        False
+        >>> _parse_bool('0')
+        False
+        >>> _parse_bool('')
+        False
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ('true', 't', 'yes', 'y', 'on', '1')
+    # For numeric types, 0 is False, non-zero is True
+    if isinstance(value, (int, float)):
+        return value != 0
+    # For other types, use Python's truthiness
+    return bool(value)
+
 # Routing configuration from audit_config.yaml
-ROUTE_TO_MAIN_AUDIT = _AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False)
-MAIN_AUDIT_ENDPOINT = _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8001/audit/ingest")
+# Allow environment variable overrides for deployment flexibility
+_route_to_main = os.getenv("ROUTE_TO_MAIN_AUDIT")
+if _route_to_main is not None:
+    ROUTE_TO_MAIN_AUDIT = _parse_bool(_route_to_main)
+else:
+    ROUTE_TO_MAIN_AUDIT = _parse_bool(_AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False))
+
+MAIN_AUDIT_ENDPOINT = os.getenv("MAIN_AUDIT_ENDPOINT", _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8000/audit/ingest"))
 ROUTING_RETRY_ENABLED = _AUDIT_CONFIG.get("ROUTING_RETRY_ENABLED", True)
 ROUTING_MAX_ATTEMPTS = _AUDIT_CONFIG.get("ROUTING_MAX_ATTEMPTS", 3)
 ROUTING_TIMEOUT_SECONDS = _AUDIT_CONFIG.get("ROUTING_TIMEOUT_SECONDS", 5.0)

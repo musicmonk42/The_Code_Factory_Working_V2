@@ -1560,7 +1560,7 @@ async def get_omnicore_audit_config_status() -> Dict[str, Any]:
     config_info["integration"] = {
         "main_audit_system": "http://localhost:8003",
         "routing_enabled": True,
-        "omnicore_ingestion": "http://localhost:8001/audit/ingest",
+        "omnicore_ingestion": "http://localhost:8000/audit/ingest",
     }
     
     # Features
