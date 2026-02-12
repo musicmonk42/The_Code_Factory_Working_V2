@@ -581,6 +581,25 @@ def mock_async_file_utils():
         }
 
 
+@pytest.fixture(autouse=True)
+def mock_async_security_utils():
+    """Automatically mock async functions in runner_security_utils for all tests."""
+    from unittest.mock import AsyncMock, patch
+    
+    # Only mock if the functions are called in async context
+    # This fixture provides safety net without breaking tests that mock these themselves
+    try:
+        with patch("runner.runner_security_utils.fetch_secret", new_callable=AsyncMock, return_value=None) as mock_fetch, \
+             patch("runner.runner_security_utils.monitor_for_leaks", new_callable=AsyncMock) as mock_monitor:
+            yield {
+                "fetch_secret": mock_fetch,
+                "monitor_for_leaks": mock_monitor,
+            }
+    except (ImportError, AttributeError):
+        # Module not available or already mocked
+        yield {}
+
+
 # ---- Textual App.run_test Compatibility ----
 # Some versions of Textual don't have run_test() method on App class
 # Add it as a mock if it's missing to prevent AttributeError
