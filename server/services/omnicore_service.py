@@ -4740,6 +4740,23 @@ class OmniCoreService:
                 except Exception as prov_err:
                     logger.warning(f"[PIPELINE] Job {job_id} provenance error: {prov_err}")
             
+            # FIX Issue A: Detect language once for all downstream stages
+            # Move language detection outside testgen-only block so it's available for
+            # deploy, docgen, and critique stages even if tests are disabled
+            output_path = codegen_result.get("output_path")
+            detected_language = payload.get("language")
+            if detected_language:
+                logger.info(f"[PIPELINE] Job {job_id} using explicit language from payload: {detected_language}")
+            elif output_path:
+                # Auto-detect project language from generated files
+                code_path = Path(output_path)
+                detected_language = _detect_project_language(code_path)
+                logger.info(f"[PIPELINE] Job {job_id} detected language: {detected_language}")
+            else:
+                # Fallback to Python if no output path available
+                detected_language = "python"
+                logger.warning(f"[PIPELINE] Job {job_id} no output path for language detection, defaulting to python")
+            
             # 3. Testgen (if requested)
             # RESILIENCE FIX: Pipeline continues even if testgen fails
             # Industry Standard: Fail-safe pipeline design - individual stage failures
@@ -4748,18 +4765,8 @@ class OmniCoreService:
             if payload.get("include_tests", True):
                 try:
                     # Check if codegen actually produced valid source files
-                    output_path = codegen_result.get("output_path")
                     if output_path:
                         code_path = Path(output_path)
-                        
-                        # Check if language is already set in payload; only auto-detect if not present
-                        detected_language = payload.get("language")
-                        if detected_language:
-                            logger.info(f"[PIPELINE] Job {job_id} using explicit language from payload: {detected_language}")
-                        else:
-                            # Detect project language
-                            detected_language = _detect_project_language(code_path)
-                            logger.info(f"[PIPELINE] Job {job_id} detected language: {detected_language}")
                         
                         # Get file patterns for the detected language
                         file_patterns = LANGUAGE_FILE_EXTENSIONS.get(detected_language, ["*.py"])
@@ -4910,6 +4917,7 @@ class OmniCoreService:
                         "include_ci_cd": True,
                         "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                         "generated_files": codegen_result.get("file_names", []),  # FIX 1: Pass file list
+                        "language": detected_language,  # FIX Issue A: Propagate detected language
                     }
                     logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm) with {len(deploy_payload.get('generated_files', []))} files")
                     
@@ -4991,6 +4999,7 @@ class OmniCoreService:
                         "doc_type": "readme",  # FIX Issue 3: Generate README instead of API docs
                         "format": "markdown",
                         "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
+                        "language": detected_language,  # FIX Issue A: Propagate detected language
                     }
                     logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
                     docgen_result = await self._run_docgen(job_id, docgen_payload)
@@ -5104,6 +5113,7 @@ class OmniCoreService:
                     "stages_completed": stages_completed,
                     "stages_failed": stages_failed,
                     "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
+                    "language": detected_language,  # FIX Issue A: Propagate detected language
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
                 critique_result = await self._run_critique(job_id, critique_payload)

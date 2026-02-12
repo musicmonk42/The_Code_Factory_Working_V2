@@ -214,10 +214,91 @@ PROMPT_ERRORS = get_or_create_counter(
 CHARS_PER_TOKEN_ESTIMATE = 4
 
 # ==============================================================================
+# --- Language-Aware README Checklist ---
+# ==============================================================================
+
+def get_readme_checklist(target_language: str = "python") -> str:
+    """
+    Generate language-specific README validation checklist.
+    
+    Args:
+        target_language: Target programming language (default: "python")
+        
+    Returns:
+        str: Language-specific README checklist items
+    """
+    language = target_language.lower()
+    
+    if language == "python":
+        return """   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with venv and pip install commands
+   - [ ] README has Run section with uvicorn command using ACTUAL service name
+   - [ ] README has Test section with pytest command
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree"""
+    
+    elif language in ("typescript", "javascript"):
+        return """   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with npm install commands
+   - [ ] README has Run section with npm run dev or npm start command using ACTUAL service name
+   - [ ] README has Test section with npm test or jest command
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree"""
+    
+    elif language == "go":
+        return """   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with go mod download command
+   - [ ] README has Run section with go run command using ACTUAL service name
+   - [ ] README has Test section with go test command
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree"""
+    
+    elif language == "java":
+        return """   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with mvn install or gradle build commands
+   - [ ] README has Run section with java -jar command or mvn/gradle run using ACTUAL service name
+   - [ ] README has Test section with mvn test or gradle test command
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree"""
+    
+    else:
+        # Generic checklist for other languages
+        return """   ⚠️ CRITICAL VALIDATION CHECKLIST:
+   - [ ] README has a title with project name
+   - [ ] README has a description of what the service does
+   - [ ] README has Setup section with installation/setup commands
+   - [ ] README has Run section with command to start the service
+   - [ ] README has Test section with command to run tests
+   - [ ] README has API Endpoints section with curl examples for ALL endpoints
+   - [ ] README has Project Structure section with actual directory tree"""
+
+# ==============================================================================
 # --- Syntax Safety Instructions ---
 # ==============================================================================
 
-SYNTAX_SAFETY_INSTRUCTIONS = """
+def get_syntax_safety_instructions(target_language: str = "python") -> str:
+    """
+    Generate language-aware syntax safety instructions for code generation.
+    
+    Args:
+        target_language: Target programming language (default: "python")
+        
+    Returns:
+        str: Language-specific syntax safety instructions including README checklist
+    """
+    # Get language-specific README checklist
+    readme_checklist = get_readme_checklist(target_language)
+    
+    # Build the instructions string with the language-specific checklist
+    return """
 CRITICAL SYNTAX REQUIREMENTS:
 
 You MUST ensure all generated code has valid syntax before responding.
@@ -238,7 +319,7 @@ The following are MANDATORY checks:
    - Every with statement MUST end with a colon (:)
 
 3. BRACKETS AND PARENTHESES:
-   - Check for unclosed brackets [], parentheses (), and braces {}
+   - Check for unclosed brackets [], parentheses (), and braces {{}}
    - Every opening bracket must have a matching closing bracket
    - Verify all function calls have matching parentheses
 
@@ -274,57 +355,57 @@ The following are MANDATORY checks:
    6. Project Structure section showing the actual file tree
    
    ```markdown
-   # {Project Name}
+   # {{Project Name}}
    
-   {Brief description of what the service does}
+   {{Brief description of what the service does}}
    
    ## Setup
    
-   \```bash
-   cd generated/{service_name}
+   \\```bash
+   cd generated/{{service_name}}
    python -m venv venv
-   source venv/bin/activate  # On Windows: venv\\Scripts\\activate
+   source venv/bin/activate  # On Windows: venv\\\\Scripts\\\\activate
    pip install -r requirements.txt
-   \```
+   \\```
    
    ## Run
    
-   \```bash
+   \\```bash
    uvicorn app.main:app --host 0.0.0.0 --port 8000
-   \```
+   \\```
    
    ## Test
    
-   \```bash
+   \\```bash
    pytest tests/ -v
-   \```
+   \\```
    
    ## API Endpoints
    
    ### Health Check
-   \```bash
+   \\```bash
    curl http://localhost:8000/health
-   # Response: {"ok": true}
-   \```
+   # Response: {{"ok": true}}
+   \\```
    
    ### Version
-   \```bash
+   \\```bash
    curl http://localhost:8000/version
-   # Response: {"name": "{service_name}", "version": "0.1.0"}
-   \```
+   # Response: {{"name": "{{service_name}}", "version": "0.1.0"}}
+   \\```
    
-   ### {Each Additional Endpoint}
-   \```bash
-   curl -X POST http://localhost:8000/{endpoint} \\
-     -H "Content-Type: application/json" \\
-     -d '{example payload}'
-   # Response: {example response}
-   \```
+   ### {{Each Additional Endpoint}}
+   \\```bash
+   curl -X POST http://localhost:8000/{{endpoint}} \\\\
+     -H "Content-Type: application/json" \\\\
+     -d '{{example payload}}'
+   # Response: {{example response}}
+   \\```
    
    ## Project Structure
    
-   \```
-   {service_name}/
+   \\```
+   {{service_name}}/
    ├── app/
    │   ├── main.py       # FastAPI app with middleware
    │   ├── routes.py     # API endpoints
@@ -332,20 +413,13 @@ The following are MANDATORY checks:
    ├── tests/
    │   ├── test_health.py
    │   ├── test_version.py
-   │   └── test_{endpoint}.py
+   │   └── test_{{endpoint}}.py
    ├── requirements.txt
    └── README.md
-   \```
+   \\```
    ```
    
-   ⚠️ CRITICAL VALIDATION CHECKLIST:
-   - [ ] README has a title with project name
-   - [ ] README has a description of what the service does
-   - [ ] README has Setup section with venv and pip install commands
-   - [ ] README has Run section with uvicorn command using ACTUAL service name
-   - [ ] README has Test section with pytest command
-   - [ ] README has API Endpoints section with curl examples for ALL endpoints
-   - [ ] README has Project Structure section with actual directory tree
+""" + readme_checklist + """
    
    DO NOT generate placeholder READMEs with missing sections.
    DO NOT use "TODO" or "..." placeholders in README sections.
@@ -375,7 +449,7 @@ The following are MANDATORY checks:
      * @router.post('/echo', response_model=dict)
      * async def echo_message(request: EchoRequest):
      *     # Pydantic already validated and trimmed - just use the value
-     *     return {'echo': request.message}
+     *     return {{'echo': request.message}}
    
    WRONG Pattern (DO NOT USE):
    - ❌ app/routes.py - Manual validation (WRONG):
@@ -384,7 +458,7 @@ The following are MANDATORY checks:
      *     message = request.message.strip()  # ❌ Manual trim
      *     if not message or len(message) > 500:  # ❌ Manual validation
      *         raise HTTPException(status_code=400, detail='Invalid')
-     *     return {'echo': message}
+     *     return {{'echo': message}}
    
    Validation Rules:
    - Use `@validator('field_name')` decorators for all validation logic
@@ -1080,7 +1154,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 state_summary=state_summary,
                 previous_feedback=previous_feedback,
                 previous_error_context=error_context,
-                syntax_safety_instructions=SYNTAX_SAFETY_INSTRUCTIONS,
+                syntax_safety_instructions=get_syntax_safety_instructions(target_language),
                 rag_context=rag_context,
                 best_practices=best_practices,
                 image_descriptions=image_desc,
@@ -1133,7 +1207,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
 
             # 8. Prepend Syntax Safety Instructions
             # These are CRITICAL to reduce syntax errors from LLM generation
-            prompt = SYNTAX_SAFETY_INSTRUCTIONS + "\n\n" + prompt
+            prompt = get_syntax_safety_instructions(target_language) + "\n\n" + prompt
 
             if error_context:
                 # If this is a retry, add error context prominently at the start
