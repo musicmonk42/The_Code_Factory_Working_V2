@@ -845,15 +845,15 @@ The load test script (`loadtest.js`) tests these endpoints:
 The test uses staged ramp-up with configurable maximum virtual users (VUs):
 
 1. **Warm-up**: 0 → 10% of MAX_VUS over 30 seconds
-2. **Sustain**: Hold at 10% for 1 minute
+2. **Sustain**: Hold at 10% for 30 seconds
 3. **Scale**: 10% → 50% of MAX_VUS over 1 minute
 4. **Sustain**: Hold at 50% for 2 minutes
 5. **Scale**: 50% → 100% of MAX_VUS over 1 minute
-6. **Peak**: Hold at 100% (MAX_VUS) for 2 minutes
+6. **Peak**: Hold at 100% (MAX_VUS) for 1.5 minutes
 7. **Ramp-down**: 100% → 0 VUs over 30 seconds
 
 **Default MAX_VUS**: 100 (can be customized via `-e MAX_VUS=N`)  
-**Total duration**: ~8 minutes
+**Total duration**: ~7 minutes
 
 #### Thresholds
 
