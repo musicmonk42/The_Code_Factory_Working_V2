@@ -58,18 +58,28 @@ try:
 except ImportError:
     # Fallback: define safe no-op / passthrough implementations so that
     # runner_file_utils remains importable in constrained/dev/test envs.
-    def encrypt_data(
+    async def encrypt_data(
         data: Union[str, bytes], key: Optional[bytes] = None, algorithm: str = "aes_gcm"
     ) -> Union[str, bytes]:
         # If the key or data is missing, we must raise a TypeError to trigger the fallback logic in save_file_content
         if key is None or data is None:
             raise TypeError("Encryption failed: key or data missing.")
-        # Simplified passthrough for fallback, assumes key and algorithm are handled by caller for correctness
+        # Use Fernet for actual encryption when algorithm is fernet
+        if algorithm == "fernet":
+            f = Fernet(key)
+            data_bytes = data.encode("utf-8") if isinstance(data, str) else data
+            return f.encrypt(data_bytes)
+        # For other algorithms, use a simplified passthrough (for test environments)
         return b"ENCRYPTED:" + (data.encode("utf-8") if isinstance(data, str) else data)
 
-    def decrypt_data(
+    async def decrypt_data(
         data: Union[str, bytes], key: Optional[bytes] = None, algorithm: str = "aes_gcm"
     ) -> Union[str, bytes]:
+        # Use Fernet for actual decryption when algorithm is fernet
+        if algorithm == "fernet" and key is not None:
+            f = Fernet(key)
+            data_bytes = data if isinstance(data, bytes) else data.encode("utf-8")
+            return f.decrypt(data_bytes).decode("utf-8")
         return data
 
     # [FIX] Fallback for redact_secrets is now synchronous
@@ -138,12 +148,18 @@ except ImportError:
 
         def decorator(func):
             import functools
+            import asyncio
 
-            @functools.wraps(func)
-            def wrapped(*args, **kwargs):
-                return func(*args, **kwargs)
-
-            return wrapped
+            if asyncio.iscoroutinefunction(func):
+                @functools.wraps(func)
+                async def async_wrapped(*args, **kwargs):
+                    return await func(*args, **kwargs)
+                return async_wrapped
+            else:
+                @functools.wraps(func)
+                def wrapped(*args, **kwargs):
+                    return func(*args, **kwargs)
+                return wrapped
 
         return decorator
 
