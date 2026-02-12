@@ -302,10 +302,18 @@ async def _trigger_pipeline_background(
         stages_completed = result.get("stages_completed", []) if result else []
 
         # Distinguish between CRITICAL and AUXILIARY stages
-        # CRITICAL stages: codegen (always), testgen (if tests requested)
+        # CRITICAL stages: codegen (always), testgen (if tests requested AND not intentionally skipped)
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
         critical_stages = ["codegen"]  # codegen is always critical
-        if include_tests:
+        
+        # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped
+        # Check if testgen was skipped for non-Python projects
+        testgen_was_skipped = any("testgen:skipped" in s for s in stages_completed)
+        include_tests = True  # This function always requests tests (see line 282)
+        include_deployment = True  # This function always requests deployment (see line 283)
+        include_docs = True  # This function always requests docs (see line 284)
+        run_critique = True  # This function always requests critique (see line 285)
+        if include_tests and not testgen_was_skipped:
             critical_stages.append("testgen")
         
         auxiliary_stages = []
@@ -499,12 +507,16 @@ async def _resume_pipeline_after_clarification(
         stages_completed = result.get("stages_completed", []) if result else []
 
         # Distinguish between CRITICAL and AUXILIARY stages
-        # CRITICAL stages: codegen (always), testgen (if tests requested)
+        # CRITICAL stages: codegen (always), testgen (if tests requested AND not intentionally skipped)
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
         critical_stages = ["codegen"]  # codegen is always critical
+        
+        # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped
         # In clarification flow, all stages are always requested (see lines 400-403)
-        # Therefore, testgen is always a critical stage in this flow
-        critical_stages.append("testgen")
+        # Check if testgen was skipped for non-Python projects
+        testgen_was_skipped = any("testgen:skipped" in s for s in stages_completed)
+        if not testgen_was_skipped:
+            critical_stages.append("testgen")
         
         # In clarification flow, all auxiliary stages are always requested (see lines 400-403)
         auxiliary_stages = ["deploy", "docgen", "critique"]
