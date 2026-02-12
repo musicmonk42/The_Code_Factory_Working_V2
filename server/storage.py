@@ -64,12 +64,14 @@ def add_job(job: Job) -> None:
                 f"Evicted {evicted_count} completed jobs from jobs_db "
                 f"(limit: {MAX_JOBS}, current: {len(jobs_db)})"
             )
-        elif len(jobs_db) > MAX_JOBS:
-            # If we still exceed the limit, log a warning
-            # This means too many active jobs
+        else:
+            # If no jobs were evicted, it means all jobs are active
+            # This could indicate a need to increase MAX_JOBS
+            active_count = len([j for j in jobs_db.values() if j.status in {JobStatus.PENDING, JobStatus.RUNNING}])
             logger.warning(
                 f"jobs_db exceeds limit ({len(jobs_db)} > {MAX_JOBS}) "
-                "but no completed jobs available to evict. Consider increasing MAX_JOBS."
+                f"with {active_count} active jobs. No completed jobs available to evict. "
+                "Consider increasing MAX_JOBS."
             )
 
 

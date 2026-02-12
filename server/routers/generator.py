@@ -159,9 +159,9 @@ async def _run_pipeline_with_semaphore(
             )
         
         async with _pipeline_semaphore:
+            # Log active pipeline count (approximate, since semaphore value decreases on acquire)
             logger.info(
-                f"[Pipeline] Starting pipeline for job {job_id} "
-                f"(active: {MAX_CONCURRENT_PIPELINES - _pipeline_semaphore._value})"
+                f"[Pipeline] Starting pipeline for job {job_id}"
             )
             await _trigger_pipeline_background(job_id, readme_content, generator_service)
     except Exception as e:

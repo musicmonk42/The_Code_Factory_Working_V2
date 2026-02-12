@@ -95,11 +95,13 @@ def main():
     # FIX: Default to 4 workers (not 1) to handle concurrent requests and prevent event loop saturation
     if args.workers is None:
         # Prefer WORKER_COUNT (K8s/Helm) over WEB_CONCURRENCY (Railway), fall back to 4
-        workers = int(
-            os.environ.get("WORKER_COUNT") or 
-            os.environ.get("WEB_CONCURRENCY") or 
-            "4"
-        )
+        # Use explicit checks to handle empty strings correctly
+        worker_count = os.environ.get("WORKER_COUNT")
+        if not worker_count:
+            worker_count = os.environ.get("WEB_CONCURRENCY")
+        if not worker_count:
+            worker_count = "4"
+        workers = int(worker_count)
     else:
         workers = args.workers
     
