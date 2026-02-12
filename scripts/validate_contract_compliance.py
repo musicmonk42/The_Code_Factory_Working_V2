@@ -22,8 +22,9 @@ from typing import Dict, List, Tuple
 class ContractValidator:
     """Validates generated code against contract requirements."""
     
-    def __init__(self, output_dir: Path):
+    def __init__(self, output_dir: Path, language: str = "python"):
         self.output_dir = output_dir
+        self.language = language.lower()
         self.errors: List[str] = []
         self.warnings: List[str] = []
     
@@ -140,15 +141,44 @@ class ContractValidator:
         
         readme_content = readme_path.read_text()
         
-        # Required sections
-        required_sections = [
-            ("## Setup", "Setup section with installation instructions"),
-            ("## Run", "Run section with uvicorn command"),
-            ("## Test", "Test section with pytest command"),
-            ("## API Endpoints", "API Endpoints section"),
-            ("## Project Structure", "Project Structure section"),
-            ("curl", "curl examples for testing endpoints"),
-        ]
+        # Language-specific required sections
+        if self.language in ("typescript", "javascript"):
+            required_sections = [
+                ("## Setup", "Setup section with installation instructions"),
+                ("## Run", "Run section with npm run command"),
+                ("## Test", "Test section with npm test or jest command"),
+                ("## API Endpoints", "API Endpoints section"),
+                ("## Project Structure", "Project Structure section"),
+                ("curl", "curl examples for testing endpoints"),
+            ]
+        elif self.language == "go":
+            required_sections = [
+                ("## Setup", "Setup section with installation instructions"),
+                ("## Run", "Run section with go run command"),
+                ("## Test", "Test section with go test command"),
+                ("## API Endpoints", "API Endpoints section"),
+                ("## Project Structure", "Project Structure section"),
+                ("curl", "curl examples for testing endpoints"),
+            ]
+        elif self.language == "java":
+            required_sections = [
+                ("## Setup", "Setup section with installation instructions"),
+                ("## Run", "Run section with java -jar or mvn/gradle run command"),
+                ("## Test", "Test section with mvn test or gradle test command"),
+                ("## API Endpoints", "API Endpoints section"),
+                ("## Project Structure", "Project Structure section"),
+                ("curl", "curl examples for testing endpoints"),
+            ]
+        else:
+            # Python (default)
+            required_sections = [
+                ("## Setup", "Setup section with installation instructions"),
+                ("## Run", "Run section with uvicorn command"),
+                ("## Test", "Test section with pytest command"),
+                ("## API Endpoints", "API Endpoints section"),
+                ("## Project Structure", "Project Structure section"),
+                ("curl", "curl examples for testing endpoints"),
+            ]
         
         for section, description in required_sections:
             if section not in readme_content:
@@ -337,6 +367,12 @@ def main():
         type=Path,
         help="Path to the generated output directory (e.g., ./uploads/job-123/generated/hello_generator)",
     )
+    parser.add_argument(
+        "--language",
+        type=str,
+        default="python",
+        help="Programming language of the generated code (default: python)",
+    )
     
     args = parser.parse_args()
     
@@ -344,7 +380,7 @@ def main():
         print(f"❌ Error: Output directory does not exist: {args.output_dir}")
         sys.exit(1)
     
-    validator = ContractValidator(args.output_dir)
+    validator = ContractValidator(args.output_dir, language=args.language)
     success = validator.validate_all()
     
     sys.exit(0 if success else 1)

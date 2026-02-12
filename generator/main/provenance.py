@@ -712,6 +712,20 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
             "pytest": ["pytest", "python -m pytest"],
             "curl": ["curl"],
         }
+    elif language.lower() == "go":
+        required_commands = {
+            "download": ["go mod download", "go get"],
+            "run": ["go run", "go build"],
+            "test": ["go test"],
+            "curl": ["curl"],
+        }
+    elif language.lower() == "java":
+        required_commands = {
+            "install": ["mvn install", "gradle build", "mvn clean install"],
+            "run": ["java -jar", "mvn spring-boot:run", "gradle run", "mvn exec:java"],
+            "test": ["mvn test", "gradle test"],
+            "curl": ["curl"],
+        }
     else:
         # Generic: just check for install and test commands
         required_commands = {
