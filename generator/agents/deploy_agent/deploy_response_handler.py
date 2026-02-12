@@ -59,6 +59,7 @@ from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (  # For YAML preservation (ruamel.yaml is generally better than pyyaml for round-tripping)
     YAML,
 )
+from ruamel.yaml.composer import ComposerError  # For detecting multi-document YAML
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -1882,11 +1883,10 @@ class KubernetesHandler(FormatHandler):
             if not found_yaml_start:
                 if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
                     found_yaml_start = True
-                elif re.match(r'^\s*\d+\.\s+\*\*', line):
-                    # Skip numbered lists before YAML starts
-                    continue
-                elif re.match(r'^\s*#\s+[A-Za-z]', line):
-                    # Skip markdown headers before YAML starts
+                    # Don't skip this line, it's the start of YAML
+                else:
+                    # Skip ALL non-YAML lines before YAML starts
+                    # This includes prose, markdown, explanations, etc.
                     continue
             
             # Skip lines that start with markdown headers (# or ## or ### etc. followed by space and any letter)
@@ -2029,28 +2029,97 @@ class HelmHandler(FormatHandler):
                 # Parse structured response
                 return self._parse_structured_helm(raw)
             else:
-                # Single YAML - treat as Chart.yaml
-                data = ru_yaml.load(raw)
-                if not isinstance(data, dict):
-                    raise ValueError("Helm chart content must be a dictionary")
-                
-                # Check if it's a Chart.yaml or values.yaml based on content
-                if "apiVersion" in data and "name" in data and "version" in data:
-                    # This is a Chart.yaml
-                    return {
-                        "Chart.yaml": data,
-                        "values.yaml": {},
-                        "templates": {}
-                    }
-                else:
-                    # Assume it's values.yaml
-                    return {
-                        "Chart.yaml": self._default_chart_yaml(),
-                        "values.yaml": data,
-                        "templates": {}
-                    }
+                # Try single YAML first, fallback to multi-document YAML
+                try:
+                    data = ru_yaml.load(raw)
+                    if not isinstance(data, dict):
+                        raise ValueError("Helm chart content must be a dictionary")
+                    
+                    # Check if it's a Chart.yaml or values.yaml based on content
+                    if "apiVersion" in data and "name" in data and "version" in data:
+                        # This is a Chart.yaml
+                        return {
+                            "Chart.yaml": data,
+                            "values.yaml": {},
+                            "templates": {}
+                        }
+                    else:
+                        # Assume it's values.yaml
+                        return {
+                            "Chart.yaml": self._default_chart_yaml(),
+                            "values.yaml": data,
+                            "templates": {}
+                        }
+                except ComposerError:
+                    # Multi-document YAML detected - use load_all()
+                    logger.info("Multi-document YAML detected in Helm response, using load_all()")
+                    return self._parse_multi_document_helm(raw, ru_yaml)
         except Exception as e:
             raise ValueError(f"Failed to parse Helm chart content: {e}")
+
+    def _parse_multi_document_helm(self, raw: str, ru_yaml: YAML) -> Dict[str, Any]:
+        """
+        Parse multi-document YAML for Helm charts.
+        
+        Args:
+            raw: Raw YAML string with multiple documents
+            ru_yaml: YAML parser instance
+            
+        Returns:
+            Dict with Chart.yaml, values.yaml, and templates
+        """
+        result = {
+            "Chart.yaml": None,
+            "values.yaml": {},
+            "templates": {}
+        }
+        
+        documents = []
+        try:
+            doc_generator = ru_yaml.load_all(raw)
+            for doc in doc_generator:
+                if doc is not None and isinstance(doc, dict):
+                    documents.append(doc)
+        except Exception as e:
+            logger.error(f"Failed to parse multi-document Helm YAML: {e}")
+            raise ValueError(f"Failed to parse multi-document YAML: {e}")
+        
+        # Process documents:
+        # - First document with apiVersion/name/version -> Chart.yaml
+        # - Other documents -> values.yaml or templates based on content
+        for idx, doc in enumerate(documents):
+            if result["Chart.yaml"] is None:
+                # Check if this is Chart.yaml
+                if "apiVersion" in doc and "name" in doc and "version" in doc:
+                    result["Chart.yaml"] = doc
+                    continue
+            
+            # Check if this looks like a K8s resource (template)
+            if "apiVersion" in doc and "kind" in doc:
+                # This is a template resource
+                kind = doc.get("kind", "resource").lower()
+                name = doc.get("metadata", {}).get("name", f"template-{idx}")
+                template_name = f"{kind}-{name}.yaml"
+                # Store as YAML string in templates
+                from io import StringIO
+                string_stream = StringIO()
+                temp_yaml = YAML()
+                temp_yaml.dump(doc, string_stream)
+                result["templates"][f"templates/{template_name}"] = string_stream.getvalue()
+            else:
+                # Assume it's values.yaml content
+                # Merge with existing values
+                if result["values.yaml"]:
+                    result["values.yaml"].update(doc)
+                else:
+                    result["values.yaml"] = doc
+        
+        # Ensure Chart.yaml exists
+        if result["Chart.yaml"] is None:
+            result["Chart.yaml"] = self._default_chart_yaml()
+        
+        return result
+
 
     def _sanitize_yaml_response(self, raw: str) -> str:
         """
