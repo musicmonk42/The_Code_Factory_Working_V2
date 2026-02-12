@@ -87,6 +87,10 @@ jobs:
             requirements.txt
             .github/constraints.txt
           
+      - name: Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+          
       - name: Free disk space
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
@@ -347,14 +351,32 @@ jobs:
       - name: Verify omnicore_engine package structure
         run: |
           echo "=== Verifying omnicore_engine package structure ==="
+          echo "PYTHONPATH: $PYTHONPATH"
+          echo "Workspace: ${{ github.workspace }}"
+          
+          # Ensure PYTHONPATH is set
+          export PYTHONPATH="${{ github.workspace }}:${PYTHONPATH}"
+          
+          # Verify directory structure
+          echo "=== Checking workspace structure ==="
+          ls -la omnicore_engine/ || {
+            echo "ERROR: omnicore_engine directory not found"
+            exit 1
+          }
+          
+          test -f omnicore_engine/__init__.py && echo "✓ omnicore_engine/__init__.py exists" || {
+            echo "ERROR: omnicore_engine/__init__.py missing"
+            exit 1
+          }
           
           # Test 1: Can we import the package?
           echo "Test 1: Importing omnicore_engine package..."
           python -c "import omnicore_engine; print(f'✓ omnicore_engine location: {omnicore_engine.__file__}')" || {
             echo "❌ FAILED: Cannot import omnicore_engine package"
-            echo "This indicates the package is not properly installed or has import-time errors"
-            pip show omnicore_engine
-            ls -la omnicore_engine/ || true
+            echo "Checking sys.path..."
+            python -c "import sys; print('sys.path:', sys.path)"
+            echo "Checking pip installation..."
+            pip show code-factory || echo "code-factory package not found"
             exit 1
           }
           
@@ -362,8 +384,6 @@ jobs:
           echo "Test 2: Importing plugin_registry module..."
           python -c "from omnicore_engine import plugin_registry; print('✓ plugin_registry import OK')" || {
             echo "❌ FAILED: Cannot import plugin_registry from omnicore_engine"
-            echo "This indicates PEP 562 lazy loading is broken or plugin_registry.py has errors"
-            python -c "import sys; import omnicore_engine; print('omnicore_engine.__dict__:', dir(omnicore_engine))"
             exit 1
           }
           
@@ -371,8 +391,6 @@ jobs:
           echo "Test 3: Accessing PLUGIN_REGISTRY singleton..."
           python -c "from omnicore_engine.plugin_registry import PLUGIN_REGISTRY; print(f'✓ PLUGIN_REGISTRY type: {type(PLUGIN_REGISTRY).__name__}')" || {
             echo "❌ FAILED: Cannot import PLUGIN_REGISTRY from plugin_registry module"
-            echo "This indicates plugin_registry.py has initialization errors"
-            python -m py_compile omnicore_engine/plugin_registry.py 2>&1 || echo "Syntax error detected"
             exit 1
           }
           
@@ -385,7 +403,7 @@ jobs:
           
           echo "✅ All import patterns verified successfully"
           
-          # Verify other critical modules (warnings only for optional modules)
+          # Verify other critical modules (warnings only)
           echo "=== Verifying meta_supervisor import ==="
           python -c "from omnicore_engine import meta_supervisor; print('✓ meta_supervisor import OK')" || echo "WARNING: meta_supervisor module not found (may be optional)"
           
