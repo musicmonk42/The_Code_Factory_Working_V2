@@ -2087,6 +2087,10 @@ class HelmHandler(FormatHandler):
         # Process documents:
         # - First document with apiVersion/name/version -> Chart.yaml
         # - Other documents -> values.yaml or templates based on content
+        # Create YAML serializer once for efficiency
+        from io import StringIO
+        temp_yaml = YAML()
+        
         for idx, doc in enumerate(documents):
             if result["Chart.yaml"] is None:
                 # Check if this is Chart.yaml
@@ -2100,10 +2104,8 @@ class HelmHandler(FormatHandler):
                 kind = doc.get("kind", "resource").lower()
                 name = doc.get("metadata", {}).get("name", f"template-{idx}")
                 template_name = f"{kind}-{name}.yaml"
-                # Store as YAML string in templates
-                from io import StringIO
+                # Store as YAML string in templates (reusing temp_yaml instance)
                 string_stream = StringIO()
-                temp_yaml = YAML()
                 temp_yaml.dump(doc, string_stream)
                 result["templates"][f"templates/{template_name}"] = string_stream.getvalue()
             else:

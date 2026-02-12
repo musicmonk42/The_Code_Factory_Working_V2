@@ -1802,28 +1802,60 @@ async def validate_generated_project(
         
         # Additional validation: Check for common missing imports (e.g., Request in FastAPI)
         # This catches cases where type hints reference undefined names
+        # Uses AST parsing for reliable detection
         for py_file in python_files:
             try:
                 content = py_file.read_text(encoding="utf-8")
                 rel_path = str(py_file.relative_to(output_dir))
                 
-                # Check for Request type hint without import
-                if "request: Request" in content or "Request," in content or "Request)" in content:
-                    # Check if Request is imported
-                    if "from fastapi import" not in content or \
-                       ("from fastapi import" in content and "Request" not in content.split("from fastapi import")[1].split("\n")[0]):
-                        result["errors"].append(
-                            f"{rel_path} uses 'Request' type hint but does not import it from fastapi. "
-                            f"Add: from fastapi import Request"
-                        )
-                        result["valid"] = False
+                # Parse the AST to detect imports and names
+                try:
+                    tree = ast.parse(content)
+                except SyntaxError:
+                    # Already caught in syntax validation above
+                    continue
                 
-                # Check for time usage without import
-                if ("time.time()" in content or "time.perf_counter()" in content) and "import time" not in content:
+                # Track imported names
+                imported_names = set()
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        for alias in node.names:
+                            imported_names.add(alias.asname if alias.asname else alias.name)
+                    elif isinstance(node, ast.ImportFrom):
+                        for alias in node.names:
+                            imported_names.add(alias.asname if alias.asname else alias.name)
+                
+                # Check for Request type hint usage
+                has_request_typehint = False
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        for arg in node.args.args:
+                            if arg.annotation and isinstance(arg.annotation, ast.Name):
+                                if arg.annotation.id == "Request":
+                                    has_request_typehint = True
+                                    break
+                
+                if has_request_typehint and "Request" not in imported_names:
+                    result["errors"].append(
+                        f"{rel_path} uses 'Request' type hint but does not import it from fastapi. "
+                        f"Add: from fastapi import Request"
+                    )
+                    result["valid"] = False
+                
+                # Check for time module usage
+                has_time_usage = False
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Attribute):
+                        if isinstance(node.value, ast.Name) and node.value.id == "time":
+                            has_time_usage = True
+                            break
+                
+                if has_time_usage and "time" not in imported_names:
                     result["errors"].append(
                         f"{rel_path} uses 'time' module but does not import it. Add: import time"
                     )
                     result["valid"] = False
+                    
             except Exception as e:
                 result["warnings"].append(f"Could not check imports in {py_file.name}: {e}")
     
