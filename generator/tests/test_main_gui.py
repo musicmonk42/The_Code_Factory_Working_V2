@@ -20,6 +20,13 @@ os.environ["TESTING"] = "true"
 os.environ["GENERATOR_API_KEY"] = "test-api-key"
 os.environ["GENERATOR_API_BASE_URL"] = "http://localhost:8000/api/v1"
 
+# Check if Textual run_test is available
+try:
+    from textual.app import App
+    HAS_RUN_TEST = hasattr(App, 'run_test')
+except ImportError:
+    HAS_RUN_TEST = False
+
 
 # Module-level mocking moved to fixture to avoid expensive operations during pytest collection
 @pytest.fixture(scope="session", autouse=True)
@@ -146,6 +153,7 @@ class TestTuiLogHandler:
         await asyncio.sleep(0.01)  # Final sleep to let everything settle
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestMainAppInitialization:
     """Tests for MainApp initialization."""
 
@@ -187,6 +195,7 @@ class TestMainAppInitialization:
             assert len(app.CSS) > 0
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestMainAppCompose:
     """Tests for MainApp compose method."""
 
@@ -204,6 +213,7 @@ class TestMainAppCompose:
             assert pilot.app.query_one("#runner_progress") is not None
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestAPIInteraction:
     """Tests for API interaction methods."""
 
@@ -302,6 +312,7 @@ class TestAPIInteraction:
                 await app_instance._make_api_request("GET", "http://test.com/api")
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestRunnerTab:
     """Tests for Runner tab functionality."""
 
@@ -349,6 +360,7 @@ class TestRunnerTab:
             assert "[red]Invalid JSON payload" in call_args or mock_set_error.called
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestParserTab:
     """Tests for Intent Parser tab functionality."""
 
@@ -435,6 +447,7 @@ class TestParserTab:
             assert "files" in call_kwargs, "API should be called with 'files' parameter for file upload"
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestClarifierTab:
     """Tests for Clarifier tab functionality."""
 
@@ -475,6 +488,7 @@ class TestClarifierTab:
             mock_api.assert_called_once_with("POST", api_url, json_data={"rating": 1.0})
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestMetricsTab:
     """Tests for Metrics tab functionality."""
 
@@ -568,6 +582,7 @@ class TestMetricsTab:
             mock_success.assert_called_once()
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestConfigReload:
     """Tests for configuration reload functionality."""
 
@@ -623,6 +638,7 @@ class TestConfigReload:
             mock_trigger.assert_called_once()
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestKeyBindings:
     # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
@@ -684,6 +700,7 @@ class TestKeyBindings:
             mock_push.assert_called_once()
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestHelpScreen:
     """Tests for Help screen."""
 
@@ -709,6 +726,7 @@ class TestHelpScreen:
             assert len(widgets) > 2
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestErrorHandling:
     """Tests for error handling in GUI."""
 
@@ -747,6 +765,7 @@ class TestErrorHandling:
                 await app_instance._make_api_request("GET", "http://test.com/api")
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestConfigWatchers:
     """Tests for configuration watchers."""
 
@@ -845,6 +864,7 @@ class TestUIMessageHelpers:
         widget.update.assert_called_once()
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestIntegrationWithAPI:
     @pytest.mark.asyncio
     async def test_full_runner_workflow(self, mock_dependencies):

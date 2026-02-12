@@ -339,6 +339,7 @@ class TestConfigurationGeneration:
             to_format="docker",
             repo_path=str(agent.repo_path),
             run_id=agent.run_id,
+            skip_presidio=True,
         )
 
     @pytest.mark.asyncio

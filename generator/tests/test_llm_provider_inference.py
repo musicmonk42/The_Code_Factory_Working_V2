@@ -87,6 +87,9 @@ async def initialized_client(mock_client_setup):
         redis_url="redis://localhost:6379/0",
         llm_provider="openai",
         default_llm_model="gpt-4",
+        backend="local",
+        framework="pytest",
+        instance_id="test-provider-inference",
     )
     client = LLMClient(config)
     # Wait for initialization

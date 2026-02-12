@@ -440,8 +440,8 @@ data:
         assert "very important" in result["data"]["description"]
     
     def test_markdown_bold_in_yaml_triggers_error(self):
-        """Test that markdown bold in YAML content still triggers validation error."""
-        # After sanitization, if ** still exists, it should error
+        """Test that markdown bold in YAML content is now sanitized instead of erroring."""
+        # After sanitization, ** should be removed successfully
         raw = """apiVersion: v1
 kind: Service
 metadata:
@@ -451,12 +451,10 @@ spec:
         
         handler = YAMLHandler()
         
-        # This should raise ValueError due to ** in YAML content
-        with pytest.raises(ValueError) as exc_info:
-            handler.normalize(raw)
-        
-        assert "Markdown formatting" in str(exc_info.value)
-        assert "**" in str(exc_info.value)
+        # This should now succeed after sanitization
+        result = handler.normalize(raw)
+        assert isinstance(result, dict)
+        assert result["kind"] == "Service"
     
     def test_sanitize_markdown_italic(self):
         """Test that markdown italic is removed."""

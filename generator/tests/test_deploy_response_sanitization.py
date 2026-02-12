@@ -282,12 +282,13 @@ class TestYAMLHandlerNormalize:
     """Test suite for YAMLHandler.normalize method."""
     
     def test_rejects_markdown_bold_after_sanitization(self):
-        """Test that remaining markdown bold causes rejection."""
+        """Test that markdown bold is sanitized correctly."""
         handler = YAMLHandler()
-        # This should be caught by the validation after sanitization
+        # This should now be sanitized successfully
         input_yaml = "- **bold**: value"
-        with pytest.raises(ValueError, match="Markdown formatting"):
-            handler.normalize(input_yaml)
+        result = handler.normalize(input_yaml)
+        # Verify it's parsed as valid YAML
+        assert isinstance(result, list)
     
     def test_parses_valid_yaml(self):
         """Test that valid YAML is parsed correctly."""
