@@ -447,10 +447,11 @@ class TargetPlugin(ABC):
 
 
 class PluginRegistry(FileSystemEventHandler):
-    def __init__(self, plugin_dir: str = "./plugins") -> None:
+    def __init__(self, plugin_dir: str = "./plugins", register_callback: Optional[Callable[[str, TargetPlugin], None]] = None) -> None:
         super().__init__()
         self.plugins: Dict[str, TargetPlugin] = {}
         self.plugin_info: Dict[str, Dict[str, Any]] = {}
+        self.register_callback = register_callback  # FIX: Add callback for plugin registration
         
         # Resolve plugin_dir relative to the deploy_agent module directory
         # This ensures plugins are found regardless of working directory
@@ -548,6 +549,10 @@ class PluginRegistry(FileSystemEventHandler):
             getattr(plugin, "__version__", "N/A"),
             health,
         )
+        
+        # FIX: Call the callback if provided to add plugin to target_graph
+        if self.register_callback:
+            self.register_callback(target, plugin)
 
     def get_plugin(self, target: str) -> Optional[TargetPlugin]:
         return self.plugins.get(target)
@@ -599,9 +604,38 @@ class DeployAgent:
             "go",
             "java",
         ]
+        
+        # FIX: Initialize target_graph BEFORE PluginRegistry so it's available for plugins
+        # Target dependency graph
+        self.target_graph = nx.DiGraph()
+        self.target_graph.add_edges_from(
+            [
+                ("docker", "helm"),
+                ("helm", "terraform"),
+            ]
+        )
+        for t in [
+            "docs",
+            "docker",
+            "helm",
+            "terraform",
+            "k8s_manifests",
+            "kubernetes",  # FIX: Add kubernetes as alias/alternate name for k8s_manifests
+            "cloud_infra",
+        ]:
+            if t not in self.target_graph:
+                self.target_graph.add_node(t)
+        
         # --- FIX: Rename and add singleton registries ---
         # Initialize PluginRegistry with correct path (will resolve to generator/agents/deploy_agent/plugins)
-        self.plugin_registry = PluginRegistry(plugin_dir)  # Renamed
+        # Pass callback to automatically add plugins to target_graph
+        def _plugin_registration_callback(target: str, plugin: TargetPlugin) -> None:
+            """Callback to add plugin targets to the dependency graph."""
+            if target not in self.target_graph:
+                self.target_graph.add_node(target)
+                logger.info(f"Added plugin target '{target}' to dependency graph")
+        
+        self.plugin_registry = PluginRegistry(plugin_dir, register_callback=_plugin_registration_callback)  # Renamed
         self.validator_registry = ValidatorRegistry()
         self.handler_registry = HandlerRegistry()
         # -------------------------------------------------
@@ -668,25 +702,6 @@ class DeployAgent:
         self.slack_webhook = slack_webhook
         self.webhook_url = webhook_url
         self.sem = asyncio.Semaphore(rate_limit)
-
-        # Target dependency graph
-        self.target_graph = nx.DiGraph()
-        self.target_graph.add_edges_from(
-            [
-                ("docker", "helm"),
-                ("helm", "terraform"),
-            ]
-        )
-        for t in [
-            "docs",
-            "docker",
-            "helm",
-            "terraform",
-            "k8s_manifests",
-            "cloud_infra",
-        ]:
-            if t not in self.target_graph:
-                self.target_graph.add_node(t)
 
         # Hooks
         self.pre_gather_hooks: List[
