@@ -601,7 +601,7 @@ class DockerValidator(Validator):
                 report["valid"] = (
                     report["build_status"] in ("success", "skipped", "lint_warning") and
                     report["lint_status"] in ("success", "skipped", "warning") and
-                    len([i for i in report["lint_issues"] if "failed to build" in i.lower()]) == 0
+                    not any("failed to build" in i.lower() for i in report["lint_issues"])
                 )
 
             except FileNotFoundError as e:
