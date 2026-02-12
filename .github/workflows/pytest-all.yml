@@ -175,9 +175,6 @@ jobs:
             exit 1
           }
           
-          # Ensure PYTHONPATH includes the workspace for editable installs
-          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
-          
           # Verify all packages are installed and importable
           echo "=== Verifying package installations ==="
           

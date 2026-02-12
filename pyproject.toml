@@ -35,7 +35,6 @@ classifiers = [
 
 [tool.setuptools]
 packages = ["generator", "omnicore_engine", "self_fixing_engineer", "server"]
-py-modules = []
 
 [tool.pytest.ini_options]
 minversion = "7.4"
