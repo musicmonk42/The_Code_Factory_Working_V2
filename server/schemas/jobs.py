@@ -83,6 +83,8 @@ class Job(BaseModel):
     completed_at: Optional[datetime] = Field(
         None, description="Job completion timestamp"
     )
+    error: Optional[str] = Field(None, description="Error message if job failed")
+    result: Optional[Dict[str, Any]] = Field(None, description="Job result data")
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional job metadata"
     )

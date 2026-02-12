@@ -1163,11 +1163,13 @@ Respond in plain prose only (no JSON / no code fences).
                                 out_format = t if t != "docs" else "markdown"
                                 # --- FIX: Pass singleton handler_registry ---
                                 # FIX Issue 4: Skip Presidio on deployment configs
+                                # Determine proper to_format: kubernetes/helm should use "yaml"
+                                to_format = "yaml" if out_format in ("kubernetes", "helm") else out_format
                                 handled = await handle_deploy_response(
                                     raw_response=raw,
                                     handler_registry=self.handler_registry,
                                     output_format=out_format,
-                                    to_format=out_format,
+                                    to_format=to_format,
                                     repo_path=str(self.repo_path),
                                     run_id=self.run_id,
                                     skip_presidio=True,  # Skip PII scrubbing for deployment configs
@@ -1711,11 +1713,13 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             
                             # --- FIX: Pass singleton handler_registry ---
                             # FIX Issue 4: Skip Presidio on deployment configs
+                            # Determine proper to_format: kubernetes/helm should use "yaml"
+                            to_format = "yaml" if target in ("kubernetes", "helm") else target
                             handled = await handle_deploy_response(
                                 raw_response=raw,
                                 handler_registry=self.handler_registry,
                                 output_format=target,
-                                to_format=target,
+                                to_format=to_format,
                                 repo_path=str(self.repo_path),
                                 run_id=self.run_id,
                                 skip_presidio=True,  # Skip PII scrubbing for deployment configs
@@ -1741,6 +1745,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                                     f"using fallback template"
                                 )
                                 # Generate fallback config based on target type
+                                project_name = self.repo_path.name
                                 config_content = self._generate_fallback_config(target, project_name)
                                 if config_content:
                                     logger.info(
