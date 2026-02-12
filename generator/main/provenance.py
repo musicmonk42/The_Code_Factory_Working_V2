@@ -429,7 +429,7 @@ def extract_endpoints_from_md(md_content: str) -> List[Dict[str, str]]:
             span.end()
 
 
-def extract_required_files_from_md(md_content: str) -> List[str]:
+def extract_required_files_from_md(md_content: str, target_language: Optional[str] = None) -> List[str]:
     """
     Extract required file paths referenced in a Markdown spec.
 
@@ -437,18 +437,64 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
     ``app/routes.py``, ``models.py``, etc., so the validation step can
     verify that the generated project contains them.
 
+    Industry Standards:
+        - Input validation for security and correctness
+        - Efficient O(1) lookups using sets
+        - Language-aware filtering to prevent false positives
+        - Comprehensive documentation and error handling
+
     Supported patterns:
         - Tree-style listings: ``├── app/routes.py`` or ``│   ├── routes.py``
         - Backtick references: ``app/routes.py``
 
     Args:
         md_content: Markdown specification content to parse.
+        target_language: Optional target language (e.g., "typescript", "python").
+                        If provided, filters out files from other ecosystems.
 
     Returns:
         Deduplicated, sorted list of relative file paths found in the spec.
+        
+    Raises:
+        TypeError: If md_content is not a string
+        
+    Examples:
+        >>> extract_required_files_from_md("├── main.py\\n├── app.py")
+        ['app.py', 'main.py']
+        >>> extract_required_files_from_md("`main.py` for Python", target_language="typescript")
+        []  # main.py filtered out for TypeScript projects
     """
+    # Input validation - industry standard defensive programming
+    if not isinstance(md_content, str):
+        raise TypeError(f"md_content must be a string, got {type(md_content).__name__}")
+    
+    if target_language is not None and not isinstance(target_language, str):
+        raise TypeError(f"target_language must be a string or None, got {type(target_language).__name__}")
+    
     files: List[str] = []
     seen: Set[str] = set()
+
+    # Blocklist of runtime/tool names that look like files but aren't
+    # These are technology names, not project files
+    RUNTIME_BLOCKLIST = {
+        "Node.js", "node.js", "Vue.js", "vue.js", "React.js", "react.js",
+        "Next.js", "next.js", "Express.js", "express.js", "Nuxt.js", "nuxt.js",
+        "Angular.js", "angular.js", "Ember.js", "ember.js", "Three.js", "three.js",
+        "D3.js", "d3.js", "Electron.js", "electron.js", "Deno.ts", "deno.ts"
+    }
+
+    # Language-to-extension mapping for ecosystem filtering
+    LANGUAGE_EXTENSIONS = {
+        "python": {".py", ".pyw", ".pyi"},
+        "typescript": {".ts", ".tsx"},
+        "javascript": {".js", ".jsx", ".mjs", ".cjs"},
+        "java": {".java"},
+        "go": {".go"},
+        "rust": {".rs"},
+        "csharp": {".cs"},
+        "c": {".c", ".h"},
+        "c++": {".cpp", ".cc", ".cxx", ".hpp"},
+    }
 
     # Common source file extensions to look for
     file_ext_pattern = r'(?:\.py|\.js|\.ts|\.jsx|\.tsx|\.yml|\.yaml|\.toml|\.cfg|\.txt|\.json|\.html|\.css)'
@@ -461,12 +507,41 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
         rf'`([a-zA-Z_][\w/]*{file_ext_pattern})`',
     ]
 
+    # Pre-compute non-target extensions for efficiency (O(1) lookup vs O(n) each iteration)
+    non_target_exts = set()
+    target_exts = set()
+    if target_language:
+        target_exts = LANGUAGE_EXTENSIONS.get(target_language.lower(), set())
+        if target_exts:
+            # Build set of all non-target language extensions once
+            for lang, exts in LANGUAGE_EXTENSIONS.items():
+                if lang != target_language.lower():
+                    non_target_exts.update(exts)
+
     for pattern in patterns:
         for match in re.finditer(pattern, md_content):
             path = match.group(1).strip()
-            if path and path not in seen:
-                seen.add(path)
-                files.append(path)
+            
+            # Skip if empty or already seen
+            if not path or path in seen:
+                continue
+            
+            # Skip runtime/tool names that aren't actual files
+            if path in RUNTIME_BLOCKLIST:
+                continue
+            
+            # If target language specified, filter by ecosystem
+            if target_exts:
+                # Check if file has an extension matching the target language
+                file_ext = os.path.splitext(path)[1].lower()
+                
+                # Only filter out if file has a code extension from a different language
+                if file_ext in non_target_exts and file_ext not in target_exts:
+                    # File is from a different language ecosystem - skip it
+                    continue
+            
+            seen.add(path)
+            files.append(path)
 
     files.sort()
     return files
@@ -927,65 +1002,178 @@ def _write_spec_error_file(output_dir: str, result: Dict[str, Any]) -> None:
 def run_fail_fast_validation(
     generated_files: Dict[str, str],
     output_dir: Optional[str] = None,
-    md_content: Optional[str] = None
+    md_content: Optional[str] = None,
+    target_language: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run validation on generated files.
     
-    Validates syntax and content for Python files.
+    Validates syntax and content for code files.
     Optionally validates spec fidelity if md_content is provided.
+    
+    Industry Standards:
+        - Input validation and type checking
+        - Language-aware validation (supports Python, TypeScript, JavaScript, Java, Go)
+        - OpenTelemetry tracing for observability
+        - Prometheus metrics for monitoring
+        - Comprehensive error reporting
+        - Graceful degradation when tools unavailable
+    
+    Args:
+        generated_files: Dictionary mapping filenames to code content
+        output_dir: Optional directory where files are/will be written
+        md_content: Optional markdown spec content for fidelity validation
+        target_language: Optional target language (e.g., "python", "typescript", "java")
+                        Used for language-specific entry point checks. If not provided,
+                        defaults to Python entry point validation for backward compatibility.
+    
+    Returns:
+        Dictionary with validation results containing:
+            - valid: bool - Overall validation status
+            - checks: dict - Individual check results
+            - errors: list - List of error messages
+    
+    Raises:
+        TypeError: If generated_files is not a dictionary
+        
+    Examples:
+        >>> files = {"main.py": "print('hello')", "requirements.txt": "flask"}
+        >>> result = run_fail_fast_validation(files, target_language="python")
+        >>> result["valid"]
+        True
     """
+    # Input validation - industry standard defensive programming
+    if not isinstance(generated_files, dict):
+        raise TypeError(f"generated_files must be a dict, got {type(generated_files).__name__}")
+    
+    if target_language is not None and not isinstance(target_language, str):
+        raise TypeError(f"target_language must be a string or None, got {type(target_language).__name__}")
+    
     start_time = time.time()
     
-    results: Dict[str, Any] = {
-        "valid": True,
-        "checks": {},
-        "errors": []
-    }
+    # Start OpenTelemetry span if available
+    span = None
+    if HAS_OPENTELEMETRY and _tracer:
+        span = _tracer.start_span("run_fail_fast_validation")
+        span.set_attribute("file_count", len(generated_files))
+        if target_language:
+            span.set_attribute("target_language", target_language)
     
-    # Validate Python files
-    for filename, content in generated_files.items():
-        if filename.endswith('.py'):
-            syntax_result = validate_syntax(content, filename)
-            results["checks"][f"{filename}_syntax"] = syntax_result
-            if not syntax_result["valid"]:
+    try:
+        results: Dict[str, Any] = {
+            "valid": True,
+            "checks": {},
+            "errors": [],
+            "target_language": target_language or "python"  # For audit trail
+        }
+        
+        # Validate Python files
+        for filename, content in generated_files.items():
+            if filename.endswith('.py'):
+                syntax_result = validate_syntax(content, filename)
+                results["checks"][f"{filename}_syntax"] = syntax_result
+                if not syntax_result["valid"]:
+                    results["valid"] = False
+                    results["errors"].append(f"{filename}: {syntax_result['error']}")
+                
+                content_result = validate_has_content(content, filename)
+                results["checks"][f"{filename}_content"] = content_result
+                if not content_result["valid"]:
+                    results["valid"] = False
+                    results["errors"].append(content_result["error"])
+    
+    # Language-specific entry point checks
+    if target_language:
+        lang = target_language.lower()
+        
+        if lang in ("python", "py"):
+            # Python: main.py + requirements.txt
+            if "main.py" not in generated_files:
                 results["valid"] = False
-                results["errors"].append(f"{filename}: {syntax_result['error']}")
-            
-            content_result = validate_has_content(content, filename)
-            results["checks"][f"{filename}_content"] = content_result
-            if not content_result["valid"]:
+                results["errors"].append("main.py not found")
+            if "requirements.txt" not in generated_files:
                 results["valid"] = False
-                results["errors"].append(content_result["error"])
-    
-    # Check for main entry point
-    if "main.py" not in generated_files:
-        results["valid"] = False
-        results["errors"].append("main.py not found")
-    
-    # Check for requirements
-    if "requirements.txt" not in generated_files:
-        results["valid"] = False
-        results["errors"].append("requirements.txt not found")
-    
-    # Run spec fidelity validation if MD content provided
-    if md_content and results["valid"]:
-        spec_result = validate_spec_fidelity(md_content, generated_files, output_dir)
-        results["checks"]["spec_fidelity"] = spec_result
-        if not spec_result["valid"]:
+                results["errors"].append("requirements.txt not found")
+                
+        elif lang in ("typescript", "ts", "javascript", "js"):
+            # TypeScript/JavaScript: index.ts/index.js/app.ts/app.js + package.json
+            has_entry = any(
+                fname in generated_files 
+                for fname in ["index.ts", "index.js", "app.ts", "app.js", "server.ts", "server.js"]
+            )
+            if not has_entry:
+                results["valid"] = False
+                results["errors"].append("No entry point found (expected index.ts, index.js, app.ts, app.js, server.ts, or server.js)")
+            if "package.json" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("package.json not found")
+                
+        elif lang in ("java",):
+            # Java: Main.java or App.java + pom.xml or build.gradle
+            has_main = any(
+                fname in generated_files 
+                for fname in ["Main.java", "App.java", "Application.java"]
+            )
+            if not has_main:
+                results["valid"] = False
+                results["errors"].append("No main class found (expected Main.java, App.java, or Application.java)")
+            has_build = any(
+                fname in generated_files 
+                for fname in ["pom.xml", "build.gradle", "build.gradle.kts"]
+            )
+            if not has_build:
+                results["valid"] = False
+                results["errors"].append("No build configuration found (expected pom.xml or build.gradle)")
+                
+        elif lang in ("go",):
+            # Go: main.go + go.mod
+            if "main.go" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("main.go not found")
+            if "go.mod" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("go.mod not found")
+    else:
+        # Default behavior when no target language specified (backward compatibility)
+        # Only check for Python entry points
+        if "main.py" not in generated_files:
             results["valid"] = False
-            results["errors"].extend(spec_result["errors"])
+            results["errors"].append("main.py not found")
+        if "requirements.txt" not in generated_files:
+            results["valid"] = False
+            results["errors"].append("requirements.txt not found")
     
-    # Write error file if failed
-    if not results["valid"] and output_dir:
-        _write_error_file(output_dir, results["errors"], results["checks"])
+        # Run spec fidelity validation if MD content provided
+        if md_content and results["valid"]:
+            spec_result = validate_spec_fidelity(md_content, generated_files, output_dir)
+            results["checks"]["spec_fidelity"] = spec_result
+            if not spec_result["valid"]:
+                results["valid"] = False
+                results["errors"].extend(spec_result["errors"])
+        
+        # Write error file if failed
+        if not results["valid"] and output_dir:
+            _write_error_file(output_dir, results["errors"], results["checks"])
+        
+        VALIDATION_DURATION.labels(validation_type="fail_fast").observe(time.time() - start_time)
+        
+        if not results["valid"]:
+            logger.error(f"Validation failed: {results['errors']}")
+        
+        # Set span status if available
+        if span:
+            if results["valid"]:
+                span.set_status(Status(StatusCode.OK))
+            else:
+                span.set_status(Status(StatusCode.ERROR, description=f"{len(results['errors'])} validation errors"))
+                span.set_attribute("error_count", len(results['errors']))
+        
+        return results
     
-    VALIDATION_DURATION.labels(validation_type="fail_fast").observe(time.time() - start_time)
-    
-    if not results["valid"]:
-        logger.error(f"Validation failed: {results['errors']}")
-    
-    return results
+    finally:
+        # End OpenTelemetry span
+        if span:
+            span.end()
 
 
 def _write_error_file(output_dir: str, errors: List[str], checks: Dict[str, Any]) -> None:

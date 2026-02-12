@@ -66,6 +66,20 @@ class TestCodegenResponseParsing:
         # The normalized content should compile as valid Python
         compile(content, "main.py", "exec")
 
+    def test_parse_llm_response_multi_file_typescript(self):
+        """TypeScript files should not be rejected when lang='python' is passed."""
+        ts_code = "interface User {\n  name: string;\n  age: number;\n}\n\nexport const getUser = (): User => {\n  return { name: 'test', age: 30 };\n};"
+        raw = json.dumps({"files": {"index.ts": ts_code, "models.ts": "export interface Model { id: number; }"}})
+        result = self._parse(raw, lang="python")
+        
+        # TypeScript files should be accepted (not rejected with Python syntax errors)
+        assert "index.ts" in result, f"Expected index.ts in result, got {list(result.keys())}"
+        assert "models.ts" in result, f"Expected models.ts in result, got {list(result.keys())}"
+        
+        # Error file should NOT be present (no Python syntax validation on .ts files)
+        from generator.agents.codegen_agent.codegen_response_handler import ERROR_FILENAME
+        assert ERROR_FILENAME not in result, f"Should not have {ERROR_FILENAME} for TypeScript files"
+
 
 # ---------------------------------------------------------------------------
 # B) Normalization regression

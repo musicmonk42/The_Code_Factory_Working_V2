@@ -4236,7 +4236,9 @@ class OmniCoreService:
                             required_files = ["requirements.txt"]
                             if md_content:
                                 try:
-                                    spec_files = _extract_required_files_from_md(md_content)
+                                    # Get target language for ecosystem filtering
+                                    target_lang = payload.get("language", "python")
+                                    spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
                                     if spec_files:
                                         existing = set(required_files)
                                         required_files.extend(sf for sf in spec_files if sf not in existing)
@@ -4395,7 +4397,9 @@ class OmniCoreService:
 
             if md_content and _PROVENANCE_AVAILABLE:
                 try:
-                    spec_files = _extract_required_files_from_md(md_content)
+                    # Get target language for ecosystem filtering
+                    target_lang = payload.get("language", "python")
+                    spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
                     if spec_files:
                         existing = set(required_files)
                         required_files.extend(sf for sf in spec_files if sf not in existing)
