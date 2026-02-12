@@ -246,6 +246,9 @@ env:
   # RUNNER_CONFIG_PATH: "/app/generator/config.yaml"
   
   # Worker configuration
+  # Number of uvicorn workers per pod (multi-process mode)
+  # Default is 4 for balanced performance and latency.
+  # Can be overridden via values.yaml or environment-specific overlays.
   WORKER_COUNT: "4"
 
 # Secrets configuration

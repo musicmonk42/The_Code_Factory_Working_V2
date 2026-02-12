@@ -49,7 +49,7 @@ patches:
         value: production
       - op: replace
         path: /data/WORKER_COUNT
-        value: "8"
+        value: "8"  # Production uses 8 workers per pod for high concurrency (vs 4 default)
 
 labels:
   - pairs:
