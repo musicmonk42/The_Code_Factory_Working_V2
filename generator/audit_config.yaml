@@ -28,7 +28,7 @@ ALERT_ENDPOINT: "http://localhost:8080/alert"
 ROUTE_TO_MAIN_AUDIT: true
 
 # OmniCore Hub audit ingestion endpoint
-MAIN_AUDIT_ENDPOINT: "http://localhost:8001/audit/ingest"
+MAIN_AUDIT_ENDPOINT: "http://omnicore.railway.internal:8001/audit/ingest"
 
 # Alternative: Generator's local audit API (for fallback/local queries)
 LOCAL_AUDIT_ENDPOINT: "http://localhost:8003/log"
