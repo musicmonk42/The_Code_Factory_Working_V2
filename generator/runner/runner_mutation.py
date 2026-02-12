@@ -482,7 +482,7 @@ test_time_multiplier = 2.0
 # Backup directory for cache
 backup_dir = ".mutmut-cache"
 # Use simple output for easier parsing
-dict_synonyms = ["dict", "{}"]
+dict_synonyms = ["dict", "{{}}"]
 
 [tool.pytest.ini_options]
 # Ensure pytest can find tests and code
