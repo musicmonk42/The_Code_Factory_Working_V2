@@ -1081,68 +1081,68 @@ def run_fail_fast_validation(
                 if not content_result["valid"]:
                     results["valid"] = False
                     results["errors"].append(content_result["error"])
-    
-    # Language-specific entry point checks
-    if target_language:
-        lang = target_language.lower()
         
-        if lang in ("python", "py"):
-            # Python: main.py + requirements.txt
+        # Language-specific entry point checks
+        if target_language:
+            lang = target_language.lower()
+            
+            if lang in ("python", "py"):
+                # Python: main.py + requirements.txt
+                if "main.py" not in generated_files:
+                    results["valid"] = False
+                    results["errors"].append("main.py not found")
+                if "requirements.txt" not in generated_files:
+                    results["valid"] = False
+                    results["errors"].append("requirements.txt not found")
+                    
+            elif lang in ("typescript", "ts", "javascript", "js"):
+                # TypeScript/JavaScript: index.ts/index.js/app.ts/app.js + package.json
+                has_entry = any(
+                    fname in generated_files 
+                    for fname in ["index.ts", "index.js", "app.ts", "app.js", "server.ts", "server.js"]
+                )
+                if not has_entry:
+                    results["valid"] = False
+                    results["errors"].append("No entry point found (expected index.ts, index.js, app.ts, app.js, server.ts, or server.js)")
+                if "package.json" not in generated_files:
+                    results["valid"] = False
+                    results["errors"].append("package.json not found")
+                    
+            elif lang in ("java",):
+                # Java: Main.java or App.java + pom.xml or build.gradle
+                has_main = any(
+                    fname in generated_files 
+                    for fname in ["Main.java", "App.java", "Application.java"]
+                )
+                if not has_main:
+                    results["valid"] = False
+                    results["errors"].append("No main class found (expected Main.java, App.java, or Application.java)")
+                has_build = any(
+                    fname in generated_files 
+                    for fname in ["pom.xml", "build.gradle", "build.gradle.kts"]
+                )
+                if not has_build:
+                    results["valid"] = False
+                    results["errors"].append("No build configuration found (expected pom.xml or build.gradle)")
+                    
+            elif lang in ("go",):
+                # Go: main.go + go.mod
+                if "main.go" not in generated_files:
+                    results["valid"] = False
+                    results["errors"].append("main.go not found")
+                if "go.mod" not in generated_files:
+                    results["valid"] = False
+                    results["errors"].append("go.mod not found")
+        else:
+            # Default behavior when no target language specified (backward compatibility)
+            # Only check for Python entry points
             if "main.py" not in generated_files:
                 results["valid"] = False
                 results["errors"].append("main.py not found")
             if "requirements.txt" not in generated_files:
                 results["valid"] = False
                 results["errors"].append("requirements.txt not found")
-                
-        elif lang in ("typescript", "ts", "javascript", "js"):
-            # TypeScript/JavaScript: index.ts/index.js/app.ts/app.js + package.json
-            has_entry = any(
-                fname in generated_files 
-                for fname in ["index.ts", "index.js", "app.ts", "app.js", "server.ts", "server.js"]
-            )
-            if not has_entry:
-                results["valid"] = False
-                results["errors"].append("No entry point found (expected index.ts, index.js, app.ts, app.js, server.ts, or server.js)")
-            if "package.json" not in generated_files:
-                results["valid"] = False
-                results["errors"].append("package.json not found")
-                
-        elif lang in ("java",):
-            # Java: Main.java or App.java + pom.xml or build.gradle
-            has_main = any(
-                fname in generated_files 
-                for fname in ["Main.java", "App.java", "Application.java"]
-            )
-            if not has_main:
-                results["valid"] = False
-                results["errors"].append("No main class found (expected Main.java, App.java, or Application.java)")
-            has_build = any(
-                fname in generated_files 
-                for fname in ["pom.xml", "build.gradle", "build.gradle.kts"]
-            )
-            if not has_build:
-                results["valid"] = False
-                results["errors"].append("No build configuration found (expected pom.xml or build.gradle)")
-                
-        elif lang in ("go",):
-            # Go: main.go + go.mod
-            if "main.go" not in generated_files:
-                results["valid"] = False
-                results["errors"].append("main.go not found")
-            if "go.mod" not in generated_files:
-                results["valid"] = False
-                results["errors"].append("go.mod not found")
-    else:
-        # Default behavior when no target language specified (backward compatibility)
-        # Only check for Python entry points
-        if "main.py" not in generated_files:
-            results["valid"] = False
-            results["errors"].append("main.py not found")
-        if "requirements.txt" not in generated_files:
-            results["valid"] = False
-            results["errors"].append("requirements.txt not found")
-    
+        
         # Run spec fidelity validation if MD content provided
         if md_content and results["valid"]:
             spec_result = validate_spec_fidelity(md_content, generated_files, output_dir)
