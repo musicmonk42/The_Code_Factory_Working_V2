@@ -30,15 +30,30 @@ os.environ["TESTING"] = "true"
 @pytest.fixture(scope="session", autouse=True)
 def mock_expensive_modules():
     """Mock all expensive module dependencies before any imports."""
-    # Mock dependencies before importing cli
-    sys.modules["engine"] = MagicMock()
-    sys.modules["runner.runner_config"] = MagicMock()
-    sys.modules["runner.runner_logging"] = MagicMock()
-    sys.modules["runner.runner_metrics"] = MagicMock()
-    sys.modules["runner.runner_utils"] = MagicMock()
-    sys.modules["clarifier_updater"] = MagicMock()
+    # Store original modules
+    originals = {}
+    modules_to_mock = [
+        "engine",
+        "runner.runner_config",
+        "runner.runner_logging",
+        "runner.runner_metrics",
+        "runner.runner_utils",
+        "clarifier_updater",
+    ]
+    
+    # Save originals and mock
+    for mod in modules_to_mock:
+        originals[mod] = sys.modules.get(mod)
+        sys.modules[mod] = MagicMock()
+    
     yield
-    # Cleanup not strictly necessary as these are test mocks
+    
+    # Restore originals
+    for mod in modules_to_mock:
+        if originals[mod] is not None:
+            sys.modules[mod] = originals[mod]
+        else:
+            sys.modules.pop(mod, None)
 
 
 # FIX: Replaced old cli_runner with new one that creates config.yaml in an isolated filesystem

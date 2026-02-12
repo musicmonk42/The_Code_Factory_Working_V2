@@ -32,15 +32,30 @@ except ImportError:
 @pytest.fixture(scope="session", autouse=True)
 def mock_expensive_modules():
     """Mock all expensive module dependencies before any imports."""
-    # Mock dependencies before importing gui
-    sys.modules["runner.runner_core"] = MagicMock()
-    sys.modules["runner.runner_config"] = MagicMock()
-    sys.modules["runner.runner_logging"] = MagicMock()
-    sys.modules["runner.runner_metrics"] = MagicMock()
-    sys.modules["runner.runner_utils"] = MagicMock()
-    sys.modules["intent_parser.intent_parser"] = MagicMock()
+    # Store original modules
+    originals = {}
+    modules_to_mock = [
+        "runner.runner_core",
+        "runner.runner_config",
+        "runner.runner_logging",
+        "runner.runner_metrics",
+        "runner.runner_utils",
+        "intent_parser.intent_parser",
+    ]
+    
+    # Save originals and mock
+    for mod in modules_to_mock:
+        originals[mod] = sys.modules.get(mod)
+        sys.modules[mod] = MagicMock()
+    
     yield
-    # Cleanup not strictly necessary as these are test mocks
+    
+    # Restore originals
+    for mod in modules_to_mock:
+        if originals[mod] is not None:
+            sys.modules[mod] = originals[mod]
+        else:
+            sys.modules.pop(mod, None)
 
 
 @pytest.fixture
