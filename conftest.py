@@ -312,9 +312,17 @@ def _initialize_opentelemetry_mock():
             pass
         def set_status(self, status):
             pass
+        def record_exception(self, exception):
+            """Record an exception on this span."""
+            pass
     
     # Create mock Status and StatusCode
     class MockStatus:
+        """Mock OpenTelemetry Status that accepts status_code and description."""
+        def __init__(self, status_code=None, description=None):
+            self.status_code = status_code or "UNSET"
+            self.description = description
+        
         OK = "OK"
         ERROR = "ERROR"
     
@@ -349,6 +357,7 @@ def _initialize_opentelemetry_mock():
         "get_tracer": lambda name: MockTracer(),
         "get_tracer_provider": lambda: MagicMock(),
         "set_tracer_provider": lambda provider: None,
+        "get_current_span": lambda: MockSpan(),
         "Status": MockStatus,
         "StatusCode": MockStatusCode,
     }, submodules=["status"])
