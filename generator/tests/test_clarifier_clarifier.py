@@ -82,11 +82,15 @@ patcher_fernet = patch(
     "generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance
 )
 patcher_sys_exit = patch("generator.clarifier.clarifier.sys.exit")
+patcher_get_config = patch(
+    "generator.clarifier.clarifier.get_config", return_value=mock_config_instance
+)
 
 patcher_dynaconf.start()
 patcher_boto3.start()
 patcher_fernet.start()
 patcher_sys_exit.start()
+patcher_get_config.start()
 
 # Mock the sub-module imports that might fail
 patcher_llm = patch("generator.clarifier.clarifier.GrokLLM")
