@@ -1951,6 +1951,10 @@ class HelmHandler(FormatHandler):
     """
     __version__ = "1.0"
     __source__ = "built-in"
+    
+    # Regex patterns for YAML sanitization
+    _NUMBERED_LIST_PATTERN = r'^\s*\d+\.\s+\*\*'
+    _MARKDOWN_HEADER_PATTERN = r'^\s*#+\s+'
 
     def normalize(self, raw: str) -> Dict[str, Any]:
         """
@@ -2005,10 +2009,6 @@ class HelmHandler(FormatHandler):
         - Markdown bold markers (**text**)
         - Code block markers (```)
         """
-        # Define regex patterns as constants to avoid duplication
-        NUMBERED_LIST_PATTERN = r'^\s*\d+\.\s+\*\*'
-        MARKDOWN_HEADER_PATTERN = r'^\s*#+\s+'  # Match any markdown header
-        
         lines = []
         in_mermaid_block = False
         found_yaml_start = False
@@ -2031,19 +2031,20 @@ class HelmHandler(FormatHandler):
             if not found_yaml_start:
                 if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
                     found_yaml_start = True
-                elif re.match(NUMBERED_LIST_PATTERN, line):
+                elif re.match(self._NUMBERED_LIST_PATTERN, line):
                     # Skip numbered lists before YAML starts
                     continue
-                elif re.match(MARKDOWN_HEADER_PATTERN, line):
+                elif re.match(self._MARKDOWN_HEADER_PATTERN, line):
                     # Skip markdown headers before YAML starts
                     continue
             
-            # Skip lines that start with markdown headers
-            if re.match(MARKDOWN_HEADER_PATTERN, line):
+            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
+            # These checks apply both before and after YAML start is detected
+            if re.match(self._NUMBERED_LIST_PATTERN, line):
                 continue
             
-            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
-            if re.match(NUMBERED_LIST_PATTERN, line):
+            # Skip markdown headers (already filtered above before YAML starts, but keeping for post-YAML)
+            if found_yaml_start and re.match(self._MARKDOWN_HEADER_PATTERN, line):
                 continue
             
             # Skip lines that are primarily markdown bullets with bold
