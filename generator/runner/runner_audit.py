@@ -86,9 +86,23 @@ def _load_audit_config():
 # Load config once
 _AUDIT_CONFIG = _load_audit_config()
 
+# Helper function for parsing boolean values from env vars or config
+def _parse_bool(value) -> bool:
+    """Parse boolean value from string, bool, or other types."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ("true", "1", "yes")
+    return bool(value)
+
 # Routing configuration from audit_config.yaml
 # Allow environment variable overrides for deployment flexibility
-ROUTE_TO_MAIN_AUDIT = os.getenv("ROUTE_TO_MAIN_AUDIT", str(_AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False))).lower() in ("true", "1", "yes")
+_route_to_main = os.getenv("ROUTE_TO_MAIN_AUDIT")
+if _route_to_main is not None:
+    ROUTE_TO_MAIN_AUDIT = _parse_bool(_route_to_main)
+else:
+    ROUTE_TO_MAIN_AUDIT = _parse_bool(_AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False))
+
 MAIN_AUDIT_ENDPOINT = os.getenv("MAIN_AUDIT_ENDPOINT", _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8000/audit/ingest"))
 ROUTING_RETRY_ENABLED = _AUDIT_CONFIG.get("ROUTING_RETRY_ENABLED", True)
 ROUTING_MAX_ATTEMPTS = _AUDIT_CONFIG.get("ROUTING_MAX_ATTEMPTS", 3)
