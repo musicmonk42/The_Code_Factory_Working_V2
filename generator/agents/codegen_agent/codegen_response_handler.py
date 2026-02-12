@@ -576,8 +576,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
                     cleaned = _normalize_file_content(_clean_code_block(content))
                     
-                    # Use validate_and_repair_syntax instead of _validate_syntax
-                    validation_result = validate_and_repair_syntax(cleaned, lang, filename)
+                    # Infer per-file language from extension instead of using project-level lang
+                    file_lang = _infer_language_from_filename(filename, default_lang=lang)
+                    
+                    # Use validate_and_repair_syntax with per-file language
+                    validation_result = validate_and_repair_syntax(cleaned, file_lang, filename)
 
                     if validation_result['valid']:
                         code_files[filename] = validation_result['code']
@@ -593,7 +596,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         logger.warning(
                             "Syntax validation failed for '%s' (%s). Details: %s",
                             filename,
-                            lang,
+                            file_lang,
                             validation_result['error'],
                         )
                         errors[filename] = validation_result['error']
@@ -702,8 +705,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         )
         return {DEFAULT_FILENAME: raw}
     
-    # Use validate_and_repair_syntax instead of _validate_syntax
-    validation_result = validate_and_repair_syntax(cleaned_code, lang, DEFAULT_FILENAME)
+    # Use validate_and_repair_syntax with inferred language for single file
+    file_lang = _infer_language_from_filename(DEFAULT_FILENAME, default_lang=lang)
+    validation_result = validate_and_repair_syntax(cleaned_code, file_lang, DEFAULT_FILENAME)
 
     if validation_result['valid']:
         # Use repaired code if auto-repair was applied
@@ -1198,18 +1202,36 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
             e
         )
     
-    # Infer language from filename if not provided or if it's generic
+    # Infer language from filename - always prefer file extension for known code types
     try:
-        inferred_lang = _infer_language_from_filename(filename, default_lang="python")
+        # Get the base extension to check if file has a known extension
+        basename = os.path.basename(filename)
+        ext = os.path.splitext(basename)[1].lstrip(".").lower()
         
-        # Use inferred language if original lang is empty or generic
+        inferred_lang = _infer_language_from_filename(filename, default_lang="")
+        
+        # Use inferred language if:
+        # 1. Original lang is empty or generic ("", "text", "plain"), OR
+        # 2. File has a recognized extension AND inferred lang differs from provided lang
+        # This ensures .ts files are validated as TypeScript even when lang="python"
         if not lang or lang.lower() in ("", "text", "plain"):
-            lang = inferred_lang
-            logger.debug(
-                "Inferred language '%s' from filename '%s'",
+            # No valid language provided, use inferred
+            if inferred_lang:
+                lang = inferred_lang
+                logger.debug(
+                    "Inferred language '%s' from filename '%s'",
+                    lang,
+                    filename
+                )
+        elif ext in _EXTENSION_TO_LANGUAGE and inferred_lang and inferred_lang != lang.lower():
+            # File has recognized extension but differs from provided lang - use extension
+            logger.info(
+                "Overriding provided lang '%s' with inferred '%s' from filename '%s'",
                 lang,
+                inferred_lang,
                 filename
             )
+            lang = inferred_lang
     except Exception as e:
         logger.warning(
             "Could not infer language from filename '%s': %s. Using provided lang '%s'.",
