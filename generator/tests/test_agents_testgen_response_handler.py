@@ -88,10 +88,13 @@ class MockAiofilesFile:
         self.encoding = encoding
 
     async def write(self, data):
+        # Note: Using synchronous I/O in async method for simplicity in tests.
+        # This is acceptable in test mocks as we don't need true async I/O performance.
         with open(self.path, self.mode, encoding=self.encoding) as f:
             f.write(data)
     
     async def read(self):
+        # Note: Using synchronous I/O in async method for simplicity in tests.
         try:
             with open(self.path, 'r', encoding=self.encoding or 'utf-8') as f:
                 return f.read()

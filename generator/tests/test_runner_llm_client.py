@@ -92,7 +92,6 @@ def mock_imports():
 
         # CRITICAL: Set up _load_task for ALL tests (not just those using mock_provider)
         # Use asyncio.get_event_loop() instead of deprecated event_loop fixture
-        import asyncio
         future = asyncio.get_event_loop().create_future()
         future.set_result(None)
         mock_plugin_manager.return_value._load_task = future
