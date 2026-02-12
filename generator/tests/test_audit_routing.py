@@ -37,7 +37,7 @@ class TestAuditRouting:
         
         # Verify expected values
         assert config["ROUTE_TO_MAIN_AUDIT"] is True
-        assert "omnicore.railway.internal:8001" in config["MAIN_AUDIT_ENDPOINT"]
+        assert "localhost:8000" in config["MAIN_AUDIT_ENDPOINT"]
         assert config["ROUTING_MAX_ATTEMPTS"] >= 1
     
     def test_runner_audit_loads_config(self):

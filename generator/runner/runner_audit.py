@@ -87,8 +87,9 @@ def _load_audit_config():
 _AUDIT_CONFIG = _load_audit_config()
 
 # Routing configuration from audit_config.yaml
-ROUTE_TO_MAIN_AUDIT = _AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False)
-MAIN_AUDIT_ENDPOINT = _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8001/audit/ingest")
+# Allow environment variable overrides for deployment flexibility
+ROUTE_TO_MAIN_AUDIT = os.getenv("ROUTE_TO_MAIN_AUDIT", str(_AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False))).lower() in ("true", "1", "yes")
+MAIN_AUDIT_ENDPOINT = os.getenv("MAIN_AUDIT_ENDPOINT", _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8000/audit/ingest"))
 ROUTING_RETRY_ENABLED = _AUDIT_CONFIG.get("ROUTING_RETRY_ENABLED", True)
 ROUTING_MAX_ATTEMPTS = _AUDIT_CONFIG.get("ROUTING_MAX_ATTEMPTS", 3)
 ROUTING_TIMEOUT_SECONDS = _AUDIT_CONFIG.get("ROUTING_TIMEOUT_SECONDS", 5.0)

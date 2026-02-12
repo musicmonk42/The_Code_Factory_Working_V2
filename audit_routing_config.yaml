@@ -35,9 +35,9 @@ omnicore_hub:
   description: "OmniCore Engine orchestrates all audit log processing for the platform"
 
   # Hub endpoints
-  ingestion_endpoint: "http://localhost:8001/audit/ingest"
-  configuration_endpoint: "http://localhost:8001/audit/config/status"
-  health_endpoint: "http://localhost:8001/health"
+  ingestion_endpoint: "http://localhost:8000/audit/ingest"
+  configuration_endpoint: "http://localhost:8000/audit/config/status"
+  health_endpoint: "http://localhost:8000/health"
 
   # Hub capabilities
   capabilities:
@@ -72,7 +72,7 @@ generator:
 
   # Generator sends ALL audit events to OmniCore
   route_all_events_to_hub: true
-  hub_endpoint: "http://localhost:8001/audit/ingest"
+  hub_endpoint: "http://localhost:8000/audit/ingest"
 
   # Generator's own audit API (for local queries)
   local_audit_api: "http://localhost:8003"
@@ -107,7 +107,7 @@ self_fixing_engineer:
 
   # SFE sends ALL audit events to OmniCore Hub
   route_all_events_to_hub: true
-  hub_endpoint: "http://localhost:8001/audit/ingest"
+  hub_endpoint: "http://localhost:8000/audit/ingest"
 
   # Sub-modules within SFE (all route through OmniCore)
   sub_modules:
