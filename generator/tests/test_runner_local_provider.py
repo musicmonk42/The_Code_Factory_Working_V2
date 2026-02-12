@@ -371,15 +371,8 @@ def test_get_provider_no_key(mock_load: MagicMock) -> None:
 async def test_stream_metrics(provider: LocalProvider) -> None:
     # <<< START FIX: Robustly clear all metrics and their internal children
     # This is the only reliable way to reset a Histogram for testing.
-    stream_chunks_total.clear()
-    stream_chunk_latency.clear()
-    # The .clear() method on the Histogram object itself is supposed to remove
-    # all labeled children, which is what we need. However, to be absolutely
-    # certain, we can also clear the internal metrics if they exist.
-    if hasattr(stream_chunk_latency, "_sum"):
-        stream_chunk_latency._sum.clear()
-    if hasattr(stream_chunk_latency, "_count"):
-        stream_chunk_latency._count.clear()
+    stream_chunks_total._metrics.clear()
+    stream_chunk_latency._metrics.clear()
     # <<< END FIX
 
     # FIX: Mock response to simulate aiohttp streaming response
