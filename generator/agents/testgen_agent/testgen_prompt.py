@@ -100,10 +100,11 @@ def _local_regex_sanitize(text: str) -> str:
 
 
 # Supported Languages and Frameworks
-SUPPORTED_LANGUAGES = ["python", "javascript", "java", "rust", "go"]
+SUPPORTED_LANGUAGES = ["python", "javascript", "typescript", "java", "rust", "go"]
 SUPPORTED_FRAMEWORKS = {
     "python": ["pytest", "unittest"],
     "javascript": ["jest", "mocha"],
+    "typescript": ["jest", "mocha"],
     "java": ["junit", "testng"],
 }
 

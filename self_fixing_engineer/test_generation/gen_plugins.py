@@ -31,10 +31,11 @@ from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_LANGUAGES = frozenset({"python", "javascript"})
+SUPPORTED_LANGUAGES = frozenset({"python", "javascript", "typescript"})
 SUPPORTED_FRAMEWORKS = {
     "python": frozenset({"unittest", "pytest"}),
     "javascript": frozenset({"jest", "mocha"}),
+    "typescript": frozenset({"jest", "mocha"}),
 }
 DEFAULT_PYTHON_TEST_FRAMEWORK = os.getenv("PYTHON_TEST_FRAMEWORK", "pytest")
 DEFAULT_JS_TEST_FRAMEWORK = os.getenv("JS_TEST_FRAMEWORK", "jest")
@@ -595,6 +596,14 @@ class TestGeneratorRegistry:
 LANGUAGE_GENERATORS = TestGeneratorRegistry()
 LANGUAGE_GENERATORS.register("python", PythonTestGenerator())
 LANGUAGE_GENERATORS.register("javascript", JavaScriptTestGenerator())
+
+
+class TypeScriptTestGenerator(JavaScriptTestGenerator):
+    """TypeScript test generator - extends JavaScript generator with TS-specific handling."""
+    pass
+
+
+LANGUAGE_GENERATORS.register("typescript", TypeScriptTestGenerator())
 
 
 # Placeholder stub for AI API - to be implemented
