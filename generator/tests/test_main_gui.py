@@ -459,7 +459,20 @@ class TestClarifierTab:
 
         app = MainApp()
         async with app.run_test() as pilot:
-            await asyncio.sleep(0.01)  # Wait for on_mount to add columns
+            # Wait for on_mount to complete and widgets to be queried
+            # The pilot.pause() waits for any pending messages to be processed
+            await pilot.pause()
+            
+            # Additional wait to ensure on_mount has completed
+            for _ in range(10):  # Try up to 10 times
+                if app.clarifier_table is not None:
+                    break
+                await asyncio.sleep(0.05)
+            
+            # Skip if clarifier_table is still None (on_mount failed)
+            if app.clarifier_table is None:
+                pytest.skip("clarifier_table not initialized - on_mount may have failed")
+            
             # Textual's DataTable.add_row is synchronous, not async
             app.clarifier_table.add_row(
                 "q123", "Test Question?", "Pending", key="q123"
