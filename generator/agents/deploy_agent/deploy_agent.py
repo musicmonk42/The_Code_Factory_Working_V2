@@ -1699,13 +1699,17 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             prompt = scrub_text(prompt)
                             try:
                                 resp = await call_llm_api(prompt, "gpt-4o", stream=False)
-                                LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
+                                # FIX Issue 3: Use correct metric labels (provider, model only)
+                                try:
+                                    LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
+                                except Exception as metric_err:
+                                    logger.warning(f"Failed to record LLM call metric: {metric_err}")
                             except Exception as le:
-                                LLM_ERRORS_TOTAL.labels(
-                                    provider="deploy",
-                                    model="gpt-4o",
-                                    error_type=type(le).__name__,
-                                ).inc()
+                                # FIX Issue 3: LLM_ERRORS_TOTAL only has [provider, model] labels, not error_type
+                                try:
+                                    LLM_ERRORS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
+                                except Exception as metric_err:
+                                    logger.warning(f"Failed to record LLM error metric: {metric_err}")
                                 raise LLMError("LLM call failed during run_deployment") from le
                             
                             raw = resp.get("content", "")
@@ -1796,7 +1800,27 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                     # Treat 'skipped' and 'tool_not_found' build statuses as non-fatal
                     build_status = vres.get("build_status", "")
                     lint_status = vres.get("lint_status", "")
-                    is_valid = vres.get("valid", False)
+                    
+                    # FIX Issue 4: Properly derive is_valid from validation results
+                    # If 'valid' key is not in the report, compute it from the check results
+                    if "valid" in vres:
+                        is_valid = vres["valid"]
+                    else:
+                        # Derive validity from individual check results
+                        lint_issues = vres.get("lint_issues", [])
+                        security_findings = vres.get("security_findings", [])
+                        
+                        # Consider valid if:
+                        # - lint_status is success OR skipped OR tool_not_found
+                        # - No critical lint issues
+                        # - No high-severity security findings
+                        is_valid = (
+                            lint_status in ("success", "skipped", "tool_not_found") and
+                            len(lint_issues) == 0 and
+                            len(security_findings) == 0
+                        )
+                        # Update the report with the derived validity
+                        vres["valid"] = is_valid
                     
                     # Check if validation should fail
                     # Fail only if:
