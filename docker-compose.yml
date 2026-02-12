@@ -56,12 +56,12 @@ services:
       - APP_ENV=development
       - DEV_MODE=1
       - PRODUCTION_MODE=0
-      
+
       # Enterprise-grade startup optimization
       - APP_STARTUP=1
       - SKIP_IMPORT_TIME_VALIDATION=1
       - SPACY_WARNING_IGNORE=W007
-      
+
       # ============================================
       # Configuration Path Resolution
       # ============================================
@@ -72,16 +72,17 @@ services:
       #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
       #   3. ./runner_config.yaml -> ./config/runner_config.yaml (for runner_config.yaml)
       # - RUNNER_CONFIG_PATH=/app/generator/config.yaml
-      
+
       # ============================================
       # SECURITY: Required keys - must be set via environment variables
       # Generate keys with:
       #   openssl rand -hex 32  (for AGENTIC_AUDIT_HMAC_KEY)
-      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"  (for ENCRYPTION_KEY)
+      #   python -c "from cryptography.fernet import Fernet;
+      #     print(Fernet.generate_key().decode())"  (for ENCRYPTION_KEY)
       # ============================================
       - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY:?AGENTIC_AUDIT_HMAC_KEY is required}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
-      
+
       # LLM Provider Configuration
       - XAI_API_KEY=${XAI_API_KEY:-}
       - GROK_API_KEY=${GROK_API_KEY:-}
@@ -93,47 +94,47 @@ services:
       - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
-      
+
       # Infrastructure
       - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
       - DB_PATH=${DB_PATH:-postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory}
-      
+
       # Citus Extension Configuration
       # Set to 1 to enable Citus distributed SQL features
       # Requires postgres service to use citusdata/citus image (already configured)
       - ENABLE_CITUS=${ENABLE_CITUS:-0}
-      
+
       # Message Bus Configuration
       - MESSAGE_BUS_SHARD_COUNT=${MESSAGE_BUS_SHARD_COUNT:-4}
       - MESSAGE_BUS_WORKERS_PER_SHARD=${MESSAGE_BUS_WORKERS_PER_SHARD:-4}
       - ENABLE_MESSAGE_BUS_GUARDIAN=${ENABLE_MESSAGE_BUS_GUARDIAN:-0}
-      
+
       # Self-Fixing Engineer
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
-      
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_STRUCTURED_LOGGING=${ENABLE_STRUCTURED_LOGGING:-0}
-      
+
       # Feature Flags
       # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
       - ENABLE_DATABASE=${ENABLE_DATABASE:-1}  # Database support enabled by default
       - ENABLE_HSM=${ENABLE_HSM:-auto}  # Hardware Security Module support with auto-detection
       - ENABLE_FEATURE_STORE=${ENABLE_FEATURE_STORE:-auto}  # Feast feature store with auto-detection
       - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-auto}  # Libvirt virtualization support with auto-detection
-      
+
       # Performance Flags
       - PARALLEL_AGENT_LOADING=${PARALLEL_AGENT_LOADING:-1}  # Enable parallel agent loading
       - LAZY_LOAD_ML=${LAZY_LOAD_ML:-1}  # Lazy load ML libraries
-      
+
       # Audit Crypto (development defaults - change in production)
       - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-disabled}
       - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1
-      
+
       # Sentry Error Tracking (Optional - auto-enabled when SENTRY_DSN is set)
       - SENTRY_DSN=${SENTRY_DSN:-}
-      
+
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
     ports:

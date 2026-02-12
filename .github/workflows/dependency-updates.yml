@@ -16,30 +16,30 @@ jobs:
   update-dependencies:
     name: Update Python Dependencies
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install pip-tools
         run: |
           python -m pip install --upgrade pip
           pip install pip-tools
-          
+
       - name: Update requirements files
         run: |
           # Update unified platform requirements
           if [ -f requirements.txt ]; then
             pip-compile --upgrade --resolver=backtracking requirements.txt || true
           fi
-          
+
       - name: Check for changes
         id: changes
         run: |
@@ -48,7 +48,7 @@ jobs:
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
-          
+
       - name: Create Pull Request
         if: steps.changes.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v6
@@ -58,9 +58,9 @@ jobs:
           title: 'chore: Update Python Dependencies'
           body: |
             Automated dependency updates by GitHub Actions.
-            
+
             Please review the changes and ensure all tests pass before merging.
-            
+
             Updated unified platform requirements.
           branch: automated/dependency-updates
           delete-branch: true
@@ -69,36 +69,36 @@ jobs:
   check-outdated:
     name: Check Outdated Dependencies
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Check for outdated packages
         run: |
           python -m pip install --upgrade pip
-          
+
           echo "## Outdated Packages Report - Unified Platform" > outdated-report.md
           echo "" >> outdated-report.md
-          
+
           if [ -f requirements.txt ]; then
             echo "### requirements.txt (Unified Platform)" >> outdated-report.md
             pip install -r requirements.txt > /dev/null 2>&1 || true
             pip list --outdated --format=markdown >> outdated-report.md || true
             echo "" >> outdated-report.md
           fi
-          
+
       - name: Upload outdated report
         uses: actions/upload-artifact@v4
         with:
           name: outdated-dependencies-report
           path: outdated-report.md
-          
+
       - name: Comment on Issue
         if: github.event_name == 'schedule'
         uses: actions/github-script@v7
@@ -106,7 +106,7 @@ jobs:
           script: |
             const fs = require('fs');
             const report = fs.readFileSync('outdated-report.md', 'utf8');
-            
+
             // Find or create an issue for outdated dependencies
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -114,11 +114,11 @@ jobs:
               state: 'open',
               labels: 'dependencies'
             });
-            
-            const existingIssue = issues.data.find(issue => 
+
+            const existingIssue = issues.data.find(issue =>
               issue.title.includes('Outdated Dependencies')
             );
-            
+
             if (existingIssue) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,

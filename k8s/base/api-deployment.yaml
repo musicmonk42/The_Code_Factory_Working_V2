@@ -59,7 +59,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
-              - ALL
+                - ALL
       containers:
         - name: codefactory
           image: ghcr.io/musicmonk42/codefactory:latest
@@ -83,7 +83,7 @@ spec:
                   key: redis-password
             - name: REDIS_URL
               value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)"
-            
+
             # Database configuration
             - name: DB_PATH
               valueFrom:
@@ -91,7 +91,7 @@ spec:
                   name: codefactory-secrets
                   key: database-url
                   optional: true
-            
+
             # LLM API keys
             - name: OPENAI_API_KEY
               valueFrom:
@@ -128,7 +128,7 @@ spec:
                   name: codefactory-secrets
                   key: ollama-host
                   optional: true
-            
+
             # Security keys
             - name: AGENTIC_AUDIT_HMAC_KEY
               valueFrom:
@@ -152,7 +152,7 @@ spec:
                   name: codefactory-secrets
                   key: audit-crypto-key
                   optional: true
-            
+
             # Monitoring and error tracking
             - name: SENTRY_DSN
               valueFrom:
@@ -160,7 +160,7 @@ spec:
                   name: codefactory-secrets
                   key: sentry-dsn
                   optional: true
-            
+
             # CORS configuration
             - name: ALLOWED_ORIGINS
               valueFrom:
@@ -209,7 +209,7 @@ spec:
             runAsUser: 1000
             capabilities:
               drop:
-              - ALL
+                - ALL
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads

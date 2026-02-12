@@ -107,7 +107,7 @@ repos:
         entry: bash -c 'safety check --json --file requirements.txt || true'
         language: system
         pass_filenames: false
-        
+
       - id: pip-audit
         name: Pip audit dependency check
         entry: bash -c 'pip-audit --requirement requirements.txt || true'
@@ -123,20 +123,20 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
-        
+
       - id: no-secrets-in-code
         name: Check for hardcoded secrets
         entry: bash -c 'if grep -r --exclude-dir={.git,.venv,node_modules} -E "(api[_-]?key|password|secret|token|bearer)" *.py; then echo "Potential secret found in code"; exit 1; fi'
         language: system
         pass_filenames: false
-        
+
       - id: check-requirements-sync
         name: Check requirements files are synced
         entry: python scripts/check_requirements_sync.py
         language: system
         pass_filenames: false
         files: requirements.*\.txt$
-        
+
       - id: run-unit-tests
         name: Run unit tests (fast)
         entry: bash -c 'pytest tests/ -v -m "not slow" --tb=short'

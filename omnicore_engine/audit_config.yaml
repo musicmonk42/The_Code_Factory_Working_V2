@@ -60,27 +60,27 @@ AUDIT_EVENT_TYPES:
     - workflow_step_execute
     - workflow_step_complete
     - workflow_error
-  
+
   plugin_management:
     - plugin_installed
     - plugin_loaded
     - plugin_unloaded
     - plugin_error
     - plugin_event_handled
-  
+
   meta_supervision:
     - supervisor_health_check
     - supervisor_alert
     - supervisor_intervention
     - policy_violation_detected
     - auto_recovery_initiated
-  
+
   error_tracking:
     - error_logged
     - error_resolved
     - error_escalated
     - critical_failure
-  
+
   performance:
     - metric_collected
     - performance_threshold_exceeded

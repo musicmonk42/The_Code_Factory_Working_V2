@@ -36,7 +36,7 @@ updates:
           - "urllib3"
         update-types:
           - "security"
-      
+
       testing-dependencies:
         patterns:
           - "pytest*"
@@ -45,7 +45,7 @@ updates:
         update-types:
           - "minor"
           - "patch"
-      
+
       langchain-ecosystem:
         patterns:
           - "langchain*"
@@ -54,7 +54,7 @@ updates:
         update-types:
           - "minor"
           - "patch"
-  
+
   # Python dependencies - Generator
   - package-ecosystem: "pip"
     directory: "/generator"
@@ -74,7 +74,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-  
+
   # Python dependencies - OmniCore Engine
   - package-ecosystem: "pip"
     directory: "/omnicore_engine"
@@ -94,7 +94,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-  
+
   # Python dependencies - Self-Fixing Engineer
   - package-ecosystem: "pip"
     directory: "/self_fixing_engineer"
@@ -114,7 +114,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-  
+
   # Docker dependencies
   - package-ecosystem: "docker"
     directory: "/"
@@ -136,7 +136,7 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
-  
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"

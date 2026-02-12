@@ -33,12 +33,12 @@ omnicore_hub:
   # OmniCore is the central orchestration hub
   role: "central_orchestrator"
   description: "OmniCore Engine orchestrates all audit log processing for the platform"
-  
+
   # Hub endpoints
   ingestion_endpoint: "http://localhost:8001/audit/ingest"
   configuration_endpoint: "http://localhost:8001/audit/config/status"
   health_endpoint: "http://localhost:8001/health"
-  
+
   # Hub capabilities
   capabilities:
     - "audit_log_orchestration"
@@ -48,7 +48,7 @@ omnicore_hub:
     - "security_analysis"
     - "alerting_coordination"
     - "meta_supervision"
-  
+
   # Processing pipeline
   pipeline:
     - "ingestion"      # Receive logs from all modules
@@ -69,14 +69,14 @@ generator:
   enabled: true
   module_type: "code_generation"
   orchestrated_by: "omnicore"
-  
+
   # Generator sends ALL audit events to OmniCore
   route_all_events_to_hub: true
   hub_endpoint: "http://localhost:8001/audit/ingest"
-  
+
   # Generator's own audit API (for local queries)
   local_audit_api: "http://localhost:8003"
-  
+
   # Event types to route
   event_types:
     - "code_generated"
@@ -89,10 +89,10 @@ generator:
     - "crypto_operation"
     - "rbac_denial"
     - "tamper_detection"
-  
+
   # Priority for routing to hub
   priority: "high"
-  
+
   # OmniCore orchestrates generator's audit lifecycle
   orchestration:
     retention_managed_by_hub: true
@@ -104,11 +104,11 @@ self_fixing_engineer:
   enabled: true
   module_type: "self_fixing_and_testing"
   orchestrated_by: "omnicore"
-  
+
   # SFE sends ALL audit events to OmniCore Hub
   route_all_events_to_hub: true
   hub_endpoint: "http://localhost:8001/audit/ingest"
-  
+
   # Sub-modules within SFE (all route through OmniCore)
   sub_modules:
     # Arbiter - Bug detection and fixing
@@ -124,7 +124,7 @@ self_fixing_engineer:
         - "learning_update"
         - "self_audit"
       priority: "critical"
-    
+
     # Test Generation
     test_generation:
       local_audit_path: "./logs/testgen_audit.jsonl"
@@ -135,7 +135,7 @@ self_fixing_engineer:
         - "test_failure"
         - "coverage_analysis"
       priority: "high"
-    
+
     # Simulation
     simulation:
       local_audit_path: "./logs/simulation_audit.jsonl"
@@ -146,7 +146,7 @@ self_fixing_engineer:
         - "simulation_complete"
         - "anomaly_detected"
       priority: "medium"
-    
+
     # Guardrails/Compliance
     guardrails:
       local_audit_path: "./simulation/results/audit_trail.log"
@@ -157,7 +157,7 @@ self_fixing_engineer:
         - "policy_violation"
         - "security_violation"
       priority: "critical"
-  
+
   # OmniCore orchestrates SFE's audit lifecycle
   orchestration:
     retention_managed_by_hub: true
@@ -170,11 +170,11 @@ omnicore:
   enabled: true
   module_type: "central_orchestrator"
   is_hub: true
-  
+
   # OmniCore processes its own audit logs internally
   local_audit_path: "./logs/omnicore_audit.jsonl"
   self_orchestration: true
-  
+
   # OmniCore event types
   event_types:
     - "workflow_orchestration"
@@ -184,7 +184,7 @@ omnicore:
     - "performance_monitoring"
     - "security_events"
     - "hub_operations"
-  
+
   # Hub responsibilities
   hub_responsibilities:
     - "ingest_from_all_modules"
@@ -202,21 +202,21 @@ omnicore:
 unified_storage:
   enabled: true
   backend_type: "hybrid"  # Use multiple backends
-  
+
   # Primary storage (fast, searchable)
   primary:
     type: "elasticsearch"  # or "opensearch"
     endpoint: "http://localhost:9200"
     index_pattern: "audit-logs-{date}"
     retention_days: 90
-  
+
   # Archive storage (long-term retention)
   archive:
     type: "s3"  # or "gcs", "azure"
     bucket: "company-audit-logs"
     prefix: "unified/"
     retention_days: 2555  # 7 years for compliance
-  
+
   # Hot storage (recent logs, high performance)
   hot:
     type: "redis"
@@ -239,7 +239,7 @@ routing_rules:
       - "unified_storage.hot"
       - "alert_system"
     latency_sla_ms: 100
-  
+
   # High priority - fast routing
   high:
     severity_levels:
@@ -249,7 +249,7 @@ routing_rules:
       - "unified_storage.primary"
       - "unified_storage.hot"
     latency_sla_ms: 500
-  
+
   # Medium priority - standard routing
   medium:
     severity_levels:
@@ -258,7 +258,7 @@ routing_rules:
     route_to:
       - "unified_storage.primary"
     latency_sla_ms: 2000
-  
+
   # Low priority - batch routing
   low:
     severity_levels:
@@ -276,7 +276,7 @@ routing_rules:
 
 correlation:
   enabled: true
-  
+
   # Correlation keys for cross-module tracking
   correlation_keys:
     - "job_id"
@@ -284,7 +284,7 @@ correlation:
     - "trace_id"
     - "user_id"
     - "session_id"
-  
+
   # Enrichment - add context to routed logs
   enrichment:
     enabled: true
@@ -301,36 +301,36 @@ correlation:
 
 filtering:
   enabled: true
-  
+
   # Global filters (apply to all modules)
   global:
     # Exclude test/debug logs in production
     exclude_patterns:
       - "event_type: 'test_*'"
       - "source: 'pytest'"
-    
+
     # Include only specific severities in production
     include_severities:
       - "info"
       - "warning"
       - "error"
       - "critical"
-  
+
   # Module-specific filters
   by_module:
     generator:
       sample_rate: 1.0  # 100% sampling
-    
+
     self_fixing_engineer:
       sample_rate: 1.0  # 100% sampling
-    
+
     omnicore:
       sample_rate: 1.0  # 100% sampling
 
 # Transformation rules
 transformation:
   enabled: true
-  
+
   # Normalize field names across modules
   field_mapping:
     "timestamp": "timestamp"
@@ -339,10 +339,10 @@ transformation:
     "message": "message"
     "details": "details"
     "module": "source_module"
-  
+
   # Standardize timestamp format
   timestamp_format: "iso8601"
-  
+
   # Ensure consistent structure
   enforce_schema: true
 
@@ -354,10 +354,10 @@ buffering:
   enabled: true
   buffer_size: 10000  # Max entries in buffer
   buffer_timeout_seconds: 5  # Max time before flush
-  
+
   # Per-module buffers
   per_module_buffers: true
-  
+
   # Overflow handling
   overflow_strategy: "drop_oldest"  # Options: drop_oldest, drop_newest, reject
 
@@ -365,7 +365,7 @@ batching:
   enabled: true
   batch_size: 500  # Entries per batch
   batch_timeout_seconds: 10  # Max time before sending batch
-  
+
   # Compression for batches
   compress_batches: true
   compression_algorithm: "zstd"
@@ -381,14 +381,14 @@ reliability:
     max_attempts: 5
     backoff_factor: 2.0
     max_backoff_seconds: 60
-  
+
   # Circuit breaker for failing destinations
   circuit_breaker:
     enabled: true
     failure_threshold: 10
     timeout_seconds: 60
     half_open_requests: 3
-  
+
   # Dead letter queue for failed routes
   dead_letter_queue:
     enabled: true
@@ -403,7 +403,7 @@ reliability:
 
 monitoring:
   enabled: true
-  
+
   # Prometheus metrics
   prometheus:
     enabled: true
@@ -414,7 +414,7 @@ monitoring:
       - "audit_routing_latency_seconds"
       - "audit_buffer_size"
       - "audit_batch_size"
-  
+
   # OpenTelemetry tracing
   opentelemetry:
     enabled: true
@@ -428,7 +428,7 @@ monitoring:
 
 alerting:
   enabled: true
-  
+
   # Alert on routing failures
   routing_failures:
     enabled: true
@@ -436,14 +436,14 @@ alerting:
     alert_channels:
       - "slack"
       - "pagerduty"
-  
+
   # Alert on high latency
   high_latency:
     enabled: true
     threshold_ms: 5000
     alert_channels:
       - "slack"
-  
+
   # Alert on buffer overflow
   buffer_overflow:
     enabled: true
@@ -458,11 +458,11 @@ alerting:
 compliance:
   # Ensure all audit logs are routed and stored
   enforce_routing: true
-  
+
   # Audit the audit routing (meta-audit)
   meta_audit_enabled: true
   meta_audit_path: "./logs/routing_audit.jsonl"
-  
+
   # Compliance reporting
   reporting:
     enabled: true
@@ -477,12 +477,12 @@ security:
   # Encrypt logs in transit
   encrypt_in_transit: true
   tls_enabled: true
-  
+
   # Authenticate routing requests
   authentication:
     enabled: true
     method: "api_key"  # Options: api_key, mutual_tls, jwt
-  
+
   # Validate log integrity during routing
   integrity_check:
     enabled: true

@@ -18,7 +18,7 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 2
-  
+
   # Medium resource limits for staging
   - target:
       kind: Deployment
@@ -36,7 +36,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: 3Gi
-  
+
   # Staging environment
   - target:
       kind: ConfigMap

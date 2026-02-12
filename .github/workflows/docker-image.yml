@@ -24,22 +24,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Free up disk space
       run: |
         sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo apt-get clean
         df -h
-    
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
-    
+
     - name: Build the Docker image
       env:
         DOCKER_BUILDKIT: 1
       run: |
         docker build . --file Dockerfile --tag "${{ env.IMAGE_TAG }}" --build-arg SKIP_HEAVY_DEPS=${{ env.SKIP_HEAVY_DEPS }}
-    
+
     - name: Test Docker image can run
       run: |
         docker run --rm "${{ env.IMAGE_TAG }}" python --version

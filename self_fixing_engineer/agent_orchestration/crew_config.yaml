@@ -242,7 +242,7 @@ agents:
         status: enforced
       - id: SC-7
         status: enforced
-  
+
   - id: workerA
     name: worker_agent_a
     manifest: plugins/worker/manifest.json

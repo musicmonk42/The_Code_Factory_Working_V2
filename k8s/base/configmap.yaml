@@ -12,21 +12,21 @@ data:
   APP_ENV: "production"
   PRODUCTION_MODE: "1"
   DEV_MODE: "0"
-  
+
   # ============================================
   # Startup Optimization
   # ============================================
   APP_STARTUP: "1"
   SKIP_IMPORT_TIME_VALIDATION: "1"
   SPACY_WARNING_IGNORE: "W007"
-  
+
   # ============================================
   # Performance Flags
   # ============================================
   PARALLEL_AGENT_LOADING: "1"
   LAZY_LOAD_ML: "1"
   STARTUP_TIMEOUT: "90"
-  
+
   # ============================================
   # Database Configuration
   # ============================================
@@ -37,7 +37,7 @@ data:
   # Connection timeouts for cloud deployments
   DB_CONNECT_TIMEOUT: "30"  # Connection timeout in seconds
   DB_COMMAND_TIMEOUT: "60"  # Query execution timeout in seconds
-  
+
   # ============================================
   # Message Bus Configuration
   # ============================================
@@ -45,7 +45,7 @@ data:
   MESSAGE_BUS_WORKERS_PER_SHARD: "4"
   ENABLE_MESSAGE_BUS_GUARDIAN: "1"
   MESSAGE_BUS_GUARDIAN_INTERVAL: "30"
-  
+
   # ============================================
   # LLM Configuration
   # ============================================
@@ -54,7 +54,7 @@ data:
   LLM_MAX_RETRIES: "3"
   LLM_TEMPERATURE: "0.7"
   TESTGEN_LLM_TIMEOUT: "300"
-  
+
   # ============================================
   # Feature Flags
   # ============================================
@@ -67,36 +67,36 @@ data:
   ENABLE_LIBVIRT: "0"
   ENABLE_KAFKA: "0"
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
-  
+
   # ============================================
   # Audit Crypto Configuration
   # ============================================
   AUDIT_CRYPTO_MODE: "software"
   AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
-  
+
   # ============================================
   # Logging
   # ============================================
   LOG_LEVEL: "INFO"
   ENABLE_STRUCTURED_LOGGING: "1"
-  
+
   # ============================================
   # Monitoring
   # ============================================
   PROMETHEUS_PORT: "9090"
-  
+
   # ============================================
   # Application Paths
   # ============================================
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
-  
+
   # SFE Checkpoint Manager uses container-friendly defaults:
   # - CHECKPOINT_AUDIT_LOG_PATH defaults to ./logs/checkpoint/audit.log
   # - CHECKPOINT_DLQ_PATH defaults to ./logs/checkpoint/dlq.jsonl
   # Both resolve to /app/logs/checkpoint/ in the container.
   # Override only if custom paths are required.
-  
+
   # ============================================
   # Runner Configuration Path
   # ============================================
@@ -108,7 +108,7 @@ data:
   #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
   # Uncomment and set if needed:
   # RUNNER_CONFIG_PATH: "/app/generator/config.yaml"
-  
+
   # ============================================
   # Worker Configuration
   # ============================================
@@ -116,7 +116,7 @@ data:
   # Default is 4 for balanced performance. Production overlay increases to 8.
   # Resource requests/limits should be scaled accordingly.
   WORKER_COUNT: "4"
-  
+
   # ============================================
   # Redis Configuration
   # ============================================
