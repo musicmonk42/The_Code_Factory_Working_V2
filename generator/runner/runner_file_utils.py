@@ -1556,6 +1556,7 @@ async def validate_generated_project(
     check_python_syntax: bool = True,
     check_fastapi_endpoints: bool = False,
     expected_endpoints: Optional[List[str]] = None,
+    language: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Validate a generated project after materialization.
@@ -1572,10 +1573,11 @@ async def validate_generated_project(
     
     Args:
         output_dir: Directory containing the generated project
-        required_files: List of files that must exist (default: ['main.py'])
+        required_files: List of files that must exist (default: language-specific)
         check_python_syntax: If True, verify all .py files have valid syntax
         check_fastapi_endpoints: If True, check for FastAPI endpoint definitions
         expected_endpoints: List of endpoint paths that should be defined
+        language: Target language for validation (e.g., 'python', 'typescript', 'javascript', 'java', 'go')
     
     Returns:
         Dict with:
@@ -1637,55 +1639,82 @@ async def validate_generated_project(
         result["errors"].append("No files found in output directory")
         return result
     
-    # Check required files
+    # Check required files - language-aware defaults
+    lang = (language or "python").lower()
+    
     if required_files is None:
-        required_files = ["main.py"]
+        # Define entry points per language
+        ENTRY_POINTS = {
+            "python": ["main.py"],
+            "py": ["main.py"],
+            "typescript": ["index.ts", "app.ts", "server.ts"],
+            "ts": ["index.ts", "app.ts", "server.ts"],
+            "javascript": ["index.js", "app.js", "server.js"],
+            "js": ["index.js", "app.js", "server.js"],
+            "java": ["Main.java", "App.java", "Application.java"],
+            "go": ["main.go"],
+            "rust": ["main.rs"],
+        }
+        required_files = ENTRY_POINTS.get(lang, ["main.py"])
 
     # Files that are always hard requirements (missing = error).
     # Other required files produce warnings when absent.
-    CRITICAL_REQUIRED_FILES = {"main.py"}
+    CRITICAL_REQUIRED_FILES_MAP = {
+        "python": {"main.py"},
+        "py": {"main.py"},
+        "typescript": {"package.json"},
+        "ts": {"package.json"},
+        "javascript": {"package.json"},
+        "js": {"package.json"},
+        "java": set(),
+        "go": {"go.mod"},
+        "rust": {"Cargo.toml"},
+    }
+    CRITICAL_REQUIRED_FILES = CRITICAL_REQUIRED_FILES_MAP.get(lang, {"main.py"})
 
     # When the generated project uses an app/ layout, also require key files
-    app_dir = output_dir / "app"
-    if app_dir.is_dir():
-        # App-layout detected: only require app/main.py as the entry point
-        CRITICAL_REQUIRED_FILES.discard("main.py")
-        if "main.py" in required_files:
-            required_files.remove("main.py")
+    # (Only applies to Python projects)
+    if lang in ("python", "py"):
+        app_dir = output_dir / "app"
+        if app_dir.is_dir():
+            # App-layout detected: only require app/main.py as the entry point
+            CRITICAL_REQUIRED_FILES.discard("main.py")
+            if "main.py" in required_files:
+                required_files.remove("main.py")
 
-        # Only app/main.py is truly critical - it's the entry point
-        CRITICAL_REQUIRED_FILES.add("app/main.py")
+            # Only app/main.py is truly critical - it's the entry point
+            CRITICAL_REQUIRED_FILES.add("app/main.py")
 
-        # Other files are optional/recommended - produce warnings not errors
-        optional_app_files = [
-            "app/routes.py", "app/schemas.py",
-            "tests/test_health.py", "tests/test_version.py",
-            "tests/test_echo.py",
-            "requirements.txt", "README.md", ".env.example",
-        ]
-        for af in ["app/main.py"] + optional_app_files:
-            if af not in required_files:
-                required_files.append(af)
+            # Other files are optional/recommended - produce warnings not errors
+            optional_app_files = [
+                "app/routes.py", "app/schemas.py",
+                "tests/test_health.py", "tests/test_version.py",
+                "tests/test_echo.py",
+                "requirements.txt", "README.md", ".env.example",
+            ]
+            for af in ["app/main.py"] + optional_app_files:
+                if af not in required_files:
+                    required_files.append(af)
 
-    # If main.py is required but not found at root, try recursive search
-    # This handles cases where main.py exists in subdirectories not named 'app'
-    if "main.py" in CRITICAL_REQUIRED_FILES:
-        main_at_root = (output_dir / "main.py").exists()
-        if not main_at_root:
-            # Search recursively for main.py
-            main_files = list(output_dir.rglob("main.py"))
-            if main_files:
-                # Found main.py in a subdirectory - update requirements
-                main_rel_path = main_files[0].relative_to(output_dir)
-                CRITICAL_REQUIRED_FILES.discard("main.py")
-                CRITICAL_REQUIRED_FILES.add(str(main_rel_path))
-                if "main.py" in required_files:
-                    required_files.remove("main.py")
-                    required_files.append(str(main_rel_path))
-                logger.info(
-                    f"Found main.py at non-standard location: {main_rel_path}. "
-                    f"Updating validation requirements."
-                )
+        # If main.py is required but not found at root, try recursive search
+        # This handles cases where main.py exists in subdirectories not named 'app'
+        if "main.py" in CRITICAL_REQUIRED_FILES:
+            main_at_root = (output_dir / "main.py").exists()
+            if not main_at_root:
+                # Search recursively for main.py
+                main_files = list(output_dir.rglob("main.py"))
+                if main_files:
+                    # Found main.py in a subdirectory - update requirements
+                    main_rel_path = main_files[0].relative_to(output_dir)
+                    CRITICAL_REQUIRED_FILES.discard("main.py")
+                    CRITICAL_REQUIRED_FILES.add(str(main_rel_path))
+                    if "main.py" in required_files:
+                        required_files.remove("main.py")
+                        required_files.append(str(main_rel_path))
+                    logger.info(
+                        f"Found main.py at non-standard location: {main_rel_path}. "
+                        f"Updating validation requirements."
+                    )
 
     for required_file in required_files:
         file_path = output_dir / required_file
@@ -1741,19 +1770,20 @@ async def validate_generated_project(
             except Exception as e:
                 result["warnings"].append(f"Could not parse {py_file.name}: {e}")
     
-    # Check requirements.txt
-    requirements_path = output_dir / "requirements.txt"
-    if requirements_path.exists():
-        try:
-            req_content = requirements_path.read_text(encoding="utf-8").lower()
-            if "fastapi" not in req_content:
-                result["warnings"].append("requirements.txt does not contain 'fastapi'")
-            if "uvicorn" not in req_content:
-                result["warnings"].append("requirements.txt does not contain 'uvicorn'")
-        except Exception as e:
-            result["warnings"].append(f"Could not read requirements.txt: {e}")
-    else:
-        result["warnings"].append("requirements.txt not found")
+    # Check requirements.txt (Python-specific)
+    if lang in ("python", "py"):
+        requirements_path = output_dir / "requirements.txt"
+        if requirements_path.exists():
+            try:
+                req_content = requirements_path.read_text(encoding="utf-8").lower()
+                if "fastapi" not in req_content:
+                    result["warnings"].append("requirements.txt does not contain 'fastapi'")
+                if "uvicorn" not in req_content:
+                    result["warnings"].append("requirements.txt does not contain 'uvicorn'")
+            except Exception as e:
+                result["warnings"].append(f"Could not read requirements.txt: {e}")
+        else:
+            result["warnings"].append("requirements.txt not found")
     
     # Check for FastAPI endpoints
     if check_fastapi_endpoints or expected_endpoints:
