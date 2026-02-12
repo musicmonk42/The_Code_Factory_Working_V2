@@ -51,26 +51,52 @@ def clean_prometheus_registry(monkeypatch):
     # same Counter object and re-registering it would cause a ValueError).
     seen_ids = set()
     sut_metrics = []
-    for v in vars(m).values():
-        if isinstance(v, (prom.Counter, prom.Gauge, prom.Histogram)) and id(v) not in seen_ids:
-            sut_metrics.append(v)
-            seen_ids.add(id(v))
+    
+    # Build a tuple of valid metric types for isinstance check.
+    # Guard against MagicMock being used as type (when prometheus_client is mocked)
+    import inspect
+    metric_types = []
+    for metric_type in (prom.Counter, prom.Gauge, prom.Histogram):
+        # Check if it's a valid type using inspect.isclass
+        if inspect.isclass(metric_type):
+            metric_types.append(metric_type)
+    
+    # If no valid metric types, skip metric collection
+    if metric_types:
+        metric_types_tuple = tuple(metric_types)
+        for v in vars(m).values():
+            try:
+                if isinstance(v, metric_types_tuple) and id(v) not in seen_ids:
+                    sut_metrics.append(v)
+                    seen_ids.add(id(v))
+            except TypeError:
+                # isinstance failed, skip this value
+                pass
 
     # --- START FIX ---
     # Clear the internal state of all metric objects before registering.
     # This prevents state (values, labels) from leaking between tests.
+    
+    # Helper function to safely check isinstance when types might be MagicMock
+    def safe_isinstance(obj, type_to_check):
+        """Safely check isinstance, handling cases where type_to_check is not a valid type."""
+        try:
+            return isinstance(obj, type_to_check)
+        except TypeError:
+            return False
+    
     for metric in sut_metrics:
         # Clear labeled metrics
         if hasattr(metric, "_metrics"):
             metric._metrics.clear()
 
         # Clear label-less Gauge
-        if isinstance(metric, prom.Gauge) and not hasattr(metric, "_labelnames"):
+        if safe_isinstance(metric, prom.Gauge) and not hasattr(metric, "_labelnames"):
             if hasattr(metric, "_value"):
                 metric._value.set(0)
 
         # Clear label-less Counter
-        if isinstance(metric, prom.Counter) and not hasattr(metric, "_labelnames"):
+        if safe_isinstance(metric, prom.Counter) and not hasattr(metric, "_labelnames"):
             if hasattr(metric, "_value"):
                 metric._value.set(0)
 

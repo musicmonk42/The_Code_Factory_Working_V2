@@ -25,6 +25,10 @@ from generator.agents.deploy_agent.deploy_response_handler import (
 )
 from generator.agents.testgen_agent.testgen_agent import TestgenAgent
 
+# Set loop scope to class to prevent "Event loop is closed" errors
+# when multiple async tests in the same class share fixtures
+pytestmark = pytest.mark.asyncio(loop_scope="class")
+
 
 class TestDeployBasePlaceholderFix:
     """Test that BASE_IMAGE placeholder is properly substituted."""

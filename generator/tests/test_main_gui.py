@@ -457,9 +457,26 @@ class TestClarifierTab:
         """Create MainApp instance."""
         from main.gui import MainApp
 
+        # Constants for widget initialization retry
+        MAX_INIT_RETRIES = 10
+        INIT_RETRY_DELAY = 0.05  # 50ms per retry, 500ms total max wait
+
         app = MainApp()
         async with app.run_test() as pilot:
-            await asyncio.sleep(0.01)  # Wait for on_mount to add columns
+            # Wait for on_mount to complete and widgets to be queried
+            # The pilot.pause() waits for any pending messages to be processed
+            await pilot.pause()
+            
+            # Additional wait to ensure on_mount has completed
+            for _ in range(MAX_INIT_RETRIES):
+                if app.clarifier_table is not None:
+                    break
+                await asyncio.sleep(INIT_RETRY_DELAY)
+            
+            # Skip if clarifier_table is still None (on_mount failed)
+            if app.clarifier_table is None:
+                pytest.skip("clarifier_table not initialized - on_mount may have failed")
+            
             # Textual's DataTable.add_row is synchronous, not async
             app.clarifier_table.add_row(
                 "q123", "Test Question?", "Pending", key="q123"

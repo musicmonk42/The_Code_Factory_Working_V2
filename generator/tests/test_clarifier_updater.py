@@ -729,24 +729,18 @@ class TestConvenienceFunction(unittest.IsolatedAsyncioTestCase):
 
 
 def tearDownModule():
-    """Clean up all patches."""
-    patcher_recursive_transform.stop()
-    patcher_detect_pii.stop()
-    patcher_redact_sensitive.stop()
-    patcher_send_alert.stop()
-    patcher_log_action.stop()
-    patcher_get_logger.stop()
-    patcher_get_fernet.stop()
-    patcher_get_config.stop()
-    patcher_clarifier_get_logger.stop()
-    patcher_clarifier_get_fernet.stop()
-    patcher_clarifier_get_config.stop()
-    patcher_otel_exporter.stop()
-    patcher_otel_set_tracer.stop()
-    patcher_otel_batch_processor.stop()
-    patcher_otel_tracer_provider.stop()
-    patcher_otel_sampling.stop()
-    patcher_otel_trace.stop()
+    """Clean up all patches.
+    
+    Note: Module-level patches are managed by _module_level_patches list.
+    The autouse fixture mock_dependencies handles per-test cleanup.
+    This function stops only the module-level patches that were started.
+    """
+    for p in _module_level_patches:
+        try:
+            p.stop()
+        except RuntimeError:
+            # Patch may already be stopped
+            pass
     print("\nAll clarifier_updater mocks stopped.")
 
 
