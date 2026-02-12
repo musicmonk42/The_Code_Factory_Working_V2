@@ -215,10 +215,11 @@ class TestConfigurableTimeouts:
 
     def test_default_timeout_values(self):
         """Test that timeout constants have default values."""
-        assert DEFAULT_TESTGEN_TIMEOUT == int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "300"))
-        assert DEFAULT_DEPLOY_TIMEOUT == int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
-        assert DEFAULT_DOCGEN_TIMEOUT == int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
-        assert DEFAULT_CRITIQUE_TIMEOUT == int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
+        # Test actual default values (when env vars are not set)
+        assert DEFAULT_TESTGEN_TIMEOUT == 300
+        assert DEFAULT_DEPLOY_TIMEOUT == 90
+        assert DEFAULT_DOCGEN_TIMEOUT == 300
+        assert DEFAULT_CRITIQUE_TIMEOUT == 90
 
     def test_custom_timeout_values(self):
         """Test that timeout values can be customized via environment variables."""
