@@ -296,15 +296,33 @@ def _initialize_opentelemetry_mock():
             return self
         def __exit__(self, *args):
             pass
+        def __call__(self, *args, **kwargs):
+            """Make MockSpan callable for decorator usage."""
+            if len(args) == 1 and callable(args[0]):
+                # Used as decorator
+                func = args[0]
+                def wrapper(*inner_args, **inner_kwargs):
+                    with self:
+                        return func(*inner_args, **inner_kwargs)
+                return wrapper
+            return self
         def set_attribute(self, key, value):
             pass
         def add_event(self, name, attributes=None):
             pass
         def set_status(self, status):
             pass
+        def record_exception(self, exception):
+            """Record an exception on this span."""
+            pass
     
     # Create mock Status and StatusCode
     class MockStatus:
+        """Mock OpenTelemetry Status that accepts status_code and description."""
+        def __init__(self, status_code=None, description=None):
+            self.status_code = status_code or "UNSET"
+            self.description = description
+        
         OK = "OK"
         ERROR = "ERROR"
     
@@ -313,14 +331,47 @@ def _initialize_opentelemetry_mock():
         ERROR = "ERROR"
         UNSET = "UNSET"
     
+    # Create mock metrics classes
+    class MockMeter:
+        def create_counter(self, name, **kwargs):
+            return MockCounter()
+        def create_histogram(self, name, **kwargs):
+            return MockHistogram()
+        def create_observable_gauge(self, name, callback, **kwargs):
+            return MockObservableGauge()
+    
+    class MockCounter:
+        def add(self, value, attributes=None):
+            pass
+    
+    class MockHistogram:
+        def record(self, value, attributes=None):
+            pass
+    
+    class MockObservableGauge:
+        pass
+    
     # Create simple mocks for opentelemetry modules
-    _create_simple_mock("opentelemetry", {}, submodules=["trace", "sdk"])
+    _create_simple_mock("opentelemetry", {}, submodules=["trace", "sdk", "metrics"])
     _create_simple_mock("opentelemetry.trace", {
         "get_tracer": lambda name: MockTracer(),
         "get_tracer_provider": lambda: MagicMock(),
         "set_tracer_provider": lambda provider: None,
+        "get_current_span": lambda: MockSpan(),
         "Status": MockStatus,
         "StatusCode": MockStatusCode,
+    }, submodules=["status"])
+    _create_simple_mock("opentelemetry.trace.status", {
+        "Status": MockStatus,
+        "StatusCode": MockStatusCode,
+    }, submodules=[])
+    _create_simple_mock("opentelemetry.metrics", {
+        "get_meter": lambda *args, **kwargs: MockMeter(),
+        "get_meter_provider": lambda: MagicMock(),
+        "set_meter_provider": lambda provider: None,
+        "Counter": MockCounter,
+        "Histogram": MockHistogram,
+        "ObservableGauge": MockObservableGauge,
     }, submodules=[])
     _create_simple_mock("opentelemetry.sdk", {}, submodules=["trace"])
     _create_simple_mock("opentelemetry.sdk.trace", {}, submodules=["export"])

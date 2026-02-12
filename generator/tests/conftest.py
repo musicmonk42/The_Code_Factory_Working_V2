@@ -285,6 +285,178 @@ if "prometheus_client" not in sys.modules:
         prom_core.REGISTRY = _shared_registry
         prom_registry.REGISTRY = _shared_registry
 
+# Initialize OpenTelemetry stubs inline
+# This ensures OpenTelemetry mocks exist before test files are imported
+if "opentelemetry" not in sys.modules:
+    try:
+        import opentelemetry as _test
+    except ImportError:
+        # Create opentelemetry package stub
+        otel_spec = importlib.machinery.ModuleSpec(name="opentelemetry", loader=None, is_package=True)
+        otel_module = importlib.util.module_from_spec(otel_spec)
+        otel_module.__file__ = "<mocked opentelemetry>"
+        otel_module.__path__ = []  # Required for package-like behavior
+        sys.modules["opentelemetry"] = otel_module
+        
+        # Create trace submodule with proper hierarchy
+        trace_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace", loader=None, is_package=True)
+        otel_trace = importlib.util.module_from_spec(trace_spec)
+        otel_trace.__file__ = "<mocked opentelemetry.trace>"
+        otel_trace.__path__ = []
+        sys.modules["opentelemetry.trace"] = otel_trace
+        otel_module.trace = otel_trace
+        
+        # Create trace.status submodule
+        trace_status_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace.status", loader=None, is_package=False)
+        otel_trace_status = importlib.util.module_from_spec(trace_status_spec)
+        otel_trace_status.__file__ = "<mocked opentelemetry.trace.status>"
+        sys.modules["opentelemetry.trace.status"] = otel_trace_status
+        otel_trace.status = otel_trace_status
+        
+        # Create metrics submodule
+        metrics_spec = importlib.machinery.ModuleSpec(name="opentelemetry.metrics", loader=None, is_package=False)
+        otel_metrics = importlib.util.module_from_spec(metrics_spec)
+        otel_metrics.__file__ = "<mocked opentelemetry.metrics>"
+        sys.modules["opentelemetry.metrics"] = otel_metrics
+        otel_module.metrics = otel_metrics
+        
+        # Add mock classes for trace
+        class MockSpan:
+            """Mock OpenTelemetry Span that can be used as a context manager and is callable."""
+            def __init__(self, *args, **kwargs):
+                self.attributes = {}
+                self.events = []
+                self.status = None
+                
+            def __enter__(self):
+                return self
+                
+            def __exit__(self, *args):
+                pass
+                
+            def __call__(self, *args, **kwargs):
+                """Make MockSpan callable for decorator usage."""
+                if len(args) == 1 and callable(args[0]):
+                    # Used as decorator
+                    func = args[0]
+                    def wrapper(*inner_args, **inner_kwargs):
+                        with self:
+                            return func(*inner_args, **inner_kwargs)
+                    return wrapper
+                return self
+                
+            def set_attribute(self, key, value):
+                self.attributes[key] = value
+                
+            def set_attributes(self, attributes):
+                self.attributes.update(attributes)
+                
+            def add_event(self, name, attributes=None):
+                self.events.append({"name": name, "attributes": attributes or {}})
+                
+            def set_status(self, status):
+                self.status = status
+                
+            def record_exception(self, exception):
+                self.events.append({"name": "exception", "exception": exception})
+        
+        class MockTracer:
+            """Mock OpenTelemetry Tracer."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def start_as_current_span(self, name, *args, **kwargs):
+                return MockSpan()
+                
+            def start_span(self, name, *args, **kwargs):
+                return MockSpan()
+        
+        class MockTracerProvider:
+            """Mock OpenTelemetry TracerProvider."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def get_tracer(self, *args, **kwargs):
+                return MockTracer()
+        
+        class MockStatus:
+            """Mock OpenTelemetry Status."""
+            def __init__(self, status_code, description=None):
+                self.status_code = status_code
+                self.description = description
+        
+        class MockStatusCode:
+            """Mock OpenTelemetry StatusCode enum."""
+            OK = "OK"
+            ERROR = "ERROR"
+            UNSET = "UNSET"
+        
+        # Add mock classes for metrics
+        class MockMeter:
+            """Mock OpenTelemetry Meter."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def create_counter(self, name, *args, **kwargs):
+                return MockCounter()
+                
+            def create_histogram(self, name, *args, **kwargs):
+                return MockHistogram()
+                
+            def create_observable_gauge(self, name, callback, *args, **kwargs):
+                return MockObservableGauge()
+        
+        class MockMeterProvider:
+            """Mock OpenTelemetry MeterProvider."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def get_meter(self, *args, **kwargs):
+                return MockMeter()
+        
+        class MockCounter:
+            """Mock OpenTelemetry Counter."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def add(self, value, attributes=None):
+                pass
+        
+        class MockHistogram:
+            """Mock OpenTelemetry Histogram."""
+            def __init__(self, *args, **kwargs):
+                pass
+                
+            def record(self, value, attributes=None):
+                pass
+        
+        class MockObservableGauge:
+            """Mock OpenTelemetry ObservableGauge."""
+            def __init__(self, *args, **kwargs):
+                pass
+        
+        # Set up trace module
+        otel_trace.get_tracer = lambda *args, **kwargs: MockTracer()
+        otel_trace.get_tracer_provider = lambda: MockTracerProvider()
+        otel_trace.set_tracer_provider = lambda provider: None
+        otel_trace.Span = MockSpan
+        otel_trace.Tracer = MockTracer
+        otel_trace.TracerProvider = MockTracerProvider
+        
+        # Set up trace.status module
+        otel_trace_status.Status = MockStatus
+        otel_trace_status.StatusCode = MockStatusCode
+        
+        # Set up metrics module
+        otel_metrics.get_meter = lambda *args, **kwargs: MockMeter()
+        otel_metrics.get_meter_provider = lambda: MockMeterProvider()
+        otel_metrics.set_meter_provider = lambda provider: None
+        otel_metrics.Meter = MockMeter
+        otel_metrics.MeterProvider = MockMeterProvider
+        otel_metrics.Counter = MockCounter
+        otel_metrics.Histogram = MockHistogram
+        otel_metrics.ObservableGauge = MockObservableGauge
+
 # Add root directory to path if not already there
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if root_dir not in sys.path:
