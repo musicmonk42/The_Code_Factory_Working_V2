@@ -329,6 +329,66 @@ class LogScrubberFilter(logging.Filter):
         return True
 
 
+def load_audit_routing_config():
+    """
+    Load unified audit routing configuration and merge into environment.
+    
+    This function loads the audit_routing_config.yaml file which defines
+    how audit logs from all platform modules (including generator) are
+    routed to the OmniCore hub for centralized storage and analysis.
+    
+    The configuration is merged into environment variables so that the
+    audit logging system (runner_audit.py) can access routing settings.
+    """
+    try:
+        import yaml
+        
+        # Path to unified routing config
+        routing_config_path = Path(__file__).parent.parent.parent / "audit_routing_config.yaml"
+        
+        if not routing_config_path.exists():
+            logger.warning(
+                f"Audit routing config not found at {routing_config_path}. "
+                f"Audit logs will not be routed to OmniCore hub."
+            )
+            return
+        
+        # Load the routing config
+        with open(routing_config_path, 'r') as f:
+            routing_config = yaml.safe_load(f)
+        
+        # Extract generator-specific routing settings
+        generator_config = routing_config.get('generator', {})
+        
+        if generator_config.get('route_all_events_to_hub'):
+            # Set environment variables for runner_audit.py to use
+            os.environ['ROUTE_TO_MAIN_AUDIT'] = 'true'
+            
+            hub_endpoint = generator_config.get('hub_endpoint')
+            if hub_endpoint:
+                os.environ['MAIN_AUDIT_ENDPOINT'] = hub_endpoint
+            
+            logger.info(
+                f"Audit routing enabled: logs will be forwarded to {hub_endpoint}",
+                extra={
+                    "routing_enabled": True,
+                    "hub_endpoint": hub_endpoint
+                }
+            )
+        else:
+            logger.info(
+                "Audit routing disabled in unified config. Logs will be local only.",
+                extra={"routing_enabled": False}
+            )
+            
+    except Exception as e:
+        logger.error(
+            f"Failed to load audit routing config: {e}. "
+            f"Audit logs will remain local only.",
+            exc_info=True
+        )
+
+
 # --- FIX: Moved side-effects into a function ---
 def setup_observability(log_level: str):
     """Initializes Logging, Tracing, and Metrics. Called at runtime."""
@@ -359,6 +419,9 @@ def setup_observability(log_level: str):
                 f"Failed to set up file logging: {e}. Continuing with console logging.",
                 exc_info=True,
             )
+
+    # --- Load Audit Routing Configuration ---
+    load_audit_routing_config()
 
     # --- OpenTelemetry Tracing Configuration ---
     if _HAS_OTEL:

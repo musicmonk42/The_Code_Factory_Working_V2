@@ -212,6 +212,10 @@ python-dotenv==1.0.0
 - ✓ Implement comprehensive error handling with HTTPException
 - ✓ Add docstrings to all endpoints
 - ✓ Use dependency injection for shared resources
+- ✓ Import ALL types used in middleware (Request, Response, time, etc.)
+- ✓ Every type annotation must have a corresponding import
+- ✓ CRITICAL: When using middleware with Request parameter, import: from fastapi import Request
+- ✓ CRITICAL: When using time in middleware, import: import time
 
 {% elif target_framework == "flask" %}
 ---

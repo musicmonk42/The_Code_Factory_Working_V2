@@ -328,6 +328,17 @@ The following are MANDATORY checks:
    - Maintain proper indentation levels for nested blocks
    - Verify indentation after control structures
 
+4a. IMPORTS AND DEPENDENCIES (CRITICAL FOR FASTAPI):
+   - Every name referenced in the code MUST have a corresponding import statement
+   - When using FastAPI middleware, ALWAYS include:
+     * from fastapi import Request (when using Request type hint)
+     * import time (when using time.time() or time.perf_counter())
+   - When using type hints, ensure the types are imported:
+     * from fastapi import Request, Response, HTTPException
+     * from typing import Optional, List, Dict, Any
+   - Check EVERY function signature and ensure all type hints have imports
+   - Double-check middleware functions - they commonly use Request and time
+
 5. ORGANIZE INTO FILES:
    Structure as a proper project with separate files using app/ directory:
    - app/main.py (FastAPI app instance, imports router from app/routes.py, includes middleware)
