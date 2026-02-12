@@ -1,5 +1,16 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+# ============================================================================
+# Generator Module Audit Log Configuration
+# ============================================================================
+# This configuration defines audit logging settings for the Generator module.
+# Updated to include routing parameters for forwarding logs to OmniCore hub.
+# ============================================================================
+
+# =============================================================================
+# CRYPTOGRAPHIC SETTINGS
+# =============================================================================
+
 PROVIDER_TYPE: "software"
 DEFAULT_ALGO: "ed25519"
 KEY_ROTATION_INTERVAL_SECONDS: 86400
@@ -7,3 +18,79 @@ SOFTWARE_KEY_DIR: "audit_keys"
 KMS_KEY_ID: "alias/audit-log-key"
 AWS_REGION: "us-east-1"
 ALERT_ENDPOINT: "http://localhost:8080/alert"
+
+# =============================================================================
+# AUDIT LOG ROUTING TO OMNICORE HUB
+# =============================================================================
+# Generator sends all audit events to OmniCore as the central orchestration hub
+
+# Enable routing to main audit system (OmniCore Hub)
+ROUTE_TO_MAIN_AUDIT: true
+
+# OmniCore Hub audit ingestion endpoint
+MAIN_AUDIT_ENDPOINT: "http://localhost:8001/audit/ingest"
+
+# Alternative: Generator's local audit API (for fallback/local queries)
+LOCAL_AUDIT_ENDPOINT: "http://localhost:8003/log"
+
+# Event severity levels to route to hub
+ROUTE_SEVERITY_LEVELS:
+  - "critical"
+  - "error"
+  - "security"
+  - "compliance"
+  - "warning"
+  - "info"
+
+# Event types to route to hub
+ROUTE_EVENT_TYPES:
+  - "code_generated"
+  - "test_generated"
+  - "doc_generated"
+  - "deployment"
+  - "error"
+  - "security"
+  - "compliance"
+  - "crypto_operation"
+  - "rbac_denial"
+  - "tamper_detection"
+
+# =============================================================================
+# AUDIT LOG STORAGE
+# =============================================================================
+
+# Local audit log path (fallback when hub is unavailable)
+AUDIT_LOG_PATH: "./logs/generator_audit.jsonl"
+
+# Log rotation settings
+AUDIT_LOG_ROTATION: "midnight"
+AUDIT_LOG_INTERVAL: 1
+AUDIT_LOG_MAX_SIZE: 10485760  # 10MB
+AUDIT_LOG_RETENTION: 30  # Keep 30 rotated files
+
+# Compression for rotated logs
+AUDIT_LOG_COMPRESSION: "gzip"
+
+# =============================================================================
+# RELIABILITY AND FAULT TOLERANCE
+# =============================================================================
+
+# Retry configuration for routing failures
+ROUTING_RETRY_ENABLED: true
+ROUTING_MAX_ATTEMPTS: 3
+ROUTING_BACKOFF_SECONDS: 2.0
+ROUTING_TIMEOUT_SECONDS: 5.0
+
+# Fallback to local logging if hub unavailable
+FALLBACK_TO_LOCAL: true
+
+# =============================================================================
+# BATCH PROCESSING
+# =============================================================================
+
+AUDIT_LOG_BATCH_SIZE: 50
+AUDIT_LOG_BATCH_TIMEOUT: 2.0
+
+# Buffer settings
+AUDIT_BUFFER_SIZE: 100
+AUDIT_FLUSH_INTERVAL: 1.0

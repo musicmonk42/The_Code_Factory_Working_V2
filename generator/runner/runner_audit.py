@@ -59,6 +59,41 @@ from typing import Any, Dict
 # --- Early logger setup to prevent circular imports ---
 logger = logging.getLogger("runner")
 
+# --- HTTP client for routing (lazy import) ---
+try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+    logger.debug("aiohttp not available. Audit routing to hub will be disabled.")
+
+# --- Load audit config (lazy import) ---
+def _load_audit_config():
+    """Load audit configuration from YAML file."""
+    try:
+        import yaml
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), 
+            "audit_config.yaml"
+        )
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return yaml.safe_load(f)
+    except Exception as e:
+        logger.debug(f"Could not load audit config: {e}")
+    return {}
+
+# Load config once
+_AUDIT_CONFIG = _load_audit_config()
+
+# Routing configuration from audit_config.yaml
+ROUTE_TO_MAIN_AUDIT = _AUDIT_CONFIG.get("ROUTE_TO_MAIN_AUDIT", False)
+MAIN_AUDIT_ENDPOINT = _AUDIT_CONFIG.get("MAIN_AUDIT_ENDPOINT", "http://localhost:8001/audit/ingest")
+ROUTING_RETRY_ENABLED = _AUDIT_CONFIG.get("ROUTING_RETRY_ENABLED", True)
+ROUTING_MAX_ATTEMPTS = _AUDIT_CONFIG.get("ROUTING_MAX_ATTEMPTS", 3)
+ROUTING_TIMEOUT_SECONDS = _AUDIT_CONFIG.get("ROUTING_TIMEOUT_SECONDS", 5.0)
+FALLBACK_TO_LOCAL = _AUDIT_CONFIG.get("FALLBACK_TO_LOCAL", True)
+
 # --- Crypto imports with fallback ---
 SIGNING_ENABLED = (
     os.getenv("DEV_MODE", "0") != "1"
@@ -119,6 +154,122 @@ _DEFAULT_AUDIT_KEY_ID: str = (
     or os.getenv("AUDIT_SIGNING_KEY", "")
     or os.getenv("RUNNER_AUDIT_SIGNING_KEY_ID", "")
 )
+
+
+async def _route_audit_to_hub(audit_entry: Dict[str, Any]) -> None:
+    """
+    Route audit event to OmniCore hub via HTTP POST.
+    
+    This function forwards audit events to the central OmniCore hub for
+    unified storage, analysis, and correlation across all platform modules.
+    
+    Features:
+    - Asynchronous HTTP POST to hub ingestion endpoint
+    - Retry logic with exponential backoff
+    - Timeout handling
+    - Fallback to local-only logging on failure
+    
+    Args:
+        audit_entry: The complete audit log entry to route
+        
+    Returns:
+        None. Errors are logged but not raised to prevent disrupting audit chain.
+    """
+    if not HAS_AIOHTTP:
+        logger.debug("aiohttp not available, skipping audit routing to hub")
+        return
+    
+    attempt = 0
+    max_attempts = ROUTING_MAX_ATTEMPTS if ROUTING_RETRY_ENABLED else 1
+    backoff_seconds = 1.0
+    
+    while attempt < max_attempts:
+        attempt += 1
+        try:
+            timeout = aiohttp.ClientTimeout(total=ROUTING_TIMEOUT_SECONDS)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # Prepare the payload for the hub
+                payload = {
+                    "source_module": "generator",
+                    "event": audit_entry,
+                    "routing_timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+                
+                # POST to hub ingestion endpoint
+                async with session.post(
+                    MAIN_AUDIT_ENDPOINT,
+                    json=payload,
+                    headers={"Content-Type": "application/json"}
+                ) as response:
+                    if response.status == 200:
+                        logger.debug(
+                            f"Successfully routed audit event to hub: {audit_entry.get('action')}",
+                            extra={
+                                "action": audit_entry.get("action"),
+                                "hub_endpoint": MAIN_AUDIT_ENDPOINT,
+                                "attempt": attempt
+                            }
+                        )
+                        return  # Success!
+                    else:
+                        logger.warning(
+                            f"Hub returned non-200 status: {response.status} for audit event",
+                            extra={
+                                "action": audit_entry.get("action"),
+                                "status": response.status,
+                                "attempt": attempt
+                            }
+                        )
+                        
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Timeout routing audit event to hub (attempt {attempt}/{max_attempts})",
+                extra={
+                    "action": audit_entry.get("action"),
+                    "hub_endpoint": MAIN_AUDIT_ENDPOINT,
+                    "timeout": ROUTING_TIMEOUT_SECONDS
+                }
+            )
+        except aiohttp.ClientError as e:
+            logger.warning(
+                f"HTTP error routing audit event to hub (attempt {attempt}/{max_attempts}): {e}",
+                extra={
+                    "action": audit_entry.get("action"),
+                    "error_type": type(e).__name__
+                }
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error routing audit event to hub: {e}",
+                exc_info=True,
+                extra={"action": audit_entry.get("action")}
+            )
+            break  # Don't retry on unexpected errors
+        
+        # Exponential backoff before retry
+        if attempt < max_attempts:
+            await asyncio.sleep(backoff_seconds)
+            backoff_seconds *= 2
+    
+    # All attempts failed
+    if FALLBACK_TO_LOCAL:
+        logger.info(
+            f"Failed to route audit event to hub after {attempt} attempts. "
+            f"Event is logged locally only.",
+            extra={
+                "action": audit_entry.get("action"),
+                "fallback": "local_only"
+            }
+        )
+    else:
+        logger.error(
+            f"Failed to route audit event to hub after {attempt} attempts. "
+            f"FALLBACK_TO_LOCAL is disabled - this event may not be centrally tracked!",
+            extra={
+                "action": audit_entry.get("action"),
+                "severity": "critical"
+            }
+        )
 
 
 async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
@@ -314,6 +465,13 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             )
             # Update Prometheus metric for audit event success
             PROVENANCE_LOG_ENTRIES.labels(action=action).inc()
+            
+            # Route audit event to OmniCore hub if enabled
+            if ROUTE_TO_MAIN_AUDIT and HAS_AIOHTTP:
+                asyncio.create_task(
+                    _route_audit_to_hub(final_audit_log),
+                    name=f"route_audit_{action}"
+                )
 
         except CryptoOperationError as e:
             # CRITICAL: Signing failed - this breaks the audit chain
