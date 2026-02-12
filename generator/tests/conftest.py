@@ -387,3 +387,23 @@ def cleanup_memory_after_test():
     # Run GC twice to catch circular references
     gc.collect()
     gc.collect()
+
+
+# ---- Global Async Mock Fixtures ----
+# These fixtures automatically mock commonly awaited async functions
+# to prevent "TypeError: object MagicMock can't be used in 'await' expression"
+# errors throughout the test suite.
+
+@pytest.fixture(autouse=True)
+def mock_async_file_utils():
+    """Automatically mock async functions in runner_file_utils for all tests."""
+    from unittest.mock import AsyncMock, patch
+    
+    with patch("runner.runner_file_utils.verify_file_integrity", new_callable=AsyncMock, return_value=True) as mock_verify, \
+         patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock) as mock_prov, \
+         patch("runner.runner_file_utils.scan_for_vulnerabilities", new_callable=AsyncMock, return_value={"vulnerabilities_found": 0}) as mock_scan:
+        yield {
+            "verify_file_integrity": mock_verify,
+            "add_provenance": mock_prov,
+            "scan_for_vulnerabilities": mock_scan,
+        }
