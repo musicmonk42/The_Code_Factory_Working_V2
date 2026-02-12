@@ -3039,6 +3039,19 @@ async def handle_deploy_response(
                 '<SERVICE_NAME>': 'app',
                 '{BASE_IMAGE}': 'python:3.11-slim',
                 '<BASE_IMAGE>': 'python:3.11-slim',
+                # FIX Issue 1: Add USER_ID and GROUP_ID placeholders
+                '{USER_ID}': '1000',
+                '{GROUP_ID}': '1000',
+                '{UID}': '1000',
+                '{GID}': '1000',
+                '{USER}': 'appuser',
+                '{APP_USER}': 'appuser',
+                '{APP_NAME}': 'app',
+                '{APP_PORT}': '8000',
+                '<USER_ID>': '1000',
+                '<GROUP_ID>': '1000',
+                '<APP_NAME>': 'app',
+                '<APP_PORT>': '8000',
             }
             
             # Pre-substitute common environment placeholders in a single pass

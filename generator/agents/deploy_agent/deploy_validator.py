@@ -595,6 +595,14 @@ class DockerValidator(Validator):
                 report["compliance_score"] = (
                     1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
                 )
+                
+                # FIX Issue 5: Set 'valid' key based on validation results
+                # Consider valid if build succeeded (or skipped) and no critical issues
+                report["valid"] = (
+                    report["build_status"] in ("success", "skipped", "lint_warning") and
+                    report["lint_status"] in ("success", "skipped", "warning") and
+                    len([i for i in report["lint_issues"] if "failed to build" in i.lower()]) == 0
+                )
 
             except FileNotFoundError as e:
                 report["build_status"] = "tool_not_found"
@@ -766,6 +774,13 @@ class KubernetesValidator(Validator):
             report["compliance_score"] = (
                 1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
             )
+            
+            # FIX Issue 5: Set 'valid' key based on validation results
+            # Consider valid if lint succeeded and no critical issues
+            report["valid"] = (
+                report["lint_status"] in ("success", "warning") and
+                total_issues == 0
+            )
 
         except Exception as e:
             report["lint_status"] = "internal_error"
@@ -924,6 +939,13 @@ class HelmValidator(Validator):
                 )
                 report["compliance_score"] = (
                     1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
+                )
+                
+                # FIX Issue 5: Set 'valid' key based on validation results
+                # Consider valid if lint succeeded and no critical issues
+                report["valid"] = (
+                    report["lint_status"] in ("success", "warning") and
+                    total_issues == 0
                 )
 
             except FileNotFoundError as e:
