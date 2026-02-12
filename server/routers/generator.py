@@ -309,20 +309,15 @@ async def _trigger_pipeline_background(
         # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped
         # Check if testgen was skipped for non-Python projects
         testgen_was_skipped = any("testgen:skipped" in s for s in stages_completed)
-        include_tests = True  # This function always requests tests (see line 282)
-        include_deployment = True  # This function always requests deployment (see line 283)
-        include_docs = True  # This function always requests docs (see line 284)
-        run_critique = True  # This function always requests critique (see line 285)
-        if include_tests and not testgen_was_skipped:
+        
+        # Note: This function always requests all stages (see run_full_pipeline call at line 278)
+        # The following constants reflect the hardcoded True values passed to run_full_pipeline
+        if not testgen_was_skipped:
+            # Only add testgen to critical stages if it wasn't intentionally skipped
             critical_stages.append("testgen")
         
-        auxiliary_stages = []
-        if include_deployment:
-            auxiliary_stages.append("deploy")
-        if include_docs:
-            auxiliary_stages.append("docgen")
-        if run_critique:
-            auxiliary_stages.append("critique")
+        # Define auxiliary stages (always requested in this function)
+        auxiliary_stages = ["deploy", "docgen", "critique"]
 
         # Check if ALL CRITICAL stages completed successfully
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
