@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 try:
-    from pydantic import BaseModel, Field, field_validator
+    from pydantic import BaseModel, ConfigDict, Field, field_validator
     PYDANTIC_AVAILABLE = True
 except ImportError:
     # Fallback for environments without Pydantic
@@ -134,6 +134,10 @@ if PYDANTIC_AVAILABLE:
         All audit events across the platform should conform to this schema.
         """
         
+        model_config = ConfigDict(json_encoders={
+            datetime: lambda v: v.isoformat(),
+        })
+        
         # Core fields
         event_id: str = Field(default_factory=lambda: str(uuid4()), description="Unique event identifier")
         event_type: str = Field(..., description="Type of event (use AuditEventType enum values)")
@@ -167,11 +171,6 @@ if PYDANTIC_AVAILABLE:
         # Source tracking
         hostname: Optional[str] = Field(default_factory=lambda: os.getenv("HOSTNAME", "unknown"), description="Host that generated the event")
         process_id: Optional[int] = Field(default_factory=os.getpid, description="Process ID that generated the event")
-        
-        class Config:
-            json_encoders = {
-                datetime: lambda v: v.isoformat(),
-            }
         
         @classmethod
         @field_validator('timestamp', mode='before')

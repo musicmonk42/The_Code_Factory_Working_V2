@@ -32,7 +32,7 @@ from uuid import uuid4
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from server.schemas import (
     Job,
@@ -150,18 +150,17 @@ class V1GenerateResponse(BaseModel):
     
     Returns the newly created job ID and status information.
     """
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "status": "pending",
+            "message": "Code generation job created. Use GET /api/v1/generations/{job_id} to check status."
+        }
+    })
+    
     id: str = Field(..., description="Job/generation ID (UUID format)")
     status: str = Field(..., description="Initial status (typically 'pending' or 'running')")
     message: str = Field(..., description="Human-readable status message")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "status": "pending",
-                "message": "Code generation job created. Use GET /api/v1/generations/{job_id} to check status."
-            }
-        }
 
 
 class V1GenerationListItem(BaseModel):
@@ -170,24 +169,23 @@ class V1GenerationListItem(BaseModel):
     
     Represents a single generation job in list responses.
     """
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "status": "completed",
+            "requirements": "Create a Flask app with /hello endpoint",
+            "language": "python",
+            "created_at": "2025-02-11T04:12:00Z",
+            "updated_at": "2025-02-11T04:15:30Z"
+        }
+    })
+    
     id: str = Field(..., description="Job/generation ID")
     status: str = Field(..., description="Current job status")
     requirements: Optional[str] = Field(None, description="Original requirements")
     language: Optional[str] = Field(None, description="Target programming language")
     created_at: str = Field(..., description="ISO 8601 timestamp of creation")
     updated_at: str = Field(..., description="ISO 8601 timestamp of last update")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "status": "completed",
-                "requirements": "Create a Flask app with /hello endpoint",
-                "language": "python",
-                "created_at": "2025-02-11T04:12:00Z",
-                "updated_at": "2025-02-11T04:15:30Z"
-            }
-        }
 
 
 def get_generator_service() -> GeneratorService:
@@ -433,20 +431,19 @@ class SFECheckpointResponse(BaseModel):
     
     Returns the checkpoint ID and confirmation message.
     """
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "type": "test",
+            "status": "created",
+            "message": "SFE checkpoint created successfully with type 'test'"
+        }
+    })
+    
     id: str = Field(..., description="Checkpoint ID (UUID format)")
     type: str = Field(..., description="Checkpoint type")
     status: str = Field(..., description="Checkpoint status")
     message: str = Field(..., description="Human-readable confirmation message")
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
-                "type": "test",
-                "status": "created",
-                "message": "SFE checkpoint created successfully with type 'test'"
-            }
-        }
 
 
 @router.post(
