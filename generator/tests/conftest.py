@@ -330,27 +330,42 @@ if "tiktoken" not in sys.modules:
         tiktoken_module.Encoding = _MockEncoding
         
         sys.modules["tiktoken"] = tiktoken_module
+
+# Create OpenTelemetry submodules if opentelemetry was mocked
+if "opentelemetry" in sys.modules:
+    otel_module = sys.modules["opentelemetry"]
+    # Only create submodules if they don't exist and opentelemetry is mocked
+    if not hasattr(otel_module, '__file__') or otel_module.__file__ == "<mocked opentelemetry>":
         # Create trace submodule with proper hierarchy
-        trace_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace", loader=None, is_package=True)
-        otel_trace = importlib.util.module_from_spec(trace_spec)
-        otel_trace.__file__ = "<mocked opentelemetry.trace>"
-        otel_trace.__path__ = []
-        sys.modules["opentelemetry.trace"] = otel_trace
-        otel_module.trace = otel_trace
+        if "opentelemetry.trace" not in sys.modules:
+            trace_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace", loader=None, is_package=True)
+            otel_trace = importlib.util.module_from_spec(trace_spec)
+            otel_trace.__file__ = "<mocked opentelemetry.trace>"
+            otel_trace.__path__ = []
+            sys.modules["opentelemetry.trace"] = otel_trace
+            otel_module.trace = otel_trace
+        else:
+            otel_trace = sys.modules["opentelemetry.trace"]
         
         # Create trace.status submodule
-        trace_status_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace.status", loader=None, is_package=False)
-        otel_trace_status = importlib.util.module_from_spec(trace_status_spec)
-        otel_trace_status.__file__ = "<mocked opentelemetry.trace.status>"
-        sys.modules["opentelemetry.trace.status"] = otel_trace_status
-        otel_trace.status = otel_trace_status
+        if "opentelemetry.trace.status" not in sys.modules:
+            trace_status_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace.status", loader=None, is_package=False)
+            otel_trace_status = importlib.util.module_from_spec(trace_status_spec)
+            otel_trace_status.__file__ = "<mocked opentelemetry.trace.status>"
+            sys.modules["opentelemetry.trace.status"] = otel_trace_status
+            otel_trace.status = otel_trace_status
+        else:
+            otel_trace_status = sys.modules["opentelemetry.trace.status"]
         
         # Create metrics submodule
-        metrics_spec = importlib.machinery.ModuleSpec(name="opentelemetry.metrics", loader=None, is_package=False)
-        otel_metrics = importlib.util.module_from_spec(metrics_spec)
-        otel_metrics.__file__ = "<mocked opentelemetry.metrics>"
-        sys.modules["opentelemetry.metrics"] = otel_metrics
-        otel_module.metrics = otel_metrics
+        if "opentelemetry.metrics" not in sys.modules:
+            metrics_spec = importlib.machinery.ModuleSpec(name="opentelemetry.metrics", loader=None, is_package=False)
+            otel_metrics = importlib.util.module_from_spec(metrics_spec)
+            otel_metrics.__file__ = "<mocked opentelemetry.metrics>"
+            sys.modules["opentelemetry.metrics"] = otel_metrics
+            otel_module.metrics = otel_metrics
+        else:
+            otel_metrics = sys.modules["opentelemetry.metrics"]
         
         # Add mock classes for trace
         class MockSpan:
@@ -603,14 +618,20 @@ def mock_async_file_utils():
     """Automatically mock async functions in runner_file_utils for all tests."""
     from unittest.mock import AsyncMock, patch
     
-    with patch("runner.runner_file_utils.verify_file_integrity", new_callable=AsyncMock, return_value=True) as mock_verify, \
-         patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock) as mock_prov, \
-         patch("runner.runner_file_utils.scan_for_vulnerabilities", new_callable=AsyncMock, return_value={"vulnerabilities_found": 0}) as mock_scan:
-        yield {
-            "verify_file_integrity": mock_verify,
-            "add_provenance": mock_prov,
-            "scan_for_vulnerabilities": mock_scan,
-        }
+    # Try to patch runner_file_utils if it exists, otherwise skip
+    try:
+        import runner.runner_file_utils
+        with patch("runner.runner_file_utils.verify_file_integrity", new_callable=AsyncMock, return_value=True) as mock_verify, \
+             patch("runner.runner_file_utils.add_provenance", new_callable=AsyncMock) as mock_prov, \
+             patch("runner.runner_file_utils.scan_for_vulnerabilities", new_callable=AsyncMock, return_value={"vulnerabilities_found": 0}) as mock_scan:
+            yield {
+                "verify_file_integrity": mock_verify,
+                "add_provenance": mock_prov,
+                "scan_for_vulnerabilities": mock_scan,
+            }
+    except (ImportError, AttributeError):
+        # runner_file_utils not available, skip mocking
+        yield {}
 
 
 @pytest.fixture(autouse=True)

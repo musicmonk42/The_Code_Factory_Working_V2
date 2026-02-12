@@ -128,9 +128,9 @@ class FileSystemKeyStorageBackend:
         """
         lock_file_path = f"{filepath}.lock"
         # Ensure the lock file directory exists
-        os.makedirs(os.path.dirname(lock_file_path), exist_ok=True)
+        os.makedirs(os.path.dirname(lock_file_path) or ".", exist_ok=True)
 
-        lock_mode = "r" if shared else "a+"
+        lock_mode = "a+"
         lock_type = (
             portalocker.LockFlags.SHARED if shared else portalocker.LockFlags.EXCLUSIVE
         )
@@ -140,14 +140,9 @@ class FileSystemKeyStorageBackend:
         )
 
         try:
-            # 1. Open the lock file using aiofiles for async context management
-            # We must use 'a+' so that the file is not truncated when opening for exclusive lock.
-            f = await aiofiles.open(lock_file_path, "a+")
-
-            # 2. Acquire the lock (blocking call, run in executor)
-            # Use non-blocking + retry loop for better control, but portalocker.lock is cleaner
+            # Use synchronous open since portalocker needs a real file descriptor
+            f = await asyncio.to_thread(open, lock_file_path, lock_mode)
             await asyncio.to_thread(portalocker.lock, f, lock_type)
-
             self._lock_files[filepath] = f
             self.logger.debug(
                 f"Acquired {'shared' if shared else 'exclusive'} lock for {filepath}."
@@ -158,10 +153,10 @@ class FileSystemKeyStorageBackend:
             )
             # Ensure the file object is closed if it was opened but locking failed
             if filepath in self._lock_files:
-                await self._lock_files[filepath].close()
+                self._lock_files[filepath].close()
                 del self._lock_files[filepath]
             elif "f" in locals():
-                await f.close()  # Close locally opened file object
+                f.close()
             # Use the local or fallback CryptoOperationError
             raise self._CryptoOperationError(
                 f"Failed to acquire file lock for {filepath}: {e}"
@@ -181,7 +176,7 @@ class FileSystemKeyStorageBackend:
                 )
             finally:
                 # 2. Close the file object
-                await f.close()
+                f.close()
                 del self._lock_files[filepath]
 
     async def _atomic_write_and_set_permissions(self, filepath: str, data_bytes: bytes):
