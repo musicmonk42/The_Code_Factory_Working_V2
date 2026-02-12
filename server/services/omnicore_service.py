@@ -4624,7 +4624,7 @@ class OmniCoreService:
                     
                     if readme_path.exists():
                         readme_content = readme_path.read_text(encoding="utf-8")
-                        readme_result = _validate_readme_completeness(readme_content)
+                        readme_result = _validate_readme_completeness(readme_content, language=target_lang)
                         
                         if readme_result.get("valid", True):
                             logger.info(
@@ -4665,7 +4665,7 @@ class OmniCoreService:
                         readme_content = readme_path.read_text(encoding="utf-8")
                         
                         if _PROVENANCE_AVAILABLE:
-                            readme_result = _validate_readme_completeness(readme_content)
+                            readme_result = _validate_readme_completeness(readme_content, language=target_lang)
                             
                             if not readme_result.get("valid", True):
                                 logger.warning(
@@ -4703,7 +4703,7 @@ class OmniCoreService:
                         
                         # Validate the new README
                         if _PROVENANCE_AVAILABLE:
-                            new_readme_result = _validate_readme_completeness(comprehensive_readme)
+                            new_readme_result = _validate_readme_completeness(comprehensive_readme, language=target_lang)
                             if new_readme_result.get("valid", True):
                                 logger.info(
                                     f"[PIPELINE] Job {job_id} regenerated README validated successfully - "
@@ -4752,9 +4752,14 @@ class OmniCoreService:
                     if output_path:
                         code_path = Path(output_path)
                         
-                        # Detect project language
-                        detected_language = _detect_project_language(code_path)
-                        logger.info(f"[PIPELINE] Job {job_id} detected language: {detected_language}")
+                        # Check if language is already set in payload; only auto-detect if not present
+                        detected_language = payload.get("language")
+                        if detected_language:
+                            logger.info(f"[PIPELINE] Job {job_id} using explicit language from payload: {detected_language}")
+                        else:
+                            # Detect project language
+                            detected_language = _detect_project_language(code_path)
+                            logger.info(f"[PIPELINE] Job {job_id} detected language: {detected_language}")
                         
                         # Get file patterns for the detected language
                         file_patterns = LANGUAGE_FILE_EXTENSIONS.get(detected_language, ["*.py"])
@@ -4802,7 +4807,19 @@ class OmniCoreService:
                                 f"(language: {detected_language}, LLM-based: {llm_provider_configured})"
                             )
                             testgen_result = await self._run_testgen(job_id, testgen_payload)
-                            if testgen_result.get("status") == "completed":
+                            
+                            # Check for skipped status first (non-Python projects)
+                            if testgen_result.get("status") == "skipped":
+                                stages_completed.append("testgen:skipped")
+                                logger.info(
+                                    f"[PIPELINE] Job {job_id} testgen skipped (likely non-Python project). "
+                                    f"Continuing pipeline without test execution.",
+                                    extra={
+                                        "job_id": job_id,
+                                        "reason": testgen_result.get("message", "Not applicable for this project type")
+                                    }
+                                )
+                            elif testgen_result.get("status") == "completed":
                                 # BUG FIX: Check if tests actually passed, not just if testgen completed
                                 # Even if testgen "completed", tests may have failed
                                 test_execution_failed = False

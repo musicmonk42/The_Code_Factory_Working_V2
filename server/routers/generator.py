@@ -204,9 +204,14 @@ async def _trigger_pipeline_background(
         
         job = jobs_db[job_id]
         
-        # Auto-detect language from README content
-        language = detect_language_from_content(readme_content)
-        logger.info(f"[Pipeline] Auto-detected language '{language}' for job {job_id}")
+        # Check if language is already set in job metadata; only auto-detect if not present
+        language = job.metadata.get("language")
+        if language:
+            logger.info(f"[Pipeline] Using explicit language '{language}' from job metadata for job {job_id}")
+        else:
+            # Auto-detect language from README content
+            language = detect_language_from_content(readme_content)
+            logger.info(f"[Pipeline] Auto-detected language '{language}' for job {job_id}")
         
         # Update job stage to GENERATOR_CLARIFICATION
         job.current_stage = JobStage.GENERATOR_CLARIFICATION
