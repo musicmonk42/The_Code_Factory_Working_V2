@@ -77,37 +77,14 @@ except ImportError:
         assistant_pkg_path = []
 
 
-try:
-    from omnicore_engine.database import Database
-except ImportError:
-    Database = None
-    print("omnicore_engine.database not found. Database functionality disabled.")
-
-try:
-    from omnicore_engine.metrics import plugin_executions
-except ImportError:
-    plugin_executions = None
-    print("omnicore_engine.metrics not found. Metrics functionality disabled.")
-
-try:
-    from redis.asyncio import Redis
-except ImportError:
-    Redis = None
-    print("redis.async asyncio not found. Redis functionality disabled.")
-
-try:
-    from omnicore_engine.message_bus import (
-        Message,
-        MessageFilter,
-        PluginMessageBusAdapter,
-        ShardedMessageBus,
-    )
-except ImportError:
-    ShardedMessageBus = None
-    PluginMessageBusAdapter = None
-    MessageFilter = None
-    Message = None
-    print("omnicore_engine.message_bus not found. Message bus functionality disabled.")
+# Core dependencies - lazy-loaded in _lazy_load_core_dependencies() when initialize() is called
+Database = None
+plugin_executions = None
+Redis = None
+ShardedMessageBus = None
+PluginMessageBusAdapter = None
+MessageFilter = None
+Message = None
 
 # Module-level: Set to None initially to avoid heavy imports during module load
 # These will be lazy-loaded when PluginRegistry.initialize() is called
@@ -203,6 +180,58 @@ def _lazy_load_optional_dependencies():
     except ImportError:
         SIM_REGISTRY = None
         print("simulation.registry not found.")
+
+def _lazy_load_core_dependencies():
+    """Lazy-load core omnicore_engine dependencies only when initialize() is called.
+    
+    This prevents import failures during pytest collection when these modules
+    may be mocked or unavailable.
+    """
+    global Database, plugin_executions, Redis, ShardedMessageBus
+    global PluginMessageBusAdapter, MessageFilter, Message
+    
+    # Only load once
+    if Database is not None:
+        return
+    
+    try:
+        from omnicore_engine.database import Database as _Database
+        Database = _Database
+    except ImportError:
+        Database = None
+        print("omnicore_engine.database not found. Database functionality disabled.")
+    
+    try:
+        from omnicore_engine.metrics import plugin_executions as _plugin_executions
+        plugin_executions = _plugin_executions
+    except ImportError:
+        plugin_executions = None
+        print("omnicore_engine.metrics not found. Metrics functionality disabled.")
+    
+    try:
+        from redis.asyncio import Redis as _Redis
+        Redis = _Redis
+    except ImportError:
+        Redis = None
+        print("redis.asyncio not found. Redis functionality disabled.")
+    
+    try:
+        from omnicore_engine.message_bus import (
+            Message as _Message,
+            MessageFilter as _MessageFilter,
+            PluginMessageBusAdapter as _PluginMessageBusAdapter,
+            ShardedMessageBus as _ShardedMessageBus,
+        )
+        ShardedMessageBus = _ShardedMessageBus
+        PluginMessageBusAdapter = _PluginMessageBusAdapter
+        MessageFilter = _MessageFilter
+        Message = _Message
+    except ImportError:
+        ShardedMessageBus = None
+        PluginMessageBusAdapter = None
+        MessageFilter = None
+        Message = None
+        print("omnicore_engine.message_bus not found. Message bus functionality disabled.")
 
 # Lazy import for security utils to avoid import-time overhead
 def get_security_utils():
@@ -843,6 +872,11 @@ class PluginRegistry:
 
             self.logger.info("Initializing PluginRegistry...")
             self._loop = asyncio.get_running_loop()
+            
+            # Lazy-load core dependencies FIRST (not at module import time)
+            # This prevents import failures during pytest collection when these modules
+            # may be mocked or unavailable
+            _lazy_load_core_dependencies()
             
             # Lazy-load optional dependencies NOW (not at module import time)
             # This prevents CPU timeout (exit code 152) during pytest collection
