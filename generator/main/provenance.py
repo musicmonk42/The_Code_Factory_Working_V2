@@ -326,6 +326,7 @@ def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[D
     ]
     
     # NestJS decorator pattern (needs separate handling due to different capture group order)
+    # Captures: (method_name, path) where method_name is the decorator (Get, Post, etc.)
     nestjs_pattern = r"""@(Get|Post|Put|Delete|Patch)\s*\(\s*['"]([^'"]+)['"]"""
     
     # Determine which patterns to use based on file extension

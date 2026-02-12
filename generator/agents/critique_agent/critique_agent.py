@@ -864,7 +864,12 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
 
 
 class TypeScriptCritiquePlugin(JavaScriptCritiquePlugin):
-    """TypeScript critique plugin - extends JavaScript plugin with TS-specific handling."""
+    """TypeScript critique plugin.
+    
+    Extends JavaScriptCritiquePlugin to apply ESLint-based linting to TypeScript code.
+    Uses the same linting tools as JavaScript (ESLint with TypeScript support) but
+    with language="typescript" to ensure proper configuration selection.
+    """
     
     async def lint(
         self,

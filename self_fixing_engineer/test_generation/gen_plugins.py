@@ -599,7 +599,12 @@ LANGUAGE_GENERATORS.register("javascript", JavaScriptTestGenerator())
 
 
 class TypeScriptTestGenerator(JavaScriptTestGenerator):
-    """TypeScript test generator - extends JavaScript generator with TS-specific handling."""
+    """TypeScript test generator.
+    
+    Currently inherits all behavior from JavaScriptTestGenerator since TypeScript
+    and JavaScript use the same test frameworks (jest, mocha). TypeScript-specific
+    handling (if needed) can be added in the future.
+    """
     pass
 
 
