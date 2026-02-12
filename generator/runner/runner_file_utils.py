@@ -1642,6 +1642,9 @@ async def validate_generated_project(
     # Check required files - language-aware defaults
     lang = (language or "python").lower()
     
+    # Track whether required_files was explicitly provided or is using defaults
+    using_default_required_files = (required_files is None)
+    
     if required_files is None:
         # Define entry points per language
         ENTRY_POINTS = {
@@ -1672,10 +1675,12 @@ async def validate_generated_project(
     }
     CRITICAL_REQUIRED_FILES = CRITICAL_REQUIRED_FILES_MAP.get(lang, {"main.py"})
     
-    # Add critical files to required_files if not already present
-    for critical_file in CRITICAL_REQUIRED_FILES:
-        if critical_file not in required_files:
-            required_files.append(critical_file)
+    # Add critical files to required_files only when using default required files
+    # (don't modify explicitly provided required_files list)
+    if using_default_required_files:
+        for critical_file in CRITICAL_REQUIRED_FILES:
+            if critical_file not in required_files:
+                required_files.append(critical_file)
 
     # When the generated project uses an app/ layout, also require key files
     # (Only applies to Python projects)
