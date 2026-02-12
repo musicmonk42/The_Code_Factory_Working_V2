@@ -1204,9 +1204,8 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     
     # Infer language from filename - always prefer file extension for known code types
     try:
-        # Get the base extension to check if file has a known extension
-        basename = os.path.basename(filename)
-        ext = os.path.splitext(basename)[1].lstrip(".").lower()
+        # Get file extension to check if file has a known extension
+        ext = os.path.splitext(os.path.basename(filename))[1].lstrip(".").lower()
         
         inferred_lang = _infer_language_from_filename(filename, default_lang="")
         
