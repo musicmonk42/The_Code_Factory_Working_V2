@@ -197,6 +197,7 @@ class TestKafkaProducerInitialization:
             with patch('server.services.omnicore_service.AIOKafkaProducer'):
                 service = OmniCoreService()
                 assert service.kafka_producer is not None
+                assert isinstance(service.kafka_producer, dict)
                 assert service.kafka_producer.get('enabled') is True
                 assert service.kafka_producer.get('bootstrap_servers') == 'test:9092'
 
@@ -214,9 +215,9 @@ class TestConfigurableTimeouts:
 
     def test_default_timeout_values(self):
         """Test that timeout constants have default values."""
-        assert DEFAULT_TESTGEN_TIMEOUT == int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "120"))
+        assert DEFAULT_TESTGEN_TIMEOUT == int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "300"))
         assert DEFAULT_DEPLOY_TIMEOUT == int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
-        assert DEFAULT_DOCGEN_TIMEOUT == int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "90"))
+        assert DEFAULT_DOCGEN_TIMEOUT == int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
         assert DEFAULT_CRITIQUE_TIMEOUT == int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
 
     def test_custom_timeout_values(self):
