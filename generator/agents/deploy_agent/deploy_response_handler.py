@@ -1996,10 +1996,68 @@ class HelmHandler(FormatHandler):
             raise ValueError(f"Failed to parse Helm chart content: {e}")
 
     def _sanitize_yaml_response(self, raw: str) -> str:
-        """Remove common LLM artifacts from YAML response."""
-        raw = re.sub(r'^```(?:yaml|yml)?\s*\n', '', raw, flags=re.MULTILINE)
-        raw = re.sub(r'\n```\s*$', '', raw, flags=re.MULTILINE)
-        return raw.strip()
+        """
+        Remove common LLM artifacts from YAML response.
+        
+        Removes markdown-style explanations that sometimes appear in YAML output:
+        - Lines starting with markdown headers (# Header)
+        - Numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
+        - Markdown bold markers (**text**)
+        - Code block markers (```)
+        """
+        lines = []
+        in_mermaid_block = False
+        found_yaml_start = False
+        
+        for line in raw.split('\n'):
+            # Skip mermaid diagram blocks completely
+            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+                in_mermaid_block = True
+                continue
+            if in_mermaid_block:
+                if '```' in line:
+                    in_mermaid_block = False
+                continue
+            
+            # Remove markdown code blocks
+            if re.match(r'^```(?:yaml|yml)?\s*$', line):
+                continue
+            
+            # Detect start of actual YAML content
+            if not found_yaml_start:
+                if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line) or re.match(r'^\s*name\s*:', line):
+                    found_yaml_start = True
+                elif re.match(r'^\s*\d+\.\s+\*\*', line):
+                    # Skip numbered lists before YAML starts
+                    continue
+                elif re.match(r'^\s*#\s+[A-Za-z]', line):
+                    # Skip markdown headers before YAML starts
+                    continue
+            
+            # Skip lines that start with markdown headers
+            if re.match(r'^\s*#+\s+[A-Za-z]', line):
+                continue
+            
+            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
+            if re.match(r'^\s*\d+\.\s+\*\*', line):
+                continue
+            
+            # Skip lines that are primarily markdown bullets with bold
+            if re.match(r'^\s*-\s+\*\*[^*]+\*\*\s*:', line):
+                continue
+            
+            # Remove markdown links: [text](url)
+            line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line)
+            
+            # Remove markdown bold (**text**) but preserve the text
+            line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+            
+            # Remove inline code backticks
+            line = re.sub(r'`([^`]+)`', r'\1', line)
+            
+            lines.append(line)
+        
+        return '\n'.join(lines).strip()
 
     def _parse_structured_helm(self, raw: str) -> Dict[str, Any]:
         """Parse a structured Helm response with multiple files."""
@@ -2858,7 +2916,7 @@ async def handle_deploy_response(
             current_config_string = ""
             try:
                 current_config_string = handler.convert(
-                    normalized_data, output_format
+                    normalized_data, to_format or output_format
                 )  # Convert back for scanning tools
             except Exception as e:
                 logger.error(
