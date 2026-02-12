@@ -1647,6 +1647,8 @@ async def validate_generated_project(
     
     if required_files is None:
         # Define entry points per language
+        # Note: Multiple entry points means ANY ONE is sufficient (not all required)
+        # E.g., for TypeScript, having index.ts OR app.ts OR server.ts is valid
         ENTRY_POINTS = {
             "python": ["main.py"],
             "py": ["main.py"],
@@ -1677,6 +1679,8 @@ async def validate_generated_project(
     
     # Add critical files to required_files only when using default required files
     # (don't modify explicitly provided required_files list)
+    # Note: Critical files like package.json are separate from entry points
+    # because they serve different purposes (build config vs. code entry point)
     if using_default_required_files:
         for critical_file in CRITICAL_REQUIRED_FILES:
             if critical_file not in required_files:

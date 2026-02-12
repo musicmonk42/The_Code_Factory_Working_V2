@@ -4230,12 +4230,13 @@ class OmniCoreService:
                     # This allows us to retry codegen if validation fails
                     validation_passed = True
                     if output_path_for_validation and _MATERIALIZER_AVAILABLE:
+                        # Get target language early for all validation logic
+                        target_lang = payload.get("language", "python").lower()
+                        
                         try:
                             # Get required files list
                             md_content = payload.get("readme_content", payload.get("requirements", ""))
                             required_files = ["requirements.txt"]
-                            # Get target language for ecosystem filtering
-                            target_lang = payload.get("language", "python").lower()
                             if md_content:
                                 try:
                                     spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
