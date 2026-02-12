@@ -88,11 +88,45 @@ _AUDIT_CONFIG = _load_audit_config()
 
 # Helper function for parsing boolean values from env vars or config
 def _parse_bool(value) -> bool:
-    """Parse boolean value from string, bool, or other types."""
+    """
+    Parse boolean value from various input types.
+    
+    Args:
+        value: Value to parse (bool, str, int, or any other type)
+        
+    Returns:
+        bool: Parsed boolean value
+        
+    Truthy values (case-insensitive strings):
+        - 'true', 't', 'yes', 'y', 'on', '1'
+        
+    Falsy values (case-insensitive strings):
+        - 'false', 'f', 'no', 'n', 'off', '0', '' (empty string)
+        
+    Examples:
+        >>> _parse_bool(True)
+        True
+        >>> _parse_bool('true')
+        True
+        >>> _parse_bool('YES')
+        True
+        >>> _parse_bool('1')
+        True
+        >>> _parse_bool('false')
+        False
+        >>> _parse_bool('0')
+        False
+        >>> _parse_bool('')
+        False
+    """
     if isinstance(value, bool):
         return value
     if isinstance(value, str):
-        return value.lower() in ("true", "1", "yes")
+        return value.lower() in ('true', 't', 'yes', 'y', 'on', '1')
+    # For numeric types, 0 is False, non-zero is True
+    if isinstance(value, (int, float)):
+        return value != 0
+    # For other types, use Python's truthiness
     return bool(value)
 
 # Routing configuration from audit_config.yaml
