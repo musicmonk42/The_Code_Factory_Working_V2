@@ -81,8 +81,14 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
     logger.debug("Set TOKENIZERS_PARALLELISM=false to prevent fork warnings")
 
 # Constants for retry logic
-DEFAULT_MAX_RETRIES = 3
-BASE_BACKOFF_SECONDS = 1.0
+# Reduced retries and increased backoff to prevent rate limit exhaustion
+DEFAULT_MAX_RETRIES = 2  # Reduced from 3 to 2
+BASE_BACKOFF_SECONDS = 2.0  # Increased from 1.0 to 2.0
+
+# Global LLM call budget per job to prevent exhaustion
+# Can be overridden via JOB_LLM_BUDGET environment variable
+DEFAULT_JOB_LLM_BUDGET = int(os.getenv("JOB_LLM_BUDGET", "50"))  # Maximum LLM calls per job
+JOB_LLM_CALL_TRACKER: Dict[str, int] = {}  # Track calls per job_id
 
 # Provider default models for fallback scenarios
 _PROVIDER_DEFAULT_MODELS = {
@@ -438,6 +444,10 @@ class LLMClient:
         self.circuit_breaker = CircuitBreaker()
         self._is_initialized = asyncio.Event()
         self._init_task = None
+        
+        # Job-level LLM call budget tracking
+        self.job_llm_budget = getattr(config, 'job_llm_budget', DEFAULT_JOB_LLM_BUDGET)
+        self.job_call_counts: Dict[str, int] = {}  # Track calls per job_id
 
     @classmethod
     async def create(cls, config: RunnerConfig) -> "LLMClient":
@@ -598,6 +608,7 @@ class LLMClient:
             Literal["openai", "claude", "grok", "gemini", "local"]
         ] = None,
         max_retries: int = DEFAULT_MAX_RETRIES,
+        job_id: Optional[str] = None,  # Added for job-level budget tracking
         **kwargs,
     ) -> Dict[str, Any] | AsyncGenerator[str, None]:
         # Ensure initialization has started (lazy initialization for backward compatibility)
@@ -610,6 +621,26 @@ class LLMClient:
         # [FIX] Redact secrets from the prompt *before* it's used in cache keys or logs
         # [FIX] redact_secrets is now synchronous, remove await
         prompt = redact_secrets(prompt)
+        
+        # Check job-level LLM call budget
+        if job_id:
+            current_count = self.job_call_counts.get(job_id, 0)
+            if current_count >= self.job_llm_budget:
+                error_msg = (
+                    f"Job {job_id} has exhausted LLM call budget "
+                    f"({current_count}/{self.job_llm_budget} calls). "
+                    f"Aborting gracefully to prevent rate limit exhaustion."
+                )
+                logger.error(error_msg, extra={"job_id": job_id, "call_count": current_count})
+                metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
+                raise LLMError(error_msg)
+            
+            # Increment call counter for this job
+            self.job_call_counts[job_id] = current_count + 1
+            logger.info(
+                f"Job {job_id} LLM call {self.job_call_counts[job_id]}/{self.job_llm_budget}",
+                extra={"job_id": job_id, "call_count": self.job_call_counts[job_id], "budget": self.job_llm_budget}
+            )
         
         # FIX: Add retry logic with exponential backoff
         for attempt in range(max_retries):
@@ -648,6 +679,15 @@ class LLMClient:
                 cached = await self.cache.get(cache_key)
                 if cached and not stream:
                     metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+                    logger.info(
+                        f"[LLM] Cache HIT for {provider}/{model}",
+                        extra={
+                            "provider": provider,
+                            "model": model,
+                            "cache_key": cache_key[:16],
+                            "job_id": job_id
+                        }
+                    )
                     return cached
 
                 plugin = self.manager.get_provider(provider)
@@ -749,6 +789,7 @@ class LLMClient:
                                         stream=stream,
                                         provider=fallback_provider,
                                         max_retries=1,  # Limit retries for fallback
+                                        job_id=job_id,  # Pass job_id for budget tracking
                                         **kwargs
                                     )
                             except Exception as fallback_error:
@@ -928,6 +969,7 @@ async def call_llm_api(
     provider: Optional[Literal["openai", "claude", "grok", "gemini", "local"]] = None,
     config: Optional[RunnerConfig] = None,
     max_retries: int = DEFAULT_MAX_RETRIES,
+    job_id: Optional[str] = None,  # Added for job-level budget tracking
     **kwargs,
 ) -> Dict[str, Any] | AsyncGenerator[str, None]:
     """
@@ -940,6 +982,7 @@ async def call_llm_api(
         provider: Optional provider name
         config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
         max_retries: Maximum number of retry attempts
+        job_id: Optional job ID for tracking LLM call budget per job
         **kwargs: Additional arguments passed to the provider
     
     Returns:
@@ -983,7 +1026,7 @@ async def call_llm_api(
                     )
             # Use direct instantiation for backward compatibility (lazy init happens on first call)
             _async_client = LLMClient(config)
-    return await _async_client.call_llm_api(prompt, model, stream, provider, max_retries, **kwargs)
+    return await _async_client.call_llm_api(prompt, model, stream, provider, max_retries, job_id=job_id, **kwargs)
 
 
 async def call_ensemble_api(
@@ -1092,7 +1135,54 @@ async def count_tokens(text: str, model: str = "gpt-4") -> int:
         return int(len(text.split()) * 1.3)
 
 
+def reset_job_llm_budget(job_id: str) -> None:
+    """
+    Reset the LLM call counter for a specific job.
+    
+    Should be called when a job completes or is cancelled to prevent
+    memory leaks in long-running processes.
+    
+    Args:
+        job_id: The job ID to reset
+    """
+    global _async_client
+    if _async_client and job_id in _async_client.job_call_counts:
+        count = _async_client.job_call_counts.pop(job_id)
+        logger.info(f"Reset LLM budget for job {job_id} (had {count} calls)")
+
+
+def get_job_llm_stats(job_id: str) -> Dict[str, int]:
+    """
+    Get LLM call statistics for a specific job.
+    
+    Args:
+        job_id: The job ID to query
+        
+    Returns:
+        Dict with 'calls_made' and 'budget_remaining'
+    """
+    global _async_client
+    if not _async_client:
+        return {"calls_made": 0, "budget_remaining": DEFAULT_JOB_LLM_BUDGET}
+    
+    calls_made = _async_client.job_call_counts.get(job_id, 0)
+    budget_remaining = max(0, _async_client.job_llm_budget - calls_made)
+    
+    return {
+        "calls_made": calls_made,
+        "budget_remaining": budget_remaining,
+        "budget_total": _async_client.job_llm_budget
+    }
+
+
 # import atexit
 # atexit.register(lambda: asyncio.run(shutdown_llm_client()))
 
-__all__ = ["call_llm_api", "call_ensemble_api", "shutdown_llm_client", "count_tokens"]
+__all__ = [
+    "call_llm_api",
+    "call_ensemble_api",
+    "shutdown_llm_client",
+    "count_tokens",
+    "reset_job_llm_budget",
+    "get_job_llm_stats",
+]
