@@ -376,6 +376,11 @@ def load_audit_routing_config():
                 }
             )
         else:
+            # When routing is disabled, ensure env vars are set to false
+            # Only set if not already set by user (user env vars take precedence)
+            if 'ROUTE_TO_MAIN_AUDIT' not in os.environ:
+                os.environ['ROUTE_TO_MAIN_AUDIT'] = 'false'
+            
             logger.info(
                 "Audit routing disabled in unified config. Logs will be local only.",
                 extra={"routing_enabled": False}

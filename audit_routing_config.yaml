@@ -71,7 +71,7 @@ generator:
   orchestrated_by: "omnicore"
 
   # Generator sends ALL audit events to OmniCore
-  route_all_events_to_hub: true
+  route_all_events_to_hub: false
   hub_endpoint: "http://localhost:8000/audit/ingest"
 
   # Generator's own audit API (for local queries)

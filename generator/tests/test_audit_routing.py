@@ -36,7 +36,7 @@ class TestAuditRouting:
         assert "ROUTING_MAX_ATTEMPTS" in config
         
         # Verify expected values
-        assert config["ROUTE_TO_MAIN_AUDIT"] is True
+        assert config["ROUTE_TO_MAIN_AUDIT"] is False
         assert "localhost:8000" in config["MAIN_AUDIT_ENDPOINT"]
         assert config["ROUTING_MAX_ATTEMPTS"] >= 1
     
