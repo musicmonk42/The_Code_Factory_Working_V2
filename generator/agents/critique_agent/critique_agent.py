@@ -736,7 +736,7 @@ class JavaScriptCritiquePlugin(LanguageCritiquePlugin):
         return await run_all_lints_and_checks(
             code_files,
             str(temp_dir),
-            lang="javascript",
+            language="javascript",
         )
 
     async def run_unit_tests(
@@ -806,7 +806,7 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
         return await run_all_lints_and_checks(
             code_files,
             str(temp_dir),
-            lang="go",
+            language="go",
         )
 
     async def run_unit_tests(
@@ -863,6 +863,24 @@ class GoCritiquePlugin(LanguageCritiquePlugin):
         )
 
 
+class TypeScriptCritiquePlugin(JavaScriptCritiquePlugin):
+    """TypeScript critique plugin - extends JavaScript plugin with TS-specific handling."""
+    
+    async def lint(
+        self,
+        code_files: Dict[str, str],
+        temp_dir: Path,
+        config: CritiqueConfig,
+    ) -> Dict[str, Any]:
+        logger.info("Running TypeScript lint (ESLint/TSLint)...")
+        await save_files_to_output(code_files, temp_dir)
+        return await run_all_lints_and_checks(
+            code_files,
+            str(temp_dir),
+            language="typescript",
+        )
+
+
 # --- Dynamic Plugin Registry ---
 _PLUGINS: Dict[str, Type[LanguageCritiquePlugin]] = {}
 
@@ -888,6 +906,7 @@ def get_plugin(language: str, config: CritiqueConfig) -> LanguageCritiquePlugin:
 # Register core plugins
 register_plugin("python", PythonCritiquePlugin)
 register_plugin("javascript", JavaScriptCritiquePlugin)
+register_plugin("typescript", TypeScriptCritiquePlugin)
 register_plugin("go", GoCritiquePlugin)
 
 
