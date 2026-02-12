@@ -54,15 +54,12 @@ def clean_prometheus_registry(monkeypatch):
     
     # Build a tuple of valid metric types for isinstance check.
     # Guard against MagicMock being used as type (when prometheus_client is mocked)
+    import inspect
     metric_types = []
     for metric_type in (prom.Counter, prom.Gauge, prom.Histogram):
-        try:
-            # Check if it's a valid type by calling isinstance with an empty check
-            isinstance(None, metric_type)
+        # Check if it's a valid type using inspect.isclass
+        if inspect.isclass(metric_type):
             metric_types.append(metric_type)
-        except TypeError:
-            # metric_type is not a valid type (e.g., MagicMock), skip it
-            pass
     
     # If no valid metric types, skip metric collection
     if metric_types:
