@@ -148,7 +148,7 @@ except ImportError:
 
         def decorator(func):
             import functools
-            import asyncio
+            # Note: asyncio is already imported at the top of the file
 
             if asyncio.iscoroutinefunction(func):
                 @functools.wraps(func)
