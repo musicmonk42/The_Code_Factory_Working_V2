@@ -25,6 +25,7 @@ Design Principles:
 
 import asyncio
 import logging
+import os
 import re
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
@@ -257,32 +258,38 @@ async def create_generation(
     logger.info(f"Created v1 generation job {job_id}")
     
     # Emit job.created event in background (fire-and-forget)
-    asyncio.create_task(
-        _emit_event_fire_and_forget(
-            omnicore_service=omnicore_service,
-            topic="job.created",
-            payload={
-                "job_id": job_id,
-                "status": job.status.value,
-                "stage": job.current_stage,
-                "created_at": job.created_at.isoformat(),
-                "metadata": metadata,
-            },
-            priority=5,
+    if not os.environ.get("SKIP_BACKGROUND_TASKS"):
+        asyncio.create_task(
+            _emit_event_fire_and_forget(
+                omnicore_service=omnicore_service,
+                topic="job.created",
+                payload={
+                    "job_id": job_id,
+                    "status": job.status.value,
+                    "stage": job.current_stage,
+                    "created_at": job.created_at.isoformat(),
+                    "metadata": metadata,
+                },
+                priority=5,
+            )
         )
-    )
+    else:
+        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
     
     # Trigger the generation pipeline as a background task
     # Uses the requirements text as the README content for the pipeline
     # Use asyncio.create_task instead of BackgroundTasks to prevent event loop blocking
-    asyncio.create_task(
-        _run_pipeline_with_semaphore(
-            job_id=job_id,
-            readme_content=request.requirements,
-            generator_service=generator_service,
+    if not os.environ.get("SKIP_BACKGROUND_TASKS"):
+        asyncio.create_task(
+            _run_pipeline_with_semaphore(
+                job_id=job_id,
+                readme_content=request.requirements,
+                generator_service=generator_service,
+            )
         )
-    )
-    logger.info(f"Background pipeline triggered for v1 generation job {job_id}")
+        logger.info(f"Background pipeline triggered for v1 generation job {job_id}")
+    else:
+        logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
     
     return V1GenerateResponse(
         id=job_id,

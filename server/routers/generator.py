@@ -750,13 +750,16 @@ async def upload_files(
         logger.info(f"Extracted README for job {job_id}")
         logger.info(f"Auto-triggering full pipeline for job {job_id} after upload")
         # Use asyncio.create_task instead of BackgroundTasks to prevent event loop blocking
-        asyncio.create_task(
-            _run_pipeline_with_semaphore(
-                job_id=job_id,
-                readme_content=readme_content,
-                generator_service=generator_service,
+        if not os.environ.get("SKIP_BACKGROUND_TASKS"):
+            asyncio.create_task(
+                _run_pipeline_with_semaphore(
+                    job_id=job_id,
+                    readme_content=readme_content,
+                    generator_service=generator_service,
+                )
             )
-        )
+        else:
+            logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
     else:
         logger.warning(
             f"No README.md found in uploaded files for job {job_id}. "

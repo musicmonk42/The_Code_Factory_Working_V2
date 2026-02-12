@@ -9,6 +9,7 @@ Handles job lifecycle: creation, listing, viewing, status, and progress tracking
 import asyncio
 import logging
 import mimetypes
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -144,20 +145,23 @@ async def create_job(
     logger.info(f"Created job {job_id}")
     
     # Emit job.created event to message bus in background (fire-and-forget)
-    asyncio.create_task(
-        _emit_event_fire_and_forget(
-            omnicore_service=omnicore_service,
-            topic="job.created",
-            payload={
-                "job_id": job_id,
-                "status": job.status.value,
-                "stage": job.current_stage.value,
-                "created_at": job.created_at.isoformat(),
-                "metadata": job.metadata,
-            },
-            priority=5,
+    if not os.environ.get("SKIP_BACKGROUND_TASKS"):
+        asyncio.create_task(
+            _emit_event_fire_and_forget(
+                omnicore_service=omnicore_service,
+                topic="job.created",
+                payload={
+                    "job_id": job_id,
+                    "status": job.status.value,
+                    "stage": job.current_stage.value,
+                    "created_at": job.created_at.isoformat(),
+                    "metadata": job.metadata,
+                },
+                priority=5,
+            )
         )
-    )
+    else:
+        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
 
     return job
 
