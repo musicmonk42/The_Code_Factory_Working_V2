@@ -4230,14 +4230,15 @@ class OmniCoreService:
                     # This allows us to retry codegen if validation fails
                     validation_passed = True
                     if output_path_for_validation and _MATERIALIZER_AVAILABLE:
+                        # Get target language early for all validation logic
+                        target_lang = payload.get("language", "python").lower()
+                        
                         try:
                             # Get required files list
                             md_content = payload.get("readme_content", payload.get("requirements", ""))
                             required_files = ["requirements.txt"]
                             if md_content:
                                 try:
-                                    # Get target language for ecosystem filtering
-                                    target_lang = payload.get("language", "python")
                                     spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
                                     if spec_files:
                                         existing = set(required_files)
@@ -4249,7 +4250,8 @@ class OmniCoreService:
                             val_result = await _validate_generated_project(
                                 output_dir=output_path_for_validation,
                                 required_files=required_files,
-                                check_python_syntax=True,
+                                check_python_syntax=(target_lang in ("python", "py")),
+                                language=target_lang,
                             )
                             
                             if not val_result.get("valid", True):
@@ -4377,10 +4379,26 @@ class OmniCoreService:
             # Extract spec-required files from the MD content so that
             # validation catches missing files like app/routes.py when the
             # spec references them.
-            required_files = ["main.py"]
+            # Get target language for ecosystem filtering
+            target_lang = payload.get("language", "python").lower()
+            
+            # Language-aware default required files
+            LANGUAGE_REQUIRED_FILES = {
+                "python": ["main.py"],
+                "py": ["main.py"],
+                "typescript": [],
+                "ts": [],
+                "javascript": [],
+                "js": [],
+                "java": [],
+                "go": [],
+                "rust": [],
+            }
+            required_files = list(LANGUAGE_REQUIRED_FILES.get(target_lang, ["main.py"]))
 
             # Adjust required_files based on actual output structure (app/ layout detection)
-            if output_path_for_validation:
+            # (Only applies to Python projects)
+            if target_lang in ("python", "py") and output_path_for_validation:
                 output_path_obj = Path(output_path_for_validation)
                 app_dir = output_path_obj / "app"
                 if app_dir.is_dir():
@@ -4397,8 +4415,6 @@ class OmniCoreService:
 
             if md_content and _PROVENANCE_AVAILABLE:
                 try:
-                    # Get target language for ecosystem filtering
-                    target_lang = payload.get("language", "python")
                     spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
                     if spec_files:
                         existing = set(required_files)
@@ -4416,7 +4432,8 @@ class OmniCoreService:
                     val_result = await _validate_generated_project(
                         output_dir=output_path_for_validation,
                         required_files=required_files,
-                        check_python_syntax=True,
+                        check_python_syntax=(target_lang in ("python", "py")),
+                        language=target_lang,
                     )
                     if not val_result.get("valid", True):
                         validation_errors = val_result.get('errors', [])
