@@ -347,7 +347,7 @@ class TestYAMLHandler:
         assert "kind: Service" in output
 
     def test_normalize_yaml_with_markdown_formatting(self):
-        """Test that YAML with markdown formatting is rejected."""
+        """Test that YAML with markdown formatting is now sanitized instead of rejected."""
         handler = YAMLHandler()
         yaml_with_markdown = """apiVersion: v1
 kind: Service
@@ -357,12 +357,13 @@ metadata:
     description: "- **Purpose:** Provide default configuration"
 """
         
-        # Should raise ValueError due to markdown pattern detection
-        with pytest.raises(ValueError, match="Invalid output: Response contains Markdown formatting"):
-            handler.normalize(yaml_with_markdown)
+        # The handler now sanitizes markdown instead of raising
+        result = handler.normalize(yaml_with_markdown)
+        assert isinstance(result, dict)
+        assert result["apiVersion"] == "v1"
 
     def test_normalize_yaml_with_markdown_bold(self):
-        """Test that YAML containing ** (bold markdown) is rejected."""
+        """Test that YAML containing ** (bold markdown) is now sanitized instead of rejected."""
         handler = YAMLHandler()
         yaml_with_bold = """apiVersion: v1
 kind: Deployment
@@ -370,8 +371,9 @@ kind: Deployment
   name: test
 """
         
-        with pytest.raises(ValueError, match="Invalid output: Response contains Markdown formatting"):
-            handler.normalize(yaml_with_bold)
+        # The handler now strips markdown bold markers
+        result = handler.normalize(yaml_with_bold)
+        assert isinstance(result, (dict, list))
 
     def test_normalize_yaml_strips_code_fences(self):
         """Test that YAML with markdown code fences is stripped."""

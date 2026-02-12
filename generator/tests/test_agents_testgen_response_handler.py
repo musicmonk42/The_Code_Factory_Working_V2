@@ -19,29 +19,9 @@ import subprocess
 import sys
 import tempfile
 from types import ModuleType
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
-
-
-class MockCallable:
-    """A mock object that can be called or accessed as an attribute."""
-    def __init__(self, name="MockCallable"):
-        self._mock_name = name
-        
-    def __call__(self, *args, **kwargs):
-        return MockCallable(f"{self._mock_name}()")
-        
-    def __getattr__(self, attr):
-        if attr in ('__spec__', '__path__', '__file__', '__name__', '__package__', '__loader__', '_mock_name'):
-            raise AttributeError(f"MockCallable has no attribute '{attr}'")
-        # Fix: Return string "OK" for 'text' attribute to fix health endpoint tests
-        if attr == 'text':
-            return "OK"
-        # FIX: Return 200 for 'status' attribute to fix health endpoint tests
-        if attr == 'status':
-            return 200
-        return MockCallable(f"{self._mock_name}.{attr}")
 
 
 def create_mock_package(name):
@@ -69,7 +49,8 @@ def create_mock_package(name):
             return name.rpartition('.')[0] if '.' in name else ''
         elif attr == '__loader__':
             return None
-        return MockCallable(f"{name}.{attr}")
+        # Return MagicMock for everything else - supports all operators
+        return MagicMock(name=f"{name}.{attr}")
     
     mock_pkg.__getattr__ = module_getattr
     return mock_pkg
@@ -97,6 +78,60 @@ watchdog_events_mock.FileSystemEventHandler = FileSystemEventHandler
 sys.modules["watchdog.events"] = watchdog_events_mock
 
 sys.modules["watchdog.observers"] = create_mock_package("watchdog.observers")
+
+# Mock aiofiles with proper async support
+class MockAiofilesFile:
+    """Mock file object with async methods."""
+    def __init__(self, path, mode, encoding=None):
+        self.path = path
+        self.mode = mode
+        self.encoding = encoding
+
+    async def write(self, data):
+        with open(self.path, self.mode, encoding=self.encoding) as f:
+            f.write(data)
+    
+    async def read(self):
+        try:
+            with open(self.path, 'r', encoding=self.encoding or 'utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            return ""
+
+    async def flush(self):
+        pass
+
+    def fileno(self):
+        return 1
+
+
+class MockAiofilesContextManager:
+    """Async context manager for aiofiles."""
+    def __init__(self, path, mode, encoding=None):
+        self.file = MockAiofilesFile(path, mode, encoding)
+
+    async def __aenter__(self):
+        return self.file
+
+    async def __aexit__(self, *args):
+        pass
+
+
+class MockAiofiles:
+    """Mock for aiofiles module."""
+    __path__ = []
+    __spec__ = importlib.machinery.ModuleSpec(
+        name="aiofiles",
+        loader=None,
+        is_package=True
+    )
+    __file__ = "<mocked aiofiles>"
+    
+    def open(self, path, mode="r", encoding=None):
+        return MockAiofilesContextManager(path, mode, encoding)
+
+
+sys.modules["aiofiles"] = MockAiofiles()
 
 # Now import the module under test
 from agents.testgen_agent.testgen_response_handler import (

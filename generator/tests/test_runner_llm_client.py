@@ -30,7 +30,7 @@ from runner.runner_errors import ConfigurationError, LLMError
 
 
 @pytest.fixture
-def mock_imports(event_loop):
+def mock_imports():
     """Mocks external dependencies used by LLMClient."""
     with (
         patch(
@@ -91,7 +91,9 @@ def mock_imports(event_loop):
         )
 
         # CRITICAL: Set up _load_task for ALL tests (not just those using mock_provider)
-        future = event_loop.create_future()
+        # Use asyncio.get_event_loop() instead of deprecated event_loop fixture
+        import asyncio
+        future = asyncio.get_event_loop().create_future()
         future.set_result(None)
         mock_plugin_manager.return_value._load_task = future
         mock_plugin_manager.return_value.registry = {}

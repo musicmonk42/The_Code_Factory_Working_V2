@@ -280,7 +280,7 @@ class TestConfigurationReload:
 
             on_config_reload(config_path, new_config, diff)
 
-            mock_validate.assert_called_once_with(new_config)
+            mock_validate.assert_called_once_with(new_config, is_reload=True)
             mock_log.assert_called_once()
 
     def test_on_config_reload_invalid(self):
@@ -304,7 +304,7 @@ class TestConfigurationReload:
 
             on_config_reload(config_path, new_config, diff)
 
-            mock_validate.assert_called_once_with(new_config)
+            mock_validate.assert_called_once_with(new_config, is_reload=True)
             # Alert should be sent for invalid config
             mock_run.assert_called_once()
 

@@ -144,42 +144,9 @@ def _create_mock_module(name: str) -> types.ModuleType:
     # They are automatically computed from the spec's name and loader
     mock_module.__spec__ = spec
     
-    class MockCallable:
-        """A mock object that can be called or accessed as an attribute.
-        
-        This mock supports:
-        - Being called as a function/constructor
-        - Attribute access (returns another mock)
-        - Context managers (for with statements)
-        - Iteration (for loops)
-        - String representation
-        """
-        def __init__(self, name="MockCallable"):
-            self._mock_name = name
-            
-        def __call__(self, *args, **kwargs):
-            return MockCallable(f"{self._mock_name}()")
-            
-        def __getattr__(self, attr):
-            # Prevent issues with special attributes
-            if attr in ('__spec__', '__path__', '__file__', '__name__', '__package__', '__loader__'):
-                raise AttributeError(f"MockCallable has no attribute '{attr}'")
-            return MockCallable(f"{self._mock_name}.{attr}")
-            
-        def __enter__(self):
-            return self
-            
-        def __exit__(self, *args):
-            return False
-            
-        def __iter__(self):
-            return iter([])
-            
-        def __repr__(self):
-            return f"<Mock: {self._mock_name}>"
-            
-        def __str__(self):
-            return self._mock_name
+    # Use MagicMock instead of custom MockCallable for better operator support
+    # MagicMock already supports comparison operators, numeric coercion, 
+    # __contains__, __iter__, context managers, etc.
     
     # Make the module itself callable and attribute-accessible
     def module_getattr(attr):
@@ -197,8 +164,9 @@ def _create_mock_module(name: str) -> types.ModuleType:
             return name.rpartition('.')[0] if '.' in name else ''
         elif attr == '__loader__':
             return None
-        # Return MockCallable for everything else
-        return MockCallable(f"{name}.{attr}")
+        # Return MagicMock for everything else - supports all operators
+        from unittest.mock import MagicMock
+        return MagicMock(name=f"{name}.{attr}")
     
     mock_module.__getattr__ = module_getattr
     return mock_module
