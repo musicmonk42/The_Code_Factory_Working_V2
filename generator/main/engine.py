@@ -124,7 +124,7 @@ except ImportError as e:
 
 # --- Pydantic for Data Validation ---
 try:
-    from pydantic import BaseModel, Field, field_validator
+    from pydantic import BaseModel, ConfigDict, Field, field_validator
     HAS_PYDANTIC = True
 except ImportError:
     HAS_PYDANTIC = False
@@ -402,6 +402,8 @@ if HAS_PYDANTIC:
     class WorkflowResult(BaseModel):
         """Result model for workflow execution."""
         
+        model_config = ConfigDict(use_enum_values=True)
+        
         workflow_id: str = Field(..., description="Unique workflow identifier")
         status: WorkflowStatus = Field(..., description="Final workflow status")
         input_file: str = Field(..., description="Input file that was processed")
@@ -418,9 +420,6 @@ if HAS_PYDANTIC:
             default_factory=dict,
             description="Results from each agent execution"
         )
-        
-        class Config:
-            use_enum_values = True
 else:
     # Simple dataclass fallback for environments without Pydantic
     @dataclass

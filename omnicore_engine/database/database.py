@@ -846,7 +846,9 @@ class Database:
 
             await self.create_tables()
 
-            if self.is_postgres:
+            # Check ENABLE_CITUS environment variable before attempting Citus migration
+            enable_citus = os.getenv("ENABLE_CITUS", "0")
+            if self.is_postgres and enable_citus == "1":
                 try:
                     await self.migrate_to_citus()
                 except Exception as e:
@@ -856,6 +858,11 @@ class Database:
                     )
                 logger.info(
                     "For PostgreSQL, ensure data migration from SQLite (if any) is handled externally."
+                )
+            elif self.is_postgres:
+                logger.info(
+                    "Citus migration skipped (ENABLE_CITUS not set or disabled). "
+                    "Using standard PostgreSQL."
                 )
 
             logger.info(
@@ -2833,7 +2840,7 @@ class Database:
                 await session.commit()
                 logger.info("Citus extension ensured.")
             except sqlalchemy.exc.SQLAlchemyError as e:
-                logger.warning(
+                logger.info(
                     f"Citus extension not available: {e}. "
                     "Continuing with standard PostgreSQL."
                 )
@@ -2857,7 +2864,7 @@ class Database:
                 await session.commit()
                 logger.info("Migrated to Citus with distribution keys.")
             except sqlalchemy.exc.SQLAlchemyError as e:
-                logger.warning(
+                logger.info(
                     f"Failed to create distributed tables for Citus: {e}. "
                     "Continuing with standard PostgreSQL."
                 )

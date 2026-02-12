@@ -9,6 +9,7 @@ the Citus extension is not available on a standard PostgreSQL instance.
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
@@ -91,10 +92,10 @@ async def test_migrate_to_citus_handles_missing_extension(mock_settings, mock_se
                     db.AsyncSessionLocal = Mock(return_value=mock_session)
                     
                     # Test that migrate_to_citus does not raise an exception
-                    with caplog.at_level(logging.WARNING):
+                    with caplog.at_level(logging.INFO):
                         await db.migrate_to_citus()
                     
-                    # Verify warning was logged
+                    # Verify info message was logged (changed from warning to info)
                     assert any("Citus extension not available" in record.message for record in caplog.records)
                     assert any("Continuing with standard PostgreSQL" in record.message for record in caplog.records)
                     
@@ -143,47 +144,48 @@ async def test_migrate_to_citus_handles_distributed_table_failure(mock_settings,
                     db.AsyncSessionLocal = Mock(return_value=mock_session)
                     
                     # Test that migrate_to_citus does not raise an exception
-                    with caplog.at_level(logging.WARNING):
+                    with caplog.at_level(logging.INFO):
                         await db.migrate_to_citus()
                     
-                    # Verify warning was logged for distributed table failure
+                    # Verify info message was logged for distributed table failure
                     assert any("Failed to create distributed tables" in record.message for record in caplog.records)
                     assert any("Continuing with standard PostgreSQL" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_initialize_continues_when_citus_fails(mock_settings, mock_security_config, caplog):
-    """Test that initialize() continues when migrate_to_citus() fails."""
+    """Test that initialize() continues when migrate_to_citus() fails (when ENABLE_CITUS=1)."""
     with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
         with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
             with patch("omnicore_engine.database.database.settings", mock_settings):
                 with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
-                    mock_security_instance = Mock()
-                    mock_security_instance.encrypt = lambda x: x
-                    mock_security_instance.decrypt = lambda x: x
-                    mock_security.return_value = mock_security_instance
+                    with patch.dict(os.environ, {"ENABLE_CITUS": "1"}):
+                        mock_security_instance = Mock()
+                        mock_security_instance.encrypt = lambda x: x
+                        mock_security_instance.decrypt = lambda x: x
+                        mock_security.return_value = mock_security_instance
 
-                    db = Database("postgresql+asyncpg://user:pass@localhost/testdb")
-                    
-                    # Mock the required methods
-                    db.test_connection = AsyncMock()
-                    db.create_tables = AsyncMock()
-                    db.migrate_to_citus = AsyncMock(
-                        side_effect=Exception("Citus extension not available")
-                    )
-                    
-                    # Test that initialize completes successfully despite migrate_to_citus failing
-                    with caplog.at_level(logging.WARNING):
-                        await db.initialize()
-                    
-                    # Verify initialization proceeded
-                    db.test_connection.assert_called_once()
-                    db.create_tables.assert_called_once()
-                    db.migrate_to_citus.assert_called_once()
-                    
-                    # Verify warning was logged
-                    assert any("Citus migration skipped (non-fatal)" in record.message for record in caplog.records)
-                    assert any("Continuing with standard PostgreSQL" in record.message for record in caplog.records)
+                        db = Database("postgresql+asyncpg://user:pass@localhost/testdb")
+                        
+                        # Mock the required methods
+                        db.test_connection = AsyncMock()
+                        db.create_tables = AsyncMock()
+                        db.migrate_to_citus = AsyncMock(
+                            side_effect=Exception("Citus extension not available")
+                        )
+                        
+                        # Test that initialize completes successfully despite migrate_to_citus failing
+                        with caplog.at_level(logging.WARNING):
+                            await db.initialize()
+                        
+                        # Verify initialization proceeded
+                        db.test_connection.assert_called_once()
+                        db.create_tables.assert_called_once()
+                        db.migrate_to_citus.assert_called_once()
+                        
+                        # Verify warning was logged
+                        assert any("Citus migration skipped (non-fatal)" in record.message for record in caplog.records)
+                        assert any("Continuing with standard PostgreSQL" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -215,3 +217,102 @@ async def test_migrate_to_citus_succeeds_when_citus_available(mock_settings, moc
                     assert mock_session.execute.call_count >= 1
                     # Verify commit was called (should be at least 2 times: after CREATE EXTENSION and after distributed tables)
                     assert mock_session.commit.call_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_initialize_skips_citus_when_enable_citus_not_set(mock_settings, mock_security_config, caplog):
+    """Test that initialize() skips Citus migration when ENABLE_CITUS is not set."""
+    with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
+        with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
+            with patch("omnicore_engine.database.database.settings", mock_settings):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
+                    with patch.dict(os.environ, {}, clear=True):  # Clear ENABLE_CITUS from env
+                        mock_security_instance = Mock()
+                        mock_security_instance.encrypt = lambda x: x
+                        mock_security_instance.decrypt = lambda x: x
+                        mock_security.return_value = mock_security_instance
+
+                        db = Database("postgresql+asyncpg://user:pass@localhost/testdb")
+                        
+                        # Mock the required methods
+                        db.test_connection = AsyncMock()
+                        db.create_tables = AsyncMock()
+                        db.migrate_to_citus = AsyncMock()
+                        
+                        # Test that initialize completes successfully without calling migrate_to_citus
+                        with caplog.at_level(logging.INFO):
+                            await db.initialize()
+                        
+                        # Verify initialization proceeded
+                        db.test_connection.assert_called_once()
+                        db.create_tables.assert_called_once()
+                        # Verify migrate_to_citus was NOT called
+                        db.migrate_to_citus.assert_not_called()
+                        
+                        # Verify info message was logged
+                        assert any("Citus migration skipped (ENABLE_CITUS not set or disabled)" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_initialize_skips_citus_when_enable_citus_is_zero(mock_settings, mock_security_config, caplog):
+    """Test that initialize() skips Citus migration when ENABLE_CITUS=0."""
+    with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
+        with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
+            with patch("omnicore_engine.database.database.settings", mock_settings):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
+                    with patch.dict(os.environ, {"ENABLE_CITUS": "0"}):
+                        mock_security_instance = Mock()
+                        mock_security_instance.encrypt = lambda x: x
+                        mock_security_instance.decrypt = lambda x: x
+                        mock_security.return_value = mock_security_instance
+
+                        db = Database("postgresql+asyncpg://user:pass@localhost/testdb")
+                        
+                        # Mock the required methods
+                        db.test_connection = AsyncMock()
+                        db.create_tables = AsyncMock()
+                        db.migrate_to_citus = AsyncMock()
+                        
+                        # Test that initialize completes successfully without calling migrate_to_citus
+                        with caplog.at_level(logging.INFO):
+                            await db.initialize()
+                        
+                        # Verify initialization proceeded
+                        db.test_connection.assert_called_once()
+                        db.create_tables.assert_called_once()
+                        # Verify migrate_to_citus was NOT called
+                        db.migrate_to_citus.assert_not_called()
+                        
+                        # Verify info message was logged
+                        assert any("Citus migration skipped (ENABLE_CITUS not set or disabled)" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_initialize_calls_citus_when_enable_citus_is_one(mock_settings, mock_security_config, caplog):
+    """Test that initialize() calls Citus migration when ENABLE_CITUS=1."""
+    with patch("omnicore_engine.database.database._get_settings", return_value=mock_settings):
+        with patch("omnicore_engine.database.database.get_security_config", return_value=mock_security_config):
+            with patch("omnicore_engine.database.database.settings", mock_settings):
+                with patch("omnicore_engine.database.database.EnterpriseSecurityUtils") as mock_security:
+                    with patch.dict(os.environ, {"ENABLE_CITUS": "1"}):
+                        mock_security_instance = Mock()
+                        mock_security_instance.encrypt = lambda x: x
+                        mock_security_instance.decrypt = lambda x: x
+                        mock_security.return_value = mock_security_instance
+
+                        db = Database("postgresql+asyncpg://user:pass@localhost/testdb")
+                        
+                        # Mock the required methods
+                        db.test_connection = AsyncMock()
+                        db.create_tables = AsyncMock()
+                        db.migrate_to_citus = AsyncMock()
+                        
+                        # Test that initialize completes successfully and calls migrate_to_citus
+                        with caplog.at_level(logging.INFO):
+                            await db.initialize()
+                        
+                        # Verify initialization proceeded
+                        db.test_connection.assert_called_once()
+                        db.create_tables.assert_called_once()
+                        # Verify migrate_to_citus WAS called
+                        db.migrate_to_citus.assert_called_once()
