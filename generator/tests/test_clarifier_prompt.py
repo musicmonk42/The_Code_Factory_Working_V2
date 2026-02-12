@@ -500,16 +500,10 @@ class TestPluginEntrypoint(unittest.IsolatedAsyncioTestCase):
 
 def tearDownModule():
     """Clean up all patches."""
-    patcher_get_channel.stop()
-    patcher_clarifier_class.stop()
-    patcher_translator.stop()
-    patcher_send_alert.stop()
-    patcher_log_action.stop()
-    patcher_get_circuit_breaker.stop()
-    patcher_get_tracer.stop()
-    patcher_get_logger.stop()
-    patcher_get_fernet.stop()
-    patcher_get_config.stop()
+    # Note: Patchers are managed by pytest fixtures using 'with' statements
+    # and are automatically cleaned up. This function is kept for compatibility
+    # but doesn't need to stop any patchers.
+    pass
     print("\nAll clarifier_prompt mocks stopped.")
 
 
