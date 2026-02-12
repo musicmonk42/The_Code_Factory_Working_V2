@@ -301,13 +301,36 @@ def validate_has_content(content: str, filename: str) -> Dict[str, Any]:
     }
 
 
-def extract_endpoints_from_code(code_content: str) -> List[Dict[str, str]]:
-    """Extract API endpoints from code using regex."""
+def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[Dict[str, str]]:
+    """Extract API endpoints from code using regex.
+    
+    Supports multiple languages and frameworks:
+    - Python: FastAPI, Flask decorators
+    - TypeScript/JavaScript: Express, NestJS, Fastify
+    - Java: Spring Boot annotations
+    - Go: standard http handlers
+    """
     endpoints = []
-    patterns = [
+    
+    # Python patterns (FastAPI, Flask)
+    python_patterns = [
         r'@\w+\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
         r'@route\s*\(\s*["\']([^"\']+)["\']',
     ]
+    
+    # TypeScript/JavaScript route patterns
+    ts_js_patterns = [
+        r"""app\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",           # Express
+        r"""router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",        # Express Router
+        r"""@(Get|Post|Put|Delete|Patch)\s*\(\s*['"]([^'"]+)['"]""",              # NestJS decorators
+        r"""server\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",       # Fastify
+    ]
+    
+    # Determine which patterns to use based on file extension
+    if filename.endswith(('.ts', '.js')):
+        patterns = ts_js_patterns
+    else:
+        patterns = python_patterns
     
     for pattern in patterns:
         matches = re.findall(pattern, code_content, re.IGNORECASE)
@@ -605,7 +628,7 @@ def extract_output_dir_from_md(md_content: str) -> str:
     return ""
 
 
-def validate_readme_completeness(readme_content: str) -> Dict[str, Any]:
+def validate_readme_completeness(readme_content: str, language: str = "python") -> Dict[str, Any]:
     """
     Validate that generated README.md is complete and production-ready.
     
@@ -619,10 +642,12 @@ def validate_readme_completeness(readme_content: str) -> Dict[str, Any]:
         - Run server instructions
         - Testing instructions
         - API examples (curl commands)
-        - Required commands: python -m venv, pip install, uvicorn, pytest, curl
+        - Required commands: language-specific (e.g., python -m venv, pip install for Python;
+          npm install, npx jest for TypeScript/JavaScript)
     
     Args:
         readme_content: Content of the generated README.md file
+        language: Programming language of the project (default: "python")
         
     Returns:
         Validation result dictionary with:
@@ -634,7 +659,7 @@ def validate_readme_completeness(readme_content: str) -> Dict[str, Any]:
         - commands_found: list of required commands that were found
         
     Example:
-        >>> result = validate_readme_completeness(readme_content)
+        >>> result = validate_readme_completeness(readme_content, language="typescript")
         >>> if not result['valid']:
         ...     print(f"README incomplete: {result['errors']}")
     """
@@ -665,14 +690,27 @@ def validate_readme_completeness(readme_content: str) -> Dict[str, Any]:
         else:
             errors.append(f"Missing required section: {section_key}")
     
-    # 3. Check for required commands
-    required_commands = {
-        "venv": ["python -m venv", "python3 -m venv", "virtualenv"],
-        "pip": ["pip install", "pip3 install"],
-        "uvicorn": ["uvicorn", "python -m uvicorn"],
-        "pytest": ["pytest", "python -m pytest"],
-        "curl": ["curl"],
-    }
+    # 3. Check for required commands (language-aware)
+    if language.lower() in ("typescript", "javascript"):
+        required_commands = {
+            "install": ["npm install", "yarn install", "pnpm install"],
+            "run": ["npm run", "npx", "node", "ts-node"],
+            "test": ["jest", "mocha", "npm test", "npx jest"],
+        }
+    elif language.lower() == "python":
+        required_commands = {
+            "venv": ["python -m venv", "python3 -m venv", "virtualenv"],
+            "pip": ["pip install", "pip3 install"],
+            "uvicorn": ["uvicorn", "python -m uvicorn"],
+            "pytest": ["pytest", "python -m pytest"],
+            "curl": ["curl"],
+        }
+    else:
+        # Generic: just check for install and test commands
+        required_commands = {
+            "install": ["install", "setup"],
+            "test": ["test"],
+        }
     
     for cmd_key, patterns in required_commands.items():
         found = any(pattern in readme_content for pattern in patterns)
@@ -782,11 +820,11 @@ def validate_spec_fidelity(
             result["valid"] = True
             return result
         
-        # Extract endpoints from all Python files in generated code
+        # Extract endpoints from all code files (Python, TypeScript, JavaScript, etc.)
         all_found_endpoints: List[Dict[str, str]] = []
         for filename, content in generated_files.items():
-            if filename.endswith('.py'):
-                file_endpoints = extract_endpoints_from_code(content)
+            if filename.endswith(('.py', '.ts', '.js', '.java', '.go')):
+                file_endpoints = extract_endpoints_from_code(content, filename)
                 all_found_endpoints.extend(file_endpoints)
         
         result["found_endpoints"] = all_found_endpoints
