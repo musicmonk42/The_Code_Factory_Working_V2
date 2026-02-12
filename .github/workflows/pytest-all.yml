@@ -89,7 +89,7 @@ jobs:
 
       - name: Set PYTHONPATH
         run: |
-          echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
+          echo "PYTHONPATH=${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer" >> $GITHUB_ENV
 
       - name: Free disk space
         run: |
@@ -355,7 +355,7 @@ jobs:
           echo "Workspace: ${{ github.workspace }}"
 
           # Ensure PYTHONPATH is set
-          export PYTHONPATH="${{ github.workspace }}:${PYTHONPATH}"
+          export PYTHONPATH="${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer:${PYTHONPATH}"
 
           # Verify directory structure
           echo "=== Checking workspace structure ==="
@@ -625,11 +625,11 @@ jobs:
           FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           NLTK_DATA: "$HOME/nltk_data"
-          PYTHONPATH: "${{ github.workspace }}"
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
           # conftest.py handles path setup automatically via path_setup module
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           export NLTK_DATA="$HOME/nltk_data"
 
           # Create Prometheus multiprocess directory
@@ -773,7 +773,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
 
@@ -827,7 +827,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -880,7 +880,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -932,7 +932,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -984,7 +984,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -1043,7 +1043,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -1103,7 +1103,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect()"
 
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
@@ -1152,7 +1152,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
 
           python -c "import gc; gc.collect()"
 
@@ -1211,7 +1211,7 @@ jobs:
           PYTEST_COLLECTING: "1"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
 
           python -c "import gc; gc.collect()"
 
@@ -1268,7 +1268,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
@@ -1310,7 +1310,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
@@ -1352,7 +1352,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
@@ -1394,7 +1394,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
           # FIX: Set finite CPU limits instead of unlimited (which often fails)
@@ -1455,7 +1455,7 @@ jobs:
           PYTHONMALLOC: "malloc"
         run: |
           set -o pipefail
-          export PYTHONPATH="$PWD"
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
 
           # Enhanced memory cleanup before batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
