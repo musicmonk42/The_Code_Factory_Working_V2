@@ -292,7 +292,37 @@ class TestExtractRequiredFilesFromMd:
         result = extract_required_files_from_md(md)
         assert "main.py" in result
         assert "app/routes.py" in result
+    
+    def test_filters_runtime_names(self):
+        """Runtime/tool names should be filtered out."""
+        from generator.main.provenance import extract_required_files_from_md
 
+        md = "This project uses `Node.js` and `Express.js` with `index.ts` as entry point."
+        result = extract_required_files_from_md(md)
+        
+        # Node.js and Express.js should be filtered out
+        assert "Node.js" not in result
+        assert "Express.js" not in result
+        
+        # index.ts should be included
+        assert "index.ts" in result
+    
+    def test_filters_by_target_language(self):
+        """Files from other language ecosystems should be filtered when target_language is specified."""
+        from generator.main.provenance import extract_required_files_from_md
+
+        md = (
+            "This TypeScript project conceptually references `main.py` from Python examples.\n"
+            "The actual entry point is `index.ts` with `models.ts`.\n"
+        )
+        
+        # With target_language="typescript", main.py should be filtered out
+        result = extract_required_files_from_md(md, target_language="typescript")
+        
+        assert "index.ts" in result
+        assert "models.ts" in result
+        assert "main.py" not in result  # Filtered because it's from Python ecosystem
+    
     def test_extract_empty_spec(self):
         """Empty spec returns empty list."""
         from generator.main.provenance import extract_required_files_from_md

@@ -429,7 +429,7 @@ def extract_endpoints_from_md(md_content: str) -> List[Dict[str, str]]:
             span.end()
 
 
-def extract_required_files_from_md(md_content: str) -> List[str]:
+def extract_required_files_from_md(md_content: str, target_language: Optional[str] = None) -> List[str]:
     """
     Extract required file paths referenced in a Markdown spec.
 
@@ -443,12 +443,36 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
 
     Args:
         md_content: Markdown specification content to parse.
+        target_language: Optional target language (e.g., "typescript", "python").
+                        If provided, filters out files from other ecosystems.
 
     Returns:
         Deduplicated, sorted list of relative file paths found in the spec.
     """
     files: List[str] = []
     seen: Set[str] = set()
+
+    # Blocklist of runtime/tool names that look like files but aren't
+    # These are technology names, not project files
+    RUNTIME_BLOCKLIST = {
+        "Node.js", "node.js", "Vue.js", "vue.js", "React.js", "react.js",
+        "Next.js", "next.js", "Express.js", "express.js", "Nuxt.js", "nuxt.js",
+        "Angular.js", "angular.js", "Ember.js", "ember.js", "Three.js", "three.js",
+        "D3.js", "d3.js", "Electron.js", "electron.js", "Deno.ts", "deno.ts"
+    }
+
+    # Language-to-extension mapping for ecosystem filtering
+    LANGUAGE_EXTENSIONS = {
+        "python": {".py", ".pyw", ".pyi"},
+        "typescript": {".ts", ".tsx"},
+        "javascript": {".js", ".jsx", ".mjs", ".cjs"},
+        "java": {".java"},
+        "go": {".go"},
+        "rust": {".rs"},
+        "csharp": {".cs"},
+        "c": {".c", ".h"},
+        "c++": {".cpp", ".cc", ".cxx", ".hpp"},
+    }
 
     # Common source file extensions to look for
     file_ext_pattern = r'(?:\.py|\.js|\.ts|\.jsx|\.tsx|\.yml|\.yaml|\.toml|\.cfg|\.txt|\.json|\.html|\.css)'
@@ -464,9 +488,33 @@ def extract_required_files_from_md(md_content: str) -> List[str]:
     for pattern in patterns:
         for match in re.finditer(pattern, md_content):
             path = match.group(1).strip()
-            if path and path not in seen:
-                seen.add(path)
-                files.append(path)
+            
+            # Skip if empty or already seen
+            if not path or path in seen:
+                continue
+            
+            # Skip runtime/tool names that aren't actual files
+            if path in RUNTIME_BLOCKLIST:
+                continue
+            
+            # If target language specified, filter by ecosystem
+            if target_language:
+                target_exts = LANGUAGE_EXTENSIONS.get(target_language.lower(), set())
+                if target_exts:
+                    # Check if file has an extension matching the target language
+                    file_ext = os.path.splitext(path)[1].lower()
+                    # Only filter out if file has a code extension from a different language
+                    is_code_file = any(
+                        file_ext in exts 
+                        for lang, exts in LANGUAGE_EXTENSIONS.items()
+                        if lang != target_language.lower()
+                    )
+                    if is_code_file and file_ext not in target_exts:
+                        # File is from a different language ecosystem - skip it
+                        continue
+            
+            seen.add(path)
+            files.append(path)
 
     files.sort()
     return files
@@ -927,13 +975,24 @@ def _write_spec_error_file(output_dir: str, result: Dict[str, Any]) -> None:
 def run_fail_fast_validation(
     generated_files: Dict[str, str],
     output_dir: Optional[str] = None,
-    md_content: Optional[str] = None
+    md_content: Optional[str] = None,
+    target_language: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run validation on generated files.
     
-    Validates syntax and content for Python files.
+    Validates syntax and content for code files.
     Optionally validates spec fidelity if md_content is provided.
+    
+    Args:
+        generated_files: Dictionary mapping filenames to code content
+        output_dir: Optional directory where files are/will be written
+        md_content: Optional markdown spec content for fidelity validation
+        target_language: Optional target language (e.g., "python", "typescript", "java")
+                        Used for language-specific entry point checks
+    
+    Returns:
+        Dictionary with validation results
     """
     start_time = time.time()
     
@@ -958,15 +1017,66 @@ def run_fail_fast_validation(
                 results["valid"] = False
                 results["errors"].append(content_result["error"])
     
-    # Check for main entry point
-    if "main.py" not in generated_files:
-        results["valid"] = False
-        results["errors"].append("main.py not found")
-    
-    # Check for requirements
-    if "requirements.txt" not in generated_files:
-        results["valid"] = False
-        results["errors"].append("requirements.txt not found")
+    # Language-specific entry point checks
+    if target_language:
+        lang = target_language.lower()
+        
+        if lang in ("python", "py"):
+            # Python: main.py + requirements.txt
+            if "main.py" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("main.py not found")
+            if "requirements.txt" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("requirements.txt not found")
+                
+        elif lang in ("typescript", "ts", "javascript", "js"):
+            # TypeScript/JavaScript: index.ts/index.js/app.ts/app.js + package.json
+            has_entry = any(
+                fname in generated_files 
+                for fname in ["index.ts", "index.js", "app.ts", "app.js", "server.ts", "server.js"]
+            )
+            if not has_entry:
+                results["valid"] = False
+                results["errors"].append("No entry point found (expected index.ts, index.js, app.ts, app.js, server.ts, or server.js)")
+            if "package.json" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("package.json not found")
+                
+        elif lang in ("java",):
+            # Java: Main.java or App.java + pom.xml or build.gradle
+            has_main = any(
+                fname in generated_files 
+                for fname in ["Main.java", "App.java", "Application.java"]
+            )
+            if not has_main:
+                results["valid"] = False
+                results["errors"].append("No main class found (expected Main.java, App.java, or Application.java)")
+            has_build = any(
+                fname in generated_files 
+                for fname in ["pom.xml", "build.gradle", "build.gradle.kts"]
+            )
+            if not has_build:
+                results["valid"] = False
+                results["errors"].append("No build configuration found (expected pom.xml or build.gradle)")
+                
+        elif lang in ("go",):
+            # Go: main.go + go.mod
+            if "main.go" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("main.go not found")
+            if "go.mod" not in generated_files:
+                results["valid"] = False
+                results["errors"].append("go.mod not found")
+    else:
+        # Default behavior when no target language specified (backward compatibility)
+        # Only check for Python entry points
+        if "main.py" not in generated_files:
+            results["valid"] = False
+            results["errors"].append("main.py not found")
+        if "requirements.txt" not in generated_files:
+            results["valid"] = False
+            results["errors"].append("requirements.txt not found")
     
     # Run spec fidelity validation if MD content provided
     if md_content and results["valid"]:
