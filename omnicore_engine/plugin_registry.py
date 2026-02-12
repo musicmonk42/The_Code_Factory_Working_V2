@@ -85,6 +85,7 @@ ShardedMessageBus = None
 PluginMessageBusAdapter = None
 MessageFilter = None
 Message = None
+_core_dependencies_loaded = False
 
 # Module-level: Set to None initially to avoid heavy imports during module load
 # These will be lazy-loaded when PluginRegistry.initialize() is called
@@ -189,10 +190,13 @@ def _lazy_load_core_dependencies():
     """
     global Database, plugin_executions, Redis, ShardedMessageBus
     global PluginMessageBusAdapter, MessageFilter, Message
+    global _core_dependencies_loaded
     
     # Only load once
-    if Database is not None:
+    if _core_dependencies_loaded:
         return
+    
+    _core_dependencies_loaded = True
     
     try:
         from omnicore_engine.database import Database as _Database
