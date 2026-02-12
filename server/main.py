@@ -687,49 +687,33 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     else:
         logger.info("Redis not configured (REDIS_URL not set)")
     
-    # Create Redis RAG index if it doesn't exist (for codegen prompt enrichment)
+    # Create Redis RAG index via codegen_prompt initialization
     if redis_url:
         try:
             import redis.asyncio as aioredis
-            from redis.commands.search.field import TextField, VectorField
-            from redis.commands.search.indexDefinition import IndexDefinition, IndexType
             
             r = aioredis.Redis.from_url(
                 redis_url, 
                 socket_connect_timeout=REDIS_CONNECTION_TIMEOUT_SECONDS, 
                 socket_timeout=REDIS_CONNECTION_TIMEOUT_SECONDS
             )
+            
+            # Delegate to codegen_prompt's initialize_rag_store for proper schema
             try:
-                # Check if index already exists
-                await r.ft(RAG_INDEX_NAME).info()
-                logger.info(f"✓ Redis RAG index '{RAG_INDEX_NAME}' already exists")
-            except Exception:
-                # Create the index
-                try:
-                    schema = (
-                        TextField("content"),
-                        TextField("metadata"),
-                        VectorField(
-                            "embedding", 
-                            "FLAT", 
-                            {
-                                "TYPE": "FLOAT32", 
-                                "DIM": RAG_EMBEDDING_DIM, 
-                                "DISTANCE_METRIC": "COSINE"
-                            }
-                        ),
-                    )
-                    definition = IndexDefinition(prefix=[RAG_INDEX_PREFIX], index_type=IndexType.HASH)
-                    await r.ft(RAG_INDEX_NAME).create_index(schema, definition=definition)
-                    logger.info(f"✓ Redis RAG index '{RAG_INDEX_NAME}' created successfully (dim={RAG_EMBEDDING_DIM})")
-                except Exception as idx_err:
-                    logger.warning(f"⚠ Could not create Redis RAG index: {idx_err}")
-                    logger.warning("  Codegen will work without RAG enrichment")
+                from generator.agents.codegen_agent.codegen_prompt import initialize_rag_store
+                await initialize_rag_store(r)
+                logger.info("✓ RAG store initialized via codegen_prompt")
+            except ImportError:
+                logger.debug("codegen_prompt not available - RAG index not created")
+            except Exception as rag_err:
+                logger.warning(f"⚠ RAG store initialization failed: {rag_err}")
+                logger.warning("  Codegen will work without RAG enrichment")
+            
             await r.aclose()
         except ImportError:
-            logger.debug("Redis search module not available - RAG index not created")
+            logger.debug("Redis asyncio module not available - RAG index not created")
         except Exception as e:
-            logger.warning(f"⚠ Redis RAG index setup failed: {e}")
+            logger.warning(f"⚠ Redis RAG setup failed: {e}")
     
     # P2 FIX: Validate Database connection on startup (explicit query test)
     database_url = os.getenv("DATABASE_URL")

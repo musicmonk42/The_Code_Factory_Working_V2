@@ -683,6 +683,13 @@ async def retrieve_augmented_context(
                         "Relevant Context (from Redis Vector Store):\n- "
                         + "\n- ".join(retrieved_docs)
                     )
+            except aioredis.ResponseError as e:
+                # Handle missing index gracefully
+                if "no such index" in str(e).lower() or "unknown index" in str(e).lower():
+                    logger.warning("RAG index not found, skipping vector search enrichment")
+                else:
+                    logger.error(f"Failed to use Redis RAG: {e}")
+                    PROMPT_ERRORS.labels("RedisRAGFailure").inc()
             except Exception as e:
                 logger.error(f"Failed to use Redis RAG: {e}")
                 PROMPT_ERRORS.labels("RedisRAGFailure").inc()
