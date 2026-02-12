@@ -2031,20 +2031,18 @@ class HelmHandler(FormatHandler):
             if not found_yaml_start:
                 if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
                     found_yaml_start = True
-                elif re.match(self._NUMBERED_LIST_PATTERN, line):
-                    # Skip numbered lists before YAML starts
+                # Skip markdown artifacts before YAML starts
+                if re.match(self._NUMBERED_LIST_PATTERN, line):
                     continue
-                elif re.match(self._MARKDOWN_HEADER_PATTERN, line):
-                    # Skip markdown headers before YAML starts
+                if re.match(self._MARKDOWN_HEADER_PATTERN, line):
                     continue
             
-            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
-            # These checks apply both before and after YAML start is detected
+            # Skip markdown artifacts anywhere in the content (pre or post YAML detection)
+            # Numbered lists and headers should never be valid YAML
             if re.match(self._NUMBERED_LIST_PATTERN, line):
                 continue
             
-            # Skip markdown headers (already filtered above before YAML starts, but keeping for post-YAML)
-            if found_yaml_start and re.match(self._MARKDOWN_HEADER_PATTERN, line):
+            if re.match(self._MARKDOWN_HEADER_PATTERN, line):
                 continue
             
             # Skip lines that are primarily markdown bullets with bold
