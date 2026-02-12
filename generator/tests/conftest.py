@@ -297,7 +297,39 @@ if "opentelemetry" not in sys.modules:
         otel_module.__file__ = "<mocked opentelemetry>"
         otel_module.__path__ = []  # Required for package-like behavior
         sys.modules["opentelemetry"] = otel_module
+
+
+# Initialize tiktoken stub for token counting (optional dependency)
+if "tiktoken" not in sys.modules:
+    try:
+        import tiktoken as _test
+    except ImportError:
+        # Create tiktoken package stub
+        tiktoken_spec = importlib.machinery.ModuleSpec(name="tiktoken", loader=None, is_package=False)
+        tiktoken_module = importlib.util.module_from_spec(tiktoken_spec)
+        tiktoken_module.__file__ = "<mocked tiktoken>"
         
+        # Mock encoding class
+        class _MockEncoding:
+            def encode(self, text: str):
+                # Simple heuristic: ~1 token per 4 characters
+                return list(range(len(text) // 4 + 1))
+            
+            def decode(self, tokens):
+                return ""
+        
+        # Mock functions
+        def _mock_get_encoding(encoding_name):
+            return _MockEncoding()
+        
+        def _mock_encoding_for_model(model_name):
+            return _MockEncoding()
+        
+        tiktoken_module.get_encoding = _mock_get_encoding
+        tiktoken_module.encoding_for_model = _mock_encoding_for_model
+        tiktoken_module.Encoding = _MockEncoding
+        
+        sys.modules["tiktoken"] = tiktoken_module
         # Create trace submodule with proper hierarchy
         trace_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace", loader=None, is_package=True)
         otel_trace = importlib.util.module_from_spec(trace_spec)
