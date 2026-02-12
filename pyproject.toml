@@ -33,9 +33,9 @@ classifiers = [
 # - self_fixing_engineer: Self-Fixing Engineer (SFE) powered by Arbiter AI
 # All modules share a single unified requirements.txt
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["generator*", "omnicore_engine*", "self_fixing_engineer*", "server*"]
+[tool.setuptools]
+packages = ["generator", "omnicore_engine", "self_fixing_engineer", "server"]
+py-modules = []
 
 [tool.pytest.ini_options]
 minversion = "7.4"
