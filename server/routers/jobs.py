@@ -6,11 +6,12 @@ Job management endpoints.
 Handles job lifecycle: creation, listing, viewing, status, and progress tracking.
 """
 
+import asyncio
 import logging
 import mimetypes
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,11 +32,40 @@ from server.schemas import (
 )
 from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
-from server.storage import jobs_db
+from server.storage import jobs_db, add_job
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
+
+
+async def _emit_event_fire_and_forget(
+    omnicore_service: OmniCoreService,
+    topic: str,
+    payload: Dict[str, Any],
+    priority: int = 5,
+) -> None:
+    """
+    Fire-and-forget wrapper for emitting OmniCore events.
+    
+    This function runs in the background without blocking the response.
+    Errors are logged but do not propagate to the caller.
+    
+    Args:
+        omnicore_service: OmniCore service instance
+        topic: Event topic
+        payload: Event payload
+        priority: Event priority (default: 5)
+    """
+    try:
+        await omnicore_service.emit_event(
+            topic=topic,
+            payload=payload,
+            priority=priority,
+        )
+        logger.debug(f"Emitted {topic} event in background")
+    except Exception as e:
+        logger.warning(f"Failed to emit {topic} event in background: {e}")
 
 
 def _is_path_safe(file_path: Path, base_dir: Path) -> bool:
@@ -110,12 +140,13 @@ async def create_job(
         metadata=request.metadata or {},
     )
 
-    jobs_db[job_id] = job
+    add_job(job)
     logger.info(f"Created job {job_id}")
     
-    # Emit job.created event to message bus for event-driven processing
-    try:
-        await omnicore_service.emit_event(
+    # Emit job.created event to message bus in background (fire-and-forget)
+    asyncio.create_task(
+        _emit_event_fire_and_forget(
+            omnicore_service=omnicore_service,
             topic="job.created",
             payload={
                 "job_id": job_id,
@@ -126,10 +157,7 @@ async def create_job(
             },
             priority=5,
         )
-        logger.debug(f"Emitted job.created event for job {job_id}")
-    except Exception as e:
-        # Don't fail job creation if event emission fails
-        logger.warning(f"Failed to emit job.created event for job {job_id}: {e}")
+    )
 
     return job
 

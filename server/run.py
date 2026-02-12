@@ -70,8 +70,8 @@ def parse_args():
     parser.add_argument(
         "--workers",
         type=int,
-        default=None,  # Will use WEB_CONCURRENCY or default to 1
-        help="Number of worker processes (default: WEB_CONCURRENCY env var or 1)",
+        default=None,  # Will use WORKER_COUNT, WEB_CONCURRENCY, or default to 4
+        help="Number of worker processes (default: WORKER_COUNT/WEB_CONCURRENCY env var or 4)",
     )
 
     parser.add_argument(
@@ -89,10 +89,19 @@ def main():
     """Main entry point for the API server."""
     args = parse_args()
     
-    # P3 FIX: Support WEB_CONCURRENCY environment variable for worker count
+    # P3 FIX: Support WEB_CONCURRENCY and WORKER_COUNT environment variables for worker count
     # This allows easy scaling through environment configuration
+    # WEB_CONCURRENCY is the Railway/Heroku standard, WORKER_COUNT is our K8s/Helm standard
+    # FIX: Default to 4 workers (not 1) to handle concurrent requests and prevent event loop saturation
     if args.workers is None:
-        workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
+        # Prefer WORKER_COUNT (K8s/Helm) over WEB_CONCURRENCY (Railway), fall back to 4
+        # Use explicit checks to handle empty strings correctly
+        worker_count = os.environ.get("WORKER_COUNT")
+        if not worker_count:
+            worker_count = os.environ.get("WEB_CONCURRENCY")
+        if not worker_count:
+            worker_count = "4"
+        workers = int(worker_count)
     else:
         workers = args.workers
     
@@ -116,7 +125,7 @@ def main():
     logger.info(f"Port: {args.port}")
     logger.info(f"Workers: {workers}")
     if workers == 1:
-        logger.info("  Note: Single worker mode. Set WEB_CONCURRENCY for more workers.")
+        logger.warning("  Note: Single worker mode may not handle load well. Set WORKER_COUNT or WEB_CONCURRENCY for more workers.")
     logger.info(f"Reload: {args.reload}")
     logger.info(f"Log Level: {args.log_level}")
     logger.info("=" * 70)

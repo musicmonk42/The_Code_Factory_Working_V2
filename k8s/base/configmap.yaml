@@ -112,6 +112,9 @@ data:
   # ============================================
   # Worker Configuration
   # ============================================
+  # Number of uvicorn workers per pod (multi-process mode)
+  # Default is 4 for balanced performance. Production overlay increases to 8.
+  # Resource requests/limits should be scaled accordingly.
   WORKER_COUNT: "4"
   
   # ============================================

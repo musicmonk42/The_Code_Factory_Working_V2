@@ -23,6 +23,7 @@ Design Principles:
 - Gracefully handles errors without exposing internal details
 """
 
+import asyncio
 import logging
 import re
 from typing import Dict, List, Optional, Any
@@ -42,8 +43,8 @@ from server.schemas import (
 )
 from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
-from server.storage import jobs_db
-from server.routers.generator import _trigger_pipeline_background
+from server.storage import jobs_db, add_job
+from server.routers.generator import _run_pipeline_with_semaphore
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,35 @@ UUID_PATTERN = re.compile(
 
 # Supported programming languages
 SUPPORTED_LANGUAGES = {"python", "javascript", "typescript", "go", "java", "rust"}
+
+
+async def _emit_event_fire_and_forget(
+    omnicore_service: OmniCoreService,
+    topic: str,
+    payload: Dict[str, Any],
+    priority: int = 5,
+) -> None:
+    """
+    Fire-and-forget wrapper for emitting OmniCore events.
+    
+    This function runs in the background without blocking the response.
+    Errors are logged but do not propagate to the caller.
+    
+    Args:
+        omnicore_service: OmniCore service instance
+        topic: Event topic
+        payload: Event payload
+        priority: Event priority (default: 5)
+    """
+    try:
+        await omnicore_service.emit_event(
+            topic=topic,
+            payload=payload,
+            priority=priority,
+        )
+        logger.debug(f"Emitted {topic} event in background")
+    except Exception as e:
+        logger.warning(f"Failed to emit {topic} event in background: {e}")
 
 
 class V1GenerateRequest(BaseModel):
@@ -223,12 +253,13 @@ async def create_generation(
         metadata=metadata,
     )
     
-    jobs_db[job_id] = job
+    add_job(job)
     logger.info(f"Created v1 generation job {job_id}")
     
-    # Emit job.created event
-    try:
-        await omnicore_service.emit_event(
+    # Emit job.created event in background (fire-and-forget)
+    asyncio.create_task(
+        _emit_event_fire_and_forget(
+            omnicore_service=omnicore_service,
             topic="job.created",
             payload={
                 "job_id": job_id,
@@ -239,17 +270,17 @@ async def create_generation(
             },
             priority=5,
         )
-        logger.debug(f"Emitted job.created event for v1 generation {job_id}")
-    except Exception as e:
-        logger.warning(f"Failed to emit job.created event for v1 generation {job_id}: {e}")
+    )
     
     # Trigger the generation pipeline as a background task
     # Uses the requirements text as the README content for the pipeline
-    background_tasks.add_task(
-        _trigger_pipeline_background,
-        job_id=job_id,
-        readme_content=request.requirements,
-        generator_service=generator_service,
+    # Use asyncio.create_task instead of BackgroundTasks to prevent event loop blocking
+    asyncio.create_task(
+        _run_pipeline_with_semaphore(
+            job_id=job_id,
+            readme_content=request.requirements,
+            generator_service=generator_service,
+        )
     )
     logger.info(f"Background pipeline triggered for v1 generation job {job_id}")
     
