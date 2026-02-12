@@ -521,13 +521,13 @@ class LLMClient:
         model_lower = model.lower()
         
         # Check for provider-specific prefixes/patterns
-        if model_lower.startswith("gpt") or "gpt" in model_lower:
+        if "gpt" in model_lower:
             return "openai"
-        elif model_lower.startswith("gemini") or "gemini" in model_lower:
+        elif "gemini" in model_lower:
             return "gemini"
-        elif model_lower.startswith("claude") or "claude" in model_lower:
+        elif "claude" in model_lower:
             return "claude"
-        elif model_lower.startswith("grok") or "grok" in model_lower:
+        elif "grok" in model_lower:
             return "grok"
         elif any(x in model_lower for x in ["codellama", "llama", "mistral"]):
             return "local"
