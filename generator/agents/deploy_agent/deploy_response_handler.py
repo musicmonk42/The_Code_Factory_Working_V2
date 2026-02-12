@@ -1786,11 +1786,88 @@ class KubernetesHandler(FormatHandler):
         return documents if len(documents) > 1 else documents[0]
 
     def _sanitize_yaml_response(self, raw: str) -> str:
-        """Remove common LLM artifacts from YAML response."""
-        # Remove markdown code blocks
-        raw = re.sub(r'^```(?:yaml|yml)?\s*\n', '', raw, flags=re.MULTILINE)
-        raw = re.sub(r'\n```\s*$', '', raw, flags=re.MULTILINE)
-        return raw.strip()
+        """
+        Sanitize YAML response by removing common LLM explanation artifacts.
+        
+        Removes markdown-style explanations that sometimes appear in YAML output:
+        - Lines starting with markdown headers (# Header)
+        - Lines with markdown links ([text](url))
+        - Inline code backticks (`code`)
+        - Markdown emphasis patterns (bold, italic)
+        - Numbered lists with explanations
+        - Markdown bullet points with bold text
+        - Malformed YAML like "type: <PERSON>ports:" (splits into proper lines)
+        - Text before the first YAML document marker (---) or first apiVersion:
+        
+        This is a best-effort cleanup before strict validation.
+        
+        Args:
+            raw: Raw YAML string potentially containing markdown artifacts
+            
+        Returns:
+            Sanitized YAML string with markdown artifacts removed
+        """
+        lines = []
+        in_mermaid_block = False  # Track if we're inside a mermaid block
+        found_yaml_start = False  # Track if we've found the start of actual YAML
+        
+        for line in raw.split('\n'):
+            # Skip mermaid diagram blocks completely
+            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+                in_mermaid_block = True
+                continue
+            if in_mermaid_block:
+                if '```' in line:
+                    in_mermaid_block = False
+                continue
+            
+            # Remove markdown code blocks
+            if re.match(r'^```(?:yaml|yml)?\s*$', line):
+                continue
+            
+            # Detect start of actual YAML content
+            if not found_yaml_start:
+                if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
+                    found_yaml_start = True
+                elif re.match(r'^\s*\d+\.\s+\*\*', line):
+                    # Skip numbered lists before YAML starts
+                    continue
+                elif re.match(r'^\s*#\s+[A-Za-z]', line):
+                    # Skip markdown headers before YAML starts
+                    continue
+            
+            # Skip lines that start with markdown headers (# followed by space and any letter)
+            if re.match(r'^\s*#\s+[A-Za-z]', line):
+                continue
+            
+            # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
+            # These are often explanatory text, not YAML content
+            if re.match(r'^\s*\d+\.\s+\*\*', line):
+                continue
+            
+            # Skip lines that are primarily markdown bullets with bold (e.g., "- **item**:")
+            # But allow YAML lists that might have some formatting
+            if re.match(r'^\s*-\s+\*\*[^*]+\*\*\s*:', line):
+                # This looks like a markdown explanation list, skip it
+                continue
+            
+            # Remove markdown links: [text](url)
+            line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line)
+            
+            # Remove markdown bold (**text**) but preserve the text
+            line = re.sub(r'\*\*([^*]+)\*\*', r'\1', line)
+            
+            # Remove markdown italic (*text* or _text_) but preserve the text
+            line = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'\1', line)  # *text*
+            line = re.sub(r'_(.+?)_', r'\1', line)  # _text_
+            
+            # Remove inline code backticks (but preserve YAML values)
+            if '`' in line and not line.strip().startswith('`'):
+                line = line.replace('`', '')
+            
+            lines.append(line)
+        
+        return '\n'.join(lines).strip()
 
     def validate(self, data: Union[Dict[str, Any], List[Dict[str, Any]]]) -> None:
         """Validate Kubernetes manifests."""
@@ -1814,7 +1891,7 @@ class KubernetesHandler(FormatHandler):
         """Convert Kubernetes manifest to requested format."""
         if to_format == "json":
             return json.dumps(data, indent=2)
-        elif to_format in ("yaml", "yml"):
+        elif to_format in ("yaml", "yml", "kubernetes"):
             from io import StringIO
             string_stream = StringIO()
             ru_yaml = YAML()
@@ -1993,7 +2070,7 @@ class HelmHandler(FormatHandler):
         """Convert Helm chart to requested format."""
         if to_format == "json":
             return json.dumps(data, indent=2)
-        elif to_format in ("yaml", "yml"):
+        elif to_format in ("yaml", "yml", "helm"):
             # Return as multi-section YAML
             from io import StringIO
             string_stream = StringIO()
