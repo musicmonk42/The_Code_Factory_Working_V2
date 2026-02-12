@@ -207,13 +207,13 @@ def mock_external_sdks():
         # Configure Datadog mock
         mock_dd.api.initialized = False
 
-        # Configure aiofiles mock - needs to be properly awaitable
+        # Configure aiofiles mock - aiofiles.open returns an async context manager directly
         mock_aio_file = AsyncMock()
         mock_aio_context = AsyncMock()
         mock_aio_context.__aenter__.return_value = mock_aio_file
         mock_aio_context.__aexit__.return_value = None
-        # Make aiofiles.open return an awaitable AsyncMock that also supports async context manager
-        mock_aio.open = AsyncMock(return_value=mock_aio_context)
+        # Make aiofiles.open return the async context manager directly (not awaitable)
+        mock_aio.open = MagicMock(return_value=mock_aio_context)
 
         yield {
             "datadog": mock_dd,

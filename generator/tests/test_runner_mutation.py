@@ -1,6 +1,7 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import asyncio
+import importlib as importlib_module
 import sys
 import types
 from pathlib import Path
@@ -337,8 +338,8 @@ async def test_property_based_test_success_no_fuzz_functions(
     # FIX: Add patch for importlib.reload to prevent ModuleNotFoundError
     with (
         patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
-        patch("importlib.import_module", return_value=module),
-        patch("importlib.reload", return_value=None),
+        patch.object(runner_mutation.importlib, "import_module", return_value=module),
+        patch.object(runner_mutation.importlib, "reload", return_value=module),
     ):
         result = await property_based_test(temp_dir, mock_config, code_files)
 
@@ -480,8 +481,8 @@ async def test_full_pipeline(
     # FIX: Add patch for importlib.reload
     with (
         patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
-        patch("importlib.import_module", return_value=pb_module),
-        patch("importlib.reload", return_value=None),
+        patch.object(runner_mutation.importlib, "import_module", return_value=pb_module),
+        patch.object(runner_mutation.importlib, "reload", return_value=pb_module),
     ):
         prop_result = await property_based_test(
             temp_dir, mock_config, {f"{module_name}.py": "x = 1"}
