@@ -84,6 +84,15 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
 DEFAULT_MAX_RETRIES = 3
 BASE_BACKOFF_SECONDS = 1.0
 
+# Provider default models for fallback scenarios
+_PROVIDER_DEFAULT_MODELS = {
+    "openai": "gpt-4o",
+    "gemini": "gemini-pro",
+    "local": "codellama",
+    "grok": "grok-beta",
+    "claude": "claude-3-sonnet-20240229",
+}
+
 
 # --- Secrets Management ---
 class SecretsManager:
@@ -499,6 +508,60 @@ class LLMClient:
             )
             return int(len(text.split()) * 1.3)
     
+    def _detect_model_provider(self, model: str) -> Optional[str]:
+        """
+        Detect which provider a model name belongs to based on naming patterns.
+        
+        Args:
+            model: Model name (e.g., "gpt-4o", "gemini-pro", "claude-3-sonnet")
+            
+        Returns:
+            Provider name or None if unable to detect
+        """
+        model_lower = model.lower()
+        
+        # Check for provider-specific prefixes/patterns
+        if model_lower.startswith("gpt") or "gpt" in model_lower:
+            return "openai"
+        elif model_lower.startswith("gemini") or "gemini" in model_lower:
+            return "gemini"
+        elif model_lower.startswith("claude") or "claude" in model_lower:
+            return "claude"
+        elif model_lower.startswith("grok") or "grok" in model_lower:
+            return "grok"
+        elif any(x in model_lower for x in ["codellama", "llama", "mistral"]):
+            return "local"
+        
+        return None
+    
+    def _remap_model_for_provider(self, model: str, target_provider: str) -> str:
+        """
+        Remap a model name to be compatible with the target provider.
+        
+        Args:
+            model: Original model name
+            target_provider: The provider to remap the model for
+            
+        Returns:
+            Remapped model name suitable for the target provider
+        """
+        model_provider = self._detect_model_provider(model)
+        
+        # If model already belongs to target provider, no remapping needed
+        if model_provider == target_provider:
+            return model
+        
+        # If we detected the model belongs to a different provider, remap to default
+        if model_provider and model_provider != target_provider:
+            remapped = _PROVIDER_DEFAULT_MODELS.get(target_provider, model)
+            logger.info(
+                f"[LLM] Model remapped for fallback: {model} ({model_provider}) -> {remapped} ({target_provider})"
+            )
+            return remapped
+        
+        # If we couldn't detect provider, assume it needs remapping and use default
+        return _PROVIDER_DEFAULT_MODELS.get(target_provider, model)
+    
     def _get_fallback_providers(self, primary_provider: str) -> List[str]:
         """
         Get list of fallback providers to try when primary provider fails.
@@ -675,10 +738,14 @@ class LLMClient:
                                 # Check if fallback provider is available
                                 if await self.circuit_breaker.allow_request(fallback_provider):
                                     logger.info(f"Trying fallback provider: {fallback_provider}")
-                                    # Recursively call with fallback provider
+                                    
+                                    # Remap model for fallback provider
+                                    fallback_model = self._remap_model_for_provider(model, fallback_provider)
+                                    
+                                    # Recursively call with fallback provider and remapped model
                                     return await self.call_llm_api(
                                         prompt=prompt,
-                                        model=model,
+                                        model=fallback_model,
                                         stream=stream,
                                         provider=fallback_provider,
                                         max_retries=1,  # Limit retries for fallback

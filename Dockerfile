@@ -262,6 +262,28 @@ RUN curl -sfL -o /usr/local/bin/hadolint "https://github.com/hadolint/hadolint/r
     chmod +x /usr/local/bin/hadolint && \
     hadolint --version
 
+# Install Node.js for TypeScript syntax validation
+# Using NodeSource setup script for latest stable version (Node.js 20.x LTS)
+# Required for deploy agent to validate TypeScript projects
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    node --version && \
+    npm --version
+
+# Install Helm for Kubernetes chart validation
+# Helm is required for deploy agent to validate Helm charts
+# Using official installation script
+RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && \
+    helm version
+
+# Install kubectl for Kubernetes manifest validation
+# kubectl is required for deploy agent to validate K8s manifests
+# Using latest stable version
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
+    chmod +x kubectl && \
+    mv kubectl /usr/local/bin/ && \
+    kubectl version --client
+
 # Note: Docker-in-Docker is NOT installed by default for security reasons
 # If deployment validation requires docker build testing inside containers,
 # use Docker socket mounting: docker run -v /var/run/docker.sock:/var/run/docker.sock

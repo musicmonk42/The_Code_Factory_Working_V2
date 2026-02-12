@@ -230,6 +230,80 @@ MAX_FILES_IN_README = 10  # Maximum files to list in README
 MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
 MIN_README_LENGTH = 500  # Minimum length for a complete README (characters)
 
+# Language detection and file extension mappings
+LANGUAGE_FILE_EXTENSIONS = {
+    "python": ["*.py"],
+    "typescript": ["*.ts", "*.tsx"],
+    "javascript": ["*.js", "*.jsx"],
+    "java": ["*.java"],
+    "go": ["*.go"],
+    "rust": ["*.rs"],
+}
+
+TEST_FILE_PATTERNS = {
+    "python": lambda f: f.name.startswith("test_") or f.name.endswith("_test.py"),
+    "typescript": lambda f: f.name.endswith(".test.ts") or f.name.endswith(".spec.ts") or f.name.endswith(".test.tsx") or f.name.endswith(".spec.tsx"),
+    "javascript": lambda f: f.name.endswith(".test.js") or f.name.endswith(".spec.js") or f.name.endswith(".test.jsx") or f.name.endswith(".spec.jsx"),
+    "java": lambda f: f.name.endswith("Test.java") or f.name.endswith("Tests.java"),
+    "go": lambda f: f.name.endswith("_test.go"),
+    "rust": lambda f: f.name.startswith("test_") or "tests" in str(f.parent),
+}
+
+
+def _detect_project_language(code_path: Path) -> str:
+    """
+    Detect the primary programming language of a project by counting files.
+    
+    Args:
+        code_path: Path to the project directory
+        
+    Returns:
+        Language name (e.g., "python", "typescript", "javascript")
+        Defaults to "python" if unable to determine
+    """
+    if not code_path.exists():
+        logger.warning(f"Code path {code_path} does not exist, defaulting to python")
+        return "python"
+    
+    # Count files by extension
+    file_counts = {}
+    for language, patterns in LANGUAGE_FILE_EXTENSIONS.items():
+        count = 0
+        for pattern in patterns:
+            count += len(list(code_path.rglob(pattern)))
+        file_counts[language] = count
+    
+    # Find the language with the most files
+    if not file_counts or max(file_counts.values()) == 0:
+        logger.info(f"No recognized source files found in {code_path}, defaulting to python")
+        return "python"
+    
+    detected_language = max(file_counts, key=file_counts.get)
+    logger.info(
+        f"Detected project language: {detected_language} "
+        f"(file counts: {file_counts})"
+    )
+    return detected_language
+
+
+def _is_test_file(file_path: Path, language: str) -> bool:
+    """
+    Check if a file is a test file based on language-specific patterns.
+    
+    Args:
+        file_path: Path to the file
+        language: Programming language
+        
+    Returns:
+        True if the file is a test file, False otherwise
+    """
+    pattern_func = TEST_FILE_PATTERNS.get(language)
+    if pattern_func:
+        return pattern_func(file_path)
+    # Default fallback for unknown languages
+    return file_path.name.startswith("test_") or "test" in file_path.name.lower()
+
+
 
 def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
     """
@@ -2308,6 +2382,27 @@ class OmniCoreService:
                     primary_metric="coverage",
                 )
                 
+                # Get language from payload or detect it
+                language = payload.get("language")
+                if not language:
+                    # Detect language if not provided
+                    language = _detect_project_language(Path(code_path))
+                
+                logger.info(f"[TESTGEN] Target language: {language}")
+                
+                # Check if testgen supports this language
+                if language != "python":
+                    # Testgen currently only supports Python - skip gracefully
+                    logger.info(
+                        f"[TESTGEN] Testgen currently only supports Python - skipping gracefully for {language} project (not a failure)"
+                    )
+                    return {
+                        "status": "skipped",
+                        "message": f"Testgen currently only supports Python. Language detected: {language}",
+                        "language": language,
+                        "job_id": job_id,
+                    }
+                
                 # Find code files to test
                 code_files = []
                 code_dir = Path(code_path).resolve()  # Resolve to absolute path
@@ -2315,23 +2410,27 @@ class OmniCoreService:
                 logger.info(f"[TESTGEN] Resolved repo_path: {repo_path}")
                 logger.info(f"[TESTGEN] Resolved code_dir: {code_dir}")
                 
+                # Get file patterns for the language
+                file_patterns = LANGUAGE_FILE_EXTENSIONS.get(language, ["*.py"])
+                
                 if code_dir.exists():
                     # Convert absolute paths to relative paths from repo_path
                     # This prevents path duplication when testgen agent prepends repo_path
-                    for f in code_dir.rglob("*.py"):
-                        if not f.name.startswith("test_"):
-                            try:
-                                # Get absolute path and convert to relative
-                                abs_file_path = f.resolve()
-                                rel_path = abs_file_path.relative_to(repo_path)
-                                code_files.append(str(rel_path))
-                                logger.debug(f"[TESTGEN] Added file: {abs_file_path} -> {rel_path}")
-                            except ValueError as e:
-                                # File is outside repo_path
-                                logger.warning(
-                                    f"[TESTGEN] File {f} is outside repo_path {repo_path}, skipping. Error: {e}"
-                                )
-                                continue
+                    for pattern in file_patterns:
+                        for f in code_dir.rglob(pattern):
+                            if not _is_test_file(f, language):
+                                try:
+                                    # Get absolute path and convert to relative
+                                    abs_file_path = f.resolve()
+                                    rel_path = abs_file_path.relative_to(repo_path)
+                                    code_files.append(str(rel_path))
+                                    logger.debug(f"[TESTGEN] Added file: {abs_file_path} -> {rel_path}")
+                                except ValueError as e:
+                                    # File is outside repo_path
+                                    logger.warning(
+                                        f"[TESTGEN] File {f} is outside repo_path {repo_path}, skipping. Error: {e}"
+                                    )
+                                    continue
                 
                 if not code_files:
                     logger.error(f"[TESTGEN] No code files found in {code_path} for job {job_id}")
@@ -2348,7 +2447,7 @@ class OmniCoreService:
                 # Generate tests
                 result = await agent.generate_tests(
                     target_files=code_files,
-                    language="python",
+                    language=language,
                     policy=policy
                 )
                 
@@ -3619,32 +3718,40 @@ class OmniCoreService:
                 
                 logger.info(f"Running critique agent for job {job_id} with scan_types: {scan_types}, auto_fix: {auto_fix}")
                 
+                # Detect language
+                detected_language = _detect_project_language(repo_path)
+                logger.info(f"[CRITIQUE] Detected language: {detected_language}")
+                
+                # Get file patterns for the detected language
+                file_patterns = LANGUAGE_FILE_EXTENSIONS.get(detected_language, ["*.py"])
+                
                 # Initialize critique agent
                 agent = self._critique_class(repo_path=str(repo_path))
                 
                 # Gather code files from code_path
                 code_files = {}
-                for file_path in repo_path.rglob("*.py"):
-                    if not any(part.startswith('.') for part in file_path.parts):
-                        # [FIX] Add error handling for path resolution
-                        try:
-                            rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
-                        except ValueError as e:
-                            logger.warning(f"[CRITIQUE] File {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
-                            continue
-                        try:
-                            code_files[rel_path] = file_path.read_text(encoding="utf-8")
-                        except Exception as e:
-                            logger.warning(f"Failed to read file {file_path}: {e}")
+                for pattern in file_patterns:
+                    for file_path in repo_path.rglob(pattern):
+                        if not any(part.startswith('.') for part in file_path.parts):
+                            # [FIX] Add error handling for path resolution
+                            try:
+                                rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
+                            except ValueError as e:
+                                logger.warning(f"[CRITIQUE] File {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
+                                continue
+                            try:
+                                code_files[rel_path] = file_path.read_text(encoding="utf-8")
+                            except Exception as e:
+                                logger.warning(f"Failed to read file {file_path}: {e}")
                 
                 if not code_files:
-                    logger.warning(f"No Python files found in {code_path} for critique")
+                    logger.warning(f"No source files found in {code_path} for critique (language: {detected_language})")
                     return {
                         "status": "completed",
                         "issues_found": 0,
                         "issues_fixed": 0,
                         "scan_types": scan_types,
-                        "warning": "No code files found to critique",
+                        "warning": f"No code files found to critique (language: {detected_language})",
                     }
                 
                 # Run critique
@@ -4644,12 +4751,21 @@ class OmniCoreService:
                     output_path = codegen_result.get("output_path")
                     if output_path:
                         code_path = Path(output_path)
-                        # Look for Python files recursively (supports nested structures like app/)
-                        # Exclude test files from source count to match what _run_testgen does
-                        source_files = [
-                            f for f in code_path.rglob("*.py") 
-                            if not f.name.startswith("test_")
-                        ] if code_path.exists() else []
+                        
+                        # Detect project language
+                        detected_language = _detect_project_language(code_path)
+                        logger.info(f"[PIPELINE] Job {job_id} detected language: {detected_language}")
+                        
+                        # Get file patterns for the detected language
+                        file_patterns = LANGUAGE_FILE_EXTENSIONS.get(detected_language, ["*.py"])
+                        
+                        # Find source files using language-specific patterns
+                        source_files = []
+                        if code_path.exists():
+                            for pattern in file_patterns:
+                                for f in code_path.rglob(pattern):
+                                    if not _is_test_file(f, detected_language):
+                                        source_files.append(f)
                         
                         if not source_files:
                             logger.warning(
@@ -4657,6 +4773,7 @@ class OmniCoreService:
                                 extra={
                                     "job_id": job_id,
                                     "output_path": str(output_path),
+                                    "detected_language": detected_language,
                                     "files_in_directory": [f.name for f in code_path.iterdir()] if code_path.exists() else []
                                 }
                             )
@@ -4678,10 +4795,11 @@ class OmniCoreService:
                                 "coverage_target": 80.0,
                                 "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
                                 "llm_timeout": 120 if llm_provider_configured else 30,  # 2 min for LLM, 30s for rule-based
+                                "language": detected_language,  # Pass detected language
                             }
                             logger.info(
                                 f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files "
-                                f"(LLM-based: {llm_provider_configured})"
+                                f"(language: {detected_language}, LLM-based: {llm_provider_configured})"
                             )
                             testgen_result = await self._run_testgen(job_id, testgen_payload)
                             if testgen_result.get("status") == "completed":

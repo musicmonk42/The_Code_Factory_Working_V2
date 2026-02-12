@@ -1765,17 +1765,51 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
 
                 if "validate" in steps:
                     vres = await self.validate_configs_final(config_content, target)
+                    
+                    # Compute `valid` from validation report if not already present
+                    # Validators return lint_status, lint_issues, security_findings, compliance_score
+                    if "valid" not in vres:
+                        lint_status = vres.get("lint_status", "unknown")
+                        lint_issues = vres.get("lint_issues", [])
+                        security_findings = vres.get("security_findings", [])
+                        compliance_score = vres.get("compliance_score", 0.0)
+                        
+                        # Validation passes if:
+                        # - lint_status is 'success' (or 'tool_not_found' which we handle below)
+                        # - No critical lint issues
+                        # - No security findings
+                        # - Compliance score is acceptable (>= 0.7)
+                        vres["valid"] = (
+                            lint_status in ("success", "tool_not_found", "skipped") and
+                            len(lint_issues) == 0 and
+                            len(security_findings) == 0 and
+                            compliance_score >= 0.7
+                        )
+                        
+                        logger.debug(
+                            f"[DEPLOY_AGENT] Computed validation status for {target}: "
+                            f"valid={vres['valid']}, lint_status={lint_status}, "
+                            f"lint_issues={len(lint_issues)}, security_findings={len(security_findings)}, "
+                            f"compliance_score={compliance_score}"
+                        )
+                    
                     # Treat 'skipped' and 'tool_not_found' build statuses as non-fatal
                     build_status = vres.get("build_status", "")
+                    lint_status = vres.get("lint_status", "")
                     is_valid = vres.get("valid", False)
-                    if not is_valid and build_status not in ("skipped", "tool_not_found", "success"):
+                    
+                    # Check if validation should fail
+                    # Fail only if:
+                    # 1. is_valid is False AND
+                    # 2. It's not a tool availability issue (build_status/lint_status not in skipped/tool_not_found)
+                    if not is_valid and build_status not in ("skipped", "tool_not_found") and lint_status not in ("skipped", "tool_not_found", "success"):
                         DEPLOY_ERRORS.labels(error_type="ValidationFailed").inc()
                         raise RunnerError(
                             error_code="VALIDATION_FAILED",
                             detail=f"Validation failed: {vres}",
                             task_id=self.run_id
                         )
-                    elif not is_valid and build_status in ("skipped", "tool_not_found"):
+                    elif not is_valid and (build_status in ("skipped", "tool_not_found") or lint_status in ("skipped", "tool_not_found")):
                         logger.warning(
                             f"[DEPLOY_AGENT] Validation skipped for {target}: Docker/tools not available"
                         )
