@@ -2005,6 +2005,10 @@ class HelmHandler(FormatHandler):
         - Markdown bold markers (**text**)
         - Code block markers (```)
         """
+        # Define regex patterns as constants to avoid duplication
+        NUMBERED_LIST_PATTERN = r'^\s*\d+\.\s+\*\*'
+        MARKDOWN_HEADER_PATTERN = r'^\s*#+\s+'  # Match any markdown header
+        
         lines = []
         in_mermaid_block = False
         found_yaml_start = False
@@ -2023,23 +2027,23 @@ class HelmHandler(FormatHandler):
             if re.match(r'^```(?:yaml|yml)?\s*$', line):
                 continue
             
-            # Detect start of actual YAML content
+            # Detect start of actual YAML content (be conservative to avoid false positives)
             if not found_yaml_start:
-                if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line) or re.match(r'^\s*name\s*:', line):
+                if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
                     found_yaml_start = True
-                elif re.match(r'^\s*\d+\.\s+\*\*', line):
+                elif re.match(NUMBERED_LIST_PATTERN, line):
                     # Skip numbered lists before YAML starts
                     continue
-                elif re.match(r'^\s*#\s+[A-Za-z]', line):
+                elif re.match(MARKDOWN_HEADER_PATTERN, line):
                     # Skip markdown headers before YAML starts
                     continue
             
             # Skip lines that start with markdown headers
-            if re.match(r'^\s*#+\s+[A-Za-z]', line):
+            if re.match(MARKDOWN_HEADER_PATTERN, line):
                 continue
             
             # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
-            if re.match(r'^\s*\d+\.\s+\*\*', line):
+            if re.match(NUMBERED_LIST_PATTERN, line):
                 continue
             
             # Skip lines that are primarily markdown bullets with bold
