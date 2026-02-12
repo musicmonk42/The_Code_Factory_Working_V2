@@ -83,7 +83,7 @@ spec:
             runAsUser: 999
             capabilities:
               drop:
-              - ALL
+                - ALL
           volumeMounts:
             - name: redis-data
               mountPath: /data

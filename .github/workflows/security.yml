@@ -21,28 +21,28 @@ jobs:
   dependency-check:
     name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install safety
         run: |
           python -m pip install --upgrade pip
           pip install safety
-          
+
       - name: Run safety check on requirements
         run: |
           if [ -f requirements.txt ]; then
             echo "Checking unified platform requirements.txt"
             safety check -r requirements.txt --output json || true
           fi
-          
+
       - name: Run pip-audit
         run: |
           pip install pip-audit
@@ -54,13 +54,13 @@ jobs:
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: TruffleHog Secret Scan — pull request
         if: github.event_name == 'pull_request'
         uses: trufflesecurity/trufflehog@main
@@ -69,7 +69,7 @@ jobs:
           base: ${{ github.event.pull_request.base.sha }}
           head: ${{ github.event.pull_request.head.sha }}
           extra_args: --only-verified
-          
+
       - name: TruffleHog Secret Scan — push and schedule (full repo)
         if: github.event_name != 'pull_request'
         uses: trufflesecurity/trufflehog@main
@@ -81,25 +81,25 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     continue-on-error: true
-    
+
     strategy:
       fail-fast: false
       matrix:
         language: [ 'python' ]
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           queries: security-and-quality
-          
+
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
-        
+
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         continue-on-error: true
@@ -111,11 +111,11 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # Don't fail the entire workflow
     timeout-minutes: 30
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Free up disk space for Docker build
         run: |
           echo "=== Initial Disk Space ==="
@@ -124,10 +124,10 @@ jobs:
           docker system prune -af --volumes 2>/dev/null || true
           echo "=== Disk Space After Cleanup ==="
           df -h
-        
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
+
       - name: Build Docker image
         timeout-minutes: 20  # Explicit timeout for build
         run: |
@@ -143,7 +143,7 @@ jobs:
             exit 1
           fi
           echo "✅ Docker build succeeded"
-          
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         timeout-minutes: 10  # Explicit timeout
@@ -154,14 +154,14 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
-          
+
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         continue-on-error: true
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
-          
+
       - name: Run Trivy filesystem scan
         uses: aquasecurity/trivy-action@master
         timeout-minutes: 10  # Explicit timeout
@@ -172,7 +172,7 @@ jobs:
           format: 'table'
           severity: 'CRITICAL,HIGH'
           exit-code: '0'
-          
+
       - name: Upload Docker build logs
         uses: actions/upload-artifact@v4
         if: always()
@@ -180,7 +180,7 @@ jobs:
           name: docker-build-logs
           path: docker-build.log
           retention-days: 14
-          
+
       - name: Docker security diagnostic info (on failure)
         if: failure()
         run: |
@@ -200,28 +200,28 @@ jobs:
   sast-analysis:
     name: SAST with Bandit
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install Bandit
         run: |
           python -m pip install --upgrade pip
           pip install bandit[toml]
-          
+
       - name: Run Bandit security scan
         run: |
           bandit -r generator/ omnicore_engine/ self_fixing_engineer/ \
             -f json -o bandit-report.json || true
           bandit -r generator/ omnicore_engine/ self_fixing_engineer/ \
             -f screen || true
-          
+
       - name: Upload Bandit results
         uses: actions/upload-artifact@v4
         if: always()
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true  # Don't fail the entire workflow
     timeout-minutes: 20  # Explicit timeout for the entire job
-    
+
     steps:
       - name: Free up disk space
         run: |
@@ -245,20 +245,20 @@ jobs:
           docker system prune -af --volumes 2>/dev/null || true
           echo "=== Disk Space After Cleanup ==="
           df -h
-          
+
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          
+
       - name: Install pip-licenses
         run: |
           python -m pip install --upgrade pip
           pip install pip-licenses
-          
+
       - name: Check licenses
         timeout-minutes: 15  # Explicit timeout for this step
         continue-on-error: true  # Continue workflow even if this step fails
@@ -266,27 +266,27 @@ jobs:
           set -euo pipefail
           HAS_ISSUES=0
           TEMP_DIR=$(mktemp -d)
-          cleanup() { 
+          cleanup() {
             echo "Cleaning up temporary directory..."
             rm -rf "$TEMP_DIR" || true
           }
           trap cleanup EXIT
-          
+
           if [ -f requirements.txt ]; then
             echo "=== Checking licenses for unified platform requirements.txt ==="
             echo "Creating virtual environment..."
-            
+
             # Create venv with error handling
             if ! python -m venv "$TEMP_DIR/venv"; then
               echo "⚠️  Failed to create virtual environment - skipping license check"
               exit 0
             fi
-            
+
             source "$TEMP_DIR/venv/bin/activate"
             python -m pip install --upgrade pip --quiet
-            
+
             echo "=== Installing dependencies (this may take several minutes) ==="
-            
+
             # Install with timeout, retries, and better error handling
             if ! timeout 600 pip install -r requirements.txt --timeout=120 --retries=3 2>&1 | tee pip-install.log; then
               echo "⚠️  pip install failed for requirements.txt"
@@ -298,12 +298,12 @@ jobs:
               deactivate
               exit 0  # Exit gracefully instead of failing
             fi
-            
+
             echo "=== Dependencies installed successfully ==="
-            
+
             # Install pip-licenses in venv
             pip install pip-licenses --quiet
-            
+
             # Generate license reports
             echo "=== Generating license report ==="
             pip-licenses --format=json > "$TEMP_DIR/licenses-requirements.json" || {
@@ -311,12 +311,12 @@ jobs:
               deactivate
               exit 0
             }
-            
+
             # Check for GPL/AGPL licenses using jq (ignore LGPL)
             if command -v jq >/dev/null 2>&1; then
               echo "=== Checking for restrictive licenses ==="
               RESTRICTIVE=$(jq -r '.[] | select((.License|test("AGPL|GPL"; "i")) and (.License|test("LGPL";"i")|not) and (.Name != "docutils")) | "\(.Name) \(.Version) - \(.License)"' "$TEMP_DIR/licenses-requirements.json" 2>/dev/null || true)
-              
+
               if [ -n "$RESTRICTIVE" ]; then
                 echo "⚠️  Found packages with restrictive licenses:"
                 echo "$RESTRICTIVE"
@@ -327,27 +327,27 @@ jobs:
             else
               echo "⚠️  jq not available - skipping restrictive license check"
             fi
-            
+
             # Generate markdown report for artifacts
             echo "=== Generating markdown report ==="
             pip-licenses --format=markdown --output-file="licenses-unified-platform.md" || {
               echo "⚠️  Failed to generate markdown report"
             }
-            
+
             deactivate
           else
             echo "⚠️  requirements.txt not found - skipping license check"
           fi
-          
+
           if [ "$HAS_ISSUES" -eq 1 ]; then
             echo ""
             echo "❌ License compliance check failed!"
             echo "Found packages with GPL or AGPL licenses. See uploaded reports."
             exit 1
           fi
-          
+
           echo "✅ License compliance check passed!"
-          
+
       - name: Upload license reports
         uses: actions/upload-artifact@v4
         if: always()
@@ -357,7 +357,7 @@ jobs:
             licenses-*.md
             pip-install.log
           retention-days: 30
-          
+
       - name: License check diagnostic info (on failure)
         if: failure()
         run: |
@@ -376,7 +376,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dependency-check, secret-scan, code-scanning, docker-security, sast-analysis, license-check]
     if: always()
-    
+
     steps:
       - name: Security scan summary
         run: |
@@ -389,22 +389,22 @@ jobs:
           echo "SAST Analysis: ${{ needs.sast-analysis.result }}"
           echo "License Check: ${{ needs.license-check.result }}"
           echo ""
-          
+
           # Count failures (excluding skipped and cancelled)
           FAILURES=0
           CRITICAL_FAILURES=0
-          
+
           [ "${{ needs.dependency-check.result }}" == "failure" ] && ((FAILURES++)) && ((CRITICAL_FAILURES++))
           [ "${{ needs.secret-scan.result }}" == "failure" ] && ((FAILURES++)) && ((CRITICAL_FAILURES++))
           [ "${{ needs.code-scanning.result }}" == "failure" ] && ((FAILURES++))
           [ "${{ needs.docker-security.result }}" == "failure" ] && ((FAILURES++))
           [ "${{ needs.sast-analysis.result }}" == "failure" ] && ((FAILURES++))
           [ "${{ needs.license-check.result }}" == "failure" ] && ((FAILURES++))
-          
+
           echo "Total failures: $FAILURES"
           echo "Critical failures (dependency-check, secret-scan): $CRITICAL_FAILURES"
           echo ""
-          
+
           if [ $CRITICAL_FAILURES -gt 0 ]; then
             echo "❌ CRITICAL security issues detected!"
             echo "Review dependency-check and secret-scan results immediately."

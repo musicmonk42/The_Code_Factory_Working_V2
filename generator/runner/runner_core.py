@@ -152,6 +152,17 @@ def _get_queue_file_path() -> Path:
     generator_dir = Path(__file__).parent.parent
     return generator_dir / DEFAULT_QUEUE_FILE_NAME
 
+# Language-aware default test frameworks
+# Used when framework auto-detection fails to provide sensible defaults per language
+LANGUAGE_DEFAULT_FRAMEWORKS = {
+    "python": "pytest",
+    "typescript": "jest",
+    "javascript": "jest",
+    "go": "go test",
+    "java": "junit",
+    "rust": "cargo",  # Note: cargo test not yet in FRAMEWORKS
+}
+
 # --- Expanded Frameworks with auto-detection logic ---
 # Gold Standard: Ensure parsers are directly callable and return schema objects (via decorators in parsers.py)
 FRAMEWORKS: Dict[str, Dict[str, Any]] = {
@@ -1561,8 +1572,58 @@ class Runner(ABC):
                 logger.info(f"Auto-detected framework: {fw_name}")
                 return fw_name
 
-        logger.warning("Could not auto-detect framework. Defaulting to 'pytest'.")
-        return "pytest"
+        # Framework auto-detection failed, use language-aware defaults
+        # Detect language from file extensions
+        detected_language = self._detect_language_from_files(test_files)
+        default_framework = LANGUAGE_DEFAULT_FRAMEWORKS.get(detected_language, "pytest")
+        
+        logger.warning(
+            f"Could not auto-detect framework. Detected language: {detected_language}. "
+            f"Defaulting to '{default_framework}'."
+        )
+        return default_framework
+    
+    def _detect_language_from_files(self, files: Dict[str, str]) -> str:
+        """
+        Detect the primary language from test file extensions.
+        
+        Args:
+            files: Dictionary of filename -> content
+            
+        Returns:
+            Language name (e.g., "python", "typescript", "javascript", "go", "java")
+        """
+        # Count files by language based on extensions
+        language_counts = {
+            "python": 0,
+            "typescript": 0,
+            "javascript": 0,
+            "go": 0,
+            "java": 0,
+        }
+        
+        for filename in files.keys():
+            if filename.endswith((".py", ".pyx")):
+                language_counts["python"] += 1
+            elif filename.endswith(".ts") or filename.endswith(".tsx"):
+                language_counts["typescript"] += 1
+            elif filename.endswith((".js", ".jsx")) and not filename.endswith((".ts", ".tsx")):
+                language_counts["javascript"] += 1
+            elif filename.endswith(".go"):
+                language_counts["go"] += 1
+            elif filename.endswith(".java"):
+                language_counts["java"] += 1
+        
+        # Return the language with the most files, default to python
+        max_count = max(language_counts.values())
+        if max_count == 0:
+            return "python"
+        
+        for lang, count in language_counts.items():
+            if count == max_count:
+                return lang
+        
+        return "python"
 
     def _persist_queue(self) -> None:
         """

@@ -59,7 +59,7 @@ AUDIT_EVENT_TYPES:
     - vulnerability_found
     - code_smell_detected
     - performance_issue_found
-  
+
   fix_operations:
     - fix_proposal_generated
     - fix_application_started
@@ -67,28 +67,28 @@ AUDIT_EVENT_TYPES:
     - fix_failed
     - fix_rollback
     - fix_verification
-  
+
   learning:
     - learning_update
     - pattern_learned
     - model_updated
     - knowledge_graph_updated
     - meta_learning_completed
-  
+
   policy:
     - policy_enforcement
     - policy_violation
     - policy_updated
     - compliance_check
     - governance_action
-  
+
   security:
     - key_management
     - key_rotation
     - access_control
     - authentication_event
     - authorization_event
-  
+
   self_operations:
     - self_audit
     - self_diagnosis
@@ -114,7 +114,7 @@ TEST_GENERATION_EVENTS:
   - test_suite_updated
 
 # =============================================================================
-# SIMULATION AUDIT SETTINGS  
+# SIMULATION AUDIT SETTINGS
 # =============================================================================
 
 # Simulation specific log path

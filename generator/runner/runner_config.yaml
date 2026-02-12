@@ -8,7 +8,7 @@
 # Compliance: ISO 27001, SOC 2 Type II, NIST SP 800-53
 #
 # Purpose:
-#   Production-grade configuration for test execution, code generation, and 
+#   Production-grade configuration for test execution, code generation, and
 #   runtime environments. This file provides enterprise defaults for all
 #   runner backends and testing frameworks.
 #
@@ -58,7 +58,7 @@ backends:
       timeout: 300  # 5 minutes default timeout
       memory_limit: "2g"
       cpu_limit: "2.0"
-      
+
   - name: kubernetes
     enabled: false
     config:
@@ -67,7 +67,7 @@ backends:
       resource_limits:
         memory: "2Gi"
         cpu: "2000m"
-      
+
   - name: local
     enabled: true
     config:
@@ -82,38 +82,38 @@ frameworks:
       args: ["-v", "--tb=short", "--maxfail=5"]
       coverage_enabled: true
       coverage_threshold: 80
-      
+
   javascript:
     runner: jest
     config:
       args: ["--verbose", "--maxWorkers=4"]
       coverage_enabled: true
       coverage_threshold: 80
-      
+
   typescript:
     runner: jest
     config:
       args: ["--verbose", "--maxWorkers=4"]
       coverage_enabled: true
       coverage_threshold: 80
-      
+
   java:
     runner: junit
     config:
       args: []
       coverage_enabled: true
-      
+
   go:
     runner: "go test"
     config:
       args: ["-v", "-race"]
       coverage_enabled: true
-      
+
   rust:
     runner: cargo
     config:
       args: ["test", "--verbose"]
-      
+
   ruby:
     runner: rspec
     config:
@@ -144,23 +144,23 @@ llm:
     - name: openai
       enabled: true
       priority: 1
-      
+
     - name: claude
       enabled: false
       priority: 2
-      
+
     - name: local
       enabled: false
       priority: 3
-      
+
   # Global timeout for LLM calls (seconds)
   timeout: 300  # 5 minutes
-  
+
   # Retry configuration
   max_retries: 3
   retry_delay: 10  # seconds
   exponential_backoff: true
-  
+
   # Rate limiting
   rate_limit:
     requests_per_minute: 60
@@ -171,13 +171,13 @@ audit:
   enabled: true
   buffer_size: 1000
   flush_interval: 60  # seconds
-  
+
   # Kafka streaming (optional)
   kafka:
     enabled: false
     bootstrap_servers: "localhost:9092"
     topic: "audit_logs"
-    
+
   # File-based audit logs (fallback)
   file:
     enabled: true
@@ -214,13 +214,13 @@ security:
     enabled: true
     cache_recognizers: true
     languages: ["en"]
-    
+
   # Plugin integrity checking
   plugin_integrity:
     enabled: true
     manifest_path: "generator/runner/providers/plugin_hash_manifest.json"
     strict_mode: false  # Set to true to fail on missing or modified plugins
-    
+
   # Secret scanning
   secret_scanning:
     enabled: true
@@ -236,13 +236,13 @@ performance:
   parallel:
     enabled: true
     max_workers: 4
-    
+
   # Caching
   cache:
     enabled: true
     ttl: 3600  # 1 hour
     max_size_mb: 500
-    
+
   # Timeout configurations
   timeouts:
     test_execution: 300  # 5 minutes
@@ -257,12 +257,12 @@ monitoring:
     prometheus:
       enabled: true
       port: 9090
-      
+
   # Distributed tracing
   tracing:
     enabled: true
     sample_rate: 0.1  # 10% sampling
-    
+
   # Logging
   logging:
     level: INFO
@@ -276,7 +276,7 @@ features:
     auto_fix: false
     smart_retry: true
     adaptive_timeout: true
-    
+
   # Beta features
   beta:
     multi_llm_ensemble: false

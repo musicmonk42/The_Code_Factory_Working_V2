@@ -204,6 +204,9 @@ LABEL maintainer="support@novatraxlabs.com"
 LABEL security.scan="true"
 LABEL security.trivy="enabled"
 
+# Set shell to use pipefail for better error handling in RUN commands
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Environment variables for the runtime stage
 # SECURITY: No hardcoded encryption keys - must be provided at runtime
 # AUDIT CRYPTO: Set AUDIT_CRYPTO_MODE to "full" when AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured

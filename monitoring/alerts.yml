@@ -25,8 +25,8 @@ groups:
       - alert: HighErrorRate
         expr: |
           (
-            rate(http_requests_total{status=~"5.."}[5m]) 
-            / 
+            rate(http_requests_total{status=~"5.."}[5m])
+            /
             rate(http_requests_total[5m])
           ) > 0.05
         for: 5m
@@ -41,7 +41,7 @@ groups:
 
       - alert: HighLatency
         expr: |
-          histogram_quantile(0.95, 
+          histogram_quantile(0.95,
             rate(http_request_duration_seconds_bucket[5m])
           ) > 0.5
         for: 10m
@@ -76,7 +76,7 @@ groups:
       - alert: HighCPUUsage
         expr: |
           (
-            rate(process_cpu_seconds_total{job=~"code-factory.*"}[5m]) 
+            rate(process_cpu_seconds_total{job=~"code-factory.*"}[5m])
             * 100
           ) > 80
         for: 10m
@@ -92,8 +92,8 @@ groups:
       - alert: HighMemoryUsage
         expr: |
           (
-            process_resident_memory_bytes{job=~"code-factory.*"} 
-            / 
+            process_resident_memory_bytes{job=~"code-factory.*"}
+            /
             node_memory_MemTotal_bytes
           ) > 0.85
         for: 10m
@@ -109,8 +109,8 @@ groups:
       - alert: DiskSpaceLow
         expr: |
           (
-            node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*"} 
-            / 
+            node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.*"}
+            /
             node_filesystem_size_bytes
           ) < 0.10
         for: 5m
@@ -158,8 +158,8 @@ groups:
       - alert: HighDatabaseConnections
         expr: |
           (
-            pg_stat_database_numbackends{datname!~"template.*|postgres"} 
-            / 
+            pg_stat_database_numbackends{datname!~"template.*|postgres"}
+            /
             pg_settings_max_connections
           ) > 0.8
         for: 5m
@@ -220,8 +220,8 @@ groups:
       - alert: RedisHighMemoryUsage
         expr: |
           (
-            redis_memory_used_bytes 
-            / 
+            redis_memory_used_bytes
+            /
             redis_memory_max_bytes
           ) > 0.9
         for: 5m
@@ -359,8 +359,8 @@ groups:
       - alert: LLMAPIFailureRate
         expr: |
           (
-            rate(llm_api_requests_total{status="error"}[5m]) 
-            / 
+            rate(llm_api_requests_total{status="error"}[5m])
+            /
             rate(llm_api_requests_total[5m])
           ) > 0.1
         for: 5m
@@ -376,8 +376,8 @@ groups:
       - alert: LLMAPIRateLimitApproaching
         expr: |
           (
-            llm_api_requests_used 
-            / 
+            llm_api_requests_used
+            /
             llm_api_requests_limit
           ) > 0.8
         for: 5m
@@ -392,7 +392,7 @@ groups:
 
       - alert: LLMHighLatency
         expr: |
-          histogram_quantile(0.95, 
+          histogram_quantile(0.95,
             rate(llm_api_duration_seconds_bucket[5m])
           ) > 10
         for: 10m
@@ -440,8 +440,8 @@ groups:
       - alert: SFEHighFailureRate
         expr: |
           (
-            rate(sfe_fixes_total{status="failed"}[5m]) 
-            / 
+            rate(sfe_fixes_total{status="failed"}[5m])
+            /
             rate(sfe_fixes_total[5m])
           ) > 0.3
         for: 10m
@@ -508,8 +508,8 @@ groups:
       - alert: HighDeploymentFailureRate
         expr: |
           (
-            rate(deployments_total{status="failed"}[1h]) 
-            / 
+            rate(deployments_total{status="failed"}[1h])
+            /
             rate(deployments_total[1h])
           ) > 0.2
         for: 30m
@@ -544,8 +544,8 @@ groups:
       - alert: BackupStorageLow
         expr: |
           (
-            backup_storage_used_bytes 
-            / 
+            backup_storage_used_bytes
+            /
             backup_storage_total_bytes
           ) > 0.9
         for: 1h

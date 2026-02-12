@@ -36,82 +36,81 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: migrations
-        image: ghcr.io/musicmonk42/codefactory:latest
-        imagePullPolicy: IfNotPresent
-        command:
-          - /bin/sh
-          - -c
-          - |
-            echo "========================================="
-            echo "Running Database Migrations with Alembic"
-            echo "========================================="
-            cd /app
-            
-            # Show current migration status
-            echo "Current migration version:"
-            alembic current || echo "No migrations applied yet"
-            
-            # Run migrations
-            echo ""
-            echo "Applying migrations..."
-            alembic upgrade head
-            
-            # Verify success
-            echo ""
-            echo "Migration completed. Current version:"
-            alembic current
-            
-            echo ""
-            echo "========================================="
-            echo "Migration Job Completed Successfully"
-            echo "========================================="
-        env:
-          # Database connection (from secret)
-          - name: DB_PATH
-            valueFrom:
-              secretKeyRef:
-                name: codefactory-secrets
-                key: database-url
-          - name: DATABASE_URL
-            valueFrom:
-              secretKeyRef:
-                name: codefactory-secrets
-                key: database-url
-          
-          # Basic configuration
-          - name: APP_ENV
-            valueFrom:
-              configMapKeyRef:
-                name: codefactory-config
-                key: APP_ENV
-          - name: LOG_LEVEL
-            valueFrom:
-              configMapKeyRef:
+        - name: migrations
+          image: ghcr.io/musicmonk42/codefactory:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "========================================="
+              echo "Running Database Migrations with Alembic"
+              echo "========================================="
+              cd /app
+
+              # Show current migration status
+              echo "Current migration version:"
+              alembic current || echo "No migrations applied yet"
+
+              # Run migrations
+              echo ""
+              echo "Applying migrations..."
+              alembic upgrade head
+
+              # Verify success
+              echo ""
+              echo "Migration completed. Current version:"
+              alembic current
+
+              echo ""
+              echo "========================================="
+              echo "Migration Job Completed Successfully"
+              echo "========================================="
+          env:
+            # Database connection (from secret)
+            - name: DB_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: database-url
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: database-url
+            # Basic configuration
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: APP_ENV
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
                 name: codefactory-config
                 key: LOG_LEVEL
-          
+
           # Disable features not needed for migrations
-          - name: ENABLE_REDIS
-            value: "0"
-          - name: ENABLE_PROMETHEUS
-            value: "0"
-          - name: SKIP_IMPORT_TIME_VALIDATION
-            value: "1"
-        
-        resources:
-          limits:
-            cpu: 500m
-            memory: 1Gi
-          requests:
-            cpu: 100m
-            memory: 256Mi
-        
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false
-          runAsNonRoot: true
-          runAsUser: 1000
-          capabilities:
-            drop:
-            - ALL
+            - name: ENABLE_REDIS
+              value: "0"
+            - name: ENABLE_PROMETHEUS
+              value: "0"
+            - name: SKIP_IMPORT_TIME_VALIDATION
+              value: "1"
+
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL

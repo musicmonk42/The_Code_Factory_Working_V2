@@ -43,7 +43,7 @@ jobs:
           - generator
           - self_fixing_engineer
           - server
-    
+
     services:
       redis:
         image: redis:7-alpine
@@ -54,7 +54,7 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-    
+
     env:
       TESTING: '1'
       CI: '1'  # Add this to skip audit background thread
@@ -73,11 +73,11 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -86,11 +86,11 @@ jobs:
           cache-dependency-path: |
             requirements.txt
             .github/constraints.txt
-          
+
       - name: Set PYTHONPATH
         run: |
           echo "PYTHONPATH=${{ github.workspace }}" >> $GITHUB_ENV
-          
+
       - name: Free disk space
         run: |
           # Remove apt lists, docs, and clear pip cache to free disk space
@@ -100,11 +100,11 @@ jobs:
           find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
           find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
-          
+
       - name: Enable memory overcommit for Redis
         run: |
           sudo sysctl -w vm.overcommit_memory=1
-          
+
       - name: Configure system for memory-intensive tests
         run: |
           # Enable memory overcommit for all processes
@@ -115,20 +115,20 @@ jobs:
           # Show available memory
           echo "=== Memory Status ==="
           free -h
-          
+
       - name: Install redis-cli on runner
         run: |
           sudo apt-get update
           sudo apt-get install -y redis-tools
           redis-cli --version
-          
+
       - name: Install system dependencies for Python packages
         run: |
           # Install system dependencies required by Python packages
           # libvirt-dev and pkg-config: required by libvirt-python (if enabled)
           sudo apt-get update
           sudo apt-get install -y libvirt-dev pkg-config
-          
+
       - name: Wait for Redis to be ready
         run: |
           # Wait loop to ensure Redis service is fully available before running tests
@@ -142,7 +142,7 @@ jobs:
           done
           # Final check - fail early if Redis is not available
           redis-cli -h localhost ping || (echo "ERROR: Redis is not available" && exit 1)
-          
+
       - name: Install dependencies
         env:
           PIP_NO_CACHE_DIR: "1"
@@ -152,7 +152,7 @@ jobs:
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
           pip install --no-cache-dir -c .github/constraints.txt protobuf
-          
+
           # Install critical dependencies first to prevent import errors
           pip install --no-cache-dir -c .github/constraints.txt \
             cryptography \
@@ -160,12 +160,12 @@ jobs:
             presidio-analyzer \
             presidio-anonymizer \
             watchdog
-          
+
           # Install unified platform requirements first
           if [ -f requirements.txt ]; then
             pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
           fi
-          
+
           # Install the unified Code Factory platform from project root
           # This installs all packages (generator, omnicore_engine, self_fixing_engineer, server)
           # in a single editable installation, which ensures proper package resolution
@@ -174,16 +174,16 @@ jobs:
             echo "ERROR: Failed to install Code Factory platform from project root"
             exit 1
           }
-          
+
           # Verify all packages are installed and importable
           echo "=== Verifying package installations ==="
-          
+
           # Verify code-factory package
           pip show code-factory || {
             echo "ERROR: code-factory package not found in pip"
             exit 1
           }
-          
+
           # Test omnicore_engine package
           echo "Testing omnicore_engine..."
           python -c "import omnicore_engine" || {
@@ -194,13 +194,13 @@ jobs:
             ls -la omnicore_engine/ || true
             exit 1
           }
-          
+
           # Test plugin_registry specifically (it's been causing failures)
           python -c "from omnicore_engine import plugin_registry" || {
             echo "ERROR: plugin_registry cannot be imported"
             exit 1
           }
-          
+
           # Test omnicore_engine.tests module (critical for pytest collection)
           python -c "import omnicore_engine.tests" || {
             echo "ERROR: omnicore_engine.tests cannot be imported - this will cause pytest collection to fail"
@@ -208,26 +208,26 @@ jobs:
             ls -la omnicore_engine/tests/ || true
             exit 1
           }
-          
+
           # Test self_fixing_engineer package
           echo "Testing self_fixing_engineer..."
           python -c "import self_fixing_engineer" || {
             echo "ERROR: self_fixing_engineer cannot be imported"
             exit 1
           }
-          
+
           # Test generator package
           echo "Testing generator..."
           python -c "import generator" || {
             echo "WARNING: generator cannot be imported (may be expected)"
           }
-          
+
           # Test server package
           echo "Testing server..."
           python -c "import server" || {
             echo "WARNING: server cannot be imported (may be expected)"
           }
-          
+
           echo "✓ All packages verified (installed and importable)"
           # Install common test/runtime extras that may be missing
           pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
@@ -254,10 +254,10 @@ jobs:
             opentelemetry-exporter-otlp-proto-grpc==${{ env.OTEL_EXPORTER_VERSION }} \
             opentelemetry-sdk==${{ env.OTEL_SDK_VERSION }} \
             opentelemetry-api==${{ env.OTEL_API_VERSION }}
-          
+
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
-          
+
       - name: Verify critical test dependencies
         run: |
           echo "=== Verifying test dependencies can be imported ==="
@@ -268,7 +268,7 @@ jobs:
           python -c "import aiofiles; print('aiofiles OK')"
           python -c "import tiktoken; print('tiktoken OK')"
           python -c "import aiohttp; print('aiohttp OK')"
-          
+
           echo "=== Verifying critical infrastructure dependencies ==="
           python -c "import cryptography; print('cryptography OK')"
           python -c "from cryptography.fernet import Fernet; print('cryptography.fernet OK')"
@@ -277,22 +277,22 @@ jobs:
           python -c "from dotenv import dotenv_values; print('python-dotenv dotenv_values OK')"
           python -c "import base64; print('base64 OK')"
           python -c "import typing; print('typing OK')"
-          
+
           echo "=== Verifying boto3 submodules ==="
           python -c "import boto3.session; print('boto3.session OK')" || {
             echo "ERROR: boto3.session missing - critical for tests"
             exit 1
           }
-          
+
           echo "=== Verifying aiokafka submodules ==="
           python -c "import aiokafka.structs; print('aiokafka.structs OK')" || echo "WARN: aiokafka.structs missing"
-          
+
           echo "=== Verifying redis submodules ==="
           python -c "import redis.asyncio; print('redis.asyncio OK')" || echo "WARN: redis.asyncio missing"
-          
+
           echo "=== Verifying opentelemetry submodules ==="
           python -c "import opentelemetry.propagators; print('opentelemetry.propagators OK')" || echo "WARN: opentelemetry.propagators missing - may need reinstall"
-          
+
           echo "=== Validate syntax of critical Python files ==="
           # Check omnicore_engine files
           python -m py_compile omnicore_engine/__init__.py || {
@@ -300,19 +300,19 @@ jobs:
             cat omnicore_engine/__init__.py | head -50
             exit 1
           }
-          
+
           python -m py_compile omnicore_engine/plugin_registry.py || {
             echo "ERROR: Syntax error in omnicore_engine/plugin_registry.py"
             exit 1
           }
-          
+
           python -m py_compile omnicore_engine/core.py || {
             echo "ERROR: Syntax error in omnicore_engine/core.py"
             exit 1
           }
-          
+
           echo "✓ Syntax validation passed for critical files"
-          
+
           echo "=== Check if test files are syntactically valid ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -320,26 +320,26 @@ jobs:
               python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
             fi
           done
-          
+
           # Check generator tests if they exist
           if [ -d "generator/main/tests" ]; then
             for test_file in generator/main/tests/test_*.py; do
               [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
             done
           fi
-          
+
           if [ -d "omnicore_engine/tests" ]; then
             for test_file in omnicore_engine/tests/test_*.py; do
               [ -f "$test_file" ] && python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
             done
           fi
-          
+
           echo "=== Verify conftest files syntax ==="
           python -m py_compile conftest.py
           [ -f generator/conftest.py ] && python -m py_compile generator/conftest.py
           [ -f self_fixing_engineer/conftest.py ] && python -m py_compile self_fixing_engineer/conftest.py
           echo "✓ All conftest files are syntactically valid"
-          
+
           echo "=== Check test files for syntax errors ==="
           # Only compile test files that exist to avoid false negatives
           for test_file in tests/test_*.py; do
@@ -347,28 +347,28 @@ jobs:
               python -m py_compile "$test_file" 2>&1 || echo "SYNTAX ERROR in $test_file"
             fi
           done
-          
+
       - name: Verify omnicore_engine package structure
         run: |
           echo "=== Verifying omnicore_engine package structure ==="
           echo "PYTHONPATH: $PYTHONPATH"
           echo "Workspace: ${{ github.workspace }}"
-          
+
           # Ensure PYTHONPATH is set
           export PYTHONPATH="${{ github.workspace }}:${PYTHONPATH}"
-          
+
           # Verify directory structure
           echo "=== Checking workspace structure ==="
           ls -la omnicore_engine/ || {
             echo "ERROR: omnicore_engine directory not found"
             exit 1
           }
-          
+
           test -f omnicore_engine/__init__.py && echo "✓ omnicore_engine/__init__.py exists" || {
             echo "ERROR: omnicore_engine/__init__.py missing"
             exit 1
           }
-          
+
           # Test 1: Can we import the package?
           echo "Test 1: Importing omnicore_engine package..."
           python -c "import omnicore_engine; print(f'✓ omnicore_engine location: {omnicore_engine.__file__}')" || {
@@ -379,37 +379,37 @@ jobs:
             pip show code-factory || echo "code-factory package not found"
             exit 1
           }
-          
+
           # Test 2: Can we import plugin_registry directly?
           echo "Test 2: Importing plugin_registry module..."
           python -c "from omnicore_engine import plugin_registry; print('✓ plugin_registry import OK')" || {
             echo "❌ FAILED: Cannot import plugin_registry from omnicore_engine"
             exit 1
           }
-          
+
           # Test 3: Can we access PLUGIN_REGISTRY singleton?
           echo "Test 3: Accessing PLUGIN_REGISTRY singleton..."
           python -c "from omnicore_engine.plugin_registry import PLUGIN_REGISTRY; print(f'✓ PLUGIN_REGISTRY type: {type(PLUGIN_REGISTRY).__name__}')" || {
             echo "❌ FAILED: Cannot import PLUGIN_REGISTRY from plugin_registry module"
             exit 1
           }
-          
+
           # Test 4: Can we use the lazy accessor function?
           echo "Test 4: Testing lazy accessor function..."
           python -c "from omnicore_engine import get_plugin_registry; reg = get_plugin_registry(); print(f'✓ get_plugin_registry returns: {type(reg).__name__}')" || {
             echo "❌ FAILED: get_plugin_registry() function is broken"
             exit 1
           }
-          
+
           echo "✅ All import patterns verified successfully"
-          
+
           # Verify other critical modules (warnings only)
           echo "=== Verifying meta_supervisor import ==="
           python -c "from omnicore_engine import meta_supervisor; print('✓ meta_supervisor import OK')" || echo "WARNING: meta_supervisor module not found (may be optional)"
-          
+
           echo "=== Verifying core module import ==="
           python -c "from omnicore_engine import core; print('✓ core module import OK')" || echo "WARNING: core module not found (may be optional)"
-          
+
       - name: Free more disk space before tests
         run: |
           # Additional cleanup right before running tests
@@ -419,7 +419,7 @@ jobs:
           find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
           find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           df -h
-      
+
       - name: Download NLTK data
         run: |
           echo "=== Pre-downloading NLTK data packages ==="
@@ -427,7 +427,7 @@ jobs:
           import nltk
           import ssl
           import sys
-          
+
           # Handle SSL certificate issues in CI environments
           try:
               _create_unverified_https_context = ssl._create_unverified_context
@@ -435,7 +435,7 @@ jobs:
               pass
           else:
               ssl._create_default_https_context = _create_unverified_https_context
-          
+
           # Download required NLTK data packages
           packages = ['punkt', 'stopwords', 'vader_lexicon', 'averaged_perceptron_tagger']
           for package in packages:
@@ -445,10 +445,10 @@ jobs:
                   print(f'✓ {package} downloaded successfully', flush=True)
               except Exception as e:
                   print(f'WARNING: Failed to download {package}: {e}', file=sys.stderr, flush=True)
-          
+
           print('NLTK data download complete', flush=True)
           "
-      
+
       - name: Verify NLTK data installation
         run: |
           echo "=== Verifying NLTK data installation ==="
@@ -456,7 +456,7 @@ jobs:
           import nltk
           import os
           print(f'NLTK data paths: {nltk.data.path}')
-          
+
           packages = ['punkt', 'stopwords', 'vader_lexicon']
           for package in packages:
               try:
@@ -473,7 +473,7 @@ jobs:
                       except LookupError:
                           print(f'✗ {package} NOT FOUND')
           "
-      
+
       - name: Collect tests (diagnostic)
         if: false  # Disable for fast-tests to save time
         run: |
@@ -487,7 +487,7 @@ jobs:
             exit 0
           }
         continue-on-error: true
-          
+
       - name: Debug pytest collection (if previous steps passed)
         if: success()
         env:
@@ -517,7 +517,7 @@ jobs:
               # This is just for debugging visibility
             }
         continue-on-error: true
-      
+
       - name: Quick import health check
         if: always()
         run: |
@@ -529,13 +529,13 @@ jobs:
           python -c "import sys; import importlib.util; spec = importlib.util.find_spec('generator'); print('✓ generator found' if spec else '✗ generator not found')"
           python -c "import sys; import importlib.util; spec = importlib.util.find_spec('self_fixing_engineer'); print('✓ self_fixing_engineer found' if spec else '✗ self_fixing_engineer not found')"
           echo "✅ All packages are discoverable"
-      
+
       - name: Final aiohttp installation and verification
         run: |
           echo "=== Final aiohttp installation (consolidated) ==="
           # Completely remove aiohttp and all related packages to start fresh
           pip uninstall -y aiohttp aiohttp-client-cache aiosignal frozenlist yarl multidict aioresponses || true
-          
+
           # Install core dependencies in correct dependency order
           # Version constraints come from .github/constraints.txt
           pip install --no-cache-dir -c .github/constraints.txt \
@@ -543,16 +543,16 @@ jobs:
             yarl \
             frozenlist \
             aiosignal
-          
+
           # Install aiohttp with the version from requirements.txt
           # Explicitly pinned to ensure consistency with requirements.txt
           pip install --no-cache-dir -c .github/constraints.txt aiohttp==3.13.3
-          
+
           # Install aiohttp extensions
           pip install --no-cache-dir -c .github/constraints.txt \
             aiohttp-client-cache==0.13.0 \
             aioresponses>=0.7.8
-          
+
           echo "=== Comprehensive aiohttp verification ==="
           # Critical verification - fail fast if any component is broken
           python -c "
@@ -570,23 +570,23 @@ jobs:
             python -c "import sys; print('sys.path:', sys.path)"
             exit 1
           }
-          
+
           echo "✓ aiohttp installation complete and verified"
-      
+
       - name: Pre-test system health check
         run: |
           echo "=== System resources before tests ==="
           free -h
           df -h
           ulimit -a
-          
+
           echo "=== Python environment ==="
           python --version
           pip list | grep -E "pytest|xdist|cov" | head -10
-          
+
           echo "=== Test discovery (quick check) ==="
           timeout 30 python -m pytest ${{ matrix.module }}/ --collect-only --quiet 2>&1 | tail -20 || echo "Collection took >30s or failed"
-      
+
       - name: Monitor memory before tests
         run: |
           echo "=== Memory Status Before Tests ==="
@@ -605,17 +605,17 @@ jobs:
           else
             echo "✓ Sufficient memory available for tests"
           fi
-      
+
       - name: Fix PyTorch memory issues
         run: |
           # Enable memory overcommit
           echo 1 | sudo tee /proc/sys/vm/overcommit_memory
           sudo sysctl -w vm.max_map_count=262144
-          
+
           # Reinstall torch as CPU-only (smaller footprint)
           pip uninstall -y torch torchvision torchaudio || true
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-      
+
       - name: Run tests for ${{ matrix.module }}
         if: matrix.module != 'self_fixing_engineer'
         timeout-minutes: 65
@@ -631,38 +631,38 @@ jobs:
           # conftest.py handles path setup automatically via path_setup module
           export PYTHONPATH="$PWD"
           export NLTK_DATA="$HOME/nltk_data"
-          
+
           # Create Prometheus multiprocess directory
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
-          
+
           # Remove CPU time limits to prevent SIGXCPU (exit code 152)
           # Use prlimit for better control over resource limits
           prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
-          
+
           # Fallback to ulimit if prlimit is not available
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
-          
+
           # Also increase stack size to prevent stack-related issues
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
-          
+
           echo "=== Running pytest tests for ${{ matrix.module }} ==="
           echo "NLTK_DATA: $NLTK_DATA"
-          
+
           # Memory optimization for generator module
           if [ "${{ matrix.module }}" = "generator" ]; then
             echo "=== Applying memory optimizations for ${{ matrix.module }} ==="
-            
+
             # Force garbage collection
             python -c "import gc; gc.collect()"
-            
+
             # Disable parallelization and coverage for memory-intensive modules
             COVERAGE_ARGS=""
             PYTEST_ARGS=""
             TIMEOUT_VALUE=300  # 5 minutes per test
             # Add ignore flag to temporarily skip problematic test
             IGNORE_ARGS="--ignore=generator/tests/test_audit_log_proto.py"
-            
+
             echo "✓ Memory optimizations applied"
             echo "  - Coverage: DISABLED"
             echo "  - Timeout: ${TIMEOUT_VALUE}s"
@@ -670,14 +670,14 @@ jobs:
             echo "  - Ignoring: test_audit_log_proto.py (temporarily skipped)"
           elif [ "${{ matrix.module }}" = "server" ]; then
             echo "=== Applying I/O optimizations for ${{ matrix.module }} ==="
-            
+
             # Server tests are I/O-bound (Redis, async operations) and don't benefit from parallelization
             # pytest-xdist workers cause communication issues during teardown
             COVERAGE_ARGS="--cov=server --cov-report=xml:coverage-server.xml"
             PYTEST_ARGS=""  # No parallelization
             TIMEOUT_VALUE=600  # 10 minutes per test (some integration tests need longer)
             IGNORE_ARGS=""
-            
+
             echo "✓ I/O optimizations applied"
             echo "  - Coverage: ENABLED"
             echo "  - Timeout: ${TIMEOUT_VALUE}s"
@@ -689,7 +689,7 @@ jobs:
             TIMEOUT_VALUE=300
             IGNORE_ARGS=""
           fi
-          
+
           # Use timeout command to prevent runaway processes (60 minutes wall-clock time)
           # Increased from 40m to 60m to accommodate longer-running test suites
           # Use python -m pytest to ensure proper sys.path setup
@@ -760,7 +760,7 @@ jobs:
               fi
               exit $EXIT_CODE
             }
-          
+
           echo "✓ Tests completed for ${{ matrix.module }}"
 
       - name: Run self_fixing_engineer tests - Batch 1 (Basic & Core)
@@ -866,7 +866,7 @@ jobs:
               exit $EXIT_CODE
             fi
           }
-          
+
           # Memory cleanup between batches
           python -c "import gc; gc.collect()"
 
@@ -919,7 +919,7 @@ jobs:
               exit $EXIT_CODE
             fi
           }
-          
+
           python -c "import gc; gc.collect()"
 
       - name: Run self_fixing_engineer tests - Batch 2c (Arbiter Other)
@@ -1270,7 +1270,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
-          
+
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
 
@@ -1312,7 +1312,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
-          
+
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
 
@@ -1354,7 +1354,7 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD"
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
-          
+
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
 
@@ -1402,7 +1402,7 @@ jobs:
           prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
           ulimit -s 65536 2>/dev/null || true
-          
+
           echo "=== Resource limits ==="
           ulimit -a | grep -E "(cpu|time|stack)" || true
 
@@ -1522,7 +1522,7 @@ jobs:
 
           # Enhanced memory cleanup after batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
-          
+
       - name: Profile test collection (on failure)
         if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
         run: |
@@ -1531,7 +1531,7 @@ jobs:
             ${{ matrix.module }}/tests/ \
             --co --quiet --disable-warnings -p no:warnings --import-mode=importlib --tb=short \
             2>&1 || true
-          
+
           if [ -f collection_profile.stats ]; then
             echo "=== Top 30 CPU-consuming functions ==="
             python -c "import pstats; p = pstats.Stats('collection_profile.stats'); p.sort_stats('cumulative').print_stats(30)"
@@ -1549,7 +1549,7 @@ jobs:
             --ignore=self_fixing_engineer/tests/test_arbiter_growth.py \
             2>&1 | head -50 || true
         continue-on-error: true
-          
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         if: always() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
@@ -1557,7 +1557,7 @@ jobs:
           name: coverage-${{ matrix.module }}
           path: coverage-${{ matrix.module }}.xml
           retention-days: 7
-          
+
       - name: Upload test results artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -1573,87 +1573,87 @@ jobs:
     if: always()
     permissions:
       contents: read
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          
+
       - name: Install coverage tools
         run: |
           python -m pip install --upgrade pip
           pip install coverage
-          
+
       - name: Download all coverage artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: coverage-*
           path: coverage-artifacts/
-          
+
       - name: Combine coverage reports
         run: |
           echo "=== Combining coverage reports ==="
-          
+
           # Find all coverage XML files
           find coverage-artifacts/ -name "coverage-*.xml" -type f
-          
+
           # Use coverage combine to merge the reports
           # First, we need to convert XML back to .coverage format, combine, then generate XML
           # Since we have XML files, we'll use a simpler approach with coverage.py
-          
+
           # Create a combined coverage file by merging all XML reports
           # We'll use coverage xml --omit to combine them
           python << 'EOF'
           import os
           import xml.etree.ElementTree as ET
           from pathlib import Path
-          
+
           # Find all coverage XML files
           coverage_dir = Path("coverage-artifacts")
           coverage_files = list(coverage_dir.rglob("coverage-*.xml"))
-          
+
           if not coverage_files:
               print("No coverage files found!")
               exit(1)
-          
+
           print(f"Found {len(coverage_files)} coverage files:")
           for f in coverage_files:
               print(f"  - {f}")
-          
+
           # For simplicity, we'll just copy the first file and note that proper merging
           # requires coverage combine with .coverage files, not XML
           # This is a basic implementation that concatenates coverage data
-          
+
           # Parse all coverage files and merge them
           combined_root = None
           packages = {}
-          
+
           for cov_file in coverage_files:
               tree = ET.parse(cov_file)
               root = tree.getroot()
-              
+
               if combined_root is None:
                   combined_root = ET.Element("coverage")
                   for attr in root.attrib:
                       combined_root.set(attr, root.get(attr))
-              
+
               # Merge packages
               for package in root.findall(".//package"):
                   pkg_name = package.get("name")
                   if pkg_name not in packages:
                       packages[pkg_name] = package
-              
+
           # Create combined XML
           if combined_root is not None:
               # Add all packages to combined root
               packages_elem = ET.SubElement(combined_root, "packages")
               for pkg in packages.values():
                   packages_elem.append(pkg)
-              
+
               # Write combined coverage
               tree = ET.ElementTree(combined_root)
               tree.write("coverage-combined.xml", encoding="utf-8", xml_declaration=True)
@@ -1662,7 +1662,7 @@ jobs:
               print("ERROR: Failed to create combined coverage")
               exit(1)
           EOF
-          
+
           # Verify the combined file was created
           if [ -f coverage-combined.xml ]; then
             echo "✓ Combined coverage file created successfully"
@@ -1671,7 +1671,7 @@ jobs:
             echo "ERROR: Failed to create combined coverage file"
             exit 1
           fi
-          
+
       - name: Upload combined coverage
         uses: actions/upload-artifact@v4
         with:

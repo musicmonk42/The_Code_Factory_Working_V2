@@ -20,7 +20,7 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 3
-  
+
   # Full resource limits for production
   - target:
       kind: Deployment
@@ -38,7 +38,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: 4Gi
-  
+
   # Production environment
   - target:
       kind: ConfigMap

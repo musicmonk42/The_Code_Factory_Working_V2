@@ -7,7 +7,7 @@ global:
   # Default time to wait before sending a notification again if it has already
   # been sent successfully for an alert (usually ~3h by default)
   resolve_timeout: 5m
-  
+
   # SMTP configuration for email alerts
   smtp_smarthost: '${SMTP_SERVER}:${SMTP_PORT}'
   smtp_from: '${SMTP_FROM_EMAIL}'
@@ -23,19 +23,19 @@ templates:
 route:
   # Default receiver for all alerts
   receiver: 'default-receiver'
-  
+
   # How long to wait before sending a group of alerts
   group_wait: 30s
-  
+
   # How long to wait before sending an alert that has been added to a group
   group_interval: 5m
-  
+
   # How long to wait before re-sending a given alert
   repeat_interval: 3h
-  
+
   # Group alerts by these labels
   group_by: ['alertname', 'cluster', 'service', 'severity']
-  
+
   # Child routes for specific alert routing
   routes:
     # Critical alerts go to PagerDuty + Slack + Email
@@ -45,21 +45,21 @@ route:
       group_wait: 10s
       repeat_interval: 30m
       continue: true  # Also send to default receiver
-      
+
     # Warning alerts go to Slack + Email
     - match:
         severity: warning
       receiver: 'warning-alerts'
       group_wait: 30s
       repeat_interval: 2h
-      
+
     # Info alerts go to Slack only
     - match:
         severity: info
       receiver: 'info-alerts'
       group_wait: 5m
       repeat_interval: 12h
-      
+
     # Security alerts always go to security team
     - match:
         component: security
@@ -67,12 +67,12 @@ route:
       group_wait: 10s
       repeat_interval: 1h
       continue: true
-      
+
     # Database alerts go to database team
     - match:
         component: database
       receiver: 'database-team'
-      
+
     # Application alerts during business hours
     - match:
         component: application
@@ -80,7 +80,7 @@ route:
       mute_time_intervals:
         - weekends
         - nights
-        
+
     # Backup alerts
     - match:
         component: backup
@@ -95,14 +95,14 @@ inhibit_rules:
     target_match:
       severity: warning
     equal: ['alertname', 'service', 'instance']
-    
+
   # Inhibit all alerts if service is down
   - source_match:
       alertname: ServiceDown
     target_match_re:
       alertname: '.*'
     equal: ['service', 'instance']
-    
+
   # Inhibit individual component alerts if the whole service is down
   - source_match:
       alertname: ServiceDown
@@ -118,11 +118,11 @@ mute_time_intervals:
           - start_time: '22:00'
             end_time: '08:00'
         weekdays: ['monday:friday']
-        
+
   - name: weekends
     time_intervals:
       - weekdays: ['saturday', 'sunday']
-        
+
   - name: maintenance-window
     time_intervals:
       - times:
@@ -139,7 +139,7 @@ receivers:
         headers:
           Subject: '[Code Factory] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
-        
+
   # Critical alerts - multiple channels
   - name: 'critical-alerts'
     # PagerDuty for on-call escalation
@@ -153,7 +153,7 @@ receivers:
           num_resolved: '{{ .Alerts.Resolved | len }}'
         client: 'Code Factory Alertmanager'
         client_url: '{{ template "pagerduty.default.clientURL" . }}'
-        
+
     # Slack for team visibility
     slack_configs:
       - api_url: '${ALERT_SLACK_WEBHOOK}'
@@ -180,7 +180,7 @@ receivers:
           - title: 'Severity'
             value: '{{ .CommonLabels.severity }}'
             short: true
-            
+
     # Email for record keeping
     email_configs:
       - to: '${ALERT_EMAIL}'
@@ -188,7 +188,7 @@ receivers:
           Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
         send_resolved: true
-        
+
   # Warning alerts
   - name: 'warning-alerts'
     slack_configs:
@@ -206,13 +206,13 @@ receivers:
           - title: 'Environment'
             value: '{{ .CommonLabels.environment }}'
             short: true
-            
+
     email_configs:
       - to: '${ALERT_EMAIL}'
         headers:
           Subject: '[WARNING] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
-        
+
   # Info alerts
   - name: 'info-alerts'
     slack_configs:
@@ -223,7 +223,7 @@ receivers:
         title: '{{ .GroupLabels.alertname }}'
         text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
         color: 'good'
-        
+
   # Security team
   - name: 'security-team'
     email_configs:
@@ -233,7 +233,7 @@ receivers:
           Priority: 'urgent'
         html: '{{ template "email.default.html" . }}'
         send_resolved: true
-        
+
     slack_configs:
       - api_url: '${SECURITY_SLACK_WEBHOOK}'
         channel: '#security-alerts'
@@ -242,7 +242,7 @@ receivers:
         title: '[SECURITY] {{ .GroupLabels.alertname }}'
         text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
         color: 'danger'
-        
+
   # Database team
   - name: 'database-team'
     email_configs:
@@ -250,13 +250,13 @@ receivers:
         headers:
           Subject: '[DATABASE] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
-        
+
     slack_configs:
       - api_url: '${ALERT_SLACK_WEBHOOK}'
         channel: '#database-alerts'
         username: 'DB Alertmanager'
         icon_emoji: ':database:'
-        
+
   # Development team
   - name: 'dev-team'
     slack_configs:
@@ -264,13 +264,13 @@ receivers:
         channel: '#dev-team'
         username: 'Alertmanager'
         icon_emoji: ':computer:'
-        
+
     email_configs:
       - to: 'dev-team@example.com'
         headers:
           Subject: '[DEV] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
-        
+
   # Operations team
   - name: 'ops-team'
     email_configs:
@@ -278,7 +278,7 @@ receivers:
         headers:
           Subject: '[OPS] {{ .GroupLabels.alertname }}'
         html: '{{ template "email.default.html" . }}'
-        
+
     slack_configs:
       - api_url: '${ALERT_SLACK_WEBHOOK}'
         channel: '#ops-team'

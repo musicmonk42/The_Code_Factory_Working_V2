@@ -2,7 +2,7 @@
 
 # Production Docker Compose Configuration
 # This file provides production-ready settings with security best practices
-# 
+#
 # ============================================================================
 # CRITICAL SECURITY WARNING
 # ============================================================================
@@ -16,7 +16,7 @@
 #
 # Generate Strong Secrets:
 #   REDIS_PASSWORD: openssl rand -base64 32
-#   POSTGRES_PASSWORD: openssl rand -base64 32  
+#   POSTGRES_PASSWORD: openssl rand -base64 32
 #   AGENTIC_AUDIT_HMAC_KEY: openssl rand -hex 32
 #   ENCRYPTION_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 #
@@ -84,7 +84,7 @@ services:
       - APP_ENV=production
       - DEV_MODE=0
       - PRODUCTION_MODE=1
-      
+
       # ============================================
       # CRITICAL: Security Configuration
       # Replace with strong random keys from secrets manager!
@@ -92,14 +92,14 @@ services:
       - AGENTIC_AUDIT_HMAC_KEY=${AGENTIC_AUDIT_HMAC_KEY}  # REQUIRED: 64-char hex key
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}  # REQUIRED: Fernet key
       - KMS_KEY_ID=${KMS_KEY_ID:-}  # Optional: AWS KMS key
-      
+
       # ============================================
       # Startup Optimization
       # ============================================
       - APP_STARTUP=1
       - SKIP_IMPORT_TIME_VALIDATION=1
       - SPACY_WARNING_IGNORE=W007
-      
+
       # ============================================
       # Configuration Path Resolution
       # ============================================
@@ -111,7 +111,7 @@ services:
       #   1. RUNNER_CONFIG_PATH (if set)
       #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
       # - RUNNER_CONFIG_PATH=${RUNNER_CONFIG_PATH:-/app/generator/config.yaml}
-      
+
       # ============================================
       # Database Configuration
       # ============================================
@@ -122,7 +122,7 @@ services:
       - DB_COMMAND_TIMEOUT=60  # Query execution timeout in seconds
       - DB_RETRY_ATTEMPTS=3
       - DB_RETRY_DELAY=1.0
-      
+
       # ============================================
       # Message Bus Configuration
       # ============================================
@@ -130,7 +130,7 @@ services:
       - MESSAGE_BUS_WORKERS_PER_SHARD=4
       - ENABLE_MESSAGE_BUS_GUARDIAN=1
       - MESSAGE_BUS_GUARDIAN_INTERVAL=30
-      
+
       # ============================================
       # LLM Provider Configuration
       # ============================================
@@ -145,27 +145,27 @@ services:
       - LLM_MAX_RETRIES=3
       - LLM_TEMPERATURE=0.7
       - TESTGEN_LLM_TIMEOUT=${TESTGEN_LLM_TIMEOUT:-300}  # Testgen-specific timeout (5 minutes)
-      
+
       # ============================================
       # Infrastructure
       # ============================================
       - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}  # Kafka broker addresses
-      
+
       # ============================================
       # Citus Extension Configuration
       # ============================================
       # Set to 1 to enable Citus distributed SQL features for production scale-out
       # Requires postgres service to use citusdata/citus image (already configured)
       - ENABLE_CITUS=${ENABLE_CITUS:-1}  # Enabled by default in production
-      
+
       # ============================================
       # CORS Configuration
       # CRITICAL: Set ALLOWED_ORIGINS for production domains
       # Example: https://yourdomain.com,https://app.yourdomain.com
       # ============================================
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}  # REQUIRED for production web clients
-      
+
       # ============================================
       # Feature Flags
       # Options: "0" (disabled), "1" (enabled), "auto" (auto-detect based on library availability)
@@ -176,13 +176,13 @@ services:
       - ENABLE_LIBVIRT=${ENABLE_LIBVIRT:-auto}  # Libvirt virtualization support with auto-detection
       - ENABLE_REDIS=1
       - ENABLE_KAFKA=${ENABLE_KAFKA:-0}
-      
+
       # ============================================
       # Performance Flags
       # ============================================
       - PARALLEL_AGENT_LOADING=1  # Enable parallel agent loading for faster startup
       - LAZY_LOAD_ML=1  # Lazy load ML libraries to reduce memory usage
-      
+
       # ============================================
       # Audit Crypto Configuration (SECURITY UPDATE)
       # Set AUDIT_CRYPTO_MODE="software" for production security
@@ -190,35 +190,35 @@ services:
       - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-software}  # Changed from "disabled" to "software"
       - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=${AUDIT_CRYPTO_ALLOW_INIT_FAILURE:-1}
       - AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=${AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64:-}
-      
+
       # ============================================
       # Sentry Error Tracking (Optional)
       # Automatically enabled when SENTRY_DSN is set
       # ============================================
       - SENTRY_DSN=${SENTRY_DSN:-}
-      
+
       # ============================================
       # Logging Configuration
       # ============================================
       - LOG_LEVEL=INFO
       - ENABLE_STRUCTURED_LOGGING=1
-      
+
       # ============================================
       # Monitoring
       # ============================================
       - PROMETHEUS_PORT=9090
-      
+
       # ============================================
       # Application Paths
       # ============================================
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/logs/audit_trail.log
-      
+
       # ============================================
       # Worker Configuration
       # ============================================
       - WORKER_COUNT=${WORKER_COUNT:-4}
-      
+
     ports:
       - "8000:8000"  # Main API endpoint
       - "9090:9090"  # Prometheus metrics
@@ -337,7 +337,7 @@ networks:
 # 2. Generate strong keys:
 #    # HMAC key (64 hex chars)
 #    openssl rand -hex 32
-#    
+#
 #    # Fernet encryption key
 #    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 #

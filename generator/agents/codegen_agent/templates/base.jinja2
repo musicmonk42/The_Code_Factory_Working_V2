@@ -167,9 +167,27 @@ Before submitting, verify EVERY item below. Failure on any item = REJECTION:
 
 **README Completeness (CRITICAL):**
 12. ✓ README has ALL required sections: Setup, Run Server, Run Tests, API Examples
+{% if target_language == "python" %}
 13. ✓ Setup section includes virtualenv creation, activation (Windows AND Linux/macOS), and pip install
 14. ✓ Run Server section has exact uvicorn/flask/etc command
-15. ✓ Run Tests section has exact pytest/npm test/etc command  
+15. ✓ Run Tests section has exact pytest command
+{% elif target_language in ["typescript", "javascript"] %}
+13. ✓ Setup section includes npm install or yarn install
+14. ✓ Run Server section has exact npm run dev/start or node command
+15. ✓ Run Tests section has exact npm test or jest command
+{% elif target_language == "java" %}
+13. ✓ Setup section includes Maven/Gradle setup
+14. ✓ Run Server section has exact mvn spring-boot:run or java -jar command
+15. ✓ Run Tests section has exact mvn test or gradle test command
+{% elif target_language == "go" %}
+13. ✓ Setup section includes go mod download
+14. ✓ Run Server section has exact go run command
+15. ✓ Run Tests section has exact go test command
+{% else %}
+13. ✓ Setup section includes dependency installation
+14. ✓ Run Server section has exact run command
+15. ✓ Run Tests section has exact test command
+{% endif %}
 16. ✓ API Examples has ALL 6 curl commands with REAL data (not placeholders)
 17. ✓ README is substantive (not just section headers - actual content in each section)
 

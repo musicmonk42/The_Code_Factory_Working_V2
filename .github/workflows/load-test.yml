@@ -32,7 +32,7 @@ jobs:
     name: Run K6 Load Test
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    
+
     # Redis service container (required by the application)
     services:
       redis:
@@ -44,7 +44,7 @@ jobs:
           --health-retries 5
         ports:
           - 6379:6379
-    
+
     env:
       # Test environment variables
       TESTING: '1'
@@ -61,35 +61,35 @@ jobs:
       # Target URL for load test (from inputs or default)
       TARGET_URL: ${{ github.event.inputs.target_url || 'http://localhost:8000' }}
       MAX_VUS: ${{ github.event.inputs.vus || '50' }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
           cache-dependency-path: requirements.txt
-      
+
       - name: Install libvirt system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libvirt-dev pkg-config
-      
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
+
       - name: Start API server
         run: |
           # Start the server in the background with 1 worker to match 2-core runner
           python server/run.py --host 0.0.0.0 --port 8000 --workers 1 > server.log 2>&1 &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          
+
           # Verify process started
           if ! ps -p $SERVER_PID > /dev/null; then
             echo "✗ Server process failed to start"
@@ -97,7 +97,7 @@ jobs:
             cat server.log
             exit 1
           fi
-          
+
           # Wait for server to be ready (max 120 seconds: 60 attempts × 2s)
           echo "Waiting for API server to be ready..."
           max_attempts=60
@@ -106,11 +106,11 @@ jobs:
             # Check if health endpoint responds with 200 OK
             if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
               echo "✓ API server is ready"
-              
+
               # Verify the health response content
               health_response=$(curl -s http://localhost:8000/health)
               echo "Health check response: $health_response"
-              
+
               # Also check if the server is still running
               if ps -p $SERVER_PID > /dev/null; then
                 echo "✓ Server process is running (PID: $SERVER_PID)"
@@ -122,7 +122,7 @@ jobs:
                 exit 1
               fi
             fi
-            
+
             # Check if server process is still running
             if ! ps -p $SERVER_PID > /dev/null; then
               echo "✗ Server process died during startup"
@@ -130,7 +130,7 @@ jobs:
               cat server.log
               exit 1
             fi
-            
+
             attempt=$((attempt + 1))
             if [ $attempt -eq $max_attempts ]; then
               echo "✗ API server failed to start within 120 seconds"
@@ -143,7 +143,7 @@ jobs:
             echo "Waiting for server... (attempt $attempt/$max_attempts)"
             sleep 2
           done
-      
+
       - name: Install k6
         run: |
           # Install k6 using official installation script
@@ -152,10 +152,10 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
           sudo apt-get update
           sudo apt-get install k6
-          
+
           # Verify installation
           k6 version
-      
+
       - name: Run k6 load test
         id: k6_test
         continue-on-error: true
@@ -168,7 +168,7 @@ jobs:
             -e API_URL=$TARGET_URL \
             -e MAX_VUS=$MAX_VUS \
             --out json=loadtest-results.json
-      
+
       - name: Check test results
         if: always()
         run: |
@@ -178,7 +178,7 @@ jobs:
             echo "Review the test summary and artifacts for details."
             echo ""
           fi
-      
+
       - name: Display test summary
         if: always()
         run: |
@@ -186,7 +186,7 @@ jobs:
             echo "=== Load Test Summary ==="
             cat loadtest-summary.json | python -m json.tool
           fi
-      
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -196,7 +196,7 @@ jobs:
             loadtest-results.json
             loadtest-summary.json
           retention-days: 30
-      
+
       - name: Upload server logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -204,7 +204,7 @@ jobs:
           name: server-logs-${{ github.run_number }}
           path: server.log
           retention-days: 7
-      
+
       - name: Stop API server
         if: always()
         run: |

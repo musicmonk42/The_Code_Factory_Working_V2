@@ -66,7 +66,7 @@ jobs:
             --set env.ENABLE_CITUS="1" \
             > /tmp/helm-production.yaml
           echo "✓ Helm template with production values rendered successfully"
-          
+
           echo "🔍 Verifying HPA is present..."
           if grep -q "kind: HorizontalPodAutoscaler" /tmp/helm-production.yaml; then
             echo "✓ HorizontalPodAutoscaler found in rendered output"
@@ -74,7 +74,7 @@ jobs:
             echo "❌ ERROR: HorizontalPodAutoscaler not found when autoscaling is enabled"
             exit 1
           fi
-          
+
           echo "🔍 Verifying Deployment does NOT have static replicas when HPA is enabled..."
           # Extract the Deployment section and check for replicas field
           if awk '/kind: Deployment/,/^---$/' /tmp/helm-production.yaml | grep -q "^  replicas:"; then
@@ -83,7 +83,7 @@ jobs:
           else
             echo "✓ Deployment does not have static replicas (correctly managed by HPA)"
           fi
-          
+
           echo "🔍 Verifying ServiceMonitor is present..."
           if grep -q "kind: ServiceMonitor" /tmp/helm-production.yaml; then
             echo "✓ ServiceMonitor found when monitoring is enabled"
@@ -99,7 +99,7 @@ jobs:
             --set migrations.runAs=job \
             > /tmp/helm-migrations-job.yaml
           echo "✓ Helm template with migrations as job rendered successfully"
-          
+
           echo "🔍 Verifying Job resource is present..."
           if grep -q "kind: Job" /tmp/helm-migrations-job.yaml; then
             echo "✓ Job resource found when migrations.runAs=job"
@@ -204,7 +204,7 @@ jobs:
         if: matrix.overlay == 'production'
         run: |
           echo "🔍 Verifying production-specific resources..."
-          
+
           echo "  Checking for HorizontalPodAutoscaler..."
           if grep -q "kind: HorizontalPodAutoscaler" /tmp/kustomize-production.yaml; then
             echo "  ✓ HorizontalPodAutoscaler found"
@@ -212,7 +212,7 @@ jobs:
             echo "  ❌ ERROR: HorizontalPodAutoscaler not found in production overlay"
             exit 1
           fi
-          
+
           echo "  Checking for PodDisruptionBudget..."
           if grep -q "kind: PodDisruptionBudget" /tmp/kustomize-production.yaml; then
             echo "  ✓ PodDisruptionBudget found"
@@ -220,7 +220,7 @@ jobs:
             echo "  ❌ ERROR: PodDisruptionBudget not found in production overlay"
             exit 1
           fi
-          
+
           echo "  Checking minimum replicas count..."
           # Extract minReplicas from HPA resource using yq for reliable YAML parsing
           HPA_MIN_REPLICAS=$(yq eval 'select(.kind == "HorizontalPodAutoscaler") | .spec.minReplicas' /tmp/kustomize-production.yaml)
@@ -230,7 +230,7 @@ jobs:
             echo "  ❌ ERROR: HPA minReplicas is not set or less than 3 (found: ${HPA_MIN_REPLICAS:-none})"
             exit 1
           fi
-          
+
           echo "✓ All production-specific resources verified"
 
   config-consistency:
@@ -243,37 +243,37 @@ jobs:
       - name: Check HPA Thresholds Consistency
         run: |
           echo "🔍 Checking HPA thresholds consistency between production overlay and Helm values..."
-          
+
           # Extract values from k8s/overlays/production/hpa.yaml
           KUSTOMIZE_CPU=$(grep -A 3 "name: cpu" k8s/overlays/production/hpa.yaml | grep "averageUtilization:" | awk '{print $2}')
           KUSTOMIZE_MEMORY=$(grep -A 3 "name: memory" k8s/overlays/production/hpa.yaml | grep "averageUtilization:" | awk '{print $2}')
           KUSTOMIZE_MAX_REPLICAS=$(grep "maxReplicas:" k8s/overlays/production/hpa.yaml | awk '{print $2}')
-          
+
           # Extract values from helm/codefactory/values.yaml autoscaling section
           HELM_CPU=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "targetCPUUtilizationPercentage:" | awk '{print $2}')
           HELM_MEMORY=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "targetMemoryUtilizationPercentage:" | awk '{print $2}')
           HELM_MAX_REPLICAS=$(grep -A 5 "^autoscaling:" helm/codefactory/values.yaml | grep "maxReplicas:" | awk '{print $2}')
-          
+
           echo "  Kustomize Production HPA: CPU=$KUSTOMIZE_CPU%, Memory=$KUSTOMIZE_MEMORY%, MaxReplicas=$KUSTOMIZE_MAX_REPLICAS"
           echo "  Helm Default HPA: CPU=$HELM_CPU%, Memory=$HELM_MEMORY%, MaxReplicas=$HELM_MAX_REPLICAS"
-          
+
           MISMATCH=0
-          
+
           if [ "$KUSTOMIZE_CPU" != "$HELM_CPU" ]; then
             echo "  ⚠️  WARNING: CPU target mismatch (Kustomize: $KUSTOMIZE_CPU%, Helm: $HELM_CPU%)"
             MISMATCH=1
           fi
-          
+
           if [ "$KUSTOMIZE_MEMORY" != "$HELM_MEMORY" ]; then
             echo "  ⚠️  WARNING: Memory target mismatch (Kustomize: $KUSTOMIZE_MEMORY%, Helm: $HELM_MEMORY%)"
             MISMATCH=1
           fi
-          
+
           if [ "$KUSTOMIZE_MAX_REPLICAS" != "$HELM_MAX_REPLICAS" ]; then
             echo "  ⚠️  WARNING: MaxReplicas mismatch (Kustomize: $KUSTOMIZE_MAX_REPLICAS, Helm: $HELM_MAX_REPLICAS)"
             MISMATCH=1
           fi
-          
+
           if [ $MISMATCH -eq 0 ]; then
             echo "  ✓ HPA thresholds are consistent between Kustomize and Helm"
           else
@@ -283,7 +283,7 @@ jobs:
       - name: Verify Message Bus Environment Variables
         run: |
           echo "🔍 Verifying message bus environment variables in Helm values..."
-          
+
           if grep -q "MESSAGE_BUS_SHARD_COUNT:" helm/codefactory/values.yaml; then
             SHARD_COUNT=$(grep "MESSAGE_BUS_SHARD_COUNT:" helm/codefactory/values.yaml | awk '{print $2}' | tr -d '"')
             echo "  ✓ MESSAGE_BUS_SHARD_COUNT found (value: $SHARD_COUNT)"
@@ -291,7 +291,7 @@ jobs:
             echo "  ❌ ERROR: MESSAGE_BUS_SHARD_COUNT not found in helm/codefactory/values.yaml"
             exit 1
           fi
-          
+
           if grep -q "MESSAGE_BUS_WORKERS_PER_SHARD:" helm/codefactory/values.yaml; then
             WORKERS=$(grep "MESSAGE_BUS_WORKERS_PER_SHARD:" helm/codefactory/values.yaml | awk '{print $2}' | tr -d '"')
             echo "  ✓ MESSAGE_BUS_WORKERS_PER_SHARD found (value: $WORKERS)"
@@ -299,16 +299,16 @@ jobs:
             echo "  ❌ ERROR: MESSAGE_BUS_WORKERS_PER_SHARD not found in helm/codefactory/values.yaml"
             exit 1
           fi
-          
+
           echo "✓ All required message bus environment variables are present"
 
       - name: Verify Security Context in k8s/base/api-deployment.yaml
         run: |
           echo "🔍 Verifying security context in k8s/base/api-deployment.yaml..."
-          
+
           # Extract all securityContext sections for efficiency (using -A 10 to capture full securityContext blocks)
           SECURITY_CONTEXTS=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml)
-          
+
           # Check pod-level security context
           if echo "$SECURITY_CONTEXTS" | grep -q "runAsNonRoot: true"; then
             echo "  ✓ runAsNonRoot: true found in pod securityContext"
@@ -316,7 +316,7 @@ jobs:
             echo "  ❌ ERROR: runAsNonRoot: true not found in pod securityContext"
             exit 1
           fi
-          
+
           # Check container-level security context for capabilities (using -A 5 to capture capabilities block)
           CAPABILITIES_SECTION=$(grep -A 10 "securityContext:" k8s/base/api-deployment.yaml | grep -A 5 "capabilities:")
           if echo "$CAPABILITIES_SECTION" | grep -q "drop:" && echo "$CAPABILITIES_SECTION" | grep -A 1 "drop:" | grep -q "ALL"; then
@@ -325,5 +325,5 @@ jobs:
             echo "  ❌ ERROR: capabilities.drop: ALL not found in container securityContext"
             exit 1
           fi
-          
+
           echo "✓ Security context is properly configured"

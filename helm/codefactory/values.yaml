@@ -49,7 +49,7 @@ securityContext:
   runAsUser: 1000
   capabilities:
     drop:
-    - ALL
+      - ALL
 
 service:
   type: ClusterIP
@@ -173,36 +173,36 @@ env:
   PRODUCTION_MODE: "1"
   APP_ENV: "production"
   DEV_MODE: "0"
-  
+
   # Startup Optimization
   APP_STARTUP: "1"
   SKIP_IMPORT_TIME_VALIDATION: "1"
   SPACY_WARNING_IGNORE: "W007"
-  
+
   # Performance optimizations
   PARALLEL_AGENT_LOADING: "1"
   LAZY_LOAD_ML: "1"
   STARTUP_TIMEOUT: "90"
-  
+
   # Database Configuration
   DB_POOL_SIZE: "50"
   DB_POOL_MAX_OVERFLOW: "20"
   DB_RETRY_ATTEMPTS: "3"
   DB_RETRY_DELAY: "1.0"
-  
+
   # Message Bus Configuration
   MESSAGE_BUS_SHARD_COUNT: "8"
   MESSAGE_BUS_WORKERS_PER_SHARD: "4"
   ENABLE_MESSAGE_BUS_GUARDIAN: "1"
   MESSAGE_BUS_GUARDIAN_INTERVAL: "30"
-  
+
   # LLM Configuration
   DEFAULT_LLM_PROVIDER: "openai"
   LLM_TIMEOUT: "300"
   LLM_MAX_RETRIES: "3"
   LLM_TEMPERATURE: "0.7"
   TESTGEN_LLM_TIMEOUT: "300"
-  
+
   # Feature flags
   ENABLE_DATABASE: "1"
   ENABLE_REDIS: "1"
@@ -213,28 +213,28 @@ env:
   ENABLE_LIBVIRT: "0"
   ENABLE_KAFKA: "0"
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
-  
+
   # Audit Crypto Configuration
   AUDIT_CRYPTO_MODE: "software"
   AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
-  
+
   # Logging
   LOG_LEVEL: "INFO"
   ENABLE_STRUCTURED_LOGGING: "1"
-  
+
   # Monitoring
   PROMETHEUS_PORT: "9090"
-  
+
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
-  
+
   # SFE Checkpoint Manager Paths (container-friendly defaults)
   # These use relative paths that resolve to /app/logs/checkpoint/ in containers
   # Override if custom paths are needed (e.g., mounted persistent volumes)
   # CHECKPOINT_AUDIT_LOG_PATH: "/app/logs/checkpoint/audit.log"
   # CHECKPOINT_DLQ_PATH: "/app/logs/checkpoint/dlq.jsonl"
-  
+
   # Runner Configuration Path
   # Optional: Set custom path to runner configuration file
   # If not set, uses smart path resolution (see CONFIG_PATH_RESOLUTION_FIX.md)
@@ -244,7 +244,7 @@ env:
   #   2. ./config.yaml -> ./generator/config.yaml (for config.yaml)
   # Uncomment and set if needed:
   # RUNNER_CONFIG_PATH: "/app/generator/config.yaml"
-  
+
   # Worker configuration
   # Number of uvicorn workers per pod (multi-process mode)
   # Default is 4 for balanced performance and latency.
@@ -261,20 +261,20 @@ secrets:
     # Password should be provided via secret
     passwordSecretName: "codefactory-secrets"
     passwordSecretKey: "redis-password"
-  
+
   # Database configuration (optional)
   database:
     enabled: false
     urlSecretName: "codefactory-secrets"
     urlSecretKey: "database-url"
-  
+
   # API keys (required)
   apiKeys:
     openaiSecretName: "codefactory-secrets"
     openaiSecretKey: "openai-api-key"
     anthropicSecretName: "codefactory-secrets"
     anthropicSecretKey: "anthropic-api-key"
-  
+
   # Security keys
   security:
     hmacKeySecretName: "codefactory-secrets"
