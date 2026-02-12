@@ -84,19 +84,20 @@ export const options = {
     stages: [
         // Warm-up phase: Ramp up to 10% of max users over 30 seconds
         { duration: '30s', target: VU_WARMUP },
-        // Maintain warmup level for 1 minute
-        { duration: '1m', target: VU_WARMUP },
+        // Maintain warmup level for 30 seconds (reduced from 1m)
+        { duration: '30s', target: VU_WARMUP },
         // Scale up to 50% of max users over 1 minute
         { duration: '1m', target: VU_MEDIUM },
-        // Maintain medium level for 2 minutes
+        // Maintain medium level for 2 minutes (reduced from 2m)
         { duration: '2m', target: VU_MEDIUM },
         // Scale up to max users over 1 minute
         { duration: '1m', target: MAX_VUS },
-        // Maintain peak load for 2 minutes
-        { duration: '2m', target: MAX_VUS },
+        // Maintain peak load for 1.5 minutes (reduced from 2m)
+        { duration: '1m30s', target: MAX_VUS },
         // Ramp down to 0 users over 30 seconds
         { duration: '30s', target: 0 },
     ],
+    // Total: 7 minutes (provides 1-minute buffer before 8m limit)
     thresholds,
     // Performance optimizations to reduce memory usage and improve stability
     discardResponseBodies: false,  // Keep response bodies for check functions to parse
