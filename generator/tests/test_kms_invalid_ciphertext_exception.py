@@ -205,10 +205,13 @@ def mock_secrets(monkeypatch):
 @pytest.fixture
 def mock_boto(monkeypatch):
     """Mocks boto3 and botocore."""
+    from unittest.mock import AsyncMock
+    
     mock_kms_client = MagicMock()
-    mock_kms_client.decrypt.return_value = {
+    # KMS decrypt is async in production, so use AsyncMock
+    mock_kms_client.decrypt = AsyncMock(return_value={
         "Plaintext": b"0123456789abcdef0123456789abcdef"  # 32 bytes
-    }
+    })
 
     mock_boto3 = MagicMock()
     mock_boto3.client.return_value = mock_kms_client

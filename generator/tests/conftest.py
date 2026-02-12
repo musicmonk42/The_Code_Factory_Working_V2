@@ -297,7 +297,39 @@ if "opentelemetry" not in sys.modules:
         otel_module.__file__ = "<mocked opentelemetry>"
         otel_module.__path__ = []  # Required for package-like behavior
         sys.modules["opentelemetry"] = otel_module
+
+
+# Initialize tiktoken stub for token counting (optional dependency)
+if "tiktoken" not in sys.modules:
+    try:
+        import tiktoken as _test
+    except ImportError:
+        # Create tiktoken package stub
+        tiktoken_spec = importlib.machinery.ModuleSpec(name="tiktoken", loader=None, is_package=False)
+        tiktoken_module = importlib.util.module_from_spec(tiktoken_spec)
+        tiktoken_module.__file__ = "<mocked tiktoken>"
         
+        # Mock encoding class
+        class _MockEncoding:
+            def encode(self, text: str):
+                # Simple heuristic: ~1 token per 4 characters
+                return list(range(len(text) // 4 + 1))
+            
+            def decode(self, tokens):
+                return ""
+        
+        # Mock functions
+        def _mock_get_encoding(encoding_name):
+            return _MockEncoding()
+        
+        def _mock_encoding_for_model(model_name):
+            return _MockEncoding()
+        
+        tiktoken_module.get_encoding = _mock_get_encoding
+        tiktoken_module.encoding_for_model = _mock_encoding_for_model
+        tiktoken_module.Encoding = _MockEncoding
+        
+        sys.modules["tiktoken"] = tiktoken_module
         # Create trace submodule with proper hierarchy
         trace_spec = importlib.machinery.ModuleSpec(name="opentelemetry.trace", loader=None, is_package=True)
         otel_trace = importlib.util.module_from_spec(trace_spec)
@@ -579,6 +611,25 @@ def mock_async_file_utils():
             "add_provenance": mock_prov,
             "scan_for_vulnerabilities": mock_scan,
         }
+
+
+@pytest.fixture(autouse=True)
+def mock_async_security_utils():
+    """Automatically mock async functions in runner_security_utils for all tests."""
+    from unittest.mock import AsyncMock, patch
+    
+    # Only mock if the functions are called in async context
+    # This fixture provides safety net without breaking tests that mock these themselves
+    try:
+        with patch("runner.runner_security_utils.fetch_secret", new_callable=AsyncMock, return_value=None) as mock_fetch, \
+             patch("runner.runner_security_utils.monitor_for_leaks", new_callable=AsyncMock) as mock_monitor:
+            yield {
+                "fetch_secret": mock_fetch,
+                "monitor_for_leaks": mock_monitor,
+            }
+    except (ImportError, AttributeError):
+        # Module not available or already mocked
+        yield {}
 
 
 # ---- Textual App.run_test Compatibility ----

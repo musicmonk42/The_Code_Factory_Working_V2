@@ -715,34 +715,10 @@ class TestComponentInteractions(unittest.IsolatedAsyncioTestCase):
 
 def tearDownModule():
     """Clean up all patches."""
-    patcher_log_action_user.stop()
-    patcher_redact_sensitive_user.stop()
-    patcher_detect_language.stop()
-    patcher_translator.stop()
-    patcher_get_logger_user.stop()
-    patcher_get_fernet_user.stop()
-    patcher_get_config_user.stop()
-    patcher_get_logger_updater.stop()
-    patcher_get_fernet_updater.stop()
-    patcher_get_config_updater.stop()
-    patcher_get_cb_prompt.stop()
-    patcher_get_tracer_prompt.stop()
-    patcher_get_logger_prompt.stop()
-    patcher_get_fernet_prompt.stop()
-    patcher_get_config_prompt.stop()
-    patcher_get_cb_clarifier.stop()
-    patcher_get_tracer_clarifier.stop()
-    patcher_get_logger_clarifier.stop()
-    patcher_get_fernet_clarifier.stop()
-    patcher_get_config_clarifier.stop()
-    patcher_redact_sensitive.stop()
-    patcher_send_alert.stop()
-    patcher_log_action.stop()
-    patcher_sys_exit.stop()
-    patcher_fernet_class.stop()
-    patcher_boto3.stop()
-    patcher_dynaconf.stop()
-    print("\nAll integration test mocks stopped.")
+    # Note: Patchers are managed by pytest fixtures using 'with' statements
+    # and are automatically cleaned up. This function is kept for compatibility
+    # but doesn't need to stop any patchers.
+    pass
 
 
 if __name__ == "__main__":
