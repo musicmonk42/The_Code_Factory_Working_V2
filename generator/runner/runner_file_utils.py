@@ -1671,6 +1671,11 @@ async def validate_generated_project(
         "rust": {"Cargo.toml"},
     }
     CRITICAL_REQUIRED_FILES = CRITICAL_REQUIRED_FILES_MAP.get(lang, {"main.py"})
+    
+    # Add critical files to required_files if not already present
+    for critical_file in CRITICAL_REQUIRED_FILES:
+        if critical_file not in required_files:
+            required_files.append(critical_file)
 
     # When the generated project uses an app/ layout, also require key files
     # (Only applies to Python projects)
