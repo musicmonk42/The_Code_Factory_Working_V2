@@ -88,7 +88,7 @@ export const options = {
         { duration: '30s', target: VU_WARMUP },
         // Scale up to 50% of max users over 1 minute
         { duration: '1m', target: VU_MEDIUM },
-        // Maintain medium level for 2 minutes (reduced from 2m)
+        // Maintain medium level for 2 minutes
         { duration: '2m', target: VU_MEDIUM },
         // Scale up to max users over 1 minute
         { duration: '1m', target: MAX_VUS },
