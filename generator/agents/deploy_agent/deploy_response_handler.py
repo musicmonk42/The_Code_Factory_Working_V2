@@ -1836,8 +1836,8 @@ class KubernetesHandler(FormatHandler):
                     # Skip markdown headers before YAML starts
                     continue
             
-            # Skip lines that start with markdown headers (# followed by space and any letter)
-            if re.match(r'^\s*#\s+[A-Za-z]', line):
+            # Skip lines that start with markdown headers (# or ## or ### etc. followed by space and any letter)
+            if re.match(r'^\s*#+\s+[A-Za-z]', line):
                 continue
             
             # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")
