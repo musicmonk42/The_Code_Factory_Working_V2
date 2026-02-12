@@ -8,6 +8,7 @@ Handles file uploads and generator-specific operations.
 [GAP #9] Sensitive routes now protected by ArbiterPolicyMiddleware.
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -44,6 +45,14 @@ from server.storage import jobs_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
+
+# Maximum number of concurrent pipeline tasks to prevent event loop saturation
+# This limits the number of pipeline coroutines that can run simultaneously
+# Tune this value based on your system resources and load requirements
+MAX_CONCURRENT_PIPELINES = 10
+
+# Semaphore to limit concurrent pipeline tasks
+_pipeline_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PIPELINES)
 
 # UUID validation pattern (RFC 4122)
 # Used for validating job IDs in API requests to prevent injection attacks
@@ -122,6 +131,41 @@ def _filter_empty_questions(questions: list) -> list:
                 filtered.append(q)
         # Silently drop anything that is neither str nor dict
     return filtered
+
+
+async def _run_pipeline_with_semaphore(
+    job_id: str,
+    readme_content: str,
+    generator_service: GeneratorService,
+) -> None:
+    """
+    Wrapper to run pipeline with semaphore to limit concurrent executions.
+    
+    This prevents unbounded pipeline tasks from saturating the event loop.
+    When the semaphore limit is reached, new pipeline tasks will wait until
+    a slot becomes available.
+    
+    Args:
+        job_id: Job ID
+        readme_content: Content of the README file
+        generator_service: GeneratorService instance
+    """
+    try:
+        # Try to acquire the semaphore
+        if _pipeline_semaphore.locked():
+            logger.warning(
+                f"[Pipeline] Pipeline semaphore at capacity ({MAX_CONCURRENT_PIPELINES}). "
+                f"Job {job_id} waiting for available slot..."
+            )
+        
+        async with _pipeline_semaphore:
+            logger.info(
+                f"[Pipeline] Starting pipeline for job {job_id} "
+                f"(active: {MAX_CONCURRENT_PIPELINES - _pipeline_semaphore._value})"
+            )
+            await _trigger_pipeline_background(job_id, readme_content, generator_service)
+    except Exception as e:
+        logger.error(f"[Pipeline] Uncaught error in pipeline wrapper for job {job_id}: {e}", exc_info=True)
 
 
 async def _trigger_pipeline_background(
@@ -705,11 +749,13 @@ async def upload_files(
     if readme_content:
         logger.info(f"Extracted README for job {job_id}")
         logger.info(f"Auto-triggering full pipeline for job {job_id} after upload")
-        background_tasks.add_task(
-            _trigger_pipeline_background,
-            job_id=job_id,
-            readme_content=readme_content,
-            generator_service=generator_service,
+        # Use asyncio.create_task instead of BackgroundTasks to prevent event loop blocking
+        asyncio.create_task(
+            _run_pipeline_with_semaphore(
+                job_id=job_id,
+                readme_content=readme_content,
+                generator_service=generator_service,
+            )
         )
     else:
         logger.warning(

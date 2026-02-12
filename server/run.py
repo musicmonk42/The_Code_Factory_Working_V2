@@ -70,8 +70,8 @@ def parse_args():
     parser.add_argument(
         "--workers",
         type=int,
-        default=None,  # Will use WEB_CONCURRENCY or default to 1
-        help="Number of worker processes (default: WEB_CONCURRENCY env var or 1)",
+        default=None,  # Will use WEB_CONCURRENCY or default to 4
+        help="Number of worker processes (default: WEB_CONCURRENCY env var or 4)",
     )
 
     parser.add_argument(
@@ -91,8 +91,9 @@ def main():
     
     # P3 FIX: Support WEB_CONCURRENCY environment variable for worker count
     # This allows easy scaling through environment configuration
+    # FIX: Default to 4 workers (not 1) to handle concurrent requests and prevent event loop saturation
     if args.workers is None:
-        workers = int(os.environ.get("WEB_CONCURRENCY", "1"))
+        workers = int(os.environ.get("WEB_CONCURRENCY", "4"))
     else:
         workers = args.workers
     
@@ -116,7 +117,7 @@ def main():
     logger.info(f"Port: {args.port}")
     logger.info(f"Workers: {workers}")
     if workers == 1:
-        logger.info("  Note: Single worker mode. Set WEB_CONCURRENCY for more workers.")
+        logger.warning("  Note: Single worker mode may not handle load well. Set WEB_CONCURRENCY for more workers.")
     logger.info(f"Reload: {args.reload}")
     logger.info(f"Log Level: {args.log_level}")
     logger.info("=" * 70)

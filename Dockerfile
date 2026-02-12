@@ -304,6 +304,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
-# Single worker mode for Railway deployment to ensure fast startup and reliable healthchecks
+# Multi-worker mode (4 workers) for production deployment to handle concurrent requests and prevent event loop saturation
 # Using server/run.py which respects PORT environment variable (defaults to 8000, Railway sets to 8080)
-CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "1"]
+CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "4"]
