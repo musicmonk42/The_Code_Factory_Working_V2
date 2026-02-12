@@ -759,7 +759,7 @@ async def upload_files(
                 )
             )
         else:
-            logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
+            logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS={os.environ.get('SKIP_BACKGROUND_TASKS')})")
     else:
         logger.warning(
             f"No README.md found in uploaded files for job {job_id}. "

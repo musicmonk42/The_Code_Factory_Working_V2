@@ -161,7 +161,7 @@ async def create_job(
             )
         )
     else:
-        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
+        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS={os.environ.get('SKIP_BACKGROUND_TASKS')})")
 
     return job
 

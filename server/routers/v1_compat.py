@@ -274,7 +274,7 @@ async def create_generation(
             )
         )
     else:
-        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
+        logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS={os.environ.get('SKIP_BACKGROUND_TASKS')})")
     
     # Trigger the generation pipeline as a background task
     # Uses the requirements text as the README content for the pipeline
@@ -289,7 +289,7 @@ async def create_generation(
         )
         logger.info(f"Background pipeline triggered for v1 generation job {job_id}")
     else:
-        logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS=1)")
+        logger.info(f"Skipping background pipeline for job {job_id} (SKIP_BACKGROUND_TASKS={os.environ.get('SKIP_BACKGROUND_TASKS')})")
     
     return V1GenerateResponse(
         id=job_id,
