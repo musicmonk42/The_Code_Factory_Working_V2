@@ -22,9 +22,17 @@ def client():
     Import deferred to fixture to avoid expensive initialization during collection.
     Uses context manager to properly trigger lifespan events.
     """
-    from server.main import app
-    with TestClient(app) as client:
-        yield client
+    # Increase recursion limit temporarily to handle deep import chains
+    import sys
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
+    
+    try:
+        from server.main import app
+        with TestClient(app) as client:
+            yield client
+    finally:
+        sys.setrecursionlimit(old_limit)
 
 
 class TestV1CompatBackgroundTrigger:
