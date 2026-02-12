@@ -125,12 +125,24 @@ class FileSystemKeyStorageBackend:
     async def _acquire_lock(self, filepath: str, shared: bool = False):
         """
         Acquires an advisory file lock for the given filepath using portalocker.
+        
+        Args:
+            filepath: Path to the file to lock
+            shared: If True, acquire a shared (read) lock; otherwise exclusive (write) lock
+        
+        Note:
+            Lock mode is always 'a+' because portalocker requires the file to exist
+            and be writable to place a lock. The shared vs exclusive nature is determined
+            by portalocker.LockFlags.SHARED vs portalocker.LockFlags.EXCLUSIVE.
         """
         lock_file_path = f"{filepath}.lock"
         # Ensure the lock file directory exists
-        os.makedirs(os.path.dirname(lock_file_path) or ".", exist_ok=True)
+        lock_dir = os.path.dirname(lock_file_path)
+        if not lock_dir:
+            lock_dir = "."
+        os.makedirs(lock_dir, exist_ok=True)
 
-        lock_mode = "a+"
+        lock_mode = "a+"  # Always use append mode to avoid truncating existing lock files
         lock_type = (
             portalocker.LockFlags.SHARED if shared else portalocker.LockFlags.EXCLUSIVE
         )
