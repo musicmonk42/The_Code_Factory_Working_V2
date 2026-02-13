@@ -1874,8 +1874,10 @@ class KubernetesHandler(FormatHandler):
         found_yaml_start = False  # Track if we've found the start of actual YAML
         
         for line in raw.split('\n'):
-            # Skip mermaid diagram blocks completely
-            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
+            # Use regex for more robust matching
+            if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
                 in_mermaid_block = True
                 continue
             if in_mermaid_block:
@@ -2146,8 +2148,10 @@ class HelmHandler(FormatHandler):
         found_yaml_start = False
         
         for line in raw.split('\n'):
-            # Skip mermaid diagram blocks completely
-            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
+            # Use regex for more robust matching
+            if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
                 in_mermaid_block = True
                 continue
             if in_mermaid_block:
