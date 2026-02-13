@@ -898,6 +898,275 @@ class TestDockerfileSanitization:
 # ============================================================================
 
 
+
+# ============================================================================
+# TESTS: HelmHandler
+# ============================================================================
+
+
+class TestHelmHandler:
+    """Tests for HelmHandler with Go template syntax support."""
+
+    def test_helm_handler_detects_go_templates(self):
+        """Test that HelmHandler detects and handles Go template syntax."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        # Helm template with Go template syntax
+        helm_template = """apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.serviceName }}
+spec:
+  selector:
+    app: {{ .Values.appName }}
+  ports:
+    - port: {{ .Values.port }}
+"""
+        
+        result = handler.normalize(helm_template)
+        
+        # Should return a dict with templates section
+        assert isinstance(result, dict)
+        assert "Chart.yaml" in result
+        assert "templates" in result
+        # Templates should be stored as raw text, not parsed as YAML
+        assert len(result["templates"]) > 0
+
+    def test_helm_handler_structured_response_with_templates(self):
+        """Test parsing structured Helm response with Chart.yaml and templates."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        # Structured Helm response with markers
+        structured_helm = """# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+
+# values.yaml
+replicaCount: 3
+image:
+  repository: myapp
+  tag: latest
+
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+"""
+        
+        result = handler.normalize(structured_helm)
+        
+        assert isinstance(result, dict)
+        assert "Chart.yaml" in result
+        assert result["Chart.yaml"]["name"] == "myapp"
+        assert "values.yaml" in result
+        assert result["values.yaml"]["replicaCount"] == 3
+        assert "templates" in result
+
+    def test_helm_handler_multi_document_with_templates_fallback(self):
+        """Test that multi-document parser falls back to template parser on Go syntax."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        # Multi-document YAML with Go templates (would fail normal YAML parsing)
+        multi_doc_with_templates = """---
+apiVersion: v2
+name: test
+version: 1.0.0
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+data:
+  port: {{ .Values.port | default 8080 }}
+"""
+        
+        # Should not crash, should use template fallback
+        result = handler.normalize(multi_doc_with_templates)
+        
+        assert isinstance(result, dict)
+        assert "Chart.yaml" in result
+        assert "templates" in result
+
+    def test_helm_handler_plain_yaml_without_templates(self):
+        """Test that HelmHandler still works for plain YAML without Go templates."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        # Plain Chart.yaml without templates
+        plain_chart = """apiVersion: v2
+name: simple-chart
+description: A simple Helm chart
+version: 1.0.0
+"""
+        
+        result = handler.normalize(plain_chart)
+        
+        assert isinstance(result, dict)
+        assert "Chart.yaml" in result
+        assert result["Chart.yaml"]["name"] == "simple-chart"
+
+
+# ============================================================================
+# TESTS: KubernetesHandler
+# ============================================================================
+
+
+class TestKubernetesHandler:
+    """Tests for KubernetesHandler with improved YAML start detection."""
+
+    def test_kubernetes_handler_recognizes_kind_as_yaml_start(self):
+        """Test that KubernetesHandler recognizes 'kind:' as valid YAML start."""
+        from generator.agents.deploy_agent.deploy_response_handler import KubernetesHandler
+        
+        handler = KubernetesHandler()
+        
+        # K8s YAML starting with kind: (without apiVersion first)
+        yaml_starting_with_kind = """Some explanatory text that should be skipped
+
+kind: Service
+apiVersion: v1
+metadata:
+  name: my-service
+spec:
+  ports:
+    - port: 80
+"""
+        
+        result = handler.normalize(yaml_starting_with_kind)
+        
+        assert isinstance(result, (dict, list))
+        if isinstance(result, dict):
+            assert result["kind"] == "Service"
+        else:
+            assert result[0]["kind"] == "Service"
+
+    def test_kubernetes_handler_recognizes_metadata_as_yaml_start(self):
+        """Test that KubernetesHandler recognizes 'metadata:' as valid YAML start."""
+        from generator.agents.deploy_agent.deploy_response_handler import KubernetesHandler
+        
+        handler = KubernetesHandler()
+        
+        # K8s YAML starting with metadata: (edge case)
+        yaml_starting_with_metadata = """Here's the configuration:
+
+metadata:
+  name: my-resource
+apiVersion: v1
+kind: ConfigMap
+data:
+  key: value
+"""
+        
+        result = handler.normalize(yaml_starting_with_metadata)
+        
+        assert isinstance(result, (dict, list))
+        # Should have parsed the YAML starting from metadata:
+        if isinstance(result, dict):
+            assert "metadata" in result
+
+    def test_kubernetes_handler_multi_document_yaml(self):
+        """Test that KubernetesHandler handles multi-document YAML."""
+        from generator.agents.deploy_agent.deploy_response_handler import KubernetesHandler
+        
+        handler = KubernetesHandler()
+        
+        multi_doc_yaml = """---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-deployment
+spec:
+  replicas: 3
+"""
+        
+        result = handler.normalize(multi_doc_yaml)
+        
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["kind"] == "Service"
+        assert result[1]["kind"] == "Deployment"
+
+
+# ============================================================================
+# TESTS: Markdown Bold Stripping
+# ============================================================================
+
+
+class TestMarkdownBoldStripping:
+    """Tests for markdown bold marker stripping across handlers."""
+
+    def test_sanitize_llm_output_strips_orphaned_bold_markers(self):
+        """Test that _sanitize_llm_output strips orphaned ** markers."""
+        from generator.agents.deploy_agent.deploy_response_handler import _sanitize_llm_output
+        
+        # Content with orphaned ** markers
+        raw_with_orphaned = """apiVersion: v1
+kind: Service
+**metadata:
+  name: test**
+"""
+        
+        result = _sanitize_llm_output(raw_with_orphaned)
+        
+        # Should not contain ** markers
+        assert "**" not in result
+        assert "metadata:" in result
+
+    def test_yaml_handler_strips_orphaned_bold_markers(self):
+        """Test that YAMLHandler strips orphaned ** markers instead of rejecting."""
+        from generator.agents.deploy_agent.deploy_response_handler import YAMLHandler
+        
+        handler = YAMLHandler()
+        
+        # YAML with orphaned ** markers
+        yaml_with_orphaned = """apiVersion: v1
+kind: Pod
+**metadata:
+  name: test-pod
+"""
+        
+        # Should not raise ValueError, should strip ** and parse
+        result = handler.normalize(yaml_with_orphaned)
+        
+        assert isinstance(result, (dict, list))
+        # Verify it parsed successfully
+        if isinstance(result, dict):
+            assert result.get("apiVersion") == "v1"
+
+    def test_sanitize_llm_output_strips_paired_bold_markers(self):
+        """Test that _sanitize_llm_output strips paired **text** markers."""
+        from generator.agents.deploy_agent.deploy_response_handler import _sanitize_llm_output
+        
+        raw_with_paired = """apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    description: "**Important** note"
+"""
+        
+        result = _sanitize_llm_output(raw_with_paired)
+        
+        # Should strip ** but keep the text
+        assert "**" not in result
+        assert "Important" in result
+
+
 class TestKubernetesDefaultTemplate:
     """Tests for kubernetes_default.jinja template."""
 
