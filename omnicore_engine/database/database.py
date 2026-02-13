@@ -69,6 +69,7 @@ def _create_fallback_settings():
         DB_CIRCUIT_THRESHOLD=3,
         DB_CIRCUIT_TIMEOUT=60,
         DB_BATCH_SIZE=100,
+        DEFAULT_AUTO_LEARN_POLICY=True,
     )
 
 
