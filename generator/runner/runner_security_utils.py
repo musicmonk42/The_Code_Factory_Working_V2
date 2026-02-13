@@ -516,7 +516,7 @@ def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) ->
             re.compile(r'\b[A-Za-z0-9_-]{20,}\b'),
             
             # Password in key-value format (case-insensitive)
-            re.compile(r'(password|pwd|pass|secret|token|key)[:=]\s*\S+', re.IGNORECASE),
+            re.compile(r'(password|pwd|pass|secret|token|key)([:=]\s*\S+)', re.IGNORECASE),
             
             # Credit card numbers (basic pattern)
             re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
@@ -527,13 +527,14 @@ def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) ->
 
     if isinstance(data, str):
         result = data
-        for pattern in patterns:
-            # Handle patterns with capture groups (like password patterns)
-            if pattern.groups > 0:
-                # Replace the entire match but preserve the key name
+        # Apply each pattern individually with appropriate replacement
+        for i, pattern in enumerate(patterns):
+            # Pattern index 3 is the password pattern with capture groups
+            if i == 3:
+                # Replace password values but preserve the key name
                 result = pattern.sub(r'\1: [REDACTED]', result)
             else:
-                # Replace the entire match
+                # Replace the entire match for other patterns
                 result = pattern.sub('[REDACTED]', result)
         return result
     elif isinstance(data, dict):
