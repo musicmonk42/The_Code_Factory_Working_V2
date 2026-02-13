@@ -45,7 +45,9 @@ class ScenarioMetric(BaseModel):
         Validates that the range is a list of two floats where the first element is
         less than or equal to the second.
         """
-        if len(v) != 2 or v[0] > v[1]:
+        if not isinstance(v, list) or len(v) != 2:
+            raise ValueError("Range must be a list of two floats")
+        if v[0] > v[1]:
             raise ValueError("Range must be a list of two floats where min <= max")
         return v
 

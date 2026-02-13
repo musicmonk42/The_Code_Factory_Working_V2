@@ -1147,6 +1147,7 @@ class ExplainAudit:
                     )
                     return
 
+                self.entries.append(record)
                 self.buffer.append(record)
                 AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
 
@@ -1317,6 +1318,7 @@ class ExplainAudit:
                     )
                     return
 
+                self.entries.append(record)
                 self.buffer.append(record)
                 AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
 
@@ -1418,8 +1420,6 @@ class ExplainAudit:
 
         try:
             for record in records_to_flush:
-                self.entries.append(record)
-
                 if (
                     self.config.AUDIT_BLOCKCHAIN_ENABLED
                     and WEB3_AVAILABLE
