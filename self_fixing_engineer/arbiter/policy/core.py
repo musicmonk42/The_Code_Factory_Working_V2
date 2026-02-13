@@ -516,8 +516,8 @@ class PolicyEngine:
                     logger.warning(f"Missing config key '{key}', using default: {defaults.get(key)}")
                     try:
                         setattr(config, key, defaults.get(key))
-                    except (AttributeError, TypeError) as e:
-                        # Config may be frozen - log and continue with defaults
+                    except (AttributeError, TypeError, ValueError) as e:
+                        # Config may be frozen Pydantic model - log and continue with defaults
                         logger.debug(f"Could not set default for '{key}' on frozen config: {e}")
             
             if missing_keys:

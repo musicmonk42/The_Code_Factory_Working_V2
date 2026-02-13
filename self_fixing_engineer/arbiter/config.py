@@ -355,7 +355,12 @@ class ArbiterConfig(BaseSettings):
         default="./policies.json"
     )
     POLICY_PAUSE_POLLING_INTERVAL: float = Field(
-        default=5.0
+        default=5.0,
+        description="Interval for policy pause polling in seconds."
+    )
+    DEFAULT_AUTO_LEARN_POLICY: bool = Field(
+        default=True,
+        description="Default policy for auto-learning if not specified in rules."
     )
 
     # --- Audit Settings ---
