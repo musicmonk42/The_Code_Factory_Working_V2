@@ -746,13 +746,41 @@ class AuditLogger:
 
         # e. Run chain verification at startup in production
         if os.environ.get("APP_ENV", "development").lower() == "production":
-            if not verify_audit_chain(self.log_path):
-                logger.critical(
-                    "Audit chain invalid at startup. Operating in degraded mode.",
-                    extra={"context": "startup"},
-                )
-                self.degraded_mode = True
-                # DO NOT call sys.exit(1) - allow system to continue in degraded mode
+            is_valid, failure_index = verify_audit_chain(self.log_path, return_failure_index=True)
+            if not is_valid:
+                # Check if corruption is at entry 0 (first entry) - this suggests a completely corrupted file
+                if failure_index == 0:
+                    logger.warning(
+                        f"Audit chain corrupted at entry 0. This suggests file corruption. "
+                        f"Backing up corrupted file and resetting chain.",
+                        extra={"context": "startup"},
+                    )
+                    # Backup the corrupted file
+                    backup_path = f"{self.log_path}.corrupted.{int(time.time())}"
+                    try:
+                        shutil.move(self.log_path, backup_path)
+                        logger.info(
+                            f"Corrupted audit log backed up to {backup_path}. Starting fresh chain.",
+                            extra={"context": "startup"},
+                        )
+                        self._last_entry_hash = "genesis_hash"
+                        self.degraded_mode = False
+                    except Exception as e:
+                        logger.critical(
+                            f"Failed to backup corrupted audit log: {e}. Operating in degraded mode.",
+                            exc_info=True,
+                            extra={"context": "startup"},
+                        )
+                        self.degraded_mode = True
+                else:
+                    # failure_index > 0 or -1 (unknown) - don't reset, just use degraded mode
+                    failure_msg = f"entry {failure_index}" if failure_index >= 0 else "unknown location"
+                    logger.critical(
+                        f"Audit chain invalid at startup (failure at {failure_msg}). Operating in degraded mode.",
+                        extra={"context": "startup"},
+                    )
+                    self.degraded_mode = True
+                    # DO NOT call sys.exit(1) - allow system to continue in degraded mode
             else:
                 logger.info(
                     "Audit chain verified successfully at startup.",
@@ -761,13 +789,40 @@ class AuditLogger:
                 self.degraded_mode = False
         else:
             # In non-production environments, still verify chain but only log warnings
-            if not verify_audit_chain(self.log_path):
-                logger.warning(
-                    "Audit chain verification failed in non-production environment. "
-                    "This may indicate integrity issues that should be addressed.",
-                    extra={"context": "startup"},
-                )
-                self.degraded_mode = True
+            is_valid, failure_index = verify_audit_chain(self.log_path, return_failure_index=True)
+            if not is_valid:
+                # Also handle corruption at entry 0 in non-production
+                if failure_index == 0:
+                    logger.info(
+                        f"Audit chain corrupted at entry 0 in non-production. "
+                        f"Backing up and resetting chain.",
+                        extra={"context": "startup"},
+                    )
+                    backup_path = f"{self.log_path}.corrupted.{int(time.time())}"
+                    try:
+                        shutil.move(self.log_path, backup_path)
+                        logger.info(
+                            f"Corrupted audit log backed up to {backup_path}. Starting fresh chain.",
+                            extra={"context": "startup"},
+                        )
+                        self._last_entry_hash = "genesis_hash"
+                        self.degraded_mode = False
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to backup corrupted audit log: {e}. Operating in degraded mode.",
+                            exc_info=True,
+                            extra={"context": "startup"},
+                        )
+                        self.degraded_mode = True
+                else:
+                    # failure_index > 0 or -1 (unknown)
+                    failure_msg = f"entry {failure_index}" if failure_index >= 0 else "unknown location"
+                    logger.warning(
+                        f"Audit chain verification failed in non-production environment at {failure_msg}. "
+                        "This may indicate integrity issues that should be addressed.",
+                        extra={"context": "startup"},
+                    )
+                    self.degraded_mode = True
             else:
                 logger.info(
                     "Audit chain verified successfully at startup.",
@@ -1162,14 +1217,23 @@ class AuditLogger:
 
         async with aiofiles.open(filepath, "a", encoding="utf-8") as f:
             with AUDIT_LOCK:
+                # Note: aiofiles doesn't expose a real file descriptor that portalocker can lock
+                # We rely on AUDIT_LOCK for thread safety in async context
+                # For cross-process locking, use the sync version with portalocker
                 try:
-                    portalocker.lock(f.fileno(), portalocker.LOCK_EX)
                     await f.write(json.dumps(entry, sort_keys=True, default=str) + "\n")
                     await f.flush()
-                    loop = asyncio.get_running_loop()
-                    await loop.run_in_executor(None, os.fsync, f.fileno())
-                finally:
-                    portalocker.unlock(f.fileno())
+                    # Get the underlying file descriptor for fsync
+                    # aiofiles wraps the file, so we need to access it properly
+                    if hasattr(f, '_file') and hasattr(f._file, 'fileno'):
+                        loop = asyncio.get_running_loop()
+                        await loop.run_in_executor(None, os.fsync, f._file.fileno())
+                except AttributeError as e:
+                    # If we can't get fileno, just log a warning and continue
+                    logger.warning(
+                        f"Could not fsync file (aiofiles compatibility issue): {e}",
+                        extra=log_context,
+                    )
 
     def _sync_file_write(
         self, filepath: str, entry: Dict[str, Any], log_context: Dict[str, Any]
@@ -1357,10 +1421,22 @@ class AuditLogger:
 # ==============================================================================
 # E. Audit Chain Verification & OpenTelemetry Tracing
 # ==============================================================================
-def verify_audit_chain(log_path: Optional[str] = None) -> bool:
+def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: bool = False):
     """
     Verifies the integrity of the audit log chain.
     This function can be called from the CLI for operational verification.
+    
+    Args:
+        log_path: Path to audit log file. Defaults to config.AUDIT_LOG_PATH.
+        return_failure_index: DEPRECATED. For backward compatibility, if False returns bool.
+                             If True, returns (is_valid, failure_index).
+                             This parameter will be removed in a future version.
+                             Use verify_audit_chain_detailed() for detailed results.
+    
+    Returns:
+        bool or tuple: If return_failure_index is False, returns bool indicating validity (deprecated).
+                      If return_failure_index is True, returns (is_valid, failure_index).
+                      failure_index is the entry number where verification failed, or None if valid.
     """
     path = log_path or config.AUDIT_LOG_PATH
     log_context_base = {"context": "verification"}
@@ -1369,10 +1445,13 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
             f"Audit log file not found at {path}. Chain considered valid (empty).",
             extra=log_context_base,
         )
+        if return_failure_index:
+            return True, None
         return True
 
     last_hash_in_chain = "genesis_hash"
     is_valid = True
+    failure_index = None
 
     global TRACER
     if "TRACER" not in globals():
@@ -1432,6 +1511,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                     extra=log_context,
                                 )
                                 is_valid = False
+                                failure_index = i
                                 span.set_status(
                                     Status(
                                         StatusCode.ERROR, description="Hash mismatch"
@@ -1474,6 +1554,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                         extra=log_context,
                                     )
                                     is_valid = False
+                                    failure_index = i
                                     span.set_status(
                                         Status(
                                             StatusCode.ERROR,
@@ -1495,6 +1576,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                             extra=log_context,
                                         )
                                         is_valid = False
+                                        failure_index = i
                                         span.set_status(
                                             Status(
                                                 StatusCode.ERROR,
@@ -1509,6 +1591,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                             extra=log_context,
                                         )
                                         is_valid = False
+                                        failure_index = i
                                         span.set_status(
                                             Status(
                                                 StatusCode.ERROR,
@@ -1532,6 +1615,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                             extra=log_context,
                                         )
                                         is_valid = False
+                                        failure_index = i
                                         span.set_status(
                                             Status(
                                                 StatusCode.ERROR,
@@ -1549,6 +1633,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                                 extra=log_context,
                             )
                             is_valid = False
+                            failure_index = i
                             span.set_status(
                                 Status(StatusCode.ERROR, description="Corrupted data")
                             )
@@ -1562,6 +1647,7 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
                 extra=log_context_base,
             )
             is_valid = False
+            failure_index = -1  # -1 indicates unknown failure location
 
     if is_valid:
         logger.info("Audit chain successfully verified.", extra=log_context_base)
@@ -1571,6 +1657,8 @@ def verify_audit_chain(log_path: Optional[str] = None) -> bool:
             extra=log_context_base,
         )
 
+    if return_failure_index:
+        return is_valid, failure_index
     return is_valid
 
 
