@@ -225,6 +225,33 @@ def mock_external_sdks():
 
 
 @pytest.fixture
+def ensure_asyncio_not_mocked():
+    """
+    Ensures asyncio primitives are not mocked.
+    This is a defensive fixture to prevent issues with async fixtures
+    that depend on asyncio.Event(), asyncio.create_task(), etc.
+    """
+    # Store original asyncio functions and verify they aren't MagicMock instances
+    original_event = asyncio.Event
+    original_create_task = asyncio.create_task
+    original_sleep = asyncio.sleep
+    
+    # Check before yielding that these are real functions, not mocks
+    from unittest.mock import MagicMock
+    assert not isinstance(original_event, MagicMock), "asyncio.Event is already mocked before test!"
+    assert not isinstance(original_create_task, MagicMock), "asyncio.create_task is already mocked before test!"
+    assert not isinstance(original_sleep, MagicMock), "asyncio.sleep is already mocked before test!"
+    
+    yield
+    
+    # Defensive check to ensure they weren't mocked during the test
+    # This helps catch issues if something tries to mock asyncio
+    assert asyncio.Event is original_event, "asyncio.Event was mocked during test!"
+    assert asyncio.create_task is original_create_task, "asyncio.create_task was mocked during test!"
+    assert asyncio.sleep is original_sleep, "asyncio.sleep was mocked during test!"
+
+
+@pytest.fixture
 def mock_lazy_imports():
     """
     Mocks modules that are lazy-loaded to break circular dependencies.
@@ -285,20 +312,33 @@ def mock_lazy_imports():
 @pytest.fixture
 # FIX: Remove @pytest.mark.asyncio from fixture - marks on fixtures have no effect
 async def started_metrics_exporter(
-    mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry
+    mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry, ensure_asyncio_not_mocked
 ):
     """
     Provides a fully initialized and started MetricsExporter.
     Handles startup and shutdown.
 
     Note: Depends on `clean_prometheus_registry` to ensure it uses the
-    monkeypatched registry.
+    monkeypatched registry. Also depends on `ensure_asyncio_not_mocked` to
+    prevent issues with mocked asyncio primitives.
     """
+    # Ensure we're in an async context with a running event loop
+    # This helps prevent issues with mocked asyncio primitives
+    # Using get_running_loop() instead of get_event_loop() as it's the modern approach
+    # Will raise RuntimeError if no event loop is running
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        raise RuntimeError("No running event loop found. Async fixture requires a running event loop.")
+    
     exporter = m.MetricsExporter(mock_config)
+    
+    # Start the exporter - this creates asyncio.Event() and asyncio.Task
     await exporter.start()
 
     yield exporter, mock_lazy_imports, mock_external_sdks
 
+    # Ensure clean shutdown
     await exporter.shutdown()
 
 
