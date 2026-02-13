@@ -62,6 +62,7 @@ import os
 import threading
 import time
 import uuid
+import yaml as pyyaml
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1852,14 +1853,12 @@ class WorkflowEngine:
                                             if "Chart.yaml" in helm_data:
                                                 chart_content = helm_data["Chart.yaml"]
                                                 if isinstance(chart_content, dict):
-                                                    import yaml as pyyaml
                                                     deploy_files["helm/Chart.yaml"] = pyyaml.dump(chart_content, default_flow_style=False)
                                                 else:
                                                     deploy_files["helm/Chart.yaml"] = str(chart_content)
                                             if "values.yaml" in helm_data:
                                                 values_content = helm_data["values.yaml"]
                                                 if isinstance(values_content, dict):
-                                                    import yaml as pyyaml
                                                     deploy_files["helm/values.yaml"] = pyyaml.dump(values_content, default_flow_style=False)
                                                 else:
                                                     deploy_files["helm/values.yaml"] = str(values_content)
@@ -1896,14 +1895,12 @@ class WorkflowEngine:
                                             if "Chart.yaml" in helm_data:
                                                 chart_content = helm_data["Chart.yaml"]
                                                 if isinstance(chart_content, dict):
-                                                    import yaml as pyyaml
                                                     deploy_files["helm/Chart.yaml"] = pyyaml.dump(chart_content, default_flow_style=False)
                                                 else:
                                                     deploy_files["helm/Chart.yaml"] = str(chart_content)
                                             if "values.yaml" in helm_data:
                                                 values_content = helm_data["values.yaml"]
                                                 if isinstance(values_content, dict):
-                                                    import yaml as pyyaml
                                                     deploy_files["helm/values.yaml"] = pyyaml.dump(values_content, default_flow_style=False)
                                                 else:
                                                     deploy_files["helm/values.yaml"] = str(values_content)
