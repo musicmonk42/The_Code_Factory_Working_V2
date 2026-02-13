@@ -2835,6 +2835,15 @@ class Database:
 
     async def migrate_to_citus(self):
         """Migrates schema to Citus by adding distribution keys."""
+        # Safety guard: Only run if ENABLE_CITUS is explicitly set to "1"
+        enable_citus = os.getenv("ENABLE_CITUS", "0")
+        if enable_citus != "1":
+            logger.debug(
+                "Citus migration skipped: ENABLE_CITUS not set to '1'. "
+                "Using standard PostgreSQL."
+            )
+            return
+        
         async with self.AsyncSessionLocal() as session:
             try:
                 await session.execute(text("CREATE EXTENSION IF NOT EXISTS citus;"))

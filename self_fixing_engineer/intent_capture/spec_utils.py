@@ -155,9 +155,39 @@ except LookupError:
         "NLTK data not found. Attempting to download... This might fail in production containers if not pre-downloaded."
     )
     try:
-        nltk.download("punkt")
-        nltk.download("stopwords")
-        logger.info("NLTK data downloaded successfully.")
+        # Use file locking to prevent race conditions in multi-replica scenarios
+        import fcntl
+        import tempfile
+        
+        lock_file_path = os.path.join(tempfile.gettempdir(), "nltk_spec_utils.lock")
+        with open(lock_file_path, 'w') as lock_file:
+            try:
+                # Try non-blocking lock first
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                
+                # We have the lock, check if data exists (might have been downloaded by another process)
+                try:
+                    nltk.data.find("tokenizers/punkt")
+                    nltk.data.find("corpora/stopwords")
+                    logger.info("NLTK data found after acquiring lock.")
+                except LookupError:
+                    # Proceed with download
+                    nltk.download("punkt")
+                    nltk.download("stopwords")
+                    logger.info("NLTK data downloaded successfully.")
+            except (IOError, OSError) as lock_error:
+                # Lock held by another process - wait and check if data is now available
+                logger.info("Another process is downloading NLTK data, waiting...")
+                import time
+                time.sleep(2)
+                try:
+                    nltk.data.find("tokenizers/punkt")
+                    nltk.data.find("corpora/stopwords")
+                    logger.info("NLTK data found after waiting.")
+                except LookupError:
+                    logger.warning(
+                        "NLTK data still unavailable after waiting. NLP features may be degraded."
+                    )
     except Exception as e:
         logger.error(
             f"Failed to download NLTK data: {e}. Please ensure 'punkt' and 'stopwords' are available.",

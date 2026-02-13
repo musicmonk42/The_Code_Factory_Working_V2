@@ -1333,7 +1333,7 @@ def main(
 
         # Industry-standard health check with exponential backoff
         api_ready_url = (
-            f"http://127.0.0.1:{api_target_port}/health"  # Use root health endpoint
+            f"http://127.0.0.1:{api_target_port}/ready"  # Use readiness endpoint
         )
         ready_timeout = int(os.getenv("API_READINESS_TIMEOUT_SECONDS", 120))
         poll_interval_initial = float(
@@ -1362,7 +1362,7 @@ def main(
                         ) as response:
                             response.raise_for_status()
                             status_json = await response.json()
-                            return status_json.get("status") == "healthy"
+                            return status_json.get("ready") is True
 
                 api_ready = loop.run_until_complete(check_api_readiness())
                 if api_ready:
