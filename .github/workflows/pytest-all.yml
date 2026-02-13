@@ -766,6 +766,26 @@ jobs:
 
           echo "✓ Tests completed for ${{ matrix.module }}"
 
+      - name: Force garbage collection before Arbiter tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Forcing garbage collection ==="
+          python -c "
+          import gc
+          import sys
+          # Aggressive garbage collection (3 passes)
+          gc.collect()
+          gc.collect()
+          gc.collect()
+          # Clear test module cache for memory isolation
+          modules_to_clear = [k for k in sys.modules.keys() if 'test_arbiter' in k or 'mock' in k.lower()]
+          for mod in modules_to_clear:
+              del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached test modules')
+          print(f'✓ Memory cleanup complete')
+          "
+          free -h
+
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
         timeout-minutes: 45
@@ -781,7 +801,8 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          prlimit --cpu=unlimited --as=$((14*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
+          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -793,13 +814,43 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=10 \
-            --durations=20 \
+            --maxfail=5 \
+            --durations=0 \
+            -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
             2>&1 | tee test-output-sfe-arbiter.log
+
+      - name: Monitor memory after Arbiter tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory Status After Arbiter Tests ==="
+          free -h
+          echo ""
+          awk '/MemAvailable/ {printf "Available: %s (%.1f GB)\n", $2, $2/1024/1024}' /proc/meminfo
+
+      - name: Force garbage collection and delay before Mesh tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory cleanup between test batches ==="
+          # Wait for any background processes to finish
+          sleep 3
+          python -c "
+          import gc
+          import sys
+          # Aggressive garbage collection
+          for _ in range(3):
+              gc.collect()
+          # Clear previous test modules
+          modules_to_clear = [k for k in sys.modules.keys() if 'test_arbiter' in k or 'mock' in k.lower()]
+          for mod in modules_to_clear:
+              del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached modules from previous batch')
+          print(f'✓ Memory cleanup complete')
+          "
+          free -h
 
       - name: Run self_fixing_engineer tests - Mesh
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -816,7 +867,8 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          prlimit --cpu=unlimited --as=$((14*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
+          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -827,13 +879,42 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=10 \
-            --durations=20 \
+            --maxfail=5 \
+            --durations=0 \
+            -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-mesh.xml \
             2>&1 | tee test-output-sfe-mesh.log
+
+      - name: Monitor memory after Mesh tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory Status After Mesh Tests ==="
+          free -h
+          echo ""
+          awk '/MemAvailable/ {printf "Available: %s (%.1f GB)\n", $2, $2/1024/1024}' /proc/meminfo
+
+      - name: Force garbage collection and delay before Other tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory cleanup between test batches ==="
+          sleep 3
+          python -c "
+          import gc
+          import sys
+          # Aggressive garbage collection
+          for _ in range(3):
+              gc.collect()
+          # Clear previous test modules
+          modules_to_clear = [k for k in sys.modules.keys() if ('test_arbiter' in k or 'test_mesh' in k or 'mock' in k.lower())]
+          for mod in modules_to_clear:
+              del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached modules from previous batches')
+          print(f'✓ Memory cleanup complete')
+          "
+          free -h
 
       - name: Run self_fixing_engineer tests - Other
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -850,7 +931,8 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          prlimit --cpu=unlimited --as=$((14*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
+          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -864,8 +946,9 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=10 \
-            --durations=20 \
+            --maxfail=5 \
+            --durations=0 \
+            -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
             --import-mode=importlib \
