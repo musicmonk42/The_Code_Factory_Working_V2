@@ -792,6 +792,8 @@ def _sanitize_llm_output(raw_output: str) -> str:
     # FIX Issue 3: Strip markdown bold markers (**text**) which are never valid in YAML/K8s configs
     # This should be done after stripping code blocks but before returning
     raw_output = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw_output)
+    # Also strip orphaned ** markers that don't have a closing pair
+    raw_output = re.sub(r'\*\*', '', raw_output)
     
     return raw_output.strip()
 
@@ -1548,6 +1550,8 @@ class YAMLHandler(FormatHandler):
             
             # Remove markdown bold markers while preserving the text content
             raw = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw)
+            # Also strip orphaned ** markers
+            raw = re.sub(r'\*\*', '', raw)
         
         # Parse YAML using ruamel.yaml for high fidelity
         # FIX 2: Support multi-document YAML with load_all()
@@ -1894,7 +1898,10 @@ class KubernetesHandler(FormatHandler):
             
             # Detect start of actual YAML content
             if not found_yaml_start:
-                if line.strip() == '---' or re.match(r'^\s*apiVersion\s*:', line):
+                # FIX Root Cause 2: Recognize kind: and metadata: as valid YAML start markers
+                # This prevents dropping valid K8s YAML that doesn't start with apiVersion
+                if (line.strip() == '---' or 
+                    re.match(r'^\s*(apiVersion|kind|metadata)\s*:', line)):
                     found_yaml_start = True
                     # Don't skip this line, it's the start of YAML
                 else:
@@ -2029,8 +2036,20 @@ class HelmHandler(FormatHandler):
         Expects either:
         1. A structured response with separate Chart.yaml, values.yaml, templates
         2. A single YAML document that we'll structure appropriately
+        3. Helm templates with Go template syntax ({{ .Values.* }})
         """
         raw = self._sanitize_yaml_response(raw)
+        
+        # FIX Root Cause 1: Check for Go template syntax BEFORE any YAML parsing
+        # Helm templates contain Go/Jinja syntax that is NOT valid YAML
+        has_go_templates = bool(re.search(
+            r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|range\s|if\s|include\s|define\s|template\s)',
+            raw
+        ))
+        
+        if has_go_templates:
+            logger.info("Detected Helm Go template syntax - treating templates as raw text")
+            return self._parse_helm_with_templates(raw)
         
         # Try to parse as structured Helm response
         ru_yaml = YAML()
@@ -2094,8 +2113,21 @@ class HelmHandler(FormatHandler):
                 if doc is not None and isinstance(doc, dict):
                     documents.append(doc)
         except Exception as e:
-            logger.error(f"Failed to parse multi-document Helm YAML: {e}")
-            raise ValueError(f"Failed to parse multi-document YAML: {e}")
+            # FIX Root Cause 1: If parsing fails, check if content has Go templates
+            # If so, use the template parser instead of crashing
+            logger.warning(f"Failed to parse multi-document Helm YAML: {e}")
+            
+            has_go_templates = bool(re.search(
+                r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|range\s|if\s|include\s|define\s|template\s)',
+                raw
+            ))
+            
+            if has_go_templates:
+                logger.info("Detected Go templates in multi-document YAML, using template parser")
+                return self._parse_helm_with_templates(raw)
+            else:
+                # Not a template issue, re-raise as ValueError
+                raise ValueError(f"Failed to parse multi-document YAML: {e}")
         
         # Process documents:
         # - First document with apiVersion/name/version -> Chart.yaml
@@ -2128,6 +2160,82 @@ class HelmHandler(FormatHandler):
                     result["values.yaml"].update(doc)
                 else:
                     result["values.yaml"] = doc
+        
+        # Ensure Chart.yaml exists
+        if result["Chart.yaml"] is None:
+            result["Chart.yaml"] = self._default_chart_yaml()
+        
+        return result
+
+    def _parse_helm_with_templates(self, raw: str) -> Dict[str, Any]:
+        """
+        Parse Helm content containing Go template syntax.
+        
+        When Go templates are detected ({{ .Values.*, etc.), this method:
+        1. Splits content by structured section markers (# Chart.yaml, # values.yaml, etc.)
+        2. Parses Chart.yaml and values.yaml sections as YAML (they usually don't have Go templates)
+        3. Stores template content as raw text strings (don't attempt YAML parsing)
+        4. If no structured sections exist, creates a default Chart.yaml and stores everything as a template
+        
+        Args:
+            raw: Raw Helm content with Go template syntax
+            
+        Returns:
+            Dict with Chart.yaml, values.yaml, and templates sections
+        """
+        result = {
+            "Chart.yaml": None,
+            "values.yaml": {},
+            "templates": {}
+        }
+        
+        # Check if content has structured sections with markers
+        has_structure = bool(re.search(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', raw))
+        
+        if has_structure:
+            # Split by file markers and process each section
+            sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/([\w\-]+\.yaml))', raw)
+            
+            ru_yaml = YAML()
+            current_file = None
+            
+            for i, section in enumerate(sections):
+                if i % 4 == 1:  # File name (Chart.yaml, values.yaml)
+                    current_file = section.strip()
+                elif i % 4 == 2:  # Template path (templates/...)
+                    if section and section.startswith('templates/'):
+                        current_file = section.strip()
+                elif i % 4 == 3:  # Template filename only
+                    # This is captured by the inner group in templates/(...)
+                    continue
+                elif current_file and section.strip():  # File content
+                    try:
+                        if current_file.startswith("templates/"):
+                            # Store template as raw text (don't parse YAML)
+                            result["templates"][current_file] = section.strip()
+                            logger.debug(f"Stored template {current_file} as raw text")
+                        elif current_file == "Chart.yaml":
+                            # Parse Chart.yaml as YAML (usually doesn't have templates)
+                            result["Chart.yaml"] = ru_yaml.load(section.strip())
+                            logger.debug("Parsed Chart.yaml as YAML")
+                        elif current_file == "values.yaml":
+                            # Parse values.yaml as YAML (usually doesn't have templates)
+                            result["values.yaml"] = ru_yaml.load(section.strip())
+                            logger.debug("Parsed values.yaml as YAML")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse {current_file}: {e}, storing as raw text")
+                        if current_file.startswith("templates/"):
+                            result["templates"][current_file] = section.strip()
+                        elif current_file == "Chart.yaml":
+                            # Try to parse without strict YAML
+                            result["Chart.yaml"] = self._default_chart_yaml()
+                        elif current_file == "values.yaml":
+                            # Store as empty dict on failure
+                            result["values.yaml"] = {}
+        else:
+            # No structured sections - treat entire content as a single template
+            logger.info("No structured sections found, storing entire content as template")
+            result["templates"]["templates/deployment.yaml"] = raw
         
         # Ensure Chart.yaml exists
         if result["Chart.yaml"] is None:
