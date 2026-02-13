@@ -2046,8 +2046,12 @@ class HelmHandler(FormatHandler):
         
         # FIX Root Cause 1: Check for Go template syntax BEFORE any YAML parsing
         # Helm templates contain Go/Jinja syntax that is NOT valid YAML
+        # Expanded pattern to catch more Go template variations
         has_go_templates = bool(re.search(
-            r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|range\s|if\s|include\s|define\s|template\s)',
+            r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|\.Capabilities\.|'
+            r'range\s|if\s|else\s|end\s|include\s|define\s|template\s|'
+            r'toYaml\s|nindent\s|default\s|quote\s|printf\s|trimSuffix\s|'
+            r'contains\s|with\s|required\s|lookup\s|tpl\s)',
             raw
         ))
         
@@ -2122,7 +2126,10 @@ class HelmHandler(FormatHandler):
             logger.warning(f"Failed to parse multi-document Helm YAML: {e}")
             
             has_go_templates = bool(re.search(
-                r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|range\s|if\s|include\s|define\s|template\s)',
+                r'\{\{[-\s]*(?:\.Values\.|\.Release\.|\.Chart\.|\.Capabilities\.|'
+                r'range\s|if\s|else\s|end\s|include\s|define\s|template\s|'
+                r'toYaml\s|nindent\s|default\s|quote\s|printf\s|trimSuffix\s|'
+                r'contains\s|with\s|required\s|lookup\s|tpl\s)',
                 raw
             ))
             

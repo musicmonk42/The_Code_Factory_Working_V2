@@ -1101,6 +1101,191 @@ spec:
         assert result[0]["kind"] == "Service"
         assert result[1]["kind"] == "Deployment"
 
+    def test_kubernetes_handler_strips_mermaid_before_yaml(self):
+        """Test that KubernetesHandler properly strips mermaid diagrams before YAML."""
+        from generator.agents.deploy_agent.deploy_response_handler import KubernetesHandler
+        
+        handler = KubernetesHandler()
+        
+        yaml_with_mermaid = """```mermaid
+graph TD;
+    A-->B;
+```
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+spec:
+  ports:
+    - port: 80
+"""
+        
+        result = handler.normalize(yaml_with_mermaid)
+        
+        assert isinstance(result, (dict, list))
+        if isinstance(result, dict):
+            assert result["kind"] == "Service"
+
+
+# ============================================================================
+# TESTS: Helm File Marker Preservation
+# ============================================================================
+
+
+class TestHelmFileMarkerPreservation:
+    """Tests that Helm file markers (# Chart.yaml, etc.) are preserved during sanitization."""
+
+    def test_helm_sanitize_preserves_chart_yaml_marker(self):
+        """Test that # Chart.yaml is preserved by HelmHandler._sanitize_yaml_response."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        raw = """# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+"""
+        result = handler._sanitize_yaml_response(raw)
+        assert "# Chart.yaml" in result
+        assert "apiVersion: v2" in result
+
+    def test_helm_sanitize_preserves_values_yaml_marker(self):
+        """Test that # values.yaml is preserved by HelmHandler._sanitize_yaml_response."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        raw = """# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+
+# values.yaml
+replicaCount: 3
+"""
+        result = handler._sanitize_yaml_response(raw)
+        assert "# Chart.yaml" in result
+        assert "# values.yaml" in result
+
+    def test_helm_sanitize_preserves_template_markers(self):
+        """Test that # templates/*.yaml is preserved by HelmHandler._sanitize_yaml_response."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        raw = """# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+"""
+        result = handler._sanitize_yaml_response(raw)
+        assert "# Chart.yaml" in result
+        assert "# templates/deployment.yaml" in result
+
+    def test_helm_sanitize_strips_markdown_headers(self):
+        """Test that real markdown headers are still stripped by HelmHandler._sanitize_yaml_response."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        raw = """# Deployment Configuration
+## Overview
+# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+"""
+        result = handler._sanitize_yaml_response(raw)
+        # Markdown headers should be stripped
+        assert "# Deployment Configuration" not in result
+        assert "## Overview" not in result
+        # Helm marker should be preserved
+        assert "# Chart.yaml" in result
+
+    def test_helm_handler_go_templates_with_structured_markers(self):
+        """Test that Helm content with both Go templates and structured markers is parsed correctly."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        structured_helm = """# Chart.yaml
+apiVersion: v2
+name: myapp
+version: 0.1.0
+appVersion: "1.0.0"
+
+# values.yaml
+replicaCount: 3
+image:
+  repository: myapp
+  tag: latest
+
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "myapp.fullname" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  template:
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+
+# templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "myapp.fullname" . }}
+spec:
+  ports:
+    - port: {{ .Values.service.port }}
+"""
+        
+        result = handler.normalize(structured_helm)
+        
+        assert isinstance(result, dict)
+        assert "Chart.yaml" in result
+        assert result["Chart.yaml"]["name"] == "myapp"
+        assert result["Chart.yaml"]["apiVersion"] == "v2"
+        assert "values.yaml" in result
+        assert result["values.yaml"]["replicaCount"] == 3
+        assert "templates" in result
+        assert len(result["templates"]) >= 1
+
+    def test_helm_handler_expanded_go_template_detection(self):
+        """Test that expanded Go template patterns are detected."""
+        from generator.agents.deploy_agent.deploy_response_handler import HelmHandler
+        
+        handler = HelmHandler()
+        
+        # Template with toYaml, nindent, default - additional patterns
+        helm_template = """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+spec:
+  template:
+    spec:
+      containers:
+      - name: app
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+"""
+        
+        result = handler.normalize(helm_template)
+        
+        assert isinstance(result, dict)
+        assert "templates" in result
+        assert len(result["templates"]) > 0
+
 
 # ============================================================================
 # TESTS: Markdown Bold Stripping
