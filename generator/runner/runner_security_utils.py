@@ -1048,32 +1048,80 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
         return []
     
     findings = []
+    # Track locations to avoid duplicates (store as list of (start, end) tuples)
+    matched_ranges = []
+    
+    def overlaps_existing(start, end):
+        """
+        Check if a range overlaps with any existing range.
+        Ranges don't overlap if one ends before the other starts.
+        """
+        for existing_start, existing_end in matched_ranges:
+            # Check for overlap: NOT (end before existing_start OR start after existing_end)
+            if not (end <= existing_start or start >= existing_end):
+                return True
+        return False
     
     # Email
-    if re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', content):
-        findings.append({'type': 'email', 'match': 'email_address'})
+    for match in re.finditer(r'\b[\w.+-]+@[\w.-]+\.\w+\b', content):
+        start, end = match.span()
+        if not overlaps_existing(start, end):
+            findings.append({
+                'type': 'email', 
+                'match': 'email_address',
+                'location_start': start,
+                'location_end': end
+            })
+            matched_ranges.append((start, end))
     
     # Phone
-    if re.search(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', content):
-        findings.append({'type': 'phone', 'match': 'phone_number'})
+    for match in re.finditer(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', content):
+        start, end = match.span()
+        if not overlaps_existing(start, end):
+            findings.append({
+                'type': 'phone', 
+                'match': 'phone_number',
+                'location_start': start,
+                'location_end': end
+            })
+            matched_ranges.append((start, end))
     
     # API key/token (20+ chars)
-    api_keys = re.findall(r'\b[A-Za-z0-9_-]{20,}\b', content)
-    for key in api_keys:
+    for match in re.finditer(r'\b[A-Za-z0-9_-]{20,}\b', content):
+        start, end = match.span()
+        key = match.group(0)
         # Skip very long strings that are unlikely to be API keys
-        if len(key) <= 100:
-            findings.append({'type': 'api_key', 'match': key[:10] + '...'})
+        if len(key) <= 100 and not overlaps_existing(start, end):
+            findings.append({
+                'type': 'api_key', 
+                'match': key[:10] + '...' if len(key) > 10 else key,
+                'location_start': start,
+                'location_end': end
+            })
+            matched_ranges.append((start, end))
     
     # Password patterns (require 8+ characters)
-    password_matches = re.findall(r'(password|pwd|pass)[:=]\s*(\S+)', content, re.IGNORECASE)
-    for match in password_matches:
-        # match[1] is the password value
-        if len(match[1]) >= 8:
-            findings.append({'type': 'password', 'match': 'password_field'})
+    for match in re.finditer(r'(password|pwd|pass)[:=]\s*(\S+)', content, re.IGNORECASE):
+        # match.group(2) is the password value
+        if len(match.group(2)) >= 8:
+            start, end = match.span()
+            if not overlaps_existing(start, end):
+                findings.append({
+                    'type': 'password', 
+                    'match': 'password_field',
+                    'location_start': start,
+                    'location_end': end
+                })
+                matched_ranges.append((start, end))
     
     # Also check the legacy SECRET_SCAN_PATTERNS for additional findings
     for pattern in SECRET_SCAN_PATTERNS:
         for match in pattern.finditer(content):
+            start, end = match.span()
+            # Skip if we already found an overlapping match
+            if overlaps_existing(start, end):
+                continue
+                
             # Avoid matching very long non-secret strings
             if (
                 pattern.pattern == r"\b[a-zA-Z0-9/+]{20,}[=]{0,2}\b"
@@ -1086,10 +1134,11 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
                 {
                     "type": "Secret_Regex",
                     "pattern": pattern.pattern,
-                    "location_start": match.start(),
-                    "location_end": match.end(),
+                    "location_start": start,
+                    "location_end": end,
                 }
             )
+            matched_ranges.append((start, end))
     
     return findings
 

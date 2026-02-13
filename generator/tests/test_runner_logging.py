@@ -106,6 +106,7 @@ def clean_history_and_handlers():
     LOG_HISTORY.clear()
 
     loggers_to_clean = [
+        logging.getLogger(),  # Root logger
         logging.getLogger("runner"),
         logging.getLogger("runner.audit"),
         logging.getLogger("runner.action"),
