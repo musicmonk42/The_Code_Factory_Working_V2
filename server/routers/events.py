@@ -371,7 +371,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     try:
                         await websocket.send_json(heartbeat.to_json_dict())
                     except Exception as send_error:
-                        logger.error(f"Failed to send heartbeat: {type(send_error).__name__} - {send_error}")
+                        # FIX Issue 4: WebSocket disconnects during long operations are expected
+                        # Downgrade from ERROR to WARNING to reduce log noise
+                        logger.warning(f"Failed to send heartbeat: {type(send_error).__name__} - {send_error}")
                         break
                     
                 except Exception as e:
