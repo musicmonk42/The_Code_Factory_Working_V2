@@ -1511,8 +1511,10 @@ async def run_full_pipeline(
                 "job_id": job_id,
                 "status": "needs_clarification",
                 "questions": questions,
-                "message": "Pipeline paused — clarification required before code generation. "
-                          f"Please answer questions via POST /generator/{job_id}/clarification/respond",
+                "message": (
+                    "Pipeline paused — clarification required before code generation. "
+                    f"Please answer questions via POST /generator/{job_id}/clarification/respond"
+                ),
                 "clarification_endpoint": f"/generator/{job_id}/clarification/respond",
             },
         )

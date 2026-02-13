@@ -303,8 +303,7 @@ class ArbiterConfig(BaseSettings):
             )
             # Don't try to extract from the dict - go straight to os.getenv
             # The dict likely doesn't contain ENCRYPTION_KEY anyway
-            actual_key = os.getenv("ENCRYPTION_KEY", "")
-            return actual_key
+            return os.getenv("ENCRYPTION_KEY", "")
         
         # For SecretStr, extract the actual string value
         if isinstance(v, SecretStr):
