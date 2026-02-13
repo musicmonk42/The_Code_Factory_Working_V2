@@ -123,7 +123,7 @@ def mock_dependencies():
         patch("generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance),
         patch("generator.clarifier.clarifier.boto3.client", return_value=MagicMock()),
         patch("generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance),
-        patch("generator.clarifier.clarifier.sys.exit"),
+        patch("generator.clarifier.clarifier.sys.exit", side_effect=lambda code=0: None),
         patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
         patch("generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance),
         patch("generator.clarifier.clarifier.get_logger", return_value=mock_logger),
