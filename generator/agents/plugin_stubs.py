@@ -16,7 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 def _fallback_plugin(**kwargs):
-    """Fallback no-op decorator when omnicore_engine.plugin_registry is unavailable."""
+    """No-op decorator used when omnicore_engine.plugin_registry is unavailable.
+
+    Note: Exported as ``plugin`` at the bottom of this module so that consumer
+    code can write ``from generator.agents.plugin_stubs import plugin``.
+    """
 
     def decorator(func):
         return func
@@ -25,7 +29,10 @@ def _fallback_plugin(**kwargs):
 
 
 class _FallbackPlugInKind:
-    """Fallback PlugInKind class when omnicore_engine.plugin_registry is unavailable."""
+    """Stub for PlugInKind used when omnicore_engine.plugin_registry is unavailable.
+
+    Note: Exported as ``PlugInKind`` at the bottom of this module.
+    """
 
     CHECK = "CHECK"
     FIX = "FIX"
