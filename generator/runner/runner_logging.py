@@ -1911,8 +1911,13 @@ def configure_logging_from_config(runner_config: "RunnerConfig"):
 
     
     # Check if root logger already has handlers (meaning server logging is configured)
+    # Ignore pytest's LogCaptureHandler to allow testing
     root_logger = logging.getLogger()
-    server_logging_configured = len(root_logger.handlers) > 0
+    non_test_handlers = [
+        h for h in root_logger.handlers 
+        if h.__class__.__name__ not in ['LogCaptureHandler', 'LogCaptureFixture']
+    ]
+    server_logging_configured = len(non_test_handlers) > 0
     
     if server_logging_configured:
         # Server logging is already configured - only configure audit logger
