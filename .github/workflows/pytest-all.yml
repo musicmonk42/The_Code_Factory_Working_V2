@@ -73,6 +73,9 @@ jobs:
       OPENBLAS_NUM_THREADS: '1'
       MKL_NUM_THREADS: '1'
       OMP_NUM_THREADS: '1'
+      # Memory management settings for malloc to reduce memory fragmentation
+      MALLOC_TRIM_THRESHOLD_: "100000"
+      MALLOC_MMAP_THRESHOLD_: "131072"
 
     steps:
       - name: Checkout code
@@ -1342,9 +1345,24 @@ jobs:
           }
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
+      - name: Check available memory before Batch 3c-3
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory Status ==="
+          free -h
+          AVAILABLE_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+          echo "Available memory: ${AVAILABLE_MB} MB"
+          
+          if [ "$AVAILABLE_MB" -lt 2000 ]; then
+            echo "⚠️ WARNING: Less than 2GB available - clearing caches"
+            sudo sysctl -w vm.drop_caches=3
+            sync
+            free -h
+          fi
+
       - name: Run self_fixing_engineer tests - Batch 3c-3 (Mesh Integration)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 10
+        timeout-minutes: 8
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1353,15 +1371,20 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          
+          # Aggressive memory cleanup before batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+          sync
 
-          prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Set tighter memory limit (12GB instead of 16GB)
+          prlimit --cpu=7200 --as=$((12*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
 
           echo "=== Running Batch 3c-3: Mesh Integration Tests ==="
-          timeout --signal=TERM --kill-after=30s 8m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 6m python -m pytest \
             self_fixing_engineer/tests/test_mesh_integration.py \
-            -v --tb=line -m "not heavy" --timeout=180 --durations=10 \
+            -v --tb=line -m "not heavy" --timeout=120 --durations=10 --maxfail=5 \
             -p no:randomly -p no:cacheprovider --import-mode=importlib \
             2>&1 | tee test-output-sfe-batch3c-3.log || {
             EXIT_CODE=$?
@@ -1384,9 +1407,24 @@ jobs:
           }
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
+      - name: Check available memory before Batch 4
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Memory Status ==="
+          free -h
+          AVAILABLE_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+          echo "Available memory: ${AVAILABLE_MB} MB"
+          
+          if [ "$AVAILABLE_MB" -lt 2000 ]; then
+            echo "⚠️ WARNING: Less than 2GB available - clearing caches"
+            sudo sysctl -w vm.drop_caches=3
+            sync
+            free -h
+          fi
+
       - name: Run self_fixing_engineer tests - Batch 4 (Import Fixer)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        timeout-minutes: 20
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1395,59 +1433,85 @@ jobs:
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          
+          # Aggressive memory cleanup and cache clearing before batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+          sync
 
-          # FIX: Set finite CPU limits instead of unlimited (which often fails)
-          # 2 hours = 7200 seconds should be more than enough
-          prlimit --cpu=7200 --as=$((16*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Set tighter memory limit (12GB instead of 16GB)
+          prlimit --cpu=7200 --as=$((12*1024*1024*1024)) --pid=$$ 2>/dev/null || true
           ulimit -t 7200 2>/dev/null || true
-          ulimit -s 65536 2>/dev/null || true
 
-          echo "=== Resource limits ==="
-          ulimit -a | grep -E "(cpu|time|stack)" || true
-
-          # First, do a quick collection check (30s timeout)
-          echo "=== Pre-flight collection check ==="
-          timeout 30s python -m pytest \
-            self_fixing_engineer/tests/test_self_healing_import_fixer*.py \
-            --collect-only -q 2>&1 | tail -20 || {
-            echo "WARNING: Collection check timed out or failed - proceeding anyway"
-          }
-
-          echo "=== Running Batch 4: Import Fixer Tests ==="
-          timeout --signal=TERM --kill-after=30s 20m python -m pytest \
-            self_fixing_engineer/tests/test_self_healing_import_fixer*.py \
-            -v --tb=line -m "not heavy" --timeout=300 --durations=10 \
-            -p no:randomly -p no:cacheprovider --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch4.log || {
-            EXIT_CODE=$?
-            echo "Batch exited with code $EXIT_CODE"
-            if [ $EXIT_CODE -eq 1 ]; then
-              echo "Some tests failed"
-              tail -50 test-output-sfe-batch4.log
-              exit 1
-            elif [ $EXIT_CODE -eq 5 ]; then
-              echo "No tests collected"
-              exit 0
-            elif [ $EXIT_CODE -eq 152 ]; then
-              echo "ERROR: CPU time limit exceeded (SIGXCPU)"
-              echo "=== Last 100 lines of output ==="
-              tail -100 test-output-sfe-batch4.log || true
-              exit 152
-            elif [ $EXIT_CODE -eq 137 ]; then
-              echo "ERROR: OOM killer"
-              free -h || true
-              tail -100 test-output-sfe-batch4.log || true
-              exit 137
-            else
-              exit $EXIT_CODE
+          echo "=== Running Batch 4: Import Fixer Tests (File-by-File) ==="
+          
+          # Run each test file individually to avoid memory accumulation
+          FAILED_FILES=()
+          for test_file in self_fixing_engineer/tests/test_self_healing_import_fixer*.py; do
+            if [ -f "$test_file" ]; then
+              echo ""
+              echo "=== Running $test_file ==="
+              
+              # Memory cleanup between files
+              python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+              
+              timeout --signal=TERM --kill-after=30s 8m python -m pytest \
+                "$test_file" \
+                -v --tb=line -m "not heavy" --timeout=300 --durations=10 \
+                -p no:randomly -p no:cacheprovider --import-mode=importlib \
+                2>&1 | tee -a test-output-sfe-batch4.log || {
+                EXIT_CODE=$?
+                echo "File $test_file exited with code $EXIT_CODE"
+                if [ $EXIT_CODE -eq 1 ]; then
+                  echo "Some tests failed in $test_file"
+                  FAILED_FILES+=("$test_file")
+                elif [ $EXIT_CODE -eq 5 ]; then
+                  echo "No tests collected in $test_file"
+                elif [ $EXIT_CODE -eq 152 ]; then
+                  echo "ERROR: CPU time limit exceeded (SIGXCPU) in $test_file"
+                  tail -50 test-output-sfe-batch4.log || true
+                  exit 152
+                elif [ $EXIT_CODE -eq 137 ]; then
+                  echo "ERROR: OOM killer in $test_file"
+                  free -h || true
+                  tail -50 test-output-sfe-batch4.log || true
+                  exit 137
+                elif [ $EXIT_CODE -ne 0 ]; then
+                  echo "ERROR: Unexpected exit code $EXIT_CODE in $test_file"
+                  exit $EXIT_CODE
+                fi
+              }
             fi
-          }
+          done
+          
+          # Check if any files had test failures
+          if [ ${#FAILED_FILES[@]} -gt 0 ]; then
+            echo ""
+            echo "=== Summary: ${#FAILED_FILES[@]} file(s) with test failures ==="
+            printf '%s\n' "${FAILED_FILES[@]}"
+            exit 1
+          fi
+          
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
 
-      - name: Run self_fixing_engineer tests - Batch 5 (Simulation)
+      - name: Check available memory before Batch 5
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 25
+        run: |
+          echo "=== Memory Status ==="
+          free -h
+          AVAILABLE_MB=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo)
+          echo "Available memory: ${AVAILABLE_MB} MB"
+          
+          if [ "$AVAILABLE_MB" -lt 2000 ]; then
+            echo "⚠️ WARNING: Less than 2GB available - clearing caches"
+            sudo sysctl -w vm.drop_caches=3
+            sync
+            free -h
+          fi
+
+      - name: Run self_fixing_engineer tests - Batch 5a (Simulation - Part 1)
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1457,24 +1521,28 @@ jobs:
           set -o pipefail
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
 
-          # Enhanced memory cleanup before batch
+          # Aggressive memory cleanup and cache clearing before batch
           python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+          sync
 
-          # Remove CPU time limits to prevent SIGXCPU (exit code 152)
-          prlimit --cpu=unlimited --as=unlimited --pid=$$ 2>/dev/null || true
-          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          # Set tighter memory limit (12GB instead of unlimited)
+          prlimit --cpu=7200 --as=$((12*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          ulimit -t 7200 2>/dev/null || true
 
-          echo "=== Running Batch 5: Simulation Tests ==="
-          timeout --signal=TERM --kill-after=30s 15m python -m pytest \
-            self_fixing_engineer/tests/test_simulation*.py \
+          echo "=== Running Batch 5a: Simulation Tests (Part 1) ==="
+          timeout --signal=TERM --kill-after=30s 12m python -m pytest \
+            self_fixing_engineer/tests/test_simulation_agentic.py \
+            self_fixing_engineer/tests/test_simulation_aws_batch_runner_plugin.py \
+            self_fixing_engineer/tests/test_simulation_cloud_logging_integrations.py \
             -v --tb=line \
             -m "not heavy" \
-            --timeout=300 --durations=10 \
+            --timeout=300 --durations=10 --maxfail=10 \
             -p no:randomly -p no:cacheprovider \
             --import-mode=importlib \
-            2>&1 | tee test-output-sfe-batch5.log || {
+            2>&1 | tee test-output-sfe-batch5a.log || {
             EXIT_CODE=$?
-            echo "Batch exited with code $EXIT_CODE"
+            echo "Batch 5a exited with code $EXIT_CODE"
             if [ $EXIT_CODE -eq 1 ]; then
               echo "Some tests failed"
               exit 1
@@ -1483,35 +1551,89 @@ jobs:
               exit 0
             elif [ $EXIT_CODE -eq 3 ]; then
               echo "ERROR: Pytest internal error (exit code 3) detected"
-              echo "This typically indicates:"
-              echo "  - Collection failure due to import errors"
-              echo "  - Metaclass conflicts"
-              echo "  - Module initialization issues"
-              echo "  - Syntax errors in test files or imported modules"
-              echo ""
-              echo "=== Last 150 lines of test output ==="
-              tail -150 test-output-sfe-batch5.log || true
+              tail -150 test-output-sfe-batch5a.log || true
               exit 3
             elif [ $EXIT_CODE -eq 137 ]; then
               echo "ERROR: Process killed by OOM killer (exit code 137)"
-              echo "Memory consumption exceeded available resources"
-              echo "=== System resources at failure ==="
               free -h || true
-              df -h || true
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-batch5.log || true
+              tail -100 test-output-sfe-batch5a.log || true
               exit 137
             elif [ $EXIT_CODE -eq 124 ]; then
               echo "Timeout signal received (exit 124) - checking if tests completed successfully"
-              # Check if tests actually passed by examining the pytest summary line
-              # Pattern matches "1 passed", "156 passed", etc. but NOT "0 passed"
-              if grep -qE "[1-9][0-9]* passed" test-output-sfe-batch5.log && ! grep -qE "(\bfailed\b|===.*\bfailed\b.*===)" test-output-sfe-batch5.log; then
+              if grep -qE "[1-9][0-9]* passed" test-output-sfe-batch5a.log && ! grep -qE "(\bfailed\b|===.*\bfailed\b.*===)" test-output-sfe-batch5a.log; then
                 echo "✓ All tests passed before timeout signal - treating as SUCCESS"
-                echo "This can occur when cleanup/teardown triggers timeout after tests complete"
                 exit 0
               else
                 echo "✗ Timeout occurred during active test execution"
-                tail -100 test-output-sfe-batch5.log
+                tail -100 test-output-sfe-batch5a.log
+                exit 124
+              fi
+            else
+              echo "Unexpected exit code: $EXIT_CODE"
+              exit $EXIT_CODE
+            fi
+          }
+
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+
+      - name: Run self_fixing_engineer tests - Batch 5b (Simulation - Part 2)
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 15
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          PYTEST_COLLECTING: "1"
+          PYTHONMALLOC: "malloc"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+
+          # Aggressive memory cleanup and cache clearing before batch
+          python -c "import gc; gc.collect(); gc.collect(); gc.collect()"
+          sudo sysctl -w vm.drop_caches=3 2>/dev/null || true
+          sync
+
+          # Set tighter memory limit (12GB instead of unlimited)
+          prlimit --cpu=7200 --as=$((12*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          ulimit -t 7200 2>/dev/null || true
+
+          echo "=== Running Batch 5b: Simulation Tests (Part 2) ==="
+          timeout --signal=TERM --kill-after=30s 12m python -m pytest \
+            self_fixing_engineer/tests/test_simulation*.py \
+            --ignore=self_fixing_engineer/tests/test_simulation_agentic.py \
+            --ignore=self_fixing_engineer/tests/test_simulation_aws_batch_runner_plugin.py \
+            --ignore=self_fixing_engineer/tests/test_simulation_cloud_logging_integrations.py \
+            -v --tb=line \
+            -m "not heavy" \
+            --timeout=300 --durations=10 --maxfail=10 \
+            -p no:randomly -p no:cacheprovider \
+            --import-mode=importlib \
+            2>&1 | tee test-output-sfe-batch5b.log || {
+            EXIT_CODE=$?
+            echo "Batch 5b exited with code $EXIT_CODE"
+            if [ $EXIT_CODE -eq 1 ]; then
+              echo "Some tests failed"
+              exit 1
+            elif [ $EXIT_CODE -eq 5 ]; then
+              echo "No tests collected - treating as warning"
+              exit 0
+            elif [ $EXIT_CODE -eq 3 ]; then
+              echo "ERROR: Pytest internal error (exit code 3) detected"
+              tail -150 test-output-sfe-batch5b.log || true
+              exit 3
+            elif [ $EXIT_CODE -eq 137 ]; then
+              echo "ERROR: Process killed by OOM killer (exit code 137)"
+              free -h || true
+              tail -100 test-output-sfe-batch5b.log || true
+              exit 137
+            elif [ $EXIT_CODE -eq 124 ]; then
+              echo "Timeout signal received (exit 124) - checking if tests completed successfully"
+              if grep -qE "[1-9][0-9]* passed" test-output-sfe-batch5b.log && ! grep -qE "(\bfailed\b|===.*\bfailed\b.*===)" test-output-sfe-batch5b.log; then
+                echo "✓ All tests passed before timeout signal - treating as SUCCESS"
+                exit 0
+              else
+                echo "✗ Timeout occurred during active test execution"
+                tail -100 test-output-sfe-batch5b.log
                 exit 124
               fi
             else
