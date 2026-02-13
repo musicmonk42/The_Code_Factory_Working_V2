@@ -350,17 +350,32 @@ class ArbiterConfig(BaseSettings):
                             f"{key} is not set. LLM functionality for {key.split('_')[0].lower()} will be disabled."
                         )
                         span.set_attribute(f"{key.lower()}_status", "missing")
-                if values.get("ENCRYPTION_KEY"):
+                encryption_key_raw = values.get("ENCRYPTION_KEY")
+                if encryption_key_raw:
                     try:
-                        key = values["ENCRYPTION_KEY"].encode("utf-8")
-                        if (
-                            len(key) != 44
-                        ):  # Fernet keys are 32 bytes, base64-encoded to 44 characters
-                            raise ValueError(
-                                "ENCRYPTION_KEY must be a 32-byte base64-encoded string"
-                            )
-                        Fernet(key)
-                        span.set_attribute("encryption_key_status", "valid")
+                        # Handle different types that pydantic-settings might pass
+                        if isinstance(encryption_key_raw, SecretStr):
+                            key_str = encryption_key_raw.get_secret_value()
+                        elif isinstance(encryption_key_raw, str):
+                            key_str = encryption_key_raw
+                        elif isinstance(encryption_key_raw, dict):
+                            # pydantic-settings sometimes passes the entire env dict
+                            # for complex types - skip validation, let field-level handle it
+                            logger.debug("ENCRYPTION_KEY received dict type in model_validator, skipping pre-validation")
+                            key_str = None
+                        else:
+                            key_str = None
+                        
+                        if key_str:
+                            key = key_str.encode("utf-8")
+                            if (
+                                len(key) != 44
+                            ):  # Fernet keys are 32 bytes, base64-encoded to 44 characters
+                                raise ValueError(
+                                    "ENCRYPTION_KEY must be a 32-byte base64-encoded string"
+                                )
+                            Fernet(key)
+                            span.set_attribute("encryption_key_status", "valid")
                     except Exception as e:
                         CONFIG_ERRORS.labels(error_type="invalid_encryption_key").inc()
                         span.record_exception(e)
