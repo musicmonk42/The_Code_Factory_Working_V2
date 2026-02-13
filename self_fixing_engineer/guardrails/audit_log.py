@@ -773,8 +773,10 @@ class AuditLogger:
                         )
                         self.degraded_mode = True
                 else:
+                    # failure_index > 0 or -1 (unknown) - don't reset, just use degraded mode
+                    failure_msg = f"entry {failure_index}" if failure_index >= 0 else "unknown location"
                     logger.critical(
-                        f"Audit chain invalid at startup (failure at entry {failure_index}). Operating in degraded mode.",
+                        f"Audit chain invalid at startup (failure at {failure_msg}). Operating in degraded mode.",
                         extra={"context": "startup"},
                     )
                     self.degraded_mode = True
@@ -813,8 +815,10 @@ class AuditLogger:
                         )
                         self.degraded_mode = True
                 else:
+                    # failure_index > 0 or -1 (unknown)
+                    failure_msg = f"entry {failure_index}" if failure_index >= 0 else "unknown location"
                     logger.warning(
-                        f"Audit chain verification failed in non-production environment at entry {failure_index}. "
+                        f"Audit chain verification failed in non-production environment at {failure_msg}. "
                         "This may indicate integrity issues that should be addressed.",
                         extra={"context": "startup"},
                     )
@@ -1424,11 +1428,13 @@ def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: boo
     
     Args:
         log_path: Path to audit log file. Defaults to config.AUDIT_LOG_PATH.
-        return_failure_index: If True, returns tuple (is_valid, failure_index).
-                             If False, returns only is_valid (backward compatible).
+        return_failure_index: DEPRECATED. For backward compatibility, if False returns bool.
+                             If True, returns (is_valid, failure_index).
+                             This parameter will be removed in a future version.
+                             Use verify_audit_chain_detailed() for detailed results.
     
     Returns:
-        bool or tuple: If return_failure_index is False, returns bool indicating validity.
+        bool or tuple: If return_failure_index is False, returns bool indicating validity (deprecated).
                       If return_failure_index is True, returns (is_valid, failure_index).
                       failure_index is the entry number where verification failed, or None if valid.
     """
@@ -1641,7 +1647,7 @@ def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: boo
                 extra=log_context_base,
             )
             is_valid = False
-            failure_index = 0  # Unknown failure location
+            failure_index = -1  # -1 indicates unknown failure location
 
     if is_valid:
         logger.info("Audit chain successfully verified.", extra=log_context_base)

@@ -361,7 +361,11 @@ class ArbiterConfig(BaseSettings):
                         elif isinstance(encryption_key_raw, dict):
                             # pydantic-settings sometimes passes the entire env dict
                             # for complex types - skip validation, let field-level handle it
-                            logger.debug("ENCRYPTION_KEY received dict type in model_validator, skipping pre-validation")
+                            logger.warning(
+                                "ENCRYPTION_KEY received dict type in model_validator. "
+                                "Skipping pre-validation - field-level validation will handle type coercion. "
+                                "If this persists, check pydantic-settings configuration."
+                            )
                             key_str = None
                         else:
                             key_str = None
