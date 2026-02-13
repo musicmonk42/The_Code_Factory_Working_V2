@@ -2045,9 +2045,11 @@ def add_package_parent_dirs(base_dir):
         return
     
     # Directories to skip (common non-package directories)
-    skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env', 'tests'}
+    # Note: Not skipping 'tests' to allow test utility packages to be importable
+    skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env'}
     
     added_paths = set()
+    base_path_str = str(base_path.resolve())
     
     # Walk the entire directory tree to find packages
     for root, dirs, files in os.walk(base_path):
@@ -2058,9 +2060,11 @@ def add_package_parent_dirs(base_dir):
         if '__init__.py' in files:
             # Add the parent directory to sys.path
             parent_dir = os.path.dirname(root)
-            if parent_dir not in added_paths and parent_dir not in sys.path:
-                sys.path.insert(0, parent_dir)
-                added_paths.add(parent_dir)
+            # Don't add directories above the base_path to sys.path
+            if parent_dir and parent_dir != base_path_str and parent_dir.startswith(base_path_str):
+                if parent_dir not in added_paths and parent_dir not in sys.path:
+                    sys.path.insert(0, parent_dir)
+                    added_paths.add(parent_dir)
 
 add_package_parent_dirs(code_path)
 

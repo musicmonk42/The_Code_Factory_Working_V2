@@ -1422,7 +1422,8 @@ def test_{file_stem}_syntax_error_documentation():
             # Skip first two parts: "generated" and "<project_name>"
             # e.g., "generated/hello_generator/app/main.py" -> "app/main.py"
             parts = parts[2:]
-            file_path_obj = Path(*parts) if parts else Path(file_path_obj.name)
+            # Handle edge case where only filename remains after stripping
+            file_path_obj = Path(*parts) if len(parts) > 0 else Path(file_path_obj.name)
         
         # Remove .py extension and convert path separators to dots
         # e.g., "app/main.py" -> "app.main", "main.py" -> "main"
