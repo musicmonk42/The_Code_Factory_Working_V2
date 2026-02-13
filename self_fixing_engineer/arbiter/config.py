@@ -332,30 +332,61 @@ class ArbiterConfig(BaseSettings):
     POLICY_CONFIG_FILE: str = Field(default="./policies.json")
 
     # --- PolicyEngine Required Settings ---
-    # These are required by PolicyEngine for initialization
+    # Industry Standards Compliance:
+    # - All fields are required by PolicyEngine for initialization
+    # - Pydantic BaseSettings provides type safety and validation
+    # - Environment variables override defaults (12-factor app methodology)
+    # - Field descriptions enable auto-generated API documentation (OpenAPI)
+    # - Validation constraints prevent misconfigurations and security issues
     POLICY_REFRESH_INTERVAL_SECONDS: float = Field(
-        default=300.0
+        default=300.0,
+        ge=1.0,
+        le=86400.0,
+        description="Policy refresh interval in seconds. Range: 1-86400 seconds (1 second to 1 day)."
     )
-    LLM_PROVIDER: str = Field(default="openai")
-    LLM_MODEL: str = Field(default="gpt-4")
+    LLM_PROVIDER: str = Field(
+        default="openai",
+        description="LLM provider for policy decisions (openai, anthropic, etc.)."
+    )
+    LLM_MODEL: str = Field(
+        default="gpt-4",
+        description="LLM model identifier for policy engine decision-making."
+    )
     DECISION_OPTIMIZER_SETTINGS: Dict[str, Any] = Field(
         default_factory=lambda: {
             "max_iterations": 100,
             "convergence_threshold": 0.01,
             "learning_rate": 0.1
-        }
+        },
+        description="Decision optimizer hyperparameters for policy learning."
     )
     CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL: float = Field(
-        default=0.1
+        default=0.1,
+        ge=0.01,
+        le=10.0,
+        description="Minimum interval between circuit breaker operations in seconds. Range: 0.01-10.0 seconds."
     )
     VALID_DOMAIN_PATTERN: str = Field(
-        default=r"^[a-zA-Z0-9_.-]+$"
+        default=r"^[a-zA-Z0-9_.-]+$",
+        description="Regex pattern for validating domain names in policy rules."
     )
     POLICY_CONFIG_FILE_PATH: str = Field(
-        default="./policies.json"
+        default="./policies.json",
+        description="Path to policy configuration file for rule definitions."
     )
     POLICY_PAUSE_POLLING_INTERVAL: float = Field(
-        default=5.0
+        default=5.0,
+        ge=0.1,
+        le=60.0,
+        description="Interval for policy pause polling in seconds. Range: 0.1-60.0 seconds."
+    )
+    DEFAULT_AUTO_LEARN_POLICY: bool = Field(
+        default=True,
+        description=(
+            "Default policy for auto-learning behavior if not specified in rules. "
+            "When True, PolicyEngine learns from execution patterns and adapts rules. "
+            "Required field for PolicyEngine initialization (defaults to True if not specified)."
+        )
     )
 
     # --- Audit Settings ---

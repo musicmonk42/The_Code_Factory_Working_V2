@@ -516,9 +516,18 @@ class PolicyEngine:
                     logger.warning(f"Missing config key '{key}', using default: {defaults.get(key)}")
                     try:
                         setattr(config, key, defaults.get(key))
-                    except (AttributeError, TypeError) as e:
-                        # Config may be frozen - log and continue with defaults
-                        logger.debug(f"Could not set default for '{key}' on frozen config: {e}")
+                    except (AttributeError, TypeError, ValueError) as e:
+                        # Industry Standard: Graceful degradation pattern
+                        # Pydantic frozen models raise ValueError on setattr attempts
+                        # AttributeError: object lacks __setattr__
+                        # TypeError: __setattr__ signature mismatch
+                        # ValueError: Pydantic frozen model field validation failure
+                        # This ensures PolicyEngine can initialize with sensible defaults
+                        # even when config is immutable (production security hardening)
+                        logger.debug(
+                            f"Could not set default for '{key}' on frozen config: {e}",
+                            extra={"key": key, "error_type": type(e).__name__}
+                        )
             
             if missing_keys:
                 logger.info(f"PolicyEngine initialized with default values for: {missing_keys}")
