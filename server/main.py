@@ -769,6 +769,36 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     else:
         logger.info("Database not configured (DATABASE_URL not set)")
     
+    # FIX Issue 3: Initialize job persistence layer with database connection
+    # NOTE: This creates a separate Database instance specifically for job persistence.
+    # While the database connection test above validates connectivity, it doesn't
+    # maintain a persistent connection. This instance will be used by the persistence
+    # layer for all job storage operations throughout the application lifecycle.
+    logger.info("=" * 80)
+    logger.info("INITIALIZING JOB PERSISTENCE")
+    logger.info("=" * 80)
+    try:
+        from server.persistence import initialize_persistence
+        from omnicore_engine.database.database import Database
+        
+        if database_url:
+            # Initialize database connection for job persistence
+            db = Database(database_url)
+            await db.initialize()
+            initialize_persistence(db)
+            logger.info("✓ Job persistence initialized with database backend")
+            logger.info("✓ Jobs will survive application restarts")
+        else:
+            # Initialize without database (memory-only mode)
+            initialize_persistence(None)
+            logger.warning("⚠ Job persistence in memory-only mode")
+            logger.warning("  Jobs will be lost on restart. Set DATABASE_URL for persistence.")
+    except Exception as e:
+        logger.error(f"Failed to initialize job persistence: {e}", exc_info=True)
+        logger.warning("Continuing without database persistence - jobs will be lost on restart")
+        from server.persistence import initialize_persistence
+        initialize_persistence(None)
+    
     # Start background agent loading (only if routers loaded successfully)
     if routers_ok and get_agent_loader is not None:
         logger.info("=" * 80)
