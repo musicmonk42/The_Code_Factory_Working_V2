@@ -178,7 +178,6 @@ except LookupError:
             except (IOError, OSError) as lock_error:
                 # Lock held by another process - wait and check if data is now available
                 logger.info("Another process is downloading NLTK data, waiting...")
-                import time
                 time.sleep(2)
                 try:
                     nltk.data.find("tokenizers/punkt")
