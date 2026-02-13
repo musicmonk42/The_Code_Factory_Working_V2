@@ -811,189 +811,206 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     # - NIST SP 800-34: Contingency Planning - Automated disaster recovery
     # - SOC 2 Type II CC6.1: Business continuity and disaster recovery
     # - Twelve-Factor App: Disposability - Processes are disposable with graceful shutdown
+    #
+    # FIX: Gate job recovery with distributed lock to prevent duplicate processing
+    # across multiple replicas in Railway deployments
     if db is not None:
         logger.info("=" * 80)
         logger.info("RECOVERING PERSISTED JOBS FROM DATABASE")
         logger.info("=" * 80)
+        
+        # Attempt to acquire distributed lock for job recovery
+        from server.distributed_lock import get_startup_lock
+        recovery_lock = get_startup_lock()
+        lock_acquired = await recovery_lock.acquire(blocking=False)
+        
+        if not lock_acquired:
+            logger.info("⚠ Job recovery skipped - another instance holds the startup lock")
+            logger.info("  This prevents duplicate job recovery across multiple replicas")
+            logger.info("  The instance holding the lock will recover all persisted jobs")
+        else:
+            logger.info("✓ Startup lock acquired - this instance will recover jobs")
+        
         try:
-            from server.persistence import load_job_from_database, save_job_to_database
-            from server.storage import add_job, jobs_db
-            from server.schemas.jobs import Job, JobStatus
-            
-            def _mark_job_as_failed(
-                job: Job,
-                original_status: str,
-                error_message: str,
-                recovery_timestamp: datetime
-            ) -> None:
-                """
-                Helper function to mark a job as FAILED after restart recovery.
+            if lock_acquired:
+                from server.persistence import load_job_from_database, save_job_to_database
+                from server.storage import add_job, jobs_db
+                from server.schemas.jobs import Job, JobStatus
                 
-                Industry Standard: DRY (Don't Repeat Yourself) principle.
-                Extracts common job failure logic to improve maintainability.
-                
-                Args:
-                    job: Job instance to update
-                    original_status: Original job status before restart (RUNNING, PENDING)
-                    error_message: Error message explaining the failure
-                    recovery_timestamp: Timestamp of recovery operation (consistency)
-                """
-                job.status = JobStatus.FAILED
-                job.error = error_message
-                job.updated_at = recovery_timestamp
-                job.completed_at = recovery_timestamp
-                if not job.metadata:
-                    job.metadata = {}
-                job.metadata["restart_recovery"] = True
-                job.metadata["recovery_timestamp"] = recovery_timestamp.isoformat()
-                job.metadata["original_status"] = original_status
-            
-            recovered_count = 0
-            failed_count = 0
-            running_reset_count = 0
-            pending_reset_count = 0
-            
-            # Pagination parameters for enterprise-scale job recovery
-            # Industry Standard: Process in batches to avoid memory exhaustion
-            # Constants extracted for maintainability and configurability
-            JOB_RECOVERY_BATCH_SIZE = 100  # Jobs per batch
-            JOB_RECOVERY_MAX_LIMIT = 10000  # Maximum total jobs to recover per startup
-            
-            batch_size = JOB_RECOVERY_BATCH_SIZE
-            offset = 0
-            total_processed = 0
-            
-            # Capture recovery timestamp once for consistency across all operations
-            # Industry Standard: Use consistent timestamps for related operations
-            recovery_timestamp = datetime.now(timezone.utc)
-            
-            logger.info("Starting paginated job recovery from database...")
-            
-            while True:
-                # Query database for job agent states with pagination
-                # Industry Standard: Always use pagination for potentially large datasets
-                job_states = await db.query_agent_states(
-                    filters={"agent_type": "job_storage"},
-                    limit=batch_size,
-                    offset=offset
-                )
-                
-                if not job_states:
-                    # No more jobs to recover
-                    break
-                
-                logger.debug(f"Processing batch: offset={offset}, count={len(job_states)}")
-                
-                for job_state in job_states:
-                    total_processed += 1
+                def _mark_job_as_failed(
+                    job: Job,
+                    original_status: str,
+                    error_message: str,
+                    recovery_timestamp: datetime
+                ) -> None:
+                    """
+                    Helper function to mark a job as FAILED after restart recovery.
                     
-                    # Extract job_id from agent name (format: "job_{job_id}")
-                    agent_name = job_state.get("id", "")
-                    if not agent_name or not isinstance(agent_name, str) or not agent_name.startswith("job_"):
-                        logger.debug(f"Skipping non-job agent state: {agent_name}")
-                        continue
-                        
-                    job_id = agent_name[4:]  # Remove "job_" prefix
+                    Industry Standard: DRY (Don't Repeat Yourself) principle.
+                    Extracts common job failure logic to improve maintainability.
                     
-                    # Idempotency: Skip if job is already in memory
-                    # Industry Standard: Idempotent operations can be safely retried
-                    if job_id in jobs_db:
-                        logger.debug(f"Job {job_id} already in memory, skipping recovery")
-                        continue
-                    
-                    # Load job from database with full validation
-                    job = await load_job_from_database(job_id)
-                    if job:
-                        # Reset interrupted jobs to FAILED status
-                        # Industry Standard: Mark incomplete work as failed after crash/restart
-                        # NIST SP 800-34: Automated failure detection and recovery
-                        if job.status == JobStatus.RUNNING:
-                            _mark_job_as_failed(
-                                job,
-                                original_status="RUNNING",
-                                error_message="Job interrupted by application restart",
-                                recovery_timestamp=recovery_timestamp
-                            )
-                            running_reset_count += 1
-                            logger.info(
-                                f"Reset RUNNING job {job_id} to FAILED after restart",
-                                extra={"job_id": job_id, "recovery_action": "reset_running"}
-                            )
-                            
-                            # Persist the updated status - ACID transaction guarantee
-                            await save_job_to_database(job)
-                        
-                        elif job.status == JobStatus.PENDING:
-                            # PENDING jobs are also reset to FAILED to avoid stuck jobs
-                            # Industry Standard: Clear all transient states after restart
-                            _mark_job_as_failed(
-                                job,
-                                original_status="PENDING",
-                                error_message="Job pending at restart - marked as failed",
-                                recovery_timestamp=recovery_timestamp
-                            )
-                            pending_reset_count += 1
-                            logger.info(
-                                f"Reset PENDING job {job_id} to FAILED after restart",
-                                extra={"job_id": job_id, "recovery_action": "reset_pending"}
-                            )
-                            await save_job_to_database(job)
-                        
-                        # Add job back to in-memory storage (idempotent)
-                        add_job(job)
-                        recovered_count += 1
-                        logger.debug(
-                            f"Recovered job {job_id} with status {job.status.value}",
-                            extra={"job_id": job_id, "status": job.status.value}
-                        )
-                    else:
-                        failed_count += 1
-                        logger.warning(
-                            f"Failed to recover job {job_id} from database",
-                            extra={"job_id": job_id, "recovery_action": "load_failed"}
-                        )
+                    Args:
+                        job: Job instance to update
+                        original_status: Original job status before restart (RUNNING, PENDING)
+                        error_message: Error message explaining the failure
+                        recovery_timestamp: Timestamp of recovery operation (consistency)
+                    """
+                    job.status = JobStatus.FAILED
+                    job.error = error_message
+                    job.updated_at = recovery_timestamp
+                    job.completed_at = recovery_timestamp
+                    if not job.metadata:
+                        job.metadata = {}
+                    job.metadata["restart_recovery"] = True
+                    job.metadata["recovery_timestamp"] = recovery_timestamp.isoformat()
+                    job.metadata["original_status"] = original_status
                 
-                # Move to next batch
-                offset += batch_size
+                recovered_count = 0
+                failed_count = 0
+                running_reset_count = 0
+                pending_reset_count = 0
                 
-                # Safety check: Prevent infinite loops
-                # Uses configurable limit for easy adjustment
-                if total_processed >= JOB_RECOVERY_MAX_LIMIT:
-                    logger.warning(
-                        f"Job recovery limit reached: {total_processed} jobs processed "
-                        f"(limit: {JOB_RECOVERY_MAX_LIMIT}). "
-                        "Remaining jobs will be recovered on next restart."
+                # Pagination parameters for enterprise-scale job recovery
+                # Industry Standard: Process in batches to avoid memory exhaustion
+                # Constants extracted for maintainability and configurability
+                JOB_RECOVERY_BATCH_SIZE = 100  # Jobs per batch
+                JOB_RECOVERY_MAX_LIMIT = 10000  # Maximum total jobs to recover per startup
+                
+                batch_size = JOB_RECOVERY_BATCH_SIZE
+                offset = 0
+                total_processed = 0
+                
+                # Capture recovery timestamp once for consistency across all operations
+                # Industry Standard: Use consistent timestamps for related operations
+                recovery_timestamp = datetime.now(timezone.utc)
+                
+                logger.info("Starting paginated job recovery from database...")
+                
+                while True:
+                    # Query database for job agent states with pagination
+                    # Industry Standard: Always use pagination for potentially large datasets
+                    job_states = await db.query_agent_states(
+                        filters={"agent_type": "job_storage"},
+                        limit=batch_size,
+                        offset=offset
                     )
-                    break
-            
-            # Log comprehensive recovery statistics
-            # Industry Standard: Observability - Always log operational metrics
-            if recovered_count > 0:
-                logger.info(f"✓ Recovered {recovered_count} jobs from database")
-                if running_reset_count > 0:
-                    logger.info(f"  → Reset {running_reset_count} RUNNING jobs to FAILED")
-                if pending_reset_count > 0:
-                    logger.info(f"  → Reset {pending_reset_count} PENDING jobs to FAILED")
-            else:
-                logger.info("✓ No jobs to recover from database")
-            
-            if failed_count > 0:
-                logger.warning(
-                    f"⚠ Failed to recover {failed_count} jobs",
-                    extra={"failed_count": failed_count, "recovered_count": recovered_count}
-                )
-            
-            logger.info(
-                f"Job recovery complete: {recovered_count} recovered, {failed_count} failed",
-                extra={
-                    "recovered_count": recovered_count,
-                    "failed_count": failed_count,
-                    "running_reset_count": running_reset_count,
-                    "pending_reset_count": pending_reset_count,
-                    "total_processed": total_processed
-                }
-            )
+                    
+                    if not job_states:
+                        # No more jobs to recover
+                        break
+                    
+                    logger.debug(f"Processing batch: offset={offset}, count={len(job_states)}")
+                    
+                    for job_state in job_states:
+                        total_processed += 1
+                        
+                        # Extract job_id from agent name (format: "job_{job_id}")
+                        agent_name = job_state.get("id", "")
+                        if not agent_name or not isinstance(agent_name, str) or not agent_name.startswith("job_"):
+                            logger.debug(f"Skipping non-job agent state: {agent_name}")
+                            continue
+                            
+                        job_id = agent_name[4:]  # Remove "job_" prefix
+                        
+                        # Idempotency: Skip if job is already in memory
+                        # Industry Standard: Idempotent operations can be safely retried
+                        if job_id in jobs_db:
+                            logger.debug(f"Job {job_id} already in memory, skipping recovery")
+                            continue
+                        
+                        # Load job from database with full validation
+                        job = await load_job_from_database(job_id)
+                        if job:
+                            # Reset interrupted jobs to FAILED status
+                            # Industry Standard: Mark incomplete work as failed after crash/restart
+                            # NIST SP 800-34: Automated failure detection and recovery
+                            if job.status == JobStatus.RUNNING:
+                                _mark_job_as_failed(
+                                    job,
+                                    original_status="RUNNING",
+                                    error_message="Job interrupted by application restart",
+                                    recovery_timestamp=recovery_timestamp
+                                )
+                                running_reset_count += 1
+                                logger.info(
+                                    f"Reset RUNNING job {job_id} to FAILED after restart",
+                                    extra={"job_id": job_id, "recovery_action": "reset_running"}
+                                )
+                                
+                                # Persist the updated status - ACID transaction guarantee
+                                await save_job_to_database(job)
+                            
+                            elif job.status == JobStatus.PENDING:
+                                # PENDING jobs are also reset to FAILED to avoid stuck jobs
+                                # Industry Standard: Clear all transient states after restart
+                                _mark_job_as_failed(
+                                    job,
+                                    original_status="PENDING",
+                                    error_message="Job pending at restart - marked as failed",
+                                    recovery_timestamp=recovery_timestamp
+                                )
+                                pending_reset_count += 1
+                                logger.info(
+                                    f"Reset PENDING job {job_id} to FAILED after restart",
+                                    extra={"job_id": job_id, "recovery_action": "reset_pending"}
+                                )
+                                await save_job_to_database(job)
+                            
+                            # Add job back to in-memory storage (idempotent)
+                            add_job(job)
+                            recovered_count += 1
+                            logger.debug(
+                                f"Recovered job {job_id} with status {job.status.value}",
+                                extra={"job_id": job_id, "status": job.status.value}
+                            )
+                        else:
+                            failed_count += 1
+                            logger.warning(
+                                f"Failed to recover job {job_id} from database",
+                                extra={"job_id": job_id, "recovery_action": "load_failed"}
+                            )
+                    
+                    # Move to next batch
+                    offset += batch_size
+                    
+                    # Safety check: Prevent infinite loops
+                    # Uses configurable limit for easy adjustment
+                    if total_processed >= JOB_RECOVERY_MAX_LIMIT:
+                        logger.warning(
+                            f"Job recovery limit reached: {total_processed} jobs processed "
+                            f"(limit: {JOB_RECOVERY_MAX_LIMIT}). "
+                            "Remaining jobs will be recovered on next restart."
+                        )
+                        break
                 
+                # Log comprehensive recovery statistics
+                # Industry Standard: Observability - Always log operational metrics
+                if recovered_count > 0:
+                    logger.info(f"✓ Recovered {recovered_count} jobs from database")
+                    if running_reset_count > 0:
+                        logger.info(f"  → Reset {running_reset_count} RUNNING jobs to FAILED")
+                    if pending_reset_count > 0:
+                        logger.info(f"  → Reset {pending_reset_count} PENDING jobs to FAILED")
+                else:
+                    logger.info("✓ No jobs to recover from database")
+                
+                if failed_count > 0:
+                    logger.warning(
+                        f"⚠ Failed to recover {failed_count} jobs",
+                        extra={"failed_count": failed_count, "recovered_count": recovered_count}
+                    )
+                
+                logger.info(
+                    f"Job recovery complete: {recovered_count} recovered, {failed_count} failed",
+                    extra={
+                        "recovered_count": recovered_count,
+                        "failed_count": failed_count,
+                        "running_reset_count": running_reset_count,
+                        "pending_reset_count": pending_reset_count,
+                        "total_processed": total_processed
+                    }
+                )
+                    
         except Exception as e:
             logger.error(
                 f"Failed to recover jobs from database: {e}",
@@ -1001,6 +1018,11 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 extra={"error_type": type(e).__name__}
             )
             logger.warning("Continuing without job recovery - some jobs may have been lost")
+        finally:
+            # Always release the lock if we acquired it
+            if lock_acquired:
+                await recovery_lock.release()
+                logger.debug("Released startup lock after job recovery")
     
     # Start background agent loading (only if routers loaded successfully)
     if routers_ok and get_agent_loader is not None:
