@@ -42,15 +42,36 @@ class TestMutmutConfigFix:
 class TestConfTestSysPathFix:
     """Test suite for Issue 2: conftest.py sys.path handling for nested packages."""
     
-    def test_conftest_adds_immediate_subdirs_to_syspath(self):
-        """Test that conftest.py adds immediate subdirectories to sys.path."""
+    def test_conftest_adds_package_parent_dirs_to_syspath(self):
+        """Test that conftest.py adds package parent directories to sys.path."""
         # The fix is in runner_core.py which generates conftest.py content
         with open('generator/runner/runner_core.py', 'r') as f:
             runner_core_content = f.read()
         
         # Verify the fix is present in the conftest generation
-        assert 'add_immediate_subdirs' in runner_core_content
-        assert 'Add immediate subdirectories of code/' in runner_core_content or 'immediate subdirectories' in runner_core_content
+        assert 'add_package_parent_dirs' in runner_core_content
+        assert 'parent directories of packages' in runner_core_content or 'parent dirs' in runner_core_content
+    
+    def test_init_files_created_in_setup_phase(self):
+        """Test that __init__.py files are created in setup phase, not in conftest.py."""
+        with open('generator/runner/runner_core.py', 'r') as f:
+            content = f.read()
+        
+        # Verify the new helper method exists
+        assert '_create_init_files_in_subdirs' in content
+        assert 'def _create_init_files_in_subdirs(self, base_dir: Path):' in content
+        
+        # Verify it's called in the setup phase
+        assert 'self._create_init_files_in_subdirs(code_sub_dir)' in content
+        
+        # Verify ensure_init_files is NOT in conftest anymore (moved to setup)
+        # Count occurrences - should be 0 in conftest_content
+        conftest_start = content.find("conftest_content = '''")
+        conftest_end = content.find("'''", conftest_start + 25)  # Find closing '''
+        if conftest_start >= 0 and conftest_end > conftest_start:
+            conftest_content = content[conftest_start:conftest_end]
+            assert 'def ensure_init_files' not in conftest_content, \
+                "ensure_init_files should not be in conftest.py anymore"
     
     def test_conftest_content_structure(self):
         """Test that the generated conftest.py has the correct structure."""
@@ -61,12 +82,10 @@ class TestConfTestSysPathFix:
         assert "conftest_content = '''" in content
         
         # Verify key components are present
-        assert 'def add_immediate_subdirs(base_dir):' in content
-        assert 'def add_package_dirs(base_dir):' in content
-        assert 'def ensure_init_files(base_dir):' in content
+        assert 'def add_package_parent_dirs(base_dir):' in content
         
         # Verify the fix comment is present
-        assert 'FIX Issue 2' in content or 'Issue 2' in content
+        assert 'FIX Issue 1' in content or 'FIX Bug 1' in content
 
 
 class TestYAMLSanitizationMarkdownBoldFix:
@@ -131,7 +150,7 @@ class TestAllFixesIntegration:
         """Verify all three main fixes are present in the code."""
         fixes_found = {
             'mutmut_array_syntax': False,
-            'conftest_subdirs': False,
+            'conftest_init_files_in_setup': False,
             'yaml_bold_sanitization': False,
         }
         
@@ -141,11 +160,12 @@ class TestAllFixesIntegration:
             if 'paths_to_mutate = ["code/"]' in content:
                 fixes_found['mutmut_array_syntax'] = True
         
-        # Check Fix 2: conftest subdirs
+        # Check Fix 2: __init__.py files created in setup phase
         with open('generator/runner/runner_core.py', 'r') as f:
             content = f.read()
-            if 'add_immediate_subdirs' in content:
-                fixes_found['conftest_subdirs'] = True
+            if '_create_init_files_in_subdirs' in content and \
+               'self._create_init_files_in_subdirs(code_sub_dir)' in content:
+                fixes_found['conftest_init_files_in_setup'] = True
         
         # Check Fix 3: YAML bold sanitization
         with open('generator/agents/deploy_agent/deploy_response_handler.py', 'r') as f:
