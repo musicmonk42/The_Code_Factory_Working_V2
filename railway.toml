@@ -9,7 +9,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python server/run.py --host 0.0.0.0 --workers 1 --log-level info"
+startCommand = "python server/run.py --host 0.0.0.0 --log-level info"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -169,9 +169,9 @@ PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
-# Multi-worker mode for production deployment to handle concurrent requests
-# Matches Dockerfile and Procfile worker count for consistency
-# WEB_CONCURRENCY = "1"
+# Worker count controlled via WORKER_COUNT env var (read by server/run.py)
+# server/run.py defaults to 4 if neither WORKER_COUNT nor WEB_CONCURRENCY is set
+# Do NOT pass --workers on the startCommand or it will override this value
 WORKER_COUNT = "4"
 MAX_CONCURRENT_TASKS = "50"
 
