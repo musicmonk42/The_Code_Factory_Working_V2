@@ -359,14 +359,23 @@ class ArbiterConfig(BaseSettings):
                         elif isinstance(encryption_key_raw, str):
                             key_str = encryption_key_raw
                         elif isinstance(encryption_key_raw, dict):
-                            # pydantic-settings sometimes passes the entire env dict
-                            # for complex types - skip validation, let field-level handle it
+                            # pydantic-settings sometimes passes the entire env dict instead of the field value
+                            # Extract the actual ENCRYPTION_KEY from the dict and replace it
                             logger.warning(
                                 "ENCRYPTION_KEY received dict type in model_validator. "
-                                "Skipping pre-validation - field-level validation will handle type coercion. "
-                                "If this persists, check pydantic-settings configuration."
+                                "Extracting actual value from environment dict."
                             )
-                            key_str = None
+                            actual_key = encryption_key_raw.get("ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
+                            if isinstance(actual_key, dict):
+                                # Still a dict (nested issue) - this indicates a deeper configuration issue
+                                logger.error(
+                                    "ENCRYPTION_KEY value is still a dict after extraction. "
+                                    "This indicates a deeper pydantic-settings configuration issue. "
+                                    "Falling back to environment variable directly."
+                                )
+                                actual_key = os.getenv("ENCRYPTION_KEY", "")
+                            values["ENCRYPTION_KEY"] = actual_key
+                            key_str = actual_key if actual_key else None
                         else:
                             key_str = None
                         

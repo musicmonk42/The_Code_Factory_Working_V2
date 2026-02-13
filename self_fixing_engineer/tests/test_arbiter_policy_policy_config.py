@@ -201,6 +201,42 @@ def test_model_validator_enforces_secrets(monkeypatch):
     #         ArbiterConfig()
 
 
+########## Model Validator: Dict ENCRYPTION_KEY Handling ##########
+
+
+def test_encryption_key_dict_handling(monkeypatch):
+    """Tests that the model validator correctly handles dict input for ENCRYPTION_KEY."""
+    # This tests the fix for the bug where pydantic-settings passes the entire env dict
+    # as the value for ENCRYPTION_KEY in mode="before" validators
+    
+    # Set a valid encryption key in the environment
+    valid_key = "8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
+    monkeypatch.setenv("ENCRYPTION_KEY", valid_key)
+    monkeypatch.delenv("APP_ENV", raising=False)  # Not in production mode
+    
+    with patch("redis.asyncio.Redis.from_url"):
+        # Simulate the scenario where pydantic-settings passes a dict
+        # by directly calling the validate_secrets method with dict input
+        from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
+        
+        # Create values dict that simulates pydantic-settings behavior
+        values = {
+            "ENCRYPTION_KEY": {"ENCRYPTION_KEY": valid_key, "REDIS_URL": "redis://localhost"},
+            "REDIS_URL": "redis://localhost"
+        }
+        
+        # Call the validator
+        validated = ArbiterConfig.validate_secrets(values)
+        
+        # Verify that the dict was replaced with the actual string value
+        assert validated["ENCRYPTION_KEY"] == valid_key
+        assert isinstance(validated["ENCRYPTION_KEY"], str)
+        
+        # Now test that instantiation works with this scenario
+        cfg = ArbiterConfig(ENCRYPTION_KEY=valid_key)
+        assert cfg.ENCRYPTION_KEY.get_secret_value() == valid_key
+
+
 ########## Singleton Thread Safety ##########
 
 
