@@ -192,8 +192,8 @@ class TestSubprocessWrapper(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(),
         )
 
-        # subprocess.run is where we control the simulated execution
-        self.subprocess_patcher = patch("runner.process_utils.subprocess.run")
+        # Mock asyncio.create_subprocess_exec to control simulated execution
+        self.subprocess_patcher = patch("runner.process_utils.asyncio.create_subprocess_exec")
 
         # Prevent real sleeps during backoff
         self.sleep_patcher = patch(
@@ -229,11 +229,10 @@ class TestSubprocessWrapper(unittest.IsolatedAsyncioTestCase):
 
     async def test_subprocess_wrapper_success(self):
         # Simulate successful command
-        self.mock_run.return_value = SimpleNamespace(
-            returncode=0,
-            stdout=b"ok\n",
-            stderr=b"",
-        )
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"ok\n", b"")
+        mock_process.returncode = 0
+        self.mock_run.return_value = mock_process
 
         result = await subprocess_wrapper(["echo", "ok"], timeout=5)
 
@@ -247,13 +246,13 @@ class TestSubprocessWrapper(unittest.IsolatedAsyncioTestCase):
         self.mock_errors.labels.assert_not_called()
 
     async def test_subprocess_wrapper_nonzero_exit_marks_failure(self):
-        self.mock_run.return_value = SimpleNamespace(
-            returncode=7,
-            stdout=b"",
-            stderr=b"failure",
-        )
+        # Simulate command with non-zero exit
+        mock_process = AsyncMock()
+        mock_process.communicate.return_value = (b"", b"failure")
+        mock_process.returncode = 7
+        self.mock_run.return_value = mock_process
 
-        result = await subprocess_wrapper(["cmd"], timeout=5)
+        result = await subprocess_wrapper(["false"], timeout=5)
 
         self.assertFalse(result["success"])
         self.assertEqual(result["returncode"], 7)
@@ -261,12 +260,17 @@ class TestSubprocessWrapper(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.mock_errors.labels.called)
 
     async def test_subprocess_wrapper_timeout_raises_timeoutexpired(self):
+        import asyncio as asyncio_module
+        
+        # Mock the process to raise TimeoutError when communicate is called
+        mock_process = AsyncMock()
+        mock_process.communicate.side_effect = asyncio_module.TimeoutError()
+        mock_process.kill = MagicMock()
+        self.mock_run.return_value = mock_process
+
         from subprocess import TimeoutExpired
-
-        self.mock_run.side_effect = TimeoutExpired(cmd="x", timeout=1)
-
         with self.assertRaises(TimeoutExpired):
-            await subprocess_wrapper(["x"], timeout=1)
+            await subprocess_wrapper(["sleep", "10"], timeout=1)
 
 
 class TestParallelSubprocess(unittest.IsolatedAsyncioTestCase):
