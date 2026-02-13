@@ -33,6 +33,8 @@ import re
 import subprocess
 import sys
 import time  # *** FIX: Added missing import ***
+import fcntl  # For file locking to prevent NLTK download race conditions
+import tempfile  # For lock file paths
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -186,9 +188,6 @@ def setup_nltk_data():
                 )
             else:
                 # Use file locking to prevent race conditions in multi-replica scenarios
-                import fcntl
-                import tempfile
-                
                 lock_file_path = os.path.join(tempfile.gettempdir(), f"nltk_{name}.lock")
                 try:
                     # Attempt to acquire exclusive lock with timeout

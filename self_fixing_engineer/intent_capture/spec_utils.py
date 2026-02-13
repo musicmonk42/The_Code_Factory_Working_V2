@@ -9,6 +9,8 @@ import os
 import re
 import time  # For performance metrics
 import uuid
+import fcntl  # For file locking to prevent NLTK download race conditions
+import tempfile  # For lock file paths
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -156,9 +158,6 @@ except LookupError:
     )
     try:
         # Use file locking to prevent race conditions in multi-replica scenarios
-        import fcntl
-        import tempfile
-        
         lock_file_path = os.path.join(tempfile.gettempdir(), "nltk_spec_utils.lock")
         with open(lock_file_path, 'w') as lock_file:
             try:
