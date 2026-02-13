@@ -325,7 +325,7 @@ EXPOSE 8080 9090
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
 # Starts checking after 60 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 3 times before marking unhealthy
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
