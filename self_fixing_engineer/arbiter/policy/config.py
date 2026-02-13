@@ -367,7 +367,12 @@ class ArbiterConfig(BaseSettings):
                             )
                             actual_key = encryption_key_raw.get("ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
                             if isinstance(actual_key, dict):
-                                # Still a dict (nested issue) - fall back to env var directly
+                                # Still a dict (nested issue) - this indicates a deeper configuration issue
+                                logger.error(
+                                    "ENCRYPTION_KEY value is still a dict after extraction. "
+                                    "This indicates a deeper pydantic-settings configuration issue. "
+                                    "Falling back to environment variable directly."
+                                )
                                 actual_key = os.getenv("ENCRYPTION_KEY", "")
                             values["ENCRYPTION_KEY"] = actual_key
                             key_str = actual_key if actual_key else None
