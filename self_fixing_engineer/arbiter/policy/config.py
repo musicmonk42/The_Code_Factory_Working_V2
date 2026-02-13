@@ -303,6 +303,8 @@ class ArbiterConfig(BaseSettings):
             )
             # Don't try to extract from the dict - go straight to os.getenv
             # The dict likely doesn't contain ENCRYPTION_KEY anyway
+            # NOTE: Empty string is acceptable here - production validation happens in model_validator
+            # which checks APP_ENV and raises an error if ENCRYPTION_KEY is missing in production
             return os.getenv("ENCRYPTION_KEY", "")
         
         # For SecretStr, extract the actual string value
@@ -394,6 +396,8 @@ class ArbiterConfig(BaseSettings):
                                 "Falling back to environment variable directly."
                             )
                             # Always go directly to os.getenv - don't trust the dict contents
+                            # NOTE: Empty string is acceptable here if not in production mode
+                            # Production mode check (lines 362-368) ensures ENCRYPTION_KEY is set
                             actual_key = os.getenv("ENCRYPTION_KEY", "")
                             values["ENCRYPTION_KEY"] = actual_key
                             key_str = actual_key if actual_key else None

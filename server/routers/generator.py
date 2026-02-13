@@ -1590,8 +1590,8 @@ async def get_pipeline_status(job_id: str):
     # Otherwise return current job status
     return {
         "job_id": job_id,
-        "status": job.status.value if hasattr(job.status, 'value') else str(job.status),
-        "message": f"Job is {job.status}",
+        "status": job.status.value if isinstance(job.status, JobStatus) else str(job.status),
+        "message": f"Job is {job.status.value if isinstance(job.status, JobStatus) else job.status}",
     }
 
 
