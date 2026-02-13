@@ -193,6 +193,7 @@ class GeneratorAgentState(AgentState):
     test_results: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     deployment_config: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     docs: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    custom_attributes: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "generator_agent_state",
