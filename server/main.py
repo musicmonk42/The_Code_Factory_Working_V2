@@ -778,7 +778,8 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("INITIALIZING JOB PERSISTENCE")
     logger.info("=" * 80)
     
-    # Keep db reference for job recovery
+    # Initialize database reference for job recovery
+    # Will be set to Database instance if available, None otherwise
     db = None
     
     try:
@@ -802,7 +803,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.warning("Continuing without database persistence - jobs will be lost on restart")
         from server.persistence import initialize_persistence
         initialize_persistence(None)
-        db = None
+        # db remains None if initialization fails
     
     # FIX Issue 3: Recover persisted jobs from database on startup
     # Industry Standards Compliance:
@@ -854,7 +855,11 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             
             # Pagination parameters for enterprise-scale job recovery
             # Industry Standard: Process in batches to avoid memory exhaustion
-            batch_size = 100
+            # Constants extracted for maintainability and configurability
+            JOB_RECOVERY_BATCH_SIZE = 100  # Jobs per batch
+            JOB_RECOVERY_MAX_LIMIT = 10000  # Maximum total jobs to recover per startup
+            
+            batch_size = JOB_RECOVERY_BATCH_SIZE
             offset = 0
             total_processed = 0
             
@@ -952,9 +957,11 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 offset += batch_size
                 
                 # Safety check: Prevent infinite loops
-                if total_processed >= 10000:
+                # Uses configurable limit for easy adjustment
+                if total_processed >= JOB_RECOVERY_MAX_LIMIT:
                     logger.warning(
-                        f"Job recovery limit reached: {total_processed} jobs processed. "
+                        f"Job recovery limit reached: {total_processed} jobs processed "
+                        f"(limit: {JOB_RECOVERY_MAX_LIMIT}). "
                         "Remaining jobs will be recovered on next restart."
                     )
                     break

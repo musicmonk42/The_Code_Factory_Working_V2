@@ -383,9 +383,9 @@ class ArbiterConfig(BaseSettings):
     DEFAULT_AUTO_LEARN_POLICY: bool = Field(
         default=True,
         description=(
-            "Default policy for auto-learning if not specified in rules. "
-            "When True, PolicyEngine learns from execution patterns. "
-            "Required for PolicyEngine initialization."
+            "Default policy for auto-learning behavior if not specified in rules. "
+            "When True, PolicyEngine learns from execution patterns and adapts rules. "
+            "Required field for PolicyEngine initialization (defaults to True if not specified)."
         )
     )
 
