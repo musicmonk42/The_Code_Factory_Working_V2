@@ -225,6 +225,29 @@ def mock_external_sdks():
 
 
 @pytest.fixture
+def ensure_asyncio_not_mocked():
+    """
+    Ensures asyncio primitives are not mocked.
+    This is a defensive fixture to prevent issues with async fixtures
+    that depend on asyncio.Event(), asyncio.create_task(), etc.
+    """
+    import asyncio as asyncio_real
+    
+    # Store original asyncio functions to verify they aren't replaced
+    original_event = asyncio_real.Event
+    original_create_task = asyncio_real.create_task
+    original_sleep = asyncio_real.sleep
+    
+    yield
+    
+    # Defensive check to ensure they weren't mocked during the test
+    # This helps catch issues early if something tries to mock asyncio
+    assert asyncio_real.Event is original_event, "asyncio.Event was mocked!"
+    assert asyncio_real.create_task is original_create_task, "asyncio.create_task was mocked!"
+    assert asyncio_real.sleep is original_sleep, "asyncio.sleep was mocked!"
+
+
+@pytest.fixture
 def mock_lazy_imports():
     """
     Mocks modules that are lazy-loaded to break circular dependencies.
@@ -285,20 +308,29 @@ def mock_lazy_imports():
 @pytest.fixture
 # FIX: Remove @pytest.mark.asyncio from fixture - marks on fixtures have no effect
 async def started_metrics_exporter(
-    mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry
+    mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry, ensure_asyncio_not_mocked
 ):
     """
     Provides a fully initialized and started MetricsExporter.
     Handles startup and shutdown.
 
     Note: Depends on `clean_prometheus_registry` to ensure it uses the
-    monkeypatched registry.
+    monkeypatched registry. Also depends on `ensure_asyncio_not_mocked` to
+    prevent issues with mocked asyncio primitives.
     """
+    # Ensure we're in an async context with a running event loop
+    # This helps prevent issues with mocked asyncio primitives
+    loop = asyncio.get_event_loop()
+    assert loop.is_running(), "Event loop must be running for async fixture"
+    
     exporter = m.MetricsExporter(mock_config)
+    
+    # Start the exporter - this creates asyncio.Event() and asyncio.Task
     await exporter.start()
 
     yield exporter, mock_lazy_imports, mock_external_sdks
 
+    # Ensure clean shutdown
     await exporter.shutdown()
 
 
