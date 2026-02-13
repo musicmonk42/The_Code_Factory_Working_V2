@@ -4,6 +4,8 @@
 Job management endpoints.
 
 Handles job lifecycle: creation, listing, viewing, status, and progress tracking.
+
+FIX Issue 3: Jobs are now persisted to database to survive application restarts.
 """
 
 import asyncio
@@ -34,6 +36,7 @@ from server.schemas import (
 from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
+from server.persistence import save_job_to_database, load_job_from_database
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +129,8 @@ async def create_job(
 
     **Returns:**
     - Job object with unique ID and initial status
+    
+    **FIX Issue 3:** Jobs are now persisted to database immediately upon creation.
     """
     job_id = str(uuid4())
     now = datetime.utcnow()
@@ -141,8 +146,16 @@ async def create_job(
         metadata=request.metadata or {},
     )
 
+    # Add to in-memory storage
     add_job(job)
-    logger.info(f"Created job {job_id}")
+    
+    # FIX Issue 3: Persist to database to survive restarts
+    try:
+        await save_job_to_database(job)
+        logger.info(f"Created job {job_id} and persisted to database")
+    except Exception as e:
+        logger.error(f"Failed to persist job {job_id} to database: {e}")
+        # Continue even if database save fails - job is still in memory
     
     # Emit job.created event to message bus in background (fire-and-forget)
     if not os.environ.get("SKIP_BACKGROUND_TASKS"):
@@ -221,11 +234,24 @@ async def get_job(job_id: str) -> Job:
 
     **Errors:**
     - 404: Job not found
+    
+    **FIX Issue 3:** Now checks database if job not found in memory.
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    # First check in-memory storage
+    if job_id in jobs_db:
+        return jobs_db[job_id]
+    
+    # FIX Issue 3: Fallback to database if not in memory
+    logger.debug(f"Job {job_id} not in memory, checking database")
+    job = await load_job_from_database(job_id)
+    
+    if job is not None:
+        # Restore to in-memory cache for faster subsequent access
+        add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+        return job
 
-    return jobs_db[job_id]
+    raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
 @router.get("/{job_id}/progress", response_model=JobProgress)
@@ -250,11 +276,23 @@ async def get_job_progress(
 
     **Errors:**
     - 404: Job not found
+    
+    **FIX Issue 3:** Now checks database if job not found in memory.
     """
+    # First check in-memory storage
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+        # FIX Issue 3: Fallback to database if not in memory
+        logger.debug(f"Job {job_id} not in memory for progress check, checking database")
+        job = await load_job_from_database(job_id)
+        
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        # Restore to in-memory cache
+        add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+    else:
+        job = jobs_db[job_id]
 
     # Determine stage statuses based on job status
     is_completed = job.status == JobStatus.COMPLETED
@@ -392,11 +430,23 @@ async def cancel_job_post(job_id: str) -> SuccessResponse:
     **Errors:**
     - 404: Job not found
     - 400: Job cannot be cancelled (already completed/failed)
+    
+    **FIX Issue 3:** Now checks database if job not found in memory.
     """
+    # First check in-memory storage
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+        # FIX Issue 3: Fallback to database if not in memory
+        logger.debug(f"Job {job_id} not in memory for cancel, checking database")
+        job = await load_job_from_database(job_id)
+        
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        # Restore to in-memory cache
+        add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+    else:
+        job = jobs_db[job_id]
 
     if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
         raise HTTPException(
@@ -406,6 +456,12 @@ async def cancel_job_post(job_id: str) -> SuccessResponse:
 
     job.status = JobStatus.CANCELLED
     job.updated_at = datetime.utcnow()
+    
+    # Update in database
+    try:
+        await save_job_to_database(job)
+    except Exception as e:
+        logger.error(f"Failed to update cancelled job {job_id} in database: {e}")
 
     logger.info(f"Cancelled job {job_id}")
 
@@ -431,12 +487,18 @@ async def delete_job(job_id: str) -> SuccessResponse:
 
     **Errors:**
     - 404: Job not found
+    
+    **FIX Issue 3:** Now checks database and deletes from both memory and database.
     """
+    # First check in-memory storage
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    _ = jobs_db[job_id]  # Verify job exists before deletion
-
+        # FIX Issue 3: Fallback to database if not in memory
+        logger.debug(f"Job {job_id} not in memory for delete, checking database")
+        job = await load_job_from_database(job_id)
+        
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
     # Delete job files if they exist
     import shutil
     from pathlib import Path
@@ -449,8 +511,17 @@ async def delete_job(job_id: str) -> SuccessResponse:
         except Exception as e:
             logger.error(f"Error deleting job files for {job_id}: {e}")
 
-    # Remove from database
-    del jobs_db[job_id]
+    # Remove from in-memory database
+    if job_id in jobs_db:
+        del jobs_db[job_id]
+    
+    # FIX Issue 3: Delete from persistent database
+    from server.persistence import delete_job_from_database
+    try:
+        await delete_job_from_database(job_id)
+        logger.info(f"Deleted job {job_id} from database")
+    except Exception as e:
+        logger.error(f"Failed to delete job {job_id} from database: {e}")
 
     logger.info(f"Deleted job {job_id}")
 
@@ -477,16 +548,28 @@ async def download_job_files(job_id: str):
     **Errors:**
     - 404: Job not found or no files available
     - 400: Job not completed yet
+    
+    **FIX Issue 3:** Now checks database if job not found in memory.
     """
     from fastapi.responses import FileResponse
     from pathlib import Path
     import zipfile
     import tempfile
 
+    # First check in-memory storage
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+        # FIX Issue 3: Fallback to database if not in memory
+        logger.debug(f"Job {job_id} not in memory for download, checking database")
+        job = await load_job_from_database(job_id)
+        
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        # Restore to in-memory cache
+        add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+    else:
+        job = jobs_db[job_id]
 
     if job.status != JobStatus.COMPLETED:
         raise HTTPException(
@@ -625,11 +708,23 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
       "download_url": "/api/jobs/abc123/download"
     }
     ```
+    
+    **FIX Issue 3:** Now checks database if job not found in memory.
     """
+    # First check in-memory storage
     if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+        # FIX Issue 3: Fallback to database if not in memory
+        logger.debug(f"Job {job_id} not in memory for files list, checking database")
+        job = await load_job_from_database(job_id)
+        
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+        
+        # Restore to in-memory cache
+        add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+    else:
+        job = jobs_db[job_id]
     job_dir = Path(f"./uploads/{job_id}")
     
     logger.info(f"[FileDiscovery] Listing files for job {job_id}, status={job.status}, dir={job_dir}")
