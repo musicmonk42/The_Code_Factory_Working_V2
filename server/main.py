@@ -811,7 +811,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     # - NIST SP 800-34: Contingency Planning - Automated disaster recovery
     # - SOC 2 Type II CC6.1: Business continuity and disaster recovery
     # - Twelve-Factor App: Disposability - Processes are disposable with graceful shutdown
-    # 
+    #
     # FIX: Gate job recovery with distributed lock to prevent duplicate processing
     # across multiple replicas in Railway deployments
     if db is not None:
@@ -1018,6 +1018,11 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 extra={"error_type": type(e).__name__}
             )
             logger.warning("Continuing without job recovery - some jobs may have been lost")
+        finally:
+            # Always release the lock if we acquired it
+            if lock_acquired:
+                await recovery_lock.release()
+                logger.debug("Released startup lock after job recovery")
     
     # Start background agent loading (only if routers loaded successfully)
     if routers_ok and get_agent_loader is not None:
