@@ -124,6 +124,7 @@ def mock_dependencies():
         patch("generator.clarifier.clarifier.boto3.client", return_value=MagicMock()),
         patch("generator.clarifier.clarifier.Fernet", return_value=mock_fernet_instance),
         patch("generator.clarifier.clarifier.sys.exit", side_effect=lambda code=0: None),
+        patch("generator.clarifier.clarifier_prompt.sys.exit", side_effect=lambda code=0: None),
         patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
         patch("generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance),
         patch("generator.clarifier.clarifier.get_logger", return_value=mock_logger),
@@ -466,6 +467,10 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
                     "inferred_constraints": ["constraint_inferred"],
                 }
             ),
+        ), patch.object(
+            self.RequirementsUpdater,
+            "self_test",
+            AsyncMock(return_value=True),
         ):
 
             updater = self.RequirementsUpdater()
@@ -660,6 +665,10 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
             AsyncMock(
                 return_value={"inferred_features": [], "inferred_constraints": []}
             ),
+        ), patch.object(
+            self.RequirementsUpdater,
+            "self_test",
+            AsyncMock(return_value=True),
         ):
 
             updater = self.RequirementsUpdater()
