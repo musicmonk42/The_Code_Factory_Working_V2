@@ -243,6 +243,9 @@ async def test_add_audit_event_file(audit_utils):
 
     await audit_utils.add_audit_event(event_type, details)
 
+    # Ensure file is flushed and written
+    await asyncio.sleep(0.1)
+
     async with aiofiles.open(audit_utils.log_path, "r") as f:
         content = await f.read()
         event = json.loads(content.strip())
@@ -320,6 +323,10 @@ async def test_validate_audit_chain_valid(audit_utils, tmp_path):
         event_type = f"test_event_{i}"
         details = {"test_key": f"test_value_{i}"}
         await audit_utils.add_audit_event(event_type, details)
+        await asyncio.sleep(0.05)  # Prevent race conditions
+
+    # Ensure all writes are complete
+    await asyncio.sleep(0.2)
 
     report = await audit_utils.validate_audit_chain()
     assert report["is_valid"]

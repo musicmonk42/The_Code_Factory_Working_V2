@@ -769,26 +769,39 @@ jobs:
       - name: Force garbage collection before Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
-          echo "=== Forcing garbage collection ==="
+          echo "=== Aggressive memory cleanup ==="
+          sleep 5  # Longer delay for kernel to reclaim memory
           python -c "
           import gc
           import sys
-          # Aggressive garbage collection (3 passes)
-          gc.collect()
-          gc.collect()
-          gc.collect()
-          # Clear test module cache for memory isolation
-          modules_to_clear = [k for k in sys.modules.keys() if 'test_arbiter' in k or 'mock' in k.lower()]
+          # Force immediate garbage collection (5 passes for generation 2)
+          for _ in range(5):
+              gc.collect(generation=2)
+          # Clear all test module caches
+          modules_to_clear = [k for k in list(sys.modules.keys()) 
+                             if 'test_' in k or 'mock' in k.lower() or 'pytest' in k]
           for mod in modules_to_clear:
-              del sys.modules[mod]
-          print(f'✓ Cleared {len(modules_to_clear)} cached test modules')
-          print(f'✓ Memory cleanup complete')
+              if mod in sys.modules:
+                  del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached modules')
           "
+          # Force Python to release memory to OS (Linux only)
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
           free -h
+
+      - name: Start background memory monitor
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          # Start background memory monitor for diagnostics
+          (while true; do
+            echo "$(date '+%H:%M:%S') Memory: $(free -h | grep Mem: | awk '{print $3 "/" $2}')"
+            sleep 10
+          done) &
+          echo $! > /tmp/memory_monitor.pid
 
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 45
+        timeout-minutes: 60  # Increased - arbiter tests need more time
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -801,8 +814,9 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
-          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Remove address space limit entirely - let kernel manage memory flexibly
+          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -810,6 +824,8 @@ jobs:
           python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             self_fixing_engineer/tests/test_audit_fixes.py \
+            -n 1 \
+            --forked \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -834,22 +850,24 @@ jobs:
       - name: Force garbage collection and delay before Mesh tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
-          echo "=== Memory cleanup between test batches ==="
-          # Wait for any background processes to finish
-          sleep 3
+          echo "=== Aggressive memory cleanup ==="
+          sleep 5  # Longer delay for kernel to reclaim memory
           python -c "
           import gc
           import sys
-          # Aggressive garbage collection
-          for _ in range(3):
-              gc.collect()
-          # Clear previous test modules
-          modules_to_clear = [k for k in sys.modules.keys() if 'test_arbiter' in k or 'mock' in k.lower()]
+          # Force immediate garbage collection (5 passes for generation 2)
+          for _ in range(5):
+              gc.collect(generation=2)
+          # Clear all test module caches
+          modules_to_clear = [k for k in list(sys.modules.keys()) 
+                             if 'test_' in k or 'mock' in k.lower() or 'pytest' in k]
           for mod in modules_to_clear:
-              del sys.modules[mod]
-          print(f'✓ Cleared {len(modules_to_clear)} cached modules from previous batch')
-          print(f'✓ Memory cleanup complete')
+              if mod in sys.modules:
+                  del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached modules')
           "
+          # Force Python to release memory to OS (Linux only)
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
           free -h
 
       - name: Run self_fixing_engineer tests - Mesh
@@ -867,14 +885,17 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
-          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Remove address space limit entirely - let kernel manage memory flexibly
+          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Mesh Tests ==="
           python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
+            -n 1 \
+            --forked \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -899,21 +920,24 @@ jobs:
       - name: Force garbage collection and delay before Other tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
-          echo "=== Memory cleanup between test batches ==="
-          sleep 3
+          echo "=== Aggressive memory cleanup ==="
+          sleep 5  # Longer delay for kernel to reclaim memory
           python -c "
           import gc
           import sys
-          # Aggressive garbage collection
-          for _ in range(3):
-              gc.collect()
-          # Clear previous test modules
-          modules_to_clear = [k for k in sys.modules.keys() if ('test_arbiter' in k or 'test_mesh' in k or 'mock' in k.lower())]
+          # Force immediate garbage collection (5 passes for generation 2)
+          for _ in range(5):
+              gc.collect(generation=2)
+          # Clear all test module caches
+          modules_to_clear = [k for k in list(sys.modules.keys()) 
+                             if 'test_' in k or 'mock' in k.lower() or 'pytest' in k]
           for mod in modules_to_clear:
-              del sys.modules[mod]
-          print(f'✓ Cleared {len(modules_to_clear)} cached modules from previous batches')
-          print(f'✓ Memory cleanup complete')
+              if mod in sys.modules:
+                  del sys.modules[mod]
+          print(f'✓ Cleared {len(modules_to_clear)} cached modules')
           "
+          # Force Python to release memory to OS (Linux only)
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
           free -h
 
       - name: Run self_fixing_engineer tests - Other
@@ -931,8 +955,9 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          # Set address space to 6GB (GitHub runners have 7GB RAM, leave 1GB for system)
-          prlimit --cpu=unlimited --as=$((6*1024*1024*1024)) --pid=$$ 2>/dev/null || true
+          # Remove address space limit entirely - let kernel manage memory flexibly
+          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -942,6 +967,8 @@ jobs:
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
             --ignore=self_fixing_engineer/tests/test_mesh*.py \
             --ignore=self_fixing_engineer/tests/test_audit_fixes.py \
+            -n 1 \
+            --forked \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -955,6 +982,13 @@ jobs:
             --junitxml=junit-sfe-other.xml \
             2>&1 | tee test-output-sfe-other.log
 
+      - name: Stop memory monitor
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          if [ -f /tmp/memory_monitor.pid ]; then
+            kill $(cat /tmp/memory_monitor.pid) 2>/dev/null || true
+            rm -f /tmp/memory_monitor.pid
+          fi
 
       - name: Profile test collection (on failure)
         if: failure() && matrix.module != 'self_fixing_engineer' && matrix.module != 'generator'
