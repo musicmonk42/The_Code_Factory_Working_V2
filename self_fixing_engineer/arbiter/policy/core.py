@@ -495,6 +495,7 @@ class PolicyEngine:
                 "VALID_DOMAIN_PATTERN",
                 "POLICY_CONFIG_FILE_PATH",
                 "POLICY_PAUSE_POLLING_INTERVAL",
+                "DEFAULT_AUTO_LEARN_POLICY",
             ]
             # FIX: Provide default values for missing config keys instead of failing
             defaults = {
@@ -506,6 +507,7 @@ class PolicyEngine:
                 "VALID_DOMAIN_PATTERN": r"^[a-zA-Z0-9_.-]+$",
                 "POLICY_CONFIG_FILE_PATH": os.path.abspath("./policies.json"),
                 "POLICY_PAUSE_POLLING_INTERVAL": 5.0,
+                "DEFAULT_AUTO_LEARN_POLICY": True,
             }
             missing_keys = []
             for key in required_config_keys:

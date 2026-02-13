@@ -46,6 +46,8 @@ def _create_fallback_settings():
         ENCRYPTION_KEY_BYTES=b"",  # Uppercase version for consistent access
         API_HOST="0.0.0.0",
         API_PORT=8000,
+        # FIX: Add DEFAULT_AUTO_LEARN_POLICY for PolicyEngine initialization
+        DEFAULT_AUTO_LEARN_POLICY=True,
     )
 
 

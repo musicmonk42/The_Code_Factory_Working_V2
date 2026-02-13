@@ -73,6 +73,8 @@ def _create_fallback_settings():
         API_PORT=8000,
         # FIX: Add PLUGINS_ENABLED for plugin system compatibility
         PLUGINS_ENABLED=True,
+        # FIX: Add DEFAULT_AUTO_LEARN_POLICY for PolicyEngine initialization
+        DEFAULT_AUTO_LEARN_POLICY=True,
     )
 
 

@@ -24,6 +24,8 @@ def _create_fallback_settings():
         LOG_LEVEL="INFO",
         database_path="sqlite:///./omnicore.db",
         DB_PATH="sqlite:///./omnicore.db",
+        # FIX: Add DEFAULT_AUTO_LEARN_POLICY for PolicyEngine initialization
+        DEFAULT_AUTO_LEARN_POLICY=True,
     )
 
 

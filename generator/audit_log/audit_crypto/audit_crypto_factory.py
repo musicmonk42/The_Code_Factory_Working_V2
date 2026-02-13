@@ -311,7 +311,8 @@ def _is_test_or_dev_mode() -> bool:
     audit_log_dev_mode = os.getenv("AUDIT_LOG_DEV_MODE", "").strip().lower()
     if audit_log_dev_mode in ("true", "1", "yes"):
         return True
-    if os.getenv("PYTEST_CURRENT_TEST"):
+    # FIX: Treat empty string as NOT dev mode, only truthy values trigger dev mode
+    if os.getenv("PYTEST_CURRENT_TEST", "").strip():
         return True
     if os.getenv("RUNNING_TESTS", "").lower() == "true":
         return True

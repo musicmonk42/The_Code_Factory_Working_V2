@@ -93,6 +93,8 @@ def _create_fallback_settings():
         REDIS_URL="redis://localhost:6379/0",
         DB_RETRY_ATTEMPTS=3,
         DB_RETRY_DELAY=0.1,
+        # FIX: Add DEFAULT_AUTO_LEARN_POLICY for PolicyEngine initialization
+        DEFAULT_AUTO_LEARN_POLICY=True,
     )
 
 
