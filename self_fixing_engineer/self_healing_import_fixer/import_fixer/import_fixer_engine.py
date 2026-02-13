@@ -856,7 +856,7 @@ class ImportFixerEngine:
         try:
             # Try to parse the code to detect syntax errors
             try:
-                ast.parse(code)
+                tree = ast.parse(code)
             except SyntaxError as e:
                 self.logger.warning(f"Syntax error in code: {e}")
                 return {
@@ -866,25 +866,133 @@ class ImportFixerEngine:
                     "message": f"Syntax error detected: {e}",
                 }
 
-            # Analyze imports - for now, just validate the code
-            # A more sophisticated implementation would detect and fix import issues
-            lines = code.split("\n")
-            new_lines = []
+            # Common stdlib modules to check for
+            STDLIB_MODULES = {
+                'time', 'os', 'sys', 'json', 're', 'math', 'datetime', 'typing',
+                'collections', 'pathlib', 'logging', 'hashlib', 'uuid', 'base64',
+                'functools', 'itertools', 'copy', 'io', 'subprocess', 'tempfile',
+                'shutil', 'random', 'string', 'pickle', 'csv', 'urllib', 'http',
+                'email', 'inspect', 'warnings', 'asyncio', 'threading', 'multiprocessing'
+            }
+            
+            # FastAPI-specific names commonly used
+            FASTAPI_NAMES = {
+                'Request', 'Response', 'HTTPException', 'Depends', 'Header',
+                'Query', 'Path', 'Body', 'Cookie', 'File', 'UploadFile',
+                'Form', 'status', 'WebSocket', 'BackgroundTasks'
+            }
 
-            for line in lines:
-                # Check for import patterns
-                import_match = re.match(
-                    r"^(\s*)(from\s+[\w.]+\s+import\s+.+|import\s+[\w., ]+)\s*$", line
-                )
+            # Walk AST to find all used names
+            used_names = set()
+            for node in ast.walk(tree):
+                # Check for attribute access like time.time(), os.path.join()
+                if isinstance(node, ast.Attribute):
+                    if isinstance(node.value, ast.Name):
+                        used_names.add(node.value.id)
+                # Check for direct name usage (includes type hints)
+                elif isinstance(node, ast.Name):
+                    used_names.add(node.id)
 
-                if import_match:
-                    # Import line detected - pass through as-is for now
-                    # Future enhancement: analyze and fix import issues
-                    new_lines.append(line)
+            # Collect currently imported names
+            imported_names = set()
+            from_imports = {}  # Map module -> set of imported names
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imported_names.add(alias.asname if alias.asname else alias.name.split('.')[0])
+                elif isinstance(node, ast.ImportFrom):
+                    module = node.module or ''
+                    if module not in from_imports:
+                        from_imports[module] = set()
+                    for alias in node.names:
+                        name = alias.asname if alias.asname else alias.name
+                        imported_names.add(name)
+                        from_imports[module].add(alias.name)
+
+            # Find missing stdlib imports
+            missing_stdlib = set()
+            for name in used_names:
+                if name in STDLIB_MODULES and name not in imported_names:
+                    missing_stdlib.add(name)
+
+            # Find missing FastAPI imports
+            missing_fastapi = set()
+            for name in used_names:
+                if name in FASTAPI_NAMES and name not in imported_names:
+                    missing_fastapi.add(name)
+
+            if not missing_stdlib and not missing_fastapi:
+                # No missing imports detected
+                return {
+                    "fixed_code": code,
+                    "fixes_applied": [],
+                    "status": "success",
+                    "message": "No missing imports detected.",
+                }
+
+            # Build fixed code by inserting missing imports
+            lines = code.split('\n')
+            
+            # Find the position to insert new imports (after existing imports or at top)
+            insert_pos = 0
+            last_import_pos = -1
+            
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith('import ') or stripped.startswith('from '):
+                    last_import_pos = i
+                elif stripped and not stripped.startswith('#'):
+                    # First non-import, non-comment line
+                    if last_import_pos == -1:
+                        insert_pos = i
+                    else:
+                        insert_pos = last_import_pos + 1
+                    break
+            else:
+                # All lines are imports or comments/blank
+                insert_pos = len(lines)
+
+            # Build new import lines
+            new_imports = []
+            
+            # Add missing stdlib imports
+            for module in sorted(missing_stdlib):
+                new_imports.append(f'import {module}')
+                fixes_applied.append(f"Added missing import: import {module}")
+                self.logger.info(f"Adding missing import: import {module}")
+
+            # Handle FastAPI imports
+            if missing_fastapi:
+                # Check if there's already a "from fastapi import" line
+                fastapi_import_line_idx = None
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('from fastapi import'):
+                        fastapi_import_line_idx = i
+                        break
+
+                if fastapi_import_line_idx is not None:
+                    # Extend existing import
+                    existing_line = lines[fastapi_import_line_idx]
+                    # Parse what's already imported
+                    match = re.match(r'from fastapi import (.+)', existing_line)
+                    if match:
+                        existing_imports = {name.strip() for name in match.group(1).split(',') if name.strip()}
+                        all_imports = existing_imports | missing_fastapi
+                        lines[fastapi_import_line_idx] = f'from fastapi import {", ".join(sorted(all_imports))}'
+                        fixes_applied.append(f"Extended fastapi import with: {', '.join(sorted(missing_fastapi))}")
+                        self.logger.info(f"Extended fastapi import with: {', '.join(sorted(missing_fastapi))}")
                 else:
-                    new_lines.append(line)
+                    # Add new fastapi import
+                    new_imports.append(f'from fastapi import {", ".join(sorted(missing_fastapi))}')
+                    fixes_applied.append(f"Added missing FastAPI imports: {', '.join(sorted(missing_fastapi))}")
+                    self.logger.info(f"Adding FastAPI imports: {', '.join(sorted(missing_fastapi))}")
 
-            fixed_code = "\n".join(new_lines)
+            # Insert new imports at the appropriate position
+            if new_imports:
+                lines[insert_pos:insert_pos] = new_imports
+
+            fixed_code = '\n'.join(lines)
 
             if dry_run:
                 self.logger.info("Dry run completed - no changes applied.")
@@ -899,7 +1007,7 @@ class ImportFixerEngine:
                 "fixed_code": fixed_code,
                 "fixes_applied": fixes_applied,
                 "status": "success",
-                "message": "Import analysis completed.",
+                "message": f"Import fixing completed. Applied {len(fixes_applied)} fixes.",
             }
 
         except Exception as e:
