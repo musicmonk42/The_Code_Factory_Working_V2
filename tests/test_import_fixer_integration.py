@@ -36,15 +36,23 @@ class TestImportFixerIntegration:
         assert "fixer = ImportFixerEngine()" in content, \
             "ImportFixerEngine should be instantiated"
         
-        # Verify files are being fixed
-        assert "if filename.endswith('.py')" in content, \
+        # Verify files are being fixed (check for the improved logic)
+        assert "if not filename.endswith('.py')" in content or "filename.endswith('.py')" in content, \
             "Should check for Python files"
-        assert "fixer.fix_code(content)" in content, \
+        assert "fixer.fix_code(content" in content, \
             "Should call fix_code on file content"
         
         # Verify logging is present
         assert "[CODEGEN] Auto-fixed imports" in content, \
             "Should log when imports are auto-fixed"
+        
+        # Verify industry-standard error handling
+        assert "try:" in content and "except" in content, \
+            "Should have proper error handling"
+        
+        # Verify summary logging for observability
+        assert "Import auto-fix summary" in content or "files_fixed" in content, \
+            "Should have summary logging for observability"
 
     def test_retry_filter_includes_import_errors(self):
         """Verify the retry filter includes import errors as retriable."""

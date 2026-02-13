@@ -215,3 +215,121 @@ def get_timestamp():
         
         assert result["status"] == "success"
         assert "import re" in result["fixed_code"]
+
+    def test_empty_code(self):
+        """Test that empty code is handled gracefully."""
+        result = self.fixer.fix_code("")
+        
+        assert result["status"] == "success"
+        assert result["fixed_code"] == ""
+        assert len(result["fixes_applied"]) == 0
+
+    def test_whitespace_only_code(self):
+        """Test that whitespace-only code is handled gracefully."""
+        result = self.fixer.fix_code("   \n  \n  ")
+        
+        assert result["status"] == "success"
+        assert len(result["fixes_applied"]) == 0
+
+    def test_invalid_input_type(self):
+        """Test that non-string input is handled gracefully."""
+        result = self.fixer.fix_code(None)
+        
+        assert result["status"] == "error"
+        assert "Invalid input" in result["message"]
+
+    def test_code_with_module_docstring(self):
+        """Test that imports are inserted after module docstring."""
+        code = '''"""Module docstring."""
+
+def f():
+    return time.time()
+'''
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        fixed = result["fixed_code"]
+        
+        # Docstring should come first
+        assert fixed.index('"""Module docstring."""') < fixed.index('import time')
+        # Import should come before function
+        assert fixed.index('import time') < fixed.index('def f()')
+
+    def test_code_with_multiline_docstring(self):
+        """Test handling of multi-line module docstrings."""
+        code = '''"""
+Module docstring
+with multiple lines.
+"""
+
+def f():
+    return os.getcwd()
+'''
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        assert "import os" in result["fixed_code"]
+        # Docstring should still be present
+        assert '"""' in result["fixed_code"]
+
+    def test_complex_attribute_access(self):
+        """Test detection of chained attribute access."""
+        code = """def get_path():
+    return os.path.join('a', 'b')
+"""
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        assert "import os" in result["fixed_code"]
+
+    def test_multiple_fastapi_imports_at_once(self):
+        """Test adding multiple FastAPI imports when none exist."""
+        code = """app = FastAPI()
+
+@app.get("/")
+def root(request: Request, response: Response):
+    raise HTTPException(status_code=404)
+"""
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        fixed = result["fixed_code"]
+        
+        # Should have a from fastapi import line with all three
+        assert "from fastapi import" in fixed
+        assert "FastAPI" in fixed
+        assert "Request" in fixed
+        assert "Response" in fixed
+        assert "HTTPException" in fixed
+
+    def test_dry_run_mode(self):
+        """Test that dry_run mode doesn't modify code."""
+        code = """def f():
+    return time.time()
+"""
+        result = self.fixer.fix_code(code, dry_run=True)
+        
+        assert result["status"] == "success"
+        assert result["fixed_code"] == code  # Original unchanged
+        assert len(result["fixes_applied"]) > 0  # But fixes were detected
+        assert "Dry run" in result["message"]
+
+    def test_logging_module(self):
+        """Test fixing missing logging module import."""
+        code = """def log_message():
+    logging.info('test')
+"""
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        assert "import logging" in result["fixed_code"]
+
+    def test_uuid_module(self):
+        """Test fixing missing uuid module import."""
+        code = """def gen_id():
+    return uuid.uuid4()
+"""
+        result = self.fixer.fix_code(code)
+        
+        assert result["status"] == "success"
+        assert "import uuid" in result["fixed_code"]

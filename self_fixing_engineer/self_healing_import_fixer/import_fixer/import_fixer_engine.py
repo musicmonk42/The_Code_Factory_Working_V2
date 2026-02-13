@@ -842,31 +842,82 @@ class ImportFixerEngine:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Fix import errors in the provided Python code.
+        Fix import errors in the provided Python code using AST analysis.
+        
+        This method performs static analysis of Python code to detect missing imports
+        and automatically adds them. It handles:
+        - Standard library module imports (time, os, json, etc.)
+        - FastAPI-specific imports (Request, Response, HTTPException, etc.)
+        - Proper insertion positioning (after existing imports or module docstrings)
+        - Extending existing from...import statements when appropriate
+        
+        The implementation uses Python's ast module for reliable parsing and avoids
+        false positives by only checking names that are actually used in the code.
 
         This is the main entry point used when the engine is registered
         as a plugin in the PluginRegistry.
 
         Args:
-            code: The Python source code to fix.
-            file_path: Optional path to the source file (for context).
-            project_root: Optional root directory of the project.
+            code: The Python source code to fix. Must be valid UTF-8 encoded text.
+            file_path: Optional path to the source file (for context and logging).
+            project_root: Optional root directory of the project (currently unused,
+                         reserved for future enhancements).
             dry_run: If True, report what would be fixed without applying changes.
-            **kwargs: Additional parameters for the fixing process.
+                    Useful for testing and validation.
+            **kwargs: Additional parameters for the fixing process (reserved for
+                     future enhancements).
 
         Returns:
             A dictionary containing:
-                - 'fixed_code': The fixed Python code (or original if no fixes).
-                - 'fixes_applied': List of fixes that were applied.
+                - 'fixed_code': The fixed Python code (or original if no fixes or error).
+                - 'fixes_applied': List of human-readable descriptions of fixes applied.
                 - 'status': 'success' or 'error'.
-                - 'message': Human-readable status message.
+                - 'message': Human-readable status message describing the result.
+                
+        Raises:
+            No exceptions are raised. All errors are caught and returned in the result
+            dictionary with status='error'. This design ensures the pipeline continues
+            even if import fixing fails.
+            
+        Examples:
+            >>> fixer = ImportFixerEngine()
+            >>> code = "def f(): return time.time()"
+            >>> result = fixer.fix_code(code)
+            >>> result['status']
+            'success'
+            >>> 'import time' in result['fixed_code']
+            True
+            
+        Security:
+            - Only analyzes code structure, never executes it
+            - Returns original code unchanged if parsing fails
+            - No file system access (all operations in-memory)
+            - Safe for untrusted input (within Python syntax constraints)
         """
+        # Input validation
+        if not isinstance(code, str):
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Invalid input: code must be a string, got {type(code).__name__}",
+            }
+        
+        if not code.strip():
+            # Empty code is valid but nothing to fix
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "success",
+                "message": "Empty code, nothing to fix.",
+            }
+        
         self.logger.info(
             f"ImportFixerEngine.fix_code called (dry_run={dry_run}, "
-            f"file_path={file_path})"
+            f"file_path={file_path}, code_length={len(code)})"
         )
 
-        fixes_applied = []
+        fixes_applied: List[str] = []
         fixed_code = code
 
         try:
@@ -1029,13 +1080,43 @@ class ImportFixerEngine:
                 "message": f"Import fixing completed. Applied {len(fixes_applied)} fixes.",
             }
 
-        except Exception as e:
-            self.logger.error(f"Error during import fixing: {e}", exc_info=True)
+        except SyntaxError as e:
+            # This should be caught earlier, but handle it here as a safety net
+            self.logger.warning(
+                f"Syntax error in code during import fixing: {e}",
+                extra={"file_path": file_path, "error": str(e)}
+            )
             return {
                 "fixed_code": code,
                 "fixes_applied": [],
                 "status": "error",
-                "message": f"Error during import fixing: {e}",
+                "message": f"Syntax error detected: {e}",
+            }
+        except (ValueError, IndexError, KeyError) as e:
+            # Handle specific errors that might occur during import manipulation
+            self.logger.error(
+                f"Error manipulating imports: {e}",
+                exc_info=True,
+                extra={"file_path": file_path, "error_type": type(e).__name__}
+            )
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Error manipulating imports: {type(e).__name__}: {e}",
+            }
+        except Exception as e:
+            # Catch-all for unexpected errors - ensures pipeline never crashes
+            self.logger.error(
+                f"Unexpected error during import fixing: {e}",
+                exc_info=True,
+                extra={"file_path": file_path, "error_type": type(e).__name__}
+            )
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Unexpected error during import fixing: {type(e).__name__}: {e}",
             }
 
     async def fix_code_async(

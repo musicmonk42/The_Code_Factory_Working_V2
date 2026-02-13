@@ -1833,31 +1833,98 @@ class OmniCoreService:
                     extra={"job_id": job_id, "files": list(result.keys())}
                 )
                 
-                # Auto-fix missing imports before materialization
+                # Auto-fix missing imports before materialization (Industry standard: fail-safe design)
+                # This prevents common LLM errors like using time.time() without import time
+                # Reference: Production incident job c296ae46-fafa-4adf-a81c-be1dbfe01f1c
                 try:
                     from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+                    
                     fixer = ImportFixerEngine()
                     fixed_count = 0
+                    error_count = 0
+                    total_fixes = 0
+                    
+                    # Process each Python file in the result
                     for filename, content in list(result.items()):
-                        if filename.endswith('.py') and isinstance(content, str):
-                            fix_result = fixer.fix_code(content)
-                            if fix_result["status"] == "success" and fix_result["fixed_code"] != content:
+                        # Only process Python files with string content
+                        if not filename.endswith('.py') or not isinstance(content, str):
+                            continue
+                        
+                        # Skip empty files
+                        if not content.strip():
+                            continue
+                        
+                        try:
+                            fix_result = fixer.fix_code(content, file_path=filename)
+                            
+                            if fix_result["status"] == "error":
+                                # Log the error but continue processing other files
+                                error_count += 1
+                                logger.warning(
+                                    f"[CODEGEN] Failed to auto-fix imports in {filename}: {fix_result['message']}",
+                                    extra={"job_id": job_id, "filename": filename, "error": fix_result["message"]}
+                                )
+                                continue
+                            
+                            # Check if any fixes were applied
+                            if fix_result["fixed_code"] != content and fix_result["fixes_applied"]:
                                 result[filename] = fix_result["fixed_code"]
                                 fixed_count += 1
-                                fixes_applied = fix_result.get("fixes_applied", [])
+                                total_fixes += len(fix_result["fixes_applied"])
+                                fixes_applied = fix_result["fixes_applied"]
+                                
                                 logger.info(
                                     f"[CODEGEN] Auto-fixed imports in {filename}: {', '.join(fixes_applied)}",
-                                    extra={"job_id": job_id, "filename": filename, "fixes": fixes_applied}
+                                    extra={
+                                        "job_id": job_id,
+                                        "filename": filename,
+                                        "fixes": fixes_applied,
+                                        "fix_count": len(fixes_applied)
+                                    }
                                 )
+                        except Exception as file_err:
+                            # Handle per-file errors without breaking the entire batch
+                            error_count += 1
+                            logger.warning(
+                                f"[CODEGEN] Exception while fixing imports in {filename}: {file_err}",
+                                exc_info=True,
+                                extra={"job_id": job_id, "filename": filename, "error": str(file_err)}
+                            )
+                    
+                    # Summary logging for observability
                     if fixed_count > 0:
                         logger.info(
-                            f"[CODEGEN] Auto-fixed imports in {fixed_count} file(s)",
-                            extra={"job_id": job_id, "fixed_count": fixed_count}
+                            f"[CODEGEN] Import auto-fix summary: {fixed_count} file(s) fixed with {total_fixes} total fix(es)",
+                            extra={
+                                "job_id": job_id,
+                                "files_fixed": fixed_count,
+                                "total_fixes": total_fixes,
+                                "errors": error_count
+                            }
                         )
-                except Exception as e:
+                    elif error_count > 0:
+                        logger.warning(
+                            f"[CODEGEN] Import auto-fix completed with {error_count} error(s), no files fixed",
+                            extra={"job_id": job_id, "error_count": error_count}
+                        )
+                    else:
+                        logger.debug(
+                            f"[CODEGEN] Import auto-fix completed: no missing imports detected",
+                            extra={"job_id": job_id}
+                        )
+                        
+                except ImportError as import_err:
+                    # ImportFixerEngine module not available - log but continue
                     logger.warning(
-                        f"[CODEGEN] Import auto-fix skipped: {e}",
-                        extra={"job_id": job_id, "error": str(e)}
+                        f"[CODEGEN] Import auto-fix unavailable: {import_err}",
+                        extra={"job_id": job_id, "error": str(import_err)}
+                    )
+                except Exception as e:
+                    # Unexpected error in import fixing system - log with full context but continue
+                    logger.error(
+                        f"[CODEGEN] Import auto-fix system error: {e}",
+                        exc_info=True,
+                        extra={"job_id": job_id, "error": str(e), "error_type": type(e).__name__}
                     )
                 
                 # FIX: Detect collapsed multi-file output bundled as a single JSON string.
