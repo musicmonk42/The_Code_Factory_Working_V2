@@ -27,6 +27,8 @@ def aggressive_memory_cleanup():
     import sys
     for module_name in list(sys.modules.keys()):
         # Only clear test modules, not unittest.mock or pytest mocks
+        # IMPORTANT: Modules with 'Mock' in name (e.g., unittest.mock, AsyncMock)
+        # must be preserved as deleting them breaks active AsyncMock patches
         if 'test_' in module_name and 'Mock' not in module_name:
             try:
                 del sys.modules[module_name]

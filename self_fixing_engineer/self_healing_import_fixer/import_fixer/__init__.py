@@ -14,6 +14,15 @@ import sys as _sys
 import importlib as _importlib
 
 
+# Static mapping of submodule names to full module paths
+_submodules = {
+    'fixer_ast': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_ast',
+    'fixer_dep': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_dep',
+    'fixer_plugins': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_plugins',
+    'fixer_validate': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_validate',
+}
+
+
 def __getattr__(name):
     """Lazy import submodules only when accessed.
     
@@ -30,12 +39,6 @@ def __getattr__(name):
     Raises:
         AttributeError: If the requested attribute doesn't exist
     """
-    _submodules = {
-        'fixer_ast': f'{__name__}.fixer_ast',
-        'fixer_dep': f'{__name__}.fixer_dep',
-        'fixer_plugins': f'{__name__}.fixer_plugins',
-        'fixer_validate': f'{__name__}.fixer_validate',
-    }
     
     if name in _submodules:
         mod = _importlib.import_module(_submodules[name])
