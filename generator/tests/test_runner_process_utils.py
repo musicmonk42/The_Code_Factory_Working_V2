@@ -260,11 +260,9 @@ class TestSubprocessWrapper(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.mock_errors.labels.called)
 
     async def test_subprocess_wrapper_timeout_raises_timeoutexpired(self):
-        import asyncio as asyncio_module
-        
         # Mock the process to raise TimeoutError when communicate is called
         mock_process = AsyncMock()
-        mock_process.communicate.side_effect = asyncio_module.TimeoutError()
+        mock_process.communicate.side_effect = asyncio.TimeoutError()
         mock_process.kill = MagicMock()
         self.mock_run.return_value = mock_process
 
