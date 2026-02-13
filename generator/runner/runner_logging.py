@@ -1205,6 +1205,7 @@ class RedactionFilter(logging.Filter):
             re.compile(
                 r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", re.IGNORECASE
             ),  # Email
+            re.compile(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b"),  # Phone (e.g., 555-123-4567, 555.123.4567, 5551234567)
             re.compile(r"\b(?:\d{3}[- ]?\d{2}[- ]?\d{4})\b"),  # SSN
             re.compile(
                 r'(?i)\b(api_key|password|token|secret|auth_token|bearer)\s*[:=]\s*["\']?([a-zA-Z0-9_-]{20,})["\']?'
@@ -1212,6 +1213,7 @@ class RedactionFilter(logging.Filter):
             re.compile(
                 r"(?i)\b(api_key|password|token|secret|auth_token|bearer)=[^& ]+"
             ),  # URL Param
+            re.compile(r"(?i)secret=[A-Za-z0-9]+"),  # Simple secret pattern (case-insensitive)
         ]
 
     def _sync_redact(self, data: Any) -> Any:
