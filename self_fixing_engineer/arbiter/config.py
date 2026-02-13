@@ -388,6 +388,30 @@ class ArbiterConfig(BaseSettings):
             "Required field for PolicyEngine initialization (defaults to True if not specified)."
         )
     )
+    LLM_POLICY_EVALUATION_ENABLED: bool = Field(
+        default=True,
+        description="Enable LLM-based policy evaluation in PolicyEngine."
+    )
+    LLM_POLICY_MIN_TRUST_SCORE: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum trust score for LLM policy decisions."
+    )
+    LLM_API_TIMEOUT_SECONDS: float = Field(
+        default=30.0,
+        gt=0,
+        description="Timeout for LLM API calls in policy evaluation."
+    )
+    LLM_API_BACKOFF_MAX_SECONDS: float = Field(
+        default=60.0,
+        description="Maximum backoff seconds for LLM API circuit breaker."
+    )
+    LLM_API_FAILURE_THRESHOLD: int = Field(
+        default=3,
+        ge=1,
+        description="Failure threshold before LLM API circuit breaker opens."
+    )
 
     # --- Audit Settings ---
     AUDIT_BUFFER_SIZE: int = Field(default=100)
