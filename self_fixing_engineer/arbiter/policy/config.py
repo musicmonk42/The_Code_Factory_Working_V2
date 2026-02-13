@@ -201,18 +201,19 @@ class ArbiterConfig(BaseSettings):
 
     # Secret Settings
     ENCRYPTION_KEY: SecretStr = Field(
-        SecretStr(os.getenv("ENCRYPTION_KEY", "")),
+        default="",
         description="A 32-byte URL-safe base64-encoded key for Fernet encryption.",
     )
     OPENAI_API_KEY: SecretStr = Field(
-        SecretStr(os.getenv("OPENAI_API_KEY", "")), description="API key for OpenAI."
+        default="", description="API key for OpenAI."
     )
     ANTHROPIC_API_KEY: SecretStr = Field(
-        SecretStr(os.getenv("ANTHROPIC_API_KEY", "")),
+        default="",
         description="API key for Anthropic.",
     )
     GEMINI_API_KEY: SecretStr = Field(
-        SecretStr(os.getenv("GOOGLE_API_KEY", "")),
+        default="",
+        validation_alias="GOOGLE_API_KEY",
         description="API key for Google Gemini.",
     )
 
