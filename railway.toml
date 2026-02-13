@@ -169,10 +169,10 @@ PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
-# Single worker for Railway deployment to ensure fast startup and reliable healthchecks
-# Set WEB_CONCURRENCY to increase workers if needed
+# Multi-worker mode for production deployment to handle concurrent requests
+# Matches Dockerfile and Procfile worker count for consistency
 # WEB_CONCURRENCY = "1"
-WORKER_COUNT = "1"
+WORKER_COUNT = "4"
 MAX_CONCURRENT_TASKS = "50"
 
 # === Self-Fixing Engineer ===
