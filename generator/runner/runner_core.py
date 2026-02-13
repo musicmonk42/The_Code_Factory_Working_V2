@@ -1571,8 +1571,8 @@ class Runner(ABC):
             current_error_count = RUN_ERRORS.labels(
                 error_type="all_errors", backend="any", instance_id=self.instance_id
             )._value
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to read error count metric: {e}")
 
         if current_error_count > anomaly_error_threshold:
             logger.warning(
@@ -1589,8 +1589,8 @@ class Runner(ABC):
                 RUN_ERRORS.labels(
                     error_type="all_errors", backend="any", instance_id=self.instance_id
                 ).inc(-current_error_count)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to reset error count metric: {e}")
             asyncio.create_task(self.backend.recover())
 
     def _detect_framework(self, test_files: Dict[str, str]) -> str:
@@ -1733,8 +1733,8 @@ class Runner(ABC):
                 if queue_file.exists():
                     try:
                         queue_file.unlink()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to clean up queue file {queue_file}: {e}")
 
     def _update_task_status_sync(
         self, task_id: str, status: str, **kwargs: Any
@@ -1778,8 +1778,8 @@ class Runner(ABC):
             task_result = self.task_status_map[task_id]
             try:
                 RUNNER_TASK_STATUS.labels(status=task_result.status).dec()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to update task status metric: {e}")
 
             task_result.status = status
 
@@ -1825,8 +1825,8 @@ class Runner(ABC):
         )
         try:
             RUNNER_TASK_STATUS.labels(status=status).inc()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to increment task status metric: {e}")
 
     def get_task_status(self, task_id: str) -> Optional[TaskResult]:
         """Retrieves the current status of a specific task."""
