@@ -167,14 +167,14 @@ def cleanup_prometheus_registry():
     for collector in saved_collectors:
         try:
             REGISTRY.unregister(collector)
-        except Exception:
+        except (ValueError, KeyError):
             pass
     yield
     # Re-register previously saved collectors to avoid affecting other test modules
     for collector in saved_collectors:
         try:
             REGISTRY.register(collector)
-        except Exception:
+        except (ValueError, KeyError):
             pass
 
 
