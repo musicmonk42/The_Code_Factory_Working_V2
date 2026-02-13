@@ -1429,7 +1429,7 @@ class Clarifier:
             if self.shutdown_event.is_set():
                 break
             # Note: Prometheus Counter doesn't expose _value.get() - just log that monitoring is active
-            self.logger.info(
+            self.logger.debug(
                 "Metrics monitoring active (Prometheus metrics are being collected)",
                 extra={"operation": "metrics_monitoring"}
             )

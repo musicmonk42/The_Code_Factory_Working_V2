@@ -7,6 +7,7 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 """
 
 import logging
+import threading
 from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import uuid4
@@ -41,13 +42,43 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
 
+# Module-level singleton for SFEService
+_sfe_service_instance: Optional[SFEService] = None
+_sfe_service_lock = threading.Lock()
+
 
 def get_sfe_service() -> SFEService:
-    """Dependency for SFEService."""
-    from server.routers.jobs import get_omnicore_service
+    """
+    Get or create the singleton SFEService instance (thread-safe).
+    
+    This function implements a thread-safe singleton pattern to ensure
+    only one SFEService instance is created, preventing multiple
+    initializations of SFE components on every request.
+    
+    Returns:
+        SFEService: The singleton SFE service instance
+    """
+    global _sfe_service_instance
+    if _sfe_service_instance is None:
+        with _sfe_service_lock:
+            if _sfe_service_instance is None:
+                from server.routers.jobs import get_omnicore_service
+                omnicore = get_omnicore_service()
+                _sfe_service_instance = SFEService(omnicore_service=omnicore)
+    return _sfe_service_instance
 
-    omnicore = get_omnicore_service()
-    return SFEService(omnicore_service=omnicore)
+
+def get_sfe_service_instance() -> SFEService:
+    """
+    Get the SFEService instance directly (without FastAPI Depends).
+    
+    This function provides direct access to the singleton SFEService
+    instance for use outside of FastAPI route handlers.
+    
+    Returns:
+        SFEService: The singleton SFE service instance
+    """
+    return get_sfe_service()
 
 
 @router.post("/{job_id}/analyze")

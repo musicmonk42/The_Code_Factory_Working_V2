@@ -36,6 +36,10 @@ const VALID_JOB_STATUSES = ['running', 'completed', 'failed', 'pending', 'needs_
 // Maximum concurrent file fetch requests to prevent server overload
 const MAX_CONCURRENT_FILE_FETCHES = 5;
 
+// Client-side cache for completed job files to prevent repeated API calls
+// Maps job_id -> {total_files, timestamp, data}
+const completedJobFilesCache = new Map();
+
 // Fetch wrapper with timeout and retry logic
 async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     const timeout = options.timeout || 30000;
@@ -817,25 +821,42 @@ async function createJobCard(job) {
     let outputCount = job.output_files ? job.output_files.length : 0;
     
     if (isCompleted && job.id) {
-        const FILE_FETCH_TIMEOUT = 5000;
-        try {
-            // Fetch latest file information with single retry and 5s timeout
-            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: FILE_FETCH_TIMEOUT}, 1);
-            if (filesResponse.ok) {
-                const filesData = await filesResponse.json();
-                
-                // Validate response structure
-                if (filesData && typeof filesData.total_files === 'number') {
-                    outputCount = filesData.total_files;
-                    hasOutputFiles = outputCount > 0;
+        // Check if we have cached data for this completed job
+        const cachedData = completedJobFilesCache.get(job.id);
+        
+        if (cachedData) {
+            // Use cached data - completed jobs' files don't change
+            outputCount = cachedData.total_files;
+            hasOutputFiles = outputCount > 0;
+        } else {
+            // Fetch and cache for first time
+            const FILE_FETCH_TIMEOUT = 5000;
+            try {
+                // Fetch latest file information with single retry and 5s timeout
+                const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: FILE_FETCH_TIMEOUT}, 1);
+                if (filesResponse.ok) {
+                    const filesData = await filesResponse.json();
+                    
+                    // Validate response structure
+                    if (filesData && typeof filesData.total_files === 'number') {
+                        outputCount = filesData.total_files;
+                        hasOutputFiles = outputCount > 0;
+                        
+                        // Cache the result for this completed job
+                        completedJobFilesCache.set(job.id, {
+                            total_files: filesData.total_files,
+                            timestamp: Date.now(),
+                            data: filesData
+                        });
+                    }
                 }
+            } catch (e) {
+                // Non-critical error - log and continue with cached data
+                const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
+                    ? `timeout after ${FILE_FETCH_TIMEOUT / 1000}s` 
+                    : e.message;
+                console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
             }
-        } catch (e) {
-            // Non-critical error - log and continue with cached data
-            const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
-                ? `timeout after ${FILE_FETCH_TIMEOUT / 1000}s` 
-                : e.message;
-            console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
         }
     }
     
@@ -2574,10 +2595,24 @@ async function queryDLT() {
 
 async function startArbiter() {
     try {
+        // Prompt user for Job ID
+        const jobIdInput = prompt('Enter Job ID to start Arbiter:');
+        if (!jobIdInput) {
+            // User cancelled or entered empty string
+            return;
+        }
+        
+        // Validate and sanitize job ID
+        const jobId = sanitizeJobId(jobIdInput);
+        if (!jobId) {
+            // Error already shown by sanitizeJobId
+            return;
+        }
+        
         const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({command: 'start', config: {}})
+            body: JSON.stringify({command: 'start', job_id: jobId, config: {}})
         });
         
         if (!response.ok) {
