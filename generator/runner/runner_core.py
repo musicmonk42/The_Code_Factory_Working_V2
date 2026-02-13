@@ -2060,7 +2060,9 @@ def add_package_parent_dirs(base_dir):
         if '__init__.py' in files:
             # Add the parent directory to sys.path
             parent_dir = os.path.dirname(root)
-            # Don't add directories above the base_path to sys.path
+            # Only add parent directories that are:
+            # 1. Inside base_path (checked by startswith)
+            # 2. Not equal to base_path itself (to avoid adding packages at the root level)
             if parent_dir and parent_dir != base_path_str and parent_dir.startswith(base_path_str):
                 if parent_dir not in added_paths and parent_dir not in sys.path:
                     sys.path.insert(0, parent_dir)
