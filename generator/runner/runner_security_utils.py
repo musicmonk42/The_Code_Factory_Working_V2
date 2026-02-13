@@ -1063,9 +1063,12 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
         if len(key) <= 100:
             findings.append({'type': 'api_key', 'match': key[:10] + '...'})
     
-    # Password patterns
-    if re.search(r'(password|pwd|pass)[:=]\s*\S+', content, re.IGNORECASE):
-        findings.append({'type': 'password', 'match': 'password_field'})
+    # Password patterns (require 8+ characters)
+    password_matches = re.findall(r'(password|pwd|pass)[:=]\s*(\S+)', content, re.IGNORECASE)
+    for match in password_matches:
+        # match[1] is the password value
+        if len(match[1]) >= 8:
+            findings.append({'type': 'password', 'match': 'password_field'})
     
     # Also check the legacy SECRET_SCAN_PATTERNS for additional findings
     for pattern in SECRET_SCAN_PATTERNS:
