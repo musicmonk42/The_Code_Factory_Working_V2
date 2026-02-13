@@ -2193,45 +2193,48 @@ class HelmHandler(FormatHandler):
         has_structure = bool(re.search(r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)', raw))
         
         if has_structure:
-            # Split by file markers and process each section
-            sections = re.split(r'#\s*(Chart\.yaml|values\.yaml|templates/([\w\-]+\.yaml))', raw)
+            # Parse structured Helm response with file markers
+            # Use a simpler regex without nested groups for clarity
+            file_marker_pattern = r'#\s*(Chart\.yaml|values\.yaml|templates/[\w\-]+\.yaml)'
+            parts = re.split(file_marker_pattern, raw)
             
             ru_yaml = YAML()
-            current_file = None
             
-            for i, section in enumerate(sections):
-                if i % 4 == 1:  # File name (Chart.yaml, values.yaml)
-                    current_file = section.strip()
-                elif i % 4 == 2:  # Template path (templates/...)
-                    if section and section.startswith('templates/'):
-                        current_file = section.strip()
-                elif i % 4 == 3:  # Template filename only
-                    # This is captured by the inner group in templates/(...)
+            # The split creates: [content_before, marker1, content1, marker2, content2, ...]
+            # We iterate in pairs: (marker, content)
+            for i in range(1, len(parts), 2):
+                if i + 1 >= len(parts):
+                    break
+                    
+                file_marker = parts[i].strip()
+                file_content = parts[i + 1].strip()
+                
+                if not file_content:
                     continue
-                elif current_file and section.strip():  # File content
-                    try:
-                        if current_file.startswith("templates/"):
-                            # Store template as raw text (don't parse YAML)
-                            result["templates"][current_file] = section.strip()
-                            logger.debug(f"Stored template {current_file} as raw text")
-                        elif current_file == "Chart.yaml":
-                            # Parse Chart.yaml as YAML (usually doesn't have templates)
-                            result["Chart.yaml"] = ru_yaml.load(section.strip())
-                            logger.debug("Parsed Chart.yaml as YAML")
-                        elif current_file == "values.yaml":
-                            # Parse values.yaml as YAML (usually doesn't have templates)
-                            result["values.yaml"] = ru_yaml.load(section.strip())
-                            logger.debug("Parsed values.yaml as YAML")
-                    except Exception as e:
-                        logger.warning(f"Failed to parse {current_file}: {e}, storing as raw text")
-                        if current_file.startswith("templates/"):
-                            result["templates"][current_file] = section.strip()
-                        elif current_file == "Chart.yaml":
-                            # Try to parse without strict YAML
-                            result["Chart.yaml"] = self._default_chart_yaml()
-                        elif current_file == "values.yaml":
-                            # Store as empty dict on failure
-                            result["values.yaml"] = {}
+                
+                try:
+                    if file_marker.startswith("templates/"):
+                        # Store template as raw text (don't parse YAML)
+                        result["templates"][file_marker] = file_content
+                        logger.debug(f"Stored template {file_marker} as raw text")
+                    elif file_marker == "Chart.yaml":
+                        # Parse Chart.yaml as YAML (usually doesn't have templates)
+                        result["Chart.yaml"] = ru_yaml.load(file_content)
+                        logger.debug("Parsed Chart.yaml as YAML")
+                    elif file_marker == "values.yaml":
+                        # Parse values.yaml as YAML (usually doesn't have templates)
+                        result["values.yaml"] = ru_yaml.load(file_content)
+                        logger.debug("Parsed values.yaml as YAML")
+                except Exception as e:
+                    logger.warning(f"Failed to parse {file_marker}: {e}, storing as raw text")
+                    if file_marker.startswith("templates/"):
+                        result["templates"][file_marker] = file_content
+                    elif file_marker == "Chart.yaml":
+                        # Use default on failure
+                        result["Chart.yaml"] = self._default_chart_yaml()
+                    elif file_marker == "values.yaml":
+                        # Store as empty dict on failure
+                        result["values.yaml"] = {}
         else:
             # No structured sections - treat entire content as a single template
             logger.info("No structured sections found, storing entire content as template")
