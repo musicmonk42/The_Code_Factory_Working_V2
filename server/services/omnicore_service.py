@@ -1833,6 +1833,33 @@ class OmniCoreService:
                     extra={"job_id": job_id, "files": list(result.keys())}
                 )
                 
+                # Auto-fix missing imports before materialization
+                try:
+                    from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+                    fixer = ImportFixerEngine()
+                    fixed_count = 0
+                    for filename, content in list(result.items()):
+                        if filename.endswith('.py') and isinstance(content, str):
+                            fix_result = fixer.fix_code(content)
+                            if fix_result["status"] == "success" and fix_result["fixed_code"] != content:
+                                result[filename] = fix_result["fixed_code"]
+                                fixed_count += 1
+                                fixes_applied = fix_result.get("fixes_applied", [])
+                                logger.info(
+                                    f"[CODEGEN] Auto-fixed imports in {filename}: {', '.join(fixes_applied)}",
+                                    extra={"job_id": job_id, "filename": filename, "fixes": fixes_applied}
+                                )
+                    if fixed_count > 0:
+                        logger.info(
+                            f"[CODEGEN] Auto-fixed imports in {fixed_count} file(s)",
+                            extra={"job_id": job_id, "fixed_count": fixed_count}
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"[CODEGEN] Import auto-fix skipped: {e}",
+                        extra={"job_id": job_id, "error": str(e)}
+                    )
+                
                 # FIX: Detect collapsed multi-file output bundled as a single JSON string.
                 # When the codegen handler's fallback wraps the entire JSON blob into a
                 # single key (e.g. {"main.py": '{"files": {"app/main.py": ...}}'}),
@@ -4364,11 +4391,12 @@ class OmniCoreService:
                             if not val_result.get("valid", True):
                                 validation_errors = val_result.get('errors', [])
                                 
-                                # Check for retriable errors (syntax errors or missing files due to syntax errors)
+                                # Check for retriable errors (syntax errors, missing files, or import errors)
                                 syntax_errors = [e for e in validation_errors if 'syntax' in e.lower() or 'SyntaxError' in e]
                                 missing_files = [e for e in validation_errors if 'missing' in e.lower() and 'required' in e.lower()]
+                                import_errors = [e for e in validation_errors if 'does not import' in e.lower() or 'but does not import' in e.lower()]
                                 
-                                errors_for_retry = syntax_errors.copy()
+                                errors_for_retry = syntax_errors + import_errors
                                 if missing_files:
                                     error_txt_path = Path(output_path_for_validation) / "error.txt"
                                     if error_txt_path.exists():
@@ -4381,18 +4409,28 @@ class OmniCoreService:
                                 if errors_for_retry and codegen_attempt < max_codegen_retries:
                                     # We have retriable errors and retries left - set up for retry
                                     validation_passed = False
+                                    
+                                    # Determine error type for better messaging
+                                    if import_errors:
+                                        error_type = "ImportError"
+                                    elif syntax_errors:
+                                        error_type = "SyntaxError"
+                                    else:
+                                        error_type = "ValidationError"
+                                    
                                     previous_error = {
-                                        "error_type": "SyntaxError" if syntax_errors else "ValidationError",
+                                        "error_type": error_type,
                                         "details": "\n".join(errors_for_retry[:3]),
                                         "instruction": (
-                                            "The previous code generation had syntax errors or missing required files. "
-                                            "Please fix these errors and regenerate the code with proper syntax. "
+                                            "The previous code generation had validation errors. "
+                                            "Please fix these errors and regenerate the code. "
                                             "Pay special attention to:\n"
                                             "1. String literals must be properly terminated with matching quotes\n"
                                             "2. All control structures (if, for, def, class, etc.) must end with a colon (:)\n"
                                             "3. Check for stray backslashes at line endings\n"
                                             "4. Ensure all brackets, parentheses, and braces are properly matched\n"
-                                            "5. Include commas between function arguments and list/dict elements"
+                                            "5. Include commas between function arguments and list/dict elements\n"
+                                            "6. Ensure all modules used (e.g., time, os, json) are properly imported at the top of the file"
                                         )
                                     }
                                     
@@ -4401,6 +4439,7 @@ class OmniCoreService:
                                         extra={
                                             "job_id": job_id,
                                             "syntax_errors": syntax_errors,
+                                            "import_errors": import_errors,
                                             "missing_files": missing_files,
                                             "attempt": codegen_attempt
                                         }
