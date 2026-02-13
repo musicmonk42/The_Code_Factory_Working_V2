@@ -1166,13 +1166,13 @@ Respond in plain prose only (no JSON / no code fences).
                                     }
 
                                 # Use build_status if available, fall back to lint_status
-                                _status = v_report.get("build_status") or v_report.get("lint_status")
+                                validation_status = v_report.get("build_status") or v_report.get("lint_status")
                                 if (
-                                    _status not in ("success", "skipped", "tool_not_found", "warning")
+                                    validation_status not in ("success", "skipped", "tool_not_found", "warning")
                                     or v_report.get("compliance_score", 0.0) < 0.5
                                 ):
                                     # Allow skipped/tool_not_found builds when Docker is unavailable
-                                    if _status in ("skipped", "tool_not_found"):
+                                    if validation_status in ("skipped", "tool_not_found"):
                                         logger.warning(
                                             f"Docker validation skipped for {t} - Docker not available. "
                                             "Set DOCKER_REQUIRED=true to enforce Docker availability."
