@@ -2462,6 +2462,7 @@ async function listDeadLetterQueue() {
 
 async function detectBugs() {
     try {
+        showSuccess('Detecting bugs...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/detect`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -2469,6 +2470,25 @@ async function detectBugs() {
         });
         const data = await response.json();
         showSuccess(`Detected ${data.bugs_found} bugs`);
+        
+        // Populate the errors list with detected bugs
+        const container = document.getElementById('errors-list');
+        if (data.bugs && data.bugs.length > 0) {
+            container.innerHTML = '';
+            data.bugs.forEach(bug => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                card.innerHTML = `
+                    <h4>${bug.type || 'Bug'}: ${bug.message || bug.description}</h4>
+                    <p>File: ${bug.file || 'N/A'}, Line: ${bug.line || 'N/A'}</p>
+                    <p>Severity: <span class="severity-${bug.severity || 'medium'}">${bug.severity || 'medium'}</span></p>
+                    ${bug.bug_id ? `<button class="btn btn-primary" onclick="proposeFix('${bug.bug_id}')">Propose Fix</button>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        } else {
+            container.innerHTML = '<p class="no-data">No bugs detected</p>';
+        }
     } catch (error) {
         showError('Bug detection failed: ' + error.message);
     }
@@ -2476,13 +2496,39 @@ async function detectBugs() {
 
 async function analyzeCodebase() {
     try {
+        showSuccess('Analyzing codebase...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', include_dependencies: true})
         });
         const data = await response.json();
-        alert(`Codebase Analysis:\n\nFiles: ${data.total_files}\nLOC: ${data.total_loc}\nComplexity: ${data.avg_complexity}`);
+        
+        // Display results in a formatted way
+        const resultMessage = `Codebase Analysis Complete:\n\n` +
+            `Files: ${data.total_files || 'N/A'}\n` +
+            `Lines of Code: ${data.total_loc || 'N/A'}\n` +
+            `Average Complexity: ${data.avg_complexity || 'N/A'}\n` +
+            `${data.analysis_summary ? '\n' + data.analysis_summary : ''}`;
+        
+        showSuccess('Codebase analysis complete');
+        alert(resultMessage);
+        
+        // If there are issues/bugs found, populate the errors list
+        if (data.issues && data.issues.length > 0) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = '';
+            data.issues.forEach(issue => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                card.innerHTML = `
+                    <h4>${issue.type || 'Issue'}: ${issue.message}</h4>
+                    <p>File: ${issue.file || 'N/A'}, Line: ${issue.line || 'N/A'}</p>
+                    <p>Severity: <span class="severity-${issue.severity || 'medium'}">${issue.severity || 'medium'}</span></p>
+                `;
+                container.appendChild(card);
+            });
+        }
     } catch (error) {
         showError('Analysis failed: ' + error.message);
     }
@@ -2498,12 +2544,36 @@ async function prioritizeBugs() {
     }
     
     try {
+        showSuccess('Prioritizing bugs...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({criteria: ['severity', 'impact']})
         });
-        showSuccess('Bugs prioritized');
+        const data = await response.json();
+        showSuccess('Bugs prioritized successfully');
+        
+        // Display prioritized bugs in the errors list
+        if (data.prioritized_bugs && data.prioritized_bugs.length > 0) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = '<h4>Prioritized Bugs (High to Low)</h4>';
+            data.prioritized_bugs.forEach((bug, index) => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                card.innerHTML = `
+                    <div style="font-weight: bold; color: #007bff;">Priority #${index + 1}</div>
+                    <h4>${bug.type || 'Bug'}: ${bug.message || bug.description}</h4>
+                    <p>File: ${bug.file || 'N/A'}, Line: ${bug.line || 'N/A'}</p>
+                    <p>Severity: <span class="severity-${bug.severity || 'medium'}">${bug.severity || 'medium'}</span></p>
+                    <p>Priority Score: ${bug.priority_score || 'N/A'}</p>
+                    ${bug.bug_id ? `<button class="btn btn-primary" onclick="proposeFix('${bug.bug_id}')">Propose Fix</button>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        } else if (data.message) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<p class="no-data">${data.message}</p>`;
+        }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
     }
@@ -2511,13 +2581,24 @@ async function prioritizeBugs() {
 
 async function fixImports() {
     try {
+        showSuccess('Fixing imports...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({file_path: '.', auto_install: false})
         });
         const data = await response.json();
-        showSuccess(`Fixed ${data.imports_fixed} imports`);
+        showSuccess(`Fixed ${data.imports_fixed || 0} imports`);
+        
+        // Display import fix results
+        if (data.fixed_files && data.fixed_files.length > 0) {
+            const resultMessage = `Import Fixes Applied:\n\n` +
+                data.fixed_files.map(file => `✓ ${file}`).join('\n') +
+                `\n\nTotal: ${data.imports_fixed} imports fixed`;
+            alert(resultMessage);
+        } else if (data.message) {
+            alert(data.message);
+        }
     } catch (error) {
         showError('Import fix failed: ' + error.message);
     }
