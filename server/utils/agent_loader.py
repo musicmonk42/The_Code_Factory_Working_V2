@@ -809,7 +809,8 @@ class AgentLoader:
                                          if at == AgentType.CODEGEN]
                         for agent_type, module_path, import_names in codegen_agents:
                             # Check if shutdown was requested
-                            if asyncio.current_task().cancelled():
+                            task = asyncio.current_task()
+                            if task and task.cancelled():
                                 logger.info("Agent loading interrupted by shutdown request")
                                 raise asyncio.CancelledError()
                             
@@ -831,7 +832,8 @@ class AgentLoader:
                         logger.info(f"Phase 3: Loading remaining agents: {[at.value for at, _, _ in remaining_agents]}")
                         for agent_type, module_path, import_names in remaining_agents:
                             # Check if shutdown was requested
-                            if asyncio.current_task().cancelled():
+                            task = asyncio.current_task()
+                            if task and task.cancelled():
                                 logger.info("Agent loading interrupted by shutdown request")
                                 raise asyncio.CancelledError()
                             

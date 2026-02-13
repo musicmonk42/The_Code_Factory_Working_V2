@@ -216,7 +216,8 @@ def setup_nltk_data():
                                 max_retries = 2
                                 for retry in range(max_retries):
                                     try:
-                                        time.sleep(1)  # Brief delay before retry
+                                        # Brief delay before retry (synchronous is fine - runs at module import time)
+                                        time.sleep(1)
                                         # Check one more time if data exists
                                         try:
                                             nltk.data.find(path)
