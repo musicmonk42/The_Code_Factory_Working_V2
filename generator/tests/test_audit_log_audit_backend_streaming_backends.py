@@ -162,10 +162,20 @@ def cleanup_test_environment(monkeypatch):
 @pytest.fixture(autouse=True)
 def cleanup_prometheus_registry():
     """Clears the Prometheus registry between tests to prevent metric conflicts."""
-    collectors = list(REGISTRY._collector_to_names.keys())
-    for collector in collectors:
-        REGISTRY.unregister(collector)
+    # Save existing collectors so they can be re-registered after the test
+    saved_collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in saved_collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except (ValueError, KeyError):
+            pass
     yield
+    # Re-register previously saved collectors to avoid affecting other test modules
+    for collector in saved_collectors:
+        try:
+            REGISTRY.register(collector)
+        except (ValueError, KeyError):
+            pass
 
 
 # --- Mock Fixtures ---
