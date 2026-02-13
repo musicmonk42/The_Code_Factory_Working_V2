@@ -111,6 +111,7 @@ class ArbiterConfig(BaseSettings):
         extra="ignore",
         validate_assignment=True,
         protected_namespaces=(),
+        env_nested_delimiter="__",  # Prevent pydantic-settings from dumping entire env dict into fields
     )
 
     _config_cache: Optional[Dict[str, Any]] = PrivateAttr(default=None)
@@ -285,6 +286,34 @@ class ArbiterConfig(BaseSettings):
         description="Configuration for the decision optimizer.",
     )
 
+    @field_validator("ENCRYPTION_KEY", mode="before")
+    @classmethod
+    def validate_encryption_key_field(cls, v):
+        """
+        Field validator for ENCRYPTION_KEY that handles the case where pydantic-settings
+        passes the entire environment dict instead of the field value.
+        
+        This runs BEFORE the model_validator and catches the issue at field assignment time.
+        """
+        # If pydantic-settings passes a dict (the entire environment), extract the actual key
+        if isinstance(v, dict):
+            logger.warning(
+                "ENCRYPTION_KEY received dict type in field_validator. "
+                "Extracting value from environment variable directly."
+            )
+            # Don't try to extract from the dict - go straight to os.getenv
+            # The dict likely doesn't contain ENCRYPTION_KEY anyway
+            # NOTE: Empty string is acceptable here - production validation happens in model_validator
+            # which checks APP_ENV and raises an error if ENCRYPTION_KEY is missing in production
+            return os.getenv("ENCRYPTION_KEY", "")
+        
+        # For SecretStr, extract the actual string value
+        if isinstance(v, SecretStr):
+            return v.get_secret_value()
+        
+        # For normal strings or other types, return as-is
+        return v
+
     @field_validator("DECISION_OPTIMIZER_SETTINGS", mode="before")
     @classmethod
     def parse_optimizer_settings(cls, v):
@@ -360,20 +389,16 @@ class ArbiterConfig(BaseSettings):
                             key_str = encryption_key_raw
                         elif isinstance(encryption_key_raw, dict):
                             # pydantic-settings sometimes passes the entire env dict instead of the field value
-                            # Extract the actual ENCRYPTION_KEY from the dict and replace it
+                            # This should be caught by the field_validator, but handle it here as a fallback
                             logger.warning(
                                 "ENCRYPTION_KEY received dict type in model_validator. "
-                                "Extracting actual value from environment dict."
+                                "This should have been caught by field_validator. "
+                                "Falling back to environment variable directly."
                             )
-                            actual_key = encryption_key_raw.get("ENCRYPTION_KEY", os.getenv("ENCRYPTION_KEY", ""))
-                            if isinstance(actual_key, dict):
-                                # Still a dict (nested issue) - this indicates a deeper configuration issue
-                                logger.error(
-                                    "ENCRYPTION_KEY value is still a dict after extraction. "
-                                    "This indicates a deeper pydantic-settings configuration issue. "
-                                    "Falling back to environment variable directly."
-                                )
-                                actual_key = os.getenv("ENCRYPTION_KEY", "")
+                            # Always go directly to os.getenv - don't trust the dict contents
+                            # NOTE: Empty string is acceptable here if not in production mode
+                            # Production mode check (lines 362-368) ensures ENCRYPTION_KEY is set
+                            actual_key = os.getenv("ENCRYPTION_KEY", "")
                             values["ENCRYPTION_KEY"] = actual_key
                             key_str = actual_key if actual_key else None
                         else:
