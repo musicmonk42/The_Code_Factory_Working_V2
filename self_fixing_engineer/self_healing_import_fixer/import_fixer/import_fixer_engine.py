@@ -786,6 +786,22 @@ class ImportFixerEngine:
     and omnicore_engine.engines for integrating import fixing functionality
     as a plugin.
     """
+    
+    # Common stdlib modules to check for (class-level constant for performance)
+    STDLIB_MODULES = {
+        'time', 'os', 'sys', 'json', 're', 'math', 'datetime', 'typing',
+        'collections', 'pathlib', 'logging', 'hashlib', 'uuid', 'base64',
+        'functools', 'itertools', 'copy', 'io', 'subprocess', 'tempfile',
+        'shutil', 'random', 'string', 'pickle', 'csv', 'urllib', 'http',
+        'email', 'inspect', 'warnings', 'asyncio', 'threading', 'multiprocessing'
+    }
+    
+    # FastAPI-specific names commonly used (class-level constant for performance)
+    FASTAPI_NAMES = {
+        'Request', 'Response', 'HTTPException', 'Depends', 'Header',
+        'Query', 'Path', 'Body', 'Cookie', 'File', 'UploadFile',
+        'Form', 'status', 'WebSocket', 'BackgroundTasks'
+    }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -910,16 +926,16 @@ class ImportFixerEngine:
                         imported_names.add(name)
                         from_imports[module].add(alias.name)
 
-            # Find missing stdlib imports
+            # Find missing stdlib imports (use class-level constants)
             missing_stdlib = set()
             for name in used_names:
-                if name in STDLIB_MODULES and name not in imported_names:
+                if name in self.STDLIB_MODULES and name not in imported_names:
                     missing_stdlib.add(name)
 
-            # Find missing FastAPI imports
+            # Find missing FastAPI imports (use class-level constants)
             missing_fastapi = set()
             for name in used_names:
-                if name in FASTAPI_NAMES and name not in imported_names:
+                if name in self.FASTAPI_NAMES and name not in imported_names:
                     missing_fastapi.add(name)
 
             if not missing_stdlib and not missing_fastapi:
@@ -934,24 +950,27 @@ class ImportFixerEngine:
             # Build fixed code by inserting missing imports
             lines = code.split('\n')
             
-            # Find the position to insert new imports (after existing imports or at top)
+            # Find the position to insert new imports using AST to be more precise
+            # This avoids inserting imports in the middle of module docstrings
             insert_pos = 0
             last_import_pos = -1
             
-            for i, line in enumerate(lines):
-                stripped = line.strip()
-                if stripped.startswith('import ') or stripped.startswith('from '):
-                    last_import_pos = i
-                elif stripped and not stripped.startswith('#'):
-                    # First non-import, non-comment line
-                    if last_import_pos == -1:
-                        insert_pos = i
-                    else:
-                        insert_pos = last_import_pos + 1
-                    break
+            # Find the last import statement in the AST
+            for node in tree.body:
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    last_import_pos = node.end_lineno - 1  # Convert to 0-indexed
+            
+            if last_import_pos >= 0:
+                # Insert after the last import
+                insert_pos = last_import_pos + 1
             else:
-                # All lines are imports or comments/blank
-                insert_pos = len(lines)
+                # No imports found, insert after module docstring if present
+                if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant):
+                    # Module has a docstring, insert after it
+                    insert_pos = tree.body[0].end_lineno
+                else:
+                    # No docstring, insert at the top
+                    insert_pos = 0
 
             # Build new import lines
             new_imports = []
