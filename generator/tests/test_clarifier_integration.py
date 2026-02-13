@@ -8,6 +8,7 @@ Tests the complete workflow from ambiguity detection through clarification to re
 
 import asyncio
 import base64
+import logging
 import os
 import sys
 import tempfile
@@ -116,6 +117,8 @@ def mock_dependencies():
     Fixture to mock all dependencies for clarifier integration tests.
     Handles patch lifecycle gracefully to prevent teardown errors.
     """
+    logger = logging.getLogger(__name__)
+    
     patches = [
         patch("generator.clarifier.clarifier.Dynaconf", return_value=mock_config_instance),
         patch("generator.clarifier.clarifier.boto3.client", return_value=MagicMock()),
@@ -155,8 +158,7 @@ def mock_dependencies():
             started_patches.append(p)
         except Exception as e:
             # If a patch fails to start, log it but continue with other patches
-            import logging
-            logging.getLogger(__name__).warning(f"Failed to start patch: {e}")
+            logger.warning(f"Failed to start patch: {e}")
     
     yield
     
@@ -167,8 +169,7 @@ def mock_dependencies():
             p.stop()
         except Exception as e:
             # Log but don't raise - we want cleanup to continue
-            import logging
-            logging.getLogger(__name__).warning(f"Failed to stop patch: {e}")
+            logger.warning(f"Failed to stop patch: {e}")
 
 
 class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
@@ -206,7 +207,6 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
         Cleanup method that catches and logs errors instead of raising SystemExit.
         This prevents teardown failures from masking test results.
         """
-        import logging
         logger = logging.getLogger(__name__)
         
         try:

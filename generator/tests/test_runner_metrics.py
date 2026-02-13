@@ -231,12 +231,10 @@ def ensure_asyncio_not_mocked():
     This is a defensive fixture to prevent issues with async fixtures
     that depend on asyncio.Event(), asyncio.create_task(), etc.
     """
-    import asyncio as asyncio_real
-    
     # Store original asyncio functions and verify they aren't MagicMock instances
-    original_event = asyncio_real.Event
-    original_create_task = asyncio_real.create_task
-    original_sleep = asyncio_real.sleep
+    original_event = asyncio.Event
+    original_create_task = asyncio.create_task
+    original_sleep = asyncio.sleep
     
     # Check before yielding that these are real functions, not mocks
     from unittest.mock import MagicMock
@@ -248,9 +246,9 @@ def ensure_asyncio_not_mocked():
     
     # Defensive check to ensure they weren't mocked during the test
     # This helps catch issues if something tries to mock asyncio
-    assert asyncio_real.Event is original_event, "asyncio.Event was mocked during test!"
-    assert asyncio_real.create_task is original_create_task, "asyncio.create_task was mocked during test!"
-    assert asyncio_real.sleep is original_sleep, "asyncio.sleep was mocked during test!"
+    assert asyncio.Event is original_event, "asyncio.Event was mocked during test!"
+    assert asyncio.create_task is original_create_task, "asyncio.create_task was mocked during test!"
+    assert asyncio.sleep is original_sleep, "asyncio.sleep was mocked during test!"
 
 
 @pytest.fixture
@@ -327,8 +325,9 @@ async def started_metrics_exporter(
     # Ensure we're in an async context with a running event loop
     # This helps prevent issues with mocked asyncio primitives
     # Using get_running_loop() instead of get_event_loop() as it's the modern approach
+    # Will raise RuntimeError if no event loop is running
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         raise RuntimeError("No running event loop found. Async fixture requires a running event loop.")
     
