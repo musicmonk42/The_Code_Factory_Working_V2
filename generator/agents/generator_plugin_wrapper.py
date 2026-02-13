@@ -660,18 +660,24 @@ async def run_generator_workflow(
 
             # --- 5. Deployment Artifact Generation Stage (Required) ---
             deployer = validated_agents["deploy_agent"]
+            
+            # FIX: Get deployment targets from config with proper default including kubernetes
+            # Production logs show deploy_all(['docker', 'kubernetes', 'helm']) is expected
+            deployment_targets = config.get('deployment_targets', ['docker', 'kubernetes', 'helm'])
+            
             with workflow_latency.labels(
                 stage="deploy", correlation_id=correlation_id
             ).time():
                 deploy_result = await deployer(
                     repo_path=workflow_state["repo_path"],
                     target_files=list(workflow_state["code_files"].keys()),
-                    targets=["docker", "helm"],  # Example targets
+                    targets=deployment_targets,
                     instructions="Generate standard deployment artifacts for a web service.",
                 )
                 workflow_state["deployment_artifacts"] = deploy_result
                 logger.info(
-                    f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}]"
+                    f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}] "
+                    f"with targets: {deployment_targets}"
                 )
                 
                 # [ARBITER] Publish deploy artifacts event
@@ -683,7 +689,7 @@ async def run_generator_workflow(
                                 "correlation_id": correlation_id,
                                 "stage": "deploy",
                                 "artifacts_generated": len(deploy_result.get("configs", {})),
-                                "targets": ["docker", "helm"]
+                                "targets": deployment_targets  # FIX: Use actual targets, not hardcoded
                             }
                         )
                     except Exception as e:
