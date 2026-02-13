@@ -27,6 +27,7 @@ sys.path.insert(0, import_fixer_dir)
 import types
 
 mock_redis_module = MagicMock()
+mock_redis_module.__version__ = "7.0.0"
 
 # Create redis.client with proper PubSubWorkerThread class for type annotations
 mock_redis_client = types.ModuleType("redis.client")
@@ -50,6 +51,7 @@ mock_redis_module.client = mock_redis_client
 
 # Mock redis.asyncio separately with PubSub (redis-py 5.x structure)
 mock_redis_async = MagicMock()
+mock_redis_async.__version__ = "7.0.0"
 mock_redis_async.PubSub = MagicMock()  # PubSub lives in redis.asyncio, not redis.client
 mock_redis_async.Redis = MagicMock()
 mock_redis_module.asyncio = mock_redis_async
