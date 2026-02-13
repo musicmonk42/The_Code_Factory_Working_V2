@@ -314,6 +314,7 @@ pytest-xdist==3.5.0
 flaky==3.8.1
 pytest-rerunfailures==15.0
 pytest-forked==1.6.0
+pytest-timeout==2.3.1
 python-dateutil==2.9.0.post0
 python-docx>=0.8.11
 python-dotenv==1.2.1
