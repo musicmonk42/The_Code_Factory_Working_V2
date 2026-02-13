@@ -123,16 +123,16 @@ class V1GenerateRequest(BaseModel):
         description="Additional metadata for the generation job"
     )
     
-    @classmethod
     @field_validator('requirements')
+    @classmethod
     def validate_requirements(cls, v):
         """Ensure requirements are not just whitespace."""
         if not v or not v.strip():
             raise ValueError("Requirements cannot be empty or whitespace only")
         return v.strip()
     
-    @classmethod
     @field_validator('language')
+    @classmethod
     def validate_language(cls, v):
         """Validate programming language is supported."""
         language_lower = v.lower()
@@ -416,8 +416,8 @@ class SFECheckpointRequest(BaseModel):
         description="Checkpoint data as a dictionary"
     )
     
-    @classmethod
     @field_validator('type')
+    @classmethod
     def validate_type(cls, v):
         """Ensure checkpoint type is not just whitespace."""
         if not v or not v.strip():
