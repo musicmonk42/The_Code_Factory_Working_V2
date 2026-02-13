@@ -1317,6 +1317,7 @@ class ExplainAudit:
                     )
                     return
 
+                self.entries.append(record)
                 self.buffer.append(record)
                 AUDIT_BUFFER_SIZE_CURRENT.set(len(self.buffer))
 
