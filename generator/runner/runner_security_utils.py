@@ -504,18 +504,39 @@ except ImportError:
 def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) -> Any:
     """Recursively redacts data using basic regex patterns."""
     if patterns is None:
+        # Comprehensive redaction patterns as specified in problem statement
         patterns = [
-            re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),  # Email
-            re.compile(r"\b(?:\d{3}[-.]?){2}\d{4}\b"),  # Phone
+            # Email addresses
+            re.compile(r'\b[\w.+-]+@[\w.-]+\.\w+\b'),
+            
+            # Phone numbers (various formats)
+            re.compile(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b'),
+            
+            # API keys and tokens (20+ alphanumeric/special chars)
+            re.compile(r'\b[A-Za-z0-9_-]{20,}\b'),
+            
+            # Password in key-value format (case-insensitive)
+            re.compile(r'(password|pwd|pass|secret|token|key)([:=]\s*\S+)', re.IGNORECASE),
+            
+            # Credit card numbers (basic pattern)
+            re.compile(r'\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b'),
+            
+            # SSN format
+            re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
         ]
 
     if isinstance(data, str):
-        # NOTE: The provided original code had the user's custom patterns being passed
-        # and combined (or intended to be combined) with the default patterns.
-        # Here we prioritize the default patterns first if no custom patterns are provided.
-        for pattern in patterns:
-            data = pattern.sub("[REDACTED]", data)
-        return data
+        result = data
+        # Apply each pattern individually with appropriate replacement
+        for i, pattern in enumerate(patterns):
+            # Pattern index 3 is the password pattern with capture groups
+            if i == 3:
+                # Replace password values but preserve the key name
+                result = pattern.sub(r'\1: [REDACTED]', result)
+            else:
+                # Replace the entire match for other patterns
+                result = pattern.sub('[REDACTED]', result)
+        return result
     elif isinstance(data, dict):
         return {k: regex_basic_redactor(v, patterns) for k, v in data.items()}
     elif isinstance(data, list):
@@ -1018,13 +1039,39 @@ SECRET_SCAN_PATTERNS = [
 
 def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
     """
-    Synchronous function to scan text for potential secrets using regex.
-    This is used by other synchronous components that cannot call async monitor_for_leaks.
+    Scan text for potential secrets and return list of findings.
+    
+    Returns:
+        List of dictionaries with 'type' and 'match' keys for each finding
     """
-    findings = []
     if not isinstance(content, str):
         return []
-
+    
+    findings = []
+    
+    # Email
+    if re.search(r'\b[\w.+-]+@[\w.-]+\.\w+\b', content):
+        findings.append({'type': 'email', 'match': 'email_address'})
+    
+    # Phone
+    if re.search(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', content):
+        findings.append({'type': 'phone', 'match': 'phone_number'})
+    
+    # API key/token (20+ chars)
+    api_keys = re.findall(r'\b[A-Za-z0-9_-]{20,}\b', content)
+    for key in api_keys:
+        # Skip very long strings that are unlikely to be API keys
+        if len(key) <= 100:
+            findings.append({'type': 'api_key', 'match': key[:10] + '...'})
+    
+    # Password patterns (require 8+ characters)
+    password_matches = re.findall(r'(password|pwd|pass)[:=]\s*(\S+)', content, re.IGNORECASE)
+    for match in password_matches:
+        # match[1] is the password value
+        if len(match[1]) >= 8:
+            findings.append({'type': 'password', 'match': 'password_field'})
+    
+    # Also check the legacy SECRET_SCAN_PATTERNS for additional findings
     for pattern in SECRET_SCAN_PATTERNS:
         for match in pattern.finditer(content):
             # Avoid matching very long non-secret strings
@@ -1034,28 +1081,16 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
             ):
                 continue
 
-            # FIX: Ensure we only capture the secret part if the pattern uses groups (like the password/key patterns)
-            # The API keys and passwords patterns use a group to capture the value.
-            # We must handle patterns without groups (like the Base64 and Email) which use group(0).
-            try:
-                # Try to get the captured value group (e.g., group 2 for password=VALUE)
-                # The first two patterns use groups (1, 2)
-                if len(match.groups()) > 1:
-                    match.group(2)
-                else:
-                    match.group(0)  # Fallback to full match
-            except IndexError:
-                match.group(0)
-
+            # Add as Secret_Regex type for backward compatibility
             findings.append(
                 {
                     "type": "Secret_Regex",
                     "pattern": pattern.pattern,
                     "location_start": match.start(),
                     "location_end": match.end(),
-                    # NOTE: We can't return the raw value, only location/type.
                 }
             )
+    
     return findings
 
 
