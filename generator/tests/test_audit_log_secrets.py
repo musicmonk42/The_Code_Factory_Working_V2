@@ -166,12 +166,21 @@ def reload_secrets_module(mocker):
 
     # Stop any patches that might be lingering from the test
     patch.stopall()
-    # Re-apply the global patches needed for a clean import
-    patch("prometheus_client.Counter", MagicMock()).start()
-    patch("prometheus_client.Gauge", MagicMock()).start()
-    patch("prometheus_client.Histogram", MagicMock()).start()
+    # Re-apply the global patches needed for a clean import, then stop them
+    # after reimport to avoid leaking MagicMock into subsequent tests
+    p1 = patch("prometheus_client.Counter", MagicMock())
+    p2 = patch("prometheus_client.Gauge", MagicMock())
+    p3 = patch("prometheus_client.Histogram", MagicMock())
+    p1.start()
+    p2.start()
+    p3.start()
 
     importlib.import_module(module_name)
+
+    # Stop the prometheus patches so they don't leak into other test modules
+    p1.stop()
+    p2.stop()
+    p3.stop()
 
 
 # --- Test Classes ---

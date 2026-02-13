@@ -311,7 +311,7 @@ IMMUTABLE = os.getenv("AUDIT_LOG_IMMUTABLE", "true").lower() == "true"
 # Ensuring that the labels used in the Counter/Histogram definition match the labels used in the code.
 # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
 try:
-    LOG_WRITES = Counter("audit_log_writes_total", "Total writes to the audit log")
+    LOG_WRITES = Counter("audit_log_writes_total", "Total writes to the audit log", ["action"])
     LOG_QUERIES = Counter(
         "audit_log_queries_total", "Total queries performed on the audit log"
     )
@@ -957,7 +957,7 @@ class AuditLog:
                 # The backend is responsible for encryption, compression, and batching.
                 await self.backend.append(entry)
 
-                LOG_WRITES.inc()
+                LOG_WRITES.labels(action="log_action").inc()
                 if generator:
                     DOC_GEN_ACTIONS.labels(generator=generator).inc()
 
