@@ -149,10 +149,10 @@ prod: &prod_env
 def mock_dependencies():
     """Mock all external dependencies."""
     with (
-        patch("main.cli.WorkflowEngine") as mock_engine,
-        patch("main.cli.load_config") as mock_config,
-        patch("main.cli.logger") as mock_logger,
-        patch("main.cli.get_metrics_dict") as mock_metrics,
+        patch("generator.main.cli.WorkflowEngine") as mock_engine,
+        patch("generator.main.cli.load_config") as mock_config,
+        patch("generator.main.cli.logger") as mock_logger,
+        patch("generator.main.cli.get_metrics_dict") as mock_metrics,
     ):
 
         mock_engine_instance = MagicMock()
@@ -308,7 +308,7 @@ class TestHealthCommand:
         """Test health command execution."""
         from generator.main.cli import cli
 
-        with patch("main.cli.WorkflowEngine") as MockEngine:
+        with patch("generator.main.cli.WorkflowEngine") as MockEngine:
             mock_engine = MagicMock()
             mock_engine.health_check.return_value = True
             MockEngine.return_value = mock_engine
@@ -333,7 +333,7 @@ class TestLogsCommand:
         """Test logs command with search query."""
         from generator.main.cli import cli
 
-        with patch("main.cli.search_logs") as mock_search:
+        with patch("generator.main.cli.search_logs") as mock_search:
             mock_search.return_value = [
                 "2025-01-01 12:00:00 - ERROR - Test error message",
                 "2025-01-01 12:01:00 - ERROR - Another error",
@@ -369,7 +369,7 @@ class TestMetricsCommand:
         """Test metrics command execution."""
         from generator.main.cli import cli
 
-        with patch("main.cli.get_metrics_dict") as mock_metrics:
+        with patch("generator.main.cli.get_metrics_dict") as mock_metrics:
             mock_metrics.return_value = {
                 "cpu_usage": 45.2,
                 "memory_usage": 62.1,
@@ -416,7 +416,7 @@ class TestConfigCommands:
         from generator.main.cli import cli
 
         # FIX: Removed patch for console.print, will check result.output
-        with patch("main.cli.aiohttp.ClientSession") as MockSession:  # Mock API call
+        with patch("generator.main.cli.aiohttp.ClientSession") as MockSession:  # Mock API call
 
             # Mock API response for reload
             mock_response = AsyncMock()
@@ -455,7 +455,7 @@ class TestFeedbackCommand:
         """Test feedback command with rating."""
         from generator.main.cli import cli
 
-        with patch("main.cli.aiohttp.ClientSession") as MockSession:
+        with patch("generator.main.cli.aiohttp.ClientSession") as MockSession:
             mock_response = AsyncMock()
             mock_response.status = 200
             mock_response.json = AsyncMock(
@@ -523,7 +523,7 @@ class TestAgentCommands:
         from generator.main.cli import cli
 
         # 'agent list' is not a command, it's 'plugin list'
-        with patch("main.cli.AGENT_REGISTRY", {"test_agent": "TestAgentClass"}):
+        with patch("generator.main.cli.AGENT_REGISTRY", {"test_agent": "TestAgentClass"}):
             result = cli_runner.invoke(cli, ["plugin", "list"])
 
             assert result.exit_code in [0, 1, 2]
@@ -638,7 +638,7 @@ class TestUtilityFunctions:
 
     def test_create_timestamped_output_dir(self, tmp_path):
         """Test creating timestamped output directory."""
-        from main.cli import create_timestamped_output_dir
+        from generator.main.cli import create_timestamped_output_dir
 
         output_dir = create_timestamped_output_dir(tmp_path)
 
@@ -648,7 +648,7 @@ class TestUtilityFunctions:
 
     def test_suggest_recovery_cli(self):
         """Test recovery suggestion function."""
-        from main.cli import suggest_recovery_cli
+        from generator.main.cli import suggest_recovery_cli
 
         # Should not raise exception
         try:
@@ -659,7 +659,7 @@ class TestUtilityFunctions:
 
     def test_suggest_recovery_cli_without_error(self):
         """Test recovery suggestions without specific error."""
-        from main.cli import suggest_recovery_cli
+        from generator.main.cli import suggest_recovery_cli
 
         try:
             suggest_recovery_cli()
@@ -673,7 +673,7 @@ class TestDynamicCommandRegistry:
 
     def test_register_cli_command(self, cli_runner):
         """Test dynamic command registration."""
-        from main.cli import register_cli_command
+        from generator.main.cli import register_cli_command
 
         @register_cli_command(name="test-dynamic", help_text="Test dynamic command")
         def test_command():
@@ -681,7 +681,7 @@ class TestDynamicCommandRegistry:
             pass
 
         # Command should be registered
-        from main.cli import _command_registry
+        from generator.main.cli import _command_registry
 
         assert "test-dynamic" in _command_registry or True
 
@@ -722,7 +722,7 @@ class TestColoredOutput:
 
     def test_rich_console_available(self):
         """Test Rich console is available."""
-        from main.cli import console
+        from generator.main.cli import console
 
         assert console is not None
 
@@ -782,7 +782,7 @@ class TestAsyncCommandExecution:
         Path("README.md").write_text("# Test Readme")
         Path("output").mkdir()
 
-        with patch("main.cli.WorkflowEngine") as MockEngine:
+        with patch("generator.main.cli.WorkflowEngine") as MockEngine:
             mock_engine = MagicMock()
             mock_engine.orchestrate = AsyncMock(return_value={"status": "success"})
             MockEngine.return_value = mock_engine
