@@ -2035,23 +2035,28 @@ code_path = os.path.join(temp_root, "code")
 if code_path not in sys.path:
     sys.path.insert(0, code_path)
 
-# FIX Issue 2: Add immediate subdirectories of code/ to sys.path
-# This handles imports like "from main import app" when main.py is in code/app/main.py
-def add_immediate_subdirs(base_dir):
-    """Add immediate subdirectories of base_dir that contain Python files to sys.path."""
+# FIX Issue 2: Recursively add ALL subdirectories of code/ that contain Python files to sys.path
+# This handles imports like "from app.main import app" when code is nested in code/generated/hello_generator/app/
+def add_all_python_dirs(base_dir):
+    """Recursively add all subdirectories of base_dir that contain Python files to sys.path."""
     base_path = Path(base_dir)
     if base_path.exists() and base_path.is_dir():
-        for entry in base_path.iterdir():
-            if entry.is_dir():
-                # Check if subdirectory has Python files (indicates it's a package/module dir)
-                # Use next() with a default to stop after finding the first Python file
-                has_python_files = next(entry.glob('*.py'), None) is not None
-                if has_python_files:
-                    entry_str = str(entry)
-                    if entry_str not in sys.path:
-                        sys.path.insert(0, entry_str)
+        # Directories to skip (common non-package directories)
+        skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env'}
+        
+        # Walk the entire directory tree
+        for root, dirs, files in os.walk(base_path):
+            # Filter out directories we should skip (modifies dirs in-place to prevent traversal)
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            
+            # Check if this directory contains Python files (excluding __pycache__ and test artifacts)
+            python_files = [f for f in files if f.endswith('.py') and not f.startswith('.')]
+            if python_files:
+                root_str = str(root)
+                if root_str not in sys.path:
+                    sys.path.insert(0, root_str)
 
-add_immediate_subdirs(code_path)
+add_all_python_dirs(code_path)
 
 # Recursively add subdirectories containing __init__.py to make them importable as packages
 def add_package_dirs(base_dir):

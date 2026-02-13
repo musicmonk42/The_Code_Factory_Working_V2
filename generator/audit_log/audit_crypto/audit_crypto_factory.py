@@ -307,7 +307,9 @@ def _is_test_or_dev_mode() -> bool:
     if audit_crypto_mode == "dev":
         return True
     
-    if os.getenv("AUDIT_LOG_DEV_MODE", "").lower() == "true":
+    # FIX Issue 3: Treat empty string as NOT dev mode, only explicit "true" enables it
+    audit_log_dev_mode = os.getenv("AUDIT_LOG_DEV_MODE", "").strip().lower()
+    if audit_log_dev_mode in ("true", "1", "yes"):
         return True
     if os.getenv("PYTEST_CURRENT_TEST"):
         return True
