@@ -18,12 +18,16 @@ def aggressive_memory_cleanup():
     properly cleaned up before the next test starts.
     
     Enhanced in v2 to also clear module-level caches and mock call histories.
+    
+    IMPORTANT: Does NOT delete Mock modules from sys.modules as this breaks
+    active AsyncMock patches used in fixtures.
     """
     yield
-    # Clear all module-level caches
+    # Clear test module caches only (not Mock modules which break active patches)
     import sys
     for module_name in list(sys.modules.keys()):
-        if 'test_' in module_name or 'Mock' in module_name:
+        # Only clear test modules, not unittest.mock or pytest mocks
+        if 'test_' in module_name and 'Mock' not in module_name:
             try:
                 del sys.modules[module_name]
             except (KeyError, AttributeError):
@@ -81,32 +85,46 @@ def cleanup_background_loops():
     
     This fixture ensures that background loops from fixer_ast, plugin_manager,
     and audit_log are properly terminated to prevent test hangs.
+    
+    IMPORTANT: Only cleans up modules that were actually imported during this
+    session to avoid triggering heavy side-effect imports at teardown.
     """
     yield
     
-    # Cleanup fixer_ast background loop
-    try:
-        from self_fixing_engineer.self_healing_import_fixer.import_fixer import fixer_ast
-        fixer_ast._shutdown_background_loop()
-    except (ImportError, AttributeError):
-        pass  # Module may not be imported in all test runs
+    import sys
     
-    # Cleanup PluginManager background loops
-    try:
-        from self_fixing_engineer.simulation.plugins.plugin_manager import PluginManager
-        # Try to stop any existing plugin manager instances
-        if hasattr(PluginManager, '_instances'):
-            for instance in PluginManager._instances:
-                if hasattr(instance, 'stop_background_loop'):
-                    instance.stop_background_loop()
-    except (ImportError, AttributeError):
-        pass  # Module may not be imported in all test runs
+    # Cleanup fixer_ast background loop - only if already imported
+    fixer_ast_key = "self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_ast"
+    if fixer_ast_key in sys.modules:
+        try:
+            fixer_ast = sys.modules[fixer_ast_key]
+            if hasattr(fixer_ast, '_shutdown_background_loop'):
+                fixer_ast._shutdown_background_loop()
+        except Exception:
+            pass  # Ignore all errors during cleanup
     
-    # Cleanup TamperEvidentLogger instances
-    try:
-        from self_fixing_engineer.arbiter.audit_log import TamperEvidentLogger
-        instance = TamperEvidentLogger._instance
-        if instance and hasattr(instance, 'shutdown'):
-            instance.shutdown()
-    except (ImportError, AttributeError):
-        pass  # Module may not be imported in all test runs
+    # Cleanup PluginManager background loops - only if already imported
+    pm_key = "self_fixing_engineer.simulation.plugins.plugin_manager"
+    if pm_key in sys.modules:
+        try:
+            pm_mod = sys.modules[pm_key]
+            PluginManager = getattr(pm_mod, 'PluginManager', None)
+            if PluginManager and hasattr(PluginManager, '_instances'):
+                for instance in PluginManager._instances:
+                    if hasattr(instance, 'stop_background_loop'):
+                        instance.stop_background_loop()
+        except Exception:
+            pass  # Ignore all errors during cleanup
+    
+    # Cleanup TamperEvidentLogger instances - only if already imported
+    audit_key = "self_fixing_engineer.arbiter.audit_log"
+    if audit_key in sys.modules:
+        try:
+            audit_mod = sys.modules[audit_key]
+            TamperEvidentLogger = getattr(audit_mod, 'TamperEvidentLogger', None)
+            if TamperEvidentLogger:
+                instance = getattr(TamperEvidentLogger, '_instance', None)
+                if instance and hasattr(instance, 'shutdown'):
+                    instance.shutdown()
+        except Exception:
+            pass  # Ignore all errors during cleanup
