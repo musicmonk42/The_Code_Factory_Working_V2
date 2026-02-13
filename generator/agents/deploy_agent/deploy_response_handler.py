@@ -789,6 +789,10 @@ def _sanitize_llm_output(raw_output: str) -> str:
     if raw_output.endswith('```'):
         raw_output = raw_output[:-3]
     
+    # FIX Issue 3: Strip markdown bold markers (**text**) which are never valid in YAML/K8s configs
+    # This should be done after stripping code blocks but before returning
+    raw_output = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw_output)
+    
     return raw_output.strip()
 
 
@@ -1519,24 +1523,28 @@ class YAMLHandler(FormatHandler):
         # This helps when LLM occasionally adds explanatory text
         raw = self._sanitize_yaml_response(raw)
         
-        # Validate: Reject if contains obvious markdown patterns
-        # Check for ** (markdown bold) which should never appear in valid YAML values
-        # Note: We check for ** which covers both standalone bold and "- **" patterns
+        # FIX Issue 3: Instead of rejecting YAML with ** (markdown bold), sanitize it
+        # Markdown bold markers should never appear in valid YAML values and can be safely removed
         if "**" in raw:
-            # Provide context about where markdown was found
+            logger.warning(
+                "Found markdown bold markers (**) in YAML content. Sanitizing by removing them.",
+                extra={"handler": "YAMLHandler"}
+            )
+            # Remove markdown bold markers while preserving the text content
+            raw = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw)
+            
+            # Log lines that had markdown for debugging
             lines_with_markdown = [
                 f"Line {i+1}: {line[:80]}"
                 for i, line in enumerate(raw.split('\n'))
                 if "**" in line
             ]
-            context = "\n  ".join(lines_with_markdown[:3])  # Show first 3 occurrences
-            
-            raise ValueError(
-                f"Invalid output: Response contains Markdown formatting (** detected). "
-                f"Expected pure YAML without markdown bold syntax or bullets.\n"
-                f"  {context}\n"
-                f"Ensure LLM outputs ONLY YAML without markdown formatting."
-            )
+            if lines_with_markdown:
+                context = "\n  ".join(lines_with_markdown[:3])
+                logger.debug(
+                    f"Sanitized markdown formatting from YAML:\n  {context}",
+                    extra={"handler": "YAMLHandler"}
+                )
         
         # Parse YAML using ruamel.yaml for high fidelity
         # FIX 2: Support multi-document YAML with load_all()
