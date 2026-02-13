@@ -248,6 +248,15 @@ def configure_logging(
         specific_logger.handlers = []
         specific_logger.propagate = True  # Explicitly ensure propagation to root
     
+    # Also clear handlers for all existing loggers to prevent duplicate log messages
+    # This handles cases where third-party modules or imports have added handlers
+    for name in logging.root.manager.loggerDict:
+        if name not in MANAGED_LOGGERS:  # Don't re-process managed loggers
+            existing_logger = logging.getLogger(name)
+            if existing_logger.handlers:
+                existing_logger.handlers.clear()
+                existing_logger.propagate = True
+    
     # Log configuration success
     logger = logging.getLogger(__name__)
     logger.info("Logging configuration applied successfully")

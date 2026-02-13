@@ -207,11 +207,43 @@ def setup_nltk_data():
                                 logger.debug(f"NLTK data '{name}' found after waiting")
                                 continue
                             except LookupError:
-                                # Data still not available, skip download to avoid race
+                                # Data still not available after waiting, retry download
+                                # This handles cases where the download was interrupted or corrupt
                                 logger.warning(
-                                    f"NLTK data '{name}' still unavailable after waiting. "
-                                    f"NLP features may be degraded."
+                                    f"NLTK data '{name}' still unavailable after waiting. Attempting retry download..."
                                 )
+                                # Retry acquiring lock and downloading
+                                max_retries = 2
+                                for retry in range(max_retries):
+                                    try:
+                                        time.sleep(1)  # Brief delay before retry
+                                        # Check one more time if data exists
+                                        try:
+                                            nltk.data.find(path)
+                                            logger.info(f"NLTK data '{name}' found on retry {retry + 1}")
+                                            break
+                                        except LookupError:
+                                            pass
+                                        
+                                        # Try to acquire lock again
+                                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                                        # Got lock, try download
+                                        logger.info(f"Retrying NLTK data '{name}' download (attempt {retry + 1}/{max_retries})")
+                                        nltk.download(name, quiet=True)
+                                        logger.info(f"NLTK data '{name}' downloaded successfully on retry")
+                                        break
+                                    except (IOError, OSError):
+                                        # Lock still held, skip retry
+                                        if retry == max_retries - 1:
+                                            logger.warning(
+                                                f"Could not acquire lock for '{name}' after {max_retries} retries. "
+                                                f"NLP features may be degraded."
+                                            )
+                                        continue
+                                    except Exception as retry_error:
+                                        logger.warning(f"Retry {retry + 1} failed for '{name}': {retry_error}")
+                                        if retry == max_retries - 1:
+                                            logger.warning(f"All retries exhausted for '{name}'. NLP features may be degraded.")
                                 continue
                         
                         if lock_acquired:
