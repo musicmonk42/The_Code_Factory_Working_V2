@@ -1526,25 +1526,28 @@ class YAMLHandler(FormatHandler):
         # FIX Issue 3: Instead of rejecting YAML with ** (markdown bold), sanitize it
         # Markdown bold markers should never appear in valid YAML values and can be safely removed
         if "**" in raw:
-            logger.warning(
-                "Found markdown bold markers (**) in YAML content. Sanitizing by removing them.",
-                extra={"handler": "YAMLHandler"}
-            )
-            # Remove markdown bold markers while preserving the text content
-            raw = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw)
-            
-            # Log lines that had markdown for debugging
+            # Log lines that had markdown for debugging (before sanitization)
             lines_with_markdown = [
                 f"Line {i+1}: {line[:80]}"
                 for i, line in enumerate(raw.split('\n'))
                 if "**" in line
             ]
+            
+            logger.warning(
+                "Found markdown bold markers (**) in YAML content. Sanitizing by removing them.",
+                extra={"handler": "YAMLHandler", "affected_lines": len(lines_with_markdown)}
+            )
+            
+            # Log specific lines for debugging (before removal)
             if lines_with_markdown:
                 context = "\n  ".join(lines_with_markdown[:3])
                 logger.debug(
-                    f"Sanitized markdown formatting from YAML:\n  {context}",
+                    f"Markdown bold markers found in lines (showing first 3):\n  {context}",
                     extra={"handler": "YAMLHandler"}
                 )
+            
+            # Remove markdown bold markers while preserving the text content
+            raw = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw)
         
         # Parse YAML using ruamel.yaml for high fidelity
         # FIX 2: Support multi-document YAML with load_all()

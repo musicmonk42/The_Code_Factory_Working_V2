@@ -2044,7 +2044,8 @@ def add_immediate_subdirs(base_dir):
         for entry in base_path.iterdir():
             if entry.is_dir():
                 # Check if subdirectory has Python files (indicates it's a package/module dir)
-                has_python_files = any(entry.glob('*.py'))
+                # Use next() with a default to stop after finding the first Python file
+                has_python_files = next(entry.glob('*.py'), None) is not None
                 if has_python_files:
                     entry_str = str(entry)
                     if entry_str not in sys.path:
