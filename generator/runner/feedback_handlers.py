@@ -529,19 +529,3 @@ import atexit
 
 atexit.register(shutdown)
 
-
-# --------------------------------------------------------------------------- #
-# Example usage (doctest)
-# --------------------------------------------------------------------------- #
-if __name__ == "__main__":
-    collect_feedback("hitl_review", {"decision": "approve", "confidence": 0.97})
-
-    # Cross-platform example: write to current directory
-    register_sink(FileSink("feedback.jsonl"))
-
-    collect_feedback("policy_violation", {"rule": "rate_limit", "ip": "203.0.113.42"})
-
-    # Give the worker thread a moment to process before the main thread exits
-    time.sleep(0.1)
-    shutdown()
-    print(f"Feedback metrics on exit: {get_feedback_metrics()}")
