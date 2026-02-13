@@ -280,7 +280,7 @@ def mock_lazy_imports():
             return {"error_code": self.code, "detail": self.detail, **self.kwargs}
 
     # 2. Create mock modules
-    mock_logging_mod = MagicMock(log_action=MagicMock())
+    mock_logging_mod = MagicMock(log_action=AsyncMock())
     mock_security_mod = MagicMock(
         redact_secrets=MagicMock(side_effect=lambda x, **kwargs: x)
     )  # Pass-through
