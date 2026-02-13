@@ -2020,6 +2020,7 @@ class TestPlaceholder:
                 # Write conftest.py to the temp root to ensure code/ is importable
                 # FIX Bug 1: Handle nested package structures by adding both code/ and temp root to sys.path
                 # This fixes ModuleNotFoundError when tests import from nested packages like "from app.main import app"
+                # FIX Issue 2: Also add immediate subdirectories of code/ to sys.path
                 conftest_content = '''import sys
 import os
 from pathlib import Path
@@ -2033,6 +2034,24 @@ if temp_root not in sys.path:
 code_path = os.path.join(temp_root, "code")
 if code_path not in sys.path:
     sys.path.insert(0, code_path)
+
+# FIX Issue 2: Add immediate subdirectories of code/ to sys.path
+# This handles imports like "from main import app" when main.py is in code/app/main.py
+def add_immediate_subdirs(base_dir):
+    """Add immediate subdirectories of base_dir that contain Python files to sys.path."""
+    base_path = Path(base_dir)
+    if base_path.exists() and base_path.is_dir():
+        for entry in base_path.iterdir():
+            if entry.is_dir():
+                # Check if subdirectory has Python files (indicates it's a package/module dir)
+                # Use next() with a default to stop after finding the first Python file
+                has_python_files = next(entry.glob('*.py'), None) is not None
+                if has_python_files:
+                    entry_str = str(entry)
+                    if entry_str not in sys.path:
+                        sys.path.insert(0, entry_str)
+
+add_immediate_subdirs(code_path)
 
 # Recursively add subdirectories containing __init__.py to make them importable as packages
 def add_package_dirs(base_dir):

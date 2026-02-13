@@ -789,6 +789,10 @@ def _sanitize_llm_output(raw_output: str) -> str:
     if raw_output.endswith('```'):
         raw_output = raw_output[:-3]
     
+    # FIX Issue 3: Strip markdown bold markers (**text**) which are never valid in YAML/K8s configs
+    # This should be done after stripping code blocks but before returning
+    raw_output = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw_output)
+    
     return raw_output.strip()
 
 
@@ -1519,24 +1523,31 @@ class YAMLHandler(FormatHandler):
         # This helps when LLM occasionally adds explanatory text
         raw = self._sanitize_yaml_response(raw)
         
-        # Validate: Reject if contains obvious markdown patterns
-        # Check for ** (markdown bold) which should never appear in valid YAML values
-        # Note: We check for ** which covers both standalone bold and "- **" patterns
+        # FIX Issue 3: Instead of rejecting YAML with ** (markdown bold), sanitize it
+        # Markdown bold markers should never appear in valid YAML values and can be safely removed
         if "**" in raw:
-            # Provide context about where markdown was found
+            # Log lines that had markdown for debugging (before sanitization)
             lines_with_markdown = [
                 f"Line {i+1}: {line[:80]}"
                 for i, line in enumerate(raw.split('\n'))
                 if "**" in line
             ]
-            context = "\n  ".join(lines_with_markdown[:3])  # Show first 3 occurrences
             
-            raise ValueError(
-                f"Invalid output: Response contains Markdown formatting (** detected). "
-                f"Expected pure YAML without markdown bold syntax or bullets.\n"
-                f"  {context}\n"
-                f"Ensure LLM outputs ONLY YAML without markdown formatting."
+            logger.warning(
+                "Found markdown bold markers (**) in YAML content. Sanitizing by removing them.",
+                extra={"handler": "YAMLHandler", "affected_lines": len(lines_with_markdown)}
             )
+            
+            # Log specific lines for debugging (before removal)
+            if lines_with_markdown:
+                context = "\n  ".join(lines_with_markdown[:3])
+                logger.debug(
+                    f"Markdown bold markers found in lines (showing first 3):\n  {context}",
+                    extra={"handler": "YAMLHandler"}
+                )
+            
+            # Remove markdown bold markers while preserving the text content
+            raw = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw)
         
         # Parse YAML using ruamel.yaml for high fidelity
         # FIX 2: Support multi-document YAML with load_all()
@@ -1866,8 +1877,10 @@ class KubernetesHandler(FormatHandler):
         found_yaml_start = False  # Track if we've found the start of actual YAML
         
         for line in raw.split('\n'):
-            # Skip mermaid diagram blocks completely
-            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
+            # Use regex for more robust matching
+            if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
                 in_mermaid_block = True
                 continue
             if in_mermaid_block:
@@ -2138,8 +2151,10 @@ class HelmHandler(FormatHandler):
         found_yaml_start = False
         
         for line in raw.split('\n'):
-            # Skip mermaid diagram blocks completely
-            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
+            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
+            # Use regex for more robust matching
+            if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
                 in_mermaid_block = True
                 continue
             if in_mermaid_block:
