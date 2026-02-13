@@ -33,6 +33,8 @@ import re
 import subprocess
 import sys
 import time  # *** FIX: Added missing import ***
+import fcntl  # For file locking to prevent NLTK download race conditions
+import tempfile  # For lock file paths
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -156,6 +158,8 @@ def setup_nltk_data():
     Setup NLTK data with non-blocking downloads and proper error handling.
     If data is not available, log warning but don't block module import.
     This prevents SIGTERM during container startup due to download timeouts.
+    
+    Uses file locking to prevent race conditions when multiple replicas start simultaneously.
     """
     nltk_data_paths = {
         "punkt": "tokenizers/punkt",
@@ -183,37 +187,65 @@ def setup_nltk_data():
                     f"NLP features may be degraded."
                 )
             else:
+                # Use file locking to prevent race conditions in multi-replica scenarios
+                lock_file_path = os.path.join(tempfile.gettempdir(), f"nltk_{name}.lock")
                 try:
-                    logger.info(f"NLTK data '{name}' not found. Attempting download...")
-                    # Use threading for cross-platform timeout (works on Windows too)
-                    import threading
-                    
-                    # Use a dict for clearer thread communication
-                    download_result = {'success': False, 'error': None}
-                    
-                    def download_with_timeout():
+                    # Attempt to acquire exclusive lock with timeout
+                    with open(lock_file_path, 'w') as lock_file:
+                        lock_acquired = False
                         try:
-                            nltk.download(name, quiet=True)
-                            download_result['success'] = True
-                        except Exception as e:
-                            download_result['error'] = e
-                    
-                    download_thread = threading.Thread(target=download_with_timeout, daemon=True)
-                    download_thread.start()
-                    download_thread.join(timeout=30)  # 30 second timeout
-                    
-                    if download_thread.is_alive():
-                        logger.warning(
-                            f"NLTK download for '{name}' timed out after 30 seconds. "
-                            f"NLP features may be degraded."
-                        )
-                    elif download_result['error']:
-                        logger.warning(
-                            f"Failed to download NLTK data '{name}': {download_result['error']}. "
-                            f"NLP features may be degraded."
-                        )
-                    elif download_result['success']:
-                        logger.info(f"NLTK data '{name}' downloaded successfully")
+                            # Try to acquire lock with non-blocking mode first
+                            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            lock_acquired = True
+                        except (IOError, OSError):
+                            # Lock held by another process - wait briefly and check if data exists
+                            logger.info(f"Another process is downloading NLTK data '{name}', waiting...")
+                            time.sleep(2)
+                            # Check if data now exists (other process may have completed)
+                            try:
+                                nltk.data.find(path)
+                                logger.debug(f"NLTK data '{name}' found after waiting")
+                                continue
+                            except LookupError:
+                                # Data still not available, skip download to avoid race
+                                logger.warning(
+                                    f"NLTK data '{name}' still unavailable after waiting. "
+                                    f"NLP features may be degraded."
+                                )
+                                continue
+                        
+                        if lock_acquired:
+                            # We have the lock, proceed with download
+                            logger.info(f"NLTK data '{name}' not found. Attempting download...")
+                            # Use threading for cross-platform timeout (works on Windows too)
+                            import threading
+                            
+                            # Use a dict for clearer thread communication
+                            download_result = {'success': False, 'error': None}
+                            
+                            def download_with_timeout():
+                                try:
+                                    nltk.download(name, quiet=True)
+                                    download_result['success'] = True
+                                except Exception as e:
+                                    download_result['error'] = e
+                            
+                            download_thread = threading.Thread(target=download_with_timeout, daemon=True)
+                            download_thread.start()
+                            download_thread.join(timeout=30)  # 30 second timeout
+                            
+                            if download_thread.is_alive():
+                                logger.warning(
+                                    f"NLTK download for '{name}' timed out after 30 seconds. "
+                                    f"NLP features may be degraded."
+                                )
+                            elif download_result['error']:
+                                logger.warning(
+                                    f"Failed to download NLTK data '{name}': {download_result['error']}. "
+                                    f"NLP features may be degraded."
+                                )
+                            elif download_result['success']:
+                                logger.info(f"NLTK data '{name}' downloaded successfully")
                 except Exception as e:
                     logger.warning(
                         f"Error during NLTK download for '{name}': {e}. "

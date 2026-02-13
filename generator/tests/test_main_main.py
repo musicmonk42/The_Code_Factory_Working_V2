@@ -428,7 +428,8 @@ class TestAllInterfaceMode:
             # The mock_response needs to be the async context manager itself
             mock_response = AsyncMock()
             mock_response.status = 200
-            mock_response.json = AsyncMock(return_value={"status": "healthy"})
+            # Updated to match new /ready endpoint response format
+            mock_response.json = AsyncMock(return_value={"ready": True, "status": "ready"})
             mock_response.raise_for_status = MagicMock()
             mock_response.__aenter__ = AsyncMock(return_value=mock_response)
             mock_response.__aexit__ = AsyncMock()
@@ -442,13 +443,13 @@ class TestAllInterfaceMode:
 
             MockSession.return_value = mock_session
 
-            # Simulate API readiness check
+            # Simulate API readiness check (now using /ready endpoint)
             async def check_api():
                 async with MockSession() as session:
-                    async with session.get("http://127.0.0.1:8000/health") as resp:
+                    async with session.get("http://127.0.0.1:8000/ready") as resp:
                         resp.raise_for_status()
                         data = await resp.json()
-                        return data.get("status") == "healthy"
+                        return data.get("ready") is True
 
             result = await check_api()
             assert result is True
