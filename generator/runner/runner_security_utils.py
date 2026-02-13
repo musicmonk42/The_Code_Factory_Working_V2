@@ -1052,9 +1052,12 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
     matched_ranges = []
     
     def overlaps_existing(start, end):
-        """Check if a range overlaps with any existing range."""
+        """
+        Check if a range overlaps with any existing range.
+        Ranges don't overlap if one ends before the other starts.
+        """
         for existing_start, existing_end in matched_ranges:
-            # Check for overlap
+            # Check for overlap: NOT (end before existing_start OR start after existing_end)
             if not (end <= existing_start or start >= existing_end):
                 return True
         return False
@@ -1091,7 +1094,7 @@ def scan_for_secrets(content: str) -> List[Dict[str, Any]]:
         if len(key) <= 100 and not overlaps_existing(start, end):
             findings.append({
                 'type': 'api_key', 
-                'match': key[:10] + '...',
+                'match': key[:10] + '...' if len(key) > 10 else key,
                 'location_start': start,
                 'location_end': end
             })
