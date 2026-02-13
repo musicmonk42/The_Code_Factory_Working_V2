@@ -1166,7 +1166,8 @@ class AuditLogger:
                     portalocker.lock(f.fileno(), portalocker.LOCK_EX)
                     await f.write(json.dumps(entry, sort_keys=True, default=str) + "\n")
                     await f.flush()
-                    await aiofiles.os.fsync(f.fileno())
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(None, os.fsync, f.fileno())
                 finally:
                     portalocker.unlock(f.fileno())
 
