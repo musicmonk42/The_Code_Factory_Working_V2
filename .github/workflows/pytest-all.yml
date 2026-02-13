@@ -794,7 +794,7 @@ jobs:
         run: |
           # Start background memory monitor for diagnostics
           (while true; do
-            echo "$(date '+%H:%M:%S') Memory: $(free -h | grep Mem: | awk '{print $3 "/" $2}')"
+            echo "$(date '+%H:%M:%S') Memory: $(free -h | grep Mem: | awk '{print $3 "/" $2}')" 2>/dev/null || true
             sleep 10
           done) &
           echo $! > /tmp/memory_monitor.pid
