@@ -2041,11 +2041,17 @@ def add_all_python_dirs(base_dir):
     """Recursively add all subdirectories of base_dir that contain Python files to sys.path."""
     base_path = Path(base_dir)
     if base_path.exists() and base_path.is_dir():
+        # Directories to skip (common non-package directories)
+        skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env'}
+        
         # Walk the entire directory tree
         for root, dirs, files in os.walk(base_path):
-            # Check if this directory contains Python files
-            has_python_files = any(f.endswith('.py') for f in files)
-            if has_python_files:
+            # Filter out directories we should skip (modifies dirs in-place to prevent traversal)
+            dirs[:] = [d for d in dirs if d not in skip_dirs]
+            
+            # Check if this directory contains Python files (excluding __pycache__ and test artifacts)
+            python_files = [f for f in files if f.endswith('.py') and not f.startswith('.')]
+            if python_files:
                 root_str = str(root)
                 if root_str not in sys.path:
                     sys.path.insert(0, root_str)
