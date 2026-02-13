@@ -38,8 +38,8 @@ class ScenarioMetric(BaseModel):
         ..., description="Aggregation method for multiverse"
     )
 
-    @classmethod
     @field_validator("range")
+    @classmethod
     def validate_range(cls, v):
         """
         Validates that the range is a list of two floats where the first element is
