@@ -777,6 +777,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     logger.info("INITIALIZING JOB PERSISTENCE")
     logger.info("=" * 80)
+    
+    # Keep db reference for job recovery
+    db = None
+    
     try:
         from server.persistence import initialize_persistence
         from omnicore_engine.database.database import Database
@@ -798,6 +802,82 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.warning("Continuing without database persistence - jobs will be lost on restart")
         from server.persistence import initialize_persistence
         initialize_persistence(None)
+        db = None
+    
+    # FIX Issue 3: Recover persisted jobs from database on startup
+    # This ensures jobs survive application restarts and are not lost when containers are redeployed
+    if db is not None:
+        logger.info("=" * 80)
+        logger.info("RECOVERING PERSISTED JOBS FROM DATABASE")
+        logger.info("=" * 80)
+        try:
+            from server.persistence import load_job_from_database, save_job_to_database
+            from server.storage import add_job, jobs_db
+            from server.schemas.jobs import JobStatus
+            
+            # Query database for all job agent states (those with agent_type='job_storage')
+            job_states = await db.query_agent_states(
+                filters={"agent_type": "job_storage"},
+                limit=1000  # Adjust if you expect more jobs
+            )
+            
+            recovered_count = 0
+            failed_count = 0
+            running_reset_count = 0
+            
+            for job_state in job_states:
+                # Extract job_id from agent name (format: "job_{job_id}")
+                agent_name = job_state.get("id", "")
+                if not agent_name.startswith("job_"):
+                    continue
+                    
+                job_id = agent_name[4:]  # Remove "job_" prefix
+                
+                # Skip if job is already in memory
+                if job_id in jobs_db:
+                    logger.debug(f"Job {job_id} already in memory, skipping recovery")
+                    continue
+                
+                # Load job from database
+                job = await load_job_from_database(job_id)
+                if job:
+                    # Reset RUNNING jobs to FAILED status (they were interrupted by restart)
+                    if job.status == JobStatus.RUNNING:
+                        job.status = JobStatus.FAILED
+                        job.error = "Job interrupted by application restart"
+                        job.updated_at = datetime.now(timezone.utc)
+                        job.completed_at = datetime.now(timezone.utc)
+                        if not job.metadata:
+                            job.metadata = {}
+                        job.metadata["restart_recovery"] = True
+                        job.metadata["recovery_timestamp"] = datetime.now(timezone.utc).isoformat()
+                        running_reset_count += 1
+                        logger.info(f"Reset RUNNING job {job_id} to FAILED after restart")
+                        
+                        # Save the updated status back to database
+                        await save_job_to_database(job)
+                    
+                    # Add job back to in-memory storage
+                    add_job(job)
+                    recovered_count += 1
+                    logger.debug(f"Recovered job {job_id} with status {job.status.value}")
+                else:
+                    failed_count += 1
+                    logger.warning(f"Failed to recover job {job_id} from database")
+            
+            if recovered_count > 0:
+                logger.info(f"✓ Recovered {recovered_count} jobs from database")
+                if running_reset_count > 0:
+                    logger.info(f"  → Reset {running_reset_count} RUNNING jobs to FAILED")
+            else:
+                logger.info("✓ No jobs to recover from database")
+            
+            if failed_count > 0:
+                logger.warning(f"⚠ Failed to recover {failed_count} jobs")
+                
+        except Exception as e:
+            logger.error(f"Failed to recover jobs from database: {e}", exc_info=True)
+            logger.warning("Continuing without job recovery - some jobs may have been lost")
     
     # Start background agent loading (only if routers loaded successfully)
     if routers_ok and get_agent_loader is not None:
