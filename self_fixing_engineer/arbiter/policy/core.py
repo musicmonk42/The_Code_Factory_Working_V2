@@ -1215,7 +1215,7 @@ class PolicyEngine:
                     self._policies["domain_rules"].get(
                         "*",
                         {
-                            "allow": self.config.DEFAULT_AUTO_LEARN_POLICY,
+                            "allow": getattr(self.config, "DEFAULT_AUTO_LEARN_POLICY", True),
                             "reason": "Default",
                         },
                     ),
