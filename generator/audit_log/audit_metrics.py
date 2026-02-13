@@ -82,45 +82,107 @@ except (ImportError, AttributeError):
             # _names_to_collectors is used by safe_counter() function (line 133)
             # to check if a metric is already registered
             self._names_to_collectors = {}
-        
+            self._values = {}
+
+        def get_sample_value(self, name, labels=None):
+            key = (name, tuple(sorted(labels.items())) if labels else ())
+            return self._values.get(key)
+
         def collect(self):
             return []
-    
+
     class MockCollectorRegistry(MockRegistry):
         pass
-    
+
+    _MOCK_REGISTRY_INSTANCE = None
+
     class MockMetric:
-        def __init__(self, *args, **kwargs):
-            pass
-        
-        def labels(self, **kwargs):
-            return self
-        
+        def __init__(self, name=None, description='', labelnames=(), *args, **kwargs):
+            self._name = name or ''
+            self._labelnames = tuple(labelnames) if labelnames else ()
+            self._label_values = {}
+            self._value = 0.0
+            self._is_counter = False
+
+        def _get_registry(self):
+            global _MOCK_REGISTRY_INSTANCE
+            return _MOCK_REGISTRY_INSTANCE
+
+        def labels(self, *args, **kwargs):
+            label_dict = {}
+            if args:
+                for i, val in enumerate(args):
+                    if i < len(self._labelnames):
+                        label_dict[self._labelnames[i]] = val
+            label_dict.update(kwargs)
+            key = tuple(sorted(label_dict.items()))
+            if key not in self._label_values:
+                child = MockMetric.__new__(MockMetric)
+                child._name = self._name
+                child._labelnames = self._labelnames
+                child._label_values = {}
+                child._value = 0.0
+                child._is_counter = self._is_counter
+                child._bound_labels = label_dict
+                self._label_values[key] = child
+            return self._label_values[key]
+
         def inc(self, amount=1):
-            pass
-        
+            self._value += amount
+            self._update_registry()
+
         def dec(self, amount=1):
-            pass
-        
+            self._value -= amount
+            self._update_registry()
+
         def set(self, value):
-            pass
-        
+            self._value = value
+            self._update_registry()
+
         def observe(self, value):
             pass
-        
+
+        def clear(self):
+            self._label_values.clear()
+            registry = self._get_registry()
+            if registry:
+                to_remove = [metric_key for metric_key in registry._values if metric_key[0] == self._sample_name()]
+                for metric_key in to_remove:
+                    del registry._values[metric_key]
+
+        def _sample_name(self):
+            if not self._is_counter or self._name.endswith('_total'):
+                return self._name
+            return self._name + '_total'
+
+        def _update_registry(self):
+            registry = self._get_registry()
+            if registry is None:
+                return
+            labels = getattr(self, '_bound_labels', None)
+            label_key = tuple(sorted(labels.items())) if labels else ()
+            key = (self._sample_name(), label_key)
+            registry._values[key] = self._value
+
         def collect(self):
             return []
-    
-    Counter = MockMetric
+
+    class MockCounter(MockMetric):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._is_counter = True
+
+    Counter = MockCounter
     Gauge = MockMetric
     Histogram = MockMetric
     HistogramMetricFamily = MockMetric
-    REGISTRY = MockRegistry()
+    _MOCK_REGISTRY_INSTANCE = MockRegistry()
+    REGISTRY = _MOCK_REGISTRY_INSTANCE
     CollectorRegistry = MockCollectorRegistry
-    
+
     def push_to_gateway(*args, **kwargs):
         pass
-    
+
     PROMETHEUS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
