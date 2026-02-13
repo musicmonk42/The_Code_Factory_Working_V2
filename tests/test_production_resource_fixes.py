@@ -10,14 +10,19 @@ Tests for:
 """
 
 import pytest
+from pathlib import Path
+
+# Get repository root directory dynamically
+REPO_ROOT = Path(__file__).parent.parent
 
 
 class TestSFEServiceSingleton:
     """Test that SFEService uses singleton pattern."""
 
-    def test_sfe_service_singleton_pattern_in_code(self):
+    def test_sfe_service_implements_singleton_pattern(self):
         """Test that get_sfe_service implements singleton pattern in source code."""
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/routers/sfe.py', 'r') as f:
+        sfe_file = REPO_ROOT / 'server' / 'routers' / 'sfe.py'
+        with open(sfe_file, 'r') as f:
             sfe_content = f.read()
         
         # Check for singleton pattern elements
@@ -29,7 +34,8 @@ class TestSFEServiceSingleton:
         
     def test_get_sfe_service_instance_function_exists(self):
         """Test that get_sfe_service_instance function exists in source code."""
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/routers/sfe.py', 'r') as f:
+        sfe_file = REPO_ROOT / 'server' / 'routers' / 'sfe.py'
+        with open(sfe_file, 'r') as f:
             sfe_content = f.read()
         
         # Check that the function exists
@@ -43,7 +49,8 @@ class TestClarifierMetricsLogging:
     def test_clarifier_metrics_uses_debug_level(self):
         """Test that _monitor_metrics uses logger.debug instead of logger.info."""
         # Read the source code to verify logging level
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/generator/clarifier/clarifier.py', 'r') as f:
+        clarifier_file = REPO_ROOT / 'generator' / 'clarifier' / 'clarifier.py'
+        with open(clarifier_file, 'r') as f:
             source = f.read()
         
         # Find the _monitor_metrics method
@@ -67,7 +74,8 @@ class TestArbiterJobIdValidation:
         # The actual endpoint validation is in server/routers/sfe.py lines 561-562
         
         # Verify the validation logic exists
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/routers/sfe.py', 'r') as f:
+        sfe_file = REPO_ROOT / 'server' / 'routers' / 'sfe.py'
+        with open(sfe_file, 'r') as f:
             sfe_content = f.read()
         
         # Check that validation for job_id exists
@@ -77,7 +85,8 @@ class TestArbiterJobIdValidation:
 
     def test_arbiter_frontend_includes_sanitize_job_id(self):
         """Test that frontend startArbiter uses sanitizeJobId."""
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/static/js/main.js', 'r') as f:
+        main_js_file = REPO_ROOT / 'server' / 'static' / 'js' / 'main.js'
+        with open(main_js_file, 'r') as f:
             main_js = f.read()
         
         # Find the startArbiter function
@@ -102,7 +111,8 @@ class TestFileDiscoveryCache:
 
     def test_completed_job_files_cache_exists(self):
         """Test that completedJobFilesCache Map is defined."""
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/static/js/main.js', 'r') as f:
+        main_js_file = REPO_ROOT / 'server' / 'static' / 'js' / 'main.js'
+        with open(main_js_file, 'r') as f:
             main_js = f.read()
         
         # Check that cache is defined
@@ -111,7 +121,8 @@ class TestFileDiscoveryCache:
         
     def test_create_job_card_uses_cache(self):
         """Test that createJobCard checks cache before fetching."""
-        with open('/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2/server/static/js/main.js', 'r') as f:
+        main_js_file = REPO_ROOT / 'server' / 'static' / 'js' / 'main.js'
+        with open(main_js_file, 'r') as f:
             main_js = f.read()
         
         # Find createJobCard function

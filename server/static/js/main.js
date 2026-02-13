@@ -2478,12 +2478,29 @@ async function detectBugs() {
             data.bugs.forEach(bug => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const bugType = escapeHtml(bug.type || 'Bug');
+                const bugMessage = escapeHtml(bug.message || bug.description || '');
+                const bugFile = escapeHtml(bug.file || 'N/A');
+                const bugLine = escapeHtml(String(bug.line || 'N/A'));
+                const bugSeverity = escapeHtml(bug.severity || 'medium');
+                
                 card.innerHTML = `
-                    <h4>${bug.type || 'Bug'}: ${bug.message || bug.description}</h4>
-                    <p>File: ${bug.file || 'N/A'}, Line: ${bug.line || 'N/A'}</p>
-                    <p>Severity: <span class="severity-${bug.severity || 'medium'}">${bug.severity || 'medium'}</span></p>
-                    ${bug.bug_id ? `<button class="btn btn-primary" onclick="proposeFix('${bug.bug_id}')">Propose Fix</button>` : ''}
+                    <h4>${bugType}: ${bugMessage}</h4>
+                    <p>File: ${bugFile}, Line: ${bugLine}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
                 `;
+                
+                // Add button using safe method if bug_id exists
+                if (bug.bug_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    card.appendChild(button);
+                }
+                
                 container.appendChild(card);
             });
         } else {
@@ -2521,10 +2538,18 @@ async function analyzeCodebase() {
             data.issues.forEach(issue => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const issueType = escapeHtml(issue.type || 'Issue');
+                const issueMessage = escapeHtml(issue.message || '');
+                const issueFile = escapeHtml(issue.file || 'N/A');
+                const issueLine = escapeHtml(String(issue.line || 'N/A'));
+                const issueSeverity = escapeHtml(issue.severity || 'medium');
+                
                 card.innerHTML = `
-                    <h4>${issue.type || 'Issue'}: ${issue.message}</h4>
-                    <p>File: ${issue.file || 'N/A'}, Line: ${issue.line || 'N/A'}</p>
-                    <p>Severity: <span class="severity-${issue.severity || 'medium'}">${issue.severity || 'medium'}</span></p>
+                    <h4>${issueType}: ${issueMessage}</h4>
+                    <p>File: ${issueFile}, Line: ${issueLine}</p>
+                    <p>Severity: <span class="severity-${issueSeverity}">${issueSeverity}</span></p>
                 `;
                 container.appendChild(card);
             });
@@ -2560,19 +2585,37 @@ async function prioritizeBugs() {
             data.prioritized_bugs.forEach((bug, index) => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const bugType = escapeHtml(bug.type || 'Bug');
+                const bugMessage = escapeHtml(bug.message || bug.description || '');
+                const bugFile = escapeHtml(bug.file || 'N/A');
+                const bugLine = escapeHtml(String(bug.line || 'N/A'));
+                const bugSeverity = escapeHtml(bug.severity || 'medium');
+                const priorityScore = escapeHtml(String(bug.priority_score || 'N/A'));
+                
                 card.innerHTML = `
                     <div style="font-weight: bold; color: #007bff;">Priority #${index + 1}</div>
-                    <h4>${bug.type || 'Bug'}: ${bug.message || bug.description}</h4>
-                    <p>File: ${bug.file || 'N/A'}, Line: ${bug.line || 'N/A'}</p>
-                    <p>Severity: <span class="severity-${bug.severity || 'medium'}">${bug.severity || 'medium'}</span></p>
-                    <p>Priority Score: ${bug.priority_score || 'N/A'}</p>
-                    ${bug.bug_id ? `<button class="btn btn-primary" onclick="proposeFix('${bug.bug_id}')">Propose Fix</button>` : ''}
+                    <h4>${bugType}: ${bugMessage}</h4>
+                    <p>File: ${bugFile}, Line: ${bugLine}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
+                    <p>Priority Score: ${priorityScore}</p>
                 `;
+                
+                // Add button using safe method if bug_id exists
+                if (bug.bug_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    card.appendChild(button);
+                }
+                
                 container.appendChild(card);
             });
         } else if (data.message) {
             const container = document.getElementById('errors-list');
-            container.innerHTML = `<p class="no-data">${data.message}</p>`;
+            container.innerHTML = `<p class="no-data">${escapeHtml(data.message)}</p>`;
         }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
