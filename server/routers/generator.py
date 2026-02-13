@@ -1497,6 +1497,26 @@ async def run_full_pipeline(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
+    # Check if job is already waiting for clarification
+    job = jobs_db[job_id]
+    if job.status == JobStatus.NEEDS_CLARIFICATION:
+        questions = job.metadata.get("clarification_questions", [])
+        logger.info(
+            f"Pipeline endpoint called for job {job_id} already in NEEDS_CLARIFICATION state. "
+            f"Returning 202 with {len(questions)} questions."
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "job_id": job_id,
+                "status": "needs_clarification",
+                "questions": questions,
+                "message": "Pipeline paused — clarification required before code generation. "
+                          f"Please answer questions via POST /generator/{job_id}/clarification/respond",
+                "clarification_endpoint": f"/generator/{job_id}/clarification/respond",
+            },
+        )
+
     result = await generator_service.run_full_pipeline(
         job_id=job_id,
         readme_content=request.readme_content,
@@ -1527,6 +1547,50 @@ async def run_full_pipeline(
 
     logger.info(f"Full pipeline executed for job {job_id}")
     return result
+
+
+@router.get("/{job_id}/pipeline")
+async def get_pipeline_status(job_id: str):
+    """
+    Get the current pipeline status for a job.
+    
+    This endpoint allows the frontend to check if a job is waiting for clarification
+    or check the current state of the pipeline.
+    
+    **Path Parameters:**
+    - job_id: Unique job identifier
+    
+    **Returns:**
+    - Pipeline status with clarification questions if applicable
+    
+    **Errors:**
+    - 404: Job not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    
+    job = jobs_db[job_id]
+    
+    # If job is waiting for clarification, return questions
+    if job.status == JobStatus.NEEDS_CLARIFICATION:
+        questions = job.metadata.get("clarification_questions", [])
+        return JSONResponse(
+            status_code=200,
+            content={
+                "job_id": job_id,
+                "status": "needs_clarification",
+                "questions": questions,
+                "message": "Pipeline paused — clarification required before code generation.",
+                "clarification_endpoint": f"/generator/{job_id}/clarification/respond",
+            },
+        )
+    
+    # Otherwise return current job status
+    return {
+        "job_id": job_id,
+        "status": job.status.value if hasattr(job.status, 'value') else str(job.status),
+        "message": f"Job is {job.status}",
+    }
 
 
 @router.post("/{job_id}/dispatch-to-sfe")
