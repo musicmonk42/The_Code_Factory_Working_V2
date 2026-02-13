@@ -2073,7 +2073,12 @@ class HelmHandler(FormatHandler):
                 try:
                     data = ru_yaml.load(raw)
                     if not isinstance(data, dict):
-                        raise ValueError("Helm chart content must be a dictionary")
+                        logger.warning("Helm chart content is not a dictionary, creating fallback chart")
+                        return {
+                            "Chart.yaml": self._default_chart_yaml(),
+                            "values.yaml": {},
+                            "templates": {}
+                        }
                     
                     # Check if it's a Chart.yaml or values.yaml based on content
                     if "apiVersion" in data and "name" in data and "version" in data:
