@@ -802,30 +802,10 @@ class AuditMetrics:
 # Global instance of AuditMetrics
 audit_metrics = AuditMetrics()
 
-# --- Usage decorators/examples ---
-
-
-# FIX: Update decorators to use the Prometheus metric name, not the Python variable name
-@observe_latency(WRITE_LATENCY)
-async def example_write():
-    """Simulates an asynchronous write operation and records its latency."""
-    await asyncio.sleep(0.05)
-    LOG_WRITES.labels(action="example").inc()  # Added label for correct usage
-    return {"status": "success", "data": "some log entry"}
-
-
-@track_size(APPEND_SIZE, lambda x: len(json.dumps(x)))
-async def example_append(entry: Dict[str, Any]):
-    """Simulates appending an entry and tracks its size."""
-    await asyncio.sleep(0.01)
-    return entry
-
 
 def update_vulnerability_count(level: str, count: int):
     """Updates the current count of vulnerabilities for a given level."""
     VULN_COUNT.labels(level).set(count)
-    # The 'name' here needs to be the Prometheus name used by the collector
-    # In this case, we'll use the Prometheus name explicitly for observation.
     audit_metrics.observe_metric("audit_security_vulnerability_count", float(count))
     logger.info(f"Vulnerability count updated: {level}={count}")
 
@@ -835,65 +815,3 @@ def update_performance_score(score: float):
     PERF_SCORE.set(score)
     audit_metrics.observe_metric("audit_system_performance_score", score)
     logger.info(f"Performance score updated: {score}")
-
-
-async def main():
-    logger.info("Starting audit metrics examples...")
-    audit_metrics.start()
-
-    # Note: custom metric definition is updated to use safe_counter for type='counter'
-    custom_error_counter = audit_metrics.define_custom_metric(
-        "database_errors", "counter", ["db_type"], "Counts database-related errors"
-    )
-    custom_error_counter.labels("sqlite").inc()
-    custom_error_counter.labels("postgres").inc(5)
-
-    for i in range(50):
-        await example_write()
-        await example_append(
-            {"id": i, "data": f"log_entry_{i}", "timestamp": time.time()}
-        )
-        if i % 3 == 0:
-            ERROR_TYPES.labels(type="network_issue").inc()
-            LOG_ERRORS.inc()
-        if i % 5 == 0:
-            CRYPTO_FAILURES.labels(op="sign_fail").inc()
-        PLUGIN_INVOCATIONS.labels(event="pre_append", plugin="data_enrichment").inc()
-
-        if i > 20 and i < 30:
-            await asyncio.sleep(0.1 + (i % 5) * 0.05)
-        else:
-            await asyncio.sleep(0.02)
-
-    update_vulnerability_count("high", 2)
-    update_vulnerability_count("medium", 5)
-    update_performance_score(85.5)
-
-    for _ in range(10):
-        update_performance_score(np.random.normal(60, 5))
-        await asyncio.sleep(0.1)
-
-    update_vulnerability_count("high", 15)
-
-    logger.info(
-        f"Allowing background monitoring and self-test tasks to run for {SELF_TEST_INTERVAL * 1.5} seconds..."
-    )
-    await asyncio.sleep(SELF_TEST_INTERVAL * 1.5)
-
-    logger.info("Initiating graceful shutdown...")
-    await audit_metrics.shutdown()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info(
-            "Program interrupted by user. Initiating shutdown (Note: shutdown is handled by asyncio.run)."
-        )
-    except Exception as e:
-        logger.error(f"An error occurred: {e}", exc_info=True)
