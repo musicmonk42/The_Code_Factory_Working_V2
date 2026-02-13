@@ -50,30 +50,15 @@ except ImportError:
     VISION_LIBRARIES_INSTALLED = False
     vision = None
 
-# Internal imports that exist in this package
-# from .codegen_llm_call import SecretsManager  <-- DELETED DEAD IMPORT
-# New imports for standardized utilities
-# NOTE: The originals are removed as per instructions
-# from .codegen_llm_call import get_token_count
-# from utils.agents_utils import AuditLogger, JsonConsoleAuditLogger
-# from utils import security_utils
-
-# --- New Centralized Utility Imports (Hypothetical) ---
-# Assuming 'runner' is an importable package structure
+# --- Centralized Utility Imports ---
+# Runner utilities for LLM calls, audit logging, and security
 try:
-    # --- FIX: Changed imports to be relative ---
-    from ...runner.llm_client import SecretsManager  # <-- ADDED REAL IMPORT
+    from ...runner.llm_client import SecretsManager
     from ...runner.llm_client import count_tokens
     from ...runner.runner_logging import log_audit_event
     from ...runner.runner_security_utils import redact_secrets
-
-    # We will need a placeholder or a default AuditLogger/security_utils for the function signature if we cannot remove the dependency fully.
-    # For now, we will update the usage. The dummy AuditLogger in build_code_generation_prompt will be replaced.
 except ImportError:
-    # A placeholder/mock is often needed in production refactoring until the runner is fully available
-    # For this exercise, we will assume the imports succeed and replace the usage.
-    # We need to define a dummy function/class to prevent a crash if the imports fail, as the signature requires it.
-    # Since the user instruction implies a replacement, we will remove the old imports and assume the new ones exist.
+    # Fallback stubs for environments where runner utilities are unavailable
     class DummyAuditLogger:
         def log_action(self, *args, **kwargs):
             logging.warning(
@@ -91,7 +76,7 @@ except ImportError:
         logging.warning(
             "Using dummy count_tokens as runner utility is unavailable. Returning a safe estimate."
         )
-        return len(prompt) // 4  # Simple char-to-token approximation (can't use constant - not defined yet)
+        return len(prompt) // 4  # Simple char-to-token approximation
 
     # Need a dummy SecretsManager if the primary import fails, otherwise secrets_manager = SecretsManager() will fail
     class SecretsManager:
@@ -99,8 +84,6 @@ except ImportError:
             logging.warning(f"Using dummy SecretsManager. {key} not found.")
             return os.getenv(key)
 
-
-# --- End New Centralized Utility Imports ---
 
 secrets_manager = SecretsManager()
 load_dotenv()

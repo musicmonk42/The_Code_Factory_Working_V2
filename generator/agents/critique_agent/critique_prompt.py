@@ -112,7 +112,7 @@ except ImportError as e:
         "Running in standalone/degraded mode with dummy implementations."
     )
 
-    def log_audit_event(*args, **kwargs):
+    async def log_audit_event(*args, **kwargs):
         logging.warning("Audit logging disabled.")
 
     async def log_action(*args, **kwargs):
@@ -147,28 +147,20 @@ except ImportError as e:
     def save_files_to_output(*args, **kwargs):
         return None
 
-    # Local metrics; label style must be compatible with production & Dummy use
-    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-    try:
-        PROMPT_BUILDS = Counter(
-            "critique_prompt_builds_total",
-            "Total prompt builds",
-            ["status"],
-        )
-        PROMPT_LATENCY = Histogram(
-            "critique_prompt_build_latency_seconds",
-            "Prompt build latency",
-        )
-    except ValueError:
-        # Metrics already registered (happens during pytest collection)
-        from prometheus_client import REGISTRY
+    # Local metrics - use shared utility for idempotent registration
+    from generator.agents.metrics_utils import get_or_create_metric
 
-        PROMPT_BUILDS = REGISTRY._names_to_collectors.get(
-            "critique_prompt_builds_total"
-        )
-        PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
-            "critique_prompt_build_latency_seconds"
-        )
+    PROMPT_BUILDS = get_or_create_metric(
+        Counter,
+        "critique_prompt_builds_total",
+        "Total prompt builds",
+        ["status"],
+    )
+    PROMPT_LATENCY = get_or_create_metric(
+        Histogram,
+        "critique_prompt_build_latency_seconds",
+        "Prompt build latency",
+    )
 
 # Constants
 MAX_PROMPT_TOKENS = 8000

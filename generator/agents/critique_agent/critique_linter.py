@@ -56,29 +56,21 @@ except TypeError:
     # Fallback for older OpenTelemetry versions
     tracer = None
 
-# Metrics
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    LINT_CALLS = Counter(
-        "critique_lint_calls_total", "Lint calls", ["language", "tool"]
-    )
-    LINT_LATENCY = Histogram(
-        "critique_lint_latency_seconds", "Lint latency", ["language", "tool"]
-    )
-    LINT_ERRORS_COUNT = Gauge(
-        "critique_lint_errors", "Errors found", ["language", "severity"]
-    )
-    LINT_TRENDS = Histogram(
-        "critique_lint_trends", "Error trends over time", ["language", "severity"]
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
+# Metrics - use shared utility for idempotent registration
+from generator.agents.metrics_utils import get_or_create_metric
 
-    LINT_CALLS = REGISTRY._names_to_collectors.get("critique_lint_calls_total")
-    LINT_LATENCY = REGISTRY._names_to_collectors.get("critique_lint_latency_seconds")
-    LINT_ERRORS_COUNT = REGISTRY._names_to_collectors.get("critique_lint_errors")
-    LINT_TRENDS = REGISTRY._names_to_collectors.get("critique_lint_trends")
+LINT_CALLS = get_or_create_metric(
+    Counter, "critique_lint_calls_total", "Lint calls", ["language", "tool"]
+)
+LINT_LATENCY = get_or_create_metric(
+    Histogram, "critique_lint_latency_seconds", "Lint latency", ["language", "tool"]
+)
+LINT_ERRORS_COUNT = get_or_create_metric(
+    Gauge, "critique_lint_errors", "Errors found", ["language", "severity"]
+)
+LINT_TRENDS = get_or_create_metric(
+    Histogram, "critique_lint_trends", "Error trends over time", ["language", "severity"]
+)
 
 # Error Explanations
 ERROR_EXPLANATIONS = {

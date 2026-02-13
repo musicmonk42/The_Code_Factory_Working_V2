@@ -99,21 +99,18 @@ except ImportError as e:
         return None
 
 
-# Prometheus Metrics
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    FIX_SUCCESS = Counter("fix_success_total", "Successful fixes applied", ["strategy"])
-    FIX_FAILURE = Counter("fix_failure_total", "Failed fixes", ["strategy", "reason"])
-    FIX_LATENCY = Histogram(
-        "fix_latency_seconds", "Fix application latency", ["strategy"]
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
+# Prometheus Metrics - use shared utility for idempotent registration
+from generator.agents.metrics_utils import get_or_create_metric
 
-    FIX_SUCCESS = REGISTRY._names_to_collectors.get("fix_success_total")
-    FIX_FAILURE = REGISTRY._names_to_collectors.get("fix_failure_total")
-    FIX_LATENCY = REGISTRY._names_to_collectors.get("fix_latency_seconds")
+FIX_SUCCESS = get_or_create_metric(
+    Counter, "fix_success_total", "Successful fixes applied", ["strategy"]
+)
+FIX_FAILURE = get_or_create_metric(
+    Counter, "fix_failure_total", "Failed fixes", ["strategy", "reason"]
+)
+FIX_LATENCY = get_or_create_metric(
+    Histogram, "fix_latency_seconds", "Fix application latency", ["strategy"]
+)
 
 # Constants
 FIX_HISTORY_DIR = Path("fix_history")
