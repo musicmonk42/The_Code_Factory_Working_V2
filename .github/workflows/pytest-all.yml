@@ -824,7 +824,6 @@ jobs:
           python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             self_fixing_engineer/tests/test_audit_fixes.py \
-            -n 1 \
             --forked \
             -v \
             --tb=short \
@@ -894,7 +893,6 @@ jobs:
           echo "=== Running Mesh Tests ==="
           python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
-            -n 1 \
             --forked \
             -v \
             --tb=short \
@@ -967,7 +965,6 @@ jobs:
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
             --ignore=self_fixing_engineer/tests/test_mesh*.py \
             --ignore=self_fixing_engineer/tests/test_audit_fixes.py \
-            -n 1 \
             --forked \
             -v \
             --tb=short \
