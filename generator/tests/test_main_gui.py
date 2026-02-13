@@ -62,10 +62,10 @@ def mock_expensive_modules():
 async def mock_dependencies():  # <<< FIX: Made fixture async
     """Mock all external dependencies."""
     with (
-        patch("main.gui.Runner") as mock_runner,
-        patch("main.gui.IntentParser") as mock_parser,
-        patch("main.gui.load_config") as mock_config,
-        patch("main.gui.ConfigWatcher") as mock_watcher,
+        patch("generator.main.gui.Runner") as mock_runner,
+        patch("generator.main.gui.IntentParser") as mock_parser,
+        patch("generator.main.gui.load_config") as mock_config,
+        patch("generator.main.gui.ConfigWatcher") as mock_watcher,
     ):
 
         mock_config.return_value = {
@@ -108,7 +108,7 @@ class TestTuiLogHandler:
         return app
 
     def test_handler_initialization(self, log_widget, mock_app):
-        from main.gui import TuiLogHandler
+        from generator.main.gui import TuiLogHandler
 
         handler = TuiLogHandler(log_widget, mock_app)
         assert handler.log_widget == log_widget
@@ -121,7 +121,7 @@ class TestTuiLogHandler:
     async def test_emit_log_record(self, log_widget, mock_app):
         import logging
 
-        from main.gui import TuiLogHandler
+        from generator.main.gui import TuiLogHandler
 
         # Create a real task for the mock app to "create"
         pending_tasks = []
@@ -175,7 +175,7 @@ class TestMainAppInitialization:
     @pytest.mark.asyncio
     async def test_app_creation(self, mock_dependencies):
         """Test MainApp can be created."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -185,7 +185,7 @@ class TestMainAppInitialization:
     @pytest.mark.asyncio
     async def test_app_has_bindings(self, mock_dependencies):
         """Test MainApp has key bindings."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         # FIX: Run the app in the test harness
@@ -201,7 +201,7 @@ class TestMainAppInitialization:
     @pytest.mark.asyncio
     async def test_app_has_css(self, mock_dependencies):
         """Test MainApp has CSS styling."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         # FIX: Run the app in the test harness
@@ -217,7 +217,7 @@ class TestMainAppCompose:
     @pytest.mark.asyncio
     async def test_compose_creates_widgets(self, mock_dependencies):
         """Test compose method creates required widgets."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -236,7 +236,7 @@ class TestAPIInteraction:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         # FIX: Run the app in the test harness and yield the app instance
@@ -247,7 +247,7 @@ class TestAPIInteraction:
     @pytest.mark.asyncio
     async def test_make_api_request_get(self, app_instance):
         """Test making GET API request."""
-        with patch("main.gui.aiohttp.ClientSession") as MockSession:
+        with patch("generator.main.gui.aiohttp.ClientSession") as MockSession:
             mock_response = AsyncMock()
             mock_response.status = 200
             mock_response.json = AsyncMock(return_value={"result": "success"})
@@ -275,7 +275,7 @@ class TestAPIInteraction:
     @pytest.mark.asyncio
     async def test_make_api_request_post(self, app_instance):
         """Test making POST API request."""
-        with patch("main.gui.aiohttp.ClientSession") as MockSession:
+        with patch("generator.main.gui.aiohttp.ClientSession") as MockSession:
             mock_response = AsyncMock()
             mock_response.status = 200
             mock_response.json = AsyncMock(return_value={"result": "created"})
@@ -322,7 +322,7 @@ class TestAPIInteraction:
         # session.request() returns the request context manager
         mock_session.request = MagicMock(return_value=mock_request_cm)
 
-        with patch("main.gui.aiohttp.ClientSession", return_value=mock_session):
+        with patch("generator.main.gui.aiohttp.ClientSession", return_value=mock_session):
             with pytest.raises(aiohttp.ClientError):
                 await app_instance._make_api_request("GET", "http://test.com/api")
 
@@ -336,7 +336,7 @@ class TestRunnerTab:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         # FIX: Mock query_one to return widgets with necessary attributes
@@ -405,7 +405,7 @@ class TestParserTab:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         # FIX: Mock query_one to return widgets with necessary attributes
@@ -437,7 +437,7 @@ class TestParserTab:
     @pytest.mark.asyncio
     async def test_parse_text_input(self, app_instance):
         """Test parsing text input."""
-        from main.gui import API_ENDPOINTS
+        from generator.main.gui import API_ENDPOINTS
 
         with (
             patch.object(app_instance, "_make_api_request") as mock_api,
@@ -465,7 +465,7 @@ class TestParserTab:
     @pytest.mark.asyncio
     async def test_parse_file_input(self, app_instance, tmp_path):
         """Test parsing file input."""
-        from main.gui import API_ENDPOINTS
+        from generator.main.gui import API_ENDPOINTS
         from unittest.mock import MagicMock
 
         # Create a test file
@@ -483,7 +483,7 @@ class TestParserTab:
 
         with (
             patch.object(app_instance, "_make_api_request") as mock_api,
-            patch("main.gui.aiofiles.open", return_value=mock_aiofiles_open),
+            patch("generator.main.gui.aiofiles.open", return_value=mock_aiofiles_open),
             patch.object(app_instance.runner_log, "write") as mock_log_write,
             patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
@@ -513,7 +513,7 @@ class TestClarifierTab:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         # Constants for widget initialization retry
         MAX_INIT_RETRIES = 10
@@ -568,7 +568,7 @@ class TestClarifierTab:
     @pytest.mark.asyncio
     async def test_submit_clarification(self, app_instance):
         """Test submitting clarification response."""
-        from main.gui import API_ENDPOINTS
+        from generator.main.gui import API_ENDPOINTS
 
         with (
             patch.object(app_instance, "_make_api_request") as mock_api,
@@ -593,7 +593,7 @@ class TestMetricsTab:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -642,10 +642,10 @@ class TestMetricsTab:
     async def test_update_metrics_local(self, app_instance):
         """Test updating metrics display from local runner metrics."""
         with (
-            patch("main.gui.RUN_QUEUE.get_size", return_value=5) as mock_q,
-            patch("main.gui.RUN_PASS_RATE.get", return_value=95.5) as mock_pass,
-            patch("main.gui.RUN_RESOURCE_USAGE.get", return_value=75.0) as mock_res,
-            patch("main.gui.HEALTH_STATUS.get", return_value="OK") as mock_health,
+            patch("generator.main.gui.RUN_QUEUE.get_size", return_value=5) as mock_q,
+            patch("generator.main.gui.RUN_PASS_RATE.get", return_value=95.5) as mock_pass,
+            patch("generator.main.gui.RUN_RESOURCE_USAGE.get", return_value=75.0) as mock_res,
+            patch("generator.main.gui.HEALTH_STATUS.get", return_value="OK") as mock_health,
             patch.object(app_instance.metrics_display, "update") as mock_display_update,
             patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
@@ -687,7 +687,7 @@ class TestConfigReload:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -741,7 +741,7 @@ class TestKeyBindings:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -750,7 +750,7 @@ class TestKeyBindings:
 
     @pytest.mark.asyncio
     async def test_focus_runner_action(self, app_instance):
-        from main.gui import Input
+        from generator.main.gui import Input
 
         with patch.object(app_instance, "query_one") as mock_query:
             mock_input = MagicMock()
@@ -764,7 +764,7 @@ class TestKeyBindings:
 
     @pytest.mark.asyncio
     async def test_focus_parser_action(self, app_instance):
-        from main.gui import Input
+        from generator.main.gui import Input
 
         with patch.object(app_instance, "query_one") as mock_query:
             mock_input = MagicMock()
@@ -778,7 +778,7 @@ class TestKeyBindings:
 
     @pytest.mark.asyncio
     async def test_focus_clarifier_action(self, app_instance):
-        from main.gui import Input
+        from generator.main.gui import Input
 
         with patch.object(app_instance, "query_one") as mock_query:
             mock_input = MagicMock()
@@ -804,7 +804,7 @@ class TestHelpScreen:
     @pytest.mark.asyncio
     async def test_help_screen_creation(self, mock_dependencies):
         """Test HelpScreen can be created."""
-        from main.gui import HelpScreen
+        from generator.main.gui import HelpScreen
 
         screen = HelpScreen()
         async with screen.run_test() as pilot:
@@ -813,7 +813,7 @@ class TestHelpScreen:
     @pytest.mark.asyncio
     async def test_help_screen_has_content(self, mock_dependencies):
         """Test HelpScreen has content."""
-        from main.gui import HelpScreen
+        from generator.main.gui import HelpScreen
 
         screen = HelpScreen()
         async with screen.run_test() as pilot:
@@ -831,7 +831,7 @@ class TestErrorHandling:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -870,7 +870,7 @@ class TestConfigWatchers:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -931,7 +931,7 @@ class TestUIMessageHelpers:
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
@@ -965,7 +965,7 @@ class TestUIMessageHelpers:
 class TestIntegrationWithAPI:
     @pytest.mark.asyncio
     async def test_full_runner_workflow(self, mock_dependencies):
-        from main.gui import MainApp
+        from generator.main.gui import MainApp
 
         app = MainApp()
         async with app.run_test() as pilot:
