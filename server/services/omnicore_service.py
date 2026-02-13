@@ -1833,6 +1833,100 @@ class OmniCoreService:
                     extra={"job_id": job_id, "files": list(result.keys())}
                 )
                 
+                # Auto-fix missing imports before materialization (Industry standard: fail-safe design)
+                # This prevents common LLM errors like using time.time() without import time
+                # Reference: Production incident job c296ae46-fafa-4adf-a81c-be1dbfe01f1c
+                try:
+                    from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+                    
+                    fixer = ImportFixerEngine()
+                    fixed_count = 0
+                    error_count = 0
+                    total_fixes = 0
+                    
+                    # Process each Python file in the result
+                    for filename, content in list(result.items()):
+                        # Only process Python files with string content
+                        if not filename.endswith('.py') or not isinstance(content, str):
+                            continue
+                        
+                        # Skip empty files
+                        if not content.strip():
+                            continue
+                        
+                        try:
+                            fix_result = fixer.fix_code(content, file_path=filename)
+                            
+                            if fix_result["status"] == "error":
+                                # Log the error but continue processing other files
+                                error_count += 1
+                                logger.warning(
+                                    f"[CODEGEN] Failed to auto-fix imports in {filename}: {fix_result['message']}",
+                                    extra={"job_id": job_id, "filename": filename, "error": fix_result["message"]}
+                                )
+                                continue
+                            
+                            # Check if any fixes were applied
+                            if fix_result["fixed_code"] != content and fix_result["fixes_applied"]:
+                                result[filename] = fix_result["fixed_code"]
+                                fixed_count += 1
+                                total_fixes += len(fix_result["fixes_applied"])
+                                fixes_applied = fix_result["fixes_applied"]
+                                
+                                logger.info(
+                                    f"[CODEGEN] Auto-fixed imports in {filename}: {', '.join(fixes_applied)}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "filename": filename,
+                                        "fixes": fixes_applied,
+                                        "fix_count": len(fixes_applied)
+                                    }
+                                )
+                        except Exception as file_err:
+                            # Handle per-file errors without breaking the entire batch
+                            error_count += 1
+                            logger.warning(
+                                f"[CODEGEN] Exception while fixing imports in {filename}: {file_err}",
+                                exc_info=True,
+                                extra={"job_id": job_id, "filename": filename, "error": str(file_err)}
+                            )
+                    
+                    # Summary logging for observability
+                    if fixed_count > 0:
+                        logger.info(
+                            f"[CODEGEN] Import auto-fix summary: {fixed_count} file(s) fixed with {total_fixes} total fix(es)",
+                            extra={
+                                "job_id": job_id,
+                                "files_fixed": fixed_count,
+                                "total_fixes": total_fixes,
+                                "errors": error_count
+                            }
+                        )
+                    elif error_count > 0:
+                        logger.warning(
+                            f"[CODEGEN] Import auto-fix completed with {error_count} error(s), no files fixed",
+                            extra={"job_id": job_id, "error_count": error_count}
+                        )
+                    else:
+                        logger.debug(
+                            f"[CODEGEN] Import auto-fix completed: no missing imports detected",
+                            extra={"job_id": job_id}
+                        )
+                        
+                except ImportError as import_err:
+                    # ImportFixerEngine module not available - log but continue
+                    logger.warning(
+                        f"[CODEGEN] Import auto-fix unavailable: {import_err}",
+                        extra={"job_id": job_id, "error": str(import_err)}
+                    )
+                except Exception as e:
+                    # Unexpected error in import fixing system - log with full context but continue
+                    logger.error(
+                        f"[CODEGEN] Import auto-fix system error: {e}",
+                        exc_info=True,
+                        extra={"job_id": job_id, "error": str(e), "error_type": type(e).__name__}
+                    )
+                
                 # FIX: Detect collapsed multi-file output bundled as a single JSON string.
                 # When the codegen handler's fallback wraps the entire JSON blob into a
                 # single key (e.g. {"main.py": '{"files": {"app/main.py": ...}}'}),
@@ -4364,11 +4458,12 @@ class OmniCoreService:
                             if not val_result.get("valid", True):
                                 validation_errors = val_result.get('errors', [])
                                 
-                                # Check for retriable errors (syntax errors or missing files due to syntax errors)
+                                # Check for retriable errors (syntax errors, missing files, or import errors)
                                 syntax_errors = [e for e in validation_errors if 'syntax' in e.lower() or 'SyntaxError' in e]
                                 missing_files = [e for e in validation_errors if 'missing' in e.lower() and 'required' in e.lower()]
+                                import_errors = [e for e in validation_errors if 'does not import' in e.lower() or 'but does not import' in e.lower()]
                                 
-                                errors_for_retry = syntax_errors.copy()
+                                errors_for_retry = syntax_errors + import_errors
                                 if missing_files:
                                     error_txt_path = Path(output_path_for_validation) / "error.txt"
                                     if error_txt_path.exists():
@@ -4381,18 +4476,28 @@ class OmniCoreService:
                                 if errors_for_retry and codegen_attempt < max_codegen_retries:
                                     # We have retriable errors and retries left - set up for retry
                                     validation_passed = False
+                                    
+                                    # Determine error type for better messaging
+                                    if import_errors:
+                                        error_type = "ImportError"
+                                    elif syntax_errors:
+                                        error_type = "SyntaxError"
+                                    else:
+                                        error_type = "ValidationError"
+                                    
                                     previous_error = {
-                                        "error_type": "SyntaxError" if syntax_errors else "ValidationError",
+                                        "error_type": error_type,
                                         "details": "\n".join(errors_for_retry[:3]),
                                         "instruction": (
-                                            "The previous code generation had syntax errors or missing required files. "
-                                            "Please fix these errors and regenerate the code with proper syntax. "
+                                            "The previous code generation had validation errors. "
+                                            "Please fix these errors and regenerate the code. "
                                             "Pay special attention to:\n"
                                             "1. String literals must be properly terminated with matching quotes\n"
                                             "2. All control structures (if, for, def, class, etc.) must end with a colon (:)\n"
                                             "3. Check for stray backslashes at line endings\n"
                                             "4. Ensure all brackets, parentheses, and braces are properly matched\n"
-                                            "5. Include commas between function arguments and list/dict elements"
+                                            "5. Include commas between function arguments and list/dict elements\n"
+                                            "6. Ensure all modules used (e.g., time, os, json) are properly imported at the top of the file"
                                         )
                                     }
                                     
@@ -4401,6 +4506,7 @@ class OmniCoreService:
                                         extra={
                                             "job_id": job_id,
                                             "syntax_errors": syntax_errors,
+                                            "import_errors": import_errors,
                                             "missing_files": missing_files,
                                             "attempt": codegen_attempt
                                         }

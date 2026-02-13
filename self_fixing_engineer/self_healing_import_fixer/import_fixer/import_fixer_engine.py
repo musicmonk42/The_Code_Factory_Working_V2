@@ -786,6 +786,22 @@ class ImportFixerEngine:
     and omnicore_engine.engines for integrating import fixing functionality
     as a plugin.
     """
+    
+    # Common stdlib modules to check for (class-level constant for performance)
+    STDLIB_MODULES = {
+        'time', 'os', 'sys', 'json', 're', 'math', 'datetime', 'typing',
+        'collections', 'pathlib', 'logging', 'hashlib', 'uuid', 'base64',
+        'functools', 'itertools', 'copy', 'io', 'subprocess', 'tempfile',
+        'shutil', 'random', 'string', 'pickle', 'csv', 'urllib', 'http',
+        'email', 'inspect', 'warnings', 'asyncio', 'threading', 'multiprocessing'
+    }
+    
+    # FastAPI-specific names commonly used (class-level constant for performance)
+    FASTAPI_NAMES = {
+        'Request', 'Response', 'HTTPException', 'Depends', 'Header',
+        'Query', 'Path', 'Body', 'Cookie', 'File', 'UploadFile',
+        'Form', 'status', 'WebSocket', 'BackgroundTasks'
+    }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -826,37 +842,88 @@ class ImportFixerEngine:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
-        Fix import errors in the provided Python code.
+        Fix import errors in the provided Python code using AST analysis.
+        
+        This method performs static analysis of Python code to detect missing imports
+        and automatically adds them. It handles:
+        - Standard library module imports (time, os, json, etc.)
+        - FastAPI-specific imports (Request, Response, HTTPException, etc.)
+        - Proper insertion positioning (after existing imports or module docstrings)
+        - Extending existing from...import statements when appropriate
+        
+        The implementation uses Python's ast module for reliable parsing and avoids
+        false positives by only checking names that are actually used in the code.
 
         This is the main entry point used when the engine is registered
         as a plugin in the PluginRegistry.
 
         Args:
-            code: The Python source code to fix.
-            file_path: Optional path to the source file (for context).
-            project_root: Optional root directory of the project.
+            code: The Python source code to fix. Must be valid UTF-8 encoded text.
+            file_path: Optional path to the source file (for context and logging).
+            project_root: Optional root directory of the project (currently unused,
+                         reserved for future enhancements).
             dry_run: If True, report what would be fixed without applying changes.
-            **kwargs: Additional parameters for the fixing process.
+                    Useful for testing and validation.
+            **kwargs: Additional parameters for the fixing process (reserved for
+                     future enhancements).
 
         Returns:
             A dictionary containing:
-                - 'fixed_code': The fixed Python code (or original if no fixes).
-                - 'fixes_applied': List of fixes that were applied.
+                - 'fixed_code': The fixed Python code (or original if no fixes or error).
+                - 'fixes_applied': List of human-readable descriptions of fixes applied.
                 - 'status': 'success' or 'error'.
-                - 'message': Human-readable status message.
+                - 'message': Human-readable status message describing the result.
+                
+        Raises:
+            No exceptions are raised. All errors are caught and returned in the result
+            dictionary with status='error'. This design ensures the pipeline continues
+            even if import fixing fails.
+            
+        Examples:
+            >>> fixer = ImportFixerEngine()
+            >>> code = "def f(): return time.time()"
+            >>> result = fixer.fix_code(code)
+            >>> result['status']
+            'success'
+            >>> 'import time' in result['fixed_code']
+            True
+            
+        Security:
+            - Only analyzes code structure, never executes it
+            - Returns original code unchanged if parsing fails
+            - No file system access (all operations in-memory)
+            - Safe for untrusted input (within Python syntax constraints)
         """
+        # Input validation
+        if not isinstance(code, str):
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Invalid input: code must be a string, got {type(code).__name__}",
+            }
+        
+        if not code.strip():
+            # Empty code is valid but nothing to fix
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "success",
+                "message": "Empty code, nothing to fix.",
+            }
+        
         self.logger.info(
             f"ImportFixerEngine.fix_code called (dry_run={dry_run}, "
-            f"file_path={file_path})"
+            f"file_path={file_path}, code_length={len(code)})"
         )
 
-        fixes_applied = []
+        fixes_applied: List[str] = []
         fixed_code = code
 
         try:
             # Try to parse the code to detect syntax errors
             try:
-                ast.parse(code)
+                tree = ast.parse(code)
             except SyntaxError as e:
                 self.logger.warning(f"Syntax error in code: {e}")
                 return {
@@ -866,25 +933,136 @@ class ImportFixerEngine:
                     "message": f"Syntax error detected: {e}",
                 }
 
-            # Analyze imports - for now, just validate the code
-            # A more sophisticated implementation would detect and fix import issues
-            lines = code.split("\n")
-            new_lines = []
+            # Common stdlib modules to check for
+            STDLIB_MODULES = {
+                'time', 'os', 'sys', 'json', 're', 'math', 'datetime', 'typing',
+                'collections', 'pathlib', 'logging', 'hashlib', 'uuid', 'base64',
+                'functools', 'itertools', 'copy', 'io', 'subprocess', 'tempfile',
+                'shutil', 'random', 'string', 'pickle', 'csv', 'urllib', 'http',
+                'email', 'inspect', 'warnings', 'asyncio', 'threading', 'multiprocessing'
+            }
+            
+            # FastAPI-specific names commonly used
+            FASTAPI_NAMES = {
+                'Request', 'Response', 'HTTPException', 'Depends', 'Header',
+                'Query', 'Path', 'Body', 'Cookie', 'File', 'UploadFile',
+                'Form', 'status', 'WebSocket', 'BackgroundTasks'
+            }
 
-            for line in lines:
-                # Check for import patterns
-                import_match = re.match(
-                    r"^(\s*)(from\s+[\w.]+\s+import\s+.+|import\s+[\w., ]+)\s*$", line
-                )
+            # Walk AST to find all used names
+            used_names = set()
+            for node in ast.walk(tree):
+                # Check for attribute access like time.time(), os.path.join()
+                if isinstance(node, ast.Attribute):
+                    if isinstance(node.value, ast.Name):
+                        used_names.add(node.value.id)
+                # Check for direct name usage (includes type hints)
+                elif isinstance(node, ast.Name):
+                    used_names.add(node.id)
 
-                if import_match:
-                    # Import line detected - pass through as-is for now
-                    # Future enhancement: analyze and fix import issues
-                    new_lines.append(line)
+            # Collect currently imported names
+            imported_names = set()
+            from_imports = {}  # Map module -> set of imported names
+            
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imported_names.add(alias.asname if alias.asname else alias.name.split('.')[0])
+                elif isinstance(node, ast.ImportFrom):
+                    module = node.module or ''
+                    if module not in from_imports:
+                        from_imports[module] = set()
+                    for alias in node.names:
+                        name = alias.asname if alias.asname else alias.name
+                        imported_names.add(name)
+                        from_imports[module].add(alias.name)
+
+            # Find missing stdlib imports (use class-level constants)
+            missing_stdlib = set()
+            for name in used_names:
+                if name in self.STDLIB_MODULES and name not in imported_names:
+                    missing_stdlib.add(name)
+
+            # Find missing FastAPI imports (use class-level constants)
+            missing_fastapi = set()
+            for name in used_names:
+                if name in self.FASTAPI_NAMES and name not in imported_names:
+                    missing_fastapi.add(name)
+
+            if not missing_stdlib and not missing_fastapi:
+                # No missing imports detected
+                return {
+                    "fixed_code": code,
+                    "fixes_applied": [],
+                    "status": "success",
+                    "message": "No missing imports detected.",
+                }
+
+            # Build fixed code by inserting missing imports
+            lines = code.split('\n')
+            
+            # Find the position to insert new imports using AST to be more precise
+            # This avoids inserting imports in the middle of module docstrings
+            insert_pos = 0
+            last_import_pos = -1
+            
+            # Find the last import statement in the AST
+            for node in tree.body:
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    last_import_pos = node.end_lineno - 1  # Convert to 0-indexed
+            
+            if last_import_pos >= 0:
+                # Insert after the last import
+                insert_pos = last_import_pos + 1
+            else:
+                # No imports found, insert after module docstring if present
+                if tree.body and isinstance(tree.body[0], ast.Expr) and isinstance(tree.body[0].value, ast.Constant):
+                    # Module has a docstring, insert after it
+                    insert_pos = tree.body[0].end_lineno
                 else:
-                    new_lines.append(line)
+                    # No docstring, insert at the top
+                    insert_pos = 0
 
-            fixed_code = "\n".join(new_lines)
+            # Build new import lines
+            new_imports = []
+            
+            # Add missing stdlib imports
+            for module in sorted(missing_stdlib):
+                new_imports.append(f'import {module}')
+                fixes_applied.append(f"Added missing import: import {module}")
+                self.logger.info(f"Adding missing import: import {module}")
+
+            # Handle FastAPI imports
+            if missing_fastapi:
+                # Check if there's already a "from fastapi import" line
+                fastapi_import_line_idx = None
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('from fastapi import'):
+                        fastapi_import_line_idx = i
+                        break
+
+                if fastapi_import_line_idx is not None:
+                    # Extend existing import
+                    existing_line = lines[fastapi_import_line_idx]
+                    # Parse what's already imported
+                    match = re.match(r'from fastapi import (.+)', existing_line)
+                    if match:
+                        existing_imports = {name.strip() for name in match.group(1).split(',') if name.strip()}
+                        all_imports = existing_imports | missing_fastapi
+                        lines[fastapi_import_line_idx] = f'from fastapi import {", ".join(sorted(all_imports))}'
+                        fixes_applied.append(f"Extended fastapi import with: {', '.join(sorted(missing_fastapi))}")
+                        self.logger.info(f"Extended fastapi import with: {', '.join(sorted(missing_fastapi))}")
+                else:
+                    # Add new fastapi import
+                    new_imports.append(f'from fastapi import {", ".join(sorted(missing_fastapi))}')
+                    fixes_applied.append(f"Added missing FastAPI imports: {', '.join(sorted(missing_fastapi))}")
+                    self.logger.info(f"Adding FastAPI imports: {', '.join(sorted(missing_fastapi))}")
+
+            # Insert new imports at the appropriate position
+            if new_imports:
+                lines[insert_pos:insert_pos] = new_imports
+
+            fixed_code = '\n'.join(lines)
 
             if dry_run:
                 self.logger.info("Dry run completed - no changes applied.")
@@ -899,16 +1077,46 @@ class ImportFixerEngine:
                 "fixed_code": fixed_code,
                 "fixes_applied": fixes_applied,
                 "status": "success",
-                "message": "Import analysis completed.",
+                "message": f"Import fixing completed. Applied {len(fixes_applied)} fixes.",
             }
 
-        except Exception as e:
-            self.logger.error(f"Error during import fixing: {e}", exc_info=True)
+        except SyntaxError as e:
+            # This should be caught earlier, but handle it here as a safety net
+            self.logger.warning(
+                f"Syntax error in code during import fixing: {e}",
+                extra={"file_path": file_path, "error": str(e)}
+            )
             return {
                 "fixed_code": code,
                 "fixes_applied": [],
                 "status": "error",
-                "message": f"Error during import fixing: {e}",
+                "message": f"Syntax error detected: {e}",
+            }
+        except (ValueError, IndexError, KeyError) as e:
+            # Handle specific errors that might occur during import manipulation
+            self.logger.error(
+                f"Error manipulating imports: {e}",
+                exc_info=True,
+                extra={"file_path": file_path, "error_type": type(e).__name__}
+            )
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Error manipulating imports: {type(e).__name__}: {e}",
+            }
+        except Exception as e:
+            # Catch-all for unexpected errors - ensures pipeline never crashes
+            self.logger.error(
+                f"Unexpected error during import fixing: {e}",
+                exc_info=True,
+                extra={"file_path": file_path, "error_type": type(e).__name__}
+            )
+            return {
+                "fixed_code": code,
+                "fixes_applied": [],
+                "status": "error",
+                "message": f"Unexpected error during import fixing: {type(e).__name__}: {e}",
             }
 
     async def fix_code_async(
