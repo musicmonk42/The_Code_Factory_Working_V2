@@ -36,7 +36,7 @@ from server.schemas import (
 from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
-from server.persistence import save_job_to_database, load_job_from_database
+from server.persistence import save_job_to_database, load_job_from_database, delete_job_from_database
 
 logger = logging.getLogger(__name__)
 
@@ -516,7 +516,6 @@ async def delete_job(job_id: str) -> SuccessResponse:
         del jobs_db[job_id]
     
     # FIX Issue 3: Delete from persistent database
-    from server.persistence import delete_job_from_database
     try:
         await delete_job_from_database(job_id)
         logger.info(f"Deleted job {job_id} from database")
