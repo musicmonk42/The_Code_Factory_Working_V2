@@ -770,6 +770,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.info("Database not configured (DATABASE_URL not set)")
     
     # FIX Issue 3: Initialize job persistence layer with database connection
+    # NOTE: This creates a separate Database instance specifically for job persistence.
+    # While the database connection test above validates connectivity, it doesn't
+    # maintain a persistent connection. This instance will be used by the persistence
+    # layer for all job storage operations throughout the application lifecycle.
     logger.info("=" * 80)
     logger.info("INITIALIZING JOB PERSISTENCE")
     logger.info("=" * 80)

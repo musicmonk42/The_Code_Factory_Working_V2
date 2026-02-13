@@ -2056,7 +2056,7 @@ class TestPlaceholder:
                 # Write conftest.py to the temp root to ensure code/ is importable
                 # FIX Bug 1: Handle nested package structures by adding both code/ and temp root to sys.path
                 # This fixes ModuleNotFoundError when tests import from nested packages like "from app.main import app"
-                # FIX Issue 2: Also add immediate subdirectories of code/ to sys.path
+                # Also adds parent directories of packages to sys.path for proper import resolution
                 # NOTE: __init__.py files are now created in the setup phase before conftest.py runs
                 conftest_content = '''import sys
 import os

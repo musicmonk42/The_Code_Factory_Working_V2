@@ -150,7 +150,7 @@ class TestAllFixesIntegration:
         """Verify all three main fixes are present in the code."""
         fixes_found = {
             'mutmut_array_syntax': False,
-            'conftest_init_files_in_setup': False,
+            'init_files_in_setup_phase': False,
             'yaml_bold_sanitization': False,
         }
         
@@ -165,7 +165,7 @@ class TestAllFixesIntegration:
             content = f.read()
             if '_create_init_files_in_subdirs' in content and \
                'self._create_init_files_in_subdirs(code_sub_dir)' in content:
-                fixes_found['conftest_init_files_in_setup'] = True
+                fixes_found['init_files_in_setup_phase'] = True
         
         # Check Fix 3: YAML bold sanitization
         with open('generator/agents/deploy_agent/deploy_response_handler.py', 'r') as f:
