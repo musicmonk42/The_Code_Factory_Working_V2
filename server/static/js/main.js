@@ -36,6 +36,10 @@ const VALID_JOB_STATUSES = ['running', 'completed', 'failed', 'pending', 'needs_
 // Maximum concurrent file fetch requests to prevent server overload
 const MAX_CONCURRENT_FILE_FETCHES = 5;
 
+// Client-side cache for completed job files to prevent repeated API calls
+// Maps job_id -> {total_files, timestamp, data}
+const completedJobFilesCache = new Map();
+
 // Fetch wrapper with timeout and retry logic
 async function fetchWithRetry(url, options = {}, maxRetries = 3) {
     const timeout = options.timeout || 30000;
@@ -817,25 +821,42 @@ async function createJobCard(job) {
     let outputCount = job.output_files ? job.output_files.length : 0;
     
     if (isCompleted && job.id) {
-        const FILE_FETCH_TIMEOUT = 5000;
-        try {
-            // Fetch latest file information with single retry and 5s timeout
-            const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: FILE_FETCH_TIMEOUT}, 1);
-            if (filesResponse.ok) {
-                const filesData = await filesResponse.json();
-                
-                // Validate response structure
-                if (filesData && typeof filesData.total_files === 'number') {
-                    outputCount = filesData.total_files;
-                    hasOutputFiles = outputCount > 0;
+        // Check if we have cached data for this completed job
+        const cachedData = completedJobFilesCache.get(job.id);
+        
+        if (cachedData) {
+            // Use cached data - completed jobs' files don't change
+            outputCount = cachedData.total_files;
+            hasOutputFiles = outputCount > 0;
+        } else {
+            // Fetch and cache for first time
+            const FILE_FETCH_TIMEOUT = 5000;
+            try {
+                // Fetch latest file information with single retry and 5s timeout
+                const filesResponse = await fetchWithRetry(`${API_BASE}/jobs/${job.id}/files`, {timeout: FILE_FETCH_TIMEOUT}, 1);
+                if (filesResponse.ok) {
+                    const filesData = await filesResponse.json();
+                    
+                    // Validate response structure
+                    if (filesData && typeof filesData.total_files === 'number') {
+                        outputCount = filesData.total_files;
+                        hasOutputFiles = outputCount > 0;
+                        
+                        // Cache the result for this completed job
+                        completedJobFilesCache.set(job.id, {
+                            total_files: filesData.total_files,
+                            timestamp: Date.now(),
+                            data: filesData
+                        });
+                    }
                 }
+            } catch (e) {
+                // Non-critical error - log and continue with cached data
+                const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
+                    ? `timeout after ${FILE_FETCH_TIMEOUT / 1000}s` 
+                    : e.message;
+                console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
             }
-        } catch (e) {
-            // Non-critical error - log and continue with cached data
-            const errorMsg = e.name === 'TimeoutError' || e.name === 'AbortError' 
-                ? `timeout after ${FILE_FETCH_TIMEOUT / 1000}s` 
-                : e.message;
-            console.debug('Could not auto-fetch files for job', job.id.substring(0, 8), ':', errorMsg);
         }
     }
     
@@ -2441,6 +2462,7 @@ async function listDeadLetterQueue() {
 
 async function detectBugs() {
     try {
+        showSuccess('Detecting bugs...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/detect`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -2448,6 +2470,42 @@ async function detectBugs() {
         });
         const data = await response.json();
         showSuccess(`Detected ${data.bugs_found} bugs`);
+        
+        // Populate the errors list with detected bugs
+        const container = document.getElementById('errors-list');
+        if (data.bugs && data.bugs.length > 0) {
+            container.innerHTML = '';
+            data.bugs.forEach(bug => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const bugType = escapeHtml(bug.type || 'Bug');
+                const bugMessage = escapeHtml(bug.message || bug.description || '');
+                const bugFile = escapeHtml(bug.file || 'N/A');
+                const bugLine = escapeHtml(String(bug.line || 'N/A'));
+                const bugSeverity = escapeHtml(bug.severity || 'medium');
+                
+                card.innerHTML = `
+                    <h4>${bugType}: ${bugMessage}</h4>
+                    <p>File: ${bugFile}, Line: ${bugLine}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
+                `;
+                
+                // Add button using safe method if bug_id exists
+                if (bug.bug_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    card.appendChild(button);
+                }
+                
+                container.appendChild(card);
+            });
+        } else {
+            container.innerHTML = '<p class="no-data">No bugs detected</p>';
+        }
     } catch (error) {
         showError('Bug detection failed: ' + error.message);
     }
@@ -2455,13 +2513,47 @@ async function detectBugs() {
 
 async function analyzeCodebase() {
     try {
+        showSuccess('Analyzing codebase...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', include_dependencies: true})
         });
         const data = await response.json();
-        alert(`Codebase Analysis:\n\nFiles: ${data.total_files}\nLOC: ${data.total_loc}\nComplexity: ${data.avg_complexity}`);
+        
+        // Display results in a formatted way
+        const resultMessage = `Codebase Analysis Complete:\n\n` +
+            `Files: ${data.total_files || 'N/A'}\n` +
+            `Lines of Code: ${data.total_loc || 'N/A'}\n` +
+            `Average Complexity: ${data.avg_complexity || 'N/A'}\n` +
+            `${data.analysis_summary ? '\n' + data.analysis_summary : ''}`;
+        
+        showSuccess('Codebase analysis complete');
+        alert(resultMessage);
+        
+        // If there are issues/bugs found, populate the errors list
+        if (data.issues && data.issues.length > 0) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = '';
+            data.issues.forEach(issue => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const issueType = escapeHtml(issue.type || 'Issue');
+                const issueMessage = escapeHtml(issue.message || '');
+                const issueFile = escapeHtml(issue.file || 'N/A');
+                const issueLine = escapeHtml(String(issue.line || 'N/A'));
+                const issueSeverity = escapeHtml(issue.severity || 'medium');
+                
+                card.innerHTML = `
+                    <h4>${issueType}: ${issueMessage}</h4>
+                    <p>File: ${issueFile}, Line: ${issueLine}</p>
+                    <p>Severity: <span class="severity-${issueSeverity}">${issueSeverity}</span></p>
+                `;
+                container.appendChild(card);
+            });
+        }
     } catch (error) {
         showError('Analysis failed: ' + error.message);
     }
@@ -2477,12 +2569,54 @@ async function prioritizeBugs() {
     }
     
     try {
+        showSuccess('Prioritizing bugs...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({criteria: ['severity', 'impact']})
         });
-        showSuccess('Bugs prioritized');
+        const data = await response.json();
+        showSuccess('Bugs prioritized successfully');
+        
+        // Display prioritized bugs in the errors list
+        if (data.prioritized_bugs && data.prioritized_bugs.length > 0) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = '<h4>Prioritized Bugs (High to Low)</h4>';
+            data.prioritized_bugs.forEach((bug, index) => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                
+                // Escape all user-generated content to prevent XSS
+                const bugType = escapeHtml(bug.type || 'Bug');
+                const bugMessage = escapeHtml(bug.message || bug.description || '');
+                const bugFile = escapeHtml(bug.file || 'N/A');
+                const bugLine = escapeHtml(String(bug.line || 'N/A'));
+                const bugSeverity = escapeHtml(bug.severity || 'medium');
+                const priorityScore = escapeHtml(String(bug.priority_score || 'N/A'));
+                
+                card.innerHTML = `
+                    <div style="font-weight: bold; color: #007bff;">Priority #${index + 1}</div>
+                    <h4>${bugType}: ${bugMessage}</h4>
+                    <p>File: ${bugFile}, Line: ${bugLine}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
+                    <p>Priority Score: ${priorityScore}</p>
+                `;
+                
+                // Add button using safe method if bug_id exists
+                if (bug.bug_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    card.appendChild(button);
+                }
+                
+                container.appendChild(card);
+            });
+        } else if (data.message) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<p class="no-data">${escapeHtml(data.message)}</p>`;
+        }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
     }
@@ -2490,13 +2624,24 @@ async function prioritizeBugs() {
 
 async function fixImports() {
     try {
+        showSuccess('Fixing imports...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({file_path: '.', auto_install: false})
         });
         const data = await response.json();
-        showSuccess(`Fixed ${data.imports_fixed} imports`);
+        showSuccess(`Fixed ${data.imports_fixed || 0} imports`);
+        
+        // Display import fix results
+        if (data.fixed_files && data.fixed_files.length > 0) {
+            const resultMessage = `Import Fixes Applied:\n\n` +
+                data.fixed_files.map(file => `✓ ${file}`).join('\n') +
+                `\n\nTotal: ${data.imports_fixed} imports fixed`;
+            alert(resultMessage);
+        } else if (data.message) {
+            alert(data.message);
+        }
     } catch (error) {
         showError('Import fix failed: ' + error.message);
     }
@@ -2574,10 +2719,24 @@ async function queryDLT() {
 
 async function startArbiter() {
     try {
+        // Prompt user for Job ID
+        const jobIdInput = prompt('Enter Job ID to start Arbiter:');
+        if (!jobIdInput) {
+            // User cancelled or entered empty string
+            return;
+        }
+        
+        // Validate and sanitize job ID
+        const jobId = sanitizeJobId(jobIdInput);
+        if (!jobId) {
+            // Error already shown by sanitizeJobId
+            return;
+        }
+        
         const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({command: 'start', config: {}})
+            body: JSON.stringify({command: 'start', job_id: jobId, config: {}})
         });
         
         if (!response.ok) {
