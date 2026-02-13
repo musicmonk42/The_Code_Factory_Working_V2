@@ -92,24 +92,7 @@ from tenacity import (
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
-    # Fallback stubs when omnicore_engine.plugin_registry is not available
-    logging.warning(
-        "omnicore_engine.plugin_registry not found. Plugin functionality will be limited."
-    )
-
-    def plugin(**kwargs):
-        """Fallback decorator when plugin_registry is unavailable."""
-        def decorator(func):
-            return func
-        return decorator
-
-    class PlugInKind:
-        """Fallback PlugInKind enum when plugin_registry is unavailable."""
-        CHECK = "CHECK"
-        TRANSFORM = "TRANSFORM"
-        ENRICH = "ENRICH"
-        VALIDATE = "VALIDATE"
-        FIX = "FIX"
+    from generator.agents.plugin_stubs import PlugInKind, plugin
 
 # --- DocGen Agent Dependencies (Refactored) ---
 from .docgen_prompt import DocGenPromptAgent

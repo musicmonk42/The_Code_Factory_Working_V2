@@ -89,16 +89,7 @@ except ImportError as e:
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
-
-    def plugin(**kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    class PlugInKind:
-        CHECK = "CHECK"
-        FIX = "FIX"
+    from generator.agents.plugin_stubs import PlugInKind, plugin
 
 
 load_dotenv()
@@ -129,44 +120,7 @@ meter = metrics.get_meter(__name__)
 # Design Pattern: Check-before-create to prevent ValueError on duplicate registration
 
 
-def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None):
-    """
-    Enterprise-grade metric factory with idempotent registration.
-
-    Implements check-before-create pattern to prevent 'Duplicated timeseries
-    in CollectorRegistry' errors that crash agents during initialization.
-
-    Args:
-        metric_class: prometheus_client metric class (Counter, Gauge, Histogram)
-        name: Unique metric name following prometheus naming conventions
-        description: Human-readable metric description
-        labelnames: Optional list of label names for dimensional metrics
-
-    Returns:
-        Existing or newly created metric instance
-    """
-    labelnames = labelnames or []
-
-    # Check if metric already exists in registry (idempotent)
-    try:
-        existing = REGISTRY._names_to_collectors.get(name)
-        if existing is not None:
-            return existing
-    except (AttributeError, KeyError):
-        pass
-
-    # Create new metric if it doesn't exist
-    try:
-        if labelnames:
-            return metric_class(name, description, labelnames)
-        return metric_class(name, description)
-    except ValueError as e:
-        # Handle race condition: metric was created by another thread/process
-        if "Duplicated timeseries" in str(e):
-            existing = REGISTRY._names_to_collectors.get(name)
-            if existing is not None:
-                return existing
-        raise
+from generator.agents.metrics_utils import get_or_create_metric as _get_or_create_metric
 
 
 CRITIQUE_STEPS = _get_or_create_metric(

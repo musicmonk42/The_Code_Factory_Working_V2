@@ -76,15 +76,7 @@ try:
 except ImportError:
     PLUGIN_AVAILABLE = False
 
-    # Create dummy decorator if plugin system not available
-    def plugin(**kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
-
-    class PlugInKind:
-        FIX = "FIX"
+    from generator.agents.plugin_stubs import PlugInKind, plugin
 
 
 # ==============================================================================

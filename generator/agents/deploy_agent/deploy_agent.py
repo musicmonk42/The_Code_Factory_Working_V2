@@ -102,49 +102,7 @@ except (ImportError, AttributeError):
 # This is critical for multi-import scenarios (tests, hot reloads, microservices)
 
 
-def _get_or_create_metric(metric_class, name: str, description: str, labelnames=None):
-    """
-    Enterprise-grade metric factory with idempotent registration.
-
-    Implements check-before-create pattern to prevent 'Duplicated timeseries
-    in CollectorRegistry' errors that crash agents during initialization.
-
-    Thread Safety: Uses REGISTRY's internal locking mechanism.
-
-    Args:
-        metric_class: prometheus_client metric class (Counter, Gauge, Histogram)
-        name: Unique metric name following prometheus naming conventions
-        description: Human-readable metric description
-        labelnames: Optional list of label names for dimensional metrics
-
-    Returns:
-        Existing or newly created metric instance
-
-    Raises:
-        ValueError: Only if a non-duplicate registration error occurs
-    """
-    labelnames = labelnames or []
-
-    # Check if metric already exists in registry (idempotent)
-    try:
-        existing = prometheus_client.REGISTRY._names_to_collectors.get(name)
-        if existing is not None:
-            return existing
-    except (AttributeError, KeyError):
-        pass  # Registry structure may vary
-
-    # Create new metric if it doesn't exist
-    try:
-        if labelnames:
-            return metric_class(name, description, labelnames)
-        return metric_class(name, description)
-    except ValueError as e:
-        # Handle race condition: metric was created by another thread/process
-        if "Duplicated timeseries" in str(e):
-            existing = prometheus_client.REGISTRY._names_to_collectors.get(name)
-            if existing is not None:
-                return existing
-        raise  # Re-raise if it's a different error
+from generator.agents.metrics_utils import get_or_create_metric as _get_or_create_metric
 
 
 GENERATION_DURATION = _get_or_create_metric(
