@@ -817,7 +817,35 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         try:
             from server.persistence import load_job_from_database, save_job_to_database
             from server.storage import add_job, jobs_db
-            from server.schemas.jobs import JobStatus
+            from server.schemas.jobs import Job, JobStatus
+            
+            def _mark_job_as_failed(
+                job: Job,
+                original_status: str,
+                error_message: str,
+                recovery_timestamp: datetime
+            ) -> None:
+                """
+                Helper function to mark a job as FAILED after restart recovery.
+                
+                Industry Standard: DRY (Don't Repeat Yourself) principle.
+                Extracts common job failure logic to improve maintainability.
+                
+                Args:
+                    job: Job instance to update
+                    original_status: Original job status before restart (RUNNING, PENDING)
+                    error_message: Error message explaining the failure
+                    recovery_timestamp: Timestamp of recovery operation (consistency)
+                """
+                job.status = JobStatus.FAILED
+                job.error = error_message
+                job.updated_at = recovery_timestamp
+                job.completed_at = recovery_timestamp
+                if not job.metadata:
+                    job.metadata = {}
+                job.metadata["restart_recovery"] = True
+                job.metadata["recovery_timestamp"] = recovery_timestamp.isoformat()
+                job.metadata["original_status"] = original_status
             
             recovered_count = 0
             failed_count = 0
@@ -829,6 +857,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             batch_size = 100
             offset = 0
             total_processed = 0
+            
+            # Capture recovery timestamp once for consistency across all operations
+            # Industry Standard: Use consistent timestamps for related operations
+            recovery_timestamp = datetime.now(timezone.utc)
             
             logger.info("Starting paginated job recovery from database...")
             
@@ -871,15 +903,12 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         # Industry Standard: Mark incomplete work as failed after crash/restart
                         # NIST SP 800-34: Automated failure detection and recovery
                         if job.status == JobStatus.RUNNING:
-                            job.status = JobStatus.FAILED
-                            job.error = "Job interrupted by application restart"
-                            job.updated_at = datetime.now(timezone.utc)
-                            job.completed_at = datetime.now(timezone.utc)
-                            if not job.metadata:
-                                job.metadata = {}
-                            job.metadata["restart_recovery"] = True
-                            job.metadata["recovery_timestamp"] = datetime.now(timezone.utc).isoformat()
-                            job.metadata["original_status"] = "RUNNING"
+                            _mark_job_as_failed(
+                                job,
+                                original_status="RUNNING",
+                                error_message="Job interrupted by application restart",
+                                recovery_timestamp=recovery_timestamp
+                            )
                             running_reset_count += 1
                             logger.info(
                                 f"Reset RUNNING job {job_id} to FAILED after restart",
@@ -892,15 +921,12 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         elif job.status == JobStatus.PENDING:
                             # PENDING jobs are also reset to FAILED to avoid stuck jobs
                             # Industry Standard: Clear all transient states after restart
-                            job.status = JobStatus.FAILED
-                            job.error = "Job pending at restart - marked as failed"
-                            job.updated_at = datetime.now(timezone.utc)
-                            job.completed_at = datetime.now(timezone.utc)
-                            if not job.metadata:
-                                job.metadata = {}
-                            job.metadata["restart_recovery"] = True
-                            job.metadata["recovery_timestamp"] = datetime.now(timezone.utc).isoformat()
-                            job.metadata["original_status"] = "PENDING"
+                            _mark_job_as_failed(
+                                job,
+                                original_status="PENDING",
+                                error_message="Job pending at restart - marked as failed",
+                                recovery_timestamp=recovery_timestamp
+                            )
                             pending_reset_count += 1
                             logger.info(
                                 f"Reset PENDING job {job_id} to FAILED after restart",

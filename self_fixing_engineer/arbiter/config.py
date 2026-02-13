@@ -337,9 +337,12 @@ class ArbiterConfig(BaseSettings):
     # - Pydantic BaseSettings provides type safety and validation
     # - Environment variables override defaults (12-factor app methodology)
     # - Field descriptions enable auto-generated API documentation (OpenAPI)
+    # - Validation constraints prevent misconfigurations and security issues
     POLICY_REFRESH_INTERVAL_SECONDS: float = Field(
         default=300.0,
-        description="Policy refresh interval in seconds for dynamic policy updates."
+        ge=1.0,
+        le=86400.0,
+        description="Policy refresh interval in seconds. Range: 1-86400 seconds (1 second to 1 day)."
     )
     LLM_PROVIDER: str = Field(
         default="openai",
@@ -359,7 +362,9 @@ class ArbiterConfig(BaseSettings):
     )
     CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL: float = Field(
         default=0.1,
-        description="Minimum interval between circuit breaker operations in seconds."
+        ge=0.01,
+        le=10.0,
+        description="Minimum interval between circuit breaker operations in seconds. Range: 0.01-10.0 seconds."
     )
     VALID_DOMAIN_PATTERN: str = Field(
         default=r"^[a-zA-Z0-9_.-]+$",
