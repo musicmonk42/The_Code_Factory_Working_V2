@@ -1411,9 +1411,18 @@ def test_{file_stem}_syntax_error_documentation():
         
         # Determine the import based on file path
         # FIX Bug 1: Compute correct import path for nested packages
-        # If file_path is "app/main.py", we need "from app.main import app"
-        # If file_path is "main.py", we need "from main import app"
+        # Strip "generated/<project>/" prefix to get package-relative path
+        # If file_path is "generated/hello_generator/app/main.py", strip to "app/main.py"
+        # If file_path is "app/main.py", keep as "app/main.py"
         file_path_obj = Path(file_path)
+        
+        # Check if path starts with "generated/<project>/" and strip it
+        parts = file_path_obj.parts
+        if len(parts) >= 3 and parts[0] == 'generated':
+            # Skip first two parts: "generated" and "<project_name>"
+            # e.g., "generated/hello_generator/app/main.py" -> "app/main.py"
+            parts = parts[2:]
+            file_path_obj = Path(*parts) if parts else Path(file_path_obj.name)
         
         # Remove .py extension and convert path separators to dots
         # e.g., "app/main.py" -> "app.main", "main.py" -> "main"

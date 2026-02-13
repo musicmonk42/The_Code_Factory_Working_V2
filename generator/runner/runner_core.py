@@ -2035,42 +2035,34 @@ code_path = os.path.join(temp_root, "code")
 if code_path not in sys.path:
     sys.path.insert(0, code_path)
 
-# FIX Issue 2: Recursively add ALL subdirectories of code/ that contain Python files to sys.path
+# FIX: Add parent directories of packages to sys.path
 # This handles imports like "from app.main import app" when code is nested in code/generated/hello_generator/app/
-def add_all_python_dirs(base_dir):
-    """Recursively add all subdirectories of base_dir that contain Python files to sys.path."""
+# When app/__init__.py exists at code/generated/hello_generator/app/, we add code/generated/hello_generator/
+def add_package_parent_dirs(base_dir):
+    """Recursively find all packages (dirs with __init__.py) and add their parent dirs to sys.path."""
     base_path = Path(base_dir)
-    if base_path.exists() and base_path.is_dir():
-        # Directories to skip (common non-package directories)
-        skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env'}
+    if not base_path.exists() or not base_path.is_dir():
+        return
+    
+    # Directories to skip (common non-package directories)
+    skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 'node_modules', '.venv', 'venv', 'env', 'tests'}
+    
+    added_paths = set()
+    
+    # Walk the entire directory tree to find packages
+    for root, dirs, files in os.walk(base_path):
+        # Filter out directories we should skip (modifies dirs in-place to prevent traversal)
+        dirs[:] = [d for d in dirs if d not in skip_dirs]
         
-        # Walk the entire directory tree
-        for root, dirs, files in os.walk(base_path):
-            # Filter out directories we should skip (modifies dirs in-place to prevent traversal)
-            dirs[:] = [d for d in dirs if d not in skip_dirs]
-            
-            # Check if this directory contains Python files (excluding __pycache__ and test artifacts)
-            python_files = [f for f in files if f.endswith('.py') and not f.startswith('.')]
-            if python_files:
-                root_str = str(root)
-                if root_str not in sys.path:
-                    sys.path.insert(0, root_str)
+        # Check if this directory contains __init__.py (is a package)
+        if '__init__.py' in files:
+            # Add the parent directory to sys.path
+            parent_dir = os.path.dirname(root)
+            if parent_dir not in added_paths and parent_dir not in sys.path:
+                sys.path.insert(0, parent_dir)
+                added_paths.add(parent_dir)
 
-add_all_python_dirs(code_path)
-
-# Recursively add subdirectories containing __init__.py to make them importable as packages
-def add_package_dirs(base_dir):
-    """Add all subdirectories containing __init__.py to sys.path."""
-    base_path = Path(base_dir)
-    if base_path.exists():
-        for subdir in base_path.rglob('*'):
-            if subdir.is_dir() and (subdir / '__init__.py').exists():
-                subdir_str = str(subdir)
-                if subdir_str not in sys.path:
-                    sys.path.insert(0, subdir_str)
-
-# Make all packages within code/ importable
-add_package_dirs(code_path)
+add_package_parent_dirs(code_path)
 
 # Create __init__.py in code/ subdirectories if they don't exist
 # This ensures Python treats them as packages
