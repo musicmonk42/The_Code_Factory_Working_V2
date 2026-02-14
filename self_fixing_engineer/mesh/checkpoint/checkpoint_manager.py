@@ -1324,8 +1324,8 @@ class CheckpointManager:
             else:
                 # Delegate to backend-specific health check
                 backend_fn = self._backends.get(self.backend_type)
+                # Avoid recursion during initialization by checking self._initialized
                 if backend_fn and self._initialized:
-                    # Avoid recursion during initialization
                     try:
                         await asyncio.wait_for(self.available(), timeout=5.0)
                         health_status["checks"]["backend_connected"] = True
@@ -1354,7 +1354,10 @@ class CheckpointManager:
             return health_status
 
         except Exception as e:
-            logger.error(f"Health check failed: {e}")
+            logger.error(
+                f"Health check failed for {self.backend_type} backend: {e}",
+                extra={"tenant": Environment.TENANT}
+            )
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
 
