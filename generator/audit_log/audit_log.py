@@ -336,10 +336,11 @@ def _safe_create_metric(metric_cls, name, description, labelnames=None):
                 try:
                     REGISTRY.unregister(existing)
                     return metric_cls(name, description, **kwargs)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Failed to re-register metric '{name}': {e}")
+                    return existing
             return existing
-        return None
+        raise
 
 
 LOG_WRITES = _safe_create_metric(Counter, "audit_log_writes_total", "Total writes to the audit log", ["action"])
