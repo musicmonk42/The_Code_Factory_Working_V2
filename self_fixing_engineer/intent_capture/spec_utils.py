@@ -183,9 +183,41 @@ except LookupError:
                     nltk.data.find("corpora/stopwords")
                     logger.info("NLTK data found after waiting.")
                 except LookupError:
-                    logger.warning(
-                        "NLTK data still unavailable after waiting. NLP features may be degraded."
-                    )
+                    # Data still not available after waiting, retry download
+                    logger.warning("NLTK data still unavailable after waiting. Attempting retry download...")
+                    max_retries = 2
+                    for retry in range(max_retries):
+                        try:
+                            # Brief delay before retry (synchronous is fine - runs at module import time)
+                            time.sleep(1)
+                            # Check one more time if data exists
+                            try:
+                                nltk.data.find("tokenizers/punkt")
+                                nltk.data.find("corpora/stopwords")
+                                logger.info(f"NLTK data found on retry {retry + 1}")
+                                break
+                            except LookupError:
+                                pass
+                            
+                            # Try to acquire lock again and download
+                            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            logger.info(f"Retrying NLTK data download (attempt {retry + 1}/{max_retries})")
+                            nltk.download("punkt")
+                            nltk.download("stopwords")
+                            logger.info("NLTK data downloaded successfully on retry")
+                            break
+                        except (IOError, OSError):
+                            # Lock still held, skip retry
+                            if retry == max_retries - 1:
+                                logger.warning(
+                                    f"Could not acquire lock after {max_retries} retries. "
+                                    f"NLP features may be degraded."
+                                )
+                            continue
+                        except Exception as retry_error:
+                            logger.warning(f"Retry {retry + 1} failed: {retry_error}")
+                            if retry == max_retries - 1:
+                                logger.warning("All retries exhausted. NLP features may be degraded.")
     except Exception as e:
         logger.error(
             f"Failed to download NLTK data: {e}. Please ensure 'punkt' and 'stopwords' are available.",

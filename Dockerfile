@@ -227,7 +227,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENABLE_LIBVIRT="auto" \
     PARALLEL_AGENT_LOADING="1" \
     LAZY_LOAD_ML="1" \
-    TOKENIZERS_PARALLELISM="false"
+    TOKENIZERS_PARALLELISM="false" \
+    NLTK_DATA="/root/nltk_data"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
@@ -308,12 +309,15 @@ WORKDIR /app
 # Note: /app/logs is needed for default audit_log.jsonl path
 # Note: /app/logs/checkpoint is needed for SFE checkpoint audit logs and DLQ
 # Note: /app/uploads is needed for job file uploads
-RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads && \
-    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads
+# Create NLTK data directory for pre-downloaded NLTK resources
+RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /root/nltk_data && \
+    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads /root/nltk_data
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
 COPY --from=builder --chown=appuser:appgroup /app /app
+# Copy NLTK data from builder stage to avoid runtime downloads
+COPY --from=builder --chown=appuser:appgroup /root/nltk_data /root/nltk_data
 
 USER appuser
 

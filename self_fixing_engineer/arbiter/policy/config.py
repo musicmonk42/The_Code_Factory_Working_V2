@@ -359,6 +359,15 @@ class ArbiterConfig(BaseSettings):
         with tracer.start_as_current_span("validate_secrets") as span:
             start_time = time.monotonic()
             is_production = os.getenv("APP_ENV", "development") == "production"
+            
+            # Fix dict-as-value bug: pydantic-settings may pass entire env dict as field value
+            # This must run BEFORE any validation logic to prevent false positives
+            for field_name in ("ENCRYPTION_KEY", "REDIS_URL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
+                raw_val = values.get(field_name)
+                if isinstance(raw_val, dict):
+                    logger.warning(f"{field_name} received dict type in model_validator. Falling back to os.getenv.")
+                    values[field_name] = os.getenv(field_name, "")
+            
             # Validate ENCRYPTION_KEY and REDIS_URL in production
             if is_production:
                 if not values.get("ENCRYPTION_KEY"):
@@ -387,33 +396,20 @@ class ArbiterConfig(BaseSettings):
                             key_str = encryption_key_raw.get_secret_value()
                         elif isinstance(encryption_key_raw, str):
                             key_str = encryption_key_raw
-                        elif isinstance(encryption_key_raw, dict):
-                            # pydantic-settings sometimes passes the entire env dict instead of the field value
-                            # This should be caught by the field_validator, but handle it here as a fallback
-                            logger.warning(
-                                "ENCRYPTION_KEY received dict type in model_validator. "
-                                "This should have been caught by field_validator. "
-                                "Falling back to environment variable directly."
-                            )
-                            # Always go directly to os.getenv - don't trust the dict contents
-                            # NOTE: Empty string is acceptable here if not in production mode
-                            # Production mode check (lines 362-368) ensures ENCRYPTION_KEY is set
-                            actual_key = os.getenv("ENCRYPTION_KEY", "")
-                            values["ENCRYPTION_KEY"] = actual_key
-                            key_str = actual_key if actual_key else None
                         else:
                             key_str = None
                         
                         if key_str:
                             key = key_str.encode("utf-8")
-                            if (
-                                len(key) != 44
-                            ):  # Fernet keys are 32 bytes, base64-encoded to 44 characters
+                            # Validate by attempting to create Fernet instance
+                            # This is more robust than checking exact length
+                            try:
+                                Fernet(key)
+                                span.set_attribute("encryption_key_status", "valid")
+                            except Exception as fernet_error:
                                 raise ValueError(
-                                    "ENCRYPTION_KEY must be a 32-byte base64-encoded string"
-                                )
-                            Fernet(key)
-                            span.set_attribute("encryption_key_status", "valid")
+                                    "ENCRYPTION_KEY must be a 32-byte base64-encoded string (Fernet key)"
+                                ) from fernet_error
                     except Exception as e:
                         CONFIG_ERRORS.labels(error_type="invalid_encryption_key").inc()
                         span.record_exception(e)
