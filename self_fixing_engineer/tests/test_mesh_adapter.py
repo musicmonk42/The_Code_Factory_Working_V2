@@ -83,8 +83,6 @@ async def redis_adapter():
     with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
         # Make redis module appear available
         mock_redis_module.from_url = mock_from_url
-        # Ensure the module is truthy
-        mock_redis_module.__bool__ = lambda: True
         
         from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
         
@@ -217,8 +215,6 @@ class TestConnection:
         with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
             # Make redis module appear available
             mock_redis_module.from_url = mock_from_url
-            # Ensure the module is truthy
-            mock_redis_module.__bool__ = lambda: True
             
             from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
             
@@ -251,8 +247,6 @@ class TestConnection:
         with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
             # Make redis module appear available
             mock_redis_module.from_url = flaky_connect
-            # Ensure the module is truthy
-            mock_redis_module.__bool__ = lambda: True
             
             from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
             
