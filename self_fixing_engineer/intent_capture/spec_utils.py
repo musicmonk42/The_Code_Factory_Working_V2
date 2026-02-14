@@ -34,8 +34,13 @@ try:
     ENVIRONMENT_DETECTION_AVAILABLE = True
 except ImportError:
     # Fallback if server.environment is not available (e.g., in isolated tests)
+    # This is expected in test environments where server module may not be in the path
     ENVIRONMENT_DETECTION_AVAILABLE = False
-    logging.warning("server.environment module not available, using fallback environment detection")
+    # Note: Use logging module here since logger is not yet defined
+    logging.warning(
+        "server.environment module not available, using fallback environment detection. "
+        "This is expected in isolated test environments."
+    )
 
 # P5: Observability: Prometheus Metrics
 try:
