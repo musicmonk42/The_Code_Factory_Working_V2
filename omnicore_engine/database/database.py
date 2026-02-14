@@ -866,6 +866,11 @@ class Database:
 
             await self.create_tables()
 
+            # Ensure schema columns exist (PostgreSQL only)
+            # This must run BEFORE job recovery to avoid missing column errors
+            if self.is_postgres:
+                await self._ensure_schema_columns()
+
             # Check ENABLE_CITUS environment variable before attempting Citus migration
             enable_citus = os.getenv("ENABLE_CITUS", "0")
             if self.is_postgres and enable_citus == "1":
@@ -1033,6 +1038,72 @@ class Database:
                 },
             )
             raise
+
+    async def _ensure_schema_columns(self) -> None:
+        """
+        Ensure that all expected columns exist in database tables.
+        
+        This method adds missing columns that are defined in SQLAlchemy models
+        but may not exist in the database due to schema drift or incomplete migrations.
+        
+        Currently handles:
+        - generator_agent_state.custom_attributes (JSONB)
+        
+        Must be called BEFORE job recovery to avoid missing column errors.
+        Only runs for PostgreSQL databases.
+        """
+        if not self.is_postgres:
+            logger.debug("Skipping schema column checks (not PostgreSQL)")
+            return
+        
+        logger.info("Checking for missing schema columns...")
+        
+        try:
+            async with self.AsyncSessionLocal() as session:
+                # Check and add custom_attributes column to generator_agent_state
+                # This column was added to the model but may not exist in existing databases
+                try:
+                    # First check if the column exists
+                    result = await session.execute(text("""
+                        SELECT column_name 
+                        FROM information_schema.columns 
+                        WHERE table_name = 'generator_agent_state' 
+                        AND column_name = 'custom_attributes'
+                    """))
+                    column_exists = result.scalar() is not None
+                    
+                    if not column_exists:
+                        logger.info(
+                            "Adding missing column: generator_agent_state.custom_attributes (JSONB)"
+                        )
+                        await session.execute(text(
+                            "ALTER TABLE generator_agent_state "
+                            "ADD COLUMN IF NOT EXISTS custom_attributes JSONB"
+                        ))
+                        await session.commit()
+                        logger.info(
+                            "✓ Successfully added generator_agent_state.custom_attributes column"
+                        )
+                    else:
+                        logger.debug(
+                            "Column generator_agent_state.custom_attributes already exists"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to add custom_attributes column: {e}",
+                        exc_info=True
+                    )
+                    # Rollback in case of error
+                    await session.rollback()
+                    raise
+        except Exception as e:
+            logger.error(
+                f"Schema column check failed: {e}. "
+                "This may cause queries to fail if columns are missing.",
+                exc_info=True
+            )
+            # Don't raise - allow startup to continue
+            # The actual queries will fail with more specific errors
 
     async def _initialize_legacy_tables_async(self) -> None:
         """Initializes legacy SQLite tables if the current database is SQLite."""
