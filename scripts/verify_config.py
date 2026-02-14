@@ -2,10 +2,11 @@
 """
 Configuration Verification Script
 
-This script verifies that all three fixes for job vanishing are properly configured:
-1. Kafka bridge enabled
-2. Agent readiness gates in place
-3. NLTK data accessible
+This script verifies that fixes for job vanishing are properly configured:
+1. Kafka bridge enabled (Dockerfile ENV and config loading)
+2. Agent readiness gates in place (dependencies and route decorators)
+3. NLTK data accessible (Dockerfile paths and ownership)
+4. get_api_key_for_provider method exists (ArbiterConfig implementation)
 
 Run this script after deployment to verify configuration.
 """
