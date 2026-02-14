@@ -11,6 +11,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from server.dependencies import require_agents_ready
 from server.schemas import (
     CircuitBreakerResetRequest,
     DatabaseExportRequest,
@@ -137,6 +138,7 @@ async def trigger_workflow(
     job_id: str,
     workflow_name: str,
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Trigger a specific workflow for a job.
@@ -152,6 +154,7 @@ async def trigger_workflow(
 
     **Errors:**
     - 404: Job not found
+    - 503: Agents not ready (service still initializing)
     """
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
