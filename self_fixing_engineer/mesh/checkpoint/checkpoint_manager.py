@@ -1325,7 +1325,7 @@ class CheckpointManager:
                 # Delegate to backend-specific health check
                 backend_fn = self._backends.get(self.backend_type)
                 if backend_fn and self._initialized:
-                    # Only call available() if initialized to prevent recursion during initialization
+                    # Avoid recursion during initialization
                     try:
                         await asyncio.wait_for(self.available(), timeout=5.0)
                         health_status["checks"]["backend_connected"] = True
