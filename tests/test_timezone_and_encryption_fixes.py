@@ -23,35 +23,29 @@ import json
 class TestTimezoneDatetimeFixes:
     """Test Bug 1: Timezone-aware datetime fixes."""
     
-    def test_jobs_router_imports_timezone(self):
-        """Test that jobs.py imports timezone module."""
-        # Simple test to verify the import works
+    def test_datetime_now_creates_timezone_aware_datetimes(self):
+        """Test that datetime.now(timezone.utc) creates timezone-aware datetimes."""
         from datetime import datetime, timezone
         
-        # Verify timezone is available
-        assert timezone is not None
-        
-        # Create a datetime the way jobs.py does it now
+        # Create a datetime the way we fixed it across all files
         now = datetime.now(timezone.utc)
         
         # Verify it's timezone-aware
         assert now.tzinfo is not None
         assert now.tzinfo == timezone.utc
     
-    def test_sfe_router_imports_timezone(self):
-        """Test that sfe.py imports timezone module."""
-        # Simple test to verify the import works
+    def test_datetime_fromtimestamp_creates_timezone_aware_datetimes(self):
+        """Test that datetime.fromtimestamp with tz parameter creates timezone-aware datetimes."""
         from datetime import datetime, timezone
+        import time
         
-        # Verify timezone is available
-        assert timezone is not None
-        
-        # Create a datetime the way sfe.py does it now
-        now = datetime.now(timezone.utc)
+        # Create a datetime the way we fixed it in jobs.py line 759
+        now_ts = time.time()
+        dt = datetime.fromtimestamp(now_ts, tz=timezone.utc)
         
         # Verify it's timezone-aware
-        assert now.tzinfo is not None
-        assert now.tzinfo == timezone.utc
+        assert dt.tzinfo is not None
+        assert dt.tzinfo == timezone.utc
     
     def test_storage_ensures_timezone_awareness_on_parse(self):
         """Test that storage.py ensures parsed datetimes are timezone-aware."""
@@ -86,52 +80,21 @@ class TestTimezoneDatetimeFixes:
         # Verify it's still timezone-aware
         assert parsed_dt.tzinfo is not None
     
-    def test_persistence_imports_timezone(self):
-        """Test that persistence.py imports timezone module."""
+    def test_datetime_fromisoformat_ensures_timezone_awareness(self):
+        """Test that fromisoformat with naive datetime is made timezone-aware."""
         from datetime import datetime, timezone
         
-        # Verify timezone is available
-        assert timezone is not None
-        
-        # Simulate the fix logic
+        # Simulate the fix logic from storage.py and persistence.py
         naive_dt_str = "2024-02-14T19:47:17.124"
         parsed_dt = datetime.fromisoformat(naive_dt_str)
         
-        # Apply the fix from persistence.py
+        # Apply the fix: ensure timezone awareness
         if parsed_dt.tzinfo is None:
             parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
         
         # Verify it's now timezone-aware
         assert parsed_dt.tzinfo is not None
         assert parsed_dt.tzinfo == timezone.utc
-    
-    def test_datetime_module_creates_timezone_aware_datetimes(self):
-        """Test that datetime.now(timezone.utc) creates timezone-aware datetimes."""
-        from datetime import datetime, timezone
-        
-        # Verify timezone is available
-        assert timezone is not None
-        
-        # Create a datetime
-        now = datetime.now(timezone.utc)
-        
-        # Verify it's timezone-aware
-        assert now.tzinfo is not None
-        assert now.tzinfo == timezone.utc
-    
-    def test_datetime_module_creates_timezone_aware_datetimes_v2(self):
-        """Test that datetime module has timezone."""
-        from datetime import datetime, timezone
-        
-        # Verify timezone is available
-        assert timezone is not None
-        
-        # Create a datetime
-        now = datetime.now(timezone.utc)
-        
-        # Verify it's timezone-aware
-        assert now.tzinfo is not None
-        assert now.tzinfo == timezone.utc
 
 
 class TestEncryptionKeysParsingFixes:
