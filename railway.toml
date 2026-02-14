@@ -127,7 +127,7 @@ ENABLE_HSM = "0"  # Set to "1" only if you have an actual HSM
 ENABLE_FEATURE_STORE = "0"  # Set to "1" only if you use Feast
 ENABLE_LIBVIRT = "0"  # Set to "1" only if you need virtualization
 ENABLE_REDIS = "1"
-ENABLE_KAFKA = "1"  # Changed from "0" - Enable Kafka bridge for production event-driven orchestration
+ENABLE_KAFKA = "1"  # Changed from "0" - Enables Kafka bridge when Kafka is available (see Kafka Configuration section below)
 
 # === CORS Configuration ===
 # CRITICAL: Set ALLOWED_ORIGINS for browser clients!
