@@ -116,15 +116,16 @@ if str(REPO_ROOT) not in sys.path:
 
 # Ensure parent packages exist in sys.modules
 # Note: Do NOT create stub for audit_utils - it should be the real module
-pkg_roots = [
-    "generator",
-    "generator.audit_log",
-    "generator.audit_log.audit_backend",
-]
-for name in pkg_roots:
+_repo_root = Path(__file__).resolve().parents[2]
+pkg_roots = {
+    "generator": str(_repo_root / "generator"),
+    "generator.audit_log": str(_repo_root / "generator" / "audit_log"),
+    "generator.audit_log.audit_backend": str(_repo_root / "generator" / "audit_log" / "audit_backend"),
+}
+for name, pkg_dir in pkg_roots.items():
     if name not in sys.modules:
         mod = ModuleType(name)
-        mod.__path__ = []  # Required for packages
+        mod.__path__ = [pkg_dir]  # Real path so submodule imports work
         mod.__spec__ = importlib.machinery.ModuleSpec(
             name=name,
             loader=None,
@@ -186,7 +187,10 @@ sys.modules["generator.audit_log.audit_backend"].get_backend = get_backend
 # Create stub for audit_crypto package and audit_crypto_factory module
 if "generator.audit_log.audit_crypto" not in sys.modules:
     audit_crypto_pkg = ModuleType("generator.audit_log.audit_crypto")
-    audit_crypto_pkg.__path__ = []  # Make it a package
+    # Set __path__ to the real package directory so Python's import system
+    # can still find real submodules (e.g., secrets) from this stub package.
+    _real_crypto_dir = str(Path(__file__).resolve().parents[1] / "audit_log" / "audit_crypto")
+    audit_crypto_pkg.__path__ = [_real_crypto_dir]
     audit_crypto_pkg.__spec__ = importlib.machinery.ModuleSpec(
         name="generator.audit_log.audit_crypto",
         loader=None,
