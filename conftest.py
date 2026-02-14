@@ -653,7 +653,9 @@ def reset_logging_for_tests():
         logging.basicConfig(level=logging.DEBUG, force=True, format='%(levelname)s:%(name)s:%(message)s')
     except TypeError:
         # Python < 3.8 fallback: manually clear and reconfigure
-        root_logger.handlers.clear()
+        # Use proper removeHandler() instead of clear() for consistency
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
         logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(message)s')
     
     # Also configure runner-specific loggers
