@@ -8,6 +8,7 @@ clarifier, ensuring proper routing through OmniCore.
 """
 
 import io
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -441,8 +442,6 @@ class TestMultiWorkerDatabaseFallback:
     @pytest.fixture
     def job_in_database(self):
         """Create a job that exists in database but not in memory."""
-        from datetime import datetime, timezone
-        
         job = Job(
             id="db-job-123",
             status=JobStatus.RUNNING,
