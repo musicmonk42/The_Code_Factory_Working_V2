@@ -228,7 +228,7 @@ if "prometheus_client" not in sys.modules:
                 self.name = name
                 self.labels = labels
                 self.value = value
-                self.timestamp = timestamp  # Seconds since epoch, None = now
+                self.timestamp = timestamp
         
         # Define Metric class for better readability  
         class _Metric:

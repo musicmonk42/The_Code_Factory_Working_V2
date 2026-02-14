@@ -651,11 +651,11 @@ def reset_logging_for_tests():
         root_logger.removeHandler(handler)
     
     # Configure basic logging for tests
-    # Note: force=True requires Python 3.8+
+    # Note: force=True was added in Python 3.8; we provide a fallback for 3.7
     try:
         logging.basicConfig(level=logging.DEBUG, force=True, format=LOG_FORMAT)
     except TypeError:
-        # Python < 3.8 fallback: manually clear and reconfigure
+        # Python 3.7 fallback: manually clear and reconfigure
         # Use proper removeHandler() instead of clear() for consistency
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
