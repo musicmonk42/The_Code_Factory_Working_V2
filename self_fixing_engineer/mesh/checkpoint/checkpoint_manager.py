@@ -710,7 +710,7 @@ class CheckpointManager:
                     available = await backend_fn(self, "available", "")
                 else:
                     available = []
-            
+
             for name in available[:100]:  # Limit initial load
                 try:
                     metadata = await self._get_checkpoint_metadata(name)
@@ -1344,7 +1344,7 @@ class CheckpointManager:
             # Check encryption
             health_status["checks"]["encryption_enabled"] = self.multi_fernet is not None
 
-            # Check caching  
+            # Check cache  
             health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
 
             # Update Prometheus metrics
