@@ -660,7 +660,9 @@ def reset_logging_for_tests():
     # These are the main logger namespaces used in the runner module
     for logger_name in ['runner', 'runner.audit', 'runner.action']:
         logger = logging.getLogger(logger_name)
-        logger.handlers.clear()
+        # Properly remove handlers one by one
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
         logger.setLevel(logging.DEBUG)
         logger.propagate = True  # Ensure logs propagate to root
     

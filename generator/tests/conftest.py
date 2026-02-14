@@ -335,8 +335,9 @@ if "prometheus_client" not in sys.modules:
                 # Return metrics in prometheus format
                 samples = []
                 
-                # Add unlabeled metric if it was used
-                if not self._metrics and self._value != 0:
+                # Add unlabeled metric if it was set (even if value is 0)
+                # We track if any labeled metrics exist to determine if unlabeled should be included
+                if not self._metrics:
                     sample = _Sample(
                         name=self.name,
                         labels={},
