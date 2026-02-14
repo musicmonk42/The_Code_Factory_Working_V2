@@ -393,6 +393,31 @@ class TestGeneratorAgentState:
         # Test generator-specific fields
         assert generator.generated_code == "class MyClass: pass"
 
+    def test_generator_custom_attributes(self, session):
+        """Test that GeneratorAgentState supports custom_attributes field."""
+        generator = GeneratorAgentState(
+            name="generator_003",
+            x=150,
+            y=250,
+            energy=85,
+            world_size=3000,
+            agent_type="generator",
+            generated_code="def custom_func(): pass",
+            custom_attributes={"model": "gpt-4", "temperature": 0.7, "max_tokens": 1000}
+        )
+
+        session.add(generator)
+        session.commit()
+
+        # Verify custom_attributes is stored correctly
+        assert generator.id is not None
+        assert generator.custom_attributes == {"model": "gpt-4", "temperature": 0.7, "max_tokens": 1000}
+        
+        # Reload from database to ensure persistence
+        session.expire(generator)
+        reloaded = session.query(GeneratorAgentState).filter_by(id=generator.id).first()
+        assert reloaded.custom_attributes == {"model": "gpt-4", "temperature": 0.7, "max_tokens": 1000}
+
 
 class TestSFEAgentState:
     """Test SFEAgentState model (inherits from AgentState)."""
