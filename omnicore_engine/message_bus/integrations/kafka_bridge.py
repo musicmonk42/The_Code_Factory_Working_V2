@@ -201,7 +201,7 @@ class KafkaBridgeConfig:
     # Producer
     acks: Union[str, int] = "all"
     linger_ms: int = 5
-    batch_size: int = 16384
+    max_batch_size: int = 16384
     compression_type: Optional[str] = "gzip"
     retries: int = 5
     retry_backoff_ms: int = 100
@@ -358,7 +358,7 @@ class KafkaBridge:
             client_id=self.cfg.client_id,
             acks=self.cfg.acks,
             linger_ms=self.cfg.linger_ms,
-            batch_size=self.cfg.batch_size,
+            max_batch_size=self.cfg.max_batch_size,
             compression_type=self.cfg.compression_type,
             retries=self.cfg.retries,
             retry_backoff_ms=self.cfg.retry_backoff_ms,
