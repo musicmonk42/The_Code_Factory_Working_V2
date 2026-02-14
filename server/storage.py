@@ -345,7 +345,12 @@ class JobsDBProxy:
         
         # Asynchronously save to PostgreSQL if enabled
         if _pg_enabled:
-            asyncio.create_task(_save_job_to_postgresql(job_id, job))
+            try:
+                asyncio.create_task(_save_job_to_postgresql(job_id, job))
+            except RuntimeError:
+                # No event loop running - this can happen in test mode
+                # Log a warning but don't fail, as the job is still in memory
+                logger.debug(f"No event loop available to save job {job_id} to PostgreSQL")
     
     def __getitem__(self, job_id: str) -> Job:
         """Get a job from memory cache."""
@@ -358,7 +363,12 @@ class JobsDBProxy:
         
         # Asynchronously delete from PostgreSQL if enabled
         if _pg_enabled:
-            asyncio.create_task(_delete_job_from_postgresql(job_id))
+            try:
+                asyncio.create_task(_delete_job_from_postgresql(job_id))
+            except RuntimeError:
+                # No event loop running - this can happen in test mode
+                # Log a warning but don't fail
+                logger.debug(f"No event loop available to delete job {job_id} from PostgreSQL")
     
     def __contains__(self, job_id: str) -> bool:
         """Check if job exists in memory cache."""

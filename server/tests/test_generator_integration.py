@@ -24,8 +24,20 @@ def client():
     Uses context manager to properly trigger lifespan events.
     """
     from server.main import app
+    from server.dependencies import require_agents_ready
+    
+    # Override the require_agents_ready dependency to always pass in tests
+    async def mock_require_agents_ready():
+        """Mock dependency that always passes."""
+        return None
+    
+    app.dependency_overrides[require_agents_ready] = mock_require_agents_ready
+    
     with TestClient(app) as client:
         yield client
+    
+    # Clean up dependency overrides
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
