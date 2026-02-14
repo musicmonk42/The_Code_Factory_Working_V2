@@ -569,9 +569,10 @@ class TamperEvidentLogger:
         """Periodically check and process the batch queue."""
         while True:
             try:
-                # Check if we're in test mode and should exit early
+                # In test mode, use shorter sleep but still respect batch_timeout if it's smaller
                 if os.getenv("PYTEST_CURRENT_TEST"):
-                    await asyncio.sleep(0.1)  # Short sleep in test mode
+                    sleep_time = min(0.1, self.config.batch_timeout)
+                    await asyncio.sleep(sleep_time)
                 else:
                     # Flush the queue every timeout
                     await asyncio.sleep(self.config.batch_timeout)

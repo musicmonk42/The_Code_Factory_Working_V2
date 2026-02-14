@@ -83,23 +83,13 @@ def cleanup_mocked_modules():
 @pytest.fixture(autouse=True)
 def mock_external_http():
     """Mock external HTTP calls to prevent network requests during tests."""
-    # Set environment variable to prevent real HTTP calls in audit_log.py
-    old_pytest_test = os.environ.get("PYTEST_CURRENT_TEST")
-    os.environ["PYTEST_CURRENT_TEST"] = "test"
-    
-    # Additionally mock aiohttp.ClientSession as a safety net
+    # Mock aiohttp.ClientSession as a safety net for any remaining HTTP calls
     with patch("aiohttp.ClientSession") as mock_session:
         mock_response = AsyncMock()
         mock_response.status = 200
         mock_response.json = AsyncMock(return_value={"status": "ok"})
         mock_session.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
         yield mock_session
-    
-    # Restore original value
-    if old_pytest_test is None:
-        os.environ.pop("PYTEST_CURRENT_TEST", None)
-    else:
-        os.environ["PYTEST_CURRENT_TEST"] = old_pytest_test
 
 
 # Fixtures
