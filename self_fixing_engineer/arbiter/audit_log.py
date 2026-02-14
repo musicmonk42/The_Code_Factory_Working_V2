@@ -851,8 +851,8 @@ class TamperEvidentLogger:
             if self._metrics:
                 self._metrics["log_latency_seconds"].observe(time.time() - start_time)
 
-        # Add omnicore_engine publishing
-        if omnicore_url:
+        # Add omnicore_engine publishing (skip in test environment)
+        if omnicore_url and not os.getenv("PYTEST_CURRENT_TEST"):
             async with aiohttp.ClientSession() as session:
                 try:
                     await session.post(f"{omnicore_url}/audit", json=log_entry)

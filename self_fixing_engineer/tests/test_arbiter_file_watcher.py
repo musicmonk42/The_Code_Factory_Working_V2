@@ -328,9 +328,10 @@ async def test_process_file(valid_config, temp_dir):
     test_file = temp_dir / "test.py"
     test_file.write_text("test code")
 
-    with patch("self_fixing_engineer.arbiter.file_watcher.summarize_code_changes", return_value="summary"):
-        with patch("self_fixing_engineer.arbiter.file_watcher.deploy_code", return_value={"success": True}):
-            with patch("self_fixing_engineer.arbiter.file_watcher.notify_changes"):
+    # Use AsyncMock for async functions
+    with patch("self_fixing_engineer.arbiter.file_watcher.summarize_code_changes", new_callable=AsyncMock, return_value="summary"):
+        with patch("self_fixing_engineer.arbiter.file_watcher.deploy_code", new_callable=AsyncMock, return_value={"success": True}):
+            with patch("self_fixing_engineer.arbiter.file_watcher.notify_changes", new_callable=AsyncMock):
                 result = await process_file(str(test_file))
                 assert result is not None
                 assert result["file"] == str(test_file)
