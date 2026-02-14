@@ -626,6 +626,48 @@ def reset_environment_vars():
     os.environ.update(original_env)
 
 
+@pytest.fixture(autouse=True)
+def reset_logging_for_tests():
+    """Reset logging configuration to allow caplog to capture records.
+    
+    This fixture ensures pytest's caplog fixture can capture log records by:
+    1. Clearing all existing handlers from the root logger
+    2. Configuring basic logging with DEBUG level
+    3. Ensuring runner-specific loggers propagate to root
+    4. Restoring original configuration after the test
+    """
+    import logging
+    
+    # Store original handlers and level
+    root_logger = logging.getLogger()
+    original_handlers = root_logger.handlers[:]
+    original_level = root_logger.level
+    
+    # Clear all handlers to allow pytest's caplog to work
+    for handler in original_handlers:
+        root_logger.removeHandler(handler)
+    
+    # Configure basic logging for tests
+    logging.basicConfig(level=logging.DEBUG, force=True, format='%(levelname)s:%(name)s:%(message)s')
+    
+    # Also configure runner-specific loggers
+    for logger_name in ['runner', 'runner.audit', 'runner.action']:
+        logger = logging.getLogger(logger_name)
+        logger.handlers.clear()
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = True  # Ensure logs propagate to root
+    
+    yield
+    
+    # Restore original configuration
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    for handler in original_handlers:
+        root_logger.addHandler(handler)
+    root_logger.setLevel(original_level)
+
+
 # ============================================================================
 # 6. TEST HELPERS
 # ============================================================================
