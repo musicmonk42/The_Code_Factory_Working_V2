@@ -956,7 +956,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                                 await save_job_to_database(job)
                             
                             # Add job back to in-memory storage (idempotent)
-                            add_job(job)
+                            await add_job(job)
                             recovered_count += 1
                             logger.debug(
                                 f"Recovered job {job_id} with status {job.status.value}",

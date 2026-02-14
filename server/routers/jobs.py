@@ -149,7 +149,7 @@ async def create_job(
     )
 
     # Add to in-memory storage
-    add_job(job)
+    await add_job(job)
     
     # FIX Issue 3: Persist to database to survive restarts
     try:
@@ -249,7 +249,7 @@ async def get_job(job_id: str) -> Job:
     
     if job is not None:
         # Restore to in-memory cache for faster subsequent access
-        add_job(job)
+        await add_job(job)
         logger.info(f"Restored job {job_id} from database to memory cache")
         return job
 
@@ -291,7 +291,7 @@ async def get_job_progress(
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         
         # Restore to in-memory cache
-        add_job(job)
+        await add_job(job)
         logger.info(f"Restored job {job_id} from database to memory cache")
     else:
         job = jobs_db[job_id]
@@ -445,7 +445,7 @@ async def cancel_job_post(job_id: str) -> SuccessResponse:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         
         # Restore to in-memory cache
-        add_job(job)
+        await add_job(job)
         logger.info(f"Restored job {job_id} from database to memory cache")
     else:
         job = jobs_db[job_id]
@@ -567,7 +567,7 @@ async def download_job_files(job_id: str):
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         
         # Restore to in-memory cache
-        add_job(job)
+        await add_job(job)
         logger.info(f"Restored job {job_id} from database to memory cache")
     else:
         job = jobs_db[job_id]
@@ -722,7 +722,7 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
         
         # Restore to in-memory cache
-        add_job(job)
+        await add_job(job)
         logger.info(f"Restored job {job_id} from database to memory cache")
     else:
         job = jobs_db[job_id]

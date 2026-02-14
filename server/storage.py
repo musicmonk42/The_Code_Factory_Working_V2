@@ -389,11 +389,11 @@ class JobsDBProxy:
 jobs_db = JobsDBProxy()
 
 
-def add_job(job: Job) -> None:
+async def add_job(job: Job) -> None:
     """
     Add a job to the jobs_db with automatic eviction of old completed jobs.
     
-    This function provides a synchronous interface over the async storage backend.
+    This function provides an async interface over the async storage backend.
     For async contexts, the write-through cache handles persistence automatically.
     
     When MAX_JOBS is reached, evicts the oldest completed/failed/cancelled jobs
@@ -428,7 +428,7 @@ def add_job(job: Job) -> None:
         ...     updated_at=datetime.now(timezone.utc),
         ...     metadata={}
         ... )
-        >>> add_job(job)
+        >>> await add_job(job)
     """
     # Add the new job (triggers write-through cache to PostgreSQL)
     jobs_db[job.id] = job
