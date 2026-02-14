@@ -29,7 +29,7 @@ async def require_agents_ready():
         @router.post("/endpoint")
         async def handler(_: None = Depends(require_agents_ready)):
             # Handler code only runs if agents are ready
-            pass
+            return {"status": "ok"}
     
     Raises:
         HTTPException: 503 if agents are not ready
@@ -38,6 +38,7 @@ async def require_agents_ready():
     from server.main import get_agent_loader, _routers_loaded
     
     # First ensure routers are loaded (includes agent loader)
+    # get_agent_loader is a module-level variable that is None initially and set during router loading
     if not _routers_loaded or get_agent_loader is None:
         raise HTTPException(
             status_code=503,
@@ -82,9 +83,21 @@ async def require_agents_ready():
                 headers={"Retry-After": "5"}
             )
     except HTTPException:
-        # Re-raise HTTP exceptions
+        # Re-raise HTTP exceptions (503 responses from above)
         raise
     except Exception as e:
-        # If we can't check readiness, log the error and fail-open
-        # This ensures that transient issues don't prevent the service from working
-        logger.warning(f"Error checking agent readiness: {e}. Allowing request (fail-open).")
+        # If we can't check readiness due to an unexpected error, fail closed (return 503)
+        # This prevents jobs from vanishing if agent status check fails
+        logger.error(
+            f"Error checking agent readiness: {e}. Failing closed to prevent job loss.",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "agent_status_check_failed",
+                "message": "Unable to verify agent readiness. Please retry in a few seconds.",
+                "retry_after": 10
+            },
+            headers={"Retry-After": "10"}
+        )
