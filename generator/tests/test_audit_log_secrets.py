@@ -165,8 +165,6 @@ def reload_secrets_module(mocker):
     if module_name in sys.modules:
         sys.modules.pop(module_name)
 
-    # Stop any patches that might be lingering from the test
-    patch.stopall()
     # Re-apply the global patches needed for a clean import, then stop them
     # after reimport to avoid leaking MagicMock into subsequent tests
     p1 = patch("prometheus_client.Counter", MagicMock())

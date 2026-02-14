@@ -309,47 +309,66 @@ IMMUTABLE = os.getenv("AUDIT_LOG_IMMUTABLE", "true").lower() == "true"
 
 # --- FIX 3: Prometheus labels match usage ---
 # Ensuring that the labels used in the Counter/Histogram definition match the labels used in the code.
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    LOG_WRITES = Counter("audit_log_writes_total", "Total writes to the audit log", ["action"])
-    LOG_QUERIES = Counter(
-        "audit_log_queries_total", "Total queries performed on the audit log"
-    )
-    # The original LOG_ERRORS labels were ['type', 'user', 'action'].
-    LOG_ERRORS = Counter(
-        "audit_log_errors_total",
-        "Total errors in audit log operations",
-        ["type", "user", "action"],
-    )
-    LOG_LATENCY = Histogram(
-        "audit_log_latency_seconds", "Latency of audit log operations", ["op"]
-    )
-    TAMPER_ALERTS = Counter("audit_tamper_alerts_total", "Total tamper detections")
-    SELF_HEAL_EVENTS = Counter(
-        "audit_self_heal_events_total", "Total self-healing events", ["type"]
-    )
-    DOC_GEN_ACTIONS = Counter(
-        "audit_doc_gen_actions_total",
-        "Total documentation generation actions",
-        ["generator"],
-    )
-    RBAC_DENIALS = Counter(
-        "audit_rbac_denials_total",
-        "Access denied by RBAC",
-        ["user", "role", "operation"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
+# FIX: Each metric is created individually with try-except to handle duplicate registration.
+# If a conflicting metric exists (e.g., same name but different labels from another module),
+# unregister it first, then re-register with the correct labels.
+from prometheus_client import REGISTRY
 
-    LOG_WRITES = REGISTRY._names_to_collectors.get("audit_log_writes_total")
-    LOG_QUERIES = REGISTRY._names_to_collectors.get("audit_log_queries_total")
-    LOG_ERRORS = REGISTRY._names_to_collectors.get("audit_log_errors_total")
-    LOG_LATENCY = REGISTRY._names_to_collectors.get("audit_log_latency_seconds")
-    TAMPER_ALERTS = REGISTRY._names_to_collectors.get("audit_tamper_alerts_total")
-    SELF_HEAL_EVENTS = REGISTRY._names_to_collectors.get("audit_self_heal_events_total")
-    DOC_GEN_ACTIONS = REGISTRY._names_to_collectors.get("audit_doc_gen_actions_total")
-    RBAC_DENIALS = REGISTRY._names_to_collectors.get("audit_rbac_denials_total")
+
+def _safe_create_metric(metric_cls, name, description, labelnames=None):
+    """Create a Prometheus metric, handling duplicate registration gracefully.
+
+    If a metric with the same name already exists but with different labels,
+    unregister the old one and create a new one with the correct labels.
+    """
+    kwargs = {}
+    if labelnames:
+        kwargs["labelnames"] = labelnames
+    try:
+        return metric_cls(name, description, **kwargs)
+    except ValueError:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            existing_labels = getattr(existing, "_labelnames", None)
+            expected_labels = tuple(labelnames) if labelnames else ()
+            if existing_labels != expected_labels:
+                # Conflicting metric with different labels; unregister and recreate
+                try:
+                    REGISTRY.unregister(existing)
+                    return metric_cls(name, description, **kwargs)
+                except Exception as e:
+                    logger.warning(f"Failed to re-register metric '{name}': {e}")
+                    return existing
+            return existing
+        raise
+
+
+LOG_WRITES = _safe_create_metric(Counter, "audit_log_writes_total", "Total writes to the audit log", ["action"])
+LOG_QUERIES = _safe_create_metric(Counter, "audit_log_queries_total", "Total queries performed on the audit log")
+# The original LOG_ERRORS labels were ['type', 'user', 'action'].
+LOG_ERRORS = _safe_create_metric(
+    Counter,
+    "audit_log_errors_total",
+    "Total errors in audit log operations",
+    ["type", "user", "action"],
+)
+LOG_LATENCY = _safe_create_metric(Histogram, "audit_log_latency_seconds", "Latency of audit log operations", ["op"])
+TAMPER_ALERTS = _safe_create_metric(Counter, "audit_tamper_alerts_total", "Total tamper detections")
+SELF_HEAL_EVENTS = _safe_create_metric(
+    Counter, "audit_self_heal_events_total", "Total self-healing events", ["type"]
+)
+DOC_GEN_ACTIONS = _safe_create_metric(
+    Counter,
+    "audit_doc_gen_actions_total",
+    "Total documentation generation actions",
+    ["generator"],
+)
+RBAC_DENIALS = _safe_create_metric(
+    Counter,
+    "audit_rbac_denials_total",
+    "Access denied by RBAC",
+    ["user", "role", "operation"],
+)
 
 # --- FIX 4: Metrics server safety ---
 try:
