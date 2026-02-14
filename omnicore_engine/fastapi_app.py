@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import jwt
 from cryptography.fernet import Fernet
+from enum import Enum
 from fastapi import (
     APIRouter,
     Depends,
@@ -1001,6 +1002,14 @@ class ChatResponse(BaseModel):
     message: Optional[str] = None
 
 
+class NotificationType(str, Enum):
+    """Enumeration of valid notification types."""
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    SUCCESS = "success"
+
+
 class FeatureFlagUpdateRequest(BaseModel):
     value: bool
 
@@ -1022,6 +1031,48 @@ class PluginRateRequest(BaseModel):
 class TestGenerationRequest(BaseModel):
     targets: List[Dict[str, Any]]
     config: Optional[Dict[str, Any]] = {}
+
+
+class SimulationExecuteRequest(BaseModel):
+    """Request model for simulation execution."""
+
+    config: Dict[str, Any]  # Simulation configuration
+    timeout: Optional[int] = 300  # Timeout in seconds
+
+
+class SimulationExplainRequest(BaseModel):
+    """Request model for simulation explanation."""
+
+    result: Dict[str, Any]  # Simulation result to explain
+
+
+class NotifyRequest(BaseModel):
+    """Request model for notifications."""
+
+    message: str  # Notification message
+    type: NotificationType = NotificationType.INFO  # Notification type
+
+
+class CodeAnalyzeRequest(BaseModel):
+    """Request model for code analysis."""
+
+    codebase_path: str  # Path to the codebase to analyze
+
+
+class WorkflowRequest(BaseModel):
+    """Request model for workflow execution."""
+
+    payload: Dict[str, Any]  # Workflow payload
+
+
+class AuditLogEntry(BaseModel):
+    """Request model for audit log ingestion."""
+
+    source_module: str  # Source module (e.g., generator, sfe, omnicore)
+    event_type: str  # Type of event being logged
+    details: Optional[Dict[str, Any]] = {}  # Event details
+    user: Optional[str] = "system"  # User triggering the event
+    job_id: Optional[str] = None  # Associated job ID
 
 
 router = APIRouter(prefix="/api")
@@ -1064,6 +1115,12 @@ async def validate_upload(file: UploadFile):
     return file
 
 
+class PluginScenarioPayload(BaseModel):
+    """Request model for plugin scenario execution."""
+
+    payload: Dict[str, Any]  # Plugin scenario payload
+
+
 @router.post("/test-generation/run")
 async def run_test_generation(request: TestGenerationRequest):
     """
@@ -1085,7 +1142,7 @@ async def run_test_generation(request: TestGenerationRequest):
 
 
 @router.post("/scenarios/test_generation/run")
-async def run_test_generation_plugin(payload: Dict[str, Any]):
+async def run_test_generation_plugin(scenario_request: PluginScenarioPayload):
     """
     Runs the 'generate_tests' plugin directly from the OmniCore registry.
     """
@@ -1095,6 +1152,7 @@ async def run_test_generation_plugin(payload: Dict[str, Any]):
 
     # We need to call the plugin with the correct arguments from the payload
     try:
+        payload = scenario_request.payload
         code = payload.get("code")
         language = payload.get("language", "python")
         config = payload.get("config", {})
@@ -1114,7 +1172,7 @@ async def run_test_generation_plugin(payload: Dict[str, Any]):
 
 
 @router.post("/simulation/execute")
-async def execute_simulation(request: Request):
+async def execute_simulation(sim_request: SimulationExecuteRequest):
     """
     Executes a simulation using the simulation engine.
     """
@@ -1123,8 +1181,7 @@ async def execute_simulation(request: Request):
             status_code=500, detail="Simulation engine is not initialized."
         )
     try:
-        sim_config = await request.json()
-        result = await simulation_module.execute_simulation(sim_config)
+        result = await simulation_module.execute_simulation(sim_request.config)
         return {"status": "success", "result": result}
     except Exception as e:
         logger.error(f"Error executing simulation: {e}", exc_info=True)
@@ -1132,7 +1189,7 @@ async def execute_simulation(request: Request):
 
 
 @router.post("/simulation/explain")
-async def explain_simulation(request: Request):
+async def explain_simulation(explain_request: SimulationExplainRequest):
     """
     Requests an explanation for a simulation result from the simulation engine.
     """
@@ -1141,8 +1198,7 @@ async def explain_simulation(request: Request):
             status_code=500, detail="Simulation engine is not initialized."
         )
     try:
-        result = await request.json()
-        explanation = await simulation_module.explain_result(result)
+        explanation = await simulation_module.explain_result(explain_request.result)
         return {"status": "success", "explanation": explanation}
     except Exception as e:
         logger.error(f"Error explaining simulation result: {e}", exc_info=True)
@@ -1150,14 +1206,13 @@ async def explain_simulation(request: Request):
 
 
 @router.post("/notify")
-async def notify(request: Request):
+async def notify(notify_request: NotifyRequest):
     API_REQUESTS.labels(endpoint="/notify", method="POST").inc()
     try:
-        data = await request.json()
         logger.info(
-            f"Received UI notification: {data.get('message')} (Type: {data.get('type')})"
+            f"Received UI notification: {notify_request.message} (Type: {notify_request.type.value})"
         )
-        return {"status": "received", "data": data}
+        return {"status": "received", "data": notify_request.model_dump()}
     except Exception as e:
         API_ERRORS.labels(
             endpoint="/notify", method="POST", error_type="exception"
@@ -1199,7 +1254,7 @@ async def chat_with_bot(chat_request: ChatRequest):
 
 
 @router.post("/arbiter/analyze-code")
-async def analyze_code(codebase_path: str):
+async def analyze_code(analyze_request: CodeAnalyzeRequest):
     if not ARENA_AVAILABLE:
         raise HTTPException(status_code=500, detail="Arbiter Arena not available.")
     settings = ArbiterConfig()
@@ -1209,7 +1264,7 @@ async def analyze_code(codebase_path: str):
         settings=settings,
         db_engine=omnicore_engine.database.engine,
     )
-    result = await arena.run_scan(codebase_path)
+    result = await arena.run_scan(analyze_request.codebase_path)
     return safe_jsonify({"status": "success", "result": result})
 
 
@@ -1220,10 +1275,9 @@ async def health_check_api():
 
 
 @app.post("/code-factory-workflow")
-async def code_factory_workflow(request: Request, user_id: str = Depends(get_user_id)):
+async def code_factory_workflow(workflow_request: WorkflowRequest, user_id: str = Depends(get_user_id)):
     API_REQUESTS.labels(endpoint="/code-factory-workflow", method="POST").inc()
-    payload = await request.json()
-    message = Message(topic="start_workflow", payload=payload)
+    message = Message(topic="start_workflow", payload=workflow_request.payload)
     await omnicore_engine.message_bus.publish(message.topic, message.payload)
     return {"status": "workflow_started", "trace_id": message.trace_id}
 
@@ -1580,30 +1634,28 @@ async def get_omnicore_audit_config_status() -> Dict[str, Any]:
 
 
 @router.post("/audit/ingest")
-async def ingest_audit_log(log_entry: Dict[str, Any]) -> Dict[str, Any]:
+async def ingest_audit_log(log_entry: AuditLogEntry) -> Dict[str, Any]:
     """
     Ingest audit log from other modules.
     
     Receives audit logs from Generator and SFE modules for centralized processing.
     """
     try:
-        required_fields = ["source_module", "event_type"]
-        missing = [f for f in required_fields if f not in log_entry]
-        if missing:
-            raise HTTPException(400, f"Missing fields: {missing}")
-        
         ingestion_id = f"ing_{int(time.time() * 1000)}"
-        log_entry["ingestion_id"] = ingestion_id
-        log_entry["ingestion_timestamp"] = datetime.datetime.utcnow().isoformat()
+        
+        # Convert to dict for processing
+        log_dict = log_entry.dict()
+        log_dict["ingestion_id"] = ingestion_id
+        log_dict["ingestion_timestamp"] = datetime.datetime.utcnow().isoformat()
         
         routed_to = []
         if omnicore_engine.audit:
             try:
                 await omnicore_engine.audit.log_action(
-                    action=log_entry.get("event_type"),
-                    details=log_entry.get("details", {}),
-                    user=log_entry.get("user", "system"),
-                    job_id=log_entry.get("job_id"),
+                    action=log_entry.event_type,
+                    details=log_entry.details,
+                    user=log_entry.user,
+                    job_id=log_entry.job_id,
                 )
                 routed_to.append("omnicore_audit")
             except Exception as e:

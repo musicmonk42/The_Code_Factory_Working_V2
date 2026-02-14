@@ -347,16 +347,17 @@ class DispatchEventQueue(Base):
     # Retry tracking
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    next_retry_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+    # FIX Issue 2: Use timezone-aware DateTime columns to prevent timezone errors
+    next_retry_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Timestamps (UTC)
+    # Timestamps (UTC) - FIX Issue 2: timezone-aware columns
     created_at: Mapped[DateTime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         # Will be set by application code using datetime.now(timezone.utc)
     )
-    updated_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[DateTime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Error tracking
     last_error: Mapped[Optional[str]] = mapped_column(String, nullable=True)

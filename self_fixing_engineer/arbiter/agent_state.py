@@ -438,9 +438,10 @@ class AgentMetadata(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String, unique=True, nullable=False, index=True)
     value = Column(Text, nullable=False, default="{}")  # Store as JSON string
-    created_at = Column(DateTime, default=func.now(), nullable=False)
+    # FIX Issue 2: Use timezone-aware DateTime columns to prevent timezone errors
+    created_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
     updated_at = Column(
-        DateTime, default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True), default=func.now(), onupdate=func.now(), nullable=False
     )
 
     def __repr__(self) -> str:

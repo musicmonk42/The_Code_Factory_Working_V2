@@ -54,7 +54,7 @@ async def _emit_event_fire_and_forget(
     Fire-and-forget wrapper for emitting OmniCore events.
     
     This function runs in the background without blocking the response.
-    Errors are logged but do not propagate to the caller.
+    FIX Issue 4: Errors are logged prominently and should be monitored.
     
     Args:
         omnicore_service: OmniCore service instance
@@ -68,9 +68,19 @@ async def _emit_event_fire_and_forget(
             payload=payload,
             priority=priority,
         )
-        logger.debug(f"Emitted {topic} event in background")
+        logger.info(f"Successfully emitted {topic} event for job {payload.get('job_id')}")
     except Exception as e:
-        logger.warning(f"Failed to emit {topic} event in background: {e}")
+        # FIX Issue 4: Make event emission failures highly visible
+        logger.error(
+            f"CRITICAL: Failed to emit {topic} event for job {payload.get('job_id')}. "
+            f"Job pipeline may not start! Error: {e}",
+            exc_info=True,
+            extra={
+                "job_id": payload.get('job_id'),
+                "topic": topic,
+                "error_type": type(e).__name__
+            }
+        )
 
 
 def _is_path_safe(file_path: Path, base_dir: Path) -> bool:
@@ -132,7 +142,13 @@ async def create_job(
     **Returns:**
     - Job object with unique ID and initial status
     
-    **FIX Issue 3:** Jobs are now persisted to database immediately upon creation.
+    **Raises:**
+    - 500: Database persistence failed - job creation aborted to prevent data loss
+    
+    **FIX Issue 1:** Jobs are ONLY created if database persistence succeeds.
+    This prevents jobs from vanishing after server restart. If database is
+    unavailable, job creation fails with HTTP 500 rather than silently creating
+    a job that will be lost.
     """
     job_id = str(uuid4())
     now = datetime.now(timezone.utc)
@@ -151,13 +167,25 @@ async def create_job(
     # Add to in-memory storage
     await add_job(job)
     
-    # FIX Issue 3: Persist to database to survive restarts
-    try:
-        await save_job_to_database(job)
-        logger.info(f"Created job {job_id} and persisted to database")
-    except Exception as e:
-        logger.error(f"Failed to persist job {job_id} to database: {e}")
-        # Continue even if database save fails - job is still in memory
+    # FIX Issue 1: Do NOT swallow DB persistence failures
+    # If database persistence fails, the job should NOT be created
+    # because it will vanish after restart
+    persistence_success = await save_job_to_database(job)
+    if not persistence_success:
+        # Remove from memory since it can't be persisted
+        from server.storage import jobs_db
+        if job_id in jobs_db:
+            del jobs_db[job_id]
+        logger.error(
+            f"Job {job_id} creation FAILED: database persistence failed. "
+            f"Job was NOT created to prevent data loss on restart."
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Job persistence failed. Cannot create job that will be lost on restart."
+        )
+    
+    logger.info(f"Created job {job_id} and persisted to database successfully")
     
     # Emit job.created event to message bus in background (fire-and-forget)
     if not os.environ.get("SKIP_BACKGROUND_TASKS"):
