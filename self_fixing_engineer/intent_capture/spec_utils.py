@@ -28,6 +28,20 @@ from tenacity import (
     wait_exponential,
 )
 
+# Import centralized environment detection utility
+try:
+    from server.environment import is_production
+    ENVIRONMENT_DETECTION_AVAILABLE = True
+except ImportError:
+    # Fallback if server.environment is not available (e.g., in isolated tests)
+    # This is expected in test environments where server module may not be in the path
+    ENVIRONMENT_DETECTION_AVAILABLE = False
+    # Note: Use logging module here since logger is not yet defined
+    logging.warning(
+        "server.environment module not available, using fallback environment detection. "
+        "This is expected in isolated test environments."
+    )
+
 # P5: Observability: Prometheus Metrics
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -153,76 +167,96 @@ try:
     nltk.data.find("tokenizers/punkt")
     nltk.data.find("corpora/stopwords")
 except LookupError:
-    logger.warning(
-        "NLTK data not found. Attempting to download... This might fail in production containers if not pre-downloaded."
-    )
-    try:
-        # Use file locking to prevent race conditions in multi-replica scenarios
-        lock_file_path = os.path.join(tempfile.gettempdir(), "nltk_spec_utils.lock")
-        with open(lock_file_path, 'w') as lock_file:
-            try:
-                # Try non-blocking lock first
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                
-                # We have the lock, check if data exists (might have been downloaded by another process)
-                try:
-                    nltk.data.find("tokenizers/punkt")
-                    nltk.data.find("corpora/stopwords")
-                    logger.info("NLTK data found after acquiring lock.")
-                except LookupError:
-                    # Proceed with download
-                    nltk.download("punkt")
-                    nltk.download("stopwords")
-                    logger.info("NLTK data downloaded successfully.")
-            except (IOError, OSError) as lock_error:
-                # Lock held by another process - wait and check if data is now available
-                logger.info("Another process is downloading NLTK data, waiting...")
-                time.sleep(2)
-                try:
-                    nltk.data.find("tokenizers/punkt")
-                    nltk.data.find("corpora/stopwords")
-                    logger.info("NLTK data found after waiting.")
-                except LookupError:
-                    # Data still not available after waiting, retry download
-                    logger.warning("NLTK data still unavailable after waiting. Attempting retry download...")
-                    max_retries = 2
-                    for retry in range(max_retries):
-                        try:
-                            # Brief delay before retry (synchronous is fine - runs at module import time)
-                            time.sleep(1)
-                            # Check one more time if data exists
-                            try:
-                                nltk.data.find("tokenizers/punkt")
-                                nltk.data.find("corpora/stopwords")
-                                logger.info(f"NLTK data found on retry {retry + 1}")
-                                break
-                            except LookupError:
-                                pass
-                            
-                            # Try to acquire lock again and download
-                            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-                            logger.info(f"Retrying NLTK data download (attempt {retry + 1}/{max_retries})")
-                            nltk.download("punkt")
-                            nltk.download("stopwords")
-                            logger.info("NLTK data downloaded successfully on retry")
-                            break
-                        except (IOError, OSError):
-                            # Lock still held, skip retry
-                            if retry == max_retries - 1:
-                                logger.warning(
-                                    f"Could not acquire lock after {max_retries} retries. "
-                                    f"NLP features may be degraded."
-                                )
-                            continue
-                        except Exception as retry_error:
-                            logger.warning(f"Retry {retry + 1} failed: {retry_error}")
-                            if retry == max_retries - 1:
-                                logger.warning("All retries exhausted. NLP features may be degraded.")
-    except Exception as e:
-        logger.error(
-            f"Failed to download NLTK data: {e}. Please ensure 'punkt' and 'stopwords' are available.",
-            exc_info=True,
+    # Check if we're in production - if so, skip runtime download
+    # In production, NLTK data should be pre-downloaded during Docker build
+    # Use centralized environment detection for consistency
+    if ENVIRONMENT_DETECTION_AVAILABLE:
+        check_production = is_production()
+    else:
+        # Fallback: Check multiple environment variables for Railway compatibility
+        check_production = (
+            os.getenv("ENVIRONMENT") == "production" or 
+            os.getenv("APP_ENV") == "production" or
+            os.getenv("PRODUCTION_MODE") == "1"
         )
+    
+    if check_production:
+        logger.warning(
+            "NLTK data not found in production environment. "
+            "This should have been pre-downloaded during Docker build. "
+            "NLP features in spec_utils may be degraded."
+        )
+    else:
+        logger.warning(
+            "NLTK data not found. Attempting to download... This might fail in production containers if not pre-downloaded."
+        )
+        try:
+            # Use file locking to prevent race conditions in multi-replica scenarios
+            lock_file_path = os.path.join(tempfile.gettempdir(), "nltk_spec_utils.lock")
+            with open(lock_file_path, 'w') as lock_file:
+                try:
+                    # Try non-blocking lock first
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    
+                    # We have the lock, check if data exists (might have been downloaded by another process)
+                    try:
+                        nltk.data.find("tokenizers/punkt")
+                        nltk.data.find("corpora/stopwords")
+                        logger.info("NLTK data found after acquiring lock.")
+                    except LookupError:
+                        # Proceed with download
+                        nltk.download("punkt")
+                        nltk.download("stopwords")
+                        logger.info("NLTK data downloaded successfully.")
+                except (IOError, OSError) as lock_error:
+                    # Lock held by another process - wait and check if data is now available
+                    logger.info("Another process is downloading NLTK data, waiting...")
+                    time.sleep(2)
+                    try:
+                        nltk.data.find("tokenizers/punkt")
+                        nltk.data.find("corpora/stopwords")
+                        logger.info("NLTK data found after waiting.")
+                    except LookupError:
+                        # Data still not available after waiting, retry download
+                        logger.warning("NLTK data still unavailable after waiting. Attempting retry download...")
+                        max_retries = 2
+                        for retry in range(max_retries):
+                            try:
+                                # Brief delay before retry (synchronous is fine - runs at module import time)
+                                time.sleep(1)
+                                # Check one more time if data exists
+                                try:
+                                    nltk.data.find("tokenizers/punkt")
+                                    nltk.data.find("corpora/stopwords")
+                                    logger.info(f"NLTK data found on retry {retry + 1}")
+                                    break
+                                except LookupError:
+                                    pass
+                                
+                                # Try to acquire lock again and download
+                                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                                logger.info(f"Retrying NLTK data download (attempt {retry + 1}/{max_retries})")
+                                nltk.download("punkt")
+                                nltk.download("stopwords")
+                                logger.info("NLTK data downloaded successfully on retry")
+                                break
+                            except (IOError, OSError):
+                                # Lock still held, skip retry
+                                if retry == max_retries - 1:
+                                    logger.warning(
+                                        f"Could not acquire lock after {max_retries} retries. "
+                                        f"NLP features may be degraded."
+                                    )
+                                continue
+                            except Exception as retry_error:
+                                logger.warning(f"Retry {retry + 1} failed: {retry_error}")
+                                if retry == max_retries - 1:
+                                    logger.warning("All retries exhausted. NLP features may be degraded.")
+        except Exception as e:
+            logger.error(
+                f"Failed to download NLTK data: {e}. Please ensure 'punkt' and 'stopwords' are available.",
+                exc_info=True,
+            )
 
 
 # P9: Internationalization - Load prompts from locales.yaml
