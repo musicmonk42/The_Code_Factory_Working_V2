@@ -57,36 +57,12 @@ def create_mock_package(name):
 
 
 # Mock external dependencies BEFORE importing
-# Save originals so we can restore them after tests to avoid polluting other test modules
-_RUNNER_MOCK_KEYS = [
-    "runner", "runner.tracer", "runner.runner_logging",
-    "runner.runner_metrics", "runner.llm_client",
-    "runner.runner_errors",
-]
-_saved_runner_modules = {k: sys.modules.get(k) for k in _RUNNER_MOCK_KEYS}
-
 sys.modules["runner"] = create_mock_package("runner")
 sys.modules["runner.tracer"] = create_mock_package("runner.tracer")
 sys.modules["runner.runner_logging"] = create_mock_package("runner.runner_logging")
 sys.modules["runner.runner_metrics"] = create_mock_package("runner.runner_metrics")
 sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
 sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
-
-
-def _restore_runner_modules():
-    """Restore original runner modules in sys.modules."""
-    for k, v in _saved_runner_modules.items():
-        if v is not None:
-            sys.modules[k] = v
-        else:
-            sys.modules.pop(k, None)
-
-
-@pytest.fixture(autouse=True, scope="module")
-def _cleanup_runner_mocks_testgen_response_handler():
-    """Restore runner modules after all tests in this module complete."""
-    yield
-    _restore_runner_modules()
 if "aiohttp" not in sys.modules:
     sys.modules["aiohttp"] = create_mock_package("aiohttp")
     sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
@@ -172,7 +148,10 @@ from agents.testgen_agent.testgen_response_handler import (
 
 # --- Restore runner modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-_restore_runner_modules()
+for _k in ["runner", "runner.tracer", "runner.runner_logging",
+           "runner.runner_metrics", "runner.llm_client",
+           "runner.runner_errors"]:
+    sys.modules.pop(_k, None)
 
 
 class TestLocalRegexSanitize:

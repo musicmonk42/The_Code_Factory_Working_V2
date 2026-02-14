@@ -50,15 +50,6 @@ class MockObserver:
 
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
-# Save originals so we can restore them after tests to avoid polluting other test modules
-_RUNNER_MOCK_KEYS = [
-    "runner", "runner.llm_client", "runner.runner_logging",
-    "runner.runner_metrics", "runner.runner_errors",
-    "runner.runner_file_utils", "runner.summarize_utils",
-    "runner.tracer",
-]
-_saved_runner_modules = {k: sys.modules.get(k) for k in _RUNNER_MOCK_KEYS}
-
 sys.modules["runner"] = MagicMock()
 sys.modules["runner.llm_client"] = MagicMock()
 sys.modules["runner.runner_logging"] = MagicMock()
@@ -67,22 +58,6 @@ sys.modules["runner.runner_errors"] = MagicMock()
 sys.modules["runner.runner_file_utils"] = MagicMock()
 sys.modules["runner.summarize_utils"] = MagicMock()
 sys.modules["runner.tracer"] = MagicMock()
-
-
-def _restore_runner_modules():
-    """Restore original runner modules in sys.modules."""
-    for k, v in _saved_runner_modules.items():
-        if v is not None:
-            sys.modules[k] = v
-        else:
-            sys.modules.pop(k, None)
-
-
-@pytest.fixture(autouse=True, scope="module")
-def _cleanup_runner_mocks_docgen_response_validator():
-    """Restore runner modules after all tests in this module complete."""
-    yield
-    _restore_runner_modules()
 
 # FIX: Mock Presidio modules properly
 mock_analyzer_result = MagicMock()
@@ -275,7 +250,11 @@ with patch(
 
 # --- Restore runner modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-_restore_runner_modules()
+for _k in ["runner", "runner.llm_client", "runner.runner_logging",
+           "runner.runner_metrics", "runner.runner_errors",
+           "runner.runner_file_utils", "runner.summarize_utils",
+           "runner.tracer"]:
+    sys.modules.pop(_k, None)
 
 
 # ============================================================================

@@ -32,14 +32,6 @@ class MockRunnerError(Exception):
     pass
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
-# Save originals so we can restore them after tests to avoid polluting other test modules
-_RUNNER_MOCK_KEYS = [
-    "runner", "runner.llm_client", "runner.runner_logging",
-    "runner.runner_metrics", "runner.runner_errors",
-    "runner.runner_file_utils", "runner.summarize_utils",
-]
-_saved_runner_modules = {k: sys.modules.get(k) for k in _RUNNER_MOCK_KEYS}
-
 mock_runner = MagicMock()
 mock_runner_llm_client = MagicMock()
 mock_runner_logging = MagicMock()
@@ -57,22 +49,6 @@ sys.modules["runner.runner_metrics"] = mock_runner_metrics
 sys.modules["runner.runner_errors"] = mock_runner_errors
 sys.modules["runner.runner_file_utils"] = mock_runner_file_utils
 sys.modules["runner.summarize_utils"] = mock_summarize_utils
-
-
-def _restore_runner_modules():
-    """Restore original runner modules in sys.modules."""
-    for k, v in _saved_runner_modules.items():
-        if v is not None:
-            sys.modules[k] = v
-        else:
-            sys.modules.pop(k, None)
-
-
-@pytest.fixture(autouse=True, scope="module")
-def _cleanup_runner_mocks_docgen_integration():
-    """Restore runner modules after all tests in this module complete."""
-    yield
-    _restore_runner_modules()
 
 # FIX: Mock tiktoken to prevent network calls during testing
 mock_tiktoken = MagicMock()
@@ -102,7 +78,10 @@ from generator.agents.docgen_agent.docgen_response_validator import ResponseVali
 
 # --- Restore runner modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-_restore_runner_modules()
+for _k in ["runner", "runner.llm_client", "runner.runner_logging",
+           "runner.runner_metrics", "runner.runner_errors",
+           "runner.runner_file_utils", "runner.summarize_utils"]:
+    sys.modules.pop(_k, None)
 
 # =============================================================================
 # FIXTURES
