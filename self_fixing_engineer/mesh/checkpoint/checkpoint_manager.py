@@ -1325,7 +1325,9 @@ class CheckpointManager:
                 # Delegate to backend-specific health check
                 backend_fn = self._backends.get(self.backend_type)
                 if backend_fn and self._initialized:
-                    # Only try this if we're already initialized to avoid recursion
+                    # NOTE: Only try this if we're already initialized to avoid recursion.
+                    # During initialization, healthcheck() is called before _initialized is set to True,
+                    # so we skip the available() call which would trigger infinite recursion.
                     try:
                         await asyncio.wait_for(self.available(), timeout=5.0)
                         health_status["checks"]["backend_connected"] = True
@@ -1344,6 +1346,12 @@ class CheckpointManager:
 
             # Check caching  
             health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
+
+            # Update Prometheus metrics
+            if PROMETHEUS_AVAILABLE:
+                BACKEND_HEALTH.labels(
+                    backend=self.backend_type, tenant=Environment.TENANT
+                ).set(1 if health_status["status"] == "healthy" else 0)
 
             span.set_status(Status(StatusCode.OK))
             return health_status
