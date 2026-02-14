@@ -42,15 +42,15 @@ _mock_if_not_installed("cryptography.hazmat.primitives.asymmetric")
 _mock_if_not_installed("cryptography.hazmat.primitives.serialization")
 _mock_if_not_installed("aiofiles")
 
-from runner.runner_config import RunnerConfig
-from runner.runner_contracts import TaskPayload, TaskResult
+from generator.runner.runner_config import RunnerConfig
+from generator.runner.runner_contracts import TaskPayload, TaskResult
 
 # Import runner modules
-from runner.runner_core import ALL_BACKENDS, Runner
+from generator.runner.runner_core import ALL_BACKENDS, Runner
 
 # FIX: Import ExecutionError directly (no alias)
-from runner.runner_errors import ExecutionError, ParsingError, TimeoutError
-from runner.runner_metrics import RUN_PASS_RATE, RUN_QUEUE
+from generator.runner.runner_errors import ExecutionError, ParsingError, TimeoutError
+from generator.runner.runner_metrics import RUN_PASS_RATE, RUN_QUEUE
 
 # We mock save_file_content, so this import is for context
 # from runner.runner_file_utils import save_file_content
@@ -101,19 +101,19 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         # Mock file save (this was incorrect in the original test, runner_core uses _save_files_to_temp_dir)
         self.patch_save_files = patch(
-            "runner.runner_core.Runner._save_files_to_temp_dir", new=AsyncMock()
+            "generator.runner.runner_core.Runner._save_files_to_temp_dir", new=AsyncMock()
         )
         self.patch_save_files.start()
 
         # Mock logging
         self.patch_log_action = patch(
-            "runner.runner_logging.log_action", new=AsyncMock()
+            "generator.runner.runner_logging.log_action", new=AsyncMock()
         )
         self.patch_log_action.start()
 
         # Mock audit logging
         self.patch_log_audit = patch(
-            "runner.runner_logging.log_audit_event", new=AsyncMock()
+            "generator.runner.runner_logging.log_audit_event", new=AsyncMock()
         )
         # FIX: Capture the mock object created by the patcher
         self.mock_log_audit = self.patch_log_audit.start()
@@ -124,7 +124,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         # FIX: Patch _load_persisted_queue to prevent state leak between tests
         self.patch_load_queue = patch(
-            "runner.runner_core.Runner._load_persisted_queue", new=MagicMock()
+            "generator.runner.runner_core.Runner._load_persisted_queue", new=MagicMock()
         )
         self.patch_load_queue.start()
 
@@ -185,10 +185,10 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         # Patch the specific parser being used
         # FIX: Patch the function where it is DEFINED, not where it is imported
-        with patch("runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
+        with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
-                "runner.runner_parsers.parse_coverage_xml",
+                "generator.runner.runner_parsers.parse_coverage_xml",
                 return_value=MagicMock(
                     model_dump=lambda **kw: {"coverage_percentage": 100.0}
                 ),
@@ -281,7 +281,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         )
 
         # FIX: Patch the function where it is DEFINED, not where it is imported
-        with patch("runner.runner_parsers.parse_junit_xml", new=mock_fail_parser):
+        with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_fail_parser):
             result = await runner.run_tests(payload)
 
         self.assertEqual(result.status, "failed")
@@ -330,10 +330,10 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         )
 
         # FIX: Patch the function where it is DEFINED, not where it is imported
-        with patch("runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
+        with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
-                "runner.runner_parsers.parse_coverage_xml",
+                "generator.runner.runner_parsers.parse_coverage_xml",
                 return_value=MagicMock(
                     model_dump=lambda **kw: {"coverage_percentage": 100.0}
                 ),
@@ -391,10 +391,10 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         )
 
         # FIX: Patch the function where it is DEFINED, not where it is imported
-        with patch("runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
+        with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
-                "runner.runner_parsers.parse_coverage_xml",
+                "generator.runner.runner_parsers.parse_coverage_xml",
                 return_value=MagicMock(
                     model_dump=lambda **kw: {"coverage_percentage": 100.0}
                 ),
@@ -420,7 +420,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         # We must explicitly start services for the background task to exist
         # We patch _self_test to avoid it running a full test
-        with patch("runner.runner_core.Runner._self_test", new=AsyncMock()):
+        with patch("generator.runner.runner_core.Runner._self_test", new=AsyncMock()):
             await runner.start_services()
 
         background_task_ref = runner._monitor_task  # Use the specific attribute

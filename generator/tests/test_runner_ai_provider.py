@@ -111,25 +111,41 @@ def test_register_model(provider: OpenAIProvider) -> None:
 
 # 2. Tokenizer
 def test_get_tokenizer_gpt4(provider: OpenAIProvider) -> None:
-    tokenizer = provider._get_tokenizer("gpt-4")
-    assert tokenizer is not None
-    assert "gpt-4" in provider.tokenizer_cache
+    mock_encoding = MagicMock()
+    with patch("generator.runner.providers.ai_provider.tiktoken") as mock_tiktoken:
+        mock_tiktoken.get_encoding.return_value = mock_encoding
+        provider.tokenizer_cache.clear()
+        tokenizer = provider._get_tokenizer("gpt-4")
+        assert tokenizer is not None
+        assert "gpt-4" in provider.tokenizer_cache
 
 
 def test_get_tokenizer_gpt35(provider: OpenAIProvider) -> None:
-    tokenizer = provider._get_tokenizer("gpt-3.5-turbo")
-    assert tokenizer is not None
+    mock_encoding = MagicMock()
+    with patch("generator.runner.providers.ai_provider.tiktoken") as mock_tiktoken:
+        mock_tiktoken.get_encoding.return_value = mock_encoding
+        provider.tokenizer_cache.clear()
+        tokenizer = provider._get_tokenizer("gpt-3.5-turbo")
+        assert tokenizer is not None
 
 
 def test_get_tokenizer_unknown_model(provider: OpenAIProvider) -> None:
-    tokenizer = provider._get_tokenizer("unknown-model")
-    assert tokenizer is not None  # Should use fallback
+    mock_encoding = MagicMock()
+    with patch("generator.runner.providers.ai_provider.tiktoken") as mock_tiktoken:
+        mock_tiktoken.get_encoding.return_value = mock_encoding
+        provider.tokenizer_cache.clear()
+        tokenizer = provider._get_tokenizer("unknown-model")
+        assert tokenizer is not None  # Should use fallback
 
 
 def test_get_tokenizer_caches(provider: OpenAIProvider) -> None:
-    tok1 = provider._get_tokenizer("gpt-4")
-    tok2 = provider._get_tokenizer("gpt-4")
-    assert tok1 is tok2  # Should return same cached instance
+    mock_encoding = MagicMock()
+    with patch("generator.runner.providers.ai_provider.tiktoken") as mock_tiktoken:
+        mock_tiktoken.get_encoding.return_value = mock_encoding
+        provider.tokenizer_cache.clear()
+        tok1 = provider._get_tokenizer("gpt-4")
+        tok2 = provider._get_tokenizer("gpt-4")
+        assert tok1 is tok2  # Should return same cached instance
 
 
 # 3. Token counting
@@ -444,8 +460,11 @@ async def test_call_with_kwargs(provider: OpenAIProvider, mock_openai_response) 
 @pytest.mark.asyncio
 async def test_multiple_tokenizers(provider: OpenAIProvider) -> None:
     # Test that different models use appropriate tokenizers
-    count1 = await provider.count_tokens("test", "gpt-4")
-    count2 = await provider.count_tokens("test", "gpt-3.5-turbo")
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.encode = MagicMock(return_value=[1, 2, 3])
+    with patch.object(provider, "_get_tokenizer", return_value=mock_tokenizer):
+        count1 = await provider.count_tokens("test", "gpt-4")
+        count2 = await provider.count_tokens("test", "gpt-3.5-turbo")
 
     # Both should work
     assert count1 > 0

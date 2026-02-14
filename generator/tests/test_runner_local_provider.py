@@ -391,20 +391,19 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
 
     assert stream_chunks_total.labels("m")._value.get() == 2
 
-    # <<< START FIX: Use the _samples() method to find the count
-    # This is the only reliable, public-facing way to test a Histogram.
+    # <<< START FIX: Use collect() to find the count sample with full metric name
+    # This is the only reliable way to test a Histogram's count.
     count_value = None
-    # The sample name for the count is the metric name + "_count"
-    count_metric_name = f"{stream_chunk_latency._name}_count"
 
-    for sample in stream_chunk_latency._samples():
-        if sample.name == count_metric_name and sample.labels.get("model") == "m":
-            count_value = sample.value
-            break
+    for metric_family in stream_chunk_latency.collect():
+        for sample in metric_family.samples:
+            if sample.name.endswith("_count") and sample.labels.get("model") == "m":
+                count_value = sample.value
+                break
 
     assert (
         count_value is not None
-    ), f"Could not find sample '{count_metric_name}' with labels {{'model': 'm'}}"
+    ), f"Could not find sample ending with '_count' with labels {{'model': 'm'}}"
     assert count_value == 2
     # <<< END FIX
 

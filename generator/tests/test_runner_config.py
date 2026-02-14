@@ -23,8 +23,13 @@ sys.modules["watchfiles"] = MagicMock()
 # sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
 
 # Import runner modules
+import runner.runner_config as _runner_config_module
 from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
 from runner.runner_errors import ConfigurationError
+
+# Get the actual module that load_config belongs to (may differ from
+# _runner_config_module due to dual sys.path entries for 'runner' vs 'generator.runner')
+_load_config_module = sys.modules[load_config.__module__]
 
 
 class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
@@ -139,6 +144,9 @@ instance_id: test-remote-loaded
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        # Clear the module-level config cache so each test gets a fresh load
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
 
     def test_config_validation_success(self):
         # FIX: Corrected to use valid fields and provide all required fields
@@ -287,18 +295,24 @@ instance_id: test-remote-loaded
     def test_audit_signing_key_environment_variables(self):
         """Test that all three audit signing key environment variables work correctly."""
         # Test 1: AGENTIC_AUDIT_HMAC_KEY (documented variable)
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         os.environ["AGENTIC_AUDIT_HMAC_KEY"] = "test-key-agentic"
         config = load_config(str(self.config_file))
         self.assertEqual(config.audit_signing_key_id, "test-key-agentic")
         del os.environ["AGENTIC_AUDIT_HMAC_KEY"]
 
         # Test 2: AUDIT_SIGNING_KEY (backward compatibility)
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         os.environ["AUDIT_SIGNING_KEY"] = "test-key-audit"
         config = load_config(str(self.config_file))
         self.assertEqual(config.audit_signing_key_id, "test-key-audit")
         del os.environ["AUDIT_SIGNING_KEY"]
 
         # Test 3: RUNNER_AUDIT_SIGNING_KEY_ID (original variable)
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"] = "test-key-runner"
         config = load_config(str(self.config_file))
         self.assertEqual(config.audit_signing_key_id, "test-key-runner")
@@ -306,6 +320,8 @@ instance_id: test-remote-loaded
 
         # Test 4: Priority - AGENTIC_AUDIT_HMAC_KEY should take precedence if multiple are set
         # (due to order in env_map dictionary - later entries override earlier ones)
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"] = "test-key-runner"
         os.environ["AUDIT_SIGNING_KEY"] = "test-key-audit"
         os.environ["AGENTIC_AUDIT_HMAC_KEY"] = "test-key-agentic"
