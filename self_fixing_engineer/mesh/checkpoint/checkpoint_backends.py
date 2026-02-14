@@ -936,7 +936,8 @@ async def s3_save(
         signature = _sign_payload(data_bytes)
 
         # S3 key with sharding for performance
-        shard = hashlib.md5(name.encode()).hexdigest()[:2]
+        # SECURITY FIX: Use SHA-256 instead of MD5 for consistent hashing
+        shard = hashlib.sha256(name.encode()).hexdigest()[:2]
         s3_key = f"{Config.S3_PREFIX}{shard}/{name}/v_{version_id}.json.gz"
 
         # Upload with metadata
@@ -992,7 +993,8 @@ async def s3_load(
     try:
         client = await registry.get_client("s3", manager)
 
-        shard = hashlib.md5(name.encode()).hexdigest()[:2]
+        # SECURITY FIX: Use SHA-256 instead of MD5 for consistent hashing
+        shard = hashlib.sha256(name.encode()).hexdigest()[:2]
 
         # Determine S3 key
         if version is None or version == "latest":
