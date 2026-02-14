@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional
 
 import jwt
 from cryptography.fernet import Fernet
+from enum import Enum
 from fastapi import (
     APIRouter,
     Depends,
@@ -1001,6 +1002,14 @@ class ChatResponse(BaseModel):
     message: Optional[str] = None
 
 
+class NotificationType(str, Enum):
+    """Enumeration of valid notification types."""
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    SUCCESS = "success"
+
+
 class FeatureFlagUpdateRequest(BaseModel):
     value: bool
 
@@ -1041,7 +1050,7 @@ class NotifyRequest(BaseModel):
     """Request model for notifications."""
 
     message: str  # Notification message
-    type: Optional[str] = "info"  # Notification type (info, warning, error)
+    type: NotificationType = NotificationType.INFO  # Notification type
 
 
 class CodeAnalyzeRequest(BaseModel):
@@ -1201,9 +1210,9 @@ async def notify(notify_request: NotifyRequest):
     API_REQUESTS.labels(endpoint="/notify", method="POST").inc()
     try:
         logger.info(
-            f"Received UI notification: {notify_request.message} (Type: {notify_request.type})"
+            f"Received UI notification: {notify_request.message} (Type: {notify_request.type.value})"
         )
-        return {"status": "received", "data": notify_request.dict()}
+        return {"status": "received", "data": notify_request.model_dump()}
     except Exception as e:
         API_ERRORS.labels(
             endpoint="/notify", method="POST", error_type="exception"
