@@ -9,7 +9,7 @@ multi-worker safety and backward compatibility.
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,8 +35,8 @@ async def test_storage_in_memory_mode():
             id="test-memory-job",
             status=JobStatus.PENDING,
             input_files=[],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             metadata={},
         )
         
@@ -69,8 +69,8 @@ async def test_add_job_function():
             id="test-add-job",
             status=JobStatus.PENDING,
             input_files=[],
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             metadata={},
         )
         
@@ -109,8 +109,8 @@ async def test_storage_eviction():
                     id=f"test-evict-{i}",
                     status=JobStatus.COMPLETED if i < 3 else JobStatus.PENDING,
                     input_files=[],
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
+                    created_at=datetime.now(timezone.utc),
+                    updated_at=datetime.now(timezone.utc),
                     metadata={},
                 )
                 jobs.append(job)
