@@ -67,6 +67,17 @@ def get_generator_service() -> GeneratorService:
     return GeneratorService(omnicore_service=omnicore)
 
 
+async def require_agents_ready():
+    """
+    Dependency that ensures agents are loaded before accepting job submission.
+    
+    This is a wrapper that imports and calls the main require_agents_ready function.
+    We use a wrapper to avoid circular imports since main.py imports routers.
+    """
+    from server.main import require_agents_ready as _require_agents_ready
+    return await _require_agents_ready()
+
+
 def detect_language_from_content(readme_content: str) -> str:
     """
     Detect programming language from README content using keyword analysis.
@@ -661,7 +672,7 @@ async def upload_files(
         ..., description="Files to upload (e.g., README.md, test files)"
     ),
     generator_service: GeneratorService = Depends(get_generator_service),
-    _: None = Depends(lambda: __import__('server.main', fromlist=['require_agents_ready']).require_agents_ready),
+    _: None = Depends(require_agents_ready),
 ) -> SuccessResponse:
     """
     Upload files for a generator job.

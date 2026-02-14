@@ -111,12 +111,23 @@ def get_omnicore_service() -> OmniCoreService:
     return _get_omnicore_service()
 
 
+async def require_agents_ready():
+    """
+    Dependency that ensures agents are loaded before accepting job submission.
+    
+    This is a wrapper that imports and calls the main require_agents_ready function.
+    We use a wrapper to avoid circular imports since main.py imports routers.
+    """
+    from server.main import require_agents_ready as _require_agents_ready
+    return await _require_agents_ready()
+
+
 @router.post("/", response_model=Job, status_code=201)
 async def create_job(
     request: JobCreateRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
-    _: None = Depends(lambda: __import__('server.main', fromlist=['require_agents_ready']).require_agents_ready),
+    _: None = Depends(require_agents_ready),
 ) -> Job:
     """
     Create a new job.
