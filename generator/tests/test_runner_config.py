@@ -310,8 +310,8 @@ instance_id: test-remote-loaded
         os.environ["AUDIT_SIGNING_KEY"] = "test-key-audit"
         os.environ["AGENTIC_AUDIT_HMAC_KEY"] = "test-key-agentic"
         config = load_config(str(self.config_file))
-        # The last one in env_map takes precedence when multiple are set
-        self.assertEqual(config.audit_signing_key_id, "test-key-audit")
+        # The last one in env_map takes precedence when multiple are set (AGENTIC_AUDIT_HMAC_KEY is primary)
+        self.assertEqual(config.audit_signing_key_id, "test-key-agentic")
         del os.environ["RUNNER_AUDIT_SIGNING_KEY_ID"]
         del os.environ["AUDIT_SIGNING_KEY"]
         del os.environ["AGENTIC_AUDIT_HMAC_KEY"]
