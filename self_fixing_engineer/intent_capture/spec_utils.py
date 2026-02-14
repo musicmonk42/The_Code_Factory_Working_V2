@@ -28,6 +28,15 @@ from tenacity import (
     wait_exponential,
 )
 
+# Import centralized environment detection utility
+try:
+    from server.environment import is_production
+    ENVIRONMENT_DETECTION_AVAILABLE = True
+except ImportError:
+    # Fallback if server.environment is not available (e.g., in isolated tests)
+    ENVIRONMENT_DETECTION_AVAILABLE = False
+    logging.warning("server.environment module not available, using fallback environment detection")
+
 # P5: Observability: Prometheus Metrics
 try:
     from prometheus_client import Counter, Gauge, Histogram, start_http_server
@@ -155,13 +164,18 @@ try:
 except LookupError:
     # Check if we're in production - if so, skip runtime download
     # In production, NLTK data should be pre-downloaded during Docker build
-    is_production = (
-        os.getenv("ENVIRONMENT") == "production" or 
-        os.getenv("APP_ENV") == "production" or
-        os.getenv("PRODUCTION_MODE") == "1"
-    )
+    # Use centralized environment detection for consistency
+    if ENVIRONMENT_DETECTION_AVAILABLE:
+        check_production = is_production()
+    else:
+        # Fallback: Check multiple environment variables for Railway compatibility
+        check_production = (
+            os.getenv("ENVIRONMENT") == "production" or 
+            os.getenv("APP_ENV") == "production" or
+            os.getenv("PRODUCTION_MODE") == "1"
+        )
     
-    if is_production:
+    if check_production:
         logger.warning(
             "NLTK data not found in production environment. "
             "This should have been pre-downloaded during Docker build. "

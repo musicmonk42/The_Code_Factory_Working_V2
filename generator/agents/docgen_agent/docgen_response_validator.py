@@ -84,6 +84,15 @@ from runner.llm_client import call_ensemble_api
 from runner.runner_file_utils import get_commits  # For changelog enrichment
 from runner.runner_logging import logger
 
+# Import centralized environment detection utility
+try:
+    from server.environment import is_production
+    ENVIRONMENT_DETECTION_AVAILABLE = True
+except ImportError:
+    # Fallback if server.environment is not available (e.g., in isolated tests)
+    ENVIRONMENT_DETECTION_AVAILABLE = False
+    logger.warning("server.environment module not available, using fallback environment detection")
+
 # -----------------------------------
 
 
@@ -180,13 +189,18 @@ def setup_nltk_data():
         except LookupError:
             # Only attempt download if not in production environment
             # In production, NLTK data should be pre-downloaded during Docker build
-            # Check both ENVIRONMENT and APP_ENV for Railway compatibility
-            is_production = (
-                os.getenv("ENVIRONMENT") == "production" or 
-                os.getenv("APP_ENV") == "production" or
-                os.getenv("PRODUCTION_MODE") == "1"
-            )
-            if is_production:
+            # Use centralized environment detection for consistency
+            if ENVIRONMENT_DETECTION_AVAILABLE:
+                check_production = is_production()
+            else:
+                # Fallback: Check multiple environment variables for Railway compatibility
+                check_production = (
+                    os.getenv("ENVIRONMENT") == "production" or 
+                    os.getenv("APP_ENV") == "production" or
+                    os.getenv("PRODUCTION_MODE") == "1"
+                )
+            
+            if check_production:
                 logger.warning(
                     f"NLTK data '{name}' not found in production environment. "
                     f"This should have been pre-downloaded during Docker build. "
