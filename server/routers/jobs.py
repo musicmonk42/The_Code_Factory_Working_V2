@@ -116,6 +116,7 @@ async def create_job(
     request: JobCreateRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    _: None = Depends(lambda: __import__('server.main', fromlist=['require_agents_ready']).require_agents_ready),
 ) -> Job:
     """
     Create a new job.

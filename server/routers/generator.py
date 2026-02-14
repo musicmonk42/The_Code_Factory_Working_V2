@@ -661,6 +661,7 @@ async def upload_files(
         ..., description="Files to upload (e.g., README.md, test files)"
     ),
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(lambda: __import__('server.main', fromlist=['require_agents_ready']).require_agents_ready),
 ) -> SuccessResponse:
     """
     Upload files for a generator job.

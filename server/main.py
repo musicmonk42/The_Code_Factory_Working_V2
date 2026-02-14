@@ -372,6 +372,70 @@ def _load_routers():
             return False
 
 
+async def require_agents_ready():
+    """
+    FastAPI dependency that ensures agents are loaded before accepting work.
+    
+    This dependency checks if agents have finished loading before allowing
+    job submission endpoints to accept requests. If agents are still loading
+    or haven't started loading yet, it returns HTTP 503 with a clear message
+    asking the client to retry.
+    
+    This prevents jobs from "vanishing" when submitted during the startup
+    window before agents are ready.
+    
+    Raises:
+        HTTPException: 503 if agents are not ready
+    """
+    # First ensure routers are loaded (includes agent loader)
+    if not _routers_loaded or get_agent_loader is None:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "service_not_ready",
+                "message": "Service is still initializing. Please retry in a few seconds.",
+                "retry_after": 5
+            },
+            headers={"Retry-After": "5"}
+        )
+    
+    try:
+        loader = get_agent_loader()
+        
+        # Check if agents are currently loading
+        if loader.is_loading():
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "service_not_ready",
+                    "message": "Agents are still loading. Please retry in a few seconds.",
+                    "retry_after": 10
+                },
+                headers={"Retry-After": "10"}
+            )
+        
+        # Check if loading has completed successfully
+        if not loader._loading_completed:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "service_not_ready",
+                    "message": "Agent loading has not started yet. Please retry shortly.",
+                    "retry_after": 5
+                },
+                headers={"Retry-After": "5"}
+            )
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        # If we can't check readiness, log the error and fail-open
+        # This ensures that transient issues don't prevent the service from working
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Error checking agent readiness: {e}. Allowing request (fail-open).")
+        pass
+
+
 
 # Import minimal dependencies needed for health endpoint schemas
 # These are defined inline to avoid import failures
