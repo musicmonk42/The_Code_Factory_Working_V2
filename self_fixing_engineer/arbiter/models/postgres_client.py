@@ -33,6 +33,22 @@ from tenacity import (
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
 
+
+def _ensure_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert timezone-aware datetime to naive UTC for asyncpg TIMESTAMPTZ compatibility.
+    
+    Args:
+        dt: A datetime object that may be timezone-aware or naive, or None
+        
+    Returns:
+        A naive datetime in UTC timezone, or None if input was None
+    """
+    if dt is not None and hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+        # Convert to UTC first (should already be UTC), then strip tzinfo
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 # Custom Exceptions
 
 
@@ -973,6 +989,9 @@ class PostgresClient:
         placeholders: List[str] = []
         for i, col in enumerate(columns):
             val = data.get(col)
+            # Ensure datetime values are naive UTC for asyncpg TIMESTAMPTZ compatibility
+            if isinstance(val, datetime):
+                val = _ensure_naive_utc(val)
             values.append(val)
             if col in jsonb_columns:
                 placeholders.append(f"${i+1}::jsonb")

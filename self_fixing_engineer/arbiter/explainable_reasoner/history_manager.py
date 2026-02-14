@@ -149,6 +149,21 @@ logger = structlog.get_logger(__name__)
 #         return SQLiteHistoryManager(...)
 
 
+def _ensure_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert timezone-aware datetime to naive UTC for asyncpg TIMESTAMPTZ compatibility.
+    
+    Args:
+        dt: A datetime object that may be timezone-aware or naive, or None
+        
+    Returns:
+        A naive datetime in UTC timezone, or None if input was None
+    """
+    if dt is not None and dt.tzinfo is not None:
+        # Convert to UTC first (should already be UTC), then strip tzinfo
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 class BaseHistoryManager(ABC):
     """Abstract base class for managing history entries."""
 
@@ -780,7 +795,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                     json.dumps(entry_to_store["context"]),
                     entry_to_store["response"],
                     entry_to_store["response_type"],
-                    datetime.fromisoformat(entry_to_store["timestamp"]),
+                    _ensure_naive_utc(datetime.fromisoformat(entry_to_store["timestamp"])),
                     entry_to_store.get("session_id"),
                 )
             self._record_op_success("add_entry", start_time)
@@ -819,7 +834,7 @@ class PostgresHistoryManager(BaseHistoryManager):
                         json.dumps(entry_to_store["context"]),
                         entry_to_store["response"],
                         entry_to_store["response_type"],
-                        datetime.fromisoformat(entry_to_store["timestamp"]),
+                        _ensure_naive_utc(datetime.fromisoformat(entry_to_store["timestamp"])),
                         entry_to_store.get("session_id"),
                     )
                 )
@@ -904,7 +919,7 @@ class PostgresHistoryManager(BaseHistoryManager):
             async with self._pool.acquire() as conn:
                 # Using DELETE ... RETURNING id allows getting the count without a second query
                 result = await conn.execute(
-                    "DELETE FROM history WHERE timestamp < $1", cutoff_timestamp
+                    "DELETE FROM history WHERE timestamp < $1", _ensure_naive_utc(cutoff_timestamp)
                 )
                 count = int(result.split(" ")[1]) if result.startswith("DELETE") else 0
 
