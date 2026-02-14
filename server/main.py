@@ -1045,22 +1045,28 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             
             # Wait for agent loading to complete (with timeout)
             # This ensures /ready endpoint transitions from 503→200 only after agents are available
+            # Configuration: 60 second timeout (120 iterations * 0.5s), log progress every 10s (20 iterations)
+            AGENT_LOADING_TIMEOUT_SECONDS = 60
+            AGENT_LOADING_CHECK_INTERVAL_SECONDS = 0.5
+            AGENT_LOADING_LOG_INTERVAL_ITERATIONS = 20  # Log progress every 10 seconds
+            MAX_LOADING_ITERATIONS = int(AGENT_LOADING_TIMEOUT_SECONDS / AGENT_LOADING_CHECK_INTERVAL_SECONDS)
+            
             try:
-                logger.info("Waiting for agent loading to complete (max 60s)...")
-                # Wait up to 60 seconds for agents to load
-                for i in range(120):  # 120 * 0.5s = 60s
+                logger.info(f"Waiting for agent loading to complete (max {AGENT_LOADING_TIMEOUT_SECONDS}s)...")
+                # Wait up to configured timeout for agents to load
+                for i in range(MAX_LOADING_ITERATIONS):
                     if not loader.is_loading():
-                        logger.info(f"✓ Agent loading completed after {i * 0.5:.1f}s")
+                        logger.info(f"✓ Agent loading completed after {i * AGENT_LOADING_CHECK_INTERVAL_SECONDS:.1f}s")
                         break
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(AGENT_LOADING_CHECK_INTERVAL_SECONDS)
                     
-                    # Log progress every 10 seconds
-                    if i > 0 and i % 20 == 0:
-                        logger.info(f"  Still loading agents... ({i * 0.5:.0f}s elapsed)")
+                    # Log progress periodically
+                    if i > 0 and i % AGENT_LOADING_LOG_INTERVAL_ITERATIONS == 0:
+                        logger.info(f"  Still loading agents... ({i * AGENT_LOADING_CHECK_INTERVAL_SECONDS:.0f}s elapsed)")
                 else:
                     # Timeout reached
                     if loader.is_loading():
-                        logger.warning("⚠ Agent loading still in progress after 60s timeout")
+                        logger.warning(f"⚠ Agent loading still in progress after {AGENT_LOADING_TIMEOUT_SECONDS}s timeout")
                         logger.warning("  /ready endpoint will return 503 until loading completes")
                     else:
                         logger.info("✓ Agent loading completed just before timeout")
