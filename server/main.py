@@ -874,10 +874,12 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 # Constants extracted for maintainability and configurability
                 JOB_RECOVERY_BATCH_SIZE = 100  # Jobs per batch
                 JOB_RECOVERY_MAX_LIMIT = 10000  # Maximum total jobs to recover per startup
+                MAX_CONSECUTIVE_ERRORS = 5  # Circuit breaker threshold for consecutive errors
                 
                 batch_size = JOB_RECOVERY_BATCH_SIZE
                 offset = 0
                 total_processed = 0
+                consecutive_errors = 0  # Track consecutive batch failures for circuit breaker
                 
                 # Capture recovery timestamp once for consistency across all operations
                 # Industry Standard: Use consistent timestamps for related operations
@@ -901,12 +903,35 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                                 .offset(offset)
                             )
                             job_states = result.scalars().all()
+                        
+                        # Reset consecutive error counter on successful query
+                        consecutive_errors = 0
+                        
                     except Exception as e:
+                        consecutive_errors += 1
                         logger.error(
                             f"Failed to query job states at offset {offset}: {e}",
                             exc_info=True,
-                            extra={"offset": offset, "batch_size": batch_size}
+                            extra={
+                                "offset": offset, 
+                                "batch_size": batch_size,
+                                "consecutive_errors": consecutive_errors
+                            }
                         )
+                        
+                        # Circuit breaker: Stop after too many consecutive errors
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                            logger.error(
+                                f"Job recovery aborted after {MAX_CONSECUTIVE_ERRORS} consecutive errors. "
+                                f"Last offset: {offset}. Fix the underlying database issue and restart.",
+                                extra={
+                                    "offset": offset,
+                                    "total_processed": total_processed,
+                                    "consecutive_errors": consecutive_errors
+                                }
+                            )
+                            break
+                        
                         # Skip this batch and continue with the next one
                         offset += batch_size
                         continue
