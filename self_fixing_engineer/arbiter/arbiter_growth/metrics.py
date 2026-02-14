@@ -1,11 +1,15 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import logging
+import threading
 from typing import Optional, Type, Union
 
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histogram
 
 logger = logging.getLogger(__name__)
+
+# Lock to prevent race conditions during metric registration
+_METRICS_LOCK = threading.Lock()
 
 
 def get_or_create_metric(
@@ -50,47 +54,49 @@ def get_or_create_metric(
     if metric_class == Histogram:
         custom_buckets = config_store.get(f"metrics.{name}.buckets")
 
-    try:
-        # Check if a metric with the same name already exists
-        existing_metric = registry._names_to_collectors.get(name)
-        if existing_metric:
-            # If it exists and is the correct type, return it
-            if isinstance(existing_metric, metric_class):
-                logger.debug(f"Returning existing metric '{name}'")
-                return existing_metric
-            # If the type is wrong, unregister the old one before creating a new one
-            else:
-                logger.warning(
-                    f"Metric '{name}' exists with a different type. Unregistering old metric."
-                )
-                try:
-                    registry.unregister(existing_metric)
-                    logger.debug(f"Successfully unregistered old metric '{name}'.")
-                except Exception as e:
-                    logger.error(
-                        f"Failed to unregister conflicting metric '{name}': {e}",
-                        exc_info=True,
-                    )
-                    # If unregister fails, return the existing metric to avoid duplicate error
+    # Use lock to ensure thread-safe metric creation
+    with _METRICS_LOCK:
+        try:
+            # Check if a metric with the same name already exists
+            existing_metric = registry._names_to_collectors.get(name)
+            if existing_metric:
+                # If it exists and is the correct type, return it
+                if isinstance(existing_metric, metric_class):
+                    logger.debug(f"Returning existing metric '{name}'")
                     return existing_metric
-    except KeyError:
-        # The metric does not exist in the registry
-        pass
-    except Exception as e:
-        # Catch any other unexpected errors during the check
-        logger.error(
-            f"Unexpected error while checking for metric '{name}': {e}", exc_info=True
-        )
+                # If the type is wrong, unregister the old one before creating a new one
+                else:
+                    logger.warning(
+                        f"Metric '{name}' exists with a different type. Unregistering old metric."
+                    )
+                    try:
+                        registry.unregister(existing_metric)
+                        logger.debug(f"Successfully unregistered old metric '{name}'.")
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to unregister conflicting metric '{name}': {e}",
+                            exc_info=True,
+                        )
+                        # If unregister fails, return the existing metric to avoid duplicate error
+                        return existing_metric
+        except KeyError:
+            # The metric does not exist in the registry
+            pass
+        except Exception as e:
+            # Catch any other unexpected errors during the check
+            logger.error(
+                f"Unexpected error while checking for metric '{name}': {e}", exc_info=True
+            )
 
-    # Create the new metric
-    kwargs = {"labelnames": custom_labels} if custom_labels else {}
-    if metric_class == Histogram and custom_buckets:
-        kwargs["buckets"] = custom_buckets
+        # Create the new metric
+        kwargs = {"labelnames": custom_labels} if custom_labels else {}
+        if metric_class == Histogram and custom_buckets:
+            kwargs["buckets"] = custom_buckets
 
-    # Get metric class name safely (handles Mocks during test collection)
-    class_name = getattr(metric_class, "__name__", str(metric_class))
-    logger.debug(f"Creating new metric '{name}' of type {class_name}.")
-    return metric_class(name, documentation, **kwargs, registry=registry)
+        # Get metric class name safely (handles Mocks during test collection)
+        class_name = getattr(metric_class, "__name__", str(metric_class))
+        logger.debug(f"Creating new metric '{name}' of type {class_name}.")
+        return metric_class(name, documentation, **kwargs, registry=registry)
 
 
 # --- Arbiter Growth Manager Metrics ---
