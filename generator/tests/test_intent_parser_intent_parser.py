@@ -20,6 +20,12 @@ import yaml  # <-- FIX 1: Added missing import
 # (No external Pydantic models are imported by intent_parser.py)
 
 # 2. Mock runner.* modules with proper secure defaults
+# Save originals so we can restore them after tests to avoid polluting other test modules
+_RUNNER_MOCK_KEYS = [
+    "runner", "runner.runner_logging", "runner.runner_security_utils",
+]
+_saved_runner_modules = {k: sys.modules.get(k) for k in _RUNNER_MOCK_KEYS}
+
 mock_runner_logging = MagicMock()
 mock_runner_logging.log_action = MagicMock()
 sys.modules["runner"] = MagicMock()
@@ -28,6 +34,16 @@ sys.modules["runner.runner_logging"] = mock_runner_logging
 mock_runner_security = MagicMock()
 mock_runner_security.redact_secrets = MagicMock(side_effect=lambda x, **kw: x)
 sys.modules["runner.runner_security_utils"] = mock_runner_security
+
+
+def _restore_runner_modules():
+    """Restore original runner modules in sys.modules."""
+    for k, v in _saved_runner_modules.items():
+        if v is not None:
+            sys.modules[k] = v
+        else:
+            sys.modules.pop(k, None)
+
 
 # 3. Mock Prometheus metrics
 mock_prometheus = MagicMock()
@@ -85,6 +101,10 @@ from generator.intent_parser.intent_parser import (
     get_torch,
     get_transformers,
 )
+
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+_restore_runner_modules()
 
 # Silence the logger for clean test output
 logging.disable(logging.CRITICAL)

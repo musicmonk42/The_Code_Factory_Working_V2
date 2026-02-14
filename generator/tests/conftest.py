@@ -101,6 +101,39 @@ if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
     sys.modules["watchdog.events"] = _mock_watchdog_events
 
 
+# ---- CRITICAL: Save original runner module references ----
+# Some test files (test_agents_docgen_*.py, test_intent_parser_*.py, etc.)
+# replace sys.modules["runner"] and sys.modules["runner.*"] with MagicMock()
+# at module level during import. This poisons sys.modules for ALL subsequent
+# test files, causing "cannot import from runner.runner_errors" errors.
+# We save the originals here (before any test files are imported) so they
+# can be restored by the individual test files after their imports complete.
+_RUNNER_MODULE_KEYS = [
+    "runner", "runner.llm_client", "runner.runner_logging",
+    "runner.runner_metrics", "runner.runner_file_utils",
+    "runner.summarize_utils", "runner.runner_errors",
+    "runner.runner_security_utils", "runner.tracer",
+    "runner.runner_audit",
+]
+_ORIGINAL_RUNNER_MODULES = {}
+for _key in _RUNNER_MODULE_KEYS:
+    if _key in sys.modules:
+        _ORIGINAL_RUNNER_MODULES[_key] = sys.modules[_key]
+
+
+def restore_runner_modules():
+    """Restore original runner modules in sys.modules.
+
+    Called by test files that mock runner modules at module level
+    to prevent pollution of subsequent test files.
+    """
+    for k in _RUNNER_MODULE_KEYS:
+        if k in _ORIGINAL_RUNNER_MODULES:
+            sys.modules[k] = _ORIGINAL_RUNNER_MODULES[k]
+        else:
+            sys.modules.pop(k, None)
+
+
 # Initialize prometheus_client stubs inline BEFORE importing root conftest
 # This ensures stubs exist before test files are imported
 if "prometheus_client" not in sys.modules:
