@@ -188,9 +188,9 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         python -c "from transformers import pipeline; \
             print('Downloading facebook/bart-large-cnn model...'); \
             pipeline('summarization', model='facebook/bart-large-cnn'); \
-            print('✓ Model download complete')" || \
-        (echo "WARNING: Failed to download HuggingFace model"); \
-        echo "✓ HuggingFace model downloads complete"; \
+            print('✓ Model download complete')" && \
+        echo "✓ HuggingFace model downloads complete" || \
+        echo "WARNING: Failed to download HuggingFace model"; \
     fi
 
 # Copy the rest of the application
