@@ -1259,7 +1259,7 @@ class Database:
                     # Validate that we got a string back
                     if not isinstance(encrypted_result, str):
                         logger.error(
-                            f"CRITICAL: Encryption returned unexpected type {type(encrypted_result)}. "
+                            f"CRITICAL: Encryption returned unexpected type. "
                             f"Expected str, got {type(encrypted_result).__name__}. Falling back to unencrypted."
                         )
                         return json_str

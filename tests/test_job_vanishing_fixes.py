@@ -59,7 +59,8 @@ class TestKafkaBridgeStartup:
         # Verify _ensure_kafka_started was called
         assert call_count >= 1, "_ensure_kafka_started should be called during start()"
         
-        # Cleanup
+        # Cleanup using internal attribute (necessary since this is a mock test)
+        # Note: In production, stop() should be called which handles cleanup properly
         bus.running = False
         await bus.stop()
 
@@ -227,28 +228,28 @@ class TestJobSubmissionEndpoints:
         """Verify require_agents_ready is imported by router modules."""
         import ast
         import os
+        from pathlib import Path
+        
+        # Get the repository root (parent of tests directory)
+        tests_dir = Path(__file__).parent
+        repo_root = tests_dir.parent
         
         router_files = [
-            'server/routers/jobs.py',
-            'server/routers/generator.py', 
-            'server/routers/v1_compat.py'
+            repo_root / 'server' / 'routers' / 'jobs.py',
+            repo_root / 'server' / 'routers' / 'generator.py', 
+            repo_root / 'server' / 'routers' / 'v1_compat.py'
         ]
         
         for router_file in router_files:
-            file_path = os.path.join(
-                '/home/runner/work/The_Code_Factory_Working_V2/The_Code_Factory_Working_V2',
-                router_file
-            )
-            
-            if not os.path.exists(file_path):
+            if not router_file.exists():
                 continue
             
-            with open(file_path, 'r') as f:
+            with open(router_file, 'r') as f:
                 content = f.read()
             
             # Check if require_agents_ready is imported
             assert 'require_agents_ready' in content, \
-                f"{router_file} should import require_agents_ready"
+                f"{router_file.name} should import require_agents_ready"
             
             # Parse the file to check for Depends usage
             try:
@@ -270,7 +271,7 @@ class TestJobSubmissionEndpoints:
                     has_depends_usage = 'Depends(require_agents_ready)' in content
                 
                 assert has_depends_usage, \
-                    f"{router_file} should use Depends(require_agents_ready)"
+                    f"{router_file.name} should use Depends(require_agents_ready)"
             except SyntaxError:
                 # If we can't parse, just check string presence
                 assert 'Depends(require_agents_ready)' in content
