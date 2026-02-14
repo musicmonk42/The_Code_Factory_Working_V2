@@ -1342,7 +1342,7 @@ class CheckpointManager:
             # Check encryption
             health_status["checks"]["encryption_enabled"] = self.multi_fernet is not None
 
-            # Check cache  
+            # Check cache
             health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
 
             # Update Prometheus metrics
@@ -1351,11 +1351,9 @@ class CheckpointManager:
                     backend=self.backend_type, tenant=Environment.TENANT
                 ).set(1 if health_status["status"] == "healthy" else 0)
 
-            span.set_status(Status(StatusCode.OK))
             return health_status
 
         except Exception as e:
-            span.set_status(Status(StatusCode.ERROR, str(e)))
             logger.error(f"Health check failed: {e}")
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
