@@ -8,7 +8,7 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 
 import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -168,8 +168,8 @@ async def propose_fix(
         proposed_changes=result["proposed_changes"],
         confidence=result["confidence"],
         reasoning=result.get("reasoning"),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     fixes_db[fix.fix_id] = fix
 
@@ -236,7 +236,7 @@ async def review_fix(
     else:
         fix.status = FixStatus.REJECTED
 
-    fix.updated_at = datetime.utcnow()
+    fix.updated_at = datetime.now(timezone.utc)
 
     logger.info(f"Fix {fix_id} {'approved' if request.approved else 'rejected'}")
 
@@ -289,10 +289,10 @@ async def apply_fix(
 
     if not request.dry_run:
         fix.status = FixStatus.APPLIED
-        fix.applied_at = datetime.utcnow()
+        fix.applied_at = datetime.now(timezone.utc)
         fix.applied_changes = result.get("files_modified", [])
 
-    fix.updated_at = datetime.utcnow()
+    fix.updated_at = datetime.now(timezone.utc)
 
     logger.info(f"Applied fix {fix_id} (dry_run={request.dry_run})")
 
@@ -341,8 +341,8 @@ async def rollback_fix(
     result = await sfe_service.rollback_fix(fix_id)
 
     fix.status = FixStatus.ROLLED_BACK
-    fix.rolled_back_at = datetime.utcnow()
-    fix.updated_at = datetime.utcnow()
+    fix.rolled_back_at = datetime.now(timezone.utc)
+    fix.updated_at = datetime.now(timezone.utc)
 
     logger.info(f"Rolled back fix {fix_id}")
 

@@ -3896,7 +3896,7 @@ class OmniCoreService:
                 # This ensures the report complies with the contract requirements
                 enhanced_report = {
                     "job_id": job_id,
-                    "timestamp": critique_result.get("timestamp") or datetime.utcnow().isoformat(),
+                    "timestamp": critique_result.get("timestamp") or datetime.now(timezone.utc).isoformat(),
                     "coverage": critique_result.get("coverage", {
                         "total_lines": 0,
                         "covered_lines": 0,
@@ -3926,7 +3926,7 @@ class OmniCoreService:
                     # Create a minimal valid report
                     json_str = json.dumps({
                         "job_id": job_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "status": "error",
                         "message": "Failed to serialize critique results",
                         "issues_found": len(critique_result.get("issues", [])),

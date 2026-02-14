@@ -12,7 +12,7 @@ import asyncio
 import logging
 import mimetypes
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -135,7 +135,7 @@ async def create_job(
     **FIX Issue 3:** Jobs are now persisted to database immediately upon creation.
     """
     job_id = str(uuid4())
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     job = Job(
         id=job_id,
@@ -457,7 +457,7 @@ async def cancel_job_post(job_id: str) -> SuccessResponse:
         )
 
     job.status = JobStatus.CANCELLED
-    job.updated_at = datetime.utcnow()
+    job.updated_at = datetime.now(timezone.utc)
     
     # Update in database
     try:
@@ -756,7 +756,7 @@ async def list_job_files(job_id: str) -> JobFilesResponse:
                 path=str(file_path.relative_to(job_dir)),
                 size=stat.st_size,
                 mime_type=mime_type,
-                created_at=datetime.fromtimestamp(stat.st_mtime),
+                created_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
             ))
             total_size += stat.st_size
 

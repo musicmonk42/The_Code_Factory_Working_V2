@@ -95,9 +95,9 @@ async def _initialize_postgresql():
                         id VARCHAR(255) PRIMARY KEY,
                         data JSONB NOT NULL,
                         status VARCHAR(50) NOT NULL,
-                        created_at TIMESTAMP NOT NULL,
-                        updated_at TIMESTAMP NOT NULL,
-                        completed_at TIMESTAMP
+                        created_at TIMESTAMPTZ NOT NULL,
+                        updated_at TIMESTAMPTZ NOT NULL,
+                        completed_at TIMESTAMPTZ
                     )
                 """))
                 
@@ -155,7 +155,11 @@ async def _load_jobs_from_postgresql():
                     if key in job_data and job_data[key] is not None:
                         if isinstance(job_data[key], str):
                             try:
-                                job_data[key] = datetime.fromisoformat(job_data[key])
+                                parsed_dt = datetime.fromisoformat(job_data[key])
+                                # Ensure timezone awareness
+                                if parsed_dt.tzinfo is None:
+                                    parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
+                                job_data[key] = parsed_dt
                             except ValueError:
                                 job_data[key] = None
                 
