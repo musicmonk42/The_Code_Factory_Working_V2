@@ -9,7 +9,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python server/run.py --host 0.0.0.0 --log-level info"
+startCommand = "python server/run.py --host 0.0.0.0 --workers 4 --log-level info"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -169,9 +169,11 @@ PROMETHEUS_PORT = "9090"
 # METRICS_PORT = "9090"
 
 # === Performance ===
-# Worker count controlled via WORKER_COUNT env var (read by server/run.py)
-# server/run.py defaults to 4 if neither WORKER_COUNT nor WEB_CONCURRENCY is set
-# Do NOT pass --workers on the startCommand or it will override this value
+# Worker count specified via --workers flag in startCommand for consistency
+# with railway.json and Procfile. The environment variable provides a fallback
+# if --workers is not specified (server/run.py defaults to 4).
+# Using 4 workers ensures proper concurrent requests handling and prevents
+# event loop saturation under load.
 WORKER_COUNT = "4"
 MAX_CONCURRENT_TASKS = "50"
 
