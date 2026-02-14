@@ -518,7 +518,7 @@ class KafkaAuditPlugin:
             acks=self.config.acks,
             enable_idempotence=self.config.enable_idempotence,
             max_in_flight_requests_per_connection=self.config.max_in_flight,
-            batch_size=self.config.batch_size,
+            max_batch_size=self.config.batch_size,
             request_timeout_ms=self.config.request_timeout_ms,
         )
 

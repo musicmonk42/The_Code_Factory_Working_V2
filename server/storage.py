@@ -20,7 +20,7 @@ import json
 import logging
 import os
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from server.schemas import Fix, Job, JobStatus
@@ -30,6 +30,21 @@ logger = logging.getLogger(__name__)
 # Maximum number of jobs to keep in memory
 # When this limit is reached, oldest completed/failed/cancelled jobs are evicted
 MAX_JOBS = 10000
+
+
+def _ensure_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert timezone-aware datetime to naive UTC for asyncpg TIMESTAMPTZ compatibility.
+    
+    Args:
+        dt: A datetime object that may be timezone-aware or naive, or None
+        
+    Returns:
+        A naive datetime in UTC timezone, or None if input was None
+    """
+    if dt is not None and dt.tzinfo is not None:
+        # Convert to UTC first (should already be UTC), then strip tzinfo
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 # Shared storage dictionaries
 _jobs_memory_cache: Dict[str, Job] = OrderedDict()
@@ -234,9 +249,9 @@ async def _save_job_to_postgresql(job_id: str, job: Job):
                     "id": job_id,
                     "data": json.dumps(job_data),
                     "status": job.status.value,
-                    "created_at": job.created_at,
-                    "updated_at": job.updated_at,
-                    "completed_at": job.completed_at,
+                    "created_at": _ensure_naive_utc(job.created_at),
+                    "updated_at": _ensure_naive_utc(job.updated_at),
+                    "completed_at": _ensure_naive_utc(job.completed_at),
                 }
             )
             await session.commit()
