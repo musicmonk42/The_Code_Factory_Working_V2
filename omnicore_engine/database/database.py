@@ -1237,8 +1237,64 @@ class Database:
             serialized_data = self.safe_serialize_wrapper(data)
             json_str = json.dumps(serialized_data)
             if encrypt:
-                # encrypt() already returns a string, no need to decode
-                json_str = self.encrypter.encrypt(json_str.encode())
+                # CRITICAL FIX: Handle encryption failures gracefully to prevent job loss
+                # If encryption fails (e.g., due to KMS key mismatch or crypto init failure),
+                # fall back to storing unencrypted data to prevent jobs from vanishing
+                try:
+                    encrypted_result = self.encrypter.encrypt(json_str.encode())
+                    
+                    # Defensive check: ensure encryption didn't return None
+                    if encrypted_result is None:
+                        logger.error(
+                            "CRITICAL: Encryption returned None! This indicates crypto initialization failure. "
+                            "Falling back to unencrypted storage to prevent data loss."
+                        )
+                        logger.warning(
+                            "SECURITY WARNING: Storing data unencrypted due to crypto failure. "
+                            "Fix KMS configuration to restore encryption."
+                        )
+                        # Return unencrypted JSON to prevent job loss
+                        return json_str
+                    
+                    # Validate that we got a string back
+                    if not isinstance(encrypted_result, str):
+                        logger.error(
+                            f"CRITICAL: Encryption returned unexpected type {type(encrypted_result)}. "
+                            f"Expected str, got {type(encrypted_result).__name__}. Falling back to unencrypted."
+                        )
+                        return json_str
+                    
+                    json_str = encrypted_result
+                    
+                except AttributeError as ae:
+                    # This catches 'NoneType' object has no attribute 'encode' errors
+                    logger.error(
+                        f"CRITICAL: AttributeError during encryption: {ae}. "
+                        f"This usually means encryption key is None. "
+                        f"Falling back to unencrypted storage to prevent data loss.",
+                        exc_info=True
+                    )
+                    logger.warning(
+                        "SECURITY WARNING: Storing data unencrypted due to crypto failure. "
+                        "Check ENCRYPTION_KEY and KMS configuration."
+                    )
+                    # Return unencrypted JSON to prevent job loss
+                    return json_str
+                    
+                except Exception as enc_err:
+                    # Catch any other encryption errors
+                    logger.error(
+                        f"CRITICAL: Encryption failed with {type(enc_err).__name__}: {enc_err}. "
+                        f"Falling back to unencrypted storage to prevent data loss.",
+                        exc_info=True
+                    )
+                    logger.warning(
+                        "SECURITY WARNING: Storing data unencrypted due to crypto failure. "
+                        "Fix encryption configuration to restore security."
+                    )
+                    # Return unencrypted JSON to prevent job loss
+                    return json_str
+                    
             return json_str
         except (TypeError, ValueError) as e:
             logger.error(f"Failed to serialize data to JSON: {e}", exc_info=True)
