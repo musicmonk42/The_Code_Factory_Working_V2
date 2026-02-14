@@ -1263,6 +1263,7 @@ async def run_codegen(
     request: CodegenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
     policy: dict = Depends(arbiter_policy_check("codegen")),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the code generation agent directly.
@@ -1308,6 +1309,7 @@ async def run_testgen(
     job_id: str,
     request: TestgenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the test generation agent.
@@ -1349,6 +1351,7 @@ async def run_deploy(
     request: DeployRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
     policy: dict = Depends(arbiter_policy_check("deploy")),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the deployment configuration generation agent.
@@ -1392,6 +1395,7 @@ async def run_docgen(
     job_id: str,
     request: DocgenRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the documentation generation agent.
@@ -1432,6 +1436,7 @@ async def run_critique(
     job_id: str,
     request: CritiqueRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the critique agent for security and quality scanning.
@@ -1472,6 +1477,7 @@ async def run_full_pipeline(
     job_id: str,
     request: PipelineRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(require_agents_ready),
 ):
     """
     Run the full generation pipeline.

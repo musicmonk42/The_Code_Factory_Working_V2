@@ -421,6 +421,33 @@ class ServerConfig(BaseSettings):
     def is_development(self) -> bool:
         """Check if running in development mode."""
         return self.app_env == "development"
+    
+    # Backward compatibility properties for ShardedMessageBus
+    # The message bus checks for KAFKA_ENABLED or USE_KAFKA attributes
+    # These properties ensure ENABLE_KAFKA env var is properly mapped
+    @property
+    def KAFKA_ENABLED(self) -> bool:
+        """
+        Backward compatibility property for ShardedMessageBus.
+        Maps kafka_enabled field to uppercase KAFKA_ENABLED attribute.
+        """
+        return self.kafka_enabled
+    
+    @property
+    def USE_KAFKA(self) -> bool:
+        """
+        Backward compatibility property for ShardedMessageBus.
+        Maps kafka_enabled field to USE_KAFKA attribute.
+        """
+        return self.kafka_enabled
+    
+    @property
+    def KAFKA_BOOTSTRAP_SERVERS(self) -> str:
+        """
+        Backward compatibility property for ShardedMessageBus.
+        Maps kafka_bootstrap_servers to uppercase attribute.
+        """
+        return self.kafka_bootstrap_servers
 
 
 @lru_cache()

@@ -429,7 +429,13 @@ class ShardedMessageBus:
         # Integration components
         # Check both KAFKA_ENABLED and USE_KAFKA flags (prefer KAFKA_ENABLED)
         # This multi-flag approach supports legacy code and different deployment configs
-        kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
+        # FALLBACK: If config doesn't have the attributes, check ENABLE_KAFKA env var directly
+        kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", None))
+        if kafka_enabled is None:
+            # Fallback to environment variable if config attributes not set
+            # This handles cases where ENABLE_KAFKA is set but not mapped to config
+            env_kafka = os.getenv("ENABLE_KAFKA", "0")
+            kafka_enabled = env_kafka.lower() in ("1", "true", "yes", "on")
         
         # Enhanced diagnostic logging for Kafka configuration troubleshooting
         # Uses structured logging to ensure observability in production environments
@@ -443,6 +449,7 @@ class ShardedMessageBus:
                 "has_USE_KAFKA": hasattr(self.config, "USE_KAFKA"),
                 "KAFKA_ENABLED_value": getattr(self.config, "KAFKA_ENABLED", "NOT_SET"),
                 "USE_KAFKA_value": getattr(self.config, "USE_KAFKA", "NOT_SET"),
+                "ENABLE_KAFKA_env": os.getenv("ENABLE_KAFKA", "NOT_SET"),
                 "KAFKA_BOOTSTRAP_SERVERS": getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "NOT_SET"),
                 "component": "ShardedMessageBus",
                 "operation": "kafka_config_check"

@@ -1666,8 +1666,12 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             
             # Check if agents are still loading
             loading_in_progress = agent_status.get('loading_in_progress', False)
+            loading_completed = agent_status.get('loading_completed', False)
             loading_error = agent_status.get('loading_error')
             
+            # FIX Issue 2: Require loading_completed to be True before returning ready
+            # Previously, the check would pass if agent_availability > 0, which meant
+            # the endpoint returned 200 when only 1 out of 5 agents was loaded
             if loading_in_progress:
                 checks["agents_loaded"] = "loading"
                 ready = False
@@ -1676,15 +1680,20 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                 checks["agents_loaded"] = f"error: {loading_error}"
                 ready = False
                 status_text = "degraded"
+            elif not loading_completed:
+                # Loading hasn't completed yet - not ready
+                checks["agents_loaded"] = "loading"
+                ready = False
+                status_text = "loading"
             else:
-                # Check if any agents are available
+                # Loading completed - check agent availability
                 agent_availability = agent_status.get('availability_rate', 0.0)
                 total_agents = agent_status.get('total_agents', 0)
                 
                 if total_agents == 0:
-                    checks["agents_loaded"] = "loading"
+                    checks["agents_loaded"] = "no_agents"
                     ready = False
-                    status_text = "loading"
+                    status_text = "degraded"
                 elif agent_availability > 0:
                     checks["agents_loaded"] = "pass"
                     available = agent_status.get('available_agents', [])
@@ -1692,6 +1701,8 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                     checks["agents_available"] = f"{len(available)}/{total_agents}"
                     if unavailable:
                         checks["agents_unavailable"] = ", ".join(unavailable)
+                        # If some agents are unavailable but core agents loaded, still mark as ready
+                        # This allows for degraded but functional operation
                 else:
                     checks["agents_loaded"] = "fail"
                     ready = False
