@@ -199,7 +199,8 @@ async def _save_job_to_postgresql(job_id: str, job: Job):
     if not _pg_enabled or not _pg_session_maker:
         return
     
-    start_time = asyncio.get_event_loop().time()
+    import time
+    start_time = time.perf_counter()
     
     try:
         from sqlalchemy import text
@@ -237,7 +238,7 @@ async def _save_job_to_postgresql(job_id: str, job: Job):
             await session.commit()
             
             # Metrics and observability
-            elapsed = asyncio.get_event_loop().time() - start_time
+            elapsed = time.perf_counter() - start_time
             logger.debug(
                 f"Saved job {job_id} to PostgreSQL",
                 extra={
@@ -249,7 +250,7 @@ async def _save_job_to_postgresql(job_id: str, job: Job):
             )
             
     except Exception as e:
-        elapsed = asyncio.get_event_loop().time() - start_time
+        elapsed = time.perf_counter() - start_time
         logger.error(
             f"Failed to save job {job_id} to PostgreSQL: {e}",
             exc_info=True,
@@ -451,8 +452,15 @@ def add_job(job: Job) -> None:
             current_job = _jobs_memory_cache[job_id]
             if current_job.status in evictable_statuses:
                 del _jobs_memory_cache[job_id]
-                # Note: We keep the job in PostgreSQL even after evicting from memory
-                # This allows workers to reload jobs from DB if needed
+                # DESIGN DECISION: We keep jobs in PostgreSQL even after evicting from memory.
+                # This provides:
+                # - Audit trail: Historical job data for compliance/debugging
+                # - Recovery: Workers can reload jobs if needed
+                # - Separation of concerns: Memory = hot cache, PostgreSQL = durable storage
+                # 
+                # Database cleanup should be handled by a separate maintenance task
+                # (e.g., periodic cleanup of jobs older than 30/90 days based on retention policy)
+                # This follows industry best practices for hot/warm/cold data management.
                 evicted_count += 1
         
         if evicted_count > 0:
@@ -484,10 +492,6 @@ def add_job(job: Job) -> None:
                     "operation": "job_eviction_warning"
                 }
             )
-
-
-__all__ = ["jobs_db", "fixes_db", "add_job", "MAX_JOBS"]
-
 
 
 __all__ = ["jobs_db", "fixes_db", "add_job", "MAX_JOBS"]
