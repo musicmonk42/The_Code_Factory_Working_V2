@@ -111,7 +111,6 @@ class ArbiterConfig(BaseSettings):
         extra="ignore",
         validate_assignment=True,
         protected_namespaces=(),
-        env_nested_delimiter="__",  # Prevent pydantic-settings from dumping entire env dict into fields
     )
 
     _config_cache: Optional[Dict[str, Any]] = PrivateAttr(default=None)
@@ -290,23 +289,8 @@ class ArbiterConfig(BaseSettings):
     @classmethod
     def validate_encryption_key_field(cls, v):
         """
-        Field validator for ENCRYPTION_KEY that handles the case where pydantic-settings
-        passes the entire environment dict instead of the field value.
-        
-        This runs BEFORE the model_validator and catches the issue at field assignment time.
+        Field validator for ENCRYPTION_KEY that handles SecretStr type coercion.
         """
-        # If pydantic-settings passes a dict (the entire environment), extract the actual key
-        if isinstance(v, dict):
-            logger.warning(
-                "ENCRYPTION_KEY received dict type in field_validator. "
-                "Extracting value from environment variable directly."
-            )
-            # Don't try to extract from the dict - go straight to os.getenv
-            # The dict likely doesn't contain ENCRYPTION_KEY anyway
-            # NOTE: Empty string is acceptable here - production validation happens in model_validator
-            # which checks APP_ENV and raises an error if ENCRYPTION_KEY is missing in production
-            return os.getenv("ENCRYPTION_KEY", "")
-        
         # For SecretStr, extract the actual string value
         if isinstance(v, SecretStr):
             return v.get_secret_value()
@@ -359,14 +343,6 @@ class ArbiterConfig(BaseSettings):
         with tracer.start_as_current_span("validate_secrets") as span:
             start_time = time.monotonic()
             is_production = os.getenv("APP_ENV", "development") == "production"
-            
-            # Fix dict-as-value bug: pydantic-settings may pass entire env dict as field value
-            # This must run BEFORE any validation logic to prevent false positives
-            for field_name in ("ENCRYPTION_KEY", "REDIS_URL", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY"):
-                raw_val = values.get(field_name)
-                if isinstance(raw_val, dict):
-                    logger.warning(f"{field_name} received dict type in model_validator. Falling back to os.getenv.")
-                    values[field_name] = os.getenv(field_name, "")
             
             # Validate ENCRYPTION_KEY and REDIS_URL in production
             if is_production:

@@ -54,25 +54,32 @@ class TestEncryptionKeyValidation:
             config = ArbiterConfig(ENCRYPTION_KEY=SecretStr(key))
             assert config.ENCRYPTION_KEY.get_secret_value() == key
 
-    def test_encryption_key_with_dict_skips_validation(self):
-        """Test that dict type in model_validator is handled gracefully."""
+    def test_config_init_with_double_underscore_env_vars(self):
+        """Test that config initializes correctly with __-delimited env vars present."""
         key = Fernet.generate_key().decode()
         
-        # This test verifies the logic handles dict gracefully without crashing
-        # In real scenarios, pydantic-settings may pass a dict during 'before' validation
-        # The fix ensures we skip validation and let field-level handling take over
+        # After removing env_nested_delimiter="__", __-delimited env vars like
+        # KAFKA__BOOTSTRAP_SERVERS (Kafka config) and PYTHON__HASH_SEED (Python internals)
+        # should no longer cause pydantic-settings to pass dict objects as field values.
+        # These represent common patterns found in production environments.
         
         with patch.dict(os.environ, {
             "APP_ENV": "production",
             "ENCRYPTION_KEY": key,
             "REDIS_URL": "redis://localhost:6379",
             "OPENAI_API_KEY": "test-key",
+            # Add __-delimited env vars that would have caused the bug
+            "KAFKA__BOOTSTRAP_SERVERS": "localhost:9092",
+            "PYTHON__HASH_SEED": "random",
         }):
-            # Test passes if no crash occurs during initialization
-            # The actual dict scenario is hard to reproduce in unit tests
-            # as it depends on pydantic-settings internal behavior
+            # Config should initialize correctly and ENCRYPTION_KEY should be the string value
             config = ArbiterConfig()
             assert config.ENCRYPTION_KEY is not None
+            assert config.ENCRYPTION_KEY.get_secret_value() == key
+            
+            # Verify __-delimited env vars are still accessible in the environment
+            assert os.environ.get("KAFKA__BOOTSTRAP_SERVERS") == "localhost:9092"
+            assert os.environ.get("PYTHON__HASH_SEED") == "random"
 
     def test_encryption_key_invalid_length(self):
         """Test ENCRYPTION_KEY validation fails for invalid length."""
