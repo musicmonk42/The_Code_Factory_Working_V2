@@ -29,8 +29,7 @@ from runner.runner_errors import ConfigurationError
 
 # Get the actual module that load_config belongs to (may differ from
 # _runner_config_module due to dual sys.path entries for 'runner' vs 'generator.runner')
-import sys as _sys
-_load_config_module = _sys.modules[load_config.__module__]
+_load_config_module = sys.modules[load_config.__module__]
 
 
 class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
