@@ -80,6 +80,18 @@ def cleanup_mocked_modules():
     _restore_original_modules()
 
 
+@pytest.fixture(autouse=True)
+def mock_external_http():
+    """Mock external HTTP calls to prevent network requests during tests."""
+    # Mock aiohttp.ClientSession as a safety net for any remaining HTTP calls
+    with patch("aiohttp.ClientSession") as mock_session:
+        mock_response = AsyncMock()
+        mock_response.status = 200
+        mock_response.json = AsyncMock(return_value={"status": "ok"})
+        mock_session.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
+        yield mock_session
+
+
 # Fixtures
 @pytest.fixture
 def temp_log_dir():
@@ -808,7 +820,14 @@ class TestIntegration:
             async_logging=False,  # Use sync for predictable file writes
         )
 
+        # Reset singleton and clear any existing handlers
         TamperEvidentLogger._instance = None
+        logger_name = "AuditLogger"
+        existing_logger = logging.getLogger(logger_name)
+        for handler in existing_logger.handlers[:]:
+            handler.close()
+            existing_logger.removeHandler(handler)
+        
         logger = TamperEvidentLogger(config)
 
         # Log several events
@@ -854,7 +873,14 @@ class TestIntegration:
             async_logging=False,
         )
 
+        # Reset singleton and clear any existing handlers
         TamperEvidentLogger._instance = None
+        logger_name = "AuditLogger"
+        existing_logger = logging.getLogger(logger_name)
+        for handler in existing_logger.handlers[:]:
+            handler.close()
+            existing_logger.removeHandler(handler)
+        
         logger = TamperEvidentLogger(config)
 
         # Log enough to trigger rotation
