@@ -157,12 +157,14 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
     fi
 
 # Pre-download NLTK data to prevent runtime download issues
+# Download to /opt/nltk_data (accessible by non-root user) instead of /root/nltk_data
 # After this step, we clean up pip vendor files since pip is no longer needed
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading NLTK data..."; \
         echo "========================================"; \
-        python -c "import nltk; \
+        mkdir -p /opt/nltk_data && \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; \
             nltk.download('punkt', quiet=True); \
             nltk.download('stopwords', quiet=True); \
             nltk.download('vader_lexicon', quiet=True); \
@@ -172,6 +174,23 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         # Clean up pip vendor files now that all pip operations are complete
         # This reduces image size - pip is not needed at runtime
         find /opt/venv -path '*/pip/_vendor/*' -prune -exec rm -rf {} + 2>/dev/null || true; \
+    fi
+
+# Pre-download HuggingFace transformer models to prevent runtime downloads
+# Download to /opt/huggingface_cache (accessible by non-root user)
+# The docgen agent uses facebook/bart-large-cnn for summarization
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "========================================"; \
+        echo "Downloading HuggingFace models..."; \
+        echo "========================================"; \
+        mkdir -p /opt/huggingface_cache && \
+        HF_HOME=/opt/huggingface_cache TRANSFORMERS_CACHE=/opt/huggingface_cache \
+        python -c "from transformers import pipeline; \
+            print('Downloading facebook/bart-large-cnn model...'); \
+            pipeline('summarization', model='facebook/bart-large-cnn'); \
+            print('✓ Model download complete')" && \
+        echo "✓ HuggingFace model downloads complete" || \
+        echo "WARNING: Failed to download HuggingFace model"; \
     fi
 
 # Copy the rest of the application
@@ -212,6 +231,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # AUDIT CRYPTO: Set AUDIT_CRYPTO_MODE to "full" when AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
 # FEATURE FLAGS: Set to "1" to enable, "0" to disable, "auto" for auto-detection
 # PARALLEL AGENT LOADING: Enabled by default for faster startup
+# NLTK_DATA: Set to /opt/nltk_data (accessible by appuser, not /root/nltk_data)
+# HF_HOME/TRANSFORMERS_CACHE: Set to /opt/huggingface_cache for pre-downloaded models
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -228,7 +249,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PARALLEL_AGENT_LOADING="1" \
     LAZY_LOAD_ML="1" \
     TOKENIZERS_PARALLELISM="false" \
-    NLTK_DATA="/root/nltk_data"
+    NLTK_DATA="/opt/nltk_data" \
+    HF_HOME="/opt/huggingface_cache" \
+    TRANSFORMERS_CACHE="/opt/huggingface_cache"
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
@@ -309,28 +332,31 @@ WORKDIR /app
 # Note: /app/logs is needed for default audit_log.jsonl path
 # Note: /app/logs/checkpoint is needed for SFE checkpoint audit logs and DLQ
 # Note: /app/uploads is needed for job file uploads
-# Create NLTK data directory for pre-downloaded NLTK resources
-RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /root/nltk_data && \
-    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads /root/nltk_data
+# Create NLTK data directory (/opt/nltk_data) and HuggingFace cache directory (/opt/huggingface_cache)
+# for pre-downloaded ML resources accessible by appuser
+RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache && \
+    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
 COPY --from=builder --chown=appuser:appgroup /app /app
-# Copy NLTK data from builder stage to avoid runtime downloads
-COPY --from=builder --chown=appuser:appgroup /root/nltk_data /root/nltk_data
+# Copy NLTK data and HuggingFace models from builder stage to avoid runtime downloads
+COPY --from=builder --chown=appuser:appgroup /opt/nltk_data /opt/nltk_data
+COPY --from=builder --chown=appuser:appgroup /opt/huggingface_cache /opt/huggingface_cache
 
 USER appuser
 
 # The FastAPI server runs on port 8080 (Railway) or PORT env var, Prometheus metrics on port 9090
 EXPOSE 8080 9090
 
-# Docker healthcheck to verify the container is running properly
-# Checks the /health endpoint which returns 200 if the API is up
+# Docker healthcheck to verify the container is ready to serve traffic
+# Uses /ready endpoint which checks both API health AND agent readiness
+# This ensures container orchestrators don't route traffic before agents are loaded
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
 # Starts checking after 120 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/ready || exit 1
 
 # Start the unified platform API server
 # Multi-worker mode (4 workers) for production deployment to handle concurrent requests and prevent event loop saturation

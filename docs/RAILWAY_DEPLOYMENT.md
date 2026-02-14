@@ -103,7 +103,7 @@ These ensure the event loop management fix works correctly:
 |----------|-------|---------|
 | `ENABLE_HSM` | `0` | Hardware security module |
 | `ENABLE_REDIS` | `1` | Redis message bridge |
-| `ENABLE_KAFKA` | `0` | Kafka message bridge |
+| `ENABLE_KAFKA` | `1` | Kafka message bridge (enabled for production event-driven orchestration) |
 | `ENABLE_STRUCTURED_LOGGING` | `1` | JSON logging |
 
 ---
@@ -118,9 +118,10 @@ These ensure the event loop management fix works correctly:
 | `GROK_API_KEY` | xAI Grok |
 
 ### Kafka (External Provider)
-If using Kafka instead of Redis Streams, use a managed service like [Upstash Kafka](https://upstash.com/kafka) or [Confluent Cloud](https://confluent.cloud):
+If using Kafka with an external managed service like [Upstash Kafka](https://upstash.com/kafka) or [Confluent Cloud](https://confluent.cloud), configure these variables:
 
 ```bash
+ENABLE_KAFKA=1
 USE_KAFKA_INGESTION=true
 USE_KAFKA_AUDIT=true
 KAFKA_BOOTSTRAP_SERVERS=your-cluster.upstash.io:9092
@@ -128,6 +129,8 @@ KAFKA_SASL_USERNAME=your-username
 KAFKA_SASL_PASSWORD=your-password
 KAFKA_SECURITY_PROTOCOL=SASL_SSL
 ```
+
+> **Note**: When `ENABLE_KAFKA=1` is set in railway.toml and Kafka is available, the ShardedMessageBus will use Kafka for event-driven orchestration instead of local queue only.
 
 ### Neo4j (Knowledge Graph)
 For knowledge graph features, use [Neo4j Aura](https://neo4j.com/cloud/aura/):
