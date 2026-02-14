@@ -857,7 +857,11 @@ class ResponseValidator:
             # Download required data if missing
             logger.warning(f"NLTK initialization failed: {e}, attempting setup")
             setup_nltk_data()
-            self.sentiment_analyzer = SentimentIntensityAnalyzer()
+            try:
+                self.sentiment_analyzer = SentimentIntensityAnalyzer()
+            except Exception as e2:
+                logger.warning(f"NLTK setup failed, sentiment analysis unavailable: {e2}")
+                self.sentiment_analyzer = None
 
     def assess_quality(self, content: str) -> Dict[str, float]:
         """
@@ -877,10 +881,13 @@ class ResponseValidator:
             )  # Optimal ~15 words/sentence
 
             # Sentiment analysis
-            sentiment_scores = self.sentiment_analyzer.polarity_scores(content)
-            sentiment_score = (
-                max(0, sentiment_scores["compound"] + 1) * 50
-            )  # Normalize to 0-100
+            if self.sentiment_analyzer is not None:
+                sentiment_scores = self.sentiment_analyzer.polarity_scores(content)
+                sentiment_score = (
+                    max(0, sentiment_scores["compound"] + 1) * 50
+                )  # Normalize to 0-100
+            else:
+                sentiment_score = 50.0  # Neutral default when analyzer unavailable
 
             # Coherence (simple proxy based on repeated key terms)
             words = content.lower().split()
