@@ -248,12 +248,20 @@ if "prometheus_client" not in sys.modules:
                 # Return metrics in prometheus format
                 samples = []
                 for label_key, child in self._metrics.items():
+                    # Safely convert label_key to dict
+                    # label_key is a tuple of (key, value) tuples
+                    try:
+                        label_dict = dict(label_key) if label_key else {}
+                    except (TypeError, ValueError):
+                        # Fallback if label_key structure is unexpected
+                        label_dict = {}
+                    
                     # Create a sample object
                     sample = _Sample(
                         name=self.name,
-                        labels=dict(label_key) if label_key else {},
+                        labels=label_dict,
                         value=child._value,
-                        timestamp=None
+                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
                     )
                     samples.append(sample)
                 
@@ -333,17 +341,24 @@ if "prometheus_client" not in sys.modules:
                         name=self.name,
                         labels={},
                         value=self._value,
-                        timestamp=None
+                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
                     )
                     samples.append(sample)
                 
                 # Add labeled metrics
                 for label_key, child in self._metrics.items():
+                    # Safely convert label_key to dict
+                    try:
+                        label_dict = dict(label_key) if label_key else {}
+                    except (TypeError, ValueError):
+                        # Fallback if label_key structure is unexpected
+                        label_dict = {}
+                    
                     sample = _Sample(
                         name=self.name,
-                        labels=dict(label_key) if label_key else {},
+                        labels=label_dict,
                         value=child._value,
-                        timestamp=None
+                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
                     )
                     samples.append(sample)
                 
