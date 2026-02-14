@@ -208,31 +208,51 @@ async def save_job_to_database(job: Job) -> bool:
             raise ValueError("Job status is required for persistence")
         
         # Store in GeneratorAgentState table with custom_attributes
-        # We use the job_id as the agent name for easy lookup
+        # Use direct database query with UPSERT to avoid interface mismatch
         from omnicore_engine.database.models import GeneratorAgentState
+        from sqlalchemy import select
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
         
         agent_name = f"job_{job.id}"
-        existing_state = await _database.get_agent_state(agent_name)
         
-        if existing_state:
-            # Update existing state (idempotent operation)
-            existing_state.custom_attributes = job_data
-            existing_state.energy = 100.0  # Keep alive
-            await _database.save_agent_state(existing_state)
-            logger.debug(f"Updated job {job.id} in database")
-        else:
-            # Create new agent state for this job
-            agent_state = GeneratorAgentState(
-                name=agent_name,
-                x=0.0,
-                y=0.0,
-                energy=100.0,
-                world_size=100,
-                agent_type="job_storage",
-                custom_attributes=job_data,
+        async with _database.AsyncSessionLocal() as session:
+            # Check if agent state already exists for this job
+            result = await session.execute(
+                select(GeneratorAgentState).filter_by(name=agent_name)
             )
-            await _database.save_agent_state(agent_state)
-            logger.debug(f"Created job {job.id} in database")
+            existing_state = result.scalars().first()
+            
+            if existing_state:
+                # Update existing state (idempotent operation)
+                existing_state.custom_attributes = job_data
+                existing_state.energy = 100.0  # Keep alive
+                existing_state.agent_type = "job_storage"
+                await session.commit()
+                logger.debug(f"Updated job {job.id} in database")
+            else:
+                # Create new agent state for this job
+                # Use UPSERT via INSERT ... ON CONFLICT to handle race conditions
+                stmt = sqlite_insert(GeneratorAgentState).values(
+                    name=agent_name,
+                    x=0.0,
+                    y=0.0,
+                    energy=100.0,
+                    world_size=100,
+                    agent_type="job_storage",
+                    custom_attributes=job_data,
+                )
+                # On conflict, update custom_attributes and energy
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["name"],
+                    set_={
+                        "custom_attributes": stmt.excluded.custom_attributes,
+                        "energy": stmt.excluded.energy,
+                        "agent_type": stmt.excluded.agent_type,
+                    }
+                )
+                await session.execute(stmt)
+                await session.commit()
+                logger.debug(f"Created job {job.id} in database")
         
         return True
     
@@ -293,44 +313,53 @@ async def load_job_from_database(job_id: str) -> Optional[Job]:
     
     async def _load_operation():
         """Inner operation that will be retried."""
+        # Query generator_agent_state table directly by name (unhashed)
+        from omnicore_engine.database.models import GeneratorAgentState
+        from sqlalchemy import select
+        
         agent_name = f"job_{job_id}"
-        agent_state = await _database.get_agent_state(agent_name)
         
-        if not agent_state or not agent_state.custom_attributes:
-            logger.debug(f"Job {job_id} not found in database")
-            return None
-        
-        # Reconstruct Job from custom_attributes
-        job_data = agent_state.custom_attributes
-        
-        # Validate required fields
-        if 'id' not in job_data or 'status' not in job_data:
-            logger.warning(f"Job {job_id} data is malformed, missing required fields")
-            return None
-        
-        # Convert ISO format strings back to datetime objects
-        for key in ['created_at', 'updated_at', 'completed_at']:
-            if key in job_data and job_data[key] is not None:
-                if isinstance(job_data[key], str):
-                    try:
-                        job_data[key] = datetime.fromisoformat(job_data[key])
-                    except ValueError as e:
-                        logger.warning(
-                            f"Invalid datetime format for job {job_id} field {key}: {e}"
-                        )
-                        # Continue with None value rather than failing entirely
-                        job_data[key] = None
-        
-        try:
-            job = Job(**job_data)
-            logger.debug(f"Loaded job {job_id} from database")
-            return job
-        except Exception as e:
-            logger.error(
-                f"Failed to deserialize job {job_id} from database: {e}",
-                exc_info=True
+        async with _database.AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(GeneratorAgentState).filter_by(name=agent_name)
             )
-            return None
+            state = result.scalars().first()
+            
+            if not state or not state.custom_attributes:
+                logger.debug(f"Job {job_id} not found in database")
+                return None
+            
+            # Reconstruct Job from custom_attributes
+            job_data = state.custom_attributes
+            
+            # Validate required fields
+            if 'id' not in job_data or 'status' not in job_data:
+                logger.warning(f"Job {job_id} data is malformed, missing required fields")
+                return None
+            
+            # Convert ISO format strings back to datetime objects
+            for key in ['created_at', 'updated_at', 'completed_at']:
+                if key in job_data and job_data[key] is not None:
+                    if isinstance(job_data[key], str):
+                        try:
+                            job_data[key] = datetime.fromisoformat(job_data[key])
+                        except ValueError as e:
+                            logger.warning(
+                                f"Invalid datetime format for job {job_id} field {key}: {e}"
+                            )
+                            # Continue with None value rather than failing entirely
+                            job_data[key] = None
+            
+            try:
+                job = Job(**job_data)
+                logger.debug(f"Loaded job {job_id} from database")
+                return job
+            except Exception as e:
+                logger.error(
+                    f"Failed to deserialize job {job_id} from database: {e}",
+                    exc_info=True
+                )
+                return None
     
     try:
         result = await _retry_with_backoff(
@@ -391,18 +420,27 @@ async def delete_job_from_database(job_id: str) -> bool:
     
     async def _delete_operation():
         """Inner operation that will be retried."""
+        # Query generator_agent_state table directly by name
+        from omnicore_engine.database.models import GeneratorAgentState
+        from sqlalchemy import select
+        
         agent_name = f"job_{job_id}"
-        agent_state = await _database.get_agent_state(agent_name)
         
-        if not agent_state:
-            logger.debug(f"Job {job_id} not found in database (already deleted or never existed)")
-            return True  # Idempotent: success even if not found
-        
-        # Mark with low energy for cleanup (soft delete)
-        agent_state.energy = 0.0
-        await _database.save_agent_state(agent_state)
-        logger.debug(f"Marked job {job_id} for cleanup in database (energy=0)")
-        return True
+        async with _database.AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(GeneratorAgentState).filter_by(name=agent_name)
+            )
+            state = result.scalars().first()
+            
+            if not state:
+                logger.debug(f"Job {job_id} not found in database (already deleted or never existed)")
+                return True  # Idempotent: success even if not found
+            
+            # Mark with low energy for cleanup (soft delete)
+            state.energy = 0.0
+            await session.commit()
+            logger.debug(f"Marked job {job_id} for cleanup in database (energy=0)")
+            return True
     
     try:
         result = await _retry_with_backoff(
