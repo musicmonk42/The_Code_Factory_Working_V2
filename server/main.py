@@ -1024,21 +1024,30 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 logger.debug("Released startup lock after job recovery")
     
     # Start background agent loading (only if routers loaded successfully)
+    # CRITICAL FIX: Agent loading must NOT be gated by the distributed lock
+    # The startup lock should only gate job recovery to prevent duplicate recovery
+    # Every replica MUST load its own agents independently to handle requests
     if routers_ok and get_agent_loader is not None:
         logger.info("=" * 80)
         logger.info("STARTING BACKGROUND AGENT LOADING")
         logger.info("=" * 80)
         
         try:
-            startup_lock = get_startup_lock()
-            lock_acquired = await startup_lock.acquire(blocking=False)
+            # Note: We check the lock status only for logging/observability
+            # Agent loading proceeds regardless of lock status
+            try:
+                startup_lock = get_startup_lock()
+                lock_status = await startup_lock.acquire(blocking=False)
+                if lock_status:
+                    logger.info("ℹ This instance holds the startup lock (used for job recovery)")
+                    # Release immediately since we don't need it for agent loading
+                    await startup_lock.release()
+                else:
+                    logger.info("ℹ Another instance holds the startup lock (handled job recovery)")
+            except Exception as lock_check_err:
+                logger.warning(f"Could not check startup lock status: {lock_check_err}")
             
-            if lock_acquired:
-                logger.info("✓ Startup lock acquired - this instance will initialize agents")
-            else:
-                logger.info("⚠ Startup lock held by another instance - agents may already be loading")
-                logger.info("  This is normal in multi-instance deployments")
-            
+            logger.info("→ Loading agents on this replica (independent of lock status)")
             loader = get_agent_loader()
             loader.start_background_loading()
             logger.info("✓ Background agent loading task started")

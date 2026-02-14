@@ -46,6 +46,7 @@ from server.services import GeneratorService, OmniCoreService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
 from server.routers.generator import _run_pipeline_with_semaphore
+from server.dependencies import require_agents_ready
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,7 @@ async def create_generation(
     background_tasks: BackgroundTasks,
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    _: None = Depends(require_agents_ready),
 ) -> V1GenerateResponse:
     """
     Create a new code generation job (v1 API).
