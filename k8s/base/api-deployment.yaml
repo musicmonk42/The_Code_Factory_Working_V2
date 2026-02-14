@@ -91,6 +91,12 @@ spec:
                   name: codefactory-secrets
                   key: database-url
                   optional: true
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: database-url
+                  optional: true
 
             # LLM API keys
             - name: OPENAI_API_KEY

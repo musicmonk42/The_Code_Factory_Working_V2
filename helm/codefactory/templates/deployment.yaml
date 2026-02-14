@@ -131,6 +131,11 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.database.urlSecretName }}
                   key: {{ .Values.secrets.database.urlSecretKey }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.database.urlSecretName }}
+                  key: {{ .Values.secrets.database.urlSecretKey }}
             {{- end }}
             # API keys
             - name: OPENAI_API_KEY
