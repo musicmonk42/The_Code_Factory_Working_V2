@@ -134,15 +134,20 @@ async def test_storage_eviction():
 
 
 @pytest.mark.asyncio
-@patch('server.storage.create_async_engine')
-@patch('server.storage.async_sessionmaker')
-async def test_postgresql_initialization(mock_sessionmaker, mock_create_engine):
+@patch('sqlalchemy.ext.asyncio.async_sessionmaker')
+@patch('sqlalchemy.ext.asyncio.create_async_engine')
+async def test_postgresql_initialization(mock_create_engine, mock_sessionmaker):
     """Test that PostgreSQL storage initializes correctly."""
     # Mock DATABASE_URL
     with patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@localhost/testdb"}):
-        # Mock the engine and session
+        # Mock the engine and session with proper async context manager support
+        from unittest.mock import MagicMock
         mock_engine = AsyncMock()
-        mock_engine.begin = AsyncMock()
+        mock_conn = AsyncMock()
+        mock_ctx_manager = MagicMock()
+        mock_ctx_manager.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_ctx_manager.__aexit__ = AsyncMock(return_value=None)
+        mock_engine.begin = MagicMock(return_value=mock_ctx_manager)
         mock_create_engine.return_value = mock_engine
         
         mock_session = AsyncMock()

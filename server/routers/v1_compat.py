@@ -252,7 +252,7 @@ async def create_generation(
         metadata=metadata,
     )
     
-    add_job(job)
+    await add_job(job)
     logger.info(f"Created v1 generation job {job_id}")
     
     # Emit job.created event in background (fire-and-forget)
