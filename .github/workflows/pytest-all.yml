@@ -891,7 +891,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Mesh Tests ==="
-          # Note: -n auto --dist loadscope disabled due to worker crashes with unrecognized arguments
+          # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
           python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
             -v \
@@ -960,7 +960,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Other Tests (simulation, self_healing, sfe_basic) ==="
-          # Note: -n auto --dist loadscope disabled due to worker crashes with unrecognized arguments
+          # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
           python -m pytest \
             self_fixing_engineer/tests/ \
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
