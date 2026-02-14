@@ -1343,7 +1343,7 @@ class CheckpointManager:
             health_status["checks"]["encryption_enabled"] = self.multi_fernet is not None
 
             # Check caching  
-            health_status["checks"]["cache_enabled"] = hasattr(self, "_cache_l1")
+            health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
 
             span.set_status(Status(StatusCode.OK))
             return health_status
@@ -1353,18 +1353,13 @@ class CheckpointManager:
             logger.error(f"Health check failed: {e}")
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
-            return health_status
-
-        except Exception as e:
-            health_status["status"] = "unhealthy"
-            health_status["error"] = str(e)
-
+            
             if PROMETHEUS_AVAILABLE:
                 BACKEND_HEALTH.labels(
                     backend=self.backend_type, tenant=Environment.TENANT
                 ).set(0)
-
-        return health_status
+            
+            return health_status
 
     async def close(self) -> None:
         """
