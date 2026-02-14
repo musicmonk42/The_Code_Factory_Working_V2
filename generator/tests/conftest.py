@@ -170,11 +170,19 @@ if "prometheus_client" not in sys.modules:
                 self._names_to_collectors = {}
                 self._collector_to_names = {}
             
-            def register(self, collector): 
-                pass
+            def register(self, collector):
+                """Register a collector with this registry."""
+                # Store the collector by its name
+                if hasattr(collector, 'name'):
+                    self._names_to_collectors[collector.name] = collector
+                    self._collector_to_names[collector] = collector.name
             
-            def unregister(self, collector): 
-                pass
+            def unregister(self, collector):
+                """Unregister a collector from this registry."""
+                if collector in self._collector_to_names:
+                    name = self._collector_to_names[collector]
+                    del self._names_to_collectors[name]
+                    del self._collector_to_names[collector]
             
             def get_sample_value(self, metric_name, labels=None):
                 """Get the value of a specific metric sample."""
@@ -288,11 +296,89 @@ if "prometheus_client" not in sys.modules:
                 return decorator
         
         class _MockGauge:
-            def __init__(self, *args, **kwargs): pass
-            def labels(self, *args, **kwargs): return self
-            def set(self, *args, **kwargs): pass
-            def inc(self, *args, **kwargs): pass
-            def dec(self, *args, **kwargs): pass
+            """Mock Prometheus Gauge that tracks values and supports label-based metrics."""
+            def __init__(self, name, description, labelnames=(), *args, **kwargs):
+                self.name = name
+                self.description = description
+                self.labelnames = labelnames
+                self._metrics = {}  # Store metrics by label values
+                self._value = 0  # For unlabeled gauge
+            
+            def labels(self, **label_values):
+                # Create a unique key for this label combination
+                label_key = tuple(sorted(label_values.items()))
+                if label_key not in self._metrics:
+                    self._metrics[label_key] = _MockGaugeChild(self, label_key, label_values)
+                return self._metrics[label_key]
+            
+            def set(self, value):
+                # For unlabeled gauge
+                self._value = value
+            
+            def inc(self, amount=1):
+                # For unlabeled gauge
+                self._value += amount
+            
+            def dec(self, amount=1):
+                # For unlabeled gauge
+                self._value -= amount
+            
+            def collect(self):
+                # Return metrics in prometheus format
+                samples = []
+                
+                # Add unlabeled metric if it was used
+                if not self._metrics and self._value != 0:
+                    sample = _Sample(
+                        name=self.name,
+                        labels={},
+                        value=self._value,
+                        timestamp=None
+                    )
+                    samples.append(sample)
+                
+                # Add labeled metrics
+                for label_key, child in self._metrics.items():
+                    sample = _Sample(
+                        name=self.name,
+                        labels=dict(label_key) if label_key else {},
+                        value=child._value,
+                        timestamp=None
+                    )
+                    samples.append(sample)
+                
+                # Return a metric family
+                metric = _Metric(
+                    name=self.name,
+                    documentation=self.description,
+                    metric_type='gauge',
+                    samples=samples
+                )
+                return [metric]
+        
+        class _MockGaugeChild:
+            """Child gauge for a specific label combination."""
+            def __init__(self, parent, label_key, label_values):
+                self.parent = parent
+                self.label_key = label_key
+                self.label_values = label_values
+                self._value = 0
+            
+            def set(self, value):
+                self._value = value
+            
+            def inc(self, amount=1):
+                self._value += amount
+            
+            def dec(self, amount=1):
+                self._value -= amount
+            
+            def labels(self, **kwargs):
+                # If labels are called on child, create new child
+                return self.parent.labels(**kwargs)
+            
+            def collect(self):
+                return self.parent.collect()
         
         class _MockInfo:
             def __init__(self, *args, **kwargs): pass
