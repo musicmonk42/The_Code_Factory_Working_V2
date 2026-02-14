@@ -208,10 +208,9 @@ async def save_job_to_database(job: Job) -> bool:
             raise ValueError("Job status is required for persistence")
         
         # Store in GeneratorAgentState table with custom_attributes
-        # Use direct database query with UPSERT to avoid interface mismatch
+        # Use direct database query to avoid interface mismatch
         from omnicore_engine.database.models import GeneratorAgentState
         from sqlalchemy import select
-        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
         
         agent_name = f"job_{job.id}"
         
@@ -231,8 +230,7 @@ async def save_job_to_database(job: Job) -> bool:
                 logger.debug(f"Updated job {job.id} in database")
             else:
                 # Create new agent state for this job
-                # Use UPSERT via INSERT ... ON CONFLICT to handle race conditions
-                stmt = sqlite_insert(GeneratorAgentState).values(
+                new_state = GeneratorAgentState(
                     name=agent_name,
                     x=0.0,
                     y=0.0,
@@ -241,16 +239,7 @@ async def save_job_to_database(job: Job) -> bool:
                     agent_type="job_storage",
                     custom_attributes=job_data,
                 )
-                # On conflict, update custom_attributes and energy
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["name"],
-                    set_={
-                        "custom_attributes": stmt.excluded.custom_attributes,
-                        "energy": stmt.excluded.energy,
-                        "agent_type": stmt.excluded.agent_type,
-                    }
-                )
-                await session.execute(stmt)
+                session.add(new_state)
                 await session.commit()
                 logger.debug(f"Created job {job.id} in database")
         
