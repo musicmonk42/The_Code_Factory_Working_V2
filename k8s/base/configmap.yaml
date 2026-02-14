@@ -65,8 +65,36 @@ data:
   ENABLE_HSM: "0"
   ENABLE_FEATURE_STORE: "0"
   ENABLE_LIBVIRT: "0"
-  ENABLE_KAFKA: "1"  # Changed from "0" - Enable Kafka bridge for production event-driven orchestration
+  
+  # Kafka Configuration: Multiple variables for component compatibility
+  # Different components check different variable names due to evolution of codebase:
+  # - KAFKA_ENABLED: Primary flag checked by ArbiterConfig (via Pydantic validation_alias)
+  #                  Used by: self_fixing_engineer/arbiter/config.py, database layer, policy engine
+  # - ENABLE_KAFKA: Legacy flag checked by older components and server/config_utils.py
+  #                 Used by: Some initialization code, compatibility layer
+  # - USE_KAFKA_INGESTION: Controls Kafka for event ingestion in ShardedMessageBus
+  #                        Used by: omnicore_engine/message_bus for job routing
+  # - USE_KAFKA_AUDIT: Controls Kafka for audit event streaming
+  #                    Used by: Audit logging system for distributed event collection
+  # All four should be set to the same value for consistent behavior.
+  # Setting all to "true" enables Kafka across the entire platform.
+  ENABLE_KAFKA: "true"  # Legacy flag - Keep for backward compatibility
+  KAFKA_ENABLED: "true"  # Primary flag - Main configuration source
+  USE_KAFKA_INGESTION: "true"  # Message bus ingestion - Event routing
+  USE_KAFKA_AUDIT: "true"  # Audit system - Compliance logging
+  
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
+
+  # ============================================
+  # ML/NLP Data Paths
+  # ============================================
+  # NLTK data directory (accessible by appuser in Docker runtime)
+  # Pre-downloaded during Docker build to avoid runtime downloads
+  NLTK_DATA: "/opt/nltk_data"
+  # HuggingFace model cache directory
+  # Pre-downloaded models to prevent runtime downloads and ensure air-gapped compatibility
+  HF_HOME: "/opt/huggingface_cache"
+  TRANSFORMERS_CACHE: "/opt/huggingface_cache"
 
   # ============================================
   # Audit Crypto Configuration
