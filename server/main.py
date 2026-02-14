@@ -885,14 +885,31 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 
                 logger.info("Starting paginated job recovery from database...")
                 
+                # Query generator_agent_state table directly to avoid hash-based lookup issues
+                from omnicore_engine.database.models import GeneratorAgentState
+                from sqlalchemy import select
+                
                 while True:
                     # Query database for job agent states with pagination
-                    # Industry Standard: Always use pagination for potentially large datasets
-                    job_states = await db.query_agent_states(
-                        filters={"agent_type": "job_storage"},
-                        limit=batch_size,
-                        offset=offset
-                    )
+                    # Use direct query on generator_agent_state table, not agent_state
+                    try:
+                        async with db.AsyncSessionLocal() as session:
+                            result = await session.execute(
+                                select(GeneratorAgentState)
+                                .filter_by(agent_type="job_storage")
+                                .limit(batch_size)
+                                .offset(offset)
+                            )
+                            job_states = result.scalars().all()
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to query job states at offset {offset}: {e}",
+                            exc_info=True,
+                            extra={"offset": offset, "batch_size": batch_size}
+                        )
+                        # Skip this batch and continue with the next one
+                        offset += batch_size
+                        continue
                     
                     if not job_states:
                         # No more jobs to recover
@@ -900,11 +917,11 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                     
                     logger.debug(f"Processing batch: offset={offset}, count={len(job_states)}")
                     
-                    for job_state in job_states:
+                    for state in job_states:
                         total_processed += 1
                         
                         # Extract job_id from agent name (format: "job_{job_id}")
-                        agent_name = job_state.get("id", "")
+                        agent_name = state.name
                         if not agent_name or not isinstance(agent_name, str) or not agent_name.startswith("job_"):
                             logger.debug(f"Skipping non-job agent state: {agent_name}")
                             continue
