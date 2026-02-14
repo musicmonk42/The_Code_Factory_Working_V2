@@ -626,6 +626,62 @@ def reset_environment_vars():
     os.environ.update(original_env)
 
 
+@pytest.fixture(autouse=True)
+def reset_logging_for_tests():
+    """Reset logging configuration to allow caplog to capture records.
+    
+    This fixture ensures pytest's caplog fixture can capture log records by:
+    1. Clearing all existing handlers from the root logger
+    2. Configuring basic logging with DEBUG level
+    3. Ensuring runner-specific loggers propagate to root
+    4. Restoring original configuration after the test
+    """
+    import logging
+    
+    # Define format string once to avoid duplication
+    LOG_FORMAT = '%(levelname)s:%(name)s:%(message)s'
+    
+    # Store original handlers and level
+    root_logger = logging.getLogger()
+    original_handlers = root_logger.handlers[:]
+    original_level = root_logger.level
+    
+    # Clear all handlers to allow pytest's caplog to work
+    for handler in original_handlers:
+        root_logger.removeHandler(handler)
+    
+    # Configure basic logging for tests
+    # Note: force=True was added in Python 3.8; we provide a fallback for 3.7
+    try:
+        logging.basicConfig(level=logging.DEBUG, force=True, format=LOG_FORMAT)
+    except TypeError:
+        # Python 3.7 fallback: manually clear and reconfigure
+        # Use proper removeHandler() instead of clear() for consistency
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
+    
+    # Also configure runner-specific loggers
+    # These are the main logger namespaces used in the runner module
+    for logger_name in ['runner', 'runner.audit', 'runner.action']:
+        logger = logging.getLogger(logger_name)
+        # Properly remove handlers one by one
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = True  # Ensure logs propagate to root
+    
+    yield
+    
+    # Restore original configuration
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+    for handler in original_handlers:
+        root_logger.addHandler(handler)
+    root_logger.setLevel(original_level)
+
+
 # ============================================================================
 # 6. TEST HELPERS
 # ============================================================================
