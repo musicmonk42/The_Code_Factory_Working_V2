@@ -464,6 +464,9 @@ class ShardedMessageBus:
                     enable_metrics=getattr(self.config, "KAFKA_ENABLE_METRICS", True),
                 )
                 self.kafka_bridge = KafkaBridge(kafka_config, self.kafka_circuit)
+                # Add lazy-start tracking flags
+                self._kafka_started = False
+                self._kafka_start_lock = asyncio.Lock()
                 logger.info("Kafka bridge initialized with config")
             except Exception as e:
                 logger.warning(f"Failed to initialize Kafka bridge: {e}. Continuing without Kafka.", exc_info=True)
@@ -477,6 +480,8 @@ class ShardedMessageBus:
                     pass
         else:
             self.kafka_bridge = None
+            self._kafka_started = False
+            self._kafka_start_lock = asyncio.Lock()
             logger.info("Kafka bridge disabled - using local queue only")
         self.redis_bridge = (
             RedisBridge(self, self.config, self.redis_circuit)
@@ -763,6 +768,9 @@ class ShardedMessageBus:
         self._create_dispatcher_tasks()
         self._dispatchers_started = True
         logger.info("Dispatcher tasks started.", num_tasks=len(self.dispatcher_tasks))
+        
+        # Ensure Kafka bridge is started (lazy initialization)
+        await self._ensure_kafka_started()
 
     async def _dispatcher_loop(
         self,
@@ -888,6 +896,10 @@ class ShardedMessageBus:
             )
         logger_for_dispatch.debug("Message submitted to internal subscribers.")
 
+        # Ensure Kafka bridge is started before use (lazy initialization)
+        if self.kafka_bridge:
+            await self._ensure_kafka_started()
+        
         if self.kafka_bridge:
             await self.kafka_bridge.publish(message)
         if self.redis_bridge:
@@ -924,6 +936,54 @@ class ShardedMessageBus:
         logger.debug(
             "Added post-publish hook.", hook=getattr(hook, "__name__", str(hook))
         )
+
+    async def _ensure_kafka_started(self) -> None:
+        """
+        Lazily start the Kafka bridge on first use (publish or subscribe).
+        
+        This method is idempotent and safe to call from multiple concurrent coroutines.
+        It will only start the Kafka bridge once, using a lock to prevent race conditions.
+        
+        If the Kafka bridge fails to start, it logs a warning, sets kafka_bridge to None,
+        and increments fallback metrics. The system continues with local queue only.
+        
+        Industry Standards:
+        - Lazy initialization pattern (GOF Design Patterns)
+        - Double-checked locking for thread safety
+        - Graceful degradation on failure
+        """
+        # Fast path: already started or disabled
+        if self._kafka_started or self.kafka_bridge is None:
+            return
+        
+        # Acquire lock to prevent concurrent start attempts
+        async with self._kafka_start_lock:
+            # Double-check after acquiring lock
+            if self._kafka_started or self.kafka_bridge is None:
+                return
+            
+            try:
+                logger.info("Starting Kafka bridge (lazy initialization)...")
+                await self.kafka_bridge.start()
+                self._kafka_started = True
+                logger.info("✓ Kafka bridge started successfully")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to start Kafka bridge: {e}. "
+                    "Falling back to local queue only.",
+                    exc_info=True
+                )
+                # Disable Kafka bridge on failure
+                self.kafka_bridge = None
+                self._kafka_started = False
+                
+                # Update metrics
+                try:
+                    from omnicore_engine.metrics import KAFKA_CONNECTION_FAILURES, KAFKA_FALLBACK_ACTIVATIONS
+                    KAFKA_CONNECTION_FAILURES.labels(reason="start_failed").inc()
+                    KAFKA_FALLBACK_ACTIVATIONS.inc()
+                except ImportError:
+                    pass
 
     async def _get_shard_id(self, message: Message) -> int:
         """Helper to get shard ID and handle rebalancing."""

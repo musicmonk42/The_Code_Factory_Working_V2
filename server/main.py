@@ -1042,6 +1042,31 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             loader = get_agent_loader()
             loader.start_background_loading()
             logger.info("✓ Background agent loading task started")
+            
+            # Wait for agent loading to complete (with timeout)
+            # This ensures /ready endpoint transitions from 503→200 only after agents are available
+            try:
+                logger.info("Waiting for agent loading to complete (max 60s)...")
+                # Wait up to 60 seconds for agents to load
+                for i in range(120):  # 120 * 0.5s = 60s
+                    if not loader.is_loading():
+                        logger.info(f"✓ Agent loading completed after {i * 0.5:.1f}s")
+                        break
+                    await asyncio.sleep(0.5)
+                    
+                    # Log progress every 10 seconds
+                    if i > 0 and i % 20 == 0:
+                        logger.info(f"  Still loading agents... ({i * 0.5:.0f}s elapsed)")
+                else:
+                    # Timeout reached
+                    if loader.is_loading():
+                        logger.warning("⚠ Agent loading still in progress after 60s timeout")
+                        logger.warning("  /ready endpoint will return 503 until loading completes")
+                    else:
+                        logger.info("✓ Agent loading completed just before timeout")
+            except Exception as e:
+                logger.error(f"Error waiting for agent loading: {e}", exc_info=True)
+            
             logger.info("✓ Check /health for liveness and /ready for readiness")
             
         except Exception as e:
@@ -1738,6 +1763,46 @@ async def readiness_check(response: Response) -> ReadinessResponse:
             logger.warning(f"Database health check failed (optional): {e}")
     else:
         checks["database"] = "not_configured"
+    
+    # Check 5: Kafka bridge connection (if enabled)
+    try:
+        from server.services.omnicore_service import get_omnicore_service
+        
+        omnicore_service = get_omnicore_service()
+        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
+            message_bus = omnicore_service._message_bus
+            
+            # Check if Kafka is enabled and bridge exists
+            if hasattr(message_bus, 'kafka_bridge') and message_bus.kafka_bridge:
+                try:
+                    # Check if Kafka bridge is started
+                    if hasattr(message_bus, '_kafka_started') and message_bus._kafka_started:
+                        # Get health status from bridge
+                        kafka_health = await asyncio.wait_for(
+                            message_bus.kafka_bridge.health(),
+                            timeout=2.0
+                        )
+                        if kafka_health.get('ready', False):
+                            checks["kafka_bridge"] = "connected"
+                        else:
+                            checks["kafka_bridge"] = "not_ready"
+                            # Don't fail readiness for optional Kafka
+                            logger.warning("Kafka bridge exists but not ready")
+                    else:
+                        checks["kafka_bridge"] = "not_started"
+                        # Kafka is configured but not started yet (lazy init)
+                        logger.debug("Kafka bridge not yet started (lazy initialization)")
+                except asyncio.TimeoutError:
+                    checks["kafka_bridge"] = "timeout"
+                    logger.warning("Kafka bridge health check timed out")
+                except Exception as e:
+                    checks["kafka_bridge"] = f"error: {type(e).__name__}"
+                    logger.warning(f"Kafka bridge health check failed: {e}")
+            else:
+                checks["kafka_bridge"] = "disabled"
+    except Exception as e:
+        logger.debug(f"Could not check Kafka bridge status: {e}")
+        checks["kafka_bridge"] = "unavailable"
     
     # Set HTTP status code based on readiness
     if not ready:
