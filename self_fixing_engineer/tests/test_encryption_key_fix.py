@@ -54,25 +54,27 @@ class TestEncryptionKeyValidation:
             config = ArbiterConfig(ENCRYPTION_KEY=SecretStr(key))
             assert config.ENCRYPTION_KEY.get_secret_value() == key
 
-    def test_encryption_key_with_dict_skips_validation(self):
-        """Test that dict type in model_validator is handled gracefully."""
+    def test_encryption_key_with_underscore_delimited_env_vars(self):
+        """Test that __-delimited env vars don't interfere with ENCRYPTION_KEY."""
         key = Fernet.generate_key().decode()
         
-        # This test verifies the logic handles dict gracefully without crashing
-        # In real scenarios, pydantic-settings may pass a dict during 'before' validation
-        # The fix ensures we skip validation and let field-level handling take over
+        # After removing env_nested_delimiter="__", __-delimited env vars like
+        # KAFKA__BOOTSTRAP_SERVERS should no longer cause pydantic-settings to
+        # pass dict objects as field values.
         
         with patch.dict(os.environ, {
             "APP_ENV": "production",
             "ENCRYPTION_KEY": key,
             "REDIS_URL": "redis://localhost:6379",
             "OPENAI_API_KEY": "test-key",
+            # Add __-delimited env vars that would have caused the bug
+            "KAFKA__BOOTSTRAP_SERVERS": "localhost:9092",
+            "PYTHON__HASH_SEED": "random",
         }):
-            # Test passes if no crash occurs during initialization
-            # The actual dict scenario is hard to reproduce in unit tests
-            # as it depends on pydantic-settings internal behavior
+            # Config should initialize correctly and ENCRYPTION_KEY should be the string value
             config = ArbiterConfig()
             assert config.ENCRYPTION_KEY is not None
+            assert config.ENCRYPTION_KEY.get_secret_value() == key
 
     def test_encryption_key_invalid_length(self):
         """Test ENCRYPTION_KEY validation fails for invalid length."""
