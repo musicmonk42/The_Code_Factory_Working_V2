@@ -430,6 +430,17 @@ class ShardedMessageBus:
         # Check both KAFKA_ENABLED and USE_KAFKA flags (prefer KAFKA_ENABLED)
         kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
         
+        # Debug logging to help diagnose configuration issues
+        logger.info(
+            "Kafka configuration check",
+            kafka_enabled=kafka_enabled,
+            config_type=type(self.config).__name__,
+            has_KAFKA_ENABLED=hasattr(self.config, "KAFKA_ENABLED"),
+            has_USE_KAFKA=hasattr(self.config, "USE_KAFKA"),
+            KAFKA_ENABLED_value=getattr(self.config, "KAFKA_ENABLED", "NOT_SET"),
+            USE_KAFKA_value=getattr(self.config, "USE_KAFKA", "NOT_SET"),
+        )
+        
         if kafka_enabled:
             # Create KafkaBridgeConfig from settings
             try:

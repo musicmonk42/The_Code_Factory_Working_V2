@@ -59,6 +59,12 @@ async def require_agents_ready():
         loading_in_progress = status.get('loading_in_progress', False)
         loading_completed = status.get('loading_completed', False)
         
+        # Debug logging to help diagnose agent readiness issues
+        logger.debug(
+            f"Agent readiness check: loading_in_progress={loading_in_progress}, "
+            f"loading_completed={loading_completed}, status={status}"
+        )
+        
         # Check if agents are currently loading
         if loading_in_progress:
             raise HTTPException(
