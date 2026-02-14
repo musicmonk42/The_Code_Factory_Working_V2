@@ -516,17 +516,35 @@ else:
 
         # --- EDIT 4: Refined mock key check ---
         if ENCRYPTION_KEYS and all(
-            isinstance(k, dict) and str(k.get("key_id", "")).lower().startswith("mock_")
+            (isinstance(k, dict) and str(k.get("key_id", "")).lower().startswith("mock_"))
+            or (isinstance(k, str) and k.lower().startswith("mock_"))
             for k in ENCRYPTION_KEYS
         ):
             logger.warning("Using mock encryption keys. Skipping KMS.")
-            _decrypted_keys = [k["key"].encode("utf-8") for k in ENCRYPTION_KEYS]
+            _decrypted_keys = [
+                k["key"].encode("utf-8") if isinstance(k, dict) else k.encode("utf-8")
+                for k in ENCRYPTION_KEYS
+            ]
         else:
             # --- EDIT 2: Lazy-init KMS client ---
             # Only initialize KMS when we actually need it (non-mock keys)
             kms_client = _make_kms_client()
             for key_obj in ENCRYPTION_KEYS:
-                b64_key = key_obj.get("key")
+                if isinstance(key_obj, str):
+                    # Handle case where ENCRYPTION_KEYS is a list of raw base64 strings
+                    # instead of list of dicts with "key" and "key_id" fields
+                    logger.warning(
+                        "ENCRYPTION_KEYS contains raw strings instead of objects. "
+                        "Expected format: [{\"key_id\": \"...\", \"key\": \"...\"}]. "
+                        "Treating raw string as base64-encoded key."
+                    )
+                    b64_key = key_obj
+                elif isinstance(key_obj, dict):
+                    b64_key = key_obj.get("key")
+                else:
+                    logger.warning(f"Unexpected ENCRYPTION_KEYS entry type: {type(key_obj)}; skipping.")
+                    continue
+                
                 if not b64_key:
                     logger.warning("Encryption key object missing 'key'; skipping.")
                     continue

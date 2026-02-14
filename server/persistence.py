@@ -23,7 +23,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -343,7 +343,11 @@ async def load_job_from_database(job_id: str) -> Optional[Job]:
                 if key in job_data and job_data[key] is not None:
                     if isinstance(job_data[key], str):
                         try:
-                            job_data[key] = datetime.fromisoformat(job_data[key])
+                            parsed_dt = datetime.fromisoformat(job_data[key])
+                            # Ensure timezone awareness
+                            if parsed_dt.tzinfo is None:
+                                parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
+                            job_data[key] = parsed_dt
                         except ValueError as e:
                             logger.warning(
                                 f"Invalid datetime format for job {job_id} field {key}: {e}"

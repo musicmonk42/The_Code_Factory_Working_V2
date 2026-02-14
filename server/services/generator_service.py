@@ -9,7 +9,7 @@ OmniCore as the central coordinator.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -71,7 +71,7 @@ class GeneratorService:
             "filename": filename,
             "path": str(file_path),
             "size": len(content),
-            "uploaded_at": datetime.utcnow().isoformat(),
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
 
     async def create_generation_job(
@@ -190,7 +190,7 @@ class GeneratorService:
         # Placeholder: Query actual logs
         return [
             {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "level": "INFO",
                 "message": f"Processing job {job_id}",
                 "module": "generator",
@@ -817,7 +817,7 @@ class GeneratorService:
         return {
             "logs": [
                 {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "event_type": "code_generated",
                     "job_id": job_id or "test",
                     "details": {},

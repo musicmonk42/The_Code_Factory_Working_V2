@@ -93,7 +93,7 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -251,7 +251,7 @@ class AgentLoader:
             
         self._agent_status: Dict[str, AgentStatus] = {}
         self._import_attempts: Dict[str, int] = {}
-        self._startup_time = datetime.utcnow().isoformat()
+        self._startup_time = datetime.now(timezone.utc).isoformat()
         self._strict_mode = os.getenv("GENERATOR_STRICT_MODE", ENV_VAR_FALSE) == ENV_VAR_TRUE
         self._debug_mode = os.getenv("DEBUG", ENV_VAR_FALSE) == ENV_VAR_TRUE
         
@@ -342,7 +342,7 @@ class AgentLoader:
                 name=agent_name,
                 available=True,
                 module_path=module_path,
-                loaded_at=datetime.utcnow().isoformat(),
+                loaded_at=datetime.now(timezone.utc).isoformat(),
             )
             
             logger.info(
@@ -393,7 +393,7 @@ class AgentLoader:
             error_type=error_type,
             error_message=error_message,
             traceback=tb_str,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             missing_dependencies=missing_deps,
             environment_issues=env_issues,
         )
@@ -779,7 +779,7 @@ class AgentLoader:
                 logger.info(f"Number of agents to load: {len(agents_to_load)}")
                 logger.info("=" * 80)
                 
-                start_time = datetime.utcnow()
+                start_time = datetime.now(timezone.utc)
                 
                 try:
                     # Note: _parallel_loading flag controls enhanced loading mode
@@ -860,7 +860,7 @@ class AgentLoader:
                             )
                     
                     self._loading_completed = True
-                    end_time = datetime.utcnow()
+                    end_time = datetime.now(timezone.utc)
                     duration = (end_time - start_time).total_seconds()
                     
                     logger.info("=" * 80)
@@ -1046,7 +1046,7 @@ class AgentLoader:
             "=" * 80,
             "AGENT LOADER DIAGNOSTIC REPORT",
             "=" * 80,
-            f"Generated at: {datetime.utcnow().isoformat()}",
+            f"Generated at: {datetime.now(timezone.utc).isoformat()}",
             f"Startup time: {self._startup_time}",
             f"Strict mode: {self._strict_mode}",
             f"Debug mode: {self._debug_mode}",
@@ -1457,7 +1457,7 @@ class VersionedAgentLoader(AgentLoader):
             self._agent_versions[version_key] = {
                 "module": module,
                 "version": version,
-                "loaded_at": datetime.utcnow(),
+                "loaded_at": datetime.now(timezone.utc),
                 "module_path": module_path,
             }
             logger.info(f"Loaded {agent_name} version {version} from {module_path}")
