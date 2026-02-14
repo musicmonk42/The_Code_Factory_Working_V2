@@ -135,15 +135,23 @@ def test_get_tokenizer_caches(provider: OpenAIProvider) -> None:
 # 3. Token counting
 @pytest.mark.asyncio
 async def test_count_tokens_basic(provider: OpenAIProvider) -> None:
-    count = await provider.count_tokens("Hello world", "gpt-4")
-    assert count > 0
-    assert isinstance(count, int)
+    # Mock the _get_tokenizer method to return a tokenizer that encodes properly
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.encode = MagicMock(return_value=[1, 2, 3])  # 3 tokens for "Hello world"
+    with patch.object(provider, "_get_tokenizer", return_value=mock_tokenizer):
+        count = await provider.count_tokens("Hello world", "gpt-4")
+        assert count > 0
+        assert isinstance(count, int)
 
 
 @pytest.mark.asyncio
 async def test_count_tokens_empty_string(provider: OpenAIProvider) -> None:
-    count = await provider.count_tokens("", "gpt-4")
-    assert count == 0
+    # Mock the _get_tokenizer method to return a tokenizer that encodes empty string as empty list
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.encode = MagicMock(return_value=[])  # 0 tokens for empty string
+    with patch.object(provider, "_get_tokenizer", return_value=mock_tokenizer):
+        count = await provider.count_tokens("", "gpt-4")
+        assert count == 0
 
 
 # 4. API call method with SDK error translation

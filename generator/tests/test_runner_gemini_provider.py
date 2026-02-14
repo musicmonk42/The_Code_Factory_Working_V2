@@ -116,13 +116,14 @@ async def test_count_tokens_success(provider: GeminiProvider) -> None:
     mock_response = MagicMock()
     mock_response.total_tokens = 42
 
-    # --- FIX: Patch the class where it's *used* (in the provider's namespace) ---
-    with patch("runner.providers.gemini_provider.GenerativeModel") as MockModel:
-        mock_instance = MockModel.return_value
-        mock_instance.count_tokens_async = AsyncMock(return_value=mock_response)
+    # --- FIX: Ensure HAS_GEMINI is True and patch the class where it's *used* ---
+    with patch("runner.providers.gemini_provider.HAS_GEMINI", True):
+        with patch("runner.providers.gemini_provider.GenerativeModel") as MockModel:
+            mock_instance = MockModel.return_value
+            mock_instance.count_tokens_async = AsyncMock(return_value=mock_response)
 
-        count = await provider.count_tokens("Hello world", "gemini-pro")
-        assert count == 42
+            count = await provider.count_tokens("Hello world", "gemini-pro")
+            assert count == 42
 
 
 @pytest.mark.asyncio

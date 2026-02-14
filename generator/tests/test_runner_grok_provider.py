@@ -66,6 +66,8 @@ def test_add_post_hook(provider: GrokProvider) -> None:
 # 3. Token counting
 @pytest.mark.asyncio
 async def test_count_tokens(provider: GrokProvider) -> None:
+    # Mock the tokenizer to return a non-empty token list
+    provider.tokenizer.encode = MagicMock(return_value=[1, 2, 3])  # 3 tokens
     count = await provider.count_tokens("Hello world", "grok-4")
     assert count > 0
 

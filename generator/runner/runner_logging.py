@@ -2152,4 +2152,6 @@ def search_logs(
 
 # FIX: Logger is now defined early in the module (after tracer initialization)
 # to prevent circular import issues. The following setup configures the audit logger.
-logging.getLogger("runner.audit").propagate = False
+# Allow propagation in testing to enable caplog capture
+if os.getenv("TESTING") != "1":
+    logging.getLogger("runner.audit").propagate = False
