@@ -1171,6 +1171,40 @@ class ArbiterConfig(BaseSettings):
     def log_level(self) -> str:
         """Lowercase alias for LOG_LEVEL for compatibility with components expecting lowercase config names."""
         return self.LOG_LEVEL
+    
+    def get_api_key_for_provider(self, provider: str) -> Optional[str]:
+        """
+        Retrieve the API key for a given LLM provider from environment variables.
+        
+        This method is required by the database layer and policy engine for LLM evaluation.
+        It provides a consistent interface for accessing API keys across different providers.
+        
+        Args:
+            provider: The name of the LLM provider (e.g., 'openai', 'anthropic', 'gemini', 'google')
+        
+        Returns:
+            The API key for the specified provider, or None if not found
+        
+        Environment Variables:
+            - OPENAI_API_KEY: For OpenAI models
+            - ANTHROPIC_API_KEY: For Claude models  
+            - GOOGLE_API_KEY: For Gemini/Google models
+            - LLM_API_KEY: Fallback for other providers
+        """
+        provider_lower = provider.lower() if provider else ""
+        
+        if provider_lower == "openai":
+            return os.getenv("OPENAI_API_KEY")
+        elif provider_lower == "anthropic":
+            return os.getenv("ANTHROPIC_API_KEY")
+        elif provider_lower in ("gemini", "google"):
+            return os.getenv("GOOGLE_API_KEY")
+        else:
+            logger.warning(
+                f"No specific API key found for provider: {provider}. "
+                f"Falling back to LLM_API_KEY environment variable."
+            )
+            return os.getenv("LLM_API_KEY")
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))

@@ -431,7 +431,7 @@ class ShardedMessageBus:
         kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
         
         # Debug logging to help diagnose configuration issues
-        logger.info(
+        logger.debug(
             "Kafka configuration check",
             kafka_enabled=kafka_enabled,
             config_type=type(self.config).__name__,
