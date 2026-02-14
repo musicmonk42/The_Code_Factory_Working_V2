@@ -53,24 +53,43 @@ def is_production_mode():
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
-    return types.SimpleNamespace(
-        log_level="INFO",
-        LOG_LEVEL="INFO",
-        database_path="sqlite:///./omnicore.db",
-        DB_PATH="sqlite:///./omnicore.db",
-        plugin_dir="./plugins",
-        PLUGIN_DIR="./plugins",
-        ENCRYPTION_KEY=None,
-        ENCRYPTION_KEY_BYTES=b"",
-        DB_POOL_SIZE=50,
-        DB_POOL_MAX_OVERFLOW=20,
-        DB_RETRY_ATTEMPTS=3,
-        DB_RETRY_DELAY=1.0,
-        DB_CIRCUIT_THRESHOLD=3,
-        DB_CIRCUIT_TIMEOUT=60,
-        DB_BATCH_SIZE=100,
-        DEFAULT_AUTO_LEARN_POLICY=True,
-    )
+    
+    class FallbackConfig:
+        """Fallback configuration class with all required methods."""
+        
+        def __init__(self):
+            self.log_level = "INFO"
+            self.LOG_LEVEL = "INFO"
+            self.database_path = "sqlite:///./omnicore.db"
+            self.DB_PATH = "sqlite:///./omnicore.db"
+            self.plugin_dir = "./plugins"
+            self.PLUGIN_DIR = "./plugins"
+            self.ENCRYPTION_KEY = None
+            self.ENCRYPTION_KEY_BYTES = b""
+            self.DB_POOL_SIZE = 50
+            self.DB_POOL_MAX_OVERFLOW = 20
+            self.DB_RETRY_ATTEMPTS = 3
+            self.DB_RETRY_DELAY = 1.0
+            self.DB_CIRCUIT_THRESHOLD = 3
+            self.DB_CIRCUIT_TIMEOUT = 60
+            self.DB_BATCH_SIZE = 100
+            self.DEFAULT_AUTO_LEARN_POLICY = True
+            # LLM configuration attributes
+            self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+            self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
+        
+        def get_api_key_for_provider(self, provider: str):
+            """Retrieve the API key for a given LLM provider from environment variables."""
+            if provider == "openai":
+                return os.getenv("OPENAI_API_KEY")
+            elif provider == "anthropic":
+                return os.getenv("ANTHROPIC_API_KEY")
+            elif provider in ("gemini", "google"):
+                return os.getenv("GOOGLE_API_KEY")
+            else:
+                return os.getenv("LLM_API_KEY")
+    
+    return FallbackConfig()
 
 
 def _get_settings():
