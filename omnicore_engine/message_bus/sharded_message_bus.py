@@ -428,7 +428,26 @@ class ShardedMessageBus:
 
         # Integration components
         # Check both KAFKA_ENABLED and USE_KAFKA flags (prefer KAFKA_ENABLED)
+        # This multi-flag approach supports legacy code and different deployment configs
         kafka_enabled = getattr(self.config, "KAFKA_ENABLED", getattr(self.config, "USE_KAFKA", False))
+        
+        # Enhanced diagnostic logging for Kafka configuration troubleshooting
+        # Uses structured logging to ensure observability in production environments
+        # This helps diagnose issues where Kafka appears configured but bridge isn't initialized
+        logger.info(
+            "Evaluating Kafka bridge configuration",
+            extra={
+                "kafka_enabled": kafka_enabled,
+                "config_type": type(self.config).__name__,
+                "has_KAFKA_ENABLED": hasattr(self.config, "KAFKA_ENABLED"),
+                "has_USE_KAFKA": hasattr(self.config, "USE_KAFKA"),
+                "KAFKA_ENABLED_value": getattr(self.config, "KAFKA_ENABLED", "NOT_SET"),
+                "USE_KAFKA_value": getattr(self.config, "USE_KAFKA", "NOT_SET"),
+                "KAFKA_BOOTSTRAP_SERVERS": getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "NOT_SET"),
+                "component": "ShardedMessageBus",
+                "operation": "kafka_config_check"
+            }
+        )
         
         if kafka_enabled:
             # Create KafkaBridgeConfig from settings

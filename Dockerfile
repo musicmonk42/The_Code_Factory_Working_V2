@@ -233,6 +233,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # PARALLEL AGENT LOADING: Enabled by default for faster startup
 # NLTK_DATA: Set to /opt/nltk_data (accessible by appuser, not /root/nltk_data)
 # HF_HOME/TRANSFORMERS_CACHE: Set to /opt/huggingface_cache for pre-downloaded models
+# KAFKA: Multiple variables for compatibility - different components check different names
+#   - KAFKA_ENABLED: Primary flag checked by ArbiterConfig (via Pydantic validation_alias)
+#   - ENABLE_KAFKA: Alias checked by some older components
+#   - USE_KAFKA_INGESTION: Controls Kafka for event ingestion
+#   - USE_KAFKA_AUDIT: Controls Kafka for audit events
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -246,6 +251,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENABLE_FEATURE_STORE="auto" \
     ENABLE_HSM="auto" \
     ENABLE_LIBVIRT="auto" \
+    KAFKA_ENABLED="true" \
+    ENABLE_KAFKA="true" \
+    USE_KAFKA_INGESTION="true" \
+    USE_KAFKA_AUDIT="true" \
     PARALLEL_AGENT_LOADING="1" \
     LAZY_LOAD_ML="1" \
     TOKENIZERS_PARALLELISM="false" \

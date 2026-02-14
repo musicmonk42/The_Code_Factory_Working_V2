@@ -1171,6 +1171,153 @@ class ArbiterConfig(BaseSettings):
     def log_level(self) -> str:
         """Lowercase alias for LOG_LEVEL for compatibility with components expecting lowercase config names."""
         return self.LOG_LEVEL
+    
+    def get_api_key_for_provider(self, provider: str) -> Optional[str]:
+        """
+        Retrieve the API key for a given LLM provider from environment variables.
+        
+        This method is required by the database layer and policy engine for LLM evaluation
+        during policy enforcement and job persistence operations. It provides a consistent,
+        observable interface for accessing provider-specific API keys across the platform.
+        
+        The method implements:
+        - OpenTelemetry distributed tracing for observability
+        - Provider-specific environment variable mapping
+        - Graceful fallback to generic LLM_API_KEY
+        - Comprehensive logging for troubleshooting
+        - Metrics tracking via existing CONFIG_ACCESS counter
+        
+        Args:
+            provider: The name of the LLM provider. Case-insensitive.
+                     Supported values:
+                     - 'openai': OpenAI GPT models
+                     - 'anthropic': Anthropic Claude models
+                     - 'gemini' or 'google': Google Gemini models
+                     - 'grok': xAI Grok models
+                     - Other: Falls back to generic LLM_API_KEY
+        
+        Returns:
+            The API key for the specified provider, or None if not configured.
+            None is an acceptable return value - callers must handle missing keys
+            appropriately (typically by failing the operation with a clear error).
+        
+        Environment Variables:
+            - OPENAI_API_KEY: OpenAI API key
+            - ANTHROPIC_API_KEY: Anthropic API key
+            - GOOGLE_API_KEY: Google/Gemini API key
+            - GROK_API_KEY: xAI Grok API key
+            - LLM_API_KEY: Generic fallback for unknown providers
+        
+        Raises:
+            No exceptions are raised. Missing keys result in None return value.
+        
+        Observability:
+            - Emits OpenTelemetry span 'get_api_key_for_provider'
+            - Sets span attributes: provider, provider_key, key_status
+            - Increments CONFIG_ACCESS counter with setting label
+            - Logs warnings for missing or fallback keys
+        
+        Example:
+            >>> config = ArbiterConfig()
+            >>> key = config.get_api_key_for_provider("openai")
+            >>> if not key:
+            ...     raise ValueError("OPENAI_API_KEY not configured")
+        
+        See Also:
+            - self_fixing_engineer/arbiter/policy/config.py: Reference implementation
+            - omnicore_engine/database/database.py: Primary consumer
+        
+        Version History:
+            - 2026-02-14: Added to fix job vanishing bug (missing method)
+        """
+        # Get tracer instance lazily to avoid import-time initialization overhead
+        tracer = _get_tracer()
+        
+        # Normalize provider name to lowercase for case-insensitive matching
+        provider_normalized = provider.lower() if provider else ""
+        
+        # Start OpenTelemetry span for distributed tracing
+        with tracer.start_as_current_span(
+            "config.get_api_key_for_provider",
+            attributes={"provider": provider, "provider_normalized": provider_normalized}
+        ) as span:
+            try:
+                # Map provider to environment variable name
+                provider_key_env: Optional[str] = None
+                api_key: Optional[str] = None
+                
+                if provider_normalized == "openai":
+                    provider_key_env = "OPENAI_API_KEY"
+                    api_key = os.getenv("OPENAI_API_KEY")
+                elif provider_normalized == "anthropic":
+                    provider_key_env = "ANTHROPIC_API_KEY"
+                    api_key = os.getenv("ANTHROPIC_API_KEY")
+                elif provider_normalized in ("gemini", "google"):
+                    provider_key_env = "GOOGLE_API_KEY"
+                    api_key = os.getenv("GOOGLE_API_KEY")
+                elif provider_normalized == "grok":
+                    provider_key_env = "GROK_API_KEY"
+                    api_key = os.getenv("GROK_API_KEY")
+                else:
+                    # Unknown provider - try generic fallback
+                    provider_key_env = "LLM_API_KEY"
+                    api_key = os.getenv("LLM_API_KEY")
+                    
+                    # Log warning for unknown provider
+                    logger.warning(
+                        f"Unknown LLM provider '{provider}'. "
+                        f"Falling back to LLM_API_KEY environment variable. "
+                        f"Supported providers: openai, anthropic, gemini, google, grok"
+                    )
+                    span.set_attribute("unknown_provider", True)
+                
+                # Set span attributes for observability
+                span.set_attribute("provider_key_env", provider_key_env)
+                span.set_attribute("key_status", "present" if api_key else "missing")
+                
+                # Increment metrics counter
+                try:
+                    CONFIG_ACCESS.labels(setting=f"api_key_{provider_normalized}").inc()
+                except Exception as e:
+                    # Don't let metrics failure break the operation
+                    logger.debug(f"Failed to increment metrics: {e}")
+                
+                # Log warning if API key is missing
+                if not api_key:
+                    logger.warning(
+                        f"API key not found for provider '{provider}'. "
+                        f"Environment variable {provider_key_env} is not set. "
+                        f"LLM operations for this provider will fail. "
+                        f"Set {provider_key_env} in your environment or .env file."
+                    )
+                    span.set_attribute("key_missing", True)
+                else:
+                    # Log success at debug level (don't spam logs)
+                    logger.debug(
+                        f"Retrieved API key for provider '{provider}' "
+                        f"from {provider_key_env}"
+                    )
+                    span.set_attribute("key_retrieved", True)
+                
+                return api_key
+                
+            except Exception as e:
+                # Catch any unexpected errors to prevent breaking callers
+                logger.error(
+                    f"Unexpected error retrieving API key for provider '{provider}': {e}",
+                    exc_info=True
+                )
+                span.set_attribute("error", True)
+                span.set_attribute("error_message", str(e))
+                
+                # Increment error counter
+                try:
+                    CONFIG_ERRORS.labels(error_type="api_key_retrieval").inc()
+                except Exception:
+                    pass  # Don't let metrics failure break the operation
+                
+                # Return None instead of raising - callers can handle missing keys
+                return None
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
