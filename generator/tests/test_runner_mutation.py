@@ -308,7 +308,7 @@ async def test_property_based_test_no_hypothesis(
     Without Hypothesis installed/enabled, property_based_test should
     report 'skipped' cleanly.
     """
-    with patch("runner.runner_mutation.HAS_HYPOTHESIS", False):
+    with patch("generator.runner.runner_mutation.HAS_HYPOTHESIS", False):
         result = await property_based_test(temp_dir, mock_config, {"a.py": "x = 1"})
 
     assert result["status"] == "skipped"
