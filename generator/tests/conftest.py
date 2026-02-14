@@ -204,14 +204,31 @@ if "prometheus_client" not in sys.modules:
                 
                 return None
         
+        # Helper function to safely convert label_key to dict
+        def _label_key_to_dict(label_key):
+            """Convert label_key (tuple of tuples) to dict, with fallback for unexpected structures.
+            
+            Args:
+                label_key: A tuple of (key, value) tuples representing metric labels
+                
+            Returns:
+                dict: Labels as a dictionary, or empty dict if conversion fails
+            """
+            try:
+                return dict(label_key) if label_key else {}
+            except (TypeError, ValueError):
+                # Fallback if label_key structure is unexpected
+                return {}
+        
         # Define Sample class for better readability
+        # Timestamp is in seconds since epoch (Unix time), None means "now"
         class _Sample:
             """Mock Prometheus sample representing a single metric data point."""
             def __init__(self, name, labels, value, timestamp=None):
                 self.name = name
                 self.labels = labels
                 self.value = value
-                self.timestamp = timestamp
+                self.timestamp = timestamp  # Seconds since epoch, None = now
         
         # Define Metric class for better readability  
         class _Metric:
@@ -248,20 +265,12 @@ if "prometheus_client" not in sys.modules:
                 # Return metrics in prometheus format
                 samples = []
                 for label_key, child in self._metrics.items():
-                    # Safely convert label_key to dict
-                    # label_key is a tuple of (key, value) tuples
-                    try:
-                        label_dict = dict(label_key) if label_key else {}
-                    except (TypeError, ValueError):
-                        # Fallback if label_key structure is unexpected
-                        label_dict = {}
-                    
                     # Create a sample object
                     sample = _Sample(
                         name=self.name,
-                        labels=label_dict,
+                        labels=_label_key_to_dict(label_key),
                         value=child._value,
-                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
+                        timestamp=None
                     )
                     samples.append(sample)
                 
@@ -342,24 +351,17 @@ if "prometheus_client" not in sys.modules:
                         name=self.name,
                         labels={},
                         value=self._value,
-                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
+                        timestamp=None
                     )
                     samples.append(sample)
                 
                 # Add labeled metrics
                 for label_key, child in self._metrics.items():
-                    # Safely convert label_key to dict
-                    try:
-                        label_dict = dict(label_key) if label_key else {}
-                    except (TypeError, ValueError):
-                        # Fallback if label_key structure is unexpected
-                        label_dict = {}
-                    
                     sample = _Sample(
                         name=self.name,
-                        labels=label_dict,
+                        labels=_label_key_to_dict(label_key),
                         value=child._value,
-                        timestamp=None  # Timestamp in seconds since epoch, None means "now"
+                        timestamp=None
                     )
                     samples.append(sample)
                 

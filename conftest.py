@@ -638,6 +638,9 @@ def reset_logging_for_tests():
     """
     import logging
     
+    # Define format string once to avoid duplication
+    LOG_FORMAT = '%(levelname)s:%(name)s:%(message)s'
+    
     # Store original handlers and level
     root_logger = logging.getLogger()
     original_handlers = root_logger.handlers[:]
@@ -650,13 +653,13 @@ def reset_logging_for_tests():
     # Configure basic logging for tests
     # Note: force=True requires Python 3.8+
     try:
-        logging.basicConfig(level=logging.DEBUG, force=True, format='%(levelname)s:%(name)s:%(message)s')
+        logging.basicConfig(level=logging.DEBUG, force=True, format=LOG_FORMAT)
     except TypeError:
         # Python < 3.8 fallback: manually clear and reconfigure
         # Use proper removeHandler() instead of clear() for consistency
         for handler in root_logger.handlers[:]:
             root_logger.removeHandler(handler)
-        logging.basicConfig(level=logging.DEBUG, format='%(levelname)s:%(name)s:%(message)s')
+        logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
     
     # Also configure runner-specific loggers
     # These are the main logger namespaces used in the runner module
