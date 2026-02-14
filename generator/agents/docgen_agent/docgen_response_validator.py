@@ -180,7 +180,13 @@ def setup_nltk_data():
         except LookupError:
             # Only attempt download if not in production environment
             # In production, NLTK data should be pre-downloaded during Docker build
-            if os.getenv("ENVIRONMENT") == "production":
+            # Check both ENVIRONMENT and APP_ENV for Railway compatibility
+            is_production = (
+                os.getenv("ENVIRONMENT") == "production" or 
+                os.getenv("APP_ENV") == "production" or
+                os.getenv("PRODUCTION_MODE") == "1"
+            )
+            if is_production:
                 logger.warning(
                     f"NLTK data '{name}' not found in production environment. "
                     f"This should have been pre-downloaded during Docker build. "
