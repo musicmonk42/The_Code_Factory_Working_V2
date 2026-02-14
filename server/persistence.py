@@ -191,7 +191,13 @@ async def save_job_to_database(job: Job) -> bool:
         return False
     
     async def _save_operation():
-        """Inner operation that will be retried."""
+        """
+        Inner operation that will be retried.
+        
+        Note: Database errors (connection failures, constraint violations, etc.)
+        will be caught and retried by the _retry_with_backoff wrapper function
+        that calls this operation. No additional error handling is needed here.
+        """
         # Serialize job to JSON with datetime conversion
         job_data = job.model_dump(mode='json')
         
@@ -301,7 +307,13 @@ async def load_job_from_database(job_id: str) -> Optional[Job]:
         return None
     
     async def _load_operation():
-        """Inner operation that will be retried."""
+        """
+        Inner operation that will be retried.
+        
+        Note: Database errors will be caught and retried by the
+        _retry_with_backoff wrapper function. No additional error
+        handling is needed here.
+        """
         # Query generator_agent_state table directly by name (unhashed)
         from omnicore_engine.database.models import GeneratorAgentState
         from sqlalchemy import select
@@ -408,7 +420,13 @@ async def delete_job_from_database(job_id: str) -> bool:
         return False
     
     async def _delete_operation():
-        """Inner operation that will be retried."""
+        """
+        Inner operation that will be retried.
+        
+        Note: Database errors will be caught and retried by the
+        _retry_with_backoff wrapper function. No additional error
+        handling is needed here.
+        """
         # Query generator_agent_state table directly by name
         from omnicore_engine.database.models import GeneratorAgentState
         from sqlalchemy import select

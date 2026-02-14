@@ -892,14 +892,24 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 while True:
                     # Query database for job agent states with pagination
                     # Use direct query on generator_agent_state table, not agent_state
-                    async with db.AsyncSessionLocal() as session:
-                        result = await session.execute(
-                            select(GeneratorAgentState)
-                            .filter_by(agent_type="job_storage")
-                            .limit(batch_size)
-                            .offset(offset)
+                    try:
+                        async with db.AsyncSessionLocal() as session:
+                            result = await session.execute(
+                                select(GeneratorAgentState)
+                                .filter_by(agent_type="job_storage")
+                                .limit(batch_size)
+                                .offset(offset)
+                            )
+                            job_states = result.scalars().all()
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to query job states at offset {offset}: {e}",
+                            exc_info=True,
+                            extra={"offset": offset, "batch_size": batch_size}
                         )
-                        job_states = result.scalars().all()
+                        # Skip this batch and continue with the next one
+                        offset += batch_size
+                        continue
                     
                     if not job_states:
                         # No more jobs to recover
