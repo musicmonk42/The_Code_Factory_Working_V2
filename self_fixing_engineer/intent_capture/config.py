@@ -348,8 +348,9 @@ class Config(BaseSettings):
     @field_validator("REDIS_URL")
     @classmethod
     def validate_redis_url(cls, v):
-        if not v.startswith("redis://"):
-            raise ValueError("Invalid REDIS_URL format")
+        # Accept both redis:// and rediss:// schemes (secure Redis)
+        if not v.startswith(("redis://", "rediss://")):
+            raise ValueError("Invalid REDIS_URL format - must start with redis:// or rediss://")
         return v
 
     @field_validator("LOG_LEVEL")

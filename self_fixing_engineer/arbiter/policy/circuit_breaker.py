@@ -387,9 +387,16 @@ class CircuitBreakerState:
     )
     async def initialize(self) -> None:
         """Initializes the Redis connection using the global connection pool."""
+        # Redis URL pattern supporting standard formats with optional credentials
+        # Accepts:
+        #  - redis://localhost:6379 (basic)
+        #  - redis://default:password@host:6379 (with credentials)
+        #  - rediss://user:pass@host:6379/0 (secure with database number)
+        REDIS_URL_PATTERN = r"^rediss?://([^:@]+:[^@]+@)?[\w.-]+(:\d+)?(/\d+)?$"
+        
         redis_url = getattr(self.config, "REDIS_URL", None)
         # Validate REDIS_URL format to prevent connection errors
-        if redis_url and not re.match(r"^redis://[\w.-]+(:\d+)?(/.*)?$", redis_url):
+        if redis_url and not re.match(REDIS_URL_PATTERN, redis_url):
             _log_validation_error(
                 f"Invalid REDIS_URL format: {redis_url}", "invalid_redis_url"
             )

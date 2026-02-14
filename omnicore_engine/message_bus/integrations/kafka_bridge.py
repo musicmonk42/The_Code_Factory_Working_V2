@@ -503,6 +503,33 @@ class KafkaBridge:
             logger.exception("Failed to produce to %s (key=%s): %s", topic, key, exc)
             raise
 
+    async def publish(self, message: Any) -> None:
+        """
+        Publish a message to Kafka (compatibility wrapper for ShardedMessageBus).
+        
+        This method provides compatibility with the ShardedMessageBus interface,
+        which expects a publish() method. It extracts the topic and payload from
+        the Message object and forwards to the produce() method.
+        
+        Args:
+            message: Message object with topic, payload, and trace_id attributes
+        """
+        topic = message.topic
+        # Extract payload - it may be JSON string or dict
+        payload = message.payload
+        if isinstance(payload, str):
+            try:
+                import json
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                # If not valid JSON, send as-is
+                pass
+        
+        # Use trace_id as key for consistent partitioning
+        key = message.trace_id if hasattr(message, 'trace_id') else None
+        
+        await self.produce(topic=topic, key=key, value=payload)
+
     # ------------------------------------------------------------------- #
     #  Consumption
     # ------------------------------------------------------------------- #

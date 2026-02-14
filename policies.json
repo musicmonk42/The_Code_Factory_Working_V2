@@ -36,9 +36,15 @@
       "trust_score_threshold": 0.6,
       "temporal_window_seconds": 86400
     },
+    "Database": {
+      "allow": true,
+      "reason": "Database operations with audit logging",
+      "control_tag": "AU-12"
+    },
     "*": {
       "allow": true,
-      "reason": "Default policy for unspecified domains"
+      "reason": "Default policy for unspecified domains",
+      "control_tag": "AU-2"
     }
   },
   "user_rules": {
