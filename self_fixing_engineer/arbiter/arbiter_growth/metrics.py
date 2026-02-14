@@ -8,7 +8,7 @@ from prometheus_client import REGISTRY, CollectorRegistry, Counter, Gauge, Histo
 
 logger = logging.getLogger(__name__)
 
-# Lock to prevent race conditions during metric registration
+# Lock to ensure thread-safe metric creation and registry access
 _METRICS_LOCK = threading.Lock()
 
 

@@ -83,7 +83,8 @@ async def redis_adapter():
     # This must happen before importing MeshPubSub because mesh_adapter
     # checks 'if not redis:' at module import time
     with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
-        # Set from_url on the mock (mesh_adapter uses redis.from_url, not redis.asyncio.from_url)
+        # Set from_url on the mock. Since mesh_adapter imports 'redis.asyncio as redis',
+        # it calls redis.from_url (not redis.asyncio.from_url) at line 599
         mock_redis_module.from_url = mock_from_url
         
         # Import must happen inside patch context to see the patched redis module
@@ -218,7 +219,8 @@ class TestConnection:
         # This must happen before importing MeshPubSub because mesh_adapter
         # checks 'if not redis:' at module import time
         with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
-            # Set from_url on the mock (mesh_adapter uses redis.from_url)
+            # Set from_url on the mock. Since mesh_adapter imports 'redis.asyncio as redis',
+            # it calls redis.from_url (not redis.asyncio.from_url) at line 599
             mock_redis_module.from_url = mock_from_url
             
             # Import must happen inside patch context to see the patched redis module
@@ -253,7 +255,8 @@ class TestConnection:
         # This must happen before importing MeshPubSub because mesh_adapter
         # checks 'if not redis:' at module import time
         with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
-            # Set from_url on the mock (mesh_adapter uses redis.from_url)
+            # Set from_url on the mock. Since mesh_adapter imports 'redis.asyncio as redis',
+            # it calls redis.from_url (not redis.asyncio.from_url) at line 599
             mock_redis_module.from_url = flaky_connect
             
             # Import must happen inside patch context to see the patched redis module
