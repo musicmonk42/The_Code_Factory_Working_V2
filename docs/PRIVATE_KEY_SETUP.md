@@ -67,4 +67,3 @@ The private key is used in:
 
 For more information about security best practices, see:
 - [SECURITY_DEPLOYMENT_GUIDE.md](./SECURITY_DEPLOYMENT_GUIDE.md)
-- [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md)
