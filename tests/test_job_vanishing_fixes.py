@@ -6,9 +6,9 @@ Tests for job vanishing issue fixes.
 This test module validates the fixes for three root causes that led to
 jobs "vanishing without running":
 
-1. Kafka bridge is properly started during application lifespan
-2. Job submission endpoints return 503 when agents aren't ready
-3. Every replica loads agents independently (not gated by distributed lock)
+1. Issue 1: Kafka bridge configuration mapping (ENABLE_KAFKA env var)
+2. Issue 2: /ready endpoint requiring full agent loading completion
+3. Issue 3: Job submission endpoints return 503 when agents aren't ready
 """
 
 import asyncio
@@ -20,7 +20,40 @@ from server.dependencies import require_agents_ready
 
 
 class TestKafkaBridgeStartup:
-    """Test that Kafka bridge is properly started."""
+    """Test Issue 1: Kafka bridge configuration mapping."""
+    
+    def test_server_config_has_kafka_enabled_property(self):
+        """Test that ServerConfig has KAFKA_ENABLED property for backward compatibility."""
+        from server.config import ServerConfig
+        
+        # Create config with kafka_enabled=True
+        config = ServerConfig(kafka_enabled=True)
+        
+        # Verify backward compatibility properties exist
+        assert hasattr(config, 'KAFKA_ENABLED')
+        assert hasattr(config, 'USE_KAFKA')
+        assert hasattr(config, 'KAFKA_BOOTSTRAP_SERVERS')
+    
+    def test_kafka_enabled_property_maps_to_field(self):
+        """Test that KAFKA_ENABLED property returns kafka_enabled field value."""
+        from server.config import ServerConfig
+        
+        # Test with kafka_enabled=True
+        config = ServerConfig(kafka_enabled=True)
+        assert config.KAFKA_ENABLED is True
+        assert config.USE_KAFKA is True
+        
+        # Test with kafka_enabled=False
+        config = ServerConfig(kafka_enabled=False)
+        assert config.KAFKA_ENABLED is False
+        assert config.USE_KAFKA is False
+    
+    def test_kafka_bootstrap_servers_property_maps_to_field(self):
+        """Test that KAFKA_BOOTSTRAP_SERVERS property maps correctly."""
+        from server.config import ServerConfig
+        
+        config = ServerConfig(kafka_bootstrap_servers="test-kafka:9092")
+        assert config.KAFKA_BOOTSTRAP_SERVERS == "test-kafka:9092"
     
     @pytest.mark.skip(reason="Requires structlog and other Kafka dependencies")
     @pytest.mark.asyncio
@@ -65,8 +98,86 @@ class TestKafkaBridgeStartup:
         await bus.stop()
 
 
+class TestReadyEndpointLogic:
+    """Test Issue 2: /ready endpoint requiring full agent loading."""
+    
+    @pytest.mark.asyncio
+    async def test_ready_endpoint_returns_503_when_loading_not_completed(self):
+        """Test that /ready returns 503 when loading_completed is False (FIX Issue 2)."""
+        # This is the key fix: Previously, the endpoint would return 200 if
+        # agent_availability > 0, even if loading wasn't complete.
+        # Now it must check loading_completed == True
+        
+        with patch('server.main.get_agent_loader') as mock_get_loader, \
+             patch('server.main._routers_loaded', True):
+            
+            # Mock loader: loading_in_progress=False but loading_completed=False
+            # This simulates partial loading (1 out of 5 agents loaded)
+            mock_loader = MagicMock()
+            mock_loader.get_status.return_value = {
+                'loading_in_progress': False,
+                'loading_completed': False,  # KEY: not completed
+                'availability_rate': 0.2,  # 20% available
+                'total_agents': 5,
+                'available_agents': ['codegen'],
+                'unavailable_agents': ['testgen', 'deploy', 'docgen', 'critique']
+            }
+            mock_get_loader.return_value = mock_loader
+            
+            # Import the readiness check function
+            from server.main import readiness_check
+            from fastapi import Response
+            
+            response = Response()
+            result = await readiness_check(response)
+            
+            # Should return NOT ready when loading not completed
+            assert result.ready is False
+            assert result.status == 'loading'
+            assert response.status_code == 503
+    
+    @pytest.mark.asyncio
+    async def test_ready_endpoint_returns_200_when_loading_completed(self):
+        """Test that /ready returns 200 only when loading_completed is True."""
+        
+        with patch('server.main.get_agent_loader') as mock_get_loader, \
+             patch('server.main._routers_loaded', True):
+            
+            # Mock loader: loading completed with all agents available
+            mock_loader = MagicMock()
+            mock_loader.get_status.return_value = {
+                'loading_in_progress': False,
+                'loading_completed': True,  # KEY: completed
+                'availability_rate': 1.0,
+                'total_agents': 5,
+                'available_agents': ['codegen', 'testgen', 'deploy', 'docgen', 'critique'],
+                'unavailable_agents': []
+            }
+            mock_get_loader.return_value = mock_loader
+            
+            # Import the readiness check function
+            from server.main import readiness_check
+            from fastapi import Response
+            
+            response = Response()
+            
+            # Mock Redis ping to avoid connection errors
+            with patch('redis.asyncio.Redis.from_url') as mock_redis:
+                mock_redis_instance = MagicMock()
+                mock_redis_instance.ping = AsyncMock(return_value=True)
+                mock_redis_instance.aclose = AsyncMock(return_value=None)
+                mock_redis.return_value = mock_redis_instance
+                
+                result = await readiness_check(response)
+                
+                # Should return ready when loading completed
+                assert result.ready is True
+                assert result.status == 'ready'
+                assert response.status_code == 200
+
+
 class TestReadinessGate:
-    """Test that job submission endpoints enforce agent readiness."""
+    """Test Issue 3: Job submission endpoints enforce agent readiness."""
     
     @pytest.mark.asyncio
     async def test_require_agents_ready_blocks_when_not_loaded(self):
