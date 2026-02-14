@@ -43,7 +43,7 @@ def _ensure_naive_utc(dt: Optional[datetime]) -> Optional[datetime]:
     Returns:
         A naive datetime in UTC timezone, or None if input was None
     """
-    if dt is not None and hasattr(dt, 'tzinfo') and dt.tzinfo is not None:
+    if dt is not None and dt.tzinfo is not None:
         # Convert to UTC first (should already be UTC), then strip tzinfo
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt
