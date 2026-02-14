@@ -220,10 +220,15 @@ if "prometheus_client" not in sys.modules:
                 # Fallback if label_key structure is unexpected
                 return {}
         
-        # Define Sample class for better readability
-        # Timestamp is in seconds since epoch (Unix time), None means "now"
         class _Sample:
-            """Mock Prometheus sample representing a single metric data point."""
+            """Mock Prometheus sample representing a single metric data point.
+            
+            Args:
+                name: Metric name
+                labels: Dictionary of label key-value pairs
+                value: The metric value
+                timestamp: Unix timestamp in seconds since epoch, None means "now"
+            """
             def __init__(self, name, labels, value, timestamp=None):
                 self.name = name
                 self.labels = labels
