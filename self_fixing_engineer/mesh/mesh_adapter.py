@@ -770,6 +770,8 @@ class MeshPubSub:
                             }
 
                         if self.enable_dlq_rotation:
+                            # Ensure parent directory exists
+                            os.makedirs(os.path.dirname(self.dead_letter_path), exist_ok=True)
                             handler = TimedRotatingFileHandler(
                                 self.dead_letter_path, when="midnight", backupCount=7
                             )
@@ -777,6 +779,8 @@ class MeshPubSub:
                             with open(handler.baseFilename, "a") as f:
                                 f.write(json.dumps(payload_to_write) + "\n")
                         else:
+                            # Ensure parent directory exists
+                            os.makedirs(os.path.dirname(self.dead_letter_path), exist_ok=True)
                             if not os.path.exists(self.dead_letter_path):
                                 if aiofiles:
                                     async with aiofiles.open(

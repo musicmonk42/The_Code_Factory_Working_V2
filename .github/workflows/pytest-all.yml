@@ -688,7 +688,7 @@ jobs:
           else
             # Other modules can use standard settings with reduced parallelism
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
-            PYTEST_ARGS="-n 2 --dist loadscope --forked"
+            PYTEST_ARGS="-n auto --dist loadscope"
             TIMEOUT_VALUE=300
             IGNORE_ARGS=""
           fi
@@ -824,7 +824,7 @@ jobs:
           python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             self_fixing_engineer/tests/test_audit_fixes.py \
-            --forked \
+            -n auto --dist loadscope \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -893,7 +893,7 @@ jobs:
           echo "=== Running Mesh Tests ==="
           python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
-            --forked \
+            -n auto --dist loadscope \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -965,7 +965,7 @@ jobs:
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
             --ignore=self_fixing_engineer/tests/test_mesh*.py \
             --ignore=self_fixing_engineer/tests/test_audit_fixes.py \
-            --forked \
+            -n auto --dist loadscope \
             -v \
             --tb=short \
             -m "not heavy" \
