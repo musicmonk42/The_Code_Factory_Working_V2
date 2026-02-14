@@ -41,7 +41,8 @@ from server.schemas import (
 from server.services import GeneratorService
 from server.services.job_finalization import finalize_job_success, finalize_job_failure
 from server.services.dispatch_service import dispatch_job_completion
-from server.storage import jobs_db
+from server.storage import jobs_db, add_job
+from server.persistence import load_job_from_database
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,39 @@ def get_generator_service() -> GeneratorService:
 
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
+
+
+async def _get_job_or_404(job_id: str) -> "Job":
+    """
+    Get a job from memory or fall back to database lookup.
+    
+    In multi-worker deployments, a job may exist in another worker's memory
+    but be persisted in the shared database. This function checks memory first
+    for performance, then falls back to database if not found.
+    
+    Args:
+        job_id: Unique job identifier
+        
+    Returns:
+        Job instance
+        
+    Raises:
+        HTTPException(404): If job not found in memory or database
+    """
+    if job_id in jobs_db:
+        return jobs_db[job_id]
+    
+    # FIX: Database fallback for multi-worker deployments
+    logger.debug(f"Job {job_id} not in memory, checking database")
+    job = await load_job_from_database(job_id)
+    
+    if job is not None:
+        # Restore to in-memory cache for faster subsequent access
+        await add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+        return job
+    
+    raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
 def detect_language_from_content(readme_content: str) -> str:
@@ -689,13 +723,10 @@ async def upload_files(
     - 404: Job not found
     - 400: No files provided
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
-
-    job = jobs_db[job_id]
     uploaded_files = []
 
     # Categorize uploaded files by type
@@ -822,8 +853,7 @@ async def get_generator_status(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     status = await generator_service.get_job_status(job_id)
     return status
@@ -850,8 +880,7 @@ async def get_generator_logs(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     logs = await generator_service.get_job_logs(job_id, limit=limit)
     return LogsResponse(job_id=job_id, logs=logs, count=len(logs))
@@ -886,11 +915,7 @@ async def clarify_requirements(
     - 400: No README content found or file read error
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        logger.warning(f"Clarify request for non-existent job: {job_id}")
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+    job = await _get_job_or_404(job_id)
     
     # Extract request parameters (with defaults for missing request)
     readme_content = (request.readme_content or "").strip() if request else ""
@@ -1086,8 +1111,7 @@ async def get_clarification_feedback(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     feedback = await generator_service.get_clarification_feedback(
         job_id=job_id,
@@ -1127,10 +1151,7 @@ async def submit_clarification_response(
     - 400: Invalid request (skip=false with no question_id/response)
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    job = jobs_db[job_id]
+    job = await _get_job_or_404(job_id)
 
     # Handle skip: mark clarification resolved and resume pipeline
     if request.skip:
@@ -1290,8 +1311,7 @@ async def run_codegen(
     - 404: Job not found
     - 403: Policy denied
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     result = await generator_service.run_codegen_agent(
         job_id=job_id,
@@ -1331,8 +1351,7 @@ async def run_testgen(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     result = await generator_service.run_testgen_agent(
         job_id=job_id,
@@ -1376,8 +1395,7 @@ async def run_deploy(
     - 404: Job not found
     - 403: Policy denied
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     result = await generator_service.run_deploy_agent(
         job_id=job_id,
@@ -1417,8 +1435,7 @@ async def run_docgen(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     result = await generator_service.run_docgen_agent(
         job_id=job_id,
@@ -1458,8 +1475,7 @@ async def run_critique(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     result = await generator_service.run_critique_agent(
         job_id=job_id,
@@ -1502,11 +1518,9 @@ async def run_full_pipeline(
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    job = await _get_job_or_404(job_id)
 
     # Check if job is already waiting for clarification
-    job = jobs_db[job_id]
     if job.status == JobStatus.NEEDS_CLARIFICATION:
         questions = job.metadata.get("clarification_questions", [])
         logger.info(
@@ -1576,10 +1590,7 @@ async def get_pipeline_status(job_id: str):
     **Errors:**
     - 404: Job not found
     """
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
-    job = jobs_db[job_id]
+    job = await _get_job_or_404(job_id)
     
     # If job is waiting for clarification, return questions
     if job.status == JobStatus.NEEDS_CLARIFICATION:
@@ -1684,14 +1695,7 @@ async def dispatch_job_to_sfe(job_id: str):
         )
     
     # Check if job exists
-    if job_id not in jobs_db:
-        logger.info(
-            f"Dispatch requested for non-existent job: {job_id}",
-            extra={"action": "dispatch_to_sfe", "error": "job_not_found"}
-        )
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    job = jobs_db[job_id]
+    job = await _get_job_or_404(job_id)
     
     # Validate job is in COMPLETED state
     if job.status != JobStatus.COMPLETED:

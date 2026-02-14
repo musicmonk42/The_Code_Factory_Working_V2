@@ -8,6 +8,7 @@ clarifier, ensuring proper routing through OmniCore.
 """
 
 import io
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -433,3 +434,167 @@ class TestReadmeContentLoading:
         result = await generator_service.get_readme_content(job_id)
         
         assert result is None
+
+
+class TestMultiWorkerDatabaseFallback:
+    """Test suite for multi-worker database fallback in generator endpoints."""
+    
+    @pytest.fixture
+    def job_in_database(self):
+        """Create a job that exists in database but not in memory."""
+        job = Job(
+            id="db-job-123",
+            status=JobStatus.RUNNING,
+            input_files=["README.md"],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            metadata={"language": "python"},
+        )
+        yield job
+        # Cleanup
+        if job.id in jobs_db:
+            del jobs_db[job.id]
+    
+    @patch("server.routers.generator.load_job_from_database")
+    @patch("server.routers.generator.add_job")
+    def test_get_pipeline_status_database_fallback(
+        self, mock_add_job, mock_load_job, client, job_in_database
+    ):
+        """Test get_pipeline_status falls back to database when job not in memory."""
+        # Ensure job is NOT in memory
+        if job_in_database.id in jobs_db:
+            del jobs_db[job_in_database.id]
+        
+        # Mock database returning the job
+        mock_load_job.return_value = job_in_database
+        mock_add_job.return_value = None
+        
+        response = client.get(f"/api/generator/{job_in_database.id}/pipeline")
+        
+        # Should succeed with database fallback
+        assert response.status_code == 200
+        
+        # Verify database was queried
+        mock_load_job.assert_called_once_with(job_in_database.id)
+        
+        # Verify job was restored to memory
+        mock_add_job.assert_called_once()
+    
+    @patch("server.routers.generator.load_job_from_database")
+    def test_upload_files_database_fallback(
+        self, mock_load_job, client, job_in_database
+    ):
+        """Test file upload falls back to database when job not in memory."""
+        # Ensure job is NOT in memory
+        if job_in_database.id in jobs_db:
+            del jobs_db[job_in_database.id]
+        
+        # Mock database returning the job
+        mock_load_job.return_value = job_in_database
+        
+        files = [
+            ("files", ("README.md", io.BytesIO(b"# Test Project"), "text/markdown"))
+        ]
+        
+        response = client.post(
+            f"/api/generator/{job_in_database.id}/upload",
+            files=files,
+        )
+        
+        # Should succeed with database fallback
+        assert response.status_code == 200
+        
+        # Verify database was queried
+        mock_load_job.assert_called_once_with(job_in_database.id)
+    
+    @patch("server.routers.generator.load_job_from_database")
+    def test_submit_clarification_response_database_fallback(
+        self, mock_load_job, client, job_in_database
+    ):
+        """Test clarification response submission falls back to database."""
+        # Set job to needs clarification state
+        job_in_database.status = JobStatus.NEEDS_CLARIFICATION
+        job_in_database.metadata["clarification_questions"] = [
+            {"id": "q1", "text": "Test question?"}
+        ]
+        
+        # Ensure job is NOT in memory
+        if job_in_database.id in jobs_db:
+            del jobs_db[job_in_database.id]
+        
+        # Mock database returning the job
+        mock_load_job.return_value = job_in_database
+        
+        response = client.post(
+            f"/api/generator/{job_in_database.id}/clarification/respond",
+            json={"skip": True},
+        )
+        
+        # Should succeed with database fallback
+        assert response.status_code == 200
+        
+        # Verify database was queried
+        mock_load_job.assert_called_once_with(job_in_database.id)
+    
+    @patch("server.routers.generator.load_job_from_database")
+    def test_job_not_found_in_memory_or_database(self, mock_load_job, client):
+        """Test 404 when job not found in both memory and database."""
+        nonexistent_id = "nonexistent-job-456"
+        
+        # Ensure job is NOT in memory
+        if nonexistent_id in jobs_db:
+            del jobs_db[nonexistent_id]
+        
+        # Mock database returning None (job not found)
+        mock_load_job.return_value = None
+        
+        response = client.get(f"/api/generator/{nonexistent_id}/pipeline")
+        
+        # Should return 404
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+        
+        # Verify database was queried
+        mock_load_job.assert_called_once_with(nonexistent_id)
+    
+    def test_job_in_memory_no_database_query(self, client, sample_job):
+        """Test that database is not queried when job is in memory."""
+        with patch("server.routers.generator.load_job_from_database") as mock_load_job:
+            response = client.get(f"/api/generator/{sample_job.id}/pipeline")
+            
+            # Should succeed without database query (job is in memory)
+            assert response.status_code == 200
+            
+            # Verify database was NOT queried (job found in memory)
+            mock_load_job.assert_not_called()
+    
+    @patch("server.routers.generator.load_job_from_database")
+    @patch("server.routers.generator.add_job")
+    def test_dispatch_to_sfe_database_fallback(
+        self, mock_add_job, mock_load_job, client, job_in_database
+    ):
+        """Test dispatch to SFE falls back to database."""
+        # Set job to completed state
+        job_in_database.status = JobStatus.COMPLETED
+        
+        # Ensure job is NOT in memory
+        if job_in_database.id in jobs_db:
+            del jobs_db[job_in_database.id]
+        
+        # Mock database returning the job
+        mock_load_job.return_value = job_in_database
+        mock_add_job.return_value = None
+        
+        with patch("server.services.dispatch_service.dispatch_job_completion") as mock_dispatch:
+            mock_dispatch.return_value = {"status": "dispatched"}
+            
+            response = client.post(f"/api/generator/{job_in_database.id}/dispatch")
+            
+            # Should succeed with database fallback
+            assert response.status_code == 200
+            
+            # Verify database was queried
+            mock_load_job.assert_called_once_with(job_in_database.id)
+            
+            # Verify job was restored to memory
+            mock_add_job.assert_called_once()
