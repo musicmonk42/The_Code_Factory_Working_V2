@@ -1218,10 +1218,15 @@ async def lifespan(app: FastAPI):
     logger.info("HTTP SERVER STARTING - Registering routers synchronously")
     logger.info("=" * 80)
     
-    # Initialize PostgreSQL job storage (async background operation)
+    # Initialize PostgreSQL job storage (must complete before accepting requests)
+    # This ensures jobs are persisted to PostgreSQL before any worker handles requests
     try:
         from server.storage import _initialize_postgresql
-        asyncio.create_task(_initialize_postgresql())
+        pg_available = await _initialize_postgresql()
+        if pg_available:
+            logger.info("✓ PostgreSQL job storage is ready (multi-worker safe)")
+        else:
+            logger.info("PostgreSQL not available, using in-memory storage only")
     except Exception as e:
         logger.warning(f"Failed to initialize PostgreSQL job storage: {e}")
     
