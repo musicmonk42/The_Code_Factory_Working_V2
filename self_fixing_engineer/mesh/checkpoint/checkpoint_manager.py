@@ -701,7 +701,16 @@ class CheckpointManager:
     async def _load_metadata(self) -> None:
         """Load checkpoint metadata for hash chain verification."""
         try:
-            available = await self.available()
+            # Call backend directly to avoid recursion during initialization
+            if self.backend_type == "local":
+                available = await self._local_available()
+            else:
+                backend_fn = self._backends.get(self.backend_type)
+                if backend_fn:
+                    available = await backend_fn(self, "available", "")
+                else:
+                    available = []
+
             for name in available[:100]:  # Limit initial load
                 try:
                     metadata = await self._get_checkpoint_metadata(name)
@@ -1315,8 +1324,8 @@ class CheckpointManager:
             else:
                 # Delegate to backend-specific health check
                 backend_fn = self._backends.get(self.backend_type)
-                if backend_fn:
-                    # Try a simple operation to verify connectivity
+                # Avoid recursion during initialization by checking self._initialized
+                if backend_fn and self._initialized:
                     try:
                         await asyncio.wait_for(self.available(), timeout=5.0)
                         health_status["checks"]["backend_connected"] = True
@@ -1326,22 +1335,29 @@ class CheckpointManager:
                     except Exception:
                         health_status["checks"]["backend_connected"] = False
                         health_status["status"] = "unhealthy"
+                else:
+                    # During initialization or backend not available
+                    health_status["checks"]["backend_connected"] = backend_fn is not None
 
             # Check encryption
-            health_status["checks"]["encryption_enabled"] = (
-                self.multi_fernet is not None
-            )
+            health_status["checks"]["encryption_enabled"] = self.multi_fernet is not None
 
             # Check cache
             health_status["checks"]["cache_enabled"] = CACHETOOLS_AVAILABLE
 
-            # Update metrics
+            # Update Prometheus metrics
             if PROMETHEUS_AVAILABLE:
                 BACKEND_HEALTH.labels(
                     backend=self.backend_type, tenant=Environment.TENANT
                 ).set(1 if health_status["status"] == "healthy" else 0)
 
+            return health_status
+
         except Exception as e:
+            logger.error(
+                f"Health check failed for {self.backend_type} backend: {e}",
+                extra={"tenant": Environment.TENANT}
+            )
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
 
@@ -1350,7 +1366,7 @@ class CheckpointManager:
                     backend=self.backend_type, tenant=Environment.TENANT
                 ).set(0)
 
-        return health_status
+            return health_status
 
     async def close(self) -> None:
         """
