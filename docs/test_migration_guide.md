@@ -41,7 +41,6 @@ This guide provides step-by-step instructions for migrating from the current com
 ### Prerequisites
 
 - ✅ Backup current configuration (git commit)
-- ✅ Review analysis report (`docs/test_analysis_report.md`)
 - ✅ Review testing guidelines (`docs/testing_guidelines.md`)
 - ✅ Ensure working test environment
 
@@ -546,7 +545,7 @@ git push origin main
 
 #### Step 5.4: Document Improvements
 
-Create `docs/test_optimization_results.md` with:
+Document optimization results with:
 - Before/after collection times
 - Before/after conftest.py line counts
 - CI workflow improvements
@@ -747,7 +746,6 @@ If needed, optimize `.github/workflows/pytest-all.yml`:
 If you encounter issues during migration:
 
 1. **Review documentation**:
-   - `docs/test_analysis_report.md`
    - `docs/testing_guidelines.md`
    - This migration guide
 

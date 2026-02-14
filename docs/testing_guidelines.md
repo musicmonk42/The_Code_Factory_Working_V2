@@ -1058,7 +1058,6 @@ k6 run loadtest.js
 
 - [SCALABLE_ARCHITECTURE.md](./SCALABLE_ARCHITECTURE.md) - Scaling tiers and architecture
 - [DEPLOYMENT.md](../DEPLOYMENT.md) - Production deployment guidelines
-- [ci_compatibility.md](./ci_compatibility.md) - CI/CD configuration
 
 ---
 
