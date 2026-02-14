@@ -75,6 +75,10 @@ class TestEncryptionKeyValidation:
             config = ArbiterConfig()
             assert config.ENCRYPTION_KEY is not None
             assert config.ENCRYPTION_KEY.get_secret_value() == key
+            
+            # Verify __-delimited env vars are still accessible in the environment
+            assert os.environ.get("KAFKA__BOOTSTRAP_SERVERS") == "localhost:9092"
+            assert os.environ.get("PYTHON__HASH_SEED") == "random"
 
     def test_encryption_key_invalid_length(self):
         """Test ENCRYPTION_KEY validation fails for invalid length."""
