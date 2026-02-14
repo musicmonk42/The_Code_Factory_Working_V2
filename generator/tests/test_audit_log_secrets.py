@@ -78,7 +78,8 @@ def mock_boto3(mocker):
     """Mocks boto3 client and exceptions."""
     mocker.patch.object(secrets, "HAS_BOTO3", True)
     mock_client = MagicMock()
-    mocker.patch("boto3.client", return_value=mock_client)
+    # Fix: Use MagicMock() that accepts any arguments and returns mock_client
+    mocker.patch("boto3.client", MagicMock(return_value=mock_client))
 
     # Mock botocore exceptions
     class MockClientError(Exception):
