@@ -146,6 +146,13 @@ from agents.testgen_agent.testgen_response_handler import (
     parse_llm_response,
 )
 
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _k in ["runner", "runner.tracer", "runner.runner_logging",
+           "runner.runner_metrics", "runner.llm_client",
+           "runner.runner_errors"]:
+    sys.modules.pop(_k, None)
+
 
 class TestLocalRegexSanitize:
     """Test the local regex sanitization function."""

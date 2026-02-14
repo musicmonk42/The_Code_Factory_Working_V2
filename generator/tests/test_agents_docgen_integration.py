@@ -76,6 +76,13 @@ from generator.agents.docgen_agent.docgen_agent import DocgenAgent, generate
 from generator.agents.docgen_agent.docgen_prompt import DocGenPromptAgent
 from generator.agents.docgen_agent.docgen_response_validator import ResponseValidator
 
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _k in ["runner", "runner.llm_client", "runner.runner_logging",
+           "runner.runner_metrics", "runner.runner_errors",
+           "runner.runner_file_utils", "runner.summarize_utils"]:
+    sys.modules.pop(_k, None)
+
 # =============================================================================
 # FIXTURES
 # =============================================================================

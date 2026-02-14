@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Mock runner modules before importing docgen_agent
+# Save originals so we can restore them after imports to avoid polluting other test modules
 sys.modules["runner"] = MagicMock()
 sys.modules["runner.llm_client"] = MagicMock()
 sys.modules["runner.runner_logging"] = MagicMock()
@@ -127,6 +128,13 @@ if _original_tiktoken is not None:
 else:
     # If tiktoken wasn't originally imported, remove the mock so it can be imported fresh
     del sys.modules["tiktoken"]
+
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _k in ["runner", "runner.llm_client", "runner.runner_logging",
+           "runner.runner_metrics", "runner.runner_file_utils",
+           "runner.summarize_utils", "runner.runner_errors"]:
+    sys.modules.pop(_k, None)
 
 # =============================================================================
 # FIXTURES

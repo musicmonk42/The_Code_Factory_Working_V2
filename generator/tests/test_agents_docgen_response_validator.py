@@ -248,6 +248,14 @@ with patch(
         scrub_text,
     )
 
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _k in ["runner", "runner.llm_client", "runner.runner_logging",
+           "runner.runner_metrics", "runner.runner_errors",
+           "runner.runner_file_utils", "runner.summarize_utils",
+           "runner.tracer"]:
+    sys.modules.pop(_k, None)
+
 
 # ============================================================================
 # FIXTURES

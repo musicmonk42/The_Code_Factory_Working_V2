@@ -29,6 +29,7 @@ mock_runner_security = MagicMock()
 mock_runner_security.redact_secrets = MagicMock(side_effect=lambda x, **kw: x)
 sys.modules["runner.runner_security_utils"] = mock_runner_security
 
+
 # 3. Mock Prometheus metrics
 mock_prometheus = MagicMock()
 mock_prometheus.__path__ = []  # Required for package imports
@@ -85,6 +86,11 @@ from generator.intent_parser.intent_parser import (
     get_torch,
     get_transformers,
 )
+
+# --- Restore runner modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _k in ["runner", "runner.runner_logging", "runner.runner_security_utils"]:
+    sys.modules.pop(_k, None)
 
 # Silence the logger for clean test output
 logging.disable(logging.CRITICAL)
