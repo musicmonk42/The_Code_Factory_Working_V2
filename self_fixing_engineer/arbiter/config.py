@@ -271,6 +271,11 @@ class ArbiterConfig(BaseSettings):
     # --- Core System Settings ---
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
     REDIS_POOL_SIZE: int = Field(default=10)
+    KAFKA_ENABLED: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("ENABLE_KAFKA", "KAFKA_ENABLED", "USE_KAFKA"),
+        description="Enable Kafka message bridge for event-driven orchestration"
+    )
     KAFKA_BOOTSTRAP_SERVERS: str = Field(
         default="localhost:9092"
     )

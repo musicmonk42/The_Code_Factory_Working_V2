@@ -127,7 +127,7 @@ ENABLE_HSM = "0"  # Set to "1" only if you have an actual HSM
 ENABLE_FEATURE_STORE = "0"  # Set to "1" only if you use Feast
 ENABLE_LIBVIRT = "0"  # Set to "1" only if you need virtualization
 ENABLE_REDIS = "1"
-ENABLE_KAFKA = "0"
+ENABLE_KAFKA = "1"  # Changed from "0" - Enable Kafka bridge for production event-driven orchestration
 
 # === CORS Configuration ===
 # CRITICAL: Set ALLOWED_ORIGINS for browser clients!
@@ -141,9 +141,9 @@ ENABLE_KAFKA = "0"
 # Uncomment and set in Railway UI (not here, since this is a template):
 # ALLOWED_ORIGINS = "https://your-frontend.railway.app,https://your-custom-domain.com"
 
-# === Kafka Configuration (disabled by default - uses Redis Streams instead) ===
-USE_KAFKA_INGESTION = "false"
-USE_KAFKA_AUDIT = "false"
+# === Kafka Configuration (enabled for production event-driven orchestration) ===
+USE_KAFKA_INGESTION = "true"  # Changed from "false" - Enable Kafka for event ingestion
+USE_KAFKA_AUDIT = "true"  # Changed from "false" - Enable Kafka for audit events
 # If using external Kafka provider (e.g., Upstash, Confluent Cloud), set:
 # KAFKA_BOOTSTRAP_SERVERS = "your-kafka-cluster:9092"
 # KAFKA_SASL_USERNAME = "your-username"
