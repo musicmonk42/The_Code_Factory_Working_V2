@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from server.dependencies import require_agents_ready
 from server.middleware import arbiter_policy_check
 from server.schemas import (
     ClarificationResponseRequest,
@@ -661,6 +662,7 @@ async def upload_files(
         ..., description="Files to upload (e.g., README.md, test files)"
     ),
     generator_service: GeneratorService = Depends(get_generator_service),
+    _: None = Depends(require_agents_ready),
 ) -> SuccessResponse:
     """
     Upload files for a generator job.

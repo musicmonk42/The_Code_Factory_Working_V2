@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from server.dependencies import require_agents_ready
 from server.schemas import (
     GeneratedFile,
     Job,
@@ -116,6 +117,7 @@ async def create_job(
     request: JobCreateRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    _: None = Depends(require_agents_ready),
 ) -> Job:
     """
     Create a new job.
