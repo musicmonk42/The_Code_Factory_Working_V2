@@ -1693,7 +1693,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                 if total_agents == 0:
                     checks["agents_loaded"] = "no_agents"
                     ready = False
-                    status_text = "degraded"
+                    status_text = "error"  # No agents means no functionality
                 elif agent_availability > 0:
                     checks["agents_loaded"] = "pass"
                     available = agent_status.get('available_agents', [])
@@ -1701,8 +1701,7 @@ async def readiness_check(response: Response) -> ReadinessResponse:
                     checks["agents_available"] = f"{len(available)}/{total_agents}"
                     if unavailable:
                         checks["agents_unavailable"] = ", ".join(unavailable)
-                        # If some agents are unavailable but core agents loaded, still mark as ready
-                        # This allows for degraded but functional operation
+                    # Agent loading completed and at least one agent available - ready
                 else:
                     checks["agents_loaded"] = "fail"
                     ready = False
