@@ -1361,12 +1361,12 @@ class CheckpointManager:
             logger.error(f"Health check failed: {e}")
             health_status["status"] = "unhealthy"
             health_status["error"] = str(e)
-            
+
             if PROMETHEUS_AVAILABLE:
                 BACKEND_HEALTH.labels(
                     backend=self.backend_type, tenant=Environment.TENANT
                 ).set(0)
-            
+
             return health_status
 
     async def close(self) -> None:
