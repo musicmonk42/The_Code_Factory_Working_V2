@@ -821,6 +821,10 @@ class TestIntegration:
         for event_type, details in events:
             await logger.log_event(event_type, details)
 
+        # Explicitly flush all handlers to ensure logs are written
+        for handler in logger._logger.handlers:
+            handler.flush()
+
         # Wait for batch processing
         await asyncio.sleep(0.2)
 
@@ -857,6 +861,10 @@ class TestIntegration:
         long_string = "x" * 150
         for i in range(3):
             await logger.log_event("event", {"data": long_string, "index": i})
+
+        # Explicitly flush all handlers to ensure logs are written
+        for handler in logger._logger.handlers:
+            handler.flush()
 
         # Manually close the handler to force rollover and compression
         for handler in logger._logger.handlers[:]:
