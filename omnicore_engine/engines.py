@@ -33,6 +33,20 @@ except ImportError as e:
             self.API_HOST = "0.0.0.0"
             self.API_PORT = 8000
             self.PLUGINS_ENABLED = True
+            # LLM configuration attributes
+            self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+            self.LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
+        
+        def get_api_key_for_provider(self, provider: str):
+            """Retrieve the API key for a given LLM provider from environment variables."""
+            if provider == "openai":
+                return os.getenv("OPENAI_API_KEY")
+            elif provider == "anthropic":
+                return os.getenv("ANTHROPIC_API_KEY")
+            elif provider in ("gemini", "google"):
+                return os.getenv("GOOGLE_API_KEY")
+            else:
+                return os.getenv("LLM_API_KEY")
 
 
 try:

@@ -287,6 +287,11 @@ uploads/
 /demo_*.py
 /demonstrate_*.py
 
+# Temporary markdown files (implementation notes, summaries, etc.)
+IMPLEMENTATION_SUMMARY.md
+*_SUMMARY.md
+*_NOTES.md
+
 # Test artifacts
 mock_history_updater.json
 test_subscription_fix.py
