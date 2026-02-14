@@ -62,8 +62,6 @@ for key, value in TEST_ENV.items():
 @pytest_asyncio.fixture
 async def redis_adapter():
     """Create MeshPubSub with Redis backend."""
-    from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
-
     # Mock Redis client
     mock_redis = AsyncMock()
     mock_redis.ping = AsyncMock(return_value=True)
@@ -81,8 +79,15 @@ async def redis_adapter():
     async def mock_from_url(*args, **kwargs):
         return mock_redis
 
-    # Patch redis.asyncio.from_url
-    with patch("redis.asyncio.from_url", side_effect=mock_from_url):
+    # Patch both the redis module availability check and from_url
+    with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
+        # Make redis module appear available
+        mock_redis_module.from_url = mock_from_url
+        # Ensure the module is truthy
+        mock_redis_module.__bool__ = lambda self: True
+        
+        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
+        
         adapter = MeshPubSub(
             backend_url="redis://localhost:6379/15",
             dead_letter_path=str(TEST_DIR / "redis_dlq.jsonl"),
@@ -198,8 +203,6 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_redis_connect(self, mock_metrics):
         """Test Redis connection."""
-        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
-
         # Mock Redis client
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock(return_value=True)
@@ -210,7 +213,15 @@ class TestConnection:
         async def mock_from_url(*args, **kwargs):
             return mock_redis
 
-        with patch("redis.asyncio.from_url", side_effect=mock_from_url):
+        # Patch both the redis module availability check and from_url
+        with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
+            # Make redis module appear available
+            mock_redis_module.from_url = mock_from_url
+            # Ensure the module is truthy
+            mock_redis_module.__bool__ = lambda self: True
+            
+            from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
+            
             adapter = MeshPubSub("redis://localhost:6379/15")
             await adapter.connect()
 
@@ -222,8 +233,6 @@ class TestConnection:
     @pytest.mark.asyncio
     async def test_connection_retry(self):
         """Test connection retry logic."""
-        from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
-
         call_count = 0
 
         async def flaky_connect(*args, **kwargs):
@@ -238,8 +247,15 @@ class TestConnection:
             mock_redis.wait_closed = AsyncMock()
             return mock_redis
 
-        # Use redis.asyncio.from_url
-        with patch("redis.asyncio.from_url", side_effect=flaky_connect):
+        # Patch both the redis module availability check and from_url
+        with patch("self_fixing_engineer.mesh.mesh_adapter.redis") as mock_redis_module:
+            # Make redis module appear available
+            mock_redis_module.from_url = flaky_connect
+            # Ensure the module is truthy
+            mock_redis_module.__bool__ = lambda self: True
+            
+            from self_fixing_engineer.mesh.mesh_adapter import MeshPubSub
+            
             adapter = MeshPubSub("redis://localhost:6379")
             await adapter.connect()
             assert call_count == 2
