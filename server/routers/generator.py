@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from server.dependencies import require_agents_ready
 from server.middleware import arbiter_policy_check
 from server.schemas import (
     ClarificationResponseRequest,
@@ -65,17 +66,6 @@ def get_generator_service() -> GeneratorService:
 
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
-
-
-async def require_agents_ready():
-    """
-    Dependency that ensures agents are loaded before accepting job submission.
-    
-    This is a wrapper that imports and calls the main require_agents_ready function.
-    We use a wrapper to avoid circular imports since main.py imports routers.
-    """
-    from server.main import require_agents_ready as _require_agents_ready
-    return await _require_agents_ready()
 
 
 def detect_language_from_content(readme_content: str) -> str:

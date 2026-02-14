@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from server.dependencies import require_agents_ready
 from server.schemas import (
     GeneratedFile,
     Job,
@@ -109,17 +110,6 @@ def get_generator_service() -> GeneratorService:
 def get_omnicore_service() -> OmniCoreService:
     """Dependency for OmniCoreService (uses singleton)."""
     return _get_omnicore_service()
-
-
-async def require_agents_ready():
-    """
-    Dependency that ensures agents are loaded before accepting job submission.
-    
-    This is a wrapper that imports and calls the main require_agents_ready function.
-    We use a wrapper to avoid circular imports since main.py imports routers.
-    """
-    from server.main import require_agents_ready as _require_agents_ready
-    return await _require_agents_ready()
 
 
 @router.post("/", response_model=Job, status_code=201)
