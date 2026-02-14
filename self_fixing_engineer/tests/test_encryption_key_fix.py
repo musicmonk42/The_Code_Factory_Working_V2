@@ -54,13 +54,14 @@ class TestEncryptionKeyValidation:
             config = ArbiterConfig(ENCRYPTION_KEY=SecretStr(key))
             assert config.ENCRYPTION_KEY.get_secret_value() == key
 
-    def test_encryption_key_with_underscore_delimited_env_vars(self):
-        """Test that __-delimited env vars don't interfere with ENCRYPTION_KEY."""
+    def test_config_init_with_double_underscore_env_vars(self):
+        """Test that config initializes correctly with __-delimited env vars present."""
         key = Fernet.generate_key().decode()
         
         # After removing env_nested_delimiter="__", __-delimited env vars like
-        # KAFKA__BOOTSTRAP_SERVERS should no longer cause pydantic-settings to
-        # pass dict objects as field values.
+        # KAFKA__BOOTSTRAP_SERVERS (Kafka config) and PYTHON__HASH_SEED (Python internals)
+        # should no longer cause pydantic-settings to pass dict objects as field values.
+        # These represent common patterns found in production environments.
         
         with patch.dict(os.environ, {
             "APP_ENV": "production",
