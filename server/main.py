@@ -1218,6 +1218,13 @@ async def lifespan(app: FastAPI):
     logger.info("HTTP SERVER STARTING - Registering routers synchronously")
     logger.info("=" * 80)
     
+    # Initialize PostgreSQL job storage (async background operation)
+    try:
+        from server.storage import _initialize_postgresql
+        asyncio.create_task(_initialize_postgresql())
+    except Exception as e:
+        logger.warning(f"Failed to initialize PostgreSQL job storage: {e}")
+    
     background_task = None
     
     # In test mode, load routers synchronously to ensure they're available immediately
