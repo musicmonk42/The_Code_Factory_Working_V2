@@ -246,6 +246,119 @@ Check the Railway logs for successful initialization:
 
 ---
 
+## Audit Crypto Configuration (CRITICAL)
+
+⚠️ **IMPORTANT**: Proper audit crypto configuration is essential for production deployments. The audit system provides cryptographic signatures for all security-relevant events.
+
+### Understanding Audit Crypto
+
+The audit crypto system uses a master encryption key to protect audit logs. This key can be:
+- **Stored in environment variables** (recommended for Railway)
+- **Encrypted with AWS KMS** (recommended for AWS deployments)
+
+### Option 1: Without AWS KMS (Recommended for Railway)
+
+This is the simplest approach for Railway deployments, where secrets are managed by Railway's environment variables.
+
+**Step 1: Generate a new master key**
+```bash
+python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+```
+
+**Step 2: Add to Railway environment variables**
+- `USE_ENV_SECRETS` = `true` (enables environment variable secret manager)
+- `AUDIT_CRYPTO_MODE` = `software` (default, can be omitted)
+- `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` = (paste the base64 key from step 1)
+- `AUDIT_CRYPTO_ALLOW_INIT_FAILURE` = `0` (fail fast in production if crypto cannot initialize)
+
+**Step 3: Verify configuration**
+```bash
+# Run the validation script before deployment
+python scripts/validate_secrets.py
+```
+
+### Option 2: With AWS KMS (Production AWS Deployments)
+
+Use this approach when deploying on AWS infrastructure with KMS for enhanced security.
+
+**Step 1: Generate a new master key**
+```bash
+python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+```
+
+**Step 2: Encrypt it with your KMS key**
+```bash
+# Replace 'alias/your-kms-key' with your actual KMS key ID or alias
+# Note: This uses bash process substitution. For other shells, save key to a file first.
+aws kms encrypt --key-id alias/your-kms-key \
+  --plaintext fileb://<(echo -n 'YOUR_MASTER_KEY_FROM_STEP_1' | base64 -d) \
+  --query CiphertextBlob --output text
+
+# Alternative using a temporary file (works in all shells):
+# echo -n 'YOUR_MASTER_KEY_FROM_STEP_1' | base64 -d > /tmp/key.bin
+# aws kms encrypt --key-id alias/your-kms-key \
+#   --plaintext fileb:///tmp/key.bin \
+#   --query CiphertextBlob --output text
+# rm /tmp/key.bin
+```
+
+**Step 3: Add to Railway environment variables**
+- `AWS_REGION` = `us-east-1` (or your AWS region)
+- `AWS_ACCESS_KEY_ID` = (your AWS access key with KMS decrypt permissions)
+- `AWS_SECRET_ACCESS_KEY` = (your AWS secret key)
+- `KMS_KEY_ID` = `alias/your-kms-key` (the same KMS key ID used in step 2)
+- `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` = (paste the ciphertext from step 2)
+- `AUDIT_CRYPTO_MODE` = `software` (default)
+- `AUDIT_CRYPTO_ALLOW_INIT_FAILURE` = `0` (fail fast in production)
+
+### Common Issues and Solutions
+
+#### KMS Key Mismatch Error
+
+If you see this error:
+```
+InvalidCiphertextException: Master key encrypted with different KMS key
+```
+
+**Cause**: The encrypted master key was encrypted with a different KMS key than the one currently configured.
+
+**Solution**:
+1. Verify your `KMS_KEY_ID` matches the key used to encrypt the master key
+2. If you've rotated KMS keys or migrated environments, regenerate the master key:
+   - Follow "Option 2: With AWS KMS" steps above
+   - Use your CURRENT KMS key ID
+   - Update `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` with the new ciphertext
+
+#### Switching Between KMS and Non-KMS
+
+**From KMS to Environment Variables (e.g., moving to Railway):**
+1. Generate a new plaintext master key (Option 1, Step 1)
+2. Set `USE_ENV_SECRETS=true`
+3. Remove AWS credentials if no longer needed
+4. Update `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` with the plaintext base64 key
+
+**From Environment Variables to KMS:**
+1. Generate a new master key and encrypt with KMS (Option 2)
+2. Remove `USE_ENV_SECRETS` or set to `false`
+3. Update `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` with the KMS ciphertext
+
+⚠️ **WARNING**: Changing the master key will invalidate existing encrypted audit data. Ensure backups are in place.
+
+### Validation
+
+Before deploying, validate your secrets configuration:
+
+```bash
+# Run validation script
+python scripts/validate_secrets.py
+
+# Expected output for successful validation:
+✓ All secrets validated successfully
+Application is ready to start
+```
+
+---
+
 ## Troubleshooting
 
 ### ❌ Critical: Secret Manager Error (NEW)
@@ -331,6 +444,25 @@ Verify in Railway UI:
 1. Verify PostgreSQL plugin is added and healthy
 2. Check `DATABASE_URL` is injected (should happen automatically)
 3. Restart the service if plugins were just added
+
+### ❌ Kafka Initialization Error
+
+**Error**:
+```
+AIOKafkaProducer.__init__() got an unexpected keyword argument 'retries'
+```
+
+**Cause**: The `aiokafka` library version in use does not support the `retries` parameter.
+
+**Solution**:
+This has been fixed in the codebase. The `retries` parameter has been removed from Kafka producer initialization as it's not supported in aiokafka 0.7.x. Retries are handled internally by aiokafka based on the `enable_idempotence` setting.
+
+If you still see this error:
+1. Ensure you're using the latest version of the code
+2. Verify the fix is present in `omnicore_engine/message_bus/integrations/kafka_bridge.py`
+3. Redeploy the application
+
+**Note**: Kafka is optional. If Kafka fails to initialize, the application will fall back to local queue mode (Redis-only). To disable Kafka entirely, set `ENABLE_KAFKA=0`.
 
 ### ❌ LLM Errors
 

@@ -241,8 +241,11 @@ env:
   TRANSFORMERS_CACHE: "/opt/huggingface_cache"
 
   # Audit Crypto Configuration
+  # CRITICAL: For production deployments, set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0
+  # to fail fast if crypto cannot be initialized. Change to "1" only for
+  # development/testing when audit crypto is intentionally disabled.
   AUDIT_CRYPTO_MODE: "software"
-  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
+  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"  # Set to "0" for production
 
   # Logging
   LOG_LEVEL: "INFO"
@@ -301,12 +304,22 @@ secrets:
     anthropicSecretName: "codefactory-secrets"
     anthropicSecretKey: "anthropic-api-key"
 
-  # Security keys
+  # Security keys (CRITICAL for production)
+  # Run 'make validate-secrets' to verify all required keys are set
   security:
     hmacKeySecretName: "codefactory-secrets"
     hmacKeySecretKey: "hmac-key"
     encryptionKeySecretName: "codefactory-secrets"
     encryptionKeySecretKey: "encryption-key"
+    # Audit crypto master key (base64-encoded)
+    # For non-KMS: Generate with python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
+    # For KMS: Encrypt the generated key with your KMS key
+    # See docs/AWS_KMS_TROUBLESHOOTING.md and docs/RAILWAY_DEPLOYMENT.md
+    auditCryptoMasterKeySecretName: "codefactory-secrets"
+    auditCryptoMasterKeySecretKey: "audit-crypto-master-key"
+    # Optional: KMS key ID for AWS KMS audit crypto
+    kmsKeyIdSecretName: "codefactory-secrets"
+    kmsKeyIdSecretKey: "kms-key-id"
 
 # Redis subchart configuration
 redis:
