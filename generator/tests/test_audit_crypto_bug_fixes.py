@@ -461,7 +461,10 @@ async def test_safe_sign_eager_secret_initialization():
     
     with patch.object(audit_crypto_factory, "_ensure_fallback_hmac_secret") as mock_ensure, \
          patch.object(audit_crypto_factory, "settings") as mock_settings, \
-         patch.object(audit_crypto_ops, "crypto_provider_factory") as mock_factory:
+         patch.object(audit_crypto_ops, "settings") as mock_ops_settings, \
+         patch.object(audit_crypto_ops, "crypto_provider_factory") as mock_factory, \
+         patch.object(audit_crypto_ops, "log_action", new_callable=AsyncMock) as mock_log, \
+         patch.object(audit_crypto_ops, "send_alert", new_callable=AsyncMock):
         
         # Setup mocks
         secret = b"test-secret-32-bytes-long-here!"
@@ -472,12 +475,16 @@ async def test_safe_sign_eager_secret_initialization():
         
         mock_ensure.side_effect = mock_ensure_secret
         
-        mock_settings.get.side_effect = lambda key, default=None: {
+        settings_dict = {
             "MAX_FALLBACK_ATTEMPTS_BEFORE_DISABLE": 100,
             "MAX_FALLBACK_ATTEMPTS_BEFORE_ALERT": 50,
             "FALLBACK_ALERT_INTERVAL_SECONDS": 300,
-        }.get(key, default)
+        }
+        mock_settings.get.side_effect = lambda key, default=None: settings_dict.get(key, default)
         mock_settings.PROVIDER_TYPE = "mock_provider"
+        # Also configure the ops-level settings mock (same reference)
+        mock_ops_settings.get.side_effect = lambda key, default=None: settings_dict.get(key, default)
+        mock_ops_settings.PROVIDER_TYPE = "mock_provider"
         
         mock_provider = MagicMock()
         mock_provider.sign = AsyncMock(side_effect=Exception("Primary failed"))

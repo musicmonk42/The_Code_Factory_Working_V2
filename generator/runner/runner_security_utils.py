@@ -845,10 +845,14 @@ async def encrypt_data(
     encrypted_bytes = await asyncio.to_thread(encryptor, data, key, "encrypt")
 
     # [FIX] Replaced add_provenance with log_audit_event
-    await log_audit_event(
-        action="security_encrypt",
-        data={"algorithm": algorithm, "output_bytes": len(encrypted_bytes)},
-    )
+    # Audit logging should not cause encryption to fail
+    try:
+        await log_audit_event(
+            action="security_encrypt",
+            data={"algorithm": algorithm, "output_bytes": len(encrypted_bytes)},
+        )
+    except Exception:
+        logger.debug("Audit logging failed for encrypt_data, continuing", exc_info=True)
     return encrypted_bytes  # type: ignore
 
 
@@ -873,10 +877,14 @@ async def decrypt_data(data: bytes, key: bytes, algorithm: str = "fernet") -> st
     decrypted_string = await asyncio.to_thread(decryptor, data, key, "decrypt")
 
     # [FIX] Replaced add_provenance with log_audit_event
-    await log_audit_event(
-        action="security_decrypt",
-        data={"algorithm": algorithm, "input_bytes": len(data)},
-    )
+    # Audit logging should not cause decryption to fail
+    try:
+        await log_audit_event(
+            action="security_decrypt",
+            data={"algorithm": algorithm, "input_bytes": len(data)},
+        )
+    except Exception:
+        logger.debug("Audit logging failed for decrypt_data, continuing", exc_info=True)
     return decrypted_string  # type: ignore
 
 
