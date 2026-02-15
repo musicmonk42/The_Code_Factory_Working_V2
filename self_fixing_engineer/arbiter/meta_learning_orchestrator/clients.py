@@ -27,6 +27,7 @@ except (ImportError, AttributeError) as e:
     SQLiteBackend = None
 
 from opentelemetry import trace
+from opentelemetry.trace import INVALID_SPAN
 from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import Counter, Histogram
 from tenacity import (
@@ -92,6 +93,19 @@ except ImportError:
 _pii_filter = PIIRedactorFilter()
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_get_current_span():
+    """Safely get the current OpenTelemetry span, returning INVALID_SPAN on failure.
+
+    Guards against corrupted OTel context (e.g. when ``get_current()`` returns
+    ``None`` due to test pollution or runtime issues).
+    """
+    try:
+        return trace.get_current_span()
+    except AttributeError:
+        return INVALID_SPAN
+
 
 # --- Prometheus Metrics ---
 HTTP_CALLS_TOTAL = Counter(
@@ -319,7 +333,7 @@ class MLPlatformClient(_BaseHTTPClient):
     @_with_client_logging_and_metrics("train_ml_model", {"ml.action": "train"})
     async def train_model(self, training_data: Dict[str, Any]) -> str:
         """Triggers an ML model training job via HTTP POST."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.training_params", str(training_data.get("params", {})))
 
         response_data = await self._request_with_redaction(
@@ -339,7 +353,7 @@ class MLPlatformClient(_BaseHTTPClient):
     @_with_client_logging_and_metrics("get_training_status", {"ml.action": "status"})
     async def get_training_status(self, job_id: str) -> Dict[str, Any]:
         """Gets the status of an ML training job via HTTP GET."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.job_id", job_id)
 
         response_data = await self._request_with_redaction(
@@ -359,7 +373,7 @@ class MLPlatformClient(_BaseHTTPClient):
         self, model_id: str, eval_data: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Evaluates an ML model via HTTP POST."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.model_id", model_id)
 
         payload = {"model_id": model_id, "eval_data": eval_data}
@@ -378,7 +392,7 @@ class MLPlatformClient(_BaseHTTPClient):
     @_with_client_logging_and_metrics("deploy_ml_model", {"ml.action": "deploy"})
     async def deploy_model(self, model_id: str, version: str) -> bool:
         """Deploys an ML model to production via HTTP POST."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.model_id", model_id)
         span.set_attribute("ml.version", version)
 
@@ -396,7 +410,7 @@ class MLPlatformClient(_BaseHTTPClient):
     @_with_client_logging_and_metrics("delete_ml_model", {"ml.action": "delete"})
     async def delete_model(self, model_id: str) -> bool:
         """Deletes an ML model via HTTP DELETE."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.model_id", model_id)
 
         response_data = await self._request_with_redaction(
@@ -419,7 +433,7 @@ class MLPlatformClient(_BaseHTTPClient):
     )
     async def get_evaluation_metrics(self, model_id: str) -> Dict[str, Any]:
         """Gets evaluation metrics for a model via HTTP GET."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("ml.model_id", model_id)
 
         response_data = await self._request_with_redaction(
@@ -446,7 +460,7 @@ class AgentConfigurationService(_BaseHTTPClient):
         self, weights: Dict[str, float], version: str
     ) -> bool:
         """Updates prioritization weights for DecisionOptimizer via HTTP."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("config.version", version)
 
         payload = {"weights": weights, "version": version}
@@ -466,7 +480,7 @@ class AgentConfigurationService(_BaseHTTPClient):
     )
     async def update_policy_rules(self, rules: Dict[str, Any], version: str) -> bool:
         """Updates policy rules for PolicyEngine via HTTP."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("config.version", version)
 
         payload = {"rules": rules, "version": version}
@@ -484,7 +498,7 @@ class AgentConfigurationService(_BaseHTTPClient):
     @_with_client_logging_and_metrics("update_rl_policy", {"config.type": "rl_policy"})
     async def update_rl_policy(self, policy_model_id: str, version: str) -> bool:
         """Deploys a new RL policy model to relevant agents via HTTP."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("config.model_id", policy_model_id)
         span.set_attribute("config.version", version)
 
@@ -505,7 +519,7 @@ class AgentConfigurationService(_BaseHTTPClient):
     )
     async def delete_config(self, config_type: str, config_id: str) -> bool:
         """Deletes a specific configuration by type and ID."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("config.type", config_type)
         span.set_attribute("config.id", config_id)
 
@@ -529,7 +543,7 @@ class AgentConfigurationService(_BaseHTTPClient):
         self, config_type: str, config_id: str, version: str
     ) -> bool:
         """Rolls back a specific configuration to a previous version."""
-        span = trace.get_current_span()
+        span = _safe_get_current_span()
         span.set_attribute("config.type", config_type)
         span.set_attribute("config.id", config_id)
         span.set_attribute("config.rollback_version", version)
