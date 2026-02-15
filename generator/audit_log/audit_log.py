@@ -1234,7 +1234,7 @@ AUDIT_LOG = initialize_audit_log_instance()
 # --- FIX 3.7: Backwards-compatible module-level helpers for tests and integrations ---
 async def log_action(
     action: str,
-    details: Any,
+    details: Any = None,
     requirement_id: Optional[str] = None,
     code_files: Optional[Dict[str, str]] = None,
     test_files: Optional[Dict[str, str]] = None,
@@ -1242,12 +1242,24 @@ async def log_action(
     credentials: Optional[HTTPAuthorizationCredentials] = None,
     generator: Optional[str] = None,
     request: Optional[Request] = None,
+    **kwargs,
 ) -> None:
     """
     Backwards-compatible helper used by existing tests and integrations.
 
     Delegates directly to the global AUDIT_LOG instance.
+    Accepts extra keyword arguments for convenience (e.g., status, severity)
+    and packages them into the details dict.
     """
+    # Package extra kwargs into details if provided
+    if kwargs:
+        if details is None:
+            details = kwargs
+        elif isinstance(details, dict):
+            details = {**details, **kwargs}
+        else:
+            details = {"original_details": details, **kwargs}
+
     # Ensure AUDIT_LOG is started if it hasn't been by a calling environment (e.g. standalone test)
     if (
         not hasattr(AUDIT_LOG, "_self_heal_task")
