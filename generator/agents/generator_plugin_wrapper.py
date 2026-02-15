@@ -132,10 +132,18 @@ _created_metrics = {}  # Cache of created metrics
 
 def get_or_create_metric(metric_class, name, description, labelnames=None, **kwargs):
     """Thread-safe metric creation that avoids duplicate registration."""
+    from prometheus_client import REGISTRY
+
     with _metrics_lock:
         # Check our cache first
         if name in _created_metrics:
             return _created_metrics[name]
+
+        # Check if already registered in the default Prometheus registry
+        if name in REGISTRY._names_to_collectors:
+            existing = REGISTRY._names_to_collectors[name]
+            _created_metrics[name] = existing
+            return existing
 
         # Create the metric and cache it
         metric = metric_class(name, description, labelnames=labelnames, **kwargs)

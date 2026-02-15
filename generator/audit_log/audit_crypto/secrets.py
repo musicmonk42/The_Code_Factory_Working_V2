@@ -170,9 +170,11 @@ class AWSSecretsManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="aws_secrets_manager",
-                    status="success",
+                    {
+                        "secret_name": secret_name,
+                        "source": "aws_secrets_manager",
+                        "status": "success",
+                    },
                 )
                 return secret_value
             else:
@@ -181,9 +183,11 @@ class AWSSecretsManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="aws_secrets_manager",
-                    status="empty_or_malformed",
+                    {
+                        "secret_name": secret_name,
+                        "source": "aws_secrets_manager",
+                        "status": "empty_or_malformed",
+                    },
                 )
                 return None
 
@@ -200,10 +204,12 @@ class AWSSecretsManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="aws_secrets_manager",
-                    status="not_found",
-                    error=str(e),
+                    {
+                        "secret_name": secret_name,
+                        "source": "aws_secrets_manager",
+                        "status": "not_found",
+                        "error": str(e),
+                    },
                 )
                 raise SecretNotFoundError(f"Secret '{secret_name}' not found.") from e
             else:
@@ -218,10 +224,12 @@ class AWSSecretsManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="aws_secrets_manager",
-                    status="error",
-                    error=str(e),
+                    {
+                        "secret_name": secret_name,
+                        "source": "aws_secrets_manager",
+                        "status": "error",
+                        "error": str(e),
+                    },
                 )
                 raise SecretError(f"AWS Secrets Manager client error: {e}") from e
         except BotoCoreError as e:
@@ -235,10 +243,12 @@ class AWSSecretsManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="aws_secrets_manager",
-                status="sdk_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "aws_secrets_manager",
+                    "status": "sdk_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"AWS SDK error: {e}") from e
         except Exception as e:
@@ -252,10 +262,12 @@ class AWSSecretsManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="aws_secrets_manager",
-                status="unexpected_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "aws_secrets_manager",
+                    "status": "unexpected_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"Unexpected error in AWSSecretsManager: {e}") from e
 
@@ -297,9 +309,11 @@ class GCPSecretManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="gcp_secret_manager",
-                    status="success",
+                    {
+                        "secret_name": secret_name,
+                        "source": "gcp_secret_manager",
+                        "status": "success",
+                    },
                 )
                 return secret_value
             else:
@@ -308,9 +322,11 @@ class GCPSecretManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="gcp_secret_manager",
-                    status="empty",
+                    {
+                        "secret_name": secret_name,
+                        "source": "gcp_secret_manager",
+                        "status": "empty",
+                    },
                 )
                 return None
         except NotFound as e:
@@ -323,10 +339,12 @@ class GCPSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="gcp_secret_manager",
-                status="not_found",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "gcp_secret_manager",
+                    "status": "not_found",
+                    "error": str(e),
+                },
             )
             raise SecretNotFoundError(f"Secret '{secret_name}' not found.") from e
         except GoogleAPIError as e:
@@ -340,10 +358,12 @@ class GCPSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="gcp_secret_manager",
-                status="api_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "gcp_secret_manager",
+                    "status": "api_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"GCP Secret Manager API error: {e}") from e
         except Exception as e:
@@ -357,10 +377,12 @@ class GCPSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="gcp_secret_manager",
-                status="unexpected_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "gcp_secret_manager",
+                    "status": "unexpected_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"Unexpected error in GCPSecretManager: {e}") from e
 
@@ -408,18 +430,22 @@ class VaultSecretManager(SecretManager):
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="vault",
-                    status="success",
+                    {
+                        "secret_name": secret_name,
+                        "source": "vault",
+                        "status": "success",
+                    },
                 )
                 return secret_value
             else:
                 self.logger.warning(f"Secret '{secret_name}' from Vault is empty.")
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="vault",
-                    status="empty",
+                    {
+                        "secret_name": secret_name,
+                        "source": "vault",
+                        "status": "empty",
+                    },
                 )
                 return None
         except InvalidRequest as e:
@@ -432,10 +458,12 @@ class VaultSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="vault",
-                status="not_found",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "vault",
+                    "status": "not_found",
+                    "error": str(e),
+                },
             )
             raise SecretNotFoundError(f"Secret '{secret_name}' not found.") from e
         except Forbidden as e:
@@ -448,10 +476,12 @@ class VaultSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="vault",
-                status="permission_denied",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "vault",
+                    "status": "permission_denied",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"Vault permission denied: {e}") from e
         except Exception as e:
@@ -465,10 +495,12 @@ class VaultSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="vault",
-                status="unexpected_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "source": "vault",
+                    "status": "unexpected_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"Unexpected error in VaultSecretManager: {e}") from e
 
@@ -522,9 +554,11 @@ class EnvVarSecretManager(SecretManager):
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="environment_variables",
-                status="not_found",
+                {
+                    "secret_name": secret_name,
+                    "source": "environment_variables",
+                    "status": "not_found",
+                },
             )
             raise SecretNotFoundError(
                 f"Environment variable '{secret_name}' not found."
@@ -535,10 +569,12 @@ class EnvVarSecretManager(SecretManager):
             self.logger.info(f"EnvVarSecretManager: Using Railway/PaaS mode for {secret_name}")
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                source="environment_variables",
-                status="success",
-                mode="railway_paas",
+                {
+                    "secret_name": secret_name,
+                    "source": "environment_variables",
+                    "status": "success",
+                    "mode": "railway_paas",
+                },
             )
             # For base64-encoded master keys, decode from base64
             if secret_name == "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64":
@@ -553,10 +589,12 @@ class EnvVarSecretManager(SecretManager):
                     self.logger.info(f"No AWS credentials found, treating {secret_name} as plaintext")
                     await log_action(
                         "secret_access",
-                        secret_name=secret_name,
-                        source="environment_variables",
-                        status="success",
-                        mode="plaintext_fallback",
+                        {
+                            "secret_name": secret_name,
+                            "source": "environment_variables",
+                            "status": "success",
+                            "mode": "plaintext_fallback",
+                        },
                     )
                     # Decode from base64 since it's stored as base64 in env var
                     return base64.b64decode(secret_value)
@@ -577,10 +615,12 @@ class EnvVarSecretManager(SecretManager):
                     self.logger.info(f"Successfully decrypted {secret_name} using KMS")
                     await log_action(
                         "secret_access",
-                        secret_name=secret_name,
-                        source="environment_variables",
-                        status="success",
-                        mode="kms_decrypted",
+                        {
+                            "secret_name": secret_name,
+                            "source": "environment_variables",
+                            "status": "success",
+                            "mode": "kms_decrypted",
+                        },
                     )
                     # KMS returns plaintext bytes directly - return as-is
                     return plaintext
@@ -590,11 +630,13 @@ class EnvVarSecretManager(SecretManager):
                 self.logger.warning(f"KMS decryption failed for {secret_name}, using as plaintext: {e}")
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    source="environment_variables",
-                    status="success",
-                    mode="plaintext_fallback_after_kms_error",
-                    error=str(e),
+                    {
+                        "secret_name": secret_name,
+                        "source": "environment_variables",
+                        "status": "success",
+                        "mode": "plaintext_fallback_after_kms_error",
+                        "error": str(e),
+                    },
                 )
                 # Decode from base64 since it's stored as base64 in env var
                 return base64.b64decode(secret_value)
@@ -605,9 +647,11 @@ class EnvVarSecretManager(SecretManager):
         )
         await log_action(
             "secret_access",
-            secret_name=secret_name,
-            source="environment_variables",
-            status="success",
+            {
+                "secret_name": secret_name,
+                "source": "environment_variables",
+                "status": "success",
+            },
         )
         return secret_value.encode("utf-8")
 
@@ -637,9 +681,11 @@ class DummySecretManager(SecretManager):
         )
         await log_action(
             "secret_access",
-            secret_name=secret_name,
-            source="dummy_secret_manager",
-            status="not_available",
+            {
+                "secret_name": secret_name,
+                "source": "dummy_secret_manager",
+                "status": "not_available",
+            },
         )
         raise SecretNotFoundError(
             f"Dummy secret manager: secret '{secret_name}' not available."
@@ -791,9 +837,11 @@ async def _get_secret_with_retries_and_rate_limit(
         )
         await log_action(
             "secret_access",
-            secret_name=secret_name,
-            status="rate_limited",
-            reason="too_many_attempts",
+            {
+                "secret_name": secret_name,
+                "status": "rate_limited",
+                "reason": "too_many_attempts",
+            },
         )
         raise SecretAccessRateLimitExceeded(
             f"Rate limit exceeded for secret '{secret_name}'."
@@ -830,9 +878,11 @@ async def _get_secret_with_retries_and_rate_limit(
                 )
                 await log_action(
                     "secret_access",
-                    secret_name=secret_name,
-                    status="failed_after_retries",
-                    error=str(e),
+                    {
+                        "secret_name": secret_name,
+                        "status": "failed_after_retries",
+                        "error": str(e),
+                    },
                 )
                 raise SecretError(
                     f"Failed to retrieve secret '{secret_name}': {e}"
@@ -847,10 +897,12 @@ async def _get_secret_with_retries_and_rate_limit(
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                status="retry_attempt",
-                attempt=attempt,
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "status": "retry_attempt",
+                    "attempt": attempt,
+                    "error": str(e),
+                },
             )
             await asyncio.sleep(delay)
         except Exception as e:  # Catch any other unexpected exceptions
@@ -860,9 +912,11 @@ async def _get_secret_with_retries_and_rate_limit(
             )
             await log_action(
                 "secret_access",
-                secret_name=secret_name,
-                status="unexpected_error",
-                error=str(e),
+                {
+                    "secret_name": secret_name,
+                    "status": "unexpected_error",
+                    "error": str(e),
+                },
             )
             raise SecretError(f"Unexpected error during secret retrieval: {e}") from e
     return None  # Should not be reached if max_retries > 0 and no re-raise on final attempt
@@ -922,9 +976,11 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
             )
             await log_action(
                 "secret_access",
-                secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64",
-                status="decoding_error",
-                reason="too_short",
+                {
+                    "secret_name": "AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64",
+                    "status": "decoding_error",
+                    "reason": "too_short",
+                },
             )
             raise SecretDecodingError("Decoded fallback HMAC secret is too short.")
         logger.debug("Fallback HMAC secret successfully retrieved and decoded.")
@@ -936,9 +992,11 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
         )
         await log_action(
             "secret_access",
-            secret_name="AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64",
-            status="decoding_error",
-            error=str(e),
+            {
+                "secret_name": "AUDIT_CRYPTO_FALLBACK_HMAC_SECRET_B64",
+                "status": "decoding_error",
+                "error": str(e),
+            },
         )
         raise SecretDecodingError(
             f"Failed to decode FALLBACK_HMAC_SECRET_B64: {e}"
@@ -995,9 +1053,11 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
         )
         await log_action(
             "secret_access",
-            secret_name="AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64",
-            status="decoding_error",
-            error=str(e),
+            {
+                "secret_name": "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64",
+                "status": "decoding_error",
+                "error": str(e),
+            },
         )
         raise SecretDecodingError(
             f"Invalid base64 encoding for KMS master key ciphertext: {e}"
