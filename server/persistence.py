@@ -384,40 +384,44 @@ async def load_job_from_database(job_id: str) -> Optional[Job]:
 
 async def delete_job_from_database(job_id: str) -> bool:
     """
-    Mark a job for deletion in the database with retry logic.
+    Perform a hard delete of a job from the database with retry logic.
     
-    This function marks jobs with low energy (0.0) for eventual cleanup
-    rather than immediately deleting them. This approach provides:
-    - Audit trail preservation (jobs can be inspected after deletion)
-    - Recovery window for accidental deletions
-    - Consistent with database cleanup patterns
+    This function permanently removes the job record from the database
+    to prevent deleted jobs from reappearing after server restarts.
+    Unlike soft delete (setting energy=0), this performs an actual row deletion.
     
-    Note: This is a soft delete operation. The Database class may have
-    scheduled cleanup tasks that purge low-energy entries. For true
-    hard deletion, a separate purge operation would be needed.
+    This approach:
+    - Prevents "zombie" jobs from reappearing after restart
+    - Ensures job recovery query doesn't resurrect deleted jobs
+    - Provides clean deletion without relying on cleanup tasks
+    
+    Note: This is a hard delete operation. The job record is permanently
+    removed from the database. For audit trail requirements, consider
+    implementing separate audit logging before calling this function.
     
     Args:
         job_id: Unique job identifier to delete
         
     Returns:
-        True if marked successfully, False otherwise
+        True if deleted successfully or if job doesn't exist (idempotent), False on error
         
     Industry Standards:
-        - Soft delete pattern (Martin Fowler, Patterns of Enterprise Application Architecture)
-        - Audit trail preservation (SOC 2 Type II, GDPR Article 30)
-        - Recovery window (NIST SP 800-34: Contingency Planning)
+        - Hard delete for immediate removal (prevents resurrection issues)
+        - Idempotent operations (safe to call multiple times)
+        - Retry with exponential backoff for database operations
         
     Alternative Implementation:
-        For stricter deletion requirements (GDPR "right to erasure"):
+        For audit trail preservation (GDPR Article 30, SOC 2 Type II):
         ```python
-        # Hard delete approach
-        await _database.delete_agent_state(agent_name)
+        # Soft delete approach (requires cleanup task)
+        state.energy = 0.0
+        await session.commit()
         ```
         
     Example:
         >>> success = await delete_job_from_database("abc123")
         >>> if success:
-        ...     logger.info("Job marked for deletion")
+        ...     logger.info("Job permanently deleted")
     """
     if not _use_database or not _database:
         logger.debug(f"Database not available, cannot delete job {job_id}")
@@ -426,31 +430,26 @@ async def delete_job_from_database(job_id: str) -> bool:
     async def _delete_operation():
         """
         Inner operation that will be retried.
-        
-        Note: Database errors will be caught and retried by the
-        _retry_with_backoff wrapper function. No additional error
-        handling is needed here.
+        Performs a hard delete (removes the row from the database).
         """
-        # Query generator_agent_state table directly by name
         from omnicore_engine.database.models import GeneratorAgentState
-        from sqlalchemy import select
+        from sqlalchemy import select, delete as sa_delete
         
         agent_name = f"job_{job_id}"
         
         async with _database.AsyncSessionLocal() as session:
+            # Hard delete - actually remove the row from the database
             result = await session.execute(
-                select(GeneratorAgentState).filter_by(name=agent_name)
+                sa_delete(GeneratorAgentState).where(
+                    GeneratorAgentState.name == agent_name
+                )
             )
-            state = result.scalars().first()
-            
-            if not state:
-                logger.debug(f"Job {job_id} not found in database (already deleted or never existed)")
-                return True  # Idempotent: success even if not found
-            
-            # Mark with low energy for cleanup (soft delete)
-            state.energy = 0.0
             await session.commit()
-            logger.debug(f"Marked job {job_id} for cleanup in database (energy=0)")
+            rows_deleted = result.rowcount
+            if rows_deleted > 0:
+                logger.info(f"Hard-deleted job {job_id} from database ({rows_deleted} row(s) removed)")
+            else:
+                logger.debug(f"Job {job_id} not found in database (already deleted or never existed)")
             return True
     
     try:

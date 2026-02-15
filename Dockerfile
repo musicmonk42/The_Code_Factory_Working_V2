@@ -359,15 +359,16 @@ USER appuser
 EXPOSE 8080 9090
 
 # Docker healthcheck to verify the container is ready to serve traffic
-# Uses /ready endpoint which checks both API health AND agent readiness
-# This ensures container orchestrators don't route traffic before agents are loaded
+# Uses /health endpoint which checks if the process is alive (liveness probe)
+# This ensures container orchestrators can detect healthy containers quickly
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
-# Starts checking after 120 seconds to allow startup time (agents load in background)
+# Starts checking after 180 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost:${PORT:-8080}/ready || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
-# Multi-worker mode (4 workers) for production deployment to handle concurrent requests and prevent event loop saturation
+# Multi-worker mode (2 workers) for production deployment to handle concurrent requests and prevent event loop saturation
+# Reduced from 4 to 2 workers to speed up startup since each worker runs full initialization
 # Using server/run.py which respects PORT environment variable (defaults to 8000, Railway sets to 8080)
-CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "4"]
+CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "2"]
