@@ -142,9 +142,11 @@ async def test_bug2_auto_recovery_from_disabled_state():
         assert signature == b"success-signature"
         
         # Verify warning log was called for recovery
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if "Auto-recovery" in str(call)]
-        assert len(warning_calls) > 0
+        assert mock_logger.warning.called
+        warning_call_args = mock_logger.warning.call_args_list
+        recovery_warnings = [call for call in warning_call_args 
+                            if len(call[0]) > 0 and "Auto-recovery" in call[0][0]]
+        assert len(recovery_warnings) > 0
 
 
 # --- Bug 3 & 4 Tests: audit_crypto_factory.py ---
@@ -230,9 +232,11 @@ async def test_bug4_circuit_breaker_opens_after_failures():
         assert audit_crypto_factory._alert_circuit_open_until == current_time + 60
         
         # Verify warning was logged about circuit opening
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if "Opening circuit breaker" in str(call)]
-        assert len(warning_calls) > 0
+        assert mock_logger.warning.called
+        warning_call_args = mock_logger.warning.call_args_list
+        circuit_warnings = [call for call in warning_call_args 
+                           if len(call[0]) > 0 and "Opening circuit breaker" in call[0][0]]
+        assert len(circuit_warnings) > 0
         
         # Reset mocks
         mock_retry.reset_mock()
@@ -310,9 +314,11 @@ async def test_bug5_placeholder_endpoint_warning():
         )
         
         # Verify warning was logged
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if "placeholder" in str(call)]
-        assert len(warning_calls) > 0
+        assert mock_logger.warning.called
+        warning_call_args = mock_logger.warning.call_args_list
+        placeholder_warnings = [call for call in warning_call_args 
+                               if len(call[0]) > 0 and "placeholder" in call[0][0]]
+        assert len(placeholder_warnings) > 0
         
         # Reset mock
         mock_logger.reset_mock()
@@ -323,9 +329,10 @@ async def test_bug5_placeholder_endpoint_warning():
         )
         
         # Verify warning was NOT logged again (rate limited)
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if "placeholder" in str(call)]
-        assert len(warning_calls) == 0
+        warning_call_args = mock_logger.warning.call_args_list
+        placeholder_warnings = [call for call in warning_call_args 
+                               if len(call[0]) > 0 and "placeholder" in call[0][0]]
+        assert len(placeholder_warnings) == 0
         
         # Send alert after 301 seconds
         mock_time.time.return_value = current_time + 301
@@ -334,6 +341,7 @@ async def test_bug5_placeholder_endpoint_warning():
         )
         
         # Verify warning was logged again
-        warning_calls = [call for call in mock_logger.warning.call_args_list 
-                        if "placeholder" in str(call)]
-        assert len(warning_calls) > 0
+        warning_call_args = mock_logger.warning.call_args_list
+        placeholder_warnings = [call for call in warning_call_args 
+                               if len(call[0]) > 0 and "placeholder" in call[0][0]]
+        assert len(placeholder_warnings) > 0
