@@ -1379,9 +1379,20 @@ class Clarifier:
             file_mode = os.stat(self.config.HISTORY_FILE).st_mode
             if file_mode & (stat.S_IRWXO | stat.S_IRWXG):
                 self.logger.critical(
-                    f"Insecure history file permissions: {oct(file_mode)}. Must be user-only."
+                    f"SECURITY WARNING: Insecure history file permissions: {oct(file_mode)}. Must be user-only. "
+                    f"Attempting to fix permissions automatically."
                 )
-                sys.exit(1)
+                # Attempt to fix permissions automatically instead of crashing
+                try:
+                    os.chmod(self.config.HISTORY_FILE, 0o600)  # Set to user read/write only
+                    self.logger.info("Fixed history file permissions to 0o600 (user read/write only)")
+                except Exception as chmod_error:
+                    self.logger.error(
+                        f"Failed to fix permissions on {self.config.HISTORY_FILE}: {chmod_error}. "
+                        f"Starting with empty history for security."
+                    )
+                    self.history = []
+                    return
             with open(self.config.HISTORY_FILE, "rb") as f:
                 data = f.read()
             if self.config.HISTORY_COMPRESSION:
