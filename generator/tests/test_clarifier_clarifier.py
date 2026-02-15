@@ -92,6 +92,12 @@ patcher_fernet.start()
 patcher_sys_exit.start()
 patcher_get_config.start()
 
+# Also patch get_fernet to return mock_fernet_instance directly
+patcher_get_fernet = patch(
+    "generator.clarifier.clarifier.get_fernet", return_value=mock_fernet_instance
+)
+patcher_get_fernet.start()
+
 # Mock the sub-module imports that might fail
 patcher_llm = patch("generator.clarifier.clarifier.GrokLLM")
 patcher_prioritizer = patch("generator.clarifier.clarifier.DefaultPrioritizer")

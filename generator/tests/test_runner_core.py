@@ -74,9 +74,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             timeout=300,
         )
 
-        # Clear Prometheus registry
-        for collector in list(REGISTRY._collector_to_names):
-            REGISTRY.unregister(collector)
+        # Note: Don't clear Prometheus registry as it breaks metric references used by runner_core
 
         # Save original ALL_BACKENDS and mock it
         self.original_backends = dict(ALL_BACKENDS)
