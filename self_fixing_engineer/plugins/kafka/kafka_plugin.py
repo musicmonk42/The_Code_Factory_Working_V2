@@ -144,19 +144,23 @@ except ImportError:
 
 # ---- Optional plugin registry (no-op if unavailable)
 try:
-    from omnicore_engine.plugin_registry import PlugInKind, plugin
+    from omnicore_engine.plugin_base import PlugInKind
+    from omnicore_engine.plugin_registry import plugin
 except ImportError:
+    try:
+        from omnicore_engine.plugin_registry import PlugInKind, plugin
+    except ImportError:
 
-    def plugin(**_kwargs):
-        def _decorator(cls):
-            return cls
+        def plugin(**_kwargs):
+            def _decorator(cls):
+                return cls
 
-        return _decorator
+            return _decorator
 
-    class PlugInKind:
-        SINK = "sink"
-        INTEGRATION = "integration"
-        FIX = "FIX"
+        class PlugInKind:
+            SINK = "sink"
+            INTEGRATION = "integration"
+            FIX = "fix"
 
 
 # ---- Optional OpenTelemetry
