@@ -10,6 +10,7 @@ All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER
 
 import asyncio
 import base64
+import binascii
 import concurrent.futures
 import logging
 import os
@@ -988,7 +989,7 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
         ciphertext_blob = base64.b64decode(encrypted_data_key_bytes)
         logger.debug("AWS KMS mode: KMS master key ciphertext blob successfully retrieved and decoded.")
         return ciphertext_blob
-    except Exception as e:
+    except (binascii.Error, ValueError) as e:
         logger.critical(
             f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True
         )

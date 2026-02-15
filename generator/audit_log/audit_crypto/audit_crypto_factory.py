@@ -541,6 +541,18 @@ _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE: bool = False
 # --- Master Key for Software Key Encryption (Lazy Init) ---
 
 
+def _is_railway_or_paas_mode() -> tuple[bool, bool]:
+    """
+    Determine if we're in Railway/PaaS mode (no KMS) or AWS KMS mode.
+    
+    Returns:
+        Tuple of (use_env_secrets, use_kms) booleans
+    """
+    use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+    use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+    return use_env_secrets, use_kms
+
+
 async def _ensure_software_key_master() -> bytes:
     """
     Returns the master key used to encrypt/decrypt software-stored keys.
@@ -578,8 +590,7 @@ async def _ensure_software_key_master() -> bytes:
     # PRODUCTION PATH (simplified; adjust to match your real KMS/secret manager wiring)
     try:
         # Check deployment mode: Railway/PaaS vs AWS KMS
-        use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
-        use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+        use_env_secrets, use_kms = _is_railway_or_paas_mode()
         
         # Railway/PaaS mode: USE_ENV_SECRETS=true or AUDIT_CRYPTO_USE_KMS=false
         if use_env_secrets or not use_kms:
@@ -651,8 +662,7 @@ async def _ensure_software_key_master() -> bytes:
         
         if is_invalid_ciphertext:
             # Build detailed error message with resolution steps
-            use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
-            use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+            use_env_secrets, use_kms = _is_railway_or_paas_mode()
             
             error_msg = (
                 f"InvalidCiphertextException: Master key encrypted with different KMS key.\n\n"
