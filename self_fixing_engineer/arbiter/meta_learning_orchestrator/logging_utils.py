@@ -37,7 +37,7 @@ class LogCorrelationFilter(logging.Filter):
                 else:
                     context = None
 
-                if context and hasattr(context, "is_valid") and context.is_valid:
+                if context and self._is_context_valid(context):
                     # Format with proper hex padding
                     record.trace_id = f"{context.trace_id:032x}"
                     record.span_id = f"{context.span_id:016x}"
@@ -57,6 +57,25 @@ class LogCorrelationFilter(logging.Filter):
         record.trace_id = "no-trace"
         record.span_id = "no-span"
         record.correlation_id = "no-trace-no-span"
+
+    @staticmethod
+    def _is_context_valid(context: Any) -> bool:
+        """Check if a span context is valid by verifying trace_id and span_id are non-zero.
+
+        This is more robust than relying on context.is_valid which may behave
+        differently across OpenTelemetry versions or when used with mock objects.
+        """
+        try:
+            is_valid = getattr(context, "is_valid", None)
+            if is_valid is not None:
+                # is_valid may be a property (bool) or a method (callable)
+                return bool(is_valid() if callable(is_valid) else is_valid)
+            # Fallback: check trace_id and span_id directly
+            trace_id = getattr(context, "trace_id", 0)
+            span_id = getattr(context, "span_id", 0)
+            return trace_id != 0 and span_id != 0
+        except Exception:
+            return False
 
 
 # --- Structured JSON Formatter ---

@@ -409,6 +409,12 @@ async def test_leader_step_down(orchestrator, mocker: MockerFixture):
 
     assert orchestrator._is_leader
 
+    # Prevent the mock leader election loop from re-electing after step-down
+    mocker.patch.object(
+        orchestrator, "_become_leader",
+        new_callable=mocker.AsyncMock,
+    )
+
     # Directly call step down since the patched verify method won't trigger it
     await orchestrator._step_down_leadership("test_reason")
 

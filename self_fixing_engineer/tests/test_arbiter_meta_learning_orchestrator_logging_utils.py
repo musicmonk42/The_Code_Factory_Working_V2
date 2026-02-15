@@ -51,7 +51,12 @@ def mock_span_context(mocker: MockerFixture):
     mock_span.get_span_context.return_value = span_context
     # Also set _context for backward compatibility
     mock_span._context = span_context
+    # Patch both the canonical location and the reference used by logging_utils
     mocker.patch("opentelemetry.trace.get_current_span", return_value=mock_span)
+    mocker.patch(
+        "self_fixing_engineer.arbiter.meta_learning_orchestrator.logging_utils.trace.get_current_span",
+        return_value=mock_span,
+    )
     yield mock_span
 
 
