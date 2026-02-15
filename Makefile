@@ -148,6 +148,24 @@ audit-config-setup-prod: ## Set up production audit configuration
 	@echo "$(YELLOW)Review and update with your environment-specific values$(NC)"
 	@echo "$(YELLOW)Run 'make audit-config-validate' to verify$(NC)"
 
+# =============================================================================
+# Secret Validation
+# =============================================================================
+
+validate-secrets: ## Validate all required secrets are configured
+	@echo "$(BLUE)Validating secrets configuration...$(NC)"
+	python scripts/validate_secrets.py
+	@echo "$(GREEN)Secret validation complete!$(NC)"
+
+validate-secrets-strict: ## Validate secrets in strict mode (warnings = errors)
+	@echo "$(BLUE)Validating secrets configuration (strict mode)...$(NC)"
+	python scripts/validate_secrets.py --strict
+	@echo "$(GREEN)Strict secret validation complete!$(NC)"
+
+validate-secrets-json: ## Validate secrets and output JSON (for CI/CD)
+	@echo "$(BLUE)Validating secrets configuration (JSON output)...$(NC)"
+	python scripts/validate_secrets.py --json
+
 audit-config-setup-dev: ## Set up development audit configuration
 	@echo "$(BLUE)Setting up development audit configuration...$(NC)"
 	@if [ -f generator/audit_config.yaml ]; then \
