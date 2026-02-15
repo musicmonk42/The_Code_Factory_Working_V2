@@ -681,20 +681,20 @@ class TestConvenienceFunction(unittest.IsolatedAsyncioTestCase):
 
         updater_module.updater = None
 
-    # FIX 9: Test that convenience function correctly rejects async context
-    async def test_update_requirements_with_answers_raises_in_async(self):
-        """Test that convenience function correctly rejects async context."""
+    # FIX 9: Test that convenience function handles async context via nest_asyncio
+    @patch("generator.clarifier.clarifier_updater.nest_asyncio")
+    @patch("generator.clarifier.clarifier_updater.updater")
+    async def test_update_requirements_with_answers_raises_in_async(self, mock_updater, mock_nest):
+        """Test that convenience function uses nest_asyncio in async context."""
         requirements = {"features": ["f1"], "schema_version": 1}
         ambiguities = ["term"]
         answers = ["meaning"]
 
-        # The convenience function should raise RuntimeError when called from async context
-        with self.assertRaises(RuntimeError) as context:
-            update_requirements_with_answers(requirements, ambiguities, answers)
+        mock_updater.update = AsyncMock(return_value=requirements)
 
-        # Check for the specific error messages from the production code
-        self.assertIn("async context", str(context.exception))
-        self.assertIn("await initialize_updater()", str(context.exception))
+        result = update_requirements_with_answers(requirements, ambiguities, answers)
+        # nest_asyncio.apply should be called to allow nested event loops
+        mock_nest.apply.assert_called_once()
 
     # Add a test for the synchronous (non-running-loop) context
     @patch("generator.clarifier.clarifier_updater.asyncio.run")

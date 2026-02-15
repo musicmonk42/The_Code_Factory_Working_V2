@@ -342,12 +342,17 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         # FIX: The queue metric requires labels and ._value.get()
         # This test now passes because _load_persisted_queue is mocked
+        queue_value = RUN_QUEUE.labels(framework="all", instance_id="test_instance")._value
         self.assertEqual(
-            RUN_QUEUE.labels(framework="all", instance_id="test_instance")._value.get(),
+            queue_value.get() if hasattr(queue_value, 'get') else queue_value,
             0,
         )
-        # FIX: Access metric value correctly with ._value.get()
-        self.assertEqual(RUN_PASS_RATE._value.get(), 1.0)
+        # FIX: Access metric value correctly - handle both real and mock Prometheus
+        pass_rate_value = RUN_PASS_RATE._value
+        self.assertEqual(
+            pass_rate_value.get() if hasattr(pass_rate_value, 'get') else pass_rate_value,
+            1.0,
+        )
 
         await runner.shutdown_services()
 
