@@ -163,6 +163,12 @@ async def with_retry(func, retries: int = 3, delay: float = 1.0):
 # Instructions for Dockerfile:
 # RUN python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
 # --- NLTK Data Setup ---
+# Add /opt/nltk_data to NLTK's data path at the beginning
+# This is where NLTK data is pre-downloaded during Docker build
+if '/opt/nltk_data' not in nltk.data.path:
+    nltk.data.path.insert(0, '/opt/nltk_data')
+    logger.debug("Added /opt/nltk_data to NLTK data path")
+
 try:
     nltk.data.find("tokenizers/punkt")
     nltk.data.find("corpora/stopwords")
