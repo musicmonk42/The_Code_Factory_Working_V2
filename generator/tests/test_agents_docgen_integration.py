@@ -32,6 +32,18 @@ class MockRunnerError(Exception):
     pass
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
+# Save originals for restoration
+_saved_modules_di = {}
+_modules_to_mock_di = [
+    "runner", "runner.llm_client", "runner.runner_logging",
+    "runner.runner_metrics", "runner.runner_errors",
+    "runner.runner_file_utils", "runner.summarize_utils",
+    "tiktoken",
+]
+for _mod in _modules_to_mock_di:
+    if _mod in sys.modules:
+        _saved_modules_di[_mod] = sys.modules[_mod]
+
 mock_runner = MagicMock()
 mock_runner_llm_client = MagicMock()
 mock_runner_logging = MagicMock()
@@ -76,12 +88,13 @@ from generator.agents.docgen_agent.docgen_agent import DocgenAgent, generate
 from generator.agents.docgen_agent.docgen_prompt import DocGenPromptAgent
 from generator.agents.docgen_agent.docgen_response_validator import ResponseValidator
 
-# --- Restore runner modules immediately after imports ---
+# --- Restore ALL mocked modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-for _k in ["runner", "runner.llm_client", "runner.runner_logging",
-           "runner.runner_metrics", "runner.runner_errors",
-           "runner.runner_file_utils", "runner.summarize_utils"]:
-    sys.modules.pop(_k, None)
+for _mod in _modules_to_mock_di:
+    if _mod in _saved_modules_di:
+        sys.modules[_mod] = _saved_modules_di[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 # =============================================================================
 # FIXTURES

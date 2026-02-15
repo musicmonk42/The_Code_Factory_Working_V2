@@ -17,6 +17,18 @@ import pytest
 
 # Mock runner modules before importing docgen_agent
 # Save originals so we can restore them after imports to avoid polluting other test modules
+_saved_modules_da = {}
+_modules_to_mock_da = [
+    "runner", "runner.llm_client", "runner.runner_logging",
+    "runner.runner_metrics", "runner.runner_file_utils",
+    "runner.summarize_utils", "runner.runner_errors",
+    "presidio_analyzer", "presidio_anonymizer", "presidio_anonymizer.entities",
+    "sphinx", "sphinx.cmd.build", "plantuml",
+]
+for _mod in _modules_to_mock_da:
+    if _mod in sys.modules:
+        _saved_modules_da[_mod] = sys.modules[_mod]
+
 sys.modules["runner"] = MagicMock()
 sys.modules["runner.llm_client"] = MagicMock()
 sys.modules["runner.runner_logging"] = MagicMock()
@@ -131,10 +143,11 @@ else:
 
 # --- Restore runner modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-for _k in ["runner", "runner.llm_client", "runner.runner_logging",
-           "runner.runner_metrics", "runner.runner_file_utils",
-           "runner.summarize_utils", "runner.runner_errors"]:
-    sys.modules.pop(_k, None)
+for _mod in _modules_to_mock_da:
+    if _mod in _saved_modules_da:
+        sys.modules[_mod] = _saved_modules_da[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 # =============================================================================
 # FIXTURES

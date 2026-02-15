@@ -20,6 +20,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # --- FIX: Mock external dependencies before importing runner modules ---
+# Save originals for restoration after imports
+_saved_modules_ra = {}
+_modules_to_mock_ra = [
+    "textual", "textual.app", "textual.containers", "textual.widgets",
+    "textual.events", "textual.binding", "textual.css",
+    "textual.worker", "textual.timer", "textual.reactive",
+]
+for _mod in _modules_to_mock_ra:
+    if _mod in sys.modules:
+        _saved_modules_ra[_mod] = sys.modules[_mod]
+
 # Mock all textual submodules that runner_app imports
 sys.modules["textual"] = MagicMock()
 sys.modules["textual.app"] = MagicMock()
@@ -155,6 +166,13 @@ from generator.runner.runner_metrics import (
     RUN_QUEUE,
     RUN_RESOURCE_USAGE,
 )
+
+# --- Restore mocked textual modules immediately after imports ---
+for _mod in _modules_to_mock_ra:
+    if _mod in _saved_modules_ra:
+        sys.modules[_mod] = _saved_modules_ra[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 
 # Mock coverage classes used in runner_app.py (since they are imported implicitly via runner.runner_parsers)

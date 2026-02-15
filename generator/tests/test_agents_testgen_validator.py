@@ -157,6 +157,13 @@ class MockWeb:
 # Apply mocks before imports
 import sys
 
+# Save originals for restoration after imports
+_saved_modules_tv = {}
+_modules_to_mock_tv = ["aiofiles", "aiohttp.web", "watchdog.events", "watchdog.observers"]
+for _mod in _modules_to_mock_tv:
+    if _mod in sys.modules:
+        _saved_modules_tv[_mod] = sys.modules[_mod]
+
 sys.modules["aiofiles"] = MockAiofiles()
 sys.modules["aiohttp.web"] = MockWeb()
 
@@ -202,6 +209,14 @@ from generator.agents.testgen_agent.testgen_validator import (
     start_health_server,
     validate_test_quality,
 )
+
+# --- Restore mocked modules immediately after imports ---
+# This prevents pollution of sys.modules for other test files collected later
+for _mod in _modules_to_mock_tv:
+    if _mod in _saved_modules_tv:
+        sys.modules[_mod] = _saved_modules_tv[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 
 class TestHealthEndpoints:

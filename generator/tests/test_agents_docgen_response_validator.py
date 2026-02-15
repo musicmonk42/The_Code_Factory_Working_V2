@@ -50,14 +50,25 @@ class MockObserver:
 
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
-sys.modules["runner"] = MagicMock()
-sys.modules["runner.llm_client"] = MagicMock()
-sys.modules["runner.runner_logging"] = MagicMock()
-sys.modules["runner.runner_metrics"] = MagicMock()
-sys.modules["runner.runner_errors"] = MagicMock()
-sys.modules["runner.runner_file_utils"] = MagicMock()
-sys.modules["runner.summarize_utils"] = MagicMock()
-sys.modules["runner.tracer"] = MagicMock()
+# Save all originals for restoration after imports to avoid polluting other test modules
+_saved_modules = {}
+_modules_to_mock = [
+    "runner", "runner.llm_client", "runner.runner_logging",
+    "runner.runner_metrics", "runner.runner_errors",
+    "runner.runner_file_utils", "runner.summarize_utils", "runner.tracer",
+    "presidio_analyzer", "presidio_anonymizer",
+    "pypandoc", "docutils", "docutils.core",
+    "bs4", "nltk", "nltk.sentiment", "nltk.tokenize", "nltk.corpus",
+    "tiktoken", "jinja2", "aiofiles", "uvicorn",
+    "watchdog", "watchdog.observers", "watchdog.events",
+]
+for _mod in _modules_to_mock:
+    if _mod in sys.modules:
+        _saved_modules[_mod] = sys.modules[_mod]
+
+# Now apply the runner mocks
+for _mod in _modules_to_mock[:8]:  # runner.* modules
+    sys.modules[_mod] = MagicMock()
 
 # FIX: Mock Presidio modules properly
 mock_analyzer_result = MagicMock()
@@ -249,13 +260,13 @@ with patch(
         scrub_text,
     )
 
-# --- Restore runner modules immediately after imports ---
+# --- Restore ALL mocked modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-for _k in ["runner", "runner.llm_client", "runner.runner_logging",
-           "runner.runner_metrics", "runner.runner_errors",
-           "runner.runner_file_utils", "runner.summarize_utils",
-           "runner.tracer"]:
-    sys.modules.pop(_k, None)
+for _mod in _modules_to_mock:
+    if _mod in _saved_modules:
+        sys.modules[_mod] = _saved_modules[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 # Restore prometheus_client to prevent pollution for other test files
 if _original_prometheus is not None:

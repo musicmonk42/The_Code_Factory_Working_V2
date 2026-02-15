@@ -17,9 +17,13 @@ from pydantic import ValidationError
 # Mock external dependencies
 # NOTE: Do NOT mock aiohttp, pydantic, or fastapi - they are needed for proper
 # type annotations and decorator evaluation at import time
-sys.modules["hvac"] = MagicMock()
-sys.modules["deepdiff"] = MagicMock()
-sys.modules["watchfiles"] = MagicMock()
+# Save originals for restoration after imports
+_saved_modules_rc = {}
+_modules_to_mock_rc = ["hvac", "deepdiff", "watchfiles"]
+for _mod in _modules_to_mock_rc:
+    if _mod in sys.modules:
+        _saved_modules_rc[_mod] = sys.modules[_mod]
+    sys.modules[_mod] = MagicMock()
 # sys.modules["aiohttp"] = MagicMock()  # REMOVED - causes type annotation errors
 
 # Import runner modules
@@ -30,6 +34,13 @@ from runner.runner_errors import ConfigurationError
 # Get the actual module that load_config belongs to (may differ from
 # _runner_config_module due to dual sys.path entries for 'runner' vs 'generator.runner')
 _load_config_module = sys.modules[load_config.__module__]
+
+# --- Restore mocked modules immediately after imports ---
+for _mod in _modules_to_mock_rc:
+    if _mod in _saved_modules_rc:
+        sys.modules[_mod] = _saved_modules_rc[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 
 class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
