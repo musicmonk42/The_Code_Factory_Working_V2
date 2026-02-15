@@ -835,6 +835,36 @@ KEY_CLEANUP_COUNT = Counter(
 )
 
 
+# --- Bug 3 fix: Shared aiohttp session for alerts ---
+_alert_session: Optional[aiohttp.ClientSession] = None
+
+# --- Bug 4 fix: Circuit breaker for alert endpoint ---
+_alert_consecutive_failures: int = 0
+_alert_circuit_open_until: float = 0
+
+# --- Bug 5 fix: Rate limiting for placeholder endpoint warning ---
+_last_placeholder_warning_time: float = 0
+
+
+def _get_alert_session() -> aiohttp.ClientSession:
+    """
+    Get or create the shared aiohttp session for alerts.
+    Bug 3 fix: Reuse a single session instead of creating one per alert.
+    """
+    global _alert_session
+    if _alert_session is None or _alert_session.closed:
+        _alert_session = aiohttp.ClientSession()
+    return _alert_session
+
+
+async def _close_alert_session():
+    """Close the shared alert session during shutdown."""
+    global _alert_session
+    if _alert_session is not None and not _alert_session.closed:
+        await _alert_session.close()
+        _alert_session = None
+
+
 # --- Alerting ---
 async def send_alert(
     message: str, severity: str = "critical", endpoint: str = settings.ALERT_ENDPOINT
@@ -847,13 +877,37 @@ async def send_alert(
         severity (str): Severity level (e.g., "critical", "high", "warning").
         endpoint (str): The URL to send the alert to.
     """
-
+    
+    # Bug 5 fix: Warn about placeholder endpoint (rate-limited)
+    global _last_placeholder_warning_time
+    current_time = time.time()
+    if endpoint == "http://localhost:8080/alert" and current_time - _last_placeholder_warning_time >= 300:
+        _last_placeholder_warning_time = current_time
+        logger.warning(
+            "Alert endpoint appears to be the default placeholder (http://localhost:8080/alert). "
+            "Alerts may not be delivered. Configure ALERT_ENDPOINT in audit_config.yaml for production.",
+            extra={"operation": "alert_placeholder_warning"},
+        )
+    
+    # Bug 4 fix: Circuit breaker
+    global _alert_consecutive_failures, _alert_circuit_open_until
+    
+    # Check if circuit is open
+    if current_time < _alert_circuit_open_until:
+        logger.debug(
+            f"Alert circuit breaker is open. Skipping alert send until {_alert_circuit_open_until}. "
+            f"Message: {message}",
+            extra={"operation": "alert_circuit_open"},
+        )
+        return
+    
     async def _send():
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                endpoint, json={"message": message, "severity": severity}
-            ) as response:
-                response.raise_for_status()
+        # Bug 3 fix: Use shared session instead of creating new one
+        session = _get_alert_session()
+        async with session.post(
+            endpoint, json={"message": message, "severity": severity}
+        ) as response:
+            response.raise_for_status()
 
     try:
         await retry_operation(
@@ -864,6 +918,10 @@ async def send_alert(
             backend_name="AlertingSystem",
             op_name="send_alert",
         )
+        
+        # Bug 4 fix: Reset failure counter on success
+        _alert_consecutive_failures = 0
+        
         logger.info(
             f"Alert sent successfully: {message}",
             extra={"operation": "send_alert_success", "severity": severity},
@@ -872,6 +930,20 @@ async def send_alert(
             "send_alert", status="success", severity=severity, message=message
         )
     except Exception as e:
+        # Bug 4 fix: Track consecutive failures and open circuit
+        _alert_consecutive_failures += 1
+        
+        failure_threshold = 5
+        circuit_cooldown = 60  # seconds
+        
+        if _alert_consecutive_failures >= failure_threshold:
+            _alert_circuit_open_until = current_time + circuit_cooldown
+            logger.warning(
+                f"Alert endpoint has failed {_alert_consecutive_failures} times. "
+                f"Opening circuit breaker for {circuit_cooldown}s.",
+                extra={"operation": "alert_circuit_opened", "failures": _alert_consecutive_failures},
+            )
+        
         logger.error(
             f"Failed to send alert to {endpoint} after multiple retries: {e}. Alert message: {message}",
             exc_info=True,

@@ -795,14 +795,20 @@ class TestGlobalSecrets:
 class TestAsyncUtils:
     """Tests utility functions like send_alert and retry_operation."""
 
-    async def test_send_alert_success(self, mock_aiohttp_session, mock_settings):
+    async def test_send_alert_success(self, mock_aiohttp_session, mock_settings, monkeypatch):
         """Tests that send_alert successfully POSTs to the endpoint."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
+        from generator.audit_log.audit_crypto import audit_crypto_factory
 
         mock_session, mock_response = mock_aiohttp_session
 
+        # Mock _get_alert_session to return our mock session directly
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._get_alert_session",
+            lambda: mock_session,
+        )
+
         mock_endpoint = mock_settings[0].ALERT_ENDPOINT
-        await send_alert("Test Alert", severity="high", endpoint=mock_endpoint)
+        await audit_crypto_factory.send_alert("Test Alert", severity="high", endpoint=mock_endpoint)
 
         # Assert the mock was called
         mock_session.post.assert_called_once()
@@ -817,16 +823,22 @@ class TestAsyncUtils:
         self, monkeypatch, mock_aiohttp_session, mock_settings
     ):
         """Tests that send_alert retries on failure."""
-        from generator.audit_log.audit_crypto.audit_crypto_factory import send_alert
+        from generator.audit_log.audit_crypto import audit_crypto_factory
 
         mock_session, mock_response = mock_aiohttp_session
         mock_response.raise_for_status.side_effect = aiohttp.ClientError("Connection failed")
+
+        # Mock _get_alert_session to return our mock session directly
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._get_alert_session",
+            lambda: mock_session,
+        )
 
         mock_sleep = AsyncMock()
         monkeypatch.setattr("asyncio.sleep", mock_sleep)
 
         mock_endpoint = mock_settings[0].ALERT_ENDPOINT
-        await send_alert("Test Alert", severity="critical", endpoint=mock_endpoint)
+        await audit_crypto_factory.send_alert("Test Alert", severity="critical", endpoint=mock_endpoint)
 
         # Check call_count properly
         assert mock_session.post.call_count == 3, \

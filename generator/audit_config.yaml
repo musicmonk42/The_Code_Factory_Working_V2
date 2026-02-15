@@ -17,6 +17,11 @@ KEY_ROTATION_INTERVAL_SECONDS: 86400
 SOFTWARE_KEY_DIR: "audit_keys"
 KMS_KEY_ID: "alias/audit-log-key"
 AWS_REGION: "us-east-1"
+
+# ALERT_ENDPOINT: URL for sending critical alerts
+# WARNING: The default value below is a placeholder. Configure this with a real
+# alerting service endpoint (e.g., PagerDuty, Slack webhook) for production use.
+# The system will log warnings if the placeholder endpoint is detected.
 ALERT_ENDPOINT: "http://localhost:8080/alert"
 
 # =============================================================================
