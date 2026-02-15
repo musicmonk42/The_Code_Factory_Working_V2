@@ -637,7 +637,9 @@ class KeyBackupManager:
                     continue
                 
                 timestamp_str = match.group(1)
-                backup_date = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").replace(tzinfo=UTC)
+                # Parse as naive datetime, then explicitly make it timezone-aware in UTC
+                naive_backup_date = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                backup_date = naive_backup_date.replace(tzinfo=UTC)
                 
                 if backup_date < cutoff_date:
                     backup_file.unlink()
@@ -870,11 +872,12 @@ class KeyRotator:
                     logger.error(f"KMS encryption failed: {e}")
                     # Fall back to plaintext
             
-            # Create metadata
+            # Create metadata with consistent timestamp
+            generation_time = datetime.datetime.now(UTC)
             metadata = KeyMetadata(
-                key_id=f"master_{datetime.datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}",
+                key_id=f"master_{generation_time.strftime('%Y%m%d_%H%M%S')}",
                 key_type="master",
-                generated_at=datetime.datetime.now(UTC).isoformat(),
+                generated_at=generation_time.isoformat(),
                 length_bytes=len(master_key_bytes),
                 format="base64",
                 deployment_mode=self.deployment_mode.value,
