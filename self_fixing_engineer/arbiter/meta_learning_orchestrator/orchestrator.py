@@ -518,6 +518,7 @@ class MetaLearningOrchestrator:
 
         self._is_leader: bool = False
         self._fencing_token: Optional[int] = None
+        self._last_audit_hash: str = "genesis_hash"
 
         # Validate local directories for fallback
         if not self.config.USE_S3_DATA_LAKE and not self.config.USE_KAFKA_INGESTION:

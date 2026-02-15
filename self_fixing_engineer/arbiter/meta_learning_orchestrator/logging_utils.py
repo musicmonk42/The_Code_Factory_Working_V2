@@ -144,6 +144,11 @@ class PIIRedactorFilter(logging.Filter):
         """
         Loads sensitive keys and extra regex patterns from environment variables.
         This method is thread-safe and caches the result for performance.
+
+        Note: This method avoids using logging.getLogger() to emit log records
+        because it is called from within a logging.Filter. Emitting log records
+        from a filter can cause recursive logging and interfere with test
+        frameworks that capture log records (e.g., pytest's caplog).
         """
         with self._config_lock:
             now = time.time()
@@ -167,22 +172,14 @@ class PIIRedactorFilter(logging.Filter):
                     for pattern in extra_patterns_str_list:
                         try:
                             extra_patterns.append(re.compile(pattern))
-                        except re.error as e:
-                            logging.getLogger(__name__).warning(
-                                f"Invalid regex in PII_EXTRA_REGEX_PATTERNS: '{pattern}'. Error: {e}"
-                            )
-                else:
-                    logging.getLogger(__name__).warning(
-                        "PII_EXTRA_REGEX_PATTERNS must be a JSON list of strings."
-                    )
-            except json.JSONDecodeError as e:
-                logging.getLogger(__name__).warning(
-                    f"Could not parse PII_EXTRA_REGEX_PATTERNS JSON: {e}"
-                )
+                        except re.error:
+                            pass
+                        
+            except (json.JSONDecodeError, TypeError):
+                pass
 
             self._all_regex_patterns = self.BASE_PII_REGEX_PATTERNS + extra_patterns
             self._last_config_load_time = now
-            logging.getLogger(__name__).info("PII redaction configuration reloaded.")
 
     def filter(self, record):
         if not REDACTION_ENABLED:
