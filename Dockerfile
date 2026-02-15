@@ -282,7 +282,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # When changing TRIVY_VERSION, update TRIVY_SHA256 from trivy_<version>_checksums.txt
 ARG TRIVY_VERSION=0.69.0
 ARG TRIVY_SHA256=fff5813d6888fa6f8bd40042a08c4f072b3e65aec9f13dd9ab1d7b26146ad046
-RUN curl -sfL -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" && \
+RUN curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" && \
     echo "${TRIVY_SHA256}  /tmp/trivy.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy && \
     rm /tmp/trivy.tar.gz && \
@@ -293,7 +293,7 @@ RUN curl -sfL -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releas
 # Using direct binary download for simplicity
 ARG HADOLINT_VERSION=2.12.0
 ARG HADOLINT_SHA256=56de6d5e5ec427e17b74fa48d51271c7fc0d61244bf5c90e828aab8362d55010
-RUN curl -sfL -o /usr/local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" && \
+RUN curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /usr/local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-Linux-x86_64" && \
     echo "${HADOLINT_SHA256}  /usr/local/bin/hadolint" | sha256sum -c - && \
     chmod +x /usr/local/bin/hadolint && \
     hadolint --version
