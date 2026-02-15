@@ -539,6 +539,9 @@ class EnvVarSecretManager(SecretManager):
                 status="success",
                 mode="railway_paas",
             )
+            # For base64-encoded master keys, decode from base64
+            if secret_name == "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64":
+                return base64.b64decode(secret_value)
             return secret_value.encode("utf-8")
         
         # AWS mode: attempt KMS decryption for specific keys
@@ -554,12 +557,14 @@ class EnvVarSecretManager(SecretManager):
                         status="success",
                         mode="plaintext_fallback",
                     )
-                    return secret_value.encode("utf-8")
+                    # Decode from base64 since it's stored as base64 in env var
+                    return base64.b64decode(secret_value)
                 
                 # Attempt KMS decryption
                 if not HAS_BOTO3:
                     self.logger.warning(f"boto3 not available, treating {secret_name} as plaintext")
-                    return secret_value.encode("utf-8")
+                    # Decode from base64 since it's stored as base64 in env var
+                    return base64.b64decode(secret_value)
                 
                 kms = boto3.client('kms', region_name=os.getenv("AWS_REGION", "us-east-1"))
                 response = await asyncio.to_thread(
@@ -576,8 +581,8 @@ class EnvVarSecretManager(SecretManager):
                         status="success",
                         mode="kms_decrypted",
                     )
-                    # KMS Plaintext is already bytes, just base64 encode it
-                    return base64.b64encode(plaintext)
+                    # KMS returns plaintext bytes directly - return as-is
+                    return plaintext
                 else:
                     raise SecretDecodingError("KMS decryption returned no plaintext")
             except Exception as e:
@@ -590,7 +595,8 @@ class EnvVarSecretManager(SecretManager):
                     mode="plaintext_fallback_after_kms_error",
                     error=str(e),
                 )
-                return secret_value.encode("utf-8")
+                # Decode from base64 since it's stored as base64 in env var
+                return base64.b64decode(secret_value)
         
         # Default: return as-is for non-KMS secrets
         self.logger.debug(
