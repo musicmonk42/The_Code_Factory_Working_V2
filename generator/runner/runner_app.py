@@ -768,7 +768,7 @@ class RunnerApp(_TextualAppBase):
             gauge = RUN_QUEUE.labels(
                 framework=self.config.framework, instance_id=instance_id
             )
-            size = _resolve_metric_value(getattr(gauge, "_value", 0)) or 0
+            size = _resolve_metric_value(getattr(gauge, "_value", 0))
         except Exception:
             size = 0
 

@@ -170,16 +170,19 @@ async def test_load_plugins_missing_file(
     provider: LocalProvider, caplog: LogCaptureFixture
 ) -> None:
     # FIX: load_plugins now accepts a file_path parameter
+    old_propagate = logger.propagate
     logger.propagate = True
-    with caplog.at_level(logging.INFO, logger=logger.name):
-        provider.load_plugins("/nonexistent.yaml")
-        assert any(
-            "No plugin file found" in rec.message
-            or "Error loading local plugins" in rec.message
-            or "Plugins loaded" in rec.message
-            for rec in caplog.records
-        )
-    logger.propagate = False
+    try:
+        with caplog.at_level(logging.INFO, logger=logger.name):
+            provider.load_plugins("/nonexistent.yaml")
+            assert any(
+                "No plugin file found" in rec.message
+                or "Error loading local plugins" in rec.message
+                or "Plugins loaded" in rec.message
+                for rec in caplog.records
+            )
+    finally:
+        logger.propagate = old_propagate
 
 
 # 4. Low-level _api_call
