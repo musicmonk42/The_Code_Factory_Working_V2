@@ -204,7 +204,8 @@ def test_redact_secrets_basic(text: str, expected: str):
 @pytest.mark.asyncio  # FIX: Add asyncio mark
 # FIX: Test algorithms that are actually implemented: 'fernet', 'aes_cbc'
 @pytest.mark.parametrize("algorithm", ["fernet", "aes_cbc"])
-async def test_encrypt_decrypt_roundtrip(algorithm: str):
+@patch("runner.runner_logging.log_audit_event", new_callable=AsyncMock)
+async def test_encrypt_decrypt_roundtrip(mock_log_audit, algorithm: str):
     data = b"secure data"
 
     # --- THIS IS THE FIX ---
@@ -325,7 +326,9 @@ async def test_scan_for_vulnerabilities_fallback_no_deps(temp_dir: Path):
 # Tests for monitor_for_leaks (async)
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-async def test_monitor_for_leaks_success(temp_dir: Path):
+@patch("runner.runner_logging.send_alert", new_callable=AsyncMock)
+@patch("runner.runner_logging.log_audit_event", new_callable=AsyncMock)
+async def test_monitor_for_leaks_success(mock_log_audit, mock_send_alert, temp_dir: Path):
     # FIX: The function signature is `monitor_for_leaks(text: str)`.
     # It does not monitor files or take interval/duration.
     log_text = "secret=abc12345678901234567890"  # Use a long secret

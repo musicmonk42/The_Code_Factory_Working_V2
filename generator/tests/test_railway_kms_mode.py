@@ -297,7 +297,7 @@ class TestDoubleDecodingFix:
         
         # Patch to use our mock
         monkeypatch.setattr(
-            "generator.audit_log.audit_crypto.secrets._SECRET_MANAGER",
+            "generator.audit_log.audit_crypto.secrets._secret_manager",
             mock_secret_manager,
         )
         

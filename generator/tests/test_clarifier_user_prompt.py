@@ -246,13 +246,15 @@ class TestSlackPrompt(unittest.IsolatedAsyncioTestCase):
     context = {"user_id": _user_id}
 
     async def asyncSetUp(self):
-        # Skip these tests if Slack methods are still abstract
+        # Skip these tests if Slack methods are still abstract or not configured
         try:
             self.channel = get_channel("slack", target_language="en")
         except TypeError as e:
             if "abstract" in str(e):
                 self.skipTest("SlackPrompt has unimplemented abstract methods")
             raise
+        except ValueError as e:
+            self.skipTest(f"SlackPrompt not configured: {e}")
 
         profile = UserProfile(user_id=self._user_id, language="en")
         save_profile(self._user_id, profile)
@@ -307,6 +309,8 @@ class TestEmailPrompt(unittest.IsolatedAsyncioTestCase):
             if "abstract" in str(e):
                 self.skipTest("EmailPrompt has unimplemented abstract methods")
             raise
+        except ValueError as e:
+            self.skipTest(f"EmailPrompt not configured: {e}")
 
         profile = UserProfile(user_id=self._user_id, language="en")
         save_profile(self._user_id, profile)
@@ -355,6 +359,8 @@ class TestSMSPrompt(unittest.IsolatedAsyncioTestCase):
             if "abstract" in str(e):
                 self.skipTest("SMSPrompt has unimplemented abstract methods")
             raise
+        except ValueError as e:
+            self.skipTest(f"SMSPrompt not configured: {e}")
 
         profile = UserProfile(user_id=self._user_id, language="en")
         save_profile(self._user_id, profile)

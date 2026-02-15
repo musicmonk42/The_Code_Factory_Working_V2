@@ -527,17 +527,17 @@ instance_id: tui_test_instance""")
 
         # Manually set mock Prometheus Gauge values (using the current labels)
         instance_id = app.config.instance_id
-        RUN_QUEUE.labels(framework="pytest", instance_id=instance_id)._value = 2
-        RUN_PASS_RATE._value = 0.95
+        RUN_QUEUE.labels(framework="pytest", instance_id=instance_id).set(2)
+        RUN_PASS_RATE.set(0.95)
         RUN_RESOURCE_USAGE.labels(
             resource_type="cpu", instance_id=instance_id
-        )._value = 75.0
+        ).set(75.0)
         RUN_RESOURCE_USAGE.labels(
             resource_type="mem", instance_id=instance_id
-        )._value = 50.0  # Added mem
+        ).set(50.0)  # Added mem
         HEALTH_STATUS.labels(
             component_name="overall", instance_id=instance_id
-        )._value = 1
+        ).set(1)
 
         # Mock the underlying Prometheus client to expose these values
         with (
