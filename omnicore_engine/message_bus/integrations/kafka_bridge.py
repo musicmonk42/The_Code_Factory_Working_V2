@@ -354,25 +354,44 @@ class KafkaBridge:
             raise RuntimeError("aiokafka not installed – `pip install aiokafka`")
 
         # ---------- Producer ----------
-        self._producer = AIOKafkaProducer(
-            bootstrap_servers=self.cfg.bootstrap_servers,
-            client_id=self.cfg.client_id,
-            acks=self.cfg.acks,
-            linger_ms=self.cfg.linger_ms,
-            max_batch_size=self.cfg.max_batch_size,
-            compression_type=self.cfg.compression_type,
+        # Try to create producer with max_in_flight_requests_per_connection first
+        # Fall back to without it if the parameter is not supported in this aiokafka version
+        producer_kwargs = {
+            "bootstrap_servers": self.cfg.bootstrap_servers,
+            "client_id": self.cfg.client_id,
+            "acks": self.cfg.acks,
+            "linger_ms": self.cfg.linger_ms,
+            "max_batch_size": self.cfg.max_batch_size,
+            "compression_type": self.cfg.compression_type,
             # Note: 'retries' parameter removed - not supported in aiokafka 0.7.x
             # Retries are handled internally by aiokafka based on enable_idempotence
-            retry_backoff_ms=self.cfg.retry_backoff_ms,
-            request_timeout_ms=self.cfg.request_timeout_ms,
-            enable_idempotence=self.cfg.enable_idempotence,
-            max_in_flight_requests_per_connection=self.cfg.max_in_flight_requests_per_connection,
-            security_protocol=self.cfg.security_protocol,
-            sasl_mechanism=self.cfg.sasl_mechanism,
-            sasl_plain_username=self.cfg.sasl_plain_username,
-            sasl_plain_password=self.cfg.sasl_plain_password,
-            ssl_context=self.cfg.ssl_context,
-        )
+            "retry_backoff_ms": self.cfg.retry_backoff_ms,
+            "request_timeout_ms": self.cfg.request_timeout_ms,
+            "enable_idempotence": self.cfg.enable_idempotence,
+            "security_protocol": self.cfg.security_protocol,
+            "sasl_mechanism": self.cfg.sasl_mechanism,
+            "sasl_plain_username": self.cfg.sasl_plain_username,
+            "sasl_plain_password": self.cfg.sasl_plain_password,
+            "ssl_context": self.cfg.ssl_context,
+        }
+        
+        try:
+            # Try with max_in_flight_requests_per_connection
+            producer_kwargs["max_in_flight_requests_per_connection"] = self.cfg.max_in_flight_requests_per_connection
+            self._producer = AIOKafkaProducer(**producer_kwargs)
+        except TypeError as e:
+            # Parameter not supported in this aiokafka version, try without it
+            if "max_in_flight_requests_per_connection" in str(e):
+                logger.warning(
+                    f"AIOKafkaProducer does not support 'max_in_flight_requests_per_connection' parameter: {e}. "
+                    "Falling back to producer without this parameter."
+                )
+                producer_kwargs.pop("max_in_flight_requests_per_connection", None)
+                self._producer = AIOKafkaProducer(**producer_kwargs)
+            else:
+                # Some other TypeError, re-raise it
+                raise
+        
         await self._producer.start()
 
         # ---------- Consumer (optional) ----------
