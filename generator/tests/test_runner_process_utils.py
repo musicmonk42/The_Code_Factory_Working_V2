@@ -390,6 +390,9 @@ class TestDistributedSubprocess(unittest.IsolatedAsyncioTestCase):
 
         fake_runner = FakeRunner(cfg=MagicMock())
 
+        mock_runner_backends = MagicMock()
+        mock_runner_backends.BACKEND_REGISTRY = {"fake": lambda cfg: fake_runner}
+
         with (
             patch("runner.process_utils._HAS_RUNNER", True),
             patch("runner.process_utils.BACKENDS", {"fake": True}),
@@ -406,9 +409,8 @@ class TestDistributedSubprocess(unittest.IsolatedAsyncioTestCase):
             patch("runner.process_utils.logger") as mock_logger,
             patch("runner.process_utils.collect_feedback", new=AsyncMock()),
             patch(
-                "runner.process_utils.runner_backends.BACKEND_REGISTRY",
-                {"fake": lambda cfg: fake_runner},
-                create=True,
+                "runner.process_utils.runner_backends",
+                mock_runner_backends,
             ),
         ):
 

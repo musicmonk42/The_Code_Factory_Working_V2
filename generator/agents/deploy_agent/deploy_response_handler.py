@@ -1369,7 +1369,8 @@ class YAMLHandler(FormatHandler):
                 continue
             
             # Skip lines that start with markdown headers (# followed by space and any letter)
-            if re.match(r'^\s*#\s+[A-Za-z]', line):
+            # But preserve YAML comments that contain parentheses or other non-header patterns
+            if re.match(r'^\s*#\s+[A-Za-z]', line) and not re.search(r'[()]', line):
                 continue
             
             # Skip numbered lists with explanations (e.g., "1. **Deployment Manifest**:")

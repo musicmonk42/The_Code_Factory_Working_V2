@@ -684,8 +684,8 @@ class TestEndToEndClarification(unittest.IsolatedAsyncioTestCase):
 
                 result = await updater.update(requirements_v1, ["amb"], ["ans"])
 
-                # Should be migrated to v2
-                self.assertEqual(result["schema_version"], 2)
+                # Should be migrated to target schema version
+                self.assertEqual(result["schema_version"], mock_config_instance.SCHEMA_VERSION)
                 self.assertIn("inferred_features", result)
                 self.assertIn("inferred_constraints", result)
 

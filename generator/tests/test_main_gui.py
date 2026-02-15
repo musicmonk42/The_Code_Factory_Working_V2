@@ -642,13 +642,16 @@ class TestMetricsTab:
     async def test_update_metrics_local(self, app_instance):
         """Test updating metrics display from local runner metrics."""
         with (
-            patch("generator.main.gui.RUN_QUEUE.get_size", return_value=5) as mock_q,
-            patch("generator.main.gui.RUN_PASS_RATE.get", return_value=95.5) as mock_pass,
-            patch("generator.main.gui.RUN_RESOURCE_USAGE.get", return_value=75.0) as mock_res,
-            patch("generator.main.gui.HEALTH_STATUS.get", return_value="OK") as mock_health,
+            patch("generator.main.gui.get_metrics_dict", return_value={"runner_queue_length": 5}) as mock_q,
+            patch("generator.main.gui.RUN_PASS_RATE") as mock_pass,
+            patch("generator.main.gui.RUN_RESOURCE_USAGE") as mock_res,
+            patch("generator.main.gui.HEALTH_STATUS") as mock_health,
             patch.object(app_instance.metrics_display, "update") as mock_display_update,
             patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
+            mock_pass._value.get.return_value = 95.5
+            mock_res._value.get.return_value = 75.0
+            mock_health._value.get.return_value = "OK"
 
             await app_instance._update_metrics()  # Call internal method directly
 

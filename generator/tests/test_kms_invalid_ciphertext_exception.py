@@ -19,15 +19,23 @@ class TestInvalidCiphertextException:
     @pytest.fixture
     def mock_botocore_client_error(self):
         """Create a mock ClientError with InvalidCiphertextException."""
-        # Mock the botocore ClientError
-        mock_error = MagicMock()
-        mock_error.response = {
-            'Error': {
-                'Code': 'InvalidCiphertextException',
-                'Message': 'The ciphertext refers to a customer master key that does not exist'
-            }
-        }
-        return mock_error
+        # Create a real exception with response attribute to simulate botocore.ClientError
+        class MockClientError(Exception):
+            def __init__(self, response, operation_name):
+                self.response = response
+                self.operation_name = operation_name
+                super().__init__(str(response))
+
+        error = MockClientError(
+            response={
+                'Error': {
+                    'Code': 'InvalidCiphertextException',
+                    'Message': 'The ciphertext refers to a customer master key that does not exist'
+                }
+            },
+            operation_name='Decrypt'
+        )
+        return error
 
     @pytest.mark.asyncio
     async def test_invalid_ciphertext_exception_handling(
@@ -45,6 +53,20 @@ class TestInvalidCiphertextException:
             lambda: False,
         )
 
+        # Reset global state to ensure clean test
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER",
+            None,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_PERMANENT_FAILURE",
+            False,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_LAST_ERROR",
+            None,
+        )
+
         # Mock botocore to have ClientError
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory.HAS_BOTO3",
@@ -60,7 +82,7 @@ class TestInvalidCiphertextException:
         )
 
         # Make the KMS decrypt call raise InvalidCiphertextException
-        mock_boto[1].side_effect = mock_botocore_client_error
+        mock_boto[1].decrypt.side_effect = mock_botocore_client_error
 
         # Test that the exception is caught and re-raised with proper message
         with pytest.raises(
@@ -84,8 +106,22 @@ class TestInvalidCiphertextException:
             lambda: False,
         )
 
+        # Reset global state to ensure clean test
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER",
+            None,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_PERMANENT_FAILURE",
+            False,
+        )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_LAST_ERROR",
+            None,
+        )
+
         # Raise a generic exception (not InvalidCiphertextException)
-        mock_boto[1].side_effect = Exception("Generic KMS error")
+        mock_boto[1].decrypt.side_effect = Exception("Generic KMS error")
 
         with pytest.raises(
             CryptoInitializationError, 
@@ -187,8 +223,9 @@ class TestRateLimitedLogger:
 @pytest.fixture
 def mock_secrets(monkeypatch):
     """Mocks the secret fetching functions from secrets.py."""
-    mock_aget_kms = MagicMock(return_value=b"mock_encrypted_ciphertext_blob")
-    mock_aget_hmac = MagicMock(return_value=b"mock_hmac_secret_bytes")
+    from unittest.mock import AsyncMock
+    mock_aget_kms = AsyncMock(return_value=b"mock_encrypted_ciphertext_blob")
+    mock_aget_hmac = AsyncMock(return_value=b"mock_hmac_secret_bytes")
 
     monkeypatch.setattr(
         "generator.audit_log.audit_crypto.audit_crypto_factory.aget_kms_master_key_ciphertext_blob",
@@ -205,11 +242,9 @@ def mock_secrets(monkeypatch):
 @pytest.fixture
 def mock_boto(monkeypatch):
     """Mocks boto3 and botocore."""
-    from unittest.mock import AsyncMock
-    
     mock_kms_client = MagicMock()
-    # KMS decrypt is async in production, so use AsyncMock
-    mock_kms_client.decrypt = AsyncMock(return_value={
+    # KMS decrypt is called via asyncio.to_thread (synchronous), so use regular MagicMock
+    mock_kms_client.decrypt = MagicMock(return_value={
         "Plaintext": b"0123456789abcdef0123456789abcdef"  # 32 bytes
     })
 
