@@ -183,33 +183,43 @@ try:
     from prometheus_client import Counter, Histogram, Gauge, Info
     HAS_PROMETHEUS = True
     
-    # Workflow metrics
-    WORKFLOW_EXECUTIONS = Counter(
+    # Workflow metrics - wrapped to handle duplicate registration across imports
+    def _safe_create(cls, *args, **kwargs):
+        try:
+            return cls(*args, **kwargs)
+        except ValueError:
+            from prometheus_client import REGISTRY
+            name = args[0] if args else kwargs.get('name', '')
+            if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
+                return REGISTRY._names_to_collectors[name]
+            raise
+
+    WORKFLOW_EXECUTIONS = _safe_create(Counter,
         'workflow_engine_executions_total',
         'Total number of workflow executions',
         ['status', 'dry_run']
     )
-    WORKFLOW_DURATION = Histogram(
+    WORKFLOW_DURATION = _safe_create(Histogram,
         'workflow_engine_duration_seconds',
         'Workflow execution duration in seconds',
         ['status'],
         buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0]
     )
-    WORKFLOW_ITERATIONS = Histogram(
+    WORKFLOW_ITERATIONS = _safe_create(Histogram,
         'workflow_engine_iterations',
         'Number of iterations per workflow',
         buckets=[1, 2, 3, 5, 10, 20, 50]
     )
-    AGENT_REGISTRY_SIZE = Gauge(
+    AGENT_REGISTRY_SIZE = _safe_create(Gauge,
         'workflow_engine_agent_registry_size',
         'Number of agents currently registered'
     )
-    AGENT_EXECUTIONS = Counter(
+    AGENT_EXECUTIONS = _safe_create(Counter,
         'workflow_engine_agent_executions_total',
         'Total agent executions',
         ['agent_name', 'status']
     )
-    ENGINE_INFO = Info(
+    ENGINE_INFO = _safe_create(Info,
         'workflow_engine',
         'Workflow engine metadata'
     )

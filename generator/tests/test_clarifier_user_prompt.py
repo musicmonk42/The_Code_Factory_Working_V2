@@ -127,6 +127,11 @@ from generator.clarifier.clarifier_user_prompt import (
     update_profile_from_feedback,
 )
 
+# Reset lazy config caches to ensure mock config is used
+import generator.clarifier.clarifier_user_prompt as _user_prompt_mod
+_user_prompt_mod._config_instance = None
+_user_prompt_mod._channel_configs_cache = None
+
 _HAS_TEXTUAL = HAS_TEXTUAL
 _HAS_FASTAPI = HAS_FASTAPI
 _HAS_SPEECH_RECOGNITION = HAS_SPEECH_RECOGNITION
@@ -205,14 +210,16 @@ class TestCLIPrompt(unittest.IsolatedAsyncioTestCase):
 
     @patch("builtins.input", side_effect=["Answer 1", "Answer 2"])
     async def test_cli_prompt(self, mock_input):
+        # Record metric value before test to check increment
+        before = PROMPT_CYCLES.labels(channel="CLIPrompt")._value.get()
         questions = ["Question 1?", "Question 2?"]
         answers = await self.channel.prompt(questions, self.context)
 
         self.assertEqual(answers, ["Answer 1", "Answer 2"])
         self.assertEqual(mock_input.call_count, 2)
-        # Fixed: Use .get() to access Prometheus metric value
-        metric_value = PROMPT_CYCLES.labels(channel="CLIPrompt")._value.get()
-        self.assertEqual(metric_value, 1)
+        # Check that the metric was incremented by 1
+        after = PROMPT_CYCLES.labels(channel="CLIPrompt")._value.get()
+        self.assertEqual(after - before, 1)
 
     @patch(
         "builtins.input", side_effect=["yes", "no", "Germany", "yes", "no"] * 10

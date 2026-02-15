@@ -1129,7 +1129,24 @@ def load_config(
             fetch = getattr(config, "fetch_vault_secrets", None)
             if fetch:
                 if asyncio.iscoroutinefunction(fetch):
-                    asyncio.run(fetch())
+                    try:
+                        asyncio.get_running_loop()
+                        # Already in an async context - use a thread to avoid nested loop
+                        import threading
+                        result_holder = {}
+                        def _run():
+                            try:
+                                asyncio.run(fetch())
+                            except Exception as e:
+                                result_holder["error"] = e
+                        t = threading.Thread(target=_run)
+                        t.start()
+                        t.join()
+                        if "error" in result_holder:
+                            raise result_holder["error"]
+                    except RuntimeError:
+                        # No running loop - safe to use asyncio.run()
+                        asyncio.run(fetch())
                 else:
                     fetch()
         except Exception as e:

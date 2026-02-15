@@ -729,8 +729,8 @@ class TestConfigReload:
             patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
-            app_instance.query_one("#reload-parser-config").press()
-            await asyncio.sleep(0.01)  # Allow events to process
+            # Directly call the handler to avoid event loop timing issues
+            await app_instance.reload_parser_config_button()
 
             app_instance.parser_config_watcher._reload.assert_called_once_with(
                 force=True

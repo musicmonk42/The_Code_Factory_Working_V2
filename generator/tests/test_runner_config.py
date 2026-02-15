@@ -45,6 +45,9 @@ for _mod in _modules_to_mock_rc:
 
 class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        # Clear config cache to prevent stale config from previous tests
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         self.temp_dir = Path(tempfile.mkdtemp())
         self.config_file = self.temp_dir / "config.yaml"
         # FIX: Updated YAML to match the modern schema (first-class api_key)

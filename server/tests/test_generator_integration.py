@@ -588,7 +588,7 @@ class TestMultiWorkerDatabaseFallback:
         with patch("server.services.dispatch_service.dispatch_job_completion") as mock_dispatch:
             mock_dispatch.return_value = {"status": "dispatched"}
             
-            response = client.post(f"/api/generator/{job_in_database.id}/dispatch")
+            response = client.post(f"/api/generator/{job_in_database.id}/dispatch-to-sfe")
             
             # Should succeed with database fallback
             assert response.status_code == 200

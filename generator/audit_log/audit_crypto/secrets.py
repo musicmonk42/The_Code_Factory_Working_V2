@@ -698,7 +698,7 @@ class DummySecretManager(SecretManager):
 
 # --- Secret Manager Initialization ---
 # This section determines which SecretManager implementation to use based on environment variables.
-_secret_manager: SecretManager
+_secret_manager: Optional[SecretManager] = None  # type: ignore[assignment]
 
 # Parse rate limit settings from environment variables with defaults
 SECRET_RATE_LIMIT_WINDOW_SECONDS = int(

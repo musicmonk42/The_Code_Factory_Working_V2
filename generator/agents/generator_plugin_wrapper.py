@@ -140,13 +140,20 @@ def get_or_create_metric(metric_class, name, description, labelnames=None, **kwa
             return _created_metrics[name]
 
         # Check if already registered in the default Prometheus registry
-        if name in REGISTRY._names_to_collectors:
+        if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
             existing = REGISTRY._names_to_collectors[name]
             _created_metrics[name] = existing
             return existing
 
-        # Create the metric and cache it
-        metric = metric_class(name, description, labelnames=labelnames, **kwargs)
+        # Create the metric and cache it; handle duplicate registration gracefully
+        try:
+            metric = metric_class(name, description, labelnames=labelnames, **kwargs)
+        except ValueError:
+            # Metric already registered (e.g. via a different import path) - retrieve it
+            if hasattr(REGISTRY, '_names_to_collectors') and name in REGISTRY._names_to_collectors:
+                metric = REGISTRY._names_to_collectors[name]
+            else:
+                raise
         _created_metrics[name] = metric
         return metric
 
