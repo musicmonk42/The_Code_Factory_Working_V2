@@ -203,7 +203,8 @@ class KafkaBridgeConfig:
     linger_ms: int = 5
     max_batch_size: int = 16384
     compression_type: Optional[str] = "gzip"
-    retries: int = 5
+    # Note: retries parameter removed - not supported in aiokafka 0.7.x
+    # Retry logic is handled internally by aiokafka based on enable_idempotence
     retry_backoff_ms: int = 100
     request_timeout_ms: int = 30000
     enable_idempotence: bool = True
