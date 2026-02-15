@@ -465,7 +465,8 @@ class ShardedMessageBus:
                     bootstrap_servers=getattr(self.config, "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
                     client_id=getattr(self.config, "KAFKA_CLIENT_ID", "omnicore-engine"),
                     group_id=getattr(self.config, "KAFKA_GROUP_ID", None),
-                    retries=getattr(self.config, "KAFKA_MAX_RETRIES", 5),
+                    # Note: 'retries' parameter removed - not supported in aiokafka 0.7.x+
+                    # Retry logic is handled internally by aiokafka based on enable_idempotence
                     retry_backoff_ms=getattr(self.config, "KAFKA_RETRY_BACKOFF_MS", 100),
                     request_timeout_ms=getattr(self.config, "KAFKA_CONNECTION_TIMEOUT_MS", 30000),
                     enable_metrics=getattr(self.config, "KAFKA_ENABLE_METRICS", True),

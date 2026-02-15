@@ -1376,7 +1376,13 @@ class CryptoProviderFactory:
             return instance
         except Exception as e:
             error_msg = f"Failed to initialize provider '{provider_type}': {e}"
-            logger.error(error_msg, exc_info=True)
+            # Use rate-limited logging to prevent log flooding
+            _logger_limiter.rate_limited_log(
+                logger.error,
+                f"provider_init_fail_{provider_type}",
+                error_msg,
+                exc_info=True
+            )
 
             # Check if graceful degradation is allowed via AUDIT_CRYPTO_ALLOW_INIT_FAILURE
             allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")

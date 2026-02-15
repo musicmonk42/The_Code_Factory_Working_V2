@@ -553,6 +553,96 @@ MESSAGE_BUS_WORKERS_PER_SHARD=8  # More workers per shard
 
 ---
 
+## Troubleshooting
+
+### Fixing InvalidCiphertextException Errors
+
+If you see `InvalidCiphertextException: Master key encrypted with different KMS key` in your logs, this means you're using a KMS-encrypted key instead of a plaintext key for Railway deployment.
+
+**Symptoms:**
+- Hundreds of error logs: `Failed to initialize provider 'software': InvalidCiphertextException`
+- Application starts but audit crypto is disabled
+- Jobs may appear and disappear due to failed state updates
+
+**Root Cause:**
+You're likely using a master encryption key that was encrypted with AWS KMS, but Railway deployments should use **plaintext base64 keys** (Railway encrypts environment variables at the platform level).
+
+**Solution:**
+
+1. **Generate a new plaintext master key:**
+   ```bash
+   python scripts/rotate_audit_crypto_key.py --mode railway
+   ```
+
+2. **Update Railway variable:**
+   - Go to Railway dashboard → Your Project → Variables
+   - Update `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` with the output from step 1
+   - Ensure `USE_ENV_SECRETS=true` is set
+   - Redeploy
+
+3. **For AWS KMS deployments (not Railway):**
+   ```bash
+   python scripts/rotate_audit_crypto_key.py --mode kms --key-id alias/your-key
+   ```
+
+**Prevention:**
+- Always use `USE_ENV_SECRETS=true` for Railway deployments
+- Never encrypt keys with KMS for Railway - Railway handles encryption
+- Use the `scripts/rotate_audit_crypto_key.py` script to generate keys
+
+### Other Common Issues
+
+#### Kafka Bridge Initialization Errors
+
+**Error:** `AIOKafkaProducer.__init__() got an unexpected keyword argument 'retries'`
+
+**Solution:** This has been fixed in the latest version. Ensure you're using the latest code where the `retries` parameter has been removed from Kafka configuration.
+
+#### Job Persistence Issues
+
+**Symptom:** Jobs disappear and reappear, or "job not found" errors
+
+**Causes:**
+1. Audit crypto failures preventing state updates (see InvalidCiphertextException fix above)
+2. Database connection issues
+3. Circuit breaker opened due to repeated failures
+
+**Solution:**
+1. Fix audit crypto configuration first (see above)
+2. Check database connectivity: `curl https://your-app.up.railway.app/health`
+3. Check logs for circuit breaker status
+4. Restart application to reset circuit breaker if needed
+
+#### Application Starts but Features Don't Work
+
+**Check these in order:**
+
+1. **Audit Crypto Status:**
+   ```bash
+   # Check logs for: "✓ Audit crypto initialized successfully"
+   # If you see "SECURITY CRITICAL: AUDIT_CRYPTO_ALLOW_INIT_FAILURE", fix the master key
+   ```
+
+2. **Database Connection:**
+   ```bash
+   curl https://your-app.up.railway.app/health
+   # Should show PostgreSQL: connected
+   ```
+
+3. **Redis Connection:**
+   ```bash
+   # Check logs for Redis connection confirmation
+   # If missing, ensure Redis plugin is added in Railway
+   ```
+
+4. **Required Secrets:**
+   ```bash
+   # Verify all required variables are set (see Environment Variables Configuration above)
+   # Missing: OPENAI_API_KEY, AGENTIC_AUDIT_HMAC_KEY, etc.
+   ```
+
+---
+
 ## Rolling Back
 
 If deployment fails:
