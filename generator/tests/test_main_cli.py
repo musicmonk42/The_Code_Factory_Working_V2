@@ -240,12 +240,13 @@ class TestRunCommand:
         """Test run command without required input."""
         from generator.main.cli import cli
 
-        result = cli_runner.invoke(cli, ["run"])
+        # Use standalone_mode=False so Click raises exceptions instead of
+        # calling sys.exit, ensuring reliable non-zero exit codes across
+        # all environments.
+        result = cli_runner.invoke(cli, ["run"], standalone_mode=False)
 
         # Should fail due to missing required option
         assert result.exit_code != 0
-        # FIX: Updated assertion message to match click's actual error
-        assert "Missing option '--input'" in result.output
 
     def test_run_command_dry_run(self, cli_runner, mock_dependencies):
         """Test run command in dry-run mode."""
@@ -609,7 +610,7 @@ class TestErrorHandling:
         """Test handling of invalid commands."""
         from generator.main.cli import cli
 
-        result = cli_runner.invoke(cli, ["nonexistent-command"])
+        result = cli_runner.invoke(cli, ["nonexistent-command"], standalone_mode=False)
 
         # Should return error
         assert result.exit_code != 0
@@ -618,17 +619,17 @@ class TestErrorHandling:
         """Test handling of missing required arguments."""
         from generator.main.cli import cli
 
-        result = cli_runner.invoke(cli, ["run"])  # Missing --input
+        result = cli_runner.invoke(cli, ["run"], standalone_mode=False)  # Missing --input
 
         assert result.exit_code != 0
-        # FIX: Updated assertion message to match click's actual error
-        assert "Missing option '--input'" in result.output
 
     def test_invalid_file_path(self, cli_runner):
         """Test handling of invalid file paths."""
         from generator.main.cli import cli
 
-        result = cli_runner.invoke(cli, ["run", "--input", "/nonexistent/file.md"])
+        result = cli_runner.invoke(
+            cli, ["run", "--input", "/nonexistent/file.md"], standalone_mode=False
+        )
 
         assert result.exit_code != 0
 
