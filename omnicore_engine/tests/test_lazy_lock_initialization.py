@@ -71,6 +71,7 @@ def test_import_speed():
     return True
 
 
+@pytest.mark.forked
 @pytest.mark.serial
 async def test_lazy_lock_creation():
     """Test that locks are created lazily in async contexts."""
@@ -118,6 +119,7 @@ async def test_lazy_lock_creation():
     return True
 
 
+@pytest.mark.forked
 async def test_lock_prevents_race_conditions():
     """Test that the lazy lock still provides thread safety."""
     print("\n" + "=" * 70)
@@ -163,6 +165,7 @@ async def test_lock_prevents_race_conditions():
     return True
 
 
+@pytest.mark.forked
 async def test_database_lazy_lock():
     """Test Database rotate_keys lazy lock creation."""
     print("\n" + "=" * 70)

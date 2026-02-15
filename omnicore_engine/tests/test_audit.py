@@ -389,6 +389,7 @@ async def test_concurrent_audit_entries(tmp_path):
         # Create a real db instance and mock its save method
         db = RealDatabase(db_url)
         db.save_audit_record = AsyncMock()
+        db.initialize = AsyncMock()
 
         # Replace audit's db client
         audit._db_client = db
