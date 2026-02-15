@@ -529,8 +529,9 @@ async def delete_job(job_id: str) -> SuccessResponse:
         if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     
-    # FIX Bug 2: Delete from persistent database FIRST to minimize race with recovery
-    # This ensures the job is marked as deleted before removing from memory
+    # Delete from persistent database FIRST to prevent race with concurrent recovery.
+    # In multi-worker deployments, recovery may be running on other workers. Deleting
+    # from DB first ensures recovery won't restore this job even if it's still in memory.
     try:
         delete_success = await delete_job_from_database(job_id)
         if delete_success:

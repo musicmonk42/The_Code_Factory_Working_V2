@@ -981,9 +981,9 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         # Load job from database with full validation
                         job = await load_job_from_database(job_id)
                         if job:
-                            # FIX Bug 2: Verify job still exists in database before restoring
-                            # The batch query may have fetched stale data if job was deleted
-                            # between the batch query and now. Re-verify before restoring.
+                            # Multi-worker race condition prevention: Verify job still exists in database
+                            # before restoring to memory. The batch query may have fetched stale data
+                            # if job was deleted between the batch query and now.
                             try:
                                 async with db.AsyncSessionLocal() as verify_session:
                                     verify_result = await verify_session.execute(

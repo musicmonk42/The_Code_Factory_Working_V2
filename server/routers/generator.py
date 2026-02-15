@@ -469,8 +469,8 @@ async def _resume_pipeline_after_clarification(
         clarified_requirements: Requirements refined from user answers
     """
     try:
-        # FIX Bug 3: Use _get_job_or_404 pattern for consistent multi-worker job lookup
-        # This ensures job is loaded from database if not in memory
+        # Use _get_job_or_404 pattern for consistent multi-worker job lookup.
+        # This ensures job is loaded from database if not in memory on this worker.
         try:
             job = await _get_job_or_404(job_id)
         except HTTPException:
@@ -1162,8 +1162,8 @@ async def submit_clarification_response(
         job.status = JobStatus.RUNNING
         job.updated_at = datetime.now(timezone.utc)
 
-        # FIX Bug 3: Persist job state to database before background task
-        # This ensures the status change is visible to other workers
+        # Persist job state to database before background task starts.
+        # This ensures status changes are visible to all workers in multi-worker deployments.
         await save_job_to_database(job)
 
         background_tasks.add_task(
@@ -1256,8 +1256,8 @@ async def submit_clarification_response(
         job.metadata["clarification_status"] = "resolved"
         job.status = JobStatus.RUNNING
 
-        # FIX Bug 3: Persist job state to database before background task
-        # This ensures the status change is visible to other workers
+        # Persist job state to database before background task starts.
+        # This ensures status changes are visible to all workers in multi-worker deployments.
         await save_job_to_database(job)
 
         background_tasks.add_task(
