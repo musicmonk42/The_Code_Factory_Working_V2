@@ -1416,26 +1416,14 @@ class Clarifier:
         ):
             try:
                 from prometheus_client import start_http_server
-                import multiprocessing
+                # Use shared worker utilities for consistent port allocation
+                from omnicore_engine.worker_utils import calculate_worker_port
 
                 # Use dynamic port to avoid conflicts with FastAPI and other workers
                 base_port = int(os.getenv("CLARIFIER_METRICS_PORT", "8000"))
-                # Derive worker offset from environment or PID to avoid port conflicts
-                worker_id = os.getenv("WORKER_ID") or os.getenv("PROMETHEUS_MULTIPROC_DIR")
-                if worker_id is None:
-                    # Use PID-based offset as fallback for multi-worker deployments
-                    try:
-                        worker_offset = multiprocessing.current_process()._identity[0] - 1 if hasattr(multiprocessing.current_process(), '_identity') and multiprocessing.current_process()._identity else 0
-                    except (IndexError, AttributeError):
-                        worker_offset = 0
-                else:
-                    try:
-                        worker_offset = int(worker_id)
-                    except (ValueError, TypeError):
-                        worker_offset = 0
-                port = base_port + worker_offset
+                port = calculate_worker_port(base_port)
                 start_http_server(port)
-                self.logger.info(f"Prometheus metrics server started on port {port} (worker_offset={worker_offset}).")
+                self.logger.info(f"Prometheus metrics server started on port {port}.")
                 setattr(self, "_metrics_server_started", True)
             except Exception as e:
                 self.logger.error(
