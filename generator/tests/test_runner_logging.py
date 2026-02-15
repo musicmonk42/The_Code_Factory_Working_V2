@@ -105,6 +105,9 @@ def clean_history_and_handlers():
     """[FIX] Clears LOG_HISTORY and removes handlers to ensure test isolation."""
     LOG_HISTORY.clear()
 
+    # Preserve pytest's LogCaptureHandler on the root logger so caplog works
+    _PYTEST_HANDLER_NAMES = {'LogCaptureHandler', '_LiveLoggingStreamHandler'}
+
     loggers_to_clean = [
         logging.getLogger(),  # Root logger
         logging.getLogger("runner"),
@@ -118,11 +121,13 @@ def clean_history_and_handlers():
         # [FIX] Also reset propagate to its default (True) for isolation
         logger.propagate = True
         for handler in list(logger.handlers):
+            if handler.__class__.__name__ in _PYTEST_HANDLER_NAMES:
+                continue  # Don't remove pytest's log capture handlers
             handler.close()
             logger.removeHandler(handler)
         # Clear filters too
-        for filter in list(logger.filters):
-            logger.removeFilter(filter)
+        for filt in list(logger.filters):
+            logger.removeFilter(filt)
 
     yield
 
@@ -130,11 +135,13 @@ def clean_history_and_handlers():
     for logger in loggers_to_clean:
         logger.propagate = True
         for handler in list(logger.handlers):
+            if handler.__class__.__name__ in _PYTEST_HANDLER_NAMES:
+                continue  # Don't remove pytest's log capture handlers
             handler.close()
             logger.removeHandler(handler)
         # Clear filters after test too
-        for filter in list(logger.filters):
-            logger.removeFilter(filter)
+        for filt in list(logger.filters):
+            logger.removeFilter(filt)
 
 
 @pytest.fixture
