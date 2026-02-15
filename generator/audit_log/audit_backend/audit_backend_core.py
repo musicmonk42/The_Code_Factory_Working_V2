@@ -271,6 +271,38 @@ def _is_test_or_dev_mode() -> bool:
     )
 
 
+# Pre-parse JSON strings from environment variables before Dynaconf reads them
+# This is critical for Railway deployments where env vars are set as JSON strings
+# Dynaconf's validator checks type before the value is parsed, so we pre-parse it here
+def _preparse_json_env_vars() -> None:
+    """
+    Pre-parse JSON string environment variables that Dynaconf will validate.
+    
+    Railway and other platforms set env vars as JSON strings like:
+    AUDIT_ENCRYPTION_KEYS='[{"key_id":"...","key":"..."}]'
+    
+    But Dynaconf validators check `is_type_of=list` on the raw string, which fails.
+    This function parses the JSON string and validates it, logging errors gracefully.
+    """
+    env_key = "AUDIT_ENCRYPTION_KEYS"
+    value = os.environ.get(env_key)
+    
+    if value and isinstance(value, str) and value.strip().startswith(('[', '{')):
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, list):
+                logger.info(f"✓ Pre-validated {env_key} - JSON parsed successfully ({len(parsed)} keys)")
+                # We can't replace os.environ with non-string, but validation passed
+                # The _as_json_list function will parse it again later
+            else:
+                logger.warning(f"⚠ {env_key} JSON parsed but is not a list: {type(parsed)}")
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Failed to parse {env_key} as JSON: {e}")
+
+# Pre-validate ENCRYPTION_KEYS JSON string before Dynaconf validation
+if not _is_test_or_dev_mode():
+    _preparse_json_env_vars()
+
 # In test/dev mode, pre-set the required values before Dynaconf initialization
 if _is_test_or_dev_mode():
     os.environ.setdefault(
@@ -296,7 +328,10 @@ else:
         envvar_prefix="AUDIT",
         settings_files=["audit_config.yaml"],
         validators=[
-            Validator("ENCRYPTION_KEYS", must_exist=True, is_type_of=list),
+            # FIX: Removed is_type_of=list check for ENCRYPTION_KEYS
+            # Railway sets this as a JSON string, and Dynaconf can't validate list types on strings
+            # The _as_json_list() function handles parsing and validation instead
+            Validator("ENCRYPTION_KEYS", must_exist=True),
             Validator(
                 "COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]
             ),
@@ -438,8 +473,16 @@ def _as_json_list(name: str, default: list) -> list:
     if isinstance(v, str):
         try:
             j = json.loads(v)
-            return j if isinstance(j, list) else default
-        except Exception:
+            if isinstance(j, list):
+                logger.info(f"✓ Parsed {name} from JSON string successfully")
+                return j
+            else:
+                logger.error(f"❌ {name} JSON parsed but is not a list, got {type(j)}")
+                return default
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Failed to parse {name} as JSON: {e}")
+            if not _is_test_or_dev_mode():
+                raise ValidationError(f"{name} must be valid JSON list, got: {v[:100]}")
             return default
     return default
 
