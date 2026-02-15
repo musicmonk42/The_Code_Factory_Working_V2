@@ -10,6 +10,7 @@ All sensitive configurations MUST BE retrieved via the configured SECRET_MANAGER
 
 import asyncio
 import base64
+import binascii
 import concurrent.futures
 import logging
 import os
@@ -946,8 +947,16 @@ async def aget_fallback_hmac_secret() -> Optional[bytes]:
 
 async def aget_kms_master_key_ciphertext_blob() -> bytes:
     """
-    Async version to fetch the KMS-encrypted ciphertext blob for the software key master securely
-    from the configured secret manager.
+    Async version to fetch the master key material from the configured secret manager.
+    
+    In Railway/PaaS mode (USE_ENV_SECRETS=true or AUDIT_CRYPTO_USE_KMS=false):
+        - Returns plaintext base64-decoded key bytes directly
+        - EnvVarSecretManager already decoded the base64, so no additional decoding needed
+        
+    In AWS KMS mode:
+        - Returns base64-decoded ciphertext blob for KMS decryption
+        - Caller must decrypt using AWS KMS
+        
     Raises SecretError if the blob cannot be retrieved or decoded.
     """
     # --- FIX 3: Removed outer try/except block to allow exceptions to propagate ---
@@ -962,11 +971,25 @@ async def aget_kms_master_key_ciphertext_blob() -> bytes:
             "Software key master encryption key not found or accessible."
         )
 
+    # Check deployment mode to avoid double base64 decoding
+    use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+    use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+    
+    # Railway/PaaS mode: EnvVarSecretManager already decoded base64, return as-is
+    if use_env_secrets or not use_kms:
+        logger.debug(
+            "Railway/PaaS mode: Returning plaintext key bytes (already base64 decoded by EnvVarSecretManager)"
+        )
+        # encrypted_data_key_bytes is already decoded by EnvVarSecretManager.get_secret()
+        # Don't decode again to avoid double-decoding bug
+        return encrypted_data_key_bytes
+    
+    # AWS KMS mode: Need to base64 decode the ciphertext blob for KMS
     try:
         ciphertext_blob = base64.b64decode(encrypted_data_key_bytes)
-        logger.debug("KMS master key ciphertext blob successfully retrieved.")
+        logger.debug("AWS KMS mode: KMS master key ciphertext blob successfully retrieved and decoded.")
         return ciphertext_blob
-    except Exception as e:
+    except (binascii.Error, ValueError) as e:
         logger.critical(
             f"Failed to base64 decode KMS master key ciphertext: {e}.", exc_info=True
         )
