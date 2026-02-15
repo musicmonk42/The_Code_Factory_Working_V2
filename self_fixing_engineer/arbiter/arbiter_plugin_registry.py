@@ -101,18 +101,59 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-class PlugInKind(Enum):
-    """Supported plugin kinds."""
+# Import PluginBase and canonical PlugInKind from the shared omnicore_engine module.
+# The canonical PlugInKind in omnicore_engine.plugin_base is the single source of truth
+# and includes all arbiter kinds (WORKFLOW, VALIDATOR, REPORTER, etc.) as well as
+# omnicore kinds (FIX, CHECK, EXECUTION, etc.).
+# We keep a local alias for backward compatibility so that existing arbiter code
+# doing ``from arbiter_plugin_registry import PlugInKind`` continues to work.
+try:
+    from omnicore_engine.plugin_base import PlugInKind, PluginBase
+except ImportError:
+    # Fallback: define locally if omnicore_engine is not installed.
+    # This allows arbiter to function standalone during development/testing.
+    logger.debug(
+        "omnicore_engine.plugin_base not available; using local PlugInKind / PluginBase definitions."
+    )
 
-    WORKFLOW = "workflow"
-    VALIDATOR = "validator"
-    REPORTER = "reporter"
-    GROWTH_MANAGER = "growth_manager"
-    CORE_SERVICE = "core_service"
-    ANALYTICS = "analytics"
-    STRATEGY = "strategy"
-    TRANSFORMER = "transformer"
-    AI_ASSISTANT = "ai_assistant"
+    class PlugInKind(Enum):
+        """Supported plugin kinds (local fallback)."""
+
+        WORKFLOW = "workflow"
+        VALIDATOR = "validator"
+        REPORTER = "reporter"
+        GROWTH_MANAGER = "growth_manager"
+        CORE_SERVICE = "core_service"
+        ANALYTICS = "analytics"
+        STRATEGY = "strategy"
+        TRANSFORMER = "transformer"
+        AI_ASSISTANT = "ai_assistant"
+
+    class PluginBase(ABC):
+        """Base class for all plugins (local fallback)."""
+
+        @abstractmethod
+        async def initialize(self) -> None:
+            pass
+
+        @abstractmethod
+        async def start(self) -> None:
+            pass
+
+        @abstractmethod
+        async def stop(self) -> None:
+            pass
+
+        @abstractmethod
+        async def health_check(self) -> bool:
+            return True
+
+        @abstractmethod
+        async def get_capabilities(self) -> List[str]:
+            return []
+
+        def on_reload(self) -> None:
+            pass
 
 
 class PluginError(Exception):
@@ -144,43 +185,6 @@ class PluginMeta:
     signature: Optional[str] = None
     is_quarantined: bool = False
     health: Optional[Dict[str, Any]] = None
-
-
-class PluginBase(ABC):
-    """Base class for all plugins."""
-
-    @abstractmethod
-    async def initialize(self) -> None:
-        """Initialize the plugin (e.g., setup resources)."""
-        pass
-
-    @abstractmethod
-    async def start(self) -> None:
-        """Start the plugin (e.g., begin processing)."""
-        pass
-
-    @abstractmethod
-    async def stop(self) -> None:
-        """Stop the plugin and clean up resources."""
-        pass
-
-    @abstractmethod
-    async def health_check(self) -> bool:
-        """Check if the plugin is healthy."""
-        return True
-
-    @abstractmethod
-    async def get_capabilities(self) -> List[str]:
-        """
-        Returns a list of the plugin's capabilities or exposed APIs.
-        This enables UIs or orchestration layers to dynamically discover
-        the services offered by a plugin.
-        """
-        return []
-
-    def on_reload(self) -> None:
-        """Handle plugin reload event."""
-        pass
 
 
 # Metrics setup

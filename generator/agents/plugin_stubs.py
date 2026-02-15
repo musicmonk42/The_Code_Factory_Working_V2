@@ -42,7 +42,11 @@ class _FallbackPlugInKind:
 
 
 try:
-    from omnicore_engine.plugin_registry import PlugInKind, plugin
+    from omnicore_engine.plugin_base import PlugInKind
+    from omnicore_engine.plugin_registry import plugin
 except ImportError:
-    plugin = _fallback_plugin
-    PlugInKind = _FallbackPlugInKind
+    try:
+        from omnicore_engine.plugin_registry import PlugInKind, plugin
+    except ImportError:
+        plugin = _fallback_plugin
+        PlugInKind = _FallbackPlugInKind
