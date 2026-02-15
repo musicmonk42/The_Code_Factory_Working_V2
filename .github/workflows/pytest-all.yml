@@ -823,7 +823,6 @@ jobs:
           echo "=== Running Arbiter Tests ==="
           python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
-            -n auto --dist loadscope \
             -v \
             --tb=short \
             -m "not heavy" \
