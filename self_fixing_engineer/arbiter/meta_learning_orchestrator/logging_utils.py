@@ -20,7 +20,10 @@ class LogCorrelationFilter(logging.Filter):
     """Adds OpenTelemetry Span ID and Trace ID to log records if available."""
 
     def filter(self, record):
-        span = trace.get_current_span()
+        try:
+            span = trace.get_current_span()
+        except (AttributeError, Exception):
+            span = None
 
         # Handle different span types and contexts properly
         if span:
