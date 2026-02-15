@@ -291,6 +291,10 @@ _router_load_lock = threading.Lock()
 _routers_loaded = False
 _router_load_error: Optional[str] = None
 
+# Job recovery flag to prevent duplicate recovery across workers or multiple calls
+# Single worker mode (workers=1) makes this less critical, but it's still good practice
+_recovery_completed = False
+
 # Placeholders for lazy-loaded modules
 api_keys_router = None
 audit_router = None
@@ -837,23 +841,29 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.info("RECOVERING PERSISTED JOBS FROM DATABASE")
         logger.info("=" * 80)
         
-        # Attempt to acquire distributed lock for job recovery
-        from server.distributed_lock import get_startup_lock
-        recovery_lock = get_startup_lock()
-        lock_acquired = await recovery_lock.acquire(blocking=False)
-        
-        if not lock_acquired:
-            logger.info("⚠ Job recovery skipped - another instance holds the startup lock")
-            logger.info("  This prevents duplicate job recovery across multiple replicas")
-            logger.info("  The instance holding the lock will recover all persisted jobs")
+        # Check if recovery already completed to prevent duplicate recovery
+        global _recovery_completed
+        if _recovery_completed:
+            logger.info("⚠ Job recovery skipped - recovery already completed in this process")
+            logger.info("  This prevents duplicate recovery if startup is called multiple times")
         else:
-            logger.info("✓ Startup lock acquired - this instance will recover jobs")
-        
-        try:
-            if lock_acquired:
-                from server.persistence import load_job_from_database, save_job_to_database
-                from server.storage import add_job, jobs_db
-                from server.schemas.jobs import Job, JobStatus
+            # Attempt to acquire distributed lock for job recovery
+            from server.distributed_lock import get_startup_lock
+            recovery_lock = get_startup_lock()
+            lock_acquired = await recovery_lock.acquire(blocking=False)
+            
+            if not lock_acquired:
+                logger.info("⚠ Job recovery skipped - another instance holds the startup lock")
+                logger.info("  This prevents duplicate job recovery across multiple replicas")
+                logger.info("  The instance holding the lock will recover all persisted jobs")
+            else:
+                logger.info("✓ Startup lock acquired - this instance will recover jobs")
+            
+            try:
+                if lock_acquired:
+                    from server.persistence import load_job_from_database, save_job_to_database
+                    from server.storage import add_job, jobs_db
+                    from server.schemas.jobs import Job, JobStatus
                 
                 def _mark_job_as_failed(
                     job: Job,
@@ -1092,19 +1102,23 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         "total_processed": total_processed
                     }
                 )
+                
+                # Mark recovery as completed to prevent duplicate recovery
+                _recovery_completed = True
+                logger.debug("Set recovery_completed flag to prevent duplicate recovery")
                     
-        except Exception as e:
-            logger.error(
-                f"Failed to recover jobs from database: {e}",
-                exc_info=True,
-                extra={"error_type": type(e).__name__}
-            )
-            logger.warning("Continuing without job recovery - some jobs may have been lost")
-        finally:
-            # Always release the lock if we acquired it
-            if lock_acquired:
-                await recovery_lock.release()
-                logger.debug("Released startup lock after job recovery")
+            except Exception as e:
+                logger.error(
+                    f"Failed to recover jobs from database: {e}",
+                    exc_info=True,
+                    extra={"error_type": type(e).__name__}
+                )
+                logger.warning("Continuing without job recovery - some jobs may have been lost")
+            finally:
+                # Always release the lock if we acquired it
+                if lock_acquired:
+                    await recovery_lock.release()
+                    logger.debug("Released startup lock after job recovery")
     
     # Start background agent loading (only if routers loaded successfully)
     # CRITICAL FIX: Agent loading must NOT be gated by the distributed lock
