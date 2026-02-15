@@ -54,39 +54,41 @@ def _load_components():
     
     _components_loading = True
     
-    # Import and expose main components that tests and other modules expect
     try:
-        # Import arbiter.py module explicitly to avoid circular reference
-        # First trigger the import to populate sys.modules
-        import self_fixing_engineer.arbiter.arbiter
-        # Then get the actual module from sys.modules
-        _arbiter = sys.modules.get('self_fixing_engineer.arbiter.arbiter')
-        from .arbiter import Arbiter as _Arbiter
-        arbiter = _arbiter
-        Arbiter = _Arbiter
-    except (ImportError, NameError) as e:
-        print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
+        # Import and expose main components that tests and other modules expect
+        try:
+            # Import arbiter.py module explicitly to avoid circular reference
+            # First trigger the import to populate sys.modules
+            import self_fixing_engineer.arbiter.arbiter
+            # Then get the actual module from sys.modules
+            _arbiter = sys.modules.get('self_fixing_engineer.arbiter.arbiter')
+            from .arbiter import Arbiter as _Arbiter
+            arbiter = _arbiter
+            Arbiter = _Arbiter
+        except (ImportError, NameError) as e:
+            print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
 
-    try:
-        from .arena import ArbiterArena as _ArbiterArena
-        ArbiterArena = _ArbiterArena
-    except ImportError as e:
-        print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
+        try:
+            from .arena import ArbiterArena as _ArbiterArena
+            ArbiterArena = _ArbiterArena
+        except ImportError as e:
+            print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
 
-    try:
-        from .feedback import FeedbackManager as _FeedbackManager
-        FeedbackManager = _FeedbackManager
-    except ImportError as e:
-        print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
+        try:
+            from .feedback import FeedbackManager as _FeedbackManager
+            FeedbackManager = _FeedbackManager
+        except ImportError as e:
+            print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
 
-    try:
-        from .config import ArbiterConfig as _ArbiterConfig
-        ArbiterConfig = _ArbiterConfig
-    except ImportError as e:
-        print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
-    
-    _components_loaded = True
-    _components_loading = False
+        try:
+            from .config import ArbiterConfig as _ArbiterConfig
+            ArbiterConfig = _ArbiterConfig
+        except ImportError as e:
+            print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
+        
+        _components_loaded = True
+    finally:
+        _components_loading = False
 
 
 def _get_human_loop():

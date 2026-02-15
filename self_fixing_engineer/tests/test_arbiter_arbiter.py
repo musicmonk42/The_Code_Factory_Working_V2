@@ -180,6 +180,7 @@ async def test_minimal_arbiter_creation():
     # This works in both stub mode (PYTEST_COLLECTING=1) and full mode
     from self_fixing_engineer.arbiter import Arbiter
     assert Arbiter is not None
+    assert isinstance(Arbiter, type), "Arbiter should be a class"
 
 
 def test_monitor_class_exists(tmp_path, arbiter_module):
