@@ -354,6 +354,11 @@ try:
     from . import runner_core as _runner_core
     _ensure_submodule_alias("runner_core")
 
+    # Level 9: language_utils depends on runner_parsers (which is imported by runner_core)
+    # Import after runner_core to ensure runner_parsers is available
+    from . import language_utils as _runner_language_utils
+    _ensure_submodule_alias("language_utils")
+
 except ImportError:
     # Circular import during initial load - modules will be available later
     # when accessed directly (e.g., from runner.alerting import send_alert)
