@@ -90,6 +90,7 @@ markers = [
     "requires_db: marks tests that require database connection",
     "forked: marks tests that should run in isolated forked process",
     "flaky: marks tests as flaky (may need retries)",
+    "serial: marks tests to run serially without xdist parallelization",
 ]
 # NOTE: Environment variables for tests are set in the CI workflow (.github/workflows/pytest-all.yml)
 # The 'env' configuration option requires pytest-env plugin which is not installed.

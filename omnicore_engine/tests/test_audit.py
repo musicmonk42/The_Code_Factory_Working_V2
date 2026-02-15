@@ -27,6 +27,7 @@ class MockMerkleTree:
 
     def add_leaf(self, content):
         self.leaves.append(content)
+        self._recalculate_root()
 
     def _recalculate_root(self):
         self.counter += 1

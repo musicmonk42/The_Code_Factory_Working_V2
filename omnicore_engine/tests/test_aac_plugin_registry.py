@@ -74,12 +74,14 @@ def test_func():
     def test_verify_plugin_signature_valid(self):
         """Test plugin signature verification with valid HMAC-SHA256 signature"""
         code = b"test plugin code"
+        test_key = "test_signing_key"
         
-        # Mock settings with a known signing key
-        with patch("omnicore_engine.plugin_registry.settings") as mock_settings:
-            test_key = "test_signing_key"
-            mock_settings.PLUGIN_SIGNING_KEY = test_key
-            
+        # Create a mock settings object with the signing key attribute
+        mock_settings = Mock()
+        mock_settings.PLUGIN_SIGNING_KEY = test_key
+        
+        # Patch settings with our configured mock
+        with patch("omnicore_engine.plugin_registry.settings", mock_settings):
             # Calculate HMAC signature (not plain SHA256)
             import hmac
             import hashlib
@@ -91,10 +93,12 @@ def test_func():
     def test_verify_plugin_signature_invalid(self):
         """Test plugin signature verification with invalid signature"""
         code = b"test plugin code"
-
-        with patch("omnicore_engine.plugin_registry.settings") as mock_settings:
-            mock_settings.PLUGIN_SIGNING_KEY = "test_key"
-
+        
+        # Create a mock settings object with the signing key attribute
+        mock_settings = Mock()
+        mock_settings.PLUGIN_SIGNING_KEY = "test_key"
+        
+        with patch("omnicore_engine.plugin_registry.settings", mock_settings):
             assert verify_plugin_signature(code, "invalid_signature") == False
 
     def test_validate_plugin_path_valid(self):
