@@ -77,8 +77,7 @@ def test_func():
         test_key = "test_signing_key"
         
         # Create a mock settings object with the signing key attribute
-        mock_settings = Mock()
-        mock_settings.PLUGIN_SIGNING_KEY = test_key
+        mock_settings = Mock(PLUGIN_SIGNING_KEY=test_key)
         
         # Patch settings with our configured mock
         with patch("omnicore_engine.plugin_registry.settings", mock_settings):
@@ -95,8 +94,7 @@ def test_func():
         code = b"test plugin code"
         
         # Create a mock settings object with the signing key attribute
-        mock_settings = Mock()
-        mock_settings.PLUGIN_SIGNING_KEY = "test_key"
+        mock_settings = Mock(PLUGIN_SIGNING_KEY="test_key")
         
         with patch("omnicore_engine.plugin_registry.settings", mock_settings):
             assert verify_plugin_signature(code, "invalid_signature") == False
