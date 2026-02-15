@@ -24,6 +24,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # FIX: Mock runner modules before importing docgen_agent to handle source file import issues
+# Save originals for restoration
+_saved_modules_dp = {}
+_modules_to_mock_dp = [
+    "runner", "runner.llm_client", "runner.runner_logging",
+    "runner.runner_metrics", "runner.runner_errors",
+    "runner.runner_file_utils", "runner.summarize_utils",
+    "sentence_transformers",
+]
+for _mod in _modules_to_mock_dp:
+    if _mod in sys.modules:
+        _saved_modules_dp[_mod] = sys.modules[_mod]
+
 sys.modules["runner"] = MagicMock()
 sys.modules["runner.llm_client"] = MagicMock()
 sys.modules["runner.runner_logging"] = MagicMock()
@@ -72,12 +84,13 @@ from generator.agents.docgen_agent.docgen_prompt import (
     scrub_text,
 )
 
-# --- Restore runner modules immediately after imports ---
+# --- Restore ALL mocked modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-for _k in ["runner", "runner.llm_client", "runner.runner_logging",
-           "runner.runner_metrics", "runner.runner_errors",
-           "runner.runner_file_utils", "runner.summarize_utils"]:
-    sys.modules.pop(_k, None)
+for _mod in _modules_to_mock_dp:
+    if _mod in _saved_modules_dp:
+        sys.modules[_mod] = _saved_modules_dp[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 # =============================================================================
 # FIXTURES

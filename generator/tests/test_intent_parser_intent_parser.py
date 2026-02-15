@@ -31,6 +31,7 @@ sys.modules["runner.runner_security_utils"] = mock_runner_security
 
 
 # 3. Mock Prometheus metrics
+_original_prometheus = sys.modules.get("prometheus_client")
 mock_prometheus = MagicMock()
 mock_prometheus.__path__ = []  # Required for package imports
 mock_prometheus.__name__ = "prometheus_client"
@@ -91,6 +92,12 @@ from generator.intent_parser.intent_parser import (
 # This prevents pollution of sys.modules for other test files collected later
 for _k in ["runner", "runner.runner_logging", "runner.runner_security_utils"]:
     sys.modules.pop(_k, None)
+
+# Restore prometheus_client to prevent pollution for other test files
+if _original_prometheus is not None:
+    sys.modules["prometheus_client"] = _original_prometheus
+else:
+    sys.modules.pop("prometheus_client", None)
 
 # Silence the logger for clean test output
 logging.disable(logging.CRITICAL)

@@ -19,13 +19,17 @@ from prometheus_client import REGISTRY
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Mock external SDKs
-sys.modules["docker"] = MagicMock()
-sys.modules["docker.errors"] = MagicMock()
-sys.modules["kubernetes"] = MagicMock()
-sys.modules["kubernetes.client"] = MagicMock()
-sys.modules["kubernetes.config"] = MagicMock()
-sys.modules["boto3"] = MagicMock()
-sys.modules["botocore.exceptions"] = MagicMock()
+# Save originals for restoration after imports
+_saved_modules_rb = {}
+_modules_to_mock_rb = [
+    "docker", "docker.errors",
+    "kubernetes", "kubernetes.client", "kubernetes.config",
+    "boto3", "botocore.exceptions",
+]
+for _mod in _modules_to_mock_rb:
+    if _mod in sys.modules:
+        _saved_modules_rb[_mod] = sys.modules[_mod]
+    sys.modules[_mod] = MagicMock()
 
 # Import current runner modules
 from runner.runner_backends import DockerBackend, LocalBackend, check_all_backends
@@ -38,6 +42,13 @@ from runner.runner_errors import ExecutionError, TimeoutError
 # --- END FIX ---
 from runner.runner_logging import LOG_HISTORY
 from runner.runner_metrics import HEALTH_STATUS
+
+# --- Restore mocked SDKs immediately after imports ---
+for _mod in _modules_to_mock_rb:
+    if _mod in _saved_modules_rb:
+        sys.modules[_mod] = _saved_modules_rb[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 
 class TestRunnerBackends(unittest.IsolatedAsyncioTestCase):

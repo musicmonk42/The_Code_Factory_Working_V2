@@ -57,6 +57,17 @@ def create_mock_package(name):
 
 
 # Mock external dependencies BEFORE importing
+# Save originals for restoration after imports
+_saved_modules_trh = {}
+_modules_to_mock_trh = [
+    "runner", "runner.tracer", "runner.runner_logging",
+    "runner.runner_metrics", "runner.llm_client", "runner.runner_errors",
+    "watchdog.events", "watchdog.observers", "aiofiles",
+]
+for _mod in _modules_to_mock_trh:
+    if _mod in sys.modules:
+        _saved_modules_trh[_mod] = sys.modules[_mod]
+
 sys.modules["runner"] = create_mock_package("runner")
 sys.modules["runner.tracer"] = create_mock_package("runner.tracer")
 sys.modules["runner.runner_logging"] = create_mock_package("runner.runner_logging")
@@ -64,6 +75,9 @@ sys.modules["runner.runner_metrics"] = create_mock_package("runner.runner_metric
 sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
 sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
 if "aiohttp" not in sys.modules:
+    _saved_modules_trh.setdefault("aiohttp", sys.modules.get("aiohttp"))
+    _saved_modules_trh.setdefault("aiohttp.web", sys.modules.get("aiohttp.web"))
+    _modules_to_mock_trh.extend(["aiohttp", "aiohttp.web"])
     sys.modules["aiohttp"] = create_mock_package("aiohttp")
     sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
 
@@ -146,12 +160,13 @@ from agents.testgen_agent.testgen_response_handler import (
     parse_llm_response,
 )
 
-# --- Restore runner modules immediately after imports ---
+# --- Restore ALL mocked modules immediately after imports ---
 # This prevents pollution of sys.modules for other test files collected later
-for _k in ["runner", "runner.tracer", "runner.runner_logging",
-           "runner.runner_metrics", "runner.llm_client",
-           "runner.runner_errors"]:
-    sys.modules.pop(_k, None)
+for _mod in _modules_to_mock_trh:
+    if _mod in _saved_modules_trh and _saved_modules_trh[_mod] is not None:
+        sys.modules[_mod] = _saved_modules_trh[_mod]
+    else:
+        sys.modules.pop(_mod, None)
 
 
 class TestLocalRegexSanitize:
