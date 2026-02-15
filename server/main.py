@@ -291,8 +291,12 @@ _router_load_lock = threading.Lock()
 _routers_loaded = False
 _router_load_error: Optional[str] = None
 
-# Job recovery flag to prevent duplicate recovery across workers or multiple calls
-# Single worker mode (workers=1) makes this less critical, but it's still good practice
+# Job recovery flag to prevent duplicate recovery within a single process
+# Thread-safety note: In single-worker mode (workers=1), this is safe since there's
+# only one Python process. If multiple workers are ever used again, this flag should
+# be moved to Redis or protected with a threading.Lock for thread-safety.
+# However, multiple workers are not recommended for this application due to job
+# state synchronization issues (each worker has its own in-memory jobs_db).
 _recovery_completed = False
 
 # Placeholders for lazy-loaded modules
@@ -841,7 +845,12 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.info("RECOVERING PERSISTED JOBS FROM DATABASE")
         logger.info("=" * 80)
         
-        # Check if recovery already completed to prevent duplicate recovery
+        # Check if recovery already completed to prevent duplicate recovery within this process
+        # This check happens BEFORE lock acquisition by design:
+        # 1. In single-worker mode (workers=1), only one process exists, so this flag is sufficient
+        # 2. The distributed lock protects against multi-instance recovery (e.g., K8s replicas)
+        # 3. This flag protects against multiple calls to _background_initialization in same process
+        # Order of checks: process-level flag → distributed lock → actual recovery
         global _recovery_completed
         if _recovery_completed:
             logger.info("⚠ Job recovery skipped - recovery already completed in this process")
