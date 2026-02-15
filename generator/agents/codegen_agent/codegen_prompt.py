@@ -723,9 +723,9 @@ async def retrieve_augmented_context(
                     "rag_index",
                     search_query,
                     "PARAMS",
-                    4,  # Number of parameter values (2 key-value pairs = 4 values total)
-                    "embedding", embedding_bytes,  # First param pair
-                    "radius", 0.8,  # Second param pair
+                    4,  # Count of following parameter values: key1, value1, key2, value2
+                    "embedding", embedding_bytes,  # First parameter pair
+                    "radius", 0.8,  # Second parameter pair
                     "RETURN",
                     2,
                     "id",
