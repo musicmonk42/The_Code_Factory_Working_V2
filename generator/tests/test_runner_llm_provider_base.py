@@ -191,7 +191,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
 
     def test_llm_response_type_aliases(self):
         # Check that the aliases map to the expected types for compatibility
-        # FIX: Now that Union is imported, this check works
-        self.assertTrue(LLMResponse is Union[LLMResult, LLMStream])
-        self.assertTrue(LLMResult is Dict[str, Any])
-        self.assertTrue(LLMStream is AsyncGenerator[str, None])
+        # FIX: Use == for type alias comparison since Union creates new objects
+        self.assertEqual(LLMResponse, Union[LLMResult, LLMStream])
+        self.assertEqual(LLMResult, Dict[str, Any])
+        self.assertEqual(LLMStream, AsyncGenerator[str, None])
