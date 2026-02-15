@@ -2626,10 +2626,10 @@ class OmniCoreService:
                 }
         
         except asyncio.TimeoutError:
-            logger.warning(f"[TESTGEN] Job {job_id} LLM call timed out after 120s - skipping tests")
+            logger.warning(f"[TESTGEN] Job {job_id} LLM call timed out after {DEFAULT_TESTGEN_TIMEOUT}s - skipping tests")
             return {
                 "status": "error",
-                "message": "Test generation timed out after 120 seconds - skipping tests",
+                "message": f"Test generation timed out after {DEFAULT_TESTGEN_TIMEOUT} seconds - skipping tests",
                 "timeout": True,
             }
         except Exception as e:
@@ -4912,7 +4912,7 @@ class OmniCoreService:
                                 "test_type": "unit",
                                 "coverage_target": 80.0,
                                 "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
-                                "llm_timeout": 120 if llm_provider_configured else 30,  # 2 min for LLM, 30s for rule-based
+                                "llm_timeout": DEFAULT_TESTGEN_TIMEOUT if llm_provider_configured else 30,  # Use configured timeout for LLM, 30s for rule-based
                                 "language": detected_language,  # Pass detected language
                             }
                             logger.info(

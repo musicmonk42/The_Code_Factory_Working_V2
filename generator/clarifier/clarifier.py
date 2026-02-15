@@ -482,10 +482,10 @@ def load_config() -> Dynaconf:
             Validator("INTERACTION_MODE", default="cli", is_in=["cli"]),
             Validator("BATCH_STRATEGY", default="default", is_in=["default"]),
             Validator("FEEDBACK_STRATEGY", default="none", is_in=["none"]),
-            # File paths - use /tmp for development, should be configured for production
-            Validator("HISTORY_FILE", default="/tmp/clarifier_history.json", is_type_of=str),
+            # File paths - use /app/data for production (writable by appuser)
+            Validator("HISTORY_FILE", default="/app/data/clarifier_history.json", is_type_of=str),
             Validator("TARGET_LANGUAGE", default="en", is_type_of=str),
-            Validator("CONTEXT_DB_PATH", default="/tmp/clarifier_context.db", is_type_of=str),
+            Validator("CONTEXT_DB_PATH", default="/app/data/clarifier_context.db", is_type_of=str),
             # Security settings - empty defaults indicate features are disabled
             Validator("KMS_KEY_ID", default="", is_type_of=str),
             Validator("ALERT_ENDPOINT", default="", is_type_of=str),
