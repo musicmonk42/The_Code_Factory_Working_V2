@@ -205,7 +205,6 @@ class PluginBase(ABC):
         calls it at a configurable interval; an ``asyncio.TimeoutError`` is
         treated as unhealthy.
         """
-        return True
 
     @abstractmethod
     async def get_capabilities(self) -> List[str]:
@@ -215,7 +214,6 @@ class PluginBase(ABC):
         (e.g. ``"code_analysis"``, ``"test_generation"``).  UIs and the
         ``DecisionOptimizer`` use these to route tasks.
         """
-        return []
 
     def on_reload(self) -> None:
         """Called after the plugin's module has been hot-reloaded.
@@ -224,6 +222,7 @@ class PluginBase(ABC):
         or perform any cleanup needed after a code update.  The default
         implementation is a no-op.
         """
+        pass
 
 
 # ---------------------------------------------------------------------------

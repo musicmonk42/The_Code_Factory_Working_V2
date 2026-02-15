@@ -146,11 +146,11 @@ except ImportError:
 
         @abstractmethod
         async def health_check(self) -> bool:
-            return True
+            pass
 
         @abstractmethod
         async def get_capabilities(self) -> List[str]:
-            return []
+            pass
 
         def on_reload(self) -> None:
             pass
