@@ -793,11 +793,13 @@ def config_edit(ctx, key, value, user_id):
 
             log_action(
                 "Config Edited",
-                category="config",
-                key=key,
-                old_value=repr(old_value),
-                new_value=repr(new_value),
-                user_id=user_id,
+                {
+                    "category": "config",
+                    "key": key,
+                    "old_value": repr(old_value),
+                    "new_value": repr(new_value),
+                    "user_id": user_id,
+                }
             )
             console.print(
                 f"[green]Config key '[bold]{key}[/bold]' updated from '[dim]{repr(old_value)}[/dim]' to '[bold]{repr(new_value)}[/bold]'.[/green]"
@@ -863,10 +865,12 @@ async def config_reload(api_endpoint, user_id):
             )
             log_action(
                 "Config Reload Triggered",
-                category="config",
-                source="cli",
-                api_response=response_json,
-                user_id=user_id,
+                {
+                    "category": "config",
+                    "source": "cli",
+                    "api_response": response_json,
+                    "user_id": user_id,
+                }
             )
     except aiohttp.ClientError as e:
         console.print(
@@ -1040,7 +1044,7 @@ async def plugin_install(plugin_identifier, verify_signature):
                 f"[green]Plugin '{plugin_identifier}' registered successfully.[/green]"
             )
             log_action(
-                "Plugin Installed", category="plugin", plugin_name=plugin_identifier
+                "Plugin Installed", {"category": "plugin", "plugin_name": plugin_identifier}
             )
         else:
             console.print(
@@ -1048,9 +1052,11 @@ async def plugin_install(plugin_identifier, verify_signature):
             )
             log_action(
                 "Plugin Install Failed",
-                category="plugin",
-                plugin_name=plugin_identifier,
-                reason="No register() function",
+                {
+                    "category": "plugin",
+                    "plugin_name": plugin_identifier,
+                    "reason": "No register() function",
+                }
             )
             await send_alert(
                 f"Plugin install failed: '{plugin_identifier}' no register() found",
@@ -1063,9 +1069,11 @@ async def plugin_install(plugin_identifier, verify_signature):
         logger.error(f"Plugin installation failed: {e}", exc_info=True)
         log_action(
             "Plugin Install Failed",
-            category="plugin",
-            plugin_name=plugin_identifier,
-            reason=f"Module not found: {e}",
+            {
+                "category": "plugin",
+                "plugin_name": plugin_identifier,
+                "reason": f"Module not found: {e}",
+            }
         )
         await send_alert(
             f"Plugin install failed: '{plugin_identifier}' module not found",
@@ -1076,9 +1084,11 @@ async def plugin_install(plugin_identifier, verify_signature):
         logger.error(f"Plugin installation failed: {e}", exc_info=True)
         log_action(
             "Plugin Install Failed",
-            category="plugin",
-            plugin_name=plugin_identifier,
-            reason=str(e),
+            {
+                "category": "plugin",
+                "plugin_name": plugin_identifier,
+                "reason": str(e),
+            }
         )
         await send_alert(f"Plugin install critical failure: {e}", severity="critical")
 
@@ -1092,16 +1102,18 @@ def plugin_uninstall(plugin_name):
         console.print(
             f"[green]Agent/Plugin '{plugin_name}' uninstalled (deregistered).[/green]"
         )
-        log_action("Plugin Uninstalled", category="plugin", plugin_name=plugin_name)
+        log_action("Plugin Uninstalled", {"category": "plugin", "plugin_name": plugin_name})
     else:
         console.print(
             f"[red]Agent/Plugin '{plugin_name}' not found in registry. Cannot uninstall.[/red]"
         )
         log_action(
             "Plugin Uninstall Failed",
-            category="plugin",
-            plugin_name=plugin_name,
-            reason="Not found in registry",
+            {
+                "category": "plugin",
+                "plugin_name": plugin_name,
+                "reason": "Not found in registry",
+            }
         )
         asyncio.run(
             send_alert(
@@ -1116,7 +1128,7 @@ def plugin_enable(plugin_name):
     console.print(f"[yellow]Enabling plugin '{plugin_name}' (conceptual)...[/yellow]")
     # This would involve updating config or a plugin state, then hot-swapping if needed.
     console.print(f"[green]Plugin '{plugin_name}' enabled (simulated).[/green]")
-    log_action("Plugin Enabled", category="plugin", plugin_name=plugin_name)
+    log_action("Plugin Enabled", {"category": "plugin", "plugin_name": plugin_name})
 
 
 @plugin.command(name="disable", help="Disable an active plugin.")
@@ -1125,7 +1137,7 @@ def plugin_disable(plugin_name):
     console.print(f"[yellow]Disabling plugin '{plugin_name}' (conceptual)...[/yellow]")
     # This would involve updating config or a plugin state, then hot-swapping/removing from registry.
     console.print(f"[green]Plugin '{plugin_name}' disabled (simulated).[/green]")
-    log_action("Plugin Disabled", category="plugin", plugin_name=plugin_name)
+    log_action("Plugin Disabled", {"category": "plugin", "plugin_name": plugin_name})
 
 
 @cli.group()  # FIX: Replaced HelpColorsGroup with standard click.Group

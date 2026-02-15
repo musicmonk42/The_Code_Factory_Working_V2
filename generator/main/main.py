@@ -642,7 +642,9 @@ def generate_launch_provenance(
         # FIX: Add robust check for log_action before calling
         try:
             if "log_action" in globals() and callable(log_action):
-                log_action("Launch Provenance", category="startup", **provenance)
+                provenance_data = provenance.copy()
+                provenance_data["category"] = "startup"
+                log_action("Launch Provenance", provenance_data)
             else:
                 logger.info(
                     f"Launch Provenance (log_action not available): {provenance}"
@@ -1572,10 +1574,12 @@ def on_config_reload(
             # Log successful reload for audit
             log_action(
                 "Config Reloaded Successfully",
-                category="config_management",
-                path=str(config_path),
-                diff_summary=f"{len(diff)} changes" if diff else "no changes",
-                validation_passed=True,
+                {
+                    "category": "config_management",
+                    "path": str(config_path),
+                    "diff_summary": f"{len(diff)} changes" if diff else "no changes",
+                    "validation_passed": True,
+                }
             )
 
         except ValueError as e:
@@ -1613,11 +1617,13 @@ def on_config_reload(
             # Log failed reload attempt for audit
             log_action(
                 "Config Reload Failed",
-                category="config_management",
-                path=str(config_path),
-                error=error_msg,
-                validation_passed=False,
-                changes_rejected=len(diff) if diff else 0,
+                {
+                    "category": "config_management",
+                    "path": str(config_path),
+                    "error": error_msg,
+                    "validation_passed": False,
+                    "changes_rejected": len(diff) if diff else 0,
+                }
             )
 
             # Do not raise - just return to keep the application running with old config
@@ -1644,10 +1650,12 @@ def on_config_reload(
             # Log critical error for audit
             log_action(
                 "Config Reload Critical Error",
-                category="config_management",
-                path=str(config_path),
-                error=error_msg,
-                validation_passed=False,
+                {
+                    "category": "config_management",
+                    "path": str(config_path),
+                    "error": error_msg,
+                    "validation_passed": False,
+                }
             )
 
             # Do not raise - keep application running
