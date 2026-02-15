@@ -108,20 +108,35 @@ def start_prometheus_server_once(port: int = METRICS_PORT):
     if _prom_started:
         return
     try:
+        # Derive worker offset from environment or PID to avoid port conflicts
+        worker_id = os.getenv("WORKER_ID") or os.getenv("PROMETHEUS_MULTIPROC_DIR")
+        if worker_id is None:
+            # Use PID-based offset as fallback for multi-worker deployments
+            import multiprocessing
+            try:
+                worker_offset = multiprocessing.current_process()._identity[0] - 1 if hasattr(multiprocessing.current_process(), '_identity') and multiprocessing.current_process()._identity else 0
+            except (IndexError, AttributeError):
+                worker_offset = 0
+        else:
+            try:
+                worker_offset = int(worker_id)
+            except (ValueError, TypeError):
+                worker_offset = 0
+        actual_port = port + worker_offset
         addr = (
             "0.0.0.0"
             if os.getenv("PROMETHEUS_BIND_ALL", "false").lower() == "true"
             else "127.0.0.1"
         )
-        prom.start_http_server(port, addr=addr)
+        prom.start_http_server(actual_port, addr=addr)
         logger.info(
-            f"Prometheus metrics HTTP server started on port {port}. Access at http://localhost:{port}/metrics"
+            f"Prometheus metrics HTTP server started on port {actual_port} (worker_offset={worker_offset}). Access at http://localhost:{actual_port}/metrics"
         )
         _prom_started = True
         # SECURITY NOTE: If exposed externally, ensure proper network security (firewall, mTLS, IP allowlisting, or service mesh protection).
     except OSError as e:
         logger.warning(
-            f"Failed to start Prometheus HTTP server on port {port}: {e}. It might already be running or port is in use."
+            f"Failed to start Prometheus HTTP server on port {actual_port}: {e}. It might already be running or port is in use."
         )
     except Exception as e:
         logger.error(

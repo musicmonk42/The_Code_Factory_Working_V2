@@ -177,9 +177,24 @@ else:
     try:
         # Use a port from environment variables or settings, if available
         # Default port 9090 to avoid conflict with FastAPI on port 8000
-        port = int(os.getenv("PROMETHEUS_PORT", "9090"))
+        base_port = int(os.getenv("PROMETHEUS_PORT", "9090"))
+        # Derive worker offset from environment or PID to avoid port conflicts
+        worker_id = os.getenv("WORKER_ID") or os.getenv("PROMETHEUS_MULTIPROC_DIR")
+        if worker_id is None:
+            # Use PID-based offset as fallback for multi-worker deployments
+            import multiprocessing
+            try:
+                worker_offset = multiprocessing.current_process()._identity[0] - 1 if hasattr(multiprocessing.current_process(), '_identity') and multiprocessing.current_process()._identity else 0
+            except (IndexError, AttributeError):
+                worker_offset = 0
+        else:
+            try:
+                worker_offset = int(worker_id)
+            except (ValueError, TypeError):
+                worker_offset = 0
+        port = base_port + worker_offset
         start_http_server(port)
-        logger.info(f"Prometheus metrics server started on port {port}")
+        logger.info(f"Prometheus metrics server started on port {port} (worker_offset={worker_offset})")
     except OSError as e:
         logger.warning(
             f"Prometheus metrics server already started or port is in use: {e}"
