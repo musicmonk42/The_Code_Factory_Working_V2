@@ -17,8 +17,8 @@ Examples:
     # Development mode with auto-reload
     python server/run.py --reload
 
-    # Production mode with multiple workers
-    python server/run.py --host 0.0.0.0 --port 8000 --workers 4
+    # Production mode with single worker (recommended for async FastAPI)
+    python server/run.py --host 0.0.0.0 --port 8000 --workers 1
 
     # Custom log level
     python server/run.py --log-level debug
@@ -70,8 +70,8 @@ def parse_args():
     parser.add_argument(
         "--workers",
         type=int,
-        default=None,  # Will use WORKER_COUNT, WEB_CONCURRENCY, or default to 4
-        help="Number of worker processes (default: WORKER_COUNT/WEB_CONCURRENCY env var or 4)",
+        default=None,  # Will use WORKER_COUNT, WEB_CONCURRENCY, or default to 1
+        help="Number of worker processes (default: WORKER_COUNT/WEB_CONCURRENCY env var or 1)",
     )
 
     parser.add_argument(
@@ -92,15 +92,16 @@ def main():
     # P3 FIX: Support WEB_CONCURRENCY and WORKER_COUNT environment variables for worker count
     # This allows easy scaling through environment configuration
     # WEB_CONCURRENCY is the Railway/Heroku standard, WORKER_COUNT is our K8s/Helm standard
-    # FIX: Default to 4 workers (not 1) to handle concurrent requests and prevent event loop saturation
+    # FIX: Default to 1 worker - FastAPI is fully async and doesn't benefit from multiple workers
+    # Multiple workers cause issues: jobs in one worker's memory aren't visible to other workers
     if args.workers is None:
-        # Prefer WORKER_COUNT (K8s/Helm) over WEB_CONCURRENCY (Railway), fall back to 4
+        # Prefer WORKER_COUNT (K8s/Helm) over WEB_CONCURRENCY (Railway), fall back to 1
         # Use explicit checks to handle empty strings correctly
         worker_count = os.environ.get("WORKER_COUNT")
         if not worker_count:
             worker_count = os.environ.get("WEB_CONCURRENCY")
         if not worker_count:
-            worker_count = "4"
+            worker_count = "1"
         workers = int(worker_count)
     else:
         workers = args.workers
@@ -124,8 +125,8 @@ def main():
     logger.info(f"Host: {args.host}")
     logger.info(f"Port: {args.port}")
     logger.info(f"Workers: {workers}")
-    if workers == 1:
-        logger.warning("  Note: Single worker mode may not handle load well. Set WORKER_COUNT or WEB_CONCURRENCY for more workers.")
+    if workers > 1:
+        logger.warning(f"  Note: Running with {workers} workers. Each worker has its own in-memory job cache, which may cause 'job not found' errors. Consider using 1 worker for async FastAPI.")
     logger.info(f"Reload: {args.reload}")
     logger.info(f"Log Level: {args.log_level}")
     logger.info("=" * 70)

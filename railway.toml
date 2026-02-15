@@ -9,7 +9,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python server/run.py --host 0.0.0.0 --workers 4 --log-level info"
+startCommand = "python server/run.py --host 0.0.0.0 --workers 1 --log-level info"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -189,10 +189,11 @@ PROMETHEUS_PORT = "9090"
 # === Performance ===
 # Worker count specified via --workers flag in startCommand for consistency
 # with railway.json and Procfile. The environment variable provides a fallback
-# if --workers is not specified (server/run.py defaults to 4).
-# Using 4 workers ensures proper concurrent requests handling and prevents
-# event loop saturation under load.
-WORKER_COUNT = "4"
+# if --workers is not specified (server/run.py defaults to 1).
+# Using 1 worker because FastAPI is fully async and doesn't benefit from multiple workers.
+# Multiple workers cause issues: each worker has its own in-memory job cache, leading to
+# "job not found" errors and deleted jobs reappearing after restart.
+WORKER_COUNT = "1"
 MAX_CONCURRENT_TASKS = "50"
 
 # === Self-Fixing Engineer ===

@@ -283,10 +283,11 @@ env:
   # RUNNER_CONFIG_PATH: "/app/generator/config.yaml"
 
   # Worker configuration
-  # Number of uvicorn workers per pod (multi-process mode)
-  # Default is 4 for balanced performance and latency.
-  # Can be overridden via values.yaml or environment-specific overlays.
-  WORKER_COUNT: "4"
+  # Number of uvicorn workers per pod (single-process mode)
+  # FastAPI is fully async and doesn't benefit from multiple workers.
+  # Multiple workers cause job synchronization issues (each worker has its own memory cache).
+  # Set to 1 for consistent job state across requests.
+  WORKER_COUNT: "1"
 
 # Secrets configuration
 # These should be created manually or via external secrets operator

@@ -4,24 +4,24 @@
 Test Suite for Deployment Worker Configuration
 ==============================================
 
-This module validates that deployment configurations use consistent worker counts
-to prevent single-worker bottlenecks that amplify resource usage issues.
+This module validates that deployment configurations use a single worker
+to prevent job synchronization issues in async FastAPI applications.
 
 Tests cover:
 1. Railway deployment worker configuration (railway.toml)
 2. Consistency across deployment configurations (Dockerfile, Procfile, .env.production.template)
-3. Minimum worker count requirements for production
+3. Single worker requirement for async FastAPI
 
 Background:
-Single-worker mode was causing:
-- Event loop saturation under concurrent requests
-- Amplified file discovery busy-loops
-- Service initialization bottlenecks
-- Reduced throughput and increased latency
+Multiple workers were causing:
+- Job synchronization issues (each worker has its own in-memory jobs_db)
+- Deleted jobs reappearing after restart (all workers recover same jobs)
+- "Job not found" errors (job created on one worker, request hits another)
+- Clarification state inconsistencies between workers
 
-The fix ensures Railway uses 4 workers (matching Dockerfile/Procfile) for proper
-concurrent request handling, reducing the impact of filesystem walks and service
-re-initialization on individual requests.
+The fix ensures all deployment configs use 1 worker, which is sufficient for
+async FastAPI since it handles concurrent requests efficiently via async I/O.
+Multiple workers only make sense for CPU-bound synchronous frameworks like Flask/Django.
 
 Compliance:
 - ISO 27001 A.12.1.4: Separation of development and production facilities
@@ -29,7 +29,7 @@ Compliance:
 - NIST SP 800-53 CP-2: Contingency planning
 
 Author: Code Factory Platform Team
-Version: 1.0.0
+Version: 2.0.0
 """
 
 import re
@@ -61,8 +61,15 @@ class TestRailwayWorkerConfiguration(unittest.TestCase):
             "railway.toml should exist in project root"
         )
 
-    def test_railway_worker_count_is_four(self):
-        """Verify railway.toml sets WORKER_COUNT to 4 (not 1)."""
+    def test_railway_worker_count_is_one(self):
+        """Verify railway.toml sets WORKER_COUNT to 1 (not 4).
+        
+        FastAPI is fully async and doesn't benefit from multiple workers.
+        Multiple workers cause issues:
+        - Each worker has its own in-memory jobs_db dictionary
+        - Jobs created on one worker aren't visible to other workers
+        - Deleted jobs can reappear after restart (multiple workers recover same jobs)
+        """
         if not self.railway_toml.exists():
             self.skipTest("railway.toml not found")
         
@@ -77,13 +84,13 @@ class TestRailwayWorkerConfiguration(unittest.TestCase):
         
         worker_count = worker_count_match.group(1)
         self.assertEqual(
-            worker_count, "4",
-            f"railway.toml WORKER_COUNT should be '4' for production, not '{worker_count}'. "
-            "Single worker causes event loop saturation and amplifies resource issues."
+            worker_count, "1",
+            f"railway.toml WORKER_COUNT should be '1' for production, not '{worker_count}'. "
+            "Multiple workers cause job synchronization issues because each has its own memory cache."
         )
 
-    def test_railway_comment_reflects_multiworker_mode(self):
-        """Verify railway.toml comment mentions multi-worker mode."""
+    def test_railway_comment_reflects_singleworker_mode(self):
+        """Verify railway.toml comment mentions single-worker mode for async FastAPI."""
         if not self.railway_toml.exists():
             self.skipTest("railway.toml not found")
         
@@ -99,69 +106,70 @@ class TestRailwayWorkerConfiguration(unittest.TestCase):
         
         section_text = performance_section.group(0)
         
-        # Should NOT mention "single worker" as the configuration rationale
+        # Should NOT mention "multi-worker" or "4 workers" as the configuration rationale
         self.assertNotIn(
-            "Single worker for Railway deployment",
+            "4 workers",
             section_text,
-            "Comment should not promote single-worker mode (which was the bug)"
+            "Comment should not promote 4-worker mode (which causes the bugs)"
         )
         
-        # Should mention multi-worker or concurrent requests
-        has_multiworker_mention = (
-            "multi-worker" in section_text.lower() or
-            "concurrent requests" in section_text.lower()
+        # Should mention single worker or async FastAPI
+        has_singleworker_mention = (
+            "1 worker" in section_text.lower() or
+            "single worker" in section_text.lower() or
+            "fully async" in section_text.lower()
         )
         self.assertTrue(
-            has_multiworker_mention,
-            "Comment should mention multi-worker mode or concurrent request handling"
+            has_singleworker_mention,
+            "Comment should mention single-worker mode or async FastAPI"
         )
 
-    def test_dockerfile_uses_four_workers(self):
-        """Verify Dockerfile uses 4 workers (for consistency check)."""
+    def test_dockerfile_uses_one_worker(self):
+        """Verify Dockerfile uses 1 worker (for consistency check)."""
         if not self.dockerfile.exists():
             self.skipTest("Dockerfile not found")
         
         content = self.dockerfile.read_text()
         
-        # Look for --workers 4 in CMD or RUN
+        # Look for --workers 1 in CMD or RUN
         workers_match = re.search(r'--workers\s+(\d+)', content)
         if workers_match:
             workers = workers_match.group(1)
             self.assertEqual(
-                workers, "4",
-                f"Dockerfile should use 4 workers, found {workers}"
+                workers, "1",
+                f"Dockerfile should use 1 worker, found {workers}"
             )
 
-    def test_procfile_uses_four_workers(self):
-        """Verify Procfile uses 4 workers (for consistency check)."""
+    def test_procfile_uses_one_worker(self):
+        """Verify Procfile uses 1 worker (for consistency check)."""
         if not self.procfile.exists():
             self.skipTest("Procfile not found")
         
         content = self.procfile.read_text()
         
-        # Look for --workers 4
+        # Look for --workers 1
         workers_match = re.search(r'--workers\s+(\d+)', content)
         if workers_match:
             workers = workers_match.group(1)
             self.assertEqual(
-                workers, "4",
-                f"Procfile should use 4 workers, found {workers}"
+                workers, "1",
+                f"Procfile should use 1 worker, found {workers}"
             )
 
-    def test_env_production_template_uses_four_workers(self):
-        """Verify .env.production.template uses WORKER_COUNT=4 (for consistency check)."""
+    def test_env_production_template_uses_one_worker(self):
+        """Verify .env.production.template uses WORKER_COUNT=1 (for consistency check)."""
         if not self.env_prod_template.exists():
             self.skipTest(".env.production.template not found")
         
         content = self.env_prod_template.read_text()
         
-        # Look for WORKER_COUNT=4 (not commented)
+        # Look for WORKER_COUNT=1 (not commented)
         worker_count_match = re.search(r'^WORKER_COUNT=(\d+)', content, re.MULTILINE)
         if worker_count_match:
             worker_count = worker_count_match.group(1)
             self.assertEqual(
-                worker_count, "4",
-                f".env.production.template should use WORKER_COUNT=4, found {worker_count}"
+                worker_count, "1",
+                f".env.production.template should use WORKER_COUNT=1, found {worker_count}"
             )
 
     def test_worker_count_consistency(self):
@@ -196,20 +204,25 @@ class TestRailwayWorkerConfiguration(unittest.TestCase):
             if match:
                 configs['.env.production.template'] = int(match.group(1))
         
-        # All configs should use the same worker count (4)
+        # All configs should use the same worker count (1)
         if len(configs) > 1:
             values = list(configs.values())
             self.assertTrue(
-                all(v == 4 for v in values),
-                f"Worker count should be consistent across deployment configs (all should be 4): {configs}"
+                all(v == 1 for v in values),
+                f"Worker count should be consistent across deployment configs (all should be 1): {configs}"
             )
 
 
 class TestWorkerCountBusinessLogic(unittest.TestCase):
-    """Test worker count meets minimum requirements."""
+    """Test worker count meets requirements."""
 
-    def test_minimum_workers_for_production(self):
-        """Verify production uses at least 2 workers (ideally 4+)."""
+    def test_single_worker_for_async_fastapi(self):
+        """Verify production uses 1 worker for async FastAPI.
+        
+        FastAPI is fully async and doesn't benefit from multiple workers.
+        Multiple workers cause job synchronization issues because each worker
+        has its own in-memory job cache (jobs_db dictionary).
+        """
         project_root = PROJECT_ROOT
         railway_toml = project_root / "railway.toml"
         
@@ -221,17 +234,11 @@ class TestWorkerCountBusinessLogic(unittest.TestCase):
         
         if worker_count_match:
             worker_count = int(worker_count_match.group(1))
-            self.assertGreaterEqual(
-                worker_count, 2,
-                "Production should use at least 2 workers to handle concurrent requests. "
-                "Single worker causes event loop saturation."
-            )
-            
-            # Recommended minimum is 4 for good throughput
-            self.assertGreaterEqual(
-                worker_count, 4,
-                "Production should use at least 4 workers for optimal concurrent request handling. "
-                "This prevents busy-loops and service re-init from blocking the event loop."
+            self.assertEqual(
+                worker_count, 1,
+                "Production should use 1 worker for async FastAPI. "
+                "Multiple workers cause job synchronization issues (jobs in one worker's "
+                "memory aren't visible to other workers, deleted jobs reappear on restart)."
             )
 
 
