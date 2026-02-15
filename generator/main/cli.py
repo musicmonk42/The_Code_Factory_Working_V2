@@ -148,7 +148,7 @@ except ImportError as e:
         logger.warning(f"Dummy send_alert: {message} (Severity: {severity})")
 
     # FIX: Added dummy log_action with signature matching runner_logging.log_action
-    def log_action(action: str, data: Dict[str, Any] = None, **kwargs):
+    def log_action(action: str, data: Dict[str, Any], **kwargs):
         logger.warning(
             f"Dummy log_action: {action} | Data: {data} | Extra: {kwargs}"
         )

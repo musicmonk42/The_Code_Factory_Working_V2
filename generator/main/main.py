@@ -642,8 +642,7 @@ def generate_launch_provenance(
         # FIX: Add robust check for log_action before calling
         try:
             if "log_action" in globals() and callable(log_action):
-                provenance_data = provenance.copy()
-                provenance_data["category"] = "startup"
+                provenance_data = {**provenance, "category": "startup"}
                 log_action("Launch Provenance", provenance_data)
             else:
                 logger.info(
