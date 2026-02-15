@@ -42,7 +42,7 @@ from .clarifier_user_prompt import get_channel
 
 
 # Create a wrapper for log_audit_event that maintains backwards compatibility
-async def _wrap_log_audit_event(action: str, **kwargs) -> None:
+async def _wrap_log_audit_event(action: str, data=None, **kwargs) -> None:
     """
     Wrapper that converts legacy log_action calls to log_audit_event format.
     """
@@ -50,6 +50,11 @@ async def _wrap_log_audit_event(action: str, **kwargs) -> None:
         # FIX: Import from runner_audit to avoid circular dependency
         from runner.runner_audit import log_audit_event
 
+        if data is not None:
+            if isinstance(data, dict):
+                kwargs.update(data)
+            else:
+                kwargs["data"] = data
         await log_audit_event(action=action, data=kwargs)
     except ImportError:
         get_logger().debug(f"log_action: {action}, {kwargs}")
