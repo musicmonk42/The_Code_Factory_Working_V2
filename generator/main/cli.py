@@ -147,10 +147,10 @@ except ImportError as e:
     async def send_alert(message: str, severity: str = "info"):
         logger.warning(f"Dummy send_alert: {message} (Severity: {severity})")
 
-    # FIX: Added dummy log_action
-    def log_action(action_type: str, category: str = "general", **kwargs):
+    # FIX: Added dummy log_action with signature matching runner_logging.log_action
+    def log_action(action: str, data: Dict[str, Any] = None, **kwargs):
         logger.warning(
-            f"Dummy log_action: {action_type} (Category: {category}) | Data: {kwargs}"
+            f"Dummy log_action: {action} | Data: {data} | Extra: {kwargs}"
         )
 
     WorkflowEngine = DummyWorkflowEngine
