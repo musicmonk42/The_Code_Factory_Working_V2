@@ -469,17 +469,13 @@ async def _resume_pipeline_after_clarification(
         clarified_requirements: Requirements refined from user answers
     """
     try:
-        # FIX Bug 3: Load job from memory or database (multi-worker support)
-        if job_id not in jobs_db:
-            logger.debug(f"[Pipeline] Job {job_id} not in memory, loading from database")
-            job = await load_job_from_database(job_id)
-            if job is None:
-                logger.error(f"[Pipeline] Job {job_id} not found in memory or database for resumption")
-                return
-            # Add to memory for subsequent operations
-            await add_job(job)
-        else:
-            job = jobs_db[job_id]
+        # FIX Bug 3: Use _get_job_or_404 pattern for consistent multi-worker job lookup
+        # This ensures job is loaded from database if not in memory
+        try:
+            job = await _get_job_or_404(job_id)
+        except HTTPException:
+            logger.error(f"[Pipeline] Job {job_id} not found in memory or database for resumption")
+            return
 
         readme_content = job.metadata.get("readme_content", "")
         language = job.metadata.get("language", "python")
