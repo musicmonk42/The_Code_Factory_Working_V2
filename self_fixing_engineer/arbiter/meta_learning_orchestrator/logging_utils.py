@@ -174,7 +174,6 @@ class PIIRedactorFilter(logging.Filter):
                             extra_patterns.append(re.compile(pattern))
                         except re.error:
                             pass
-                        
             except (json.JSONDecodeError, TypeError):
                 pass
 
