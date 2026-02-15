@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # pytest-asyncio's event loop management. Tests that call main() are now skipped.
 
 
+@pytest.mark.serial
 class TestUtilityFunctions:
     """Test utility functions used by CLI"""
 
@@ -135,6 +136,7 @@ class TestLoadFileFunction:
             os.unlink(f.name)
 
 
+@pytest.mark.serial
 class TestSimulateCommand:
     """Test simulate command"""
 
@@ -198,6 +200,7 @@ class TestListPluginsCommand:
         # Test would verify the command calls the right methods
 
 
+@pytest.mark.serial
 class TestAuditCommands:
     """Test audit-related commands"""
 
@@ -317,6 +320,7 @@ class TestOutputFormatting:
             pass
 
 
+@pytest.mark.serial
 class TestREPLMode:
     """Test REPL (interactive shell) mode"""
 

@@ -11,6 +11,7 @@ This test demonstrates that:
 """
 
 import asyncio
+import pytest
 import sys
 import time
 from pathlib import Path
@@ -70,6 +71,7 @@ def test_import_speed():
     return True
 
 
+@pytest.mark.serial
 async def test_lazy_lock_creation():
     """Test that locks are created lazily in async contexts."""
     print("\n" + "=" * 70)
