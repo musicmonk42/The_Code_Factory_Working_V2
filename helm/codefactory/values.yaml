@@ -246,6 +246,13 @@ env:
   # development/testing when audit crypto is intentionally disabled.
   AUDIT_CRYPTO_MODE: "software"
   AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"  # Set to "0" for production
+  
+  # Kubernetes/Cloud Native secret management
+  # Set to "true" to use plaintext secrets from Kubernetes Secrets
+  # (Kubernetes handles encryption at rest via etcd encryption)
+  # Set to "false" for AWS deployments using KMS
+  USE_ENV_SECRETS: "true"
+  AUDIT_CRYPTO_USE_KMS: "false"  # KMS not used in Kubernetes - secrets managed by K8s
 
   # Logging
   LOG_LEVEL: "INFO"
