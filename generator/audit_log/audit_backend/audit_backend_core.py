@@ -287,7 +287,7 @@ def _preparse_json_env_vars() -> None:
     env_key = "AUDIT_ENCRYPTION_KEYS"
     value = os.environ.get(env_key)
     
-    if value and isinstance(value, str) and value.strip().startswith(('[', '{')):
+    if value and isinstance(value, str) and value.strip().startswith('['):
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
@@ -480,9 +480,9 @@ def _as_json_list(name: str, default: list) -> list:
                 logger.error(f"❌ {name} JSON parsed but is not a list, got {type(j)}")
                 return default
         except json.JSONDecodeError as e:
-            logger.error(f"❌ Failed to parse {name} as JSON: {e}")
+            logger.error(f"❌ Failed to parse {name} as JSON list: {str(e)}. Value: {v[:100]}")
             if not _is_test_or_dev_mode():
-                raise ValidationError(f"{name} must be valid JSON list, got: {v[:100]}")
+                raise ValidationError(f"{name} must be valid JSON list: {str(e)}")
             return default
     return default
 
