@@ -981,6 +981,28 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         # Load job from database with full validation
                         job = await load_job_from_database(job_id)
                         if job:
+                            # Multi-worker race condition prevention: Verify job still exists in database
+                            # before restoring to memory. The batch query may have fetched stale data
+                            # if job was deleted between the batch query and now.
+                            try:
+                                async with db.AsyncSessionLocal() as verify_session:
+                                    verify_result = await verify_session.execute(
+                                        select(GeneratorAgentState)
+                                        .filter_by(name=f"job_{job_id}")
+                                    )
+                                    if verify_result.scalar_one_or_none() is None:
+                                        logger.debug(
+                                            f"Job {job_id} was deleted after batch query, skipping recovery",
+                                            extra={"job_id": job_id, "recovery_action": "skip_deleted"}
+                                        )
+                                        continue
+                            except Exception as verify_error:
+                                logger.warning(
+                                    f"Failed to verify job {job_id} existence, skipping recovery: {verify_error}",
+                                    extra={"job_id": job_id}
+                                )
+                                continue
+                            
                             # Reset interrupted jobs to FAILED status
                             # Industry Standard: Mark incomplete work as failed after crash/restart
                             # NIST SP 800-34: Automated failure detection and recovery
@@ -1346,13 +1368,14 @@ async def lifespan(app: FastAPI):
         # CRITICAL FIX: Register routers with timeout to prevent hanging
         # If router loading hangs (e.g., due to ENCRYPTION_KEYS validation errors),
         # we must still yield so /health endpoint can respond
-        logger.info("Production mode - loading routers with 30-second timeout")
+        logger.info("Production mode - loading routers with 120-second timeout")
         try:
             # Wrap synchronous router loading in asyncio.to_thread with timeout
             # This prevents the lifespan from hanging indefinitely
+            # Increased to 120s to accommodate heavy imports (SFE/Arbiter/ML models)
             routers_ok = await asyncio.wait_for(
                 asyncio.to_thread(_register_routers_sync, app),
-                timeout=30.0
+                timeout=120.0
             )
             if routers_ok:
                 logger.info("✓ Routers loaded successfully within timeout")
@@ -1360,7 +1383,7 @@ async def lifespan(app: FastAPI):
                 logger.error("❌ Router loading failed but continuing startup")
         except asyncio.TimeoutError:
             logger.error(
-                "❌ CRITICAL: Router loading timed out after 30 seconds! "
+                "❌ CRITICAL: Router loading timed out after 120 seconds! "
                 "Continuing startup with degraded functionality. "
                 "Check for slow imports or validation errors in router modules."
             )

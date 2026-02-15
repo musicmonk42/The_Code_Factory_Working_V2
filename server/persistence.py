@@ -436,6 +436,9 @@ async def delete_job_from_database(job_id: str) -> bool:
             
             rows_deleted = result.rowcount
             
+            # Flush to ensure immediate visibility to other sessions
+            await session.flush()
+            
             # Commit the transaction
             try:
                 await session.commit()

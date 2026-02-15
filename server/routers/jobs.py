@@ -529,6 +529,26 @@ async def delete_job(job_id: str) -> SuccessResponse:
         if job is None:
             raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
     
+    # Delete from persistent database FIRST to prevent race with concurrent recovery.
+    # In multi-worker deployments, recovery may be running on other workers. Deleting
+    # from DB first ensures recovery won't restore this job even if it's still in memory.
+    try:
+        delete_success = await delete_job_from_database(job_id)
+        if delete_success:
+            logger.info(f"Deleted job {job_id} from database")
+        else:
+            logger.warning(f"Database deletion returned False for job {job_id}")
+    except Exception as e:
+        logger.error(f"Failed to delete job {job_id} from database: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete job from database: {str(e)}"
+        )
+    
+    # Remove from in-memory database
+    if job_id in jobs_db:
+        del jobs_db[job_id]
+    
     # Delete job files if they exist
     import shutil
     from pathlib import Path
@@ -541,18 +561,7 @@ async def delete_job(job_id: str) -> SuccessResponse:
         except Exception as e:
             logger.error(f"Error deleting job files for {job_id}: {e}")
 
-    # Remove from in-memory database
-    if job_id in jobs_db:
-        del jobs_db[job_id]
-    
-    # FIX Issue 3: Delete from persistent database
-    try:
-        await delete_job_from_database(job_id)
-        logger.info(f"Deleted job {job_id} from database")
-    except Exception as e:
-        logger.error(f"Failed to delete job {job_id} from database: {e}")
-
-    logger.info(f"Deleted job {job_id}")
+    logger.info(f"Successfully deleted job {job_id} (DB, memory, and files)")
 
     return SuccessResponse(
         success=True,

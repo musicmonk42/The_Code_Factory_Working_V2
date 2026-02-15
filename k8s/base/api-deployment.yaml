@@ -182,7 +182,7 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             successThreshold: 1
-            failureThreshold: 18  # 90 seconds max startup time
+            failureThreshold: 24  # 120 seconds max startup time (increased to accommodate 120s router loading)
           livenessProbe:
             httpGet:
               path: /health

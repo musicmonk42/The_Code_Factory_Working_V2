@@ -42,7 +42,7 @@ from server.services import GeneratorService
 from server.services.job_finalization import finalize_job_success, finalize_job_failure
 from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db, add_job
-from server.persistence import load_job_from_database
+from server.persistence import load_job_from_database, save_job_to_database
 
 logger = logging.getLogger(__name__)
 
@@ -469,11 +469,13 @@ async def _resume_pipeline_after_clarification(
         clarified_requirements: Requirements refined from user answers
     """
     try:
-        if job_id not in jobs_db:
-            logger.error(f"[Pipeline] Job {job_id} not found for resumption")
+        # Use _get_job_or_404 pattern for consistent multi-worker job lookup.
+        # This ensures job is loaded from database if not in memory on this worker.
+        try:
+            job = await _get_job_or_404(job_id)
+        except HTTPException:
+            logger.error(f"[Pipeline] Job {job_id} not found in memory or database for resumption")
             return
-
-        job = jobs_db[job_id]
 
         readme_content = job.metadata.get("readme_content", "")
         language = job.metadata.get("language", "python")
@@ -1160,6 +1162,10 @@ async def submit_clarification_response(
         job.status = JobStatus.RUNNING
         job.updated_at = datetime.now(timezone.utc)
 
+        # Persist job state to database before background task starts.
+        # This ensures status changes are visible to all workers in multi-worker deployments.
+        await save_job_to_database(job)
+
         background_tasks.add_task(
             _resume_pipeline_after_clarification,
             job_id=job_id,
@@ -1249,6 +1255,10 @@ async def submit_clarification_response(
         )
         job.metadata["clarification_status"] = "resolved"
         job.status = JobStatus.RUNNING
+
+        # Persist job state to database before background task starts.
+        # This ensures status changes are visible to all workers in multi-worker deployments.
+        await save_job_to_database(job)
 
         background_tasks.add_task(
             _resume_pipeline_after_clarification,

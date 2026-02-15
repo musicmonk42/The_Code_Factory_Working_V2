@@ -94,7 +94,8 @@ autoscaling:
   targetMemoryUtilizationPercentage: 80
 
 # Startup probe - critical for agent loading
-# Allows up to 90 seconds for background agent initialization
+# Allows up to 120 seconds for background agent initialization (increased from 90s)
+# to accommodate the 120s router loading timeout
 startupProbe:
   httpGet:
     path: /ready
@@ -103,7 +104,7 @@ startupProbe:
   periodSeconds: 5
   timeoutSeconds: 3
   successThreshold: 1
-  failureThreshold: 18  # 18 * 5s = 90s max startup time
+  failureThreshold: 24  # 24 * 5s = 120s max startup time
 
 # Liveness probe - restart if unhealthy
 livenessProbe:
