@@ -17,35 +17,15 @@ def aggressive_memory_cleanup():
     to ensure that heavy objects (quantum circuits, large datasets, etc.) are
     properly cleaned up before the next test starts.
     
-    Enhanced in v2 to also clear module-level caches and mock call histories.
-    
-    IMPORTANT: Does NOT delete Mock modules from sys.modules as this breaks
-    active AsyncMock patches used in fixtures.
+    IMPORTANT: Does NOT delete modules from sys.modules or clear mock patches,
+    as this can interfere with active test fixtures and mock patches used by
+    pytest-mock, causing flaky tests (e.g., missing env vars, broken mocks).
     """
     yield
-    # Clear test module caches only (not Mock modules which break active patches)
-    import sys
-    for module_name in list(sys.modules.keys()):
-        # Only clear test modules, not unittest.mock or pytest mocks
-        # IMPORTANT: Modules with 'Mock' in name (e.g., unittest.mock, AsyncMock)
-        # must be preserved as deleting them breaks active AsyncMock patches
-        if 'test_' in module_name and 'Mock' not in module_name:
-            try:
-                del sys.modules[module_name]
-            except (KeyError, AttributeError):
-                pass
-    
     # Force multiple GC passes
     gc.collect()
     gc.collect()
     gc.collect()
-    
-    # Clear unittest.mock call history
-    try:
-        from unittest.mock import _patch
-        _patch._clear_all_patches()
-    except:
-        pass
 
 
 @pytest.fixture(autouse=True)
