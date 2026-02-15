@@ -54,68 +54,21 @@ if not logger.handlers:
     )
     logger.addHandler(handler)
 
-# Defensive import for omnicore_engine.plugin_registry with fallbacks
+# Defensive import for omnicore_engine.plugin_registry with fallbacks.
+# Uses the centralized fallback stubs from plugin_stubs to avoid duplication.
 try:
     from omnicore_engine.plugin_registry import PLUGIN_REGISTRY, PlugInKind, plugin
     _PLUGIN_REGISTRY_AVAILABLE = True
 except (ImportError, AttributeError) as e:
-    # Provide fallback for test environments where omnicore_engine may not be fully initialized
     logger.warning(
         f"Failed to import from omnicore_engine.plugin_registry: {e}. "
         "Using fallback implementations for testing."
     )
     _PLUGIN_REGISTRY_AVAILABLE = False
-    
-    # Fallback PlugInKind enum
-    from enum import Enum
-    
-    class PlugInKind(str, Enum):
-        """Fallback PlugInKind enum for when omnicore_engine is unavailable."""
-        FIX = "fix"
-        CHECK = "check"
-        VALIDATION = "validation"
-        EXECUTION = "execution"
-        CORE_SERVICE = "core_service"
-        SCENARIO = "scenario"
-        CUSTOM = "custom"
-        AGGREGATOR = "aggregator"
-        AI_ASSISTANT = "ai_assistant"
-        OPTIMIZATION = "optimization"
-        MONITORING = "monitoring"
-        GROWTH_MANAGER = "growth_manager"
-        SIMULATION_RUNNER = "simulation_runner"
-        EVOLUTION = "evolution"
-        RL_ENVIRONMENT = "rl_environment"
-    
-    # Fallback plugin decorator
-    def plugin(
-        kind=None,
-        name=None,
-        description="",
-        version="0.1.0",
-        safe=True,
-        source="code",
-        params_schema=None,
-        signature=None,
-        subscriptions=None,
-    ):
-        """Fallback no-op decorator for when omnicore_engine is unavailable."""
-        def decorator(f):
-            # Just return the function unmodified in test mode
-            logger.debug(
-                f"Fallback plugin decorator applied to {f.__name__} "
-                f"(kind={kind}, name={name})"
-            )
-            return f
-        
-        # Handle both @plugin and @plugin(...) syntax
-        if kind is not None and callable(kind):
-            # Called as @plugin without arguments (kind is actually the function)
-            func = kind
-            logger.debug(f"Fallback plugin decorator applied to {func.__name__} (no args)")
-            return func
-        return decorator
-    
+
+    # Re-use the centralized fallback stubs instead of duplicating them here.
+    from generator.agents.plugin_stubs import PlugInKind, plugin  # noqa: F811
+
     # Fallback PLUGIN_REGISTRY
     PLUGIN_REGISTRY = None
 

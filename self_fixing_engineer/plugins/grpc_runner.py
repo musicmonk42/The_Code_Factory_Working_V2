@@ -47,14 +47,20 @@ PlugInKind = None
 plugin = None
 
 try:
-    from omnicore_engine.plugin_registry import PlugInKind, plugin
+    from omnicore_engine.plugin_base import PlugInKind
+    from omnicore_engine.plugin_registry import plugin
 
     _PLUGIN_REGISTRY_AVAILABLE = True
-except ImportError as e:
-    logging.getLogger(__name__).warning(
-        f"Could not import plugin registry components: {e}. "
-        "Plugin registration will be skipped."
-    )
+except ImportError:
+    try:
+        from omnicore_engine.plugin_registry import PlugInKind, plugin
+
+        _PLUGIN_REGISTRY_AVAILABLE = True
+    except ImportError as e:
+        logging.getLogger(__name__).warning(
+            f"Could not import plugin registry components: {e}. "
+            "Plugin registration will be skipped."
+        )
 
 
 def _noop_plugin(**kwargs):

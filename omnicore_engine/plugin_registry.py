@@ -289,22 +289,10 @@ def _ensure_multiprocessing_configured():
             pass  # already set
 
 
-class PlugInKind(str, Enum):
-    FIX = "fix"
-    CHECK = "check"
-    VALIDATION = "validation"
-    EXECUTION = "execution"
-    CORE_SERVICE = "core_service"
-    SCENARIO = "scenario"
-    CUSTOM = "custom"
-    AGGREGATOR = "aggregator"
-    AI_ASSISTANT = "ai_assistant"
-    OPTIMIZATION = "optimization"
-    MONITORING = "monitoring"
-    GROWTH_MANAGER = "growth_manager"
-    SIMULATION_RUNNER = "simulation_runner"
-    EVOLUTION = "evolution"
-    RL_ENVIRONMENT = "rl_environment"
+# Import the canonical PlugInKind from the shared plugin_base module.
+# This is the single source of truth for plugin kinds across the platform.
+from omnicore_engine.plugin_base import PlugInKind  # noqa: E402
+from omnicore_engine.plugin_base import PluginBase  # noqa: E402
 
 
 class SecurityError(Exception):
@@ -2172,6 +2160,7 @@ __all__ = [
     "PluginMeta",
     "Plugin",
     "PlugInKind",
+    "PluginBase",
     "PLUGIN_REGISTRY",
     "plugin",
     "PluginVersionManager",
