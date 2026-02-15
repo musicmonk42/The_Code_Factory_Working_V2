@@ -1,13 +1,27 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+import importlib
 import logging
 import os
 import sys
 from typing import Dict
+from unittest.mock import MagicMock
 
 import pytest
-from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from pytest_mock import MockerFixture
+
+# Ensure prometheus_client is real at import time.  Other test modules
+# (test_arbiter_queue_consumer_worker, test_simulation_main_sim_runner)
+# unconditionally replace sys.modules["prometheus_client"] with a MagicMock
+# *at module level*, which means it can be contaminated before this file is
+# even collected.
+_pc = sys.modules.get("prometheus_client")
+if _pc is None or isinstance(_pc, MagicMock) or hasattr(_pc, "_mock_name"):
+    for _k in [k for k in list(sys.modules) if k.startswith("prometheus_client")]:
+        del sys.modules[_k]
+    importlib.import_module("prometheus_client")
+
+from prometheus_client import Counter, Gauge, Histogram, generate_latest  # noqa: E402
 
 # Configure logging for tests
 logging.basicConfig(
@@ -18,10 +32,22 @@ logger = logging.getLogger(__name__)
 # Sample environment variables for testing
 SAMPLE_ENV = {"ENVIRONMENT": "test", "CLUSTER_NAME": "test-cluster"}
 
+# Save the real prometheus_client module (guaranteed real after the block above)
+_real_prometheus_client = sys.modules["prometheus_client"]
+
 
 @pytest.fixture(autouse=True)
 def setup_env(mocker: MockerFixture):
     """Set up environment variables and reload metrics module."""
+    # Ensure prometheus_client is the real module (may have been replaced by
+    # other test modules between tests).
+    pc = sys.modules.get("prometheus_client")
+    if pc is not _real_prometheus_client:
+        sys.modules["prometheus_client"] = _real_prometheus_client
+        for key in [k for k in list(sys.modules) if k.startswith("prometheus_client.")]:
+            if isinstance(sys.modules[key], MagicMock) or hasattr(sys.modules[key], "_mock_name"):
+                del sys.modules[key]
+
     # Set environment variables
     for key, value in SAMPLE_ENV.items():
         mocker.patch.dict(os.environ, {key: value})
