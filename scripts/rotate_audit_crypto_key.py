@@ -102,6 +102,7 @@ import datetime
 import json
 import logging
 import os
+import re
 import secrets
 import shutil
 import sys
@@ -628,8 +629,14 @@ class KeyBackupManager:
         
         for backup_file in self.backup_dir.glob("audit_key_backup_*.txt"):
             try:
-                # Parse timestamp from filename
-                timestamp_str = backup_file.stem.split("_", 3)[-1]
+                # Parse timestamp from filename (format: audit_key_backup_YYYYMMDD_HHMMSS.txt)
+                # Use regex to ensure proper format
+                match = re.match(r'audit_key_backup_(\d{8}_\d{6})\.txt$', backup_file.name)
+                if not match:
+                    logger.warning(f"Skipping file with unexpected format: {backup_file.name}")
+                    continue
+                
+                timestamp_str = match.group(1)
                 backup_date = datetime.datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S").replace(tzinfo=UTC)
                 
                 if backup_date < cutoff_date:

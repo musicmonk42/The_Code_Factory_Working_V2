@@ -582,7 +582,12 @@ You're likely using a master encryption key that was encrypted with AWS KMS, but
 
 3. **For AWS KMS deployments (not Railway):**
    ```bash
-   python scripts/rotate_audit_crypto_key.py --mode kms --key-id alias/your-key
+   # Set KMS key ID in environment
+   export AWS_KMS_KEY_ID=alias/your-key
+   # Or arn:aws:kms:region:account:key/key-id
+   
+   # Rotate keys with KMS encryption
+   python scripts/rotate_audit_crypto_key.py --mode aws-kms
    ```
 
 **Prevention:**
