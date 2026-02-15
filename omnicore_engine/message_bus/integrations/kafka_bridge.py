@@ -360,7 +360,8 @@ class KafkaBridge:
             linger_ms=self.cfg.linger_ms,
             max_batch_size=self.cfg.max_batch_size,
             compression_type=self.cfg.compression_type,
-            retries=self.cfg.retries,
+            # Note: 'retries' parameter removed - not supported in aiokafka 0.7.x
+            # Retries are handled internally by aiokafka based on enable_idempotence
             retry_backoff_ms=self.cfg.retry_backoff_ms,
             request_timeout_ms=self.cfg.request_timeout_ms,
             enable_idempotence=self.cfg.enable_idempotence,

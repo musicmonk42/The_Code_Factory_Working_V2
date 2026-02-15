@@ -614,25 +614,36 @@ async def _ensure_software_key_master() -> bytes:
                     is_invalid_ciphertext = True
         
         if is_invalid_ciphertext:
+            # Build detailed error message with resolution steps
+            error_msg = (
+                f"InvalidCiphertextException: Master key encrypted with different KMS key.\n\n"
+                f"CURRENT KMS KEY ID: {settings.KMS_KEY_ID}\n\n"
+                f"RESOLUTION STEPS:\n"
+                f"1. Generate a new master key:\n"
+                f"   python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n\n"
+                f"2. Encrypt it with your CURRENT KMS key ({settings.KMS_KEY_ID}):\n"
+                f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} \\\n"
+                f"     --plaintext fileb://<(echo -n 'YOUR_MASTER_KEY' | base64 -d) \\\n"
+                f"     --query CiphertextBlob --output text\n\n"
+                f"3. Update AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 with the new ciphertext\n\n"
+                f"4. For Railway deployments without KMS, use environment variable secret manager:\n"
+                f"   - Set USE_ENV_SECRETS=true\n"
+                f"   - Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to the base64 key from step 1\n"
+                f"   - No KMS encryption needed for Railway (secrets managed by Railway)\n\n"
+                f"WARNING: Changing the master key will invalidate existing encrypted audit data.\n"
+                f"Ensure you have backups before proceeding.\n\n"
+                f"See docs/AWS_KMS_TROUBLESHOOTING.md and docs/RAILWAY_DEPLOYMENT.md for detailed instructions."
+            )
+            
             # Use rate-limited logging to prevent log flooding
             _logger_limiter.rate_limited_log(
                 logger.error,
                 "kms_invalid_ciphertext",
-                "InvalidCiphertextException: The encrypted master key was encrypted with a different KMS key. "
-                "This typically happens after KMS key rotation or environment migration. "
-                "RESOLUTION REQUIRED: Update the AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 secret "
-                "with a new master key encrypted using the current KMS key ID: %s. "
-                "To generate a new key: 1) Generate a fresh Fernet key, 2) Encrypt it with current KMS key, "
-                "3) Base64 encode the ciphertext, 4) Update the secret in your secret manager. "
-                "WARNING: Changing the master key will invalidate all existing encrypted audit data. "
-                "Ensure you have backups before proceeding.",
-                settings.KMS_KEY_ID,
+                error_msg,
             )
+            
             # Mark as permanent failure - no need to retry
-            error_to_raise = CryptoInitializationError(
-                "InvalidCiphertextException: Master key encrypted with different KMS key. "
-                "See logs for resolution steps."
-            )
+            error_to_raise = CryptoInitializationError(error_msg)
             _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE = True
             _SOFTWARE_KEY_MASTER_LAST_FAILURE = time.time()
             _SOFTWARE_KEY_MASTER_LAST_ERROR = error_to_raise
