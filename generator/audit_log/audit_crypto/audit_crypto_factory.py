@@ -577,29 +577,42 @@ async def _ensure_software_key_master() -> bytes:
 
     # PRODUCTION PATH (simplified; adjust to match your real KMS/secret manager wiring)
     try:
-        # Railway/PaaS mode: Use plaintext master key from environment
-        # EnvVarSecretManager returns the decoded plaintext when USE_ENV_SECRETS=true
+        # Check deployment mode: Railway/PaaS vs AWS KMS
         use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+        use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
         
-        if use_env_secrets:
+        # Railway/PaaS mode: USE_ENV_SECRETS=true or AUDIT_CRYPTO_USE_KMS=false
+        if use_env_secrets or not use_kms:
+            logger.info(
+                "AUDIT_CRYPTO: Using Railway/PaaS mode (plaintext base64 key, no KMS). "
+                f"USE_ENV_SECRETS={use_env_secrets}, AUDIT_CRYPTO_USE_KMS={use_kms}"
+            )
+            
             # Get plaintext master key directly (already base64 decoded by EnvVarSecretManager)
             # Note: Function name is historical; in this mode it returns plaintext, not ciphertext
             master_key_bytes = await aget_kms_master_key_ciphertext_blob()
             if not master_key_bytes:
                 raise CryptoInitializationError(
-                    "No master key returned from EnvVarSecretManager."
+                    "No master key returned from secret manager. "
+                    "Ensure AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is set to a base64-encoded 32-byte key."
                 )
             # Validate key length before slicing
             if len(master_key_bytes) < 32:
                 raise CryptoInitializationError(
-                    f"Master key too short: got {len(master_key_bytes)} bytes, need at least 32 bytes for Fernet encryption."
+                    f"Master key too short: got {len(master_key_bytes)} bytes, need at least 32 bytes for Fernet encryption. "
+                    f"Generate a new key with: python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\""
                 )
-            logger.info("Using Railway/PaaS mode: environment-based secret management")
+            logger.info(f"AUDIT_CRYPTO: Successfully loaded {len(master_key_bytes)}-byte plaintext master key (Railway/PaaS mode)")
             # Use exactly 32 bytes for Fernet
             _SOFTWARE_KEY_MASTER = master_key_bytes[:32]
             return _SOFTWARE_KEY_MASTER
         
-        # AWS KMS mode: Fetch KMS-encrypted ciphertext and decrypt
+        # AWS KMS mode: Decrypt KMS-encrypted ciphertext
+        logger.info(
+            "AUDIT_CRYPTO: Using AWS KMS mode (KMS-encrypted ciphertext). "
+            f"KMS_KEY_ID={settings.KMS_KEY_ID}"
+        )
+        
         ciphertext = await aget_kms_master_key_ciphertext_blob()
         if not ciphertext:
             raise CryptoInitializationError(
@@ -621,6 +634,7 @@ async def _ensure_software_key_master() -> bytes:
         if not plaintext:
             raise CryptoInitializationError("KMS decrypt returned no Plaintext.")
 
+        logger.info(f"AUDIT_CRYPTO: Successfully decrypted {len(plaintext)}-byte master key using AWS KMS")
         # The new key management ensures 32 bytes are used for Fernet
         _SOFTWARE_KEY_MASTER = plaintext[:32]
         return _SOFTWARE_KEY_MASTER
@@ -637,34 +651,57 @@ async def _ensure_software_key_master() -> bytes:
         
         if is_invalid_ciphertext:
             # Build detailed error message with resolution steps
+            use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+            use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+            
             error_msg = (
                 f"InvalidCiphertextException: Master key encrypted with different KMS key.\n\n"
-                f"CURRENT KMS KEY ID: {settings.KMS_KEY_ID}\n\n"
-                f"⚠️  RAILWAY/PaaS DEPLOYMENT? You should NOT be seeing this error!\n"
-                f"   If deploying to Railway, Heroku, or similar PaaS:\n"
-                f"   1. Set USE_ENV_SECRETS=true (tells system to use plaintext secrets)\n"
-                f"   2. Generate an UNENCRYPTED master key:\n"
-                f"      python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n"
-                f"   3. Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to that base64 key\n"
-                f"   4. NO KMS encryption needed - Railway/PaaS manages secrets securely\n"
-                f"   See docs/RAILWAY_DEPLOYMENT.md for complete Railway setup guide.\n\n"
-                f"AWS KMS DEPLOYMENT RESOLUTION:\n"
-                f"1. Generate a new master key:\n"
-                f"   python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n\n"
-                f"2. Encrypt it with your CURRENT KMS key ({settings.KMS_KEY_ID}):\n"
-                f"   # Using bash process substitution:\n"
-                f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} \\\n"
-                f"     --plaintext fileb://<(echo -n 'YOUR_MASTER_KEY' | base64 -d) \\\n"
-                f"     --query CiphertextBlob --output text\n"
-                f"   # Or using a temp file (all shells):\n"
-                f"   echo -n 'YOUR_MASTER_KEY' | base64 -d > /tmp/key.bin && \\\n"
-                f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} --plaintext fileb:///tmp/key.bin \\\n"
-                f"     --query CiphertextBlob --output text && rm /tmp/key.bin\n\n"
-                f"3. Update AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 with the new ciphertext\n\n"
-                f"WARNING: Changing the master key will invalidate existing encrypted audit data.\n"
-                f"Ensure you have backups before proceeding.\n\n"
-                f"See docs/AWS_KMS_TROUBLESHOOTING.md for detailed AWS KMS troubleshooting."
+                f"CURRENT CONFIGURATION:\n"
+                f"  - KMS KEY ID: {settings.KMS_KEY_ID}\n"
+                f"  - USE_ENV_SECRETS: {use_env_secrets}\n"
+                f"  - AUDIT_CRYPTO_USE_KMS: {use_kms}\n\n"
+                f"⚠️  DEPLOYMENT MODE MISMATCH DETECTED!\n\n"
             )
+            
+            if not use_env_secrets and use_kms:
+                # User is in AWS KMS mode but getting InvalidCiphertextException
+                error_msg += (
+                    f"You're configured for AWS KMS mode but the master key was encrypted with a different KMS key.\n\n"
+                    f"AWS KMS DEPLOYMENT RESOLUTION:\n"
+                    f"1. Generate a new master key:\n"
+                    f"   python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n\n"
+                    f"2. Encrypt it with your CURRENT KMS key ({settings.KMS_KEY_ID}):\n"
+                    f"   # Using bash process substitution:\n"
+                    f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} \\\n"
+                    f"     --plaintext fileb://<(echo -n 'YOUR_MASTER_KEY' | base64 -d) \\\n"
+                    f"     --query CiphertextBlob --output text\n"
+                    f"   # Or using a temp file (all shells):\n"
+                    f"   echo -n 'YOUR_MASTER_KEY' | base64 -d > /tmp/key.bin && \\\n"
+                    f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} --plaintext fileb:///tmp/key.bin \\\n"
+                    f"     --query CiphertextBlob --output text && rm /tmp/key.bin\n\n"
+                    f"3. Update AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 with the new ciphertext\n\n"
+                    f"WARNING: Changing the master key will invalidate existing encrypted audit data.\n"
+                    f"Ensure you have backups before proceeding.\n\n"
+                    f"See docs/AWS_KMS_TROUBLESHOOTING.md for detailed AWS KMS troubleshooting."
+                )
+            else:
+                # User might be deploying to Railway but has wrong configuration
+                error_msg += (
+                    f"IF DEPLOYING TO RAILWAY/HEROKU/PaaS (NOT AWS):\n"
+                    f"  You should NOT be seeing this error! You're likely using a KMS-encrypted key\n"
+                    f"  instead of a plaintext base64 key.\n\n"
+                    f"  QUICK FIX for Railway/PaaS deployments:\n"
+                    f"  1. Set USE_ENV_SECRETS=true (tells system to use plaintext secrets)\n"
+                    f"  2. OR Set AUDIT_CRYPTO_USE_KMS=false (disables KMS decryption)\n"
+                    f"  3. Generate an UNENCRYPTED master key:\n"
+                    f"      python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n"
+                    f"  4. Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to that base64 key\n"
+                    f"  5. NO KMS encryption needed - Railway/PaaS manages secrets securely\n\n"
+                    f"  See docs/RAILWAY_DEPLOYMENT.md for complete Railway setup guide.\n\n"
+                    f"IF DEPLOYING TO AWS WITH KMS:\n"
+                    f"  The master key was encrypted with a different KMS key than {settings.KMS_KEY_ID}.\n"
+                    f"  Follow the AWS KMS resolution steps above.\n"
+                )
             
             # Use rate-limited logging to prevent log flooding
             _logger_limiter.rate_limited_log(
