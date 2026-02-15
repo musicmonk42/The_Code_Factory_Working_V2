@@ -41,7 +41,7 @@ def validate_audit_crypto():
             print("  3. Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to the ciphertext")
             return False
         
-        # Validate it's valid base64
+        # Validate it is valid base64
         try:
             decoded = base64.b64decode(key_b64)
             print(f"✓ AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is valid base64 ({len(decoded)} bytes)")
@@ -71,7 +71,7 @@ def validate_audit_hmac():
         print("\nThis key is required for audit log integrity (must be exactly 64 hex characters)")
         return False
     
-    # Validate it's 64 hex characters
+    # Validate it is 64 hex characters
     if len(hmac_key) != 64:
         print(f"❌ ERROR: AGENTIC_AUDIT_HMAC_KEY must be exactly 64 characters (got {len(hmac_key)})")
         return False

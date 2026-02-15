@@ -289,9 +289,17 @@ python -c "import base64, os; print(base64.b64encode(os.urandom(32)).decode())"
 **Step 2: Encrypt it with your KMS key**
 ```bash
 # Replace 'alias/your-kms-key' with your actual KMS key ID or alias
+# Note: This uses bash process substitution. For other shells, save key to a file first.
 aws kms encrypt --key-id alias/your-kms-key \
   --plaintext fileb://<(echo -n 'YOUR_MASTER_KEY_FROM_STEP_1' | base64 -d) \
   --query CiphertextBlob --output text
+
+# Alternative using a temporary file (works in all shells):
+# echo -n 'YOUR_MASTER_KEY_FROM_STEP_1' | base64 -d > /tmp/key.bin
+# aws kms encrypt --key-id alias/your-kms-key \
+#   --plaintext fileb:///tmp/key.bin \
+#   --query CiphertextBlob --output text
+# rm /tmp/key.bin
 ```
 
 **Step 3: Add to Railway environment variables**
