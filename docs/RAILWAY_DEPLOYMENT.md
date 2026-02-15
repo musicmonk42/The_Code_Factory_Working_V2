@@ -23,7 +23,7 @@ This guide has been updated to include all environment variables required for th
 - ❌ Do NOT set up AWS credentials, KMS keys, or IAM roles
 - ❌ You should NEVER see `InvalidCiphertextException` errors
 
-If you see `InvalidCiphertextException` errors, it means you're using a KMS-encrypted key instead of a plaintext base64 key. Follow the secret generation commands below to fix this.
+If you see `InvalidCiphertextException` errors, this typically means you're using a KMS-encrypted key instead of a plaintext base64 key. Follow the secret generation commands below to fix this.
 
 ---
 

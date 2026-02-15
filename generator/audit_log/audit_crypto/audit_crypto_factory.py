@@ -594,7 +594,7 @@ async def _ensure_software_key_master() -> bytes:
                 raise CryptoInitializationError(
                     f"Master key too short: got {len(master_key_bytes)} bytes, need at least 32 bytes for Fernet encryption."
                 )
-            logger.info("Using Railway/PaaS mode: plaintext master key from environment")
+            logger.info("Using Railway/PaaS mode: environment-based secret management")
             # Use exactly 32 bytes for Fernet
             _SOFTWARE_KEY_MASTER = master_key_bytes[:32]
             return _SOFTWARE_KEY_MASTER
