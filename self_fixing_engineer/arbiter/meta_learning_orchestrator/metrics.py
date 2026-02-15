@@ -112,8 +112,10 @@ def _get_or_create_metric_internal(
     try:
         existing_metric = REGISTRY._names_to_collectors.get(name)
         if existing_metric:
+            # Guard against metric_class not being a real type (e.g. when
+            # prometheus_client has been replaced with a MagicMock in tests).
             try:
-                is_same_type = isinstance(existing_metric, metric_class)
+                is_same_type = isinstance(metric_class, type) and isinstance(existing_metric, metric_class)
             except TypeError:
                 is_same_type = False
             if is_same_type:
