@@ -57,7 +57,6 @@ from cryptography.exceptions import InvalidSignature
 
 # Import the crypto provider and related utilities from the factory
 from .audit_crypto_factory import (
-    _FALLBACK_HMAC_SECRET,
     CRYPTO_ERRORS,
     SensitiveDataFilter,
     crypto_provider_factory,
@@ -65,6 +64,8 @@ from .audit_crypto_factory import (
     send_alert,
     settings,
 )
+# Import the factory module itself to access _FALLBACK_HMAC_SECRET dynamically
+from . import audit_crypto_factory as _factory
 from .audit_crypto_provider import (
     CryptoOperationError,
     HSMError,
@@ -1268,6 +1269,17 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
             _LAST_FALLBACK_ALERT_TIME = current_time
             _FALLBACK_ATTEMPT_COUNT["since_alert"] = 0
 
+        # Bug 2 fix: Eagerly initialize HMAC fallback secret before calling hmac_sign_fallback
+        try:
+            await _factory._ensure_fallback_hmac_secret()
+        except Exception as init_e:
+            logger.error(
+                f"Failed to initialize HMAC fallback secret: {init_e}",
+                exc_info=True,
+                extra={"operation": "fallback_secret_init_fail"},
+            )
+            # Continue anyway; hmac_sign_fallback will raise if secret is None
+
         try:
             fallback_signature = hmac_sign_fallback(entry, prev_hash)
             logger.warning(
@@ -1394,7 +1406,7 @@ def hmac_sign_fallback(entry: Dict[str, Any], prev_hash: str) -> str:
         )
         raise TypeError("Previous hash must be a string.")
 
-    if _FALLBACK_HMAC_SECRET is None:
+    if _factory._FALLBACK_HMAC_SECRET is None:
         logger.critical(
             "HMAC fallback secret not securely configured. Cannot perform fallback signing.",
             extra={"operation": "hmac_fallback_secret_missing"},
@@ -1416,4 +1428,4 @@ def hmac_sign_fallback(entry: Dict[str, Any], prev_hash: str) -> str:
 
     data = json.dumps(entry_for_signing, sort_keys=True).encode("utf-8")
 
-    return hmac.new(_FALLBACK_HMAC_SECRET, data, hashlib.sha256).hexdigest()
+    return hmac.new(_factory._FALLBACK_HMAC_SECRET, data, hashlib.sha256).hexdigest()

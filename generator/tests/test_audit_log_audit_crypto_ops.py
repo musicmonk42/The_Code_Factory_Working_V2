@@ -138,8 +138,9 @@ def mock_metrics(monkeypatch):
 def mock_fallback_secret(monkeypatch):
     """Mocks the '_FALLBACK_HMAC_SECRET' global var from the factory."""
     secret = b"test-fallback-secret-key-32bytes!"
+    # Bug 1 fix: Patch the factory module instead of audit_crypto_ops
     monkeypatch.setattr(
-        "generator.audit_log.audit_crypto.audit_crypto_ops._FALLBACK_HMAC_SECRET",
+        "generator.audit_log.audit_crypto.audit_crypto_factory._FALLBACK_HMAC_SECRET",
         secret,
     )
     return secret
