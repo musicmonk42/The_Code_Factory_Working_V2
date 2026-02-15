@@ -268,9 +268,9 @@ class TestIntentParser(unittest.TestCase):
         self.assertIn("[CODE_BLOCK]", sections["Features"])
         self.assertNotIn("print('code')", sections["Features"])
 
-    # --- FIX 6: Patch the correct function: rst_to_myst.convert ---
+    # --- FIX 6: Patch the correct function: rst_to_myst.rst_to_myst ---
     @patch(
-        "generator.intent_parser.intent_parser.rst_to_myst.convert",
+        "generator.intent_parser.intent_parser.rst_to_myst.rst_to_myst",
         side_effect=Exception("RST Error"),
     )
     def test_rst_strategy_failure_fallback(self, mock_convert):
@@ -278,7 +278,7 @@ class TestIntentParser(unittest.TestCase):
         strategy = RSTStrategy()
         content = "Bad RST content"
         sections = strategy.parse(content)
-        mock_convert.assert_called_with(content)
+        mock_convert.assert_called_with(content, use_sphinx=False)
         self.assertEqual(sections, {"Full Document": content})
 
     def test_yaml_strategy_success(self):

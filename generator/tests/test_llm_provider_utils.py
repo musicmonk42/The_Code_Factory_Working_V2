@@ -9,6 +9,8 @@ Industry Standards Applied:
 - Documentation: Docstrings explain test purposes
 """
 
+import logging
+
 import pytest
 from generator.utils.llm_provider_utils import (
     infer_provider_from_model,
@@ -84,7 +86,8 @@ class TestInferProviderFromModel:
     
     def test_infer_provider_logs_warning_for_unknown(self, caplog):
         """Test that unknown models log a warning."""
-        infer_provider_from_model("completely-unknown-model")
+        with caplog.at_level(logging.WARNING, logger="generator.utils.llm_provider_utils"):
+            infer_provider_from_model("completely-unknown-model")
         assert "Could not infer provider" in caplog.text
         assert "completely-unknown-model" in caplog.text
 

@@ -430,7 +430,8 @@ class RSTStrategy(ParserStrategy):
         if isinstance(content, Path):
             content = content.read_text(encoding="utf-8")
         try:
-            myst_content = rst_to_myst.convert(content)
+            result = rst_to_myst.rst_to_myst(content, use_sphinx=False)
+            myst_content = result.text
             FORMAT_DETECTION_COUNT.labels(format="rst").inc()
             logger.debug("Converted RST to MyST. Parsing as Markdown.")
             return MarkdownStrategy().parse(myst_content)
