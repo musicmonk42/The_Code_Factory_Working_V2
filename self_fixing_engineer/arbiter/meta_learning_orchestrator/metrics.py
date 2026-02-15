@@ -111,13 +111,17 @@ def _get_or_create_metric_internal(
     """
     try:
         existing_metric = REGISTRY._names_to_collectors.get(name)
-        if existing_metric and isinstance(existing_metric, metric_class):
-            # Return wrapped metric with existing metric
-            extra_labelnames = tuple(l for l in labelnames if l not in GLOBAL_LABELS)
-            return LabeledMetricWrapper(
-                existing_metric, GLOBAL_LABELS, extra_labelnames
-            )
         if existing_metric:
+            try:
+                is_same_type = isinstance(existing_metric, metric_class)
+            except TypeError:
+                is_same_type = False
+            if is_same_type:
+                # Return wrapped metric with existing metric
+                extra_labelnames = tuple(l for l in labelnames if l not in GLOBAL_LABELS)
+                return LabeledMetricWrapper(
+                    existing_metric, GLOBAL_LABELS, extra_labelnames
+                )
             REGISTRY.unregister(existing_metric)
             logger.warning(
                 f"Unregistered existing metric '{name}' due to type mismatch or re-creation attempt."

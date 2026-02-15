@@ -1,9 +1,11 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import asyncio
+import importlib
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -70,6 +72,37 @@ SAMPLE_RECORD = {
     "decision_trace": {"step": "value"},
     "event_type": "test_event",
 }
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_real_aiofiles():
+    """Ensure aiofiles is the real module, not a mock.
+
+    Other test modules (e.g. test_arbiter_growth, test_arbiter_run_exploration,
+    test_plugins_siem_plugin) replace sys.modules["aiofiles"] with MagicMock at
+    module level or patch aiofiles.open with a mock. This fixture restores the
+    real module before tests run.
+    """
+    global aiofiles
+    import self_fixing_engineer.arbiter.meta_learning_orchestrator.orchestrator as orch_module
+
+    real_aiofiles = sys.modules.get("aiofiles")
+    needs_reimport = False
+    if real_aiofiles is None or isinstance(real_aiofiles, MagicMock) or hasattr(real_aiofiles, '_mock_name'):
+        needs_reimport = True
+    else:
+        # Check if aiofiles.open was replaced (class or instance of MagicMock)
+        aio_open = getattr(real_aiofiles, "open", None)
+        if aio_open is MagicMock or isinstance(aio_open, MagicMock):
+            needs_reimport = True
+    if needs_reimport:
+        for key in [k for k in list(sys.modules) if k.startswith("aiofiles")]:
+            del sys.modules[key]
+        real_aiofiles = importlib.import_module("aiofiles")
+    aiofiles = real_aiofiles
+    # Also patch the orchestrator module's reference so its aiofiles.open is real
+    orch_module.aiofiles = real_aiofiles
+    yield
 
 
 @pytest_asyncio.fixture(autouse=True)
