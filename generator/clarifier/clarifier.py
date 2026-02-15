@@ -544,7 +544,21 @@ def load_config() -> Dynaconf:
 
 
 def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
-    """Initializes Fernet encryption, fetching the key from KMS in production."""
+    """
+    Initializes Fernet encryption, fetching the key from KMS in production.
+    
+    NOTE: This function has been modified to prevent production crashes on Railway
+    deployment which doesn't use AWS KMS. The fallback to locally generated keys
+    has important limitations:
+    
+    1. Each restart generates a NEW key, making old encrypted data unreadable
+    2. History encryption is INSECURE without KMS in production
+    3. This is a pragmatic fix for Railway; AWS deployments should use KMS
+    
+    For production AWS deployments, ensure AWS_REGION and KMS credentials are set.
+    For Railway or similar deployments without KMS, accept the logging warnings
+    and understand that encrypted history won't persist across restarts.
+    """
     aws_region = os.getenv("AWS_REGION")
     
     # Validate AWS_REGION is set before attempting KMS call
@@ -557,7 +571,8 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
             # Fall back to local key with critical warning in prod
             get_logger().critical(
                 "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
-                "Falling back to local encryption key. This is INSECURE for production use."
+                "Falling back to local encryption key. This is INSECURE for production use. "
+                "WARNING: Encrypted history will be lost on restart due to ephemeral key generation."
             )
             f = Fernet(Fernet.generate_key())
             get_logger().warning(
@@ -593,11 +608,13 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
         if is_prod:
             get_logger().critical(
                 "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
-                "Falling back to local encryption key. This is INSECURE for production use."
+                "Falling back to local encryption key. This is INSECURE for production use. "
+                "WARNING: Encrypted history will be lost on restart due to ephemeral key generation."
             )
         f = Fernet(Fernet.generate_key())
         get_logger().warning(
-            "Using a locally generated Fernet key as fallback. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+            "Using a locally generated Fernet key as fallback. History encryption is INSECURE. "
+            "DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY. Data encrypted with this key will be unreadable after restart."
         )
         return f
 

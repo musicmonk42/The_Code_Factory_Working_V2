@@ -401,8 +401,10 @@ async def delete_job_from_database(job_id: str) -> bool:
         
     Industry Standards:
         - Hard delete pattern for user-requested deletions
+        - GDPR Article 17: Right to erasure - permanent deletion required
+        - CCPA Section 1798.105: Right to delete personal information
         - Idempotent operation (success even if already deleted)
-        - Retry logic for transient database errors
+        - Retry logic for transient database errors (reliability pattern)
         
     Example:
         >>> success = await delete_job_from_database("abc123")
@@ -431,9 +433,16 @@ async def delete_job_from_database(job_id: str) -> bool:
             result = await session.execute(
                 delete(GeneratorAgentState).filter_by(name=agent_name)
             )
-            await session.commit()
             
             rows_deleted = result.rowcount
+            
+            # Commit the transaction
+            try:
+                await session.commit()
+            except Exception as commit_error:
+                logger.error(f"Failed to commit deletion of job {job_id}: {commit_error}")
+                raise  # Re-raise to trigger retry
+            
             if rows_deleted == 0:
                 logger.debug(f"Job {job_id} not found in database (already deleted or never existed)")
             else:
