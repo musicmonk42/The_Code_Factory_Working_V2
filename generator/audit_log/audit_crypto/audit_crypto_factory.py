@@ -49,7 +49,7 @@ import signal
 import threading
 import time
 import uuid
-from typing import Any, Awaitable, Callable, Dict, Optional, Type
+from typing import Any, Awaitable, Callable, Dict, Optional, Tuple, Type
 
 # Configuration management with fallback for test environments
 try:
@@ -541,7 +541,7 @@ _SOFTWARE_KEY_MASTER_PERMANENT_FAILURE: bool = False
 # --- Master Key for Software Key Encryption (Lazy Init) ---
 
 
-def _is_railway_or_paas_mode() -> tuple[bool, bool]:
+def _is_railway_or_paas_mode() -> Tuple[bool, bool]:
     """
     Determine if we're in Railway/PaaS mode (no KMS) or AWS KMS mode.
     
@@ -577,7 +577,10 @@ async def _ensure_software_key_master() -> bytes:
     if _SOFTWARE_KEY_MASTER_LAST_FAILURE is not None:
         elapsed = time.time() - _SOFTWARE_KEY_MASTER_LAST_FAILURE
         if elapsed < _SOFTWARE_KEY_MASTER_FAILURE_COOLDOWN:
-            raise _SOFTWARE_KEY_MASTER_LAST_ERROR
+            if _SOFTWARE_KEY_MASTER_LAST_ERROR is not None:
+                raise _SOFTWARE_KEY_MASTER_LAST_ERROR
+            else:
+                raise CryptoInitializationError("Software key master initialization failed recently.")
 
     # DEV/TEST: safe, deterministic dummy key so SoftwareCryptoProvider can initialize.
     if _is_test_or_dev_mode():
