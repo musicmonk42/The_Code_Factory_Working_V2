@@ -358,7 +358,11 @@ def get_provider():
     Loads the API key from config/env and instantiates the provider.
     """
     config = load_config()
-    API_KEY = config.llm_provider_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    key = config.llm_provider_api_key
+    # Handle SecretStr from Pydantic
+    if hasattr(key, "get_secret_value"):
+        key = key.get_secret_value()
+    API_KEY = key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
     if not HAS_GEMINI:
         logger.error("Google GenerativeAI SDK not found. Skipping GeminiProvider.")

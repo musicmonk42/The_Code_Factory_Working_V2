@@ -193,11 +193,12 @@ def mock_config():
 def mock_external_sdks():
     """Mocks Datadog, Boto3, and aiofiles."""
 
-    # Update patch targets from 'runner.metrics' to 'runner.runner_metrics'
+    # Update patch targets to use the actual module name
+    _mod = m.__name__
     with (
-        patch("runner.runner_metrics.datadog", MagicMock()) as mock_dd,
-        patch("runner.runner_metrics.boto3", MagicMock()) as mock_boto,
-        patch("runner.runner_metrics.aiofiles", MagicMock()) as mock_aio,
+        patch(f"{_mod}.datadog", MagicMock()) as mock_dd,
+        patch(f"{_mod}.boto3", MagicMock()) as mock_boto,
+        patch(f"{_mod}.aiofiles", MagicMock()) as mock_aio,
     ):
 
         # Configure Boto3 mock
@@ -295,12 +296,16 @@ def mock_lazy_imports():
     )
 
     # 3. Use patch.dict to inject them into sys.modules
+    # Cover both possible module paths (runner.* and generator.runner.*)
     with patch.dict(
         "sys.modules",
         {
             "runner.runner_logging": mock_logging_mod,
             "runner.runner_security_utils": mock_security_mod,
             "runner.runner_errors": mock_errors_mod,
+            "generator.runner.runner_logging": mock_logging_mod,
+            "generator.runner.runner_security_utils": mock_security_mod,
+            "generator.runner.runner_errors": mock_errors_mod,
         },
     ):
         yield {
@@ -346,13 +351,14 @@ async def started_metrics_exporter(
 # --- Global Function Tests -------------------------------------------------- #
 
 
-# Update patch target from 'runner.metrics' to 'runner.runner_metrics'
-@patch("runner.runner_metrics.prom.start_http_server")
+# Update patch target to use the actual module name
+@patch(f"{m.__name__}.prom.start_http_server")
 def test_start_prometheus_server_once(mock_start_http, monkeypatch):
     monkeypatch.delenv("PROMETHEUS_BIND_ALL", raising=False)
     m._prom_started = False  # Reset global flag
 
-    m.start_prometheus_server_once(8001)
+    with patch("omnicore_engine.worker_utils.calculate_worker_port", return_value=8001):
+        m.start_prometheus_server_once(8001)
     mock_start_http.assert_called_once_with(8001, addr="127.0.0.1")
     assert m._prom_started == True
 
