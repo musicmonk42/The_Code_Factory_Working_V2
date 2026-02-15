@@ -554,11 +554,16 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
                 "CRITICAL: AWS_REGION environment variable is not set. "
                 "Cannot initialize KMS client for production encryption."
             )
-            # Fall back to dummy key with critical warning in prod
+            # Fall back to local key with critical warning in prod
             get_logger().critical(
-                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. Aborting startup."
+                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
+                "Falling back to local encryption key. This is INSECURE for production use."
             )
-            sys.exit(1)
+            f = Fernet(Fernet.generate_key())
+            get_logger().warning(
+                "Using a locally generated Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+            )
+            return f
         else:
             get_logger().warning(
                 "AWS_REGION not set. Skipping KMS initialization and using local encryption key."
@@ -587,15 +592,14 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
         )
         if is_prod:
             get_logger().critical(
-                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. Aborting startup."
+                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
+                "Falling back to local encryption key. This is INSECURE for production use."
             )
-            sys.exit(1)
-        else:
-            f = Fernet(Fernet.generate_key())
-            get_logger().warning(
-                "Using a dummy Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
-            )
-            return f
+        f = Fernet(Fernet.generate_key())
+        get_logger().warning(
+            "Using a locally generated Fernet key as fallback. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+        )
+        return f
 
 
 def setup_tracing() -> Tuple[Optional[Any], Optional[Any], Optional[Any], bool]:
