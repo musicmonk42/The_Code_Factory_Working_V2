@@ -245,6 +245,7 @@ async def test_configure_logging_http_sink(mock_config, mock_aiohttp):
 # [FIX] Patch sys.modules to force ImportError and test the sync fallback
 @patch.dict("sys.modules", {"runner.runner_security_utils": None})
 def test_log_action(caplog):  # [FIX] Use caplog, not LOG_HISTORY
+    caplog.set_level(logging.DEBUG)
     # [FIX] Configure logging first so the 'runner.action' logger exists
     configure_logging_from_config(
         MagicMock(
@@ -274,6 +275,8 @@ def test_log_action(caplog):  # [FIX] Use caplog, not LOG_HISTORY
 async def test_log_audit_event(mock_safe_sign, caplog, mock_config):
     # [FIX] Configure logging to set the key ID from the mock_config
     configure_logging_from_config(mock_config)
+
+    caplog.set_level(logging.DEBUG)
 
     # [FIX] Set level AND propagation for 'runner.audit' so caplog can see it
     audit_logger = logging.getLogger("runner.audit")
@@ -308,6 +311,8 @@ async def test_log_audit_event_with_bytes(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing bytes objects are successfully serialized."""
     # Configure logging to set the key ID from the mock_config
     configure_logging_from_config(mock_config)
+
+    caplog.set_level(logging.DEBUG)
 
     # Set level AND propagation for 'runner.audit' so caplog can see it
     audit_logger = logging.getLogger("runner.audit")
@@ -354,6 +359,7 @@ async def test_log_audit_event_with_datetime(mock_safe_sign, caplog, mock_config
     from datetime import datetime, timezone
 
     configure_logging_from_config(mock_config)
+    caplog.set_level(logging.DEBUG)
 
     audit_logger = logging.getLogger("runner.audit")
     audit_logger.setLevel(logging.INFO)
@@ -389,6 +395,7 @@ async def test_log_audit_event_with_datetime(mock_safe_sign, caplog, mock_config
 async def test_log_audit_event_with_set(mock_safe_sign, caplog, mock_config):
     """Test that audit events containing set objects are successfully serialized."""
     configure_logging_from_config(mock_config)
+    caplog.set_level(logging.DEBUG)
 
     audit_logger = logging.getLogger("runner.audit")
     audit_logger.setLevel(logging.INFO)
@@ -425,6 +432,7 @@ async def test_log_audit_event_with_uuid(mock_safe_sign, caplog, mock_config):
     import uuid
 
     configure_logging_from_config(mock_config)
+    caplog.set_level(logging.DEBUG)
 
     audit_logger = logging.getLogger("runner.audit")
     audit_logger.setLevel(logging.INFO)
@@ -463,6 +471,7 @@ async def test_log_audit_event_with_mixed_non_serializable(mock_safe_sign, caplo
     from datetime import datetime, timezone
 
     configure_logging_from_config(mock_config)
+    caplog.set_level(logging.DEBUG)
 
     audit_logger = logging.getLogger("runner.audit")
     audit_logger.setLevel(logging.INFO)
@@ -518,6 +527,7 @@ def test_search_logs():
 async def test_full_pipeline(mock_config, mock_aiohttp, mock_ot_tracer, caplog):
     # [FIX] Use the mock_config fixture which now sets the audit key
     configure_logging_from_config(mock_config)
+    caplog.set_level(logging.DEBUG)
 
     # [FIX] Log to a child of 'runner' to ensure handlers are used
     logger = logging.getLogger("runner.pipeline")
@@ -551,6 +561,7 @@ async def test_full_pipeline(mock_config, mock_aiohttp, mock_ot_tracer, caplog):
     ],
 )
 def test_log_action_with_error(error: Optional[Exception], expected: Dict, caplog):
+    caplog.set_level(logging.DEBUG)
     # [FIX] Configure logging first so the 'runner.action' logger exists
     configure_logging_from_config(
         MagicMock(
