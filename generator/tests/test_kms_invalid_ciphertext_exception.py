@@ -119,6 +119,10 @@ class TestInvalidCiphertextException:
             "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_LAST_ERROR",
             None,
         )
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._SOFTWARE_KEY_MASTER_LAST_FAILURE",
+            None,
+        )
 
         # Raise a generic exception (not InvalidCiphertextException)
         mock_boto[1].decrypt.side_effect = Exception("Generic KMS error")
