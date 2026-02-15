@@ -12,6 +12,21 @@ This guide has been updated to include all environment variables required for th
 
 ---
 
+## ⚠️ Railway Deployment: No AWS KMS Required
+
+**IMPORTANT:** Railway deployments do NOT need AWS KMS (Key Management Service). Railway has its own built-in secrets management that encrypts all environment variables at the platform level.
+
+**What this means:**
+- ✅ Generate an **UNENCRYPTED** base64 master key (see commands below)
+- ✅ Set `USE_ENV_SECRETS=true` to use Railway's environment variables directly
+- ❌ Do NOT encrypt the master key with AWS KMS
+- ❌ Do NOT set up AWS credentials, KMS keys, or IAM roles
+- ❌ You should NEVER see `InvalidCiphertextException` errors
+
+If you see `InvalidCiphertextException` errors, it means you're using a KMS-encrypted key instead of a plaintext base64 key. Follow the secret generation commands below to fix this.
+
+---
+
 ## Quick Start
 
 ### 1. Deploy to Railway
@@ -39,10 +54,11 @@ In your Railway project dashboard:
 **Generate Commands:**
 
 ```bash
-# USE_ENV_SECRETS (enable environment variable secret manager for Railway)
+# USE_ENV_SECRETS (REQUIRED: tells system to use Railway's environment variables)
 true
 
-# AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 (base64-encoded 32-byte key)
+# AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 (UNENCRYPTED base64 key)
+# ⚠️ IMPORTANT: This is NOT encrypted with KMS - Railway encrypts it for you
 python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
 
 # AGENTIC_AUDIT_HMAC_KEY (64 hex characters)
@@ -56,9 +72,10 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
 > **⚠️ CRITICAL**: 
-> - `USE_ENV_SECRETS=true` enables the environment variable secret manager for Railway deployment
-> - `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` is required for audit encryption to work
+> - `USE_ENV_SECRETS=true` is **REQUIRED** for Railway deployment. Without it, the system will try to use AWS KMS and fail.
+> - `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` must be an **UNENCRYPTED** base64 key (generated with the command above). Do NOT use a KMS-encrypted key.
 > - `AGENTIC_AUDIT_HMAC_KEY` is **required** for production audit logging. Without it, the application will fail at runtime when attempting to log security events. Must be exactly 64 hexadecimal characters.
+> - Railway encrypts ALL environment variables at the platform level, so your secrets are protected.
 
 ---
 
