@@ -689,10 +689,10 @@ class MainApp(App):
         try:
             # Example metrics retrieval (replace with actual metrics logic)
             metrics = {
-                "queue_size": RUN_QUEUE.get_size(),
-                "pass_rate": RUN_PASS_RATE.get(),
-                "resource_usage": RUN_RESOURCE_USAGE.get(),
-                "health_status": HEALTH_STATUS.get(),
+                "queue_size": get_metrics_dict().get("runner_queue_length", 0),
+                "pass_rate": RUN_PASS_RATE._value.get() if hasattr(RUN_PASS_RATE, '_value') else 0,
+                "resource_usage": RUN_RESOURCE_USAGE._value.get() if hasattr(RUN_RESOURCE_USAGE, '_value') else 0,
+                "health_status": HEALTH_STATUS._value.get() if hasattr(HEALTH_STATUS, '_value') else 0,
             }
             metrics_text = "\n".join(
                 f"{key}: {value}" for key, value in metrics.items()

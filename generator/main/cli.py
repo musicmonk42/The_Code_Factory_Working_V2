@@ -848,7 +848,11 @@ def config_edit(ctx, key, value, user_id):
     help="API endpoint to trigger config reload.",
 )
 @click.option("--user-id", default="cli_user", help="User ID for audit logging.")
-async def config_reload(api_endpoint, user_id):
+def config_reload(api_endpoint, user_id):
+    asyncio.run(_config_reload_async(api_endpoint, user_id))
+
+
+async def _config_reload_async(api_endpoint, user_id):
     console.print("[bold yellow]Attempting to reload configuration...[/bold yellow]")
     try:
         # This now explicitly hits the API endpoint for dynamic reload

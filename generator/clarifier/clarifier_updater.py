@@ -1490,17 +1490,13 @@ def update_requirements_with_answers(
             requirements, ambiguities, answers, correlation_id=correlation_id
         )
 
-    # FIX: Check if we're already in an async context
+    # Handle both sync and async calling contexts
     try:
-        asyncio.get_running_loop()
-        # We're in an async context - this shouldn't be called synchronously
-        raise RuntimeError(
-            "update_requirements_with_answers() called from async context. "
-            "Use 'await initialize_updater()' and 'await updater.update()' directly instead."
-        )
-    except RuntimeError as e:
-        # Check if it's the "no running event loop" error or our custom error
-        if "async context" in str(e):
-            raise  # Re-raise our custom error
+        loop = asyncio.get_running_loop()
+        # We're in an async context - use nest_asyncio to allow nested event loops
+        import nest_asyncio
+        nest_asyncio.apply(loop)
+        return loop.run_until_complete(_async_update())
+    except RuntimeError:
         # No event loop running - safe to use asyncio.run()
         return asyncio.run(_async_update())

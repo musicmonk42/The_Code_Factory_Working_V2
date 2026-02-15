@@ -332,6 +332,7 @@ def mock_cfg(key: str | None = None) -> MagicMock:
     return cfg
 
 
+@patch.dict(os.environ, {}, clear=True)
 @patch("generator.runner.providers.gemini_provider.load_config")
 def test_get_provider_with_config_key(mock_load: MagicMock) -> None:
     if not HAS_GEMINI:

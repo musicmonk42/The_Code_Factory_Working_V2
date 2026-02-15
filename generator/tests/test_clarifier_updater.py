@@ -151,7 +151,7 @@ def mock_dependencies():
         patch("generator.clarifier.clarifier_updater.get_fernet", return_value=mock_fernet_instance),
         patch("generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger),
         patch("generator.clarifier.clarifier_updater.log_action", side_effect=MockLogAction),
-        patch("generator.clarifier.clarifier_updater.send_alert", new_callable=AsyncMock),
+        patch("generator.clarifier.clarifier_updater.send_alert", new=MockSendAlert),
         patch("generator.clarifier.clarifier_updater.redact_sensitive", side_effect=MockRedactSensitive),
         patch("generator.clarifier.clarifier_updater.detect_pii", return_value=False),
         patch("generator.clarifier.clarifier_updater._recursive_transform", side_effect=mock_redaction_logic),
@@ -160,6 +160,10 @@ def mock_dependencies():
     # Start all patches
     for p in patches:
         p.start()
+    
+    # Reset module-level mocks to ensure test isolation
+    MockSendAlert.reset_mock()
+    MockLogAction.reset_mock()
     
     yield
     
