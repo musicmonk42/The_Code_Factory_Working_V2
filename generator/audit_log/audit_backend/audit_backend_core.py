@@ -489,6 +489,18 @@ def _make_kms_client():
     return boto3.client("kms", region_name=region)
 
 
+def _is_railway_or_paas_mode() -> tuple[bool, bool]:
+    """
+    Determine if we're in Railway/PaaS mode (no KMS) or AWS KMS mode.
+    
+    Returns:
+        Tuple of (use_env_secrets, use_kms) booleans
+    """
+    use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+    use_kms = os.getenv("AUDIT_CRYPTO_USE_KMS", "true").lower() == "true"
+    return use_env_secrets, use_kms
+
+
 # --- END: ADDED KMS HELPERS ---
 
 SCHEMA_VERSION = 2  # <-- Manually re-added constant
@@ -526,31 +538,63 @@ else:
                 for k in ENCRYPTION_KEYS
             ]
         else:
-            # --- EDIT 2: Lazy-init KMS client ---
-            # Only initialize KMS when we actually need it (non-mock keys)
-            kms_client = _make_kms_client()
-            for key_obj in ENCRYPTION_KEYS:
-                if isinstance(key_obj, str):
-                    # Handle case where ENCRYPTION_KEYS is a list of raw base64 strings
-                    # instead of list of dicts with "key" and "key_id" fields
-                    logger.warning(
-                        "ENCRYPTION_KEYS contains raw strings instead of objects. "
-                        "Expected format: [{\"key_id\": \"...\", \"key\": \"...\"}]. "
-                        "Treating raw string as base64-encoded key."
-                    )
-                    b64_key = key_obj
-                elif isinstance(key_obj, dict):
-                    b64_key = key_obj.get("key")
-                else:
-                    logger.warning(f"Unexpected ENCRYPTION_KEYS entry type: {type(key_obj)}; skipping.")
-                    continue
-                
-                if not b64_key:
-                    logger.warning("Encryption key object missing 'key'; skipping.")
-                    continue
-                # Use synchronous decrypt at import time
-                resp = kms_client.decrypt(CiphertextBlob=base64.b64decode(b64_key))
-                _decrypted_keys.append(resp["Plaintext"])
+            # Check deployment mode: Railway/PaaS vs AWS KMS
+            use_env_secrets, use_kms = _is_railway_or_paas_mode()
+            is_paas_mode = use_env_secrets or not use_kms
+            
+            if is_paas_mode:
+                # Railway/PaaS mode: keys are plaintext base64, not KMS ciphertext
+                logger.info(
+                    "[audit_backend_core] Railway/PaaS mode detected (USE_ENV_SECRETS=%s, AUDIT_CRYPTO_USE_KMS=%s). "
+                    "Using plaintext encryption keys (no KMS decryption).",
+                    use_env_secrets, use_kms
+                )
+                for key_obj in ENCRYPTION_KEYS:
+                    if isinstance(key_obj, str):
+                        b64_key = key_obj
+                    elif isinstance(key_obj, dict):
+                        b64_key = key_obj.get("key")
+                    else:
+                        logger.warning(f"Unexpected ENCRYPTION_KEYS entry type: {type(key_obj)}; skipping.")
+                        continue
+                    
+                    if not b64_key:
+                        logger.warning("Encryption key object missing 'key'; skipping.")
+                        continue
+                    # In PaaS mode, the key IS the Fernet key (base64-encoded), use directly as bytes
+                    _decrypted_keys.append(b64_key.encode("utf-8") if isinstance(b64_key, str) else b64_key)
+            else:
+                # AWS KMS mode: decrypt ciphertext blobs via KMS
+                logger.info(
+                    "[audit_backend_core] AWS KMS mode (USE_ENV_SECRETS=%s, AUDIT_CRYPTO_USE_KMS=%s). "
+                    "Decrypting encryption keys via KMS.",
+                    use_env_secrets, use_kms
+                )
+                # --- EDIT 2: Lazy-init KMS client ---
+                # Only initialize KMS when we actually need it (non-mock keys)
+                kms_client = _make_kms_client()
+                for key_obj in ENCRYPTION_KEYS:
+                    if isinstance(key_obj, str):
+                        # Handle case where ENCRYPTION_KEYS is a list of raw base64 strings
+                        # instead of list of dicts with "key" and "key_id" fields
+                        logger.warning(
+                            "ENCRYPTION_KEYS contains raw strings instead of objects. "
+                            "Expected format: [{\"key_id\": \"...\", \"key\": \"...\"}]. "
+                            "Treating raw string as base64-encoded key."
+                        )
+                        b64_key = key_obj
+                    elif isinstance(key_obj, dict):
+                        b64_key = key_obj.get("key")
+                    else:
+                        logger.warning(f"Unexpected ENCRYPTION_KEYS entry type: {type(key_obj)}; skipping.")
+                        continue
+                    
+                    if not b64_key:
+                        logger.warning("Encryption key object missing 'key'; skipping.")
+                        continue
+                    # Use synchronous decrypt at import time
+                    resp = kms_client.decrypt(CiphertextBlob=base64.b64decode(b64_key))
+                    _decrypted_keys.append(resp["Plaintext"])
 
         if not _decrypted_keys:
             raise ValueError("No encryption keys provided or decrypted successfully.")
