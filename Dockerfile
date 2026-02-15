@@ -368,6 +368,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD curl -f http://localhost:${PORT:-8080}/ready || exit 1
 
 # Start the unified platform API server
-# Multi-worker mode (4 workers) for production deployment to handle concurrent requests and prevent event loop saturation
+# Single worker mode (1 worker) for production deployment
+# FastAPI is fully async and doesn't benefit from multiple workers
+# Multiple workers cause issues: each has its own in-memory jobs_db, leading to
+# job synchronization problems (jobs not found, deleted jobs reappearing)
 # Using server/run.py which respects PORT environment variable (defaults to 8000, Railway sets to 8080)
-CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "4"]
+CMD ["python", "server/run.py", "--host", "0.0.0.0", "--workers", "1"]

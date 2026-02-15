@@ -147,10 +147,11 @@ data:
   # ============================================
   # Worker Configuration
   # ============================================
-  # Number of uvicorn workers per pod (multi-process mode)
-  # Default is 4 for balanced performance. Production overlay increases to 8.
-  # Resource requests/limits should be scaled accordingly.
-  WORKER_COUNT: "4"
+  # Number of uvicorn workers per pod (single worker mode)
+  # FastAPI is fully async and doesn't benefit from multiple workers.
+  # Multiple workers cause job synchronization issues (each has its own memory cache).
+  # Set to 1 for consistent job state across requests.
+  WORKER_COUNT: "1"
 
   # ============================================
   # Redis Configuration

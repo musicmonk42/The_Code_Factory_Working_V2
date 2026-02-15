@@ -224,7 +224,8 @@ services:
       # ============================================
       # Worker Configuration
       # ============================================
-      - WORKER_COUNT=${WORKER_COUNT:-4}
+      # Single worker mode - FastAPI is async and multiple workers cause job sync issues
+      - WORKER_COUNT=${WORKER_COUNT:-1}
 
     ports:
       - "8000:8000"  # Main API endpoint
@@ -264,10 +265,10 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
-    # Command with production workers
+    # Command with single worker for async FastAPI
     # Using gunicorn with secure defaults
-    # Note: WORKER_COUNT must be set in environment before running docker-compose
-    command: ["sh", "-c", "gunicorn server.main:app -w $${WORKER_COUNT:-4} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 30 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --access-logfile - --error-logfile -"]
+    # Single worker prevents job synchronization issues in async applications
+    command: ["sh", "-c", "gunicorn server.main:app -w $${WORKER_COUNT:-1} -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 300 --graceful-timeout 30 --keep-alive 5 --max-requests 1000 --max-requests-jitter 50 --access-logfile - --error-logfile -"]
 
   # Prometheus for metrics collection
   prometheus:
