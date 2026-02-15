@@ -544,8 +544,8 @@ class EnvVarSecretManager(SecretManager):
         # AWS mode: attempt KMS decryption for specific keys
         if secret_name == "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64":
             try:
-                # Check if AWS credentials are available
-                if not (os.getenv("AWS_ACCESS_KEY_ID") or os.getenv("AWS_REGION")):
+                # Check if AWS credentials are available (both are required)
+                if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_REGION")):
                     self.logger.info(f"No AWS credentials found, treating {secret_name} as plaintext")
                     await log_action(
                         "secret_access",
@@ -576,7 +576,8 @@ class EnvVarSecretManager(SecretManager):
                         status="success",
                         mode="kms_decrypted",
                     )
-                    return base64.b64encode(plaintext).encode("utf-8")
+                    # KMS Plaintext is already bytes, just base64 encode it
+                    return base64.b64encode(plaintext)
                 else:
                     raise SecretDecodingError("KMS decryption returned no plaintext")
             except Exception as e:
