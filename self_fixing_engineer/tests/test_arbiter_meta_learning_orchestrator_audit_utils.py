@@ -279,7 +279,7 @@ async def test_add_audit_event_file(audit_utils):
             span = trace.get_current_span()
             assert span is not None
     except AttributeError:
-        pass  # OTel context may be corrupted by other tests
+        logger.warning("OTel context corrupted by other tests; skipping span check")
 
 
 @pytest.mark.asyncio
@@ -343,7 +343,7 @@ async def test_validate_audit_chain_valid(audit_utils, tmp_path):
             span = trace.get_current_span()
             assert span is not None
     except AttributeError:
-        pass  # OTel context may be corrupted by other tests
+        logger.warning("OTel context corrupted by other tests; skipping span check")
 
 
 @pytest.mark.asyncio
