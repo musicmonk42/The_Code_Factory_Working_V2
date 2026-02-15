@@ -241,8 +241,13 @@ async def audit_client(mock_web3_dependencies, mocker: MockerFixture):
     client = AuditLedgerClient(dlt_type="ethereum")
     yield client
 
-    if client._is_connected:
-        await client.disconnect()
+    # Clean up client state directly instead of calling disconnect()
+    # to avoid TypeError when mocker teardown ordering causes
+    # disconnect() to return a MagicMock instead of a coroutine
+    client._is_connected = False
+    client.web3 = None
+    client.contract = None
+    client.account = None
 
 
 class TestAuditLedgerClientInit:
