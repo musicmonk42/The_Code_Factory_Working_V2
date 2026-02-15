@@ -92,6 +92,12 @@ logger.addFilter(SensitiveDataFilter())
 _FALLBACK_ATTEMPT_COUNT: Dict[str, int] = {}
 _LAST_FALLBACK_ALERT_TIME: float = 0
 
+# Bug 1 fix: Rate limiting for auto-disable alerts
+_LAST_AUTO_DISABLE_ALERT_TIME: float = 0
+
+# Bug 2 fix: Auto-recovery from fallback disabled state
+_FALLBACK_DISABLED_AT: float = 0
+
 
 # --- Utility Functions ---
 def compute_hash(data: bytes) -> str:
@@ -1122,45 +1128,76 @@ async def safe_sign(entry: Dict[str, Any], key_id: str, prev_hash: str = "") -> 
 
     # Check if fallback is auto-disabled
     if _FALLBACK_ATTEMPT_COUNT.get("total", 0) >= max_fallback_disable:
-        logger.critical(
-            "HMAC fallback has been auto-disabled due to excessive failures. Primary crypto system is likely critical.",
-            extra={"operation": "fallback_auto_disabled"},
-        )
-
-        # We need to run this async call in a safe way.
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(
-                send_alert(
-                    "CRITICAL: HMAC fallback auto-disabled. Audit log cannot be signed!",
-                    severity="emergency",
-                )
+        # Bug 2 fix: Check for auto-recovery
+        global _FALLBACK_DISABLED_AT
+        current_time = time.time()
+        
+        # Initialize disabled timestamp if not set
+        if _FALLBACK_DISABLED_AT == 0:
+            _FALLBACK_DISABLED_AT = current_time
+        
+        # Check if recovery cooldown has elapsed
+        recovery_seconds = settings.get("FALLBACK_AUTO_RECOVERY_SECONDS") or 300
+        time_since_disabled = current_time - _FALLBACK_DISABLED_AT
+        
+        if time_since_disabled >= recovery_seconds:
+            # Attempt auto-recovery
+            logger.warning(
+                f"Auto-recovery: {recovery_seconds}s have elapsed since fallback was disabled. "
+                f"Resetting counter to give primary provider a chance to recover.",
+                extra={"operation": "fallback_auto_recovery", "elapsed_seconds": time_since_disabled},
             )
-            loop.create_task(
-                log_action(
-                    "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
-                )
+            _FALLBACK_ATTEMPT_COUNT["total"] = 0
+            _FALLBACK_DISABLED_AT = 0
+            # Fall through to normal signing attempt
+        else:
+            # Still in disabled state
+            logger.critical(
+                "HMAC fallback has been auto-disabled due to excessive failures. Primary crypto system is likely critical.",
+                extra={"operation": "fallback_auto_disabled"},
             )
-        except RuntimeError:
-            # If no event loop is running, we must run the async calls synchronously
-            try:
-                asyncio.run(
-                    send_alert(
-                        "CRITICAL: HMAC fallback auto-disabled. Audit log cannot be signed!",
-                        severity="emergency",
-                    )
-                )
-                asyncio.run(
-                    log_action(
-                        "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
-                    )
-                )
-            except Exception:
-                logging.critical(
-                    "No running event loop to send critical alert or log crypto fallback disable."
-                )
 
-        raise CryptoOperationError("HMAC fallback auto-disabled. Cannot sign entry.")
+            # Bug 1 fix: Rate-limit auto-disable alerts
+            global _LAST_AUTO_DISABLE_ALERT_TIME
+            alert_cooldown = 60  # seconds
+            
+            if current_time - _LAST_AUTO_DISABLE_ALERT_TIME >= alert_cooldown:
+                _LAST_AUTO_DISABLE_ALERT_TIME = current_time
+                
+                # We need to run this async call in a safe way.
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(
+                        send_alert(
+                            "CRITICAL: HMAC fallback auto-disabled. Audit log cannot be signed!",
+                            severity="emergency",
+                        )
+                    )
+                    loop.create_task(
+                        log_action(
+                            "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
+                        )
+                    )
+                except RuntimeError:
+                    # If no event loop is running, we must run the async calls synchronously
+                    try:
+                        asyncio.run(
+                            send_alert(
+                                "CRITICAL: HMAC fallback auto-disabled. Audit log cannot be signed!",
+                                severity="emergency",
+                            )
+                        )
+                        asyncio.run(
+                            log_action(
+                                "crypto_fallback_disabled", {"reason": "max_attempts_reached"}
+                            )
+                        )
+                    except Exception:
+                        logging.critical(
+                            "No running event loop to send critical alert or log crypto fallback disable."
+                        )
+
+            raise CryptoOperationError("HMAC fallback auto-disabled. Cannot sign entry.")
 
     try:
         signature = await sign_function(data=data_to_sign_primary, key_id=key_id)
