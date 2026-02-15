@@ -661,6 +661,25 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             extra={"plugin": "generator_plugin_wrapper", "error_type": type(e).__name__}
         )
     
+    # FIX: If routers failed to load synchronously, retry in background
+    if not routers_ok:
+        logger.info("=" * 80)
+        logger.info("RETRYING ROUTER LOADING (Background)")
+        logger.info("=" * 80)
+        logger.info("Routers failed during synchronous startup - attempting background retry")
+        try:
+            # Give the system a moment to settle (e.g., if there were transient errors)
+            await asyncio.sleep(2)
+            routers_retry_ok = _register_routers_sync(app_instance)
+            if routers_retry_ok:
+                logger.info("✓ Router loading succeeded on background retry")
+                # Update the routers_ok flag for subsequent logic
+                routers_ok = True
+            else:
+                logger.error("❌ Router loading failed on background retry - API endpoints unavailable")
+        except Exception as e:
+            logger.error(f"❌ Router background retry failed with exception: {e}", exc_info=True)
+    
     # P2 FIX: Validate Redis connection on startup (explicit PING test)
     redis_url = os.getenv("REDIS_URL")
     if redis_url:
@@ -1312,6 +1331,7 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Failed to initialize PostgreSQL job storage: {e}")
     
     background_task = None
+    routers_ok = False
     
     # In test mode, load routers synchronously to ensure they're available immediately
     if is_test():
@@ -1322,17 +1342,52 @@ async def lifespan(app: FastAPI):
             _include_routers(app)
         else:
             logger.error(f"Router loading failed: {_router_load_error}")
-    # CRITICAL: Register routers SYNCHRONOUSLY before yielding
-    # This ensures API endpoints are available when the server starts
-    routers_ok = _register_routers_sync(app)
+    else:
+        # CRITICAL FIX: Register routers with timeout to prevent hanging
+        # If router loading hangs (e.g., due to ENCRYPTION_KEYS validation errors),
+        # we must still yield so /health endpoint can respond
+        logger.info("Production mode - loading routers with 30-second timeout")
+        try:
+            # Wrap synchronous router loading in asyncio.to_thread with timeout
+            # This prevents the lifespan from hanging indefinitely
+            routers_ok = await asyncio.wait_for(
+                asyncio.to_thread(_register_routers_sync, app),
+                timeout=30.0
+            )
+            if routers_ok:
+                logger.info("✓ Routers loaded successfully within timeout")
+            else:
+                logger.error("❌ Router loading failed but continuing startup")
+        except asyncio.TimeoutError:
+            logger.error(
+                "❌ CRITICAL: Router loading timed out after 30 seconds! "
+                "Continuing startup with degraded functionality. "
+                "Check for slow imports or validation errors in router modules."
+            )
+            routers_ok = False
+        except Exception as e:
+            logger.error(
+                f"❌ CRITICAL: Router loading failed with exception: {e}. "
+                "Continuing startup with degraded functionality.",
+                exc_info=True
+            )
+            routers_ok = False
     
     # Start HEAVY initialization in background (config, agents)
-    # Pass routers_ok so background task knows if agents should be loaded
+    # Pass routers_ok so background task knows if routers loaded successfully
+    # If routers failed to load synchronously, background task can retry
     background_task = asyncio.create_task(_background_initialization(app, routers_ok))
     logger.info("Background initialization task created for config and agents")
-    logger.info("✓ API endpoints are now available")
     
-    # Yield - server now accepts requests with routers already registered
+    if routers_ok:
+        logger.info("✓ API endpoints are now available")
+    else:
+        logger.warning("⚠ API endpoints may not be fully available - check logs above")
+    
+    # CRITICAL: Always yield, even if router loading failed
+    # This ensures /health endpoint is reachable for Railway healthchecks
+    # The /health endpoint is defined directly on the app, not in a router
+    logger.info("✓ Lifespan yielding - HTTP server ready to accept connections")
     yield
     
     # Shutdown
