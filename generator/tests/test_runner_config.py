@@ -79,19 +79,24 @@ api_key: sk-abc123
         )
         self.patch_env.start()
 
+        # Use the actual module name for patching, since it may be loaded as
+        # 'runner.runner_config' or 'generator.runner.runner_config' depending
+        # on sys.path and import mode.
+        _mod = _load_config_module.__name__
+
         self.mock_hvac = MagicMock()
-        self.patch_hvac = patch("runner.runner_config.hvac", new=self.mock_hvac)
+        self.patch_hvac = patch(f"{_mod}.hvac", new=self.mock_hvac)
         self.patch_hvac.start()
 
         self.mock_deepdiff = MagicMock()
         self.patch_deepdiff = patch(
-            "runner.runner_config.DeepDiff", new=self.mock_deepdiff
+            f"{_mod}.DeepDiff", new=self.mock_deepdiff
         )
         self.patch_deepdiff.start()
 
         self.mock_watchfiles = MagicMock()
         self.patch_watchfiles = patch(
-            "runner.runner_config.watchfiles", new=self.mock_watchfiles
+            f"{_mod}.watchfiles", new=self.mock_watchfiles
         )
         self.patch_watchfiles.start()
 
@@ -139,14 +144,14 @@ instance_id: test-remote-loaded
         )
 
         self.patch_aiohttp = patch(
-            "runner.runner_config.aiohttp.ClientSession",
+            f"{_mod}.aiohttp.ClientSession",
             new=self.mock_aiohttp_session_cls,
         )
         self.patch_aiohttp.start()
         # --- END FIX ---
 
         self.mock_fernet = MagicMock()
-        self.patch_fernet = patch("runner.runner_config.Fernet", new=self.mock_fernet)
+        self.patch_fernet = patch(f"{_mod}.Fernet", new=self.mock_fernet)
         self.patch_fernet.start()
 
         self.addCleanup(self.patch_env.stop)

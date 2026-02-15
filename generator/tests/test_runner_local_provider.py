@@ -170,13 +170,16 @@ async def test_load_plugins_missing_file(
     provider: LocalProvider, caplog: LogCaptureFixture
 ) -> None:
     # FIX: load_plugins now accepts a file_path parameter
-    provider.load_plugins("/nonexistent.yaml")
-    assert any(
-        "No plugin file found" in rec.message
-        or "Error loading local plugins" in rec.message
-        or "Plugins loaded" in rec.message
-        for rec in caplog.records
-    )
+    logger.propagate = True
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        provider.load_plugins("/nonexistent.yaml")
+        assert any(
+            "No plugin file found" in rec.message
+            or "Error loading local plugins" in rec.message
+            or "Plugins loaded" in rec.message
+            for rec in caplog.records
+        )
+    logger.propagate = False
 
 
 # 4. Low-level _api_call
@@ -369,11 +372,18 @@ def test_get_provider_no_key(mock_load: MagicMock) -> None:
 # 9. Prometheus metrics
 @pytest.mark.asyncio
 async def test_stream_metrics(provider: LocalProvider) -> None:
-    # <<< START FIX: Robustly clear all metrics and their internal children
-    # This is the only reliable way to reset a Histogram for testing.
-    stream_chunks_total._metrics.clear()
-    stream_chunk_latency._metrics.clear()
-    # <<< END FIX
+    # Record baseline values before test
+    try:
+        baseline_count = stream_chunks_total.labels("m")._value.get()
+    except Exception:
+        baseline_count = 0
+
+    baseline_latency_count = 0
+    for metric_family in stream_chunk_latency.collect():
+        for sample in metric_family.samples:
+            if sample.name.endswith("_count") and sample.labels.get("model") == "m":
+                baseline_latency_count = sample.value
+                break
 
     # FIX: Mock response to simulate aiohttp streaming response
     mock_resp = AsyncMock()
@@ -389,12 +399,9 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
         gen = await provider.call("p", "m", stream=True)
         _ = [c async for c in gen]
 
-    assert stream_chunks_total.labels("m")._value.get() == 2
+    assert stream_chunks_total.labels("m")._value.get() - baseline_count == 2
 
-    # <<< START FIX: Use collect() to find the count sample with full metric name
-    # This is the only reliable way to test a Histogram's count.
     count_value = None
-
     for metric_family in stream_chunk_latency.collect():
         for sample in metric_family.samples:
             if sample.name.endswith("_count") and sample.labels.get("model") == "m":
@@ -404,7 +411,7 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
     assert (
         count_value is not None
     ), f"Could not find sample ending with '_count' with labels {{'model': 'm'}}"
-    assert count_value == 2
+    assert count_value - baseline_latency_count == 2
     # <<< END FIX
 
 

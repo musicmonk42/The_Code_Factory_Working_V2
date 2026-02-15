@@ -755,12 +755,20 @@ class RunnerApp(_TextualAppBase):
 
         instance_id = self.config.instance_id
 
+        def _resolve_metric_value(val, default=0):
+            """Resolve a Prometheus metric _value, handling MmapedValue."""
+            if val is None:
+                return default
+            if hasattr(val, "get"):
+                return val.get()
+            return val
+
         # Queue size from RUN_QUEUE gauge (safe under mocks)
         try:
             gauge = RUN_QUEUE.labels(
                 framework=self.config.framework, instance_id=instance_id
             )
-            size = getattr(gauge, "_value", 0) or 0
+            size = _resolve_metric_value(getattr(gauge, "_value", 0)) or 0
         except Exception:
             size = 0
 
@@ -770,25 +778,25 @@ class RunnerApp(_TextualAppBase):
         )
 
         # Pass rate
-        pr = getattr(RUN_PASS_RATE, "_value", None)
+        pr = _resolve_metric_value(getattr(RUN_PASS_RATE, "_value", None), default=None)
         if pr is not None:
             self.pass_rate_label.update(f"Pass Rate: [bold]{pr * 100:.2f}%[/bold]")
 
         # CPU / MEM usage
         try:
-            cpu = getattr(
+            cpu = _resolve_metric_value(getattr(
                 RUN_RESOURCE_USAGE.labels(resource_type="cpu", instance_id=instance_id),
                 "_value",
                 0.0,
-            )
+            ))
         except Exception:
             cpu = 0.0
         try:
-            mem = getattr(
+            mem = _resolve_metric_value(getattr(
                 RUN_RESOURCE_USAGE.labels(resource_type="mem", instance_id=instance_id),
                 "_value",
                 0.0,
-            )
+            ))
         except Exception:
             mem = 0.0
 
@@ -797,11 +805,11 @@ class RunnerApp(_TextualAppBase):
 
         # Health status
         try:
-            health_status_value = getattr(
+            health_status_value = _resolve_metric_value(getattr(
                 HEALTH_STATUS.labels(component_name="overall", instance_id=instance_id),
                 "_value",
                 -1,
-            )
+            ))
             self.health_label.update(
                 _("Health: [bold]{}[/bold]").format(
                     _("Good")

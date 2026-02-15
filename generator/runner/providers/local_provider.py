@@ -444,7 +444,11 @@ def get_provider():
     """
     config = load_config()
     # API_KEY is optional for most local setups
-    API_KEY = config.llm_provider_api_key or os.getenv("LOCAL_API_KEY")
+    key = config.llm_provider_api_key
+    # Handle SecretStr from Pydantic
+    if hasattr(key, "get_secret_value"):
+        key = key.get_secret_value()
+    API_KEY = key or os.getenv("LOCAL_API_KEY")
 
     # For local providers, we typically don't require an API key
     # But if you want to enforce it, uncomment the following:
