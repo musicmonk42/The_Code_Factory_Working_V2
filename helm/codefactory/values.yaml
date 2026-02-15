@@ -248,9 +248,9 @@ env:
   AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"  # Set to "0" for production
   
   # Kubernetes/Cloud Native secret management
-  # Set to "true" to use plaintext secrets from Kubernetes Secrets
-  # (Kubernetes handles encryption at rest via etcd encryption)
-  # Set to "false" for AWS deployments using KMS
+  # For Kubernetes/Helm: Set USE_ENV_SECRETS=true (plaintext secrets, K8s encrypts via etcd)
+  # For AWS: Set USE_ENV_SECRETS=false and configure KMS (see AWS_KMS_TROUBLESHOOTING.md)
+  # Railway: Set USE_ENV_SECRETS=true (Railway encrypts at platform level)
   USE_ENV_SECRETS: "true"
   AUDIT_CRYPTO_USE_KMS: "false"  # KMS not used in Kubernetes - secrets managed by K8s
 

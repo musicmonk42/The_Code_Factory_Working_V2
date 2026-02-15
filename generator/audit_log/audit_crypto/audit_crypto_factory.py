@@ -583,14 +583,20 @@ async def _ensure_software_key_master() -> bytes:
         
         if use_env_secrets:
             # Get plaintext master key directly (already base64 decoded by EnvVarSecretManager)
-            plaintext = await aget_kms_master_key_ciphertext_blob()
-            if not plaintext:
+            # Note: Function name is historical; in this mode it returns plaintext, not ciphertext
+            master_key_bytes = await aget_kms_master_key_ciphertext_blob()
+            if not master_key_bytes:
                 raise CryptoInitializationError(
                     "No master key returned from EnvVarSecretManager."
                 )
+            # Validate key length before slicing
+            if len(master_key_bytes) < 32:
+                raise CryptoInitializationError(
+                    f"Master key too short: got {len(master_key_bytes)} bytes, need at least 32 bytes for Fernet encryption."
+                )
             logger.info("Using Railway/PaaS mode: plaintext master key from environment")
-            # Ensure we use exactly 32 bytes for Fernet
-            _SOFTWARE_KEY_MASTER = plaintext[:32]
+            # Use exactly 32 bytes for Fernet
+            _SOFTWARE_KEY_MASTER = master_key_bytes[:32]
             return _SOFTWARE_KEY_MASTER
         
         # AWS KMS mode: Fetch KMS-encrypted ciphertext and decrypt
