@@ -97,7 +97,9 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     try:
         import redis.asyncio as aioredis
 
-        mock_redis = mocker.MagicMock(spec=aioredis.Redis)
+        from unittest.mock import MagicMock as _MagicMock
+        _redis_spec = aioredis.Redis if not isinstance(aioredis.Redis, _MagicMock) else None
+        mock_redis = mocker.MagicMock(spec=_redis_spec)
         mock_redis.ping = mocker.AsyncMock(return_value=True)
         mock_redis.set = mocker.AsyncMock(return_value=True)
         mock_redis.get = mocker.AsyncMock(

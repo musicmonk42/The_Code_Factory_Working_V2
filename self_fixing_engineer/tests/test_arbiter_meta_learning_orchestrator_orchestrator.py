@@ -5,11 +5,15 @@ import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import aiofiles
 import pytest
 import pytest_asyncio
-import redis.asyncio as aioredis
+try:
+    import redis.asyncio as aioredis
+except (ImportError, ModuleNotFoundError):
+    aioredis = None  # type: ignore[assignment]
 from aiokafka import AIOKafkaProducer
 from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 from self_fixing_engineer.arbiter.meta_learning_orchestrator.clients import (
@@ -186,7 +190,8 @@ async def mock_kafka_producer(mocker: MockerFixture):
 async def mock_redis_client(mocker: MockerFixture):
     """Fixture for mocked aioredis.Redis."""
 
-    redis_client = mocker.MagicMock(spec=aioredis.Redis)
+    _redis_spec = aioredis.Redis if aioredis and not isinstance(aioredis.Redis, MagicMock) else None
+    redis_client = mocker.MagicMock(spec=_redis_spec)
     redis_client.set = mocker.AsyncMock(return_value=True)
     redis_client.get = mocker.AsyncMock(return_value=None)
     redis_client.ping = mocker.AsyncMock(return_value=True)
