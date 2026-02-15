@@ -76,7 +76,9 @@ async def redis_client(mocker: MockerFixture):
     mock_store = {}
 
     # Mock aioredis client
-    mock_client = mocker.MagicMock(spec=aioredis.Redis)
+    from unittest.mock import MagicMock as _MagicMock
+    _redis_spec = aioredis.Redis if not isinstance(aioredis.Redis, _MagicMock) else None
+    mock_client = mocker.MagicMock(spec=_redis_spec)
     mock_client.ping = mocker.AsyncMock(return_value=True)
 
     async def mock_set(key, value, ex=None, px=None, nx=False, xx=False, **kwargs):

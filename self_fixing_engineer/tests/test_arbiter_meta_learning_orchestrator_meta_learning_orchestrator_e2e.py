@@ -6,10 +6,14 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
-import redis.asyncio as aioredis
+try:
+    import redis.asyncio as aioredis
+except (ImportError, ModuleNotFoundError):
+    aioredis = None  # type: ignore[assignment]
 from self_fixing_engineer.arbiter.meta_learning_orchestrator.audit_utils import AuditUtils
 from self_fixing_engineer.arbiter.meta_learning_orchestrator.clients import (
     AgentConfigurationService,
@@ -141,7 +145,8 @@ async def orchestrator(mocker: MockerFixture, tmp_path):
     mock_agent_service.close = mocker.AsyncMock()
     mock_agent_service.endpoint = config.AGENT_CONFIG_SERVICE_ENDPOINT
 
-    mock_redis = mocker.MagicMock(spec=aioredis.Redis)
+    _redis_spec = aioredis.Redis if aioredis and not isinstance(aioredis.Redis, MagicMock) else None
+    mock_redis = mocker.MagicMock(spec=_redis_spec)
     mock_redis.set = mocker.AsyncMock(return_value=True)
     mock_redis.get = mocker.AsyncMock(return_value=None)
     mock_redis.ping = mocker.AsyncMock(return_value=True)
