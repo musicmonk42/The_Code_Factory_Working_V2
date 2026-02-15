@@ -544,7 +544,21 @@ def load_config() -> Dynaconf:
 
 
 def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
-    """Initializes Fernet encryption, fetching the key from KMS in production."""
+    """
+    Initializes Fernet encryption, fetching the key from KMS in production.
+    
+    NOTE: This function has been modified to prevent production crashes on Railway
+    deployment which doesn't use AWS KMS. The fallback to locally generated keys
+    has important limitations:
+    
+    1. Each restart generates a NEW key, making old encrypted data unreadable
+    2. History encryption is INSECURE without KMS in production
+    3. This is a pragmatic fix for Railway; AWS deployments should use KMS
+    
+    For production AWS deployments, ensure AWS_REGION and KMS credentials are set.
+    For Railway or similar deployments without KMS, accept the logging warnings
+    and understand that encrypted history won't persist across restarts.
+    """
     aws_region = os.getenv("AWS_REGION")
     
     # Validate AWS_REGION is set before attempting KMS call
@@ -554,11 +568,17 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
                 "CRITICAL: AWS_REGION environment variable is not set. "
                 "Cannot initialize KMS client for production encryption."
             )
-            # Fall back to dummy key with critical warning in prod
+            # Fall back to local key with critical warning in prod
             get_logger().critical(
-                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. Aborting startup."
+                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
+                "Falling back to local encryption key. This is INSECURE for production use. "
+                "WARNING: Encrypted history will be lost on restart due to ephemeral key generation."
             )
-            sys.exit(1)
+            f = Fernet(Fernet.generate_key())
+            get_logger().warning(
+                "Using a locally generated Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+            )
+            return f
         else:
             get_logger().warning(
                 "AWS_REGION not set. Skipping KMS initialization and using local encryption key."
@@ -587,15 +607,16 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
         )
         if is_prod:
             get_logger().critical(
-                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. Aborting startup."
+                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
+                "Falling back to local encryption key. This is INSECURE for production use. "
+                "WARNING: Encrypted history will be lost on restart due to ephemeral key generation."
             )
-            sys.exit(1)
-        else:
-            f = Fernet(Fernet.generate_key())
-            get_logger().warning(
-                "Using a dummy Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
-            )
-            return f
+        f = Fernet(Fernet.generate_key())
+        get_logger().warning(
+            "Using a locally generated Fernet key as fallback. History encryption is INSECURE. "
+            "DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY. Data encrypted with this key will be unreadable after restart."
+        )
+        return f
 
 
 def setup_tracing() -> Tuple[Optional[Any], Optional[Any], Optional[Any], bool]:
@@ -1375,9 +1396,20 @@ class Clarifier:
             file_mode = os.stat(self.config.HISTORY_FILE).st_mode
             if file_mode & (stat.S_IRWXO | stat.S_IRWXG):
                 self.logger.critical(
-                    f"Insecure history file permissions: {oct(file_mode)}. Must be user-only."
+                    f"SECURITY WARNING: Insecure history file permissions: {oct(file_mode)}. Must be user-only. "
+                    f"Attempting to fix permissions automatically."
                 )
-                sys.exit(1)
+                # Attempt to fix permissions automatically instead of crashing
+                try:
+                    os.chmod(self.config.HISTORY_FILE, 0o600)  # Set to user read/write only
+                    self.logger.info("Fixed history file permissions to 0o600 (user read/write only)")
+                except Exception as chmod_error:
+                    self.logger.error(
+                        f"Failed to fix permissions on {self.config.HISTORY_FILE}: {chmod_error}. "
+                        f"Starting with empty history for security."
+                    )
+                    self.history = []
+                    return
             with open(self.config.HISTORY_FILE, "rb") as f:
                 data = f.read()
             if self.config.HISTORY_COMPRESSION:
