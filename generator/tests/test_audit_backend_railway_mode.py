@@ -16,8 +16,8 @@ import pytest
 class TestIsRailwayOrPaaSModeFunction:
     """Tests for the _is_railway_or_paas_mode() helper function."""
 
-    def test_use_env_secrets_true_returns_correct_values(self, monkeypatch):
-        """Test that USE_ENV_SECRETS=true is correctly detected."""
+    def test_use_env_secrets_true_with_kms_default(self, monkeypatch):
+        """Test that USE_ENV_SECRETS=true is correctly detected with default KMS setting."""
         monkeypatch.setenv("USE_ENV_SECRETS", "true")
         monkeypatch.delenv("AUDIT_CRYPTO_USE_KMS", raising=False)
         
@@ -27,8 +27,8 @@ class TestIsRailwayOrPaaSModeFunction:
         assert use_env_secrets is True
         assert use_kms is True  # Default value
 
-    def test_audit_crypto_use_kms_false_returns_correct_values(self, monkeypatch):
-        """Test that AUDIT_CRYPTO_USE_KMS=false is correctly detected."""
+    def test_audit_crypto_use_kms_false_with_env_secrets_default(self, monkeypatch):
+        """Test that AUDIT_CRYPTO_USE_KMS=false is correctly detected with default USE_ENV_SECRETS."""
         monkeypatch.delenv("USE_ENV_SECRETS", raising=False)
         monkeypatch.setenv("AUDIT_CRYPTO_USE_KMS", "false")
         
@@ -38,8 +38,8 @@ class TestIsRailwayOrPaaSModeFunction:
         assert use_env_secrets is False
         assert use_kms is False
 
-    def test_both_env_vars_set_returns_correct_values(self, monkeypatch):
-        """Test that both env vars set correctly returns values."""
+    def test_railway_mode_with_both_env_vars_set(self, monkeypatch):
+        """Test Railway/PaaS mode detection with both USE_ENV_SECRETS=true and AUDIT_CRYPTO_USE_KMS=false."""
         monkeypatch.setenv("USE_ENV_SECRETS", "true")
         monkeypatch.setenv("AUDIT_CRYPTO_USE_KMS", "false")
         

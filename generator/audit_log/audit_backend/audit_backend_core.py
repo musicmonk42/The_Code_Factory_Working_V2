@@ -561,8 +561,12 @@ else:
                     if not b64_key:
                         logger.warning("Encryption key object missing 'key'; skipping.")
                         continue
-                    # In PaaS mode, the key IS the Fernet key (base64-encoded), use directly as bytes
-                    _decrypted_keys.append(b64_key.encode("utf-8") if isinstance(b64_key, str) else b64_key)
+                    # In PaaS mode, the key IS the Fernet key (base64-encoded)
+                    # Fernet accepts both str and bytes, but we convert to bytes for consistency with KMS mode
+                    if isinstance(b64_key, str):
+                        _decrypted_keys.append(b64_key.encode('ascii'))  # Base64 is ASCII-safe
+                    else:
+                        _decrypted_keys.append(b64_key)
             else:
                 # AWS KMS mode: decrypt ciphertext blobs via KMS
                 logger.info(
