@@ -54,6 +54,10 @@ PORT = "8080"
 AUDIT_CRYPTO_MODE = "software"  # Changed from "disabled" to "software" for security
 AUDIT_CRYPTO_ALLOW_INIT_FAILURE = "1"
 
+# Railway-specific secret management (CRITICAL for Railway deployments)
+USE_ENV_SECRETS = "true"  # Use plaintext secrets from Railway environment variables
+AUDIT_CRYPTO_USE_KMS = "false"  # KMS not available on Railway - secrets managed by platform
+
 # === Docker Configuration ===
 # Skip Docker validation in Railway (Docker daemon not available during deployment)
 SKIP_DOCKER_VALIDATION = "true"

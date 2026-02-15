@@ -482,6 +482,14 @@ class EnvVarSecretManager(SecretManager):
     This is suitable for PaaS platforms like Railway, Heroku, or similar that use
     environment variables for configuration and secrets.
     
+    For Railway/PaaS deployments:
+    - Detects USE_ENV_SECRETS=true
+    - Returns plaintext secrets directly (Railway encrypts at platform level)
+    - Skips AWS KMS decryption
+    
+    For AWS deployments:
+    - Attempts KMS decryption if AWS credentials are available
+    
     Security Note: While environment variables are a valid deployment pattern for
     PaaS platforms, they may be visible in process listings and system logs.
     For sensitive production workloads, consider using a dedicated secret manager
@@ -499,7 +507,7 @@ class EnvVarSecretManager(SecretManager):
             secret_name: The name of the environment variable to read
             
         Returns:
-            The secret value as bytes (UTF-8 encoded)
+            The secret value as bytes (UTF-8 encoded or base64 decoded)
             
         Raises:
             SecretNotFoundError: If the environment variable is not set
@@ -521,6 +529,76 @@ class EnvVarSecretManager(SecretManager):
                 f"Environment variable '{secret_name}' not found."
             )
         
+        # Railway/PaaS mode: return plaintext directly
+        if os.getenv("USE_ENV_SECRETS", "").lower() == "true":
+            self.logger.info(f"EnvVarSecretManager: Using Railway/PaaS mode for {secret_name}")
+            await log_action(
+                "secret_access",
+                secret_name=secret_name,
+                source="environment_variables",
+                status="success",
+                mode="railway_paas",
+            )
+            # For base64-encoded master keys, decode from base64
+            if secret_name == "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64":
+                return base64.b64decode(secret_value)
+            return secret_value.encode("utf-8")
+        
+        # AWS mode: attempt KMS decryption for specific keys
+        if secret_name == "AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64":
+            try:
+                # Check if AWS credentials are available (both are required)
+                if not (os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_REGION")):
+                    self.logger.info(f"No AWS credentials found, treating {secret_name} as plaintext")
+                    await log_action(
+                        "secret_access",
+                        secret_name=secret_name,
+                        source="environment_variables",
+                        status="success",
+                        mode="plaintext_fallback",
+                    )
+                    # Decode from base64 since it's stored as base64 in env var
+                    return base64.b64decode(secret_value)
+                
+                # Attempt KMS decryption
+                if not HAS_BOTO3:
+                    self.logger.warning(f"boto3 not available, treating {secret_name} as plaintext")
+                    # Decode from base64 since it's stored as base64 in env var
+                    return base64.b64decode(secret_value)
+                
+                kms = boto3.client('kms', region_name=os.getenv("AWS_REGION", "us-east-1"))
+                response = await asyncio.to_thread(
+                    kms.decrypt,
+                    CiphertextBlob=base64.b64decode(secret_value)
+                )
+                plaintext = response.get('Plaintext')
+                if plaintext:
+                    self.logger.info(f"Successfully decrypted {secret_name} using KMS")
+                    await log_action(
+                        "secret_access",
+                        secret_name=secret_name,
+                        source="environment_variables",
+                        status="success",
+                        mode="kms_decrypted",
+                    )
+                    # KMS returns plaintext bytes directly - return as-is
+                    return plaintext
+                else:
+                    raise SecretDecodingError("KMS decryption returned no plaintext")
+            except Exception as e:
+                self.logger.warning(f"KMS decryption failed for {secret_name}, using as plaintext: {e}")
+                await log_action(
+                    "secret_access",
+                    secret_name=secret_name,
+                    source="environment_variables",
+                    status="success",
+                    mode="plaintext_fallback_after_kms_error",
+                    error=str(e),
+                )
+                # Decode from base64 since it's stored as base64 in env var
+                return base64.b64decode(secret_value)
+        
+        # Default: return as-is for non-KMS secrets
         self.logger.debug(
             f"Secret '{secret_name}' retrieved from environment variables."
         )

@@ -191,6 +191,12 @@ services:
       - AUDIT_CRYPTO_MODE=${AUDIT_CRYPTO_MODE:-software}  # Changed from "disabled" to "software"
       - AUDIT_CRYPTO_ALLOW_INIT_FAILURE=${AUDIT_CRYPTO_ALLOW_INIT_FAILURE:-1}
       - AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64=${AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64:-}
+      
+      # Docker/Container secret management
+      # Set to "true" to use plaintext secrets from container environment
+      # Set to "false" for AWS deployments using KMS
+      - USE_ENV_SECRETS=${USE_ENV_SECRETS:-true}
+      - AUDIT_CRYPTO_USE_KMS=${AUDIT_CRYPTO_USE_KMS:-false}
 
       # ============================================
       # Sentry Error Tracking (Optional)
