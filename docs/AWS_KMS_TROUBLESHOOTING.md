@@ -4,9 +4,28 @@
 
 ## Overview
 
-This guide helps you troubleshoot AWS KMS-related issues in the audit crypto system. The application uses AWS KMS to encrypt and decrypt the master key used for audit log cryptographic operations.
+This guide helps you troubleshoot AWS KMS-related issues in the audit crypto system. The application uses AWS KMS to encrypt and decrypt the master key used for audit log cryptographic operations **in AWS deployments only**.
 
-## Common Issues
+## ⚠️ Railway/PaaS Deployments: You Don't Need KMS!
+
+**If you're deploying to Railway, Heroku, or similar PaaS platforms, STOP HERE.**
+
+You should NOT be using AWS KMS or encountering KMS errors. Railway has its own secrets management that encrypts environment variables at the platform level.
+
+**For Railway/PaaS deployments:**
+1. Set `USE_ENV_SECRETS=true` 
+2. Generate an UNENCRYPTED base64 master key:
+   ```bash
+   python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+   ```
+3. Set `AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64` to that base64 key
+4. NO KMS setup needed
+
+**See [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md) for complete Railway setup instructions.**
+
+---
+
+## AWS KMS Issues (AWS Deployments Only)
 
 ### InvalidCiphertextException Error
 

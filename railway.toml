@@ -55,8 +55,17 @@ AUDIT_CRYPTO_MODE = "software"  # Changed from "disabled" to "software" for secu
 AUDIT_CRYPTO_ALLOW_INIT_FAILURE = "1"
 
 # Railway-specific secret management (CRITICAL for Railway deployments)
+# ⚠️ IMPORTANT: Railway does NOT use AWS KMS
+# Railway encrypts all environment variables at the platform level
+# Set USE_ENV_SECRETS=true to use plaintext secrets (Railway encrypts them for you)
 USE_ENV_SECRETS = "true"  # Use plaintext secrets from Railway environment variables
 AUDIT_CRYPTO_USE_KMS = "false"  # KMS not available on Railway - secrets managed by platform
+
+# REQUIRED: Generate master encryption key (UNENCRYPTED base64)
+# In Railway UI, add this secret:
+# AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64
+# Generate with: python -c "import os, base64; print(base64.b64encode(os.urandom(32)).decode())"
+# DO NOT encrypt with KMS - Railway handles encryption automatically
 
 # === Docker Configuration ===
 # Skip Docker validation in Railway (Docker daemon not available during deployment)

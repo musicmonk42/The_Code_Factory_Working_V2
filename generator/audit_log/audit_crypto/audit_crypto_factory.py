@@ -577,7 +577,29 @@ async def _ensure_software_key_master() -> bytes:
 
     # PRODUCTION PATH (simplified; adjust to match your real KMS/secret manager wiring)
     try:
-        # Example using async secret helper; replace with your actual logic if different.
+        # Railway/PaaS mode: Use plaintext master key from environment
+        # EnvVarSecretManager returns the decoded plaintext when USE_ENV_SECRETS=true
+        use_env_secrets = os.getenv("USE_ENV_SECRETS", "").lower() == "true"
+        
+        if use_env_secrets:
+            # Get plaintext master key directly (already base64 decoded by EnvVarSecretManager)
+            # Note: Function name is historical; in this mode it returns plaintext, not ciphertext
+            master_key_bytes = await aget_kms_master_key_ciphertext_blob()
+            if not master_key_bytes:
+                raise CryptoInitializationError(
+                    "No master key returned from EnvVarSecretManager."
+                )
+            # Validate key length before slicing
+            if len(master_key_bytes) < 32:
+                raise CryptoInitializationError(
+                    f"Master key too short: got {len(master_key_bytes)} bytes, need at least 32 bytes for Fernet encryption."
+                )
+            logger.info("Using Railway/PaaS mode: environment-based secret management")
+            # Use exactly 32 bytes for Fernet
+            _SOFTWARE_KEY_MASTER = master_key_bytes[:32]
+            return _SOFTWARE_KEY_MASTER
+        
+        # AWS KMS mode: Fetch KMS-encrypted ciphertext and decrypt
         ciphertext = await aget_kms_master_key_ciphertext_blob()
         if not ciphertext:
             raise CryptoInitializationError(
@@ -618,7 +640,15 @@ async def _ensure_software_key_master() -> bytes:
             error_msg = (
                 f"InvalidCiphertextException: Master key encrypted with different KMS key.\n\n"
                 f"CURRENT KMS KEY ID: {settings.KMS_KEY_ID}\n\n"
-                f"RESOLUTION STEPS:\n"
+                f"⚠️  RAILWAY/PaaS DEPLOYMENT? You should NOT be seeing this error!\n"
+                f"   If deploying to Railway, Heroku, or similar PaaS:\n"
+                f"   1. Set USE_ENV_SECRETS=true (tells system to use plaintext secrets)\n"
+                f"   2. Generate an UNENCRYPTED master key:\n"
+                f"      python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n"
+                f"   3. Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to that base64 key\n"
+                f"   4. NO KMS encryption needed - Railway/PaaS manages secrets securely\n"
+                f"   See docs/RAILWAY_DEPLOYMENT.md for complete Railway setup guide.\n\n"
+                f"AWS KMS DEPLOYMENT RESOLUTION:\n"
                 f"1. Generate a new master key:\n"
                 f"   python -c \"import base64, os; print(base64.b64encode(os.urandom(32)).decode())\"\n\n"
                 f"2. Encrypt it with your CURRENT KMS key ({settings.KMS_KEY_ID}):\n"
@@ -631,13 +661,9 @@ async def _ensure_software_key_master() -> bytes:
                 f"   aws kms encrypt --key-id {settings.KMS_KEY_ID} --plaintext fileb:///tmp/key.bin \\\n"
                 f"     --query CiphertextBlob --output text && rm /tmp/key.bin\n\n"
                 f"3. Update AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 with the new ciphertext\n\n"
-                f"4. For Railway deployments without KMS, use environment variable secret manager:\n"
-                f"   - Set USE_ENV_SECRETS=true\n"
-                f"   - Set AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 to the base64 key from step 1\n"
-                f"   - No KMS encryption needed for Railway (secrets managed by Railway)\n\n"
                 f"WARNING: Changing the master key will invalidate existing encrypted audit data.\n"
                 f"Ensure you have backups before proceeding.\n\n"
-                f"See docs/AWS_KMS_TROUBLESHOOTING.md and docs/RAILWAY_DEPLOYMENT.md for detailed instructions."
+                f"See docs/AWS_KMS_TROUBLESHOOTING.md for detailed AWS KMS troubleshooting."
             )
             
             # Use rate-limited logging to prevent log flooding
