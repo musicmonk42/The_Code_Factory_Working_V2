@@ -242,7 +242,15 @@ async def audit_client(mock_web3_dependencies, mocker: MockerFixture):
     yield client
 
     if client._is_connected:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except TypeError:
+            # Handle case where disconnect() returns a MagicMock
+            # instead of a coroutine due to mocker teardown ordering
+            client._is_connected = False
+            client.web3 = None
+            client.contract = None
+            client.account = None
 
 
 class TestAuditLedgerClientInit:
