@@ -84,6 +84,7 @@ class TestUtilityFunctions:
             validated = validate_file_path(str(test_file))
             assert validated == test_file.resolve()
 
+    @pytest.mark.forked
     def test_validate_file_path_invalid(self):
         """Test validation rejects path traversal"""
         from omnicore_engine.cli import validate_file_path
@@ -171,6 +172,7 @@ class TestSimulateCommand:
             if os.path.exists(temp_file):
                 os.unlink(temp_file)
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_simulate_execution(self):
         """Test simulate command execution"""
@@ -186,6 +188,7 @@ class TestSimulateCommand:
 class TestListPluginsCommand:
     """Test list-plugins command"""
 
+    @pytest.mark.forked
     @patch("sys.argv", ["cli.py", "list-plugins"])
     @patch("omnicore_engine.cli.asyncio.run")
     def test_list_plugins_without_filter(self, mock_run):
@@ -204,6 +207,7 @@ class TestListPluginsCommand:
 class TestAuditCommands:
     """Test audit-related commands"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_audit_query_command(self):
         """Test audit-query command"""
@@ -244,6 +248,7 @@ class TestAuditCommands:
 class TestPluginManagementCommands:
     """Test plugin management commands"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_plugin_install_command(self):
         """Test plugin-install command"""
@@ -324,6 +329,7 @@ class TestOutputFormatting:
 class TestREPLMode:
     """Test REPL (interactive shell) mode"""
 
+    @pytest.mark.forked
     @patch("sys.argv", ["cli.py", "repl"])
     @patch("omnicore_engine.cli.asyncio.to_thread")
     @patch("builtins.input")
@@ -351,6 +357,7 @@ class TestREPLMode:
 class TestDebugInfoCommand:
     """Test debug-info command"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_debug_info_output(self):
         """Test debug-info command output"""
@@ -435,6 +442,7 @@ class TestAnonymization:
 class TestWorkflowCommand:
     """Test workflow command"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_workflow_command_execution(self):
         """Test workflow command execution"""
@@ -477,6 +485,7 @@ class TestMetricsCommand:
 class TestFeatureFlagCommand:
     """Test feature-flag-set command"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_set_feature_flag_true(self):
         """Test setting feature flag to true"""
@@ -512,6 +521,7 @@ class TestDocsCommand:
 class TestImportFixerCommand:
     """Test fix-imports command"""
 
+    @pytest.mark.forked
     @pytest.mark.asyncio
     async def test_fix_imports_command(self):
         """Test fix-imports command execution"""
