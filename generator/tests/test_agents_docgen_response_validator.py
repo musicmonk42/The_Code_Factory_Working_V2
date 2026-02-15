@@ -192,6 +192,7 @@ sys.modules["watchdog.observers"] = mock_watchdog_observers
 sys.modules["watchdog.events"] = mock_watchdog_events
 
 # Mock prometheus_client
+_original_prometheus = sys.modules.get("prometheus_client")
 mock_prometheus = MagicMock()
 mock_prometheus.__path__ = []  # Required for package imports
 mock_prometheus.__name__ = "prometheus_client"
@@ -255,6 +256,12 @@ for _k in ["runner", "runner.llm_client", "runner.runner_logging",
            "runner.runner_file_utils", "runner.summarize_utils",
            "runner.tracer"]:
     sys.modules.pop(_k, None)
+
+# Restore prometheus_client to prevent pollution for other test files
+if _original_prometheus is not None:
+    sys.modules["prometheus_client"] = _original_prometheus
+else:
+    sys.modules.pop("prometheus_client", None)
 
 
 # ============================================================================
