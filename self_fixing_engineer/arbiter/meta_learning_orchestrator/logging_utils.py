@@ -59,7 +59,7 @@ class LogCorrelationFilter(logging.Filter):
         record.correlation_id = "no-trace-no-span"
 
     @staticmethod
-    def _is_context_valid(context) -> bool:
+    def _is_context_valid(context: Any) -> bool:
         """Check if a span context is valid by verifying trace_id and span_id are non-zero.
 
         This is more robust than relying on context.is_valid which may behave
