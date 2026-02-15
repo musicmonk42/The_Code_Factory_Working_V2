@@ -52,6 +52,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -142,6 +143,11 @@ ROUTING_RETRY_ENABLED = _AUDIT_CONFIG.get("ROUTING_RETRY_ENABLED", True)
 ROUTING_MAX_ATTEMPTS = _AUDIT_CONFIG.get("ROUTING_MAX_ATTEMPTS", 3)
 ROUTING_TIMEOUT_SECONDS = _AUDIT_CONFIG.get("ROUTING_TIMEOUT_SECONDS", 5.0)
 FALLBACK_TO_LOCAL = _AUDIT_CONFIG.get("FALLBACK_TO_LOCAL", True)
+
+# Bug 3 fix: Rate-limiting state for CryptoOperationError CRITICAL logs
+_SIGN_FAILURE_COUNT: int = 0
+_LAST_SIGN_FAILURE_LOG_TIME: float = 0.0
+_SIGN_FAILURE_LOG_INTERVAL: float = 60.0  # seconds
 
 # --- Crypto imports with fallback ---
 SIGNING_ENABLED = (
@@ -525,11 +531,22 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
         except CryptoOperationError as e:
             # CRITICAL: Signing failed - this breaks the audit chain
             # This indicates a problem with key material, KMS, or crypto infrastructure
-            logger.critical(
-                f"CRITICAL: Failed to sign audit event '{action}'. The audit chain may be broken. Error: {e}",
-                exc_info=True,
-                extra={"action": action, "error_type": "CryptoOperationError"},
-            )
+            # Bug 3 fix: Rate-limit CRITICAL logs to prevent log flooding
+            global _SIGN_FAILURE_COUNT, _LAST_SIGN_FAILURE_LOG_TIME
+            _SIGN_FAILURE_COUNT += 1
+            current_time = time.time()
+            
+            if current_time - _LAST_SIGN_FAILURE_LOG_TIME >= _SIGN_FAILURE_LOG_INTERVAL:
+                suppressed = _SIGN_FAILURE_COUNT - 1
+                logger.critical(
+                    f"CRITICAL: Failed to sign audit event '{action}'. The audit chain may be broken. Error: {e}"
+                    + (f" ({suppressed} similar errors suppressed in last {_SIGN_FAILURE_LOG_INTERVAL:.0f}s)" if suppressed > 0 else ""),
+                    exc_info=True,
+                    extra={"action": action, "error_type": "CryptoOperationError"},
+                )
+                _SIGN_FAILURE_COUNT = 0
+                _LAST_SIGN_FAILURE_LOG_TIME = current_time
+            
             # Update anomaly metric for monitoring/alerting
             ANOMALY_DETECTED_TOTAL.labels(
                 type="audit_signing_failure", severity="critical"

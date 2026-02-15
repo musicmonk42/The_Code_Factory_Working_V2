@@ -138,8 +138,9 @@ def mock_metrics(monkeypatch):
 def mock_fallback_secret(monkeypatch):
     """Mocks the '_FALLBACK_HMAC_SECRET' global var from the factory."""
     secret = b"test-fallback-secret-key-32bytes!"
+    # Bug 1 fix: Patch the factory module instead of audit_crypto_ops
     monkeypatch.setattr(
-        "generator.audit_log.audit_crypto.audit_crypto_ops._FALLBACK_HMAC_SECRET",
+        "generator.audit_log.audit_crypto.audit_crypto_factory._FALLBACK_HMAC_SECRET",
         secret,
     )
     return secret
@@ -1057,9 +1058,19 @@ class TestFallbackLogic:
         # 1. Make primary provider fail
         mock_crypto_provider.sign.side_effect = HSMError("HSM is offline")
 
-        # 2. Make fallback fail by removing secret
+        # 2. Make fallback fail by preventing secret initialization
+        # Mock _ensure_fallback_hmac_secret to raise an exception
+        async def mock_ensure_secret_fail():
+            raise RuntimeError("Secret initialization failed in test")
+        
         monkeypatch.setattr(
-            "generator.audit_log.audit_crypto.audit_crypto_ops._FALLBACK_HMAC_SECRET",
+            "generator.audit_log.audit_crypto.audit_crypto_factory._ensure_fallback_hmac_secret",
+            mock_ensure_secret_fail,
+        )
+        
+        # Also set the secret to None to ensure hmac_sign_fallback fails if reached
+        monkeypatch.setattr(
+            "generator.audit_log.audit_crypto.audit_crypto_factory._FALLBACK_HMAC_SECRET",
             None,
         )
 
