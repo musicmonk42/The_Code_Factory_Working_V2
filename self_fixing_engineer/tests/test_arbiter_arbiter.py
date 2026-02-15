@@ -167,7 +167,7 @@ def test_available_classes(arbiter_module):
 
 
 @pytest.mark.asyncio
-async def test_minimal_arbiter_creation(test_config, mock_engine, arbiter_module):
+async def test_minimal_arbiter_creation():
     """Test creating an Arbiter instance with minimal parameters.
     
     Note: This test was simplified to reduce memory usage from ~500MB to <50MB
@@ -176,14 +176,11 @@ async def test_minimal_arbiter_creation(test_config, mock_engine, arbiter_module
     preventing OOM failures in CI. More comprehensive Arbiter initialization
     tests should be added as integration tests with proper memory limits.
     """
-    # Patch at module level to prevent actual initialization
-    with patch("self_fixing_engineer.arbiter.arbiter.PostgresClient"):
-        with patch("self_fixing_engineer.arbiter.arbiter.MultiModalPlugin"):
-            with patch("self_fixing_engineer.arbiter.arbiter.Neo4jKnowledgeGraph"):
-                with patch("self_fixing_engineer.arbiter.arbiter.SimulationEngine"):
-                    # Don't actually create the Arbiter - just test the imports work
-                    from self_fixing_engineer.arbiter import Arbiter
-                    assert Arbiter is not None
+    # Import Arbiter via the package's lazy loading mechanism (__getattr__)
+    # This works in both stub mode (PYTEST_COLLECTING=1) and full mode
+    from self_fixing_engineer.arbiter import Arbiter
+    assert Arbiter is not None
+    assert isinstance(Arbiter, type), "Arbiter should be a class"
 
 
 def test_monitor_class_exists(tmp_path, arbiter_module):
@@ -360,36 +357,15 @@ async def test_arbiter_with_mocked_dependencies(
     preventing OOM failures in CI. More comprehensive Arbiter initialization
     tests should be added as integration tests with proper memory limits.
     """
-    # PostgresClient is imported within arbiter.py, so patch it there
-    with patch("self_fixing_engineer.arbiter.arbiter.PostgresClient", return_value=mock_db_client):
-        # Mock the Fernet class to avoid encryption issues
-        with patch("self_fixing_engineer.arbiter.arbiter.Fernet") as mock_fernet_class:
-            mock_fernet = MagicMock()
-            mock_fernet.encrypt.return_value.decode.return_value = "encrypted"
-            mock_fernet.decrypt.return_value.decode.return_value = "[]"
-            mock_fernet_class.return_value = mock_fernet
+    # Import Arbiter via the package's lazy loading mechanism (__getattr__)
+    # This works in both stub mode (PYTEST_COLLECTING=1) and full mode
+    from self_fixing_engineer.arbiter import Arbiter
+    assert Arbiter is not None, "Arbiter class should be importable"
 
-            # Mock MultiModalPlugin to avoid initialization issues
-            with patch("self_fixing_engineer.arbiter.arbiter.MultiModalPlugin") as mock_multimodal:
-                mock_multimodal.return_value = MagicMock()
-
-                # Mock Neo4jKnowledgeGraph to avoid Neo4j connection issues
-                with patch("self_fixing_engineer.arbiter.arbiter.Neo4jKnowledgeGraph") as mock_neo4j:
-                    mock_neo4j.return_value = MagicMock()
-                    
-                    # Verify imports work and mocks are set up correctly
-                    # Don't create actual Arbiter instance to prevent OOM
-                    from self_fixing_engineer.arbiter import Arbiter
-                    assert Arbiter is not None, "Arbiter class should be importable"
-                    
-                    # Verify mock setup and that mocked dependencies work correctly
-                    assert mock_db_client.check_health is not None
-                    health = await mock_db_client.check_health()
-                    assert health["status"] == "healthy"
-                    
-                    # Verify Fernet mock is properly configured
-                    assert mock_fernet.encrypt is not None
-                    assert mock_fernet.decrypt is not None
+    # Verify mock setup and that mocked dependencies work correctly
+    assert mock_db_client.check_health is not None
+    health = await mock_db_client.check_health()
+    assert health["status"] == "healthy"
 
 
 @pytest.mark.asyncio
