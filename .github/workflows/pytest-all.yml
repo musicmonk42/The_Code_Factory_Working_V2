@@ -827,7 +827,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=5 \
+            --maxfail=20 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
@@ -896,7 +896,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=5 \
+            --maxfail=20 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
@@ -967,7 +967,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=5 \
+            --maxfail=20 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
