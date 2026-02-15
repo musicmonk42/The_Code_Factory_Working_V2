@@ -175,9 +175,13 @@ if _skip_server:
     )
 else:
     try:
+        # Use shared worker utilities for consistent port allocation
+        from omnicore_engine.worker_utils import calculate_worker_port
+        
         # Use a port from environment variables or settings, if available
         # Default port 9090 to avoid conflict with FastAPI on port 8000
-        port = int(os.getenv("PROMETHEUS_PORT", "9090"))
+        base_port = int(os.getenv("PROMETHEUS_PORT", "9090"))
+        port = calculate_worker_port(base_port)
         start_http_server(port)
         logger.info(f"Prometheus metrics server started on port {port}")
     except OSError as e:

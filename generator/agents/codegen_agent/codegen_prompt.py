@@ -710,18 +710,22 @@ async def retrieve_augmented_context(
                 query_embedding = encoder.encode(query_text).tolist()
 
                 # KNN search query for RediSearch
+                # Note: Redis PARAMS expects alternating key-value pairs
                 search_query = "(@embedding:[VECTOR_RANGE $radius $embedding])=>{$yield_distance_as: score}"
-                params = {
-                    "embedding": json.dumps(query_embedding),
-                    "radius": 0.8,  # Cosine similarity threshold
-                }
-
+                
+                # Convert embedding to bytes for Redis
+                # Redis vector search expects the embedding as bytes, not JSON
+                import struct
+                embedding_bytes = struct.pack(f'{len(query_embedding)}f', *query_embedding)
+                
                 results = await redis_client.execute_command(
                     "FT.SEARCH",
                     "rag_index",
                     search_query,
                     "PARAMS",
-                    json.dumps(params),
+                    4,  # Count of following parameter values: key1, value1, key2, value2
+                    "embedding", embedding_bytes,  # First parameter pair
+                    "radius", 0.8,  # Second parameter pair
                     "RETURN",
                     2,
                     "id",

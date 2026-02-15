@@ -857,6 +857,16 @@ def load_config(
     # Try to find the config file using smart path resolution
     resolved_path = _find_config_file(config_file)
     
+    # If runner_config.yaml is not found, try falling back to config.yaml
+    if resolved_path is None and Path(config_file).name == "runner_config.yaml":
+        logger.debug(
+            f"runner_config.yaml not found, attempting fallback to config.yaml"
+        )
+        resolved_path = _find_config_file("config.yaml")
+        if resolved_path is not None:
+            logger.info(f"✅ Using config.yaml as fallback for runner_config.yaml")
+            config_file = "config.yaml"
+    
     # Check if file should exist (not a test scenario with overrides)
     # Note: We check `is None` rather than `not overrides` because an empty dict {} is valid
     # and means "load from file with no overrides", while None means "use defaults if no file"

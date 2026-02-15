@@ -1416,9 +1416,14 @@ class Clarifier:
         ):
             try:
                 from prometheus_client import start_http_server
+                # Use shared worker utilities for consistent port allocation
+                from omnicore_engine.worker_utils import calculate_worker_port
 
-                start_http_server(8000)
-                self.logger.info("Prometheus metrics server started on port 8000.")
+                # Use dynamic port to avoid conflicts with FastAPI and other workers
+                base_port = int(os.getenv("CLARIFIER_METRICS_PORT", "8000"))
+                port = calculate_worker_port(base_port)
+                start_http_server(port)
+                self.logger.info(f"Prometheus metrics server started on port {port}.")
                 setattr(self, "_metrics_server_started", True)
             except Exception as e:
                 self.logger.error(

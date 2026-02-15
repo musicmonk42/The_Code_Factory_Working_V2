@@ -174,6 +174,12 @@ def setup_nltk_data():
     
     Uses file locking to prevent race conditions when multiple replicas start simultaneously.
     """
+    # Add /opt/nltk_data to NLTK's data path at the beginning
+    # This is where NLTK data is pre-downloaded during Docker build
+    if '/opt/nltk_data' not in nltk.data.path:
+        nltk.data.path.insert(0, '/opt/nltk_data')
+        logger.debug("Added /opt/nltk_data to NLTK data path")
+    
     nltk_data_paths = {
         "punkt": "tokenizers/punkt",
         "punkt_tab": "tokenizers/punkt_tab",

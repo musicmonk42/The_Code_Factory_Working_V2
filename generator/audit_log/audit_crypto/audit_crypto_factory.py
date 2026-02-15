@@ -482,6 +482,9 @@ def post_validation_checks():
 
 def validate_and_load_config():
     """Validates the configuration and raises an error on failure."""
+    # Check if graceful degradation is allowed via AUDIT_CRYPTO_ALLOW_INIT_FAILURE
+    allow_init_failure = os.getenv("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "0").lower() in ("1", "true", "yes")
+    
     try:
         settings.validators.validate()
         post_validation_checks()  # Run manual checks after
@@ -492,6 +495,15 @@ def validate_and_load_config():
             logger.warning(
                 "AUDIT CRYPTO VALIDATION FAILED in DEV/TEST context: %s. "
                 "Continuing with mocked or default configuration.",
+                e,
+            )
+        elif allow_init_failure:
+            # AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set, allow graceful fallback
+            logger.warning(
+                "AUDIT CRYPTO VALIDATION FAILED in production context: %s. "
+                "AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set, continuing with degraded configuration. "
+                "SECURITY WARNING: Cryptographic validation failed but application will continue. "
+                "This is NOT recommended for production use.",
                 e,
             )
         else:
@@ -507,6 +519,12 @@ def validate_and_load_config():
         # Catch unexpected exceptions during validation outside of ValidationError
         if _is_test_or_dev_mode():
             logger.warning(f"Unexpected validation error in DEV/TEST context: {e}")
+        elif allow_init_failure:
+            # AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set, allow graceful fallback
+            logger.warning(
+                f"Unexpected validation error in production context: {e}. "
+                "AUDIT_CRYPTO_ALLOW_INIT_FAILURE is set, continuing with degraded configuration."
+            )
         else:
             logger.critical(f"Unexpected validation error: {e}")
             raise ConfigurationError(f"Unexpected configuration error: {e}")
