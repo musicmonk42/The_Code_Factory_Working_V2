@@ -588,3 +588,172 @@ def test_parse_llm_response_json_prefix_with_whitespace():
     assert "main.py" in files
     assert files["main.py"] == "x = 42"
 
+
+# ==============================================================================
+# Tests for Fix 1: YAML and Markdown code fence extraction
+# ==============================================================================
+
+def test_clean_code_block_yaml_fence():
+    """
+    Test that YAML content wrapped in ```yaml fences is properly extracted.
+    This addresses the Chart.yaml markdown wrapper bug.
+    """
+    src = """```yaml
+apiVersion: v2
+name: my-chart
+version: 1.0.0
+```"""
+    cleaned = crh._clean_code_block(src)
+    expected = "apiVersion: v2\nname: my-chart\nversion: 1.0.0"
+    assert cleaned == expected, f"Expected YAML extraction, got: {cleaned}"
+
+
+def test_clean_code_block_yml_fence():
+    """
+    Test that content wrapped in ```yml fences is also extracted.
+    """
+    src = """```yml
+key: value
+nested:
+  item: 123
+```"""
+    cleaned = crh._clean_code_block(src)
+    assert "key: value" in cleaned
+    assert "nested:" in cleaned
+    assert "```" not in cleaned
+
+
+def test_clean_code_block_markdown_fence():
+    """
+    Test that markdown content wrapped in ```markdown fences is extracted.
+    This addresses the README.md wrapper bug.
+    """
+    src = """```markdown
+# My Project
+
+This is a README file.
+
+## Installation
+
+Run `npm install`
+```"""
+    cleaned = crh._clean_code_block(src)
+    assert cleaned.startswith("# My Project")
+    assert "Installation" in cleaned
+    assert "```" not in cleaned
+
+
+def test_clean_code_block_md_fence():
+    """
+    Test that content wrapped in ```md fences is also extracted.
+    """
+    src = """```md
+# Hello World
+
+This is markdown content.
+```"""
+    cleaned = crh._clean_code_block(src)
+    assert cleaned.startswith("# Hello World")
+    assert "```" not in cleaned
+
+
+def test_clean_code_block_multiple_language_fences():
+    """
+    Test extraction works for other newly added languages.
+    """
+    # Test dockerfile
+    dockerfile_src = """```dockerfile
+FROM ubuntu:20.04
+RUN apt-get update
+```"""
+    cleaned = crh._clean_code_block(dockerfile_src)
+    assert cleaned.startswith("FROM ubuntu")
+    assert "```" not in cleaned
+    
+    # Test bash
+    bash_src = """```bash
+#!/bin/bash
+echo "Hello"
+```"""
+    cleaned = crh._clean_code_block(bash_src)
+    assert "#!/bin/bash" in cleaned
+    assert "```" not in cleaned
+
+
+# ==============================================================================
+# Tests for Fix 2: YAML content validation
+# ==============================================================================
+
+def test_validate_yaml_content_valid():
+    """
+    Test that valid YAML content passes validation.
+    """
+    valid_yaml = """apiVersion: v2
+name: my-chart
+version: 1.0.0
+description: A Helm chart"""
+    
+    is_valid, msg = crh._validate_yaml_content(valid_yaml, "Chart.yaml")
+    assert is_valid, f"Valid YAML should pass validation. Error: {msg}"
+    assert msg == "" or "not available" in msg  # Empty or yaml not available
+
+
+def test_validate_yaml_content_with_markdown_fence():
+    """
+    Test that YAML wrapped in markdown fences is detected and rejected.
+    This is the key test for the Chart.yaml bug.
+    """
+    wrapped_yaml = """```yaml
+apiVersion: v2
+name: my-chart
+```"""
+    
+    is_valid, msg = crh._validate_yaml_content(wrapped_yaml, "Chart.yaml")
+    assert not is_valid, "YAML with markdown fences should be rejected"
+    assert "markdown code fences" in msg.lower() or "code fence" in msg.lower()
+
+
+def test_validate_yaml_content_with_markdown_indicators():
+    """
+    Test that YAML files containing markdown badges/diagrams are rejected.
+    """
+    markdown_yaml = """![Build Status](https://example.com/badge.svg)
+
+## Mermaid Diagram
+
+```mermaid
+graph TD
+    A --> B
+```
+
+apiVersion: v2"""
+    
+    is_valid, msg = crh._validate_yaml_content(markdown_yaml, "Chart.yaml")
+    assert not is_valid, "YAML with markdown indicators should be rejected"
+    assert "markdown" in msg.lower()
+
+
+def test_validate_yaml_content_invalid_yaml_syntax():
+    """
+    Test that invalid YAML syntax is detected.
+    """
+    # Skip this test if PyYAML is not available
+    if not crh.HAS_YAML:
+        return
+    
+    invalid_yaml = """apiVersion: v2
+name: [missing closing bracket
+version: 1.0.0"""
+    
+    is_valid, msg = crh._validate_yaml_content(invalid_yaml, "Chart.yaml")
+    assert not is_valid, "Invalid YAML syntax should be rejected"
+
+
+def test_validate_yaml_content_empty():
+    """
+    Test that empty YAML content is rejected.
+    """
+    is_valid, msg = crh._validate_yaml_content("   ", "Chart.yaml")
+    assert not is_valid, "Empty YAML should be rejected"
+    assert "empty" in msg.lower()
+

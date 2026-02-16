@@ -571,7 +571,7 @@ def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) ->
 
 
 # NLP-based redactor (if Presidio is available)
-def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, apply_allowlist: bool = True) -> Any:
+def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, apply_allowlist: bool = True, is_documentation: bool = False) -> Any:
     """
     Recursively redacts data using Presidio NLP, falling back to regex for non-strings.
     
@@ -579,10 +579,18 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
         data: Data to redact (string, dict, list, or other)
         patterns: Optional additional regex patterns to apply after Presidio
         apply_allowlist: If True, filters out technical terms from TECHNICAL_ALLOWLIST
+        is_documentation: If True, skips or significantly reduces PII scanning for documentation files
     
     Returns:
         Redacted data with PII removed but technical terms preserved
     """
+    # FIX: Skip PII redaction for documentation files (Fix 4)
+    # Documentation files (README.md, docs/*.md, etc.) intentionally contain
+    # example URLs, service names, and organization names that should not be redacted
+    if is_documentation:
+        logger.debug("Skipping PII redaction for documentation file")
+        return data
+    
     # FIX: Ensure Presidio is loaded only when this function is called
     if not _PRESIDIO_AVAILABLE:
         _load_presidio_engine()
@@ -642,9 +650,9 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
             # --- FIX: REMOVED METRIC INCREMENT ---
             return regex_basic_redactor(data, patterns)  # Fallback on error
     elif isinstance(data, dict):
-        return {k: nlp_presidio_redactor(v, patterns, apply_allowlist) for k, v in data.items()}
+        return {k: nlp_presidio_redactor(v, patterns, apply_allowlist, is_documentation) for k, v in data.items()}
     elif isinstance(data, list):
-        return [nlp_presidio_redactor(item, patterns, apply_allowlist) for item in data]
+        return [nlp_presidio_redactor(item, patterns, apply_allowlist, is_documentation) for item in data]
     return data
 
 
@@ -723,7 +731,8 @@ register_decryptor("aes_cbc", aes_cbc_encrypt_decrypt)
 # --- Public-facing Security Functions ---
 @util_decorator
 def redact_secrets(
-    data: Any, method: Optional[str] = None, patterns: Optional[List[Pattern]] = None
+    data: Any, method: Optional[str] = None, patterns: Optional[List[Pattern]] = None,
+    filename: Optional[str] = None
 ) -> Any:
     """
     Redacts sensitive information from data using the specified method.
@@ -744,6 +753,7 @@ def redact_secrets(
         data: The data to redact (str, dict, list, etc.)
         method: Optional specific redaction method to use
         patterns: Optional custom regex patterns for redaction
+        filename: Optional filename to determine if this is documentation (skips PII for docs)
 
     Returns:
         Redacted data of the same type as input
@@ -753,6 +763,22 @@ def redact_secrets(
     # Defensive: If no data, return immediately
     if data is None:
         return data
+    
+    # Determine if this is a documentation file (Fix 4)
+    is_documentation = False
+    if filename:
+        filename_lower = filename.lower()
+        is_documentation = (
+            filename_lower.endswith('.md') or
+            'readme' in filename_lower or
+            '/docs/' in filename_lower or
+            filename_lower.startswith('docs/') or
+            filename_lower == 'changelog' or
+            filename_lower == 'contributing' or
+            filename_lower == 'license'
+        )
+        if is_documentation:
+            logger.debug(f"Detected documentation file: {filename}, skipping PII redaction")
 
     try:
         # FIX: Lazy import to break circular dependency - use sync version
@@ -799,7 +825,11 @@ def redact_secrets(
 
         # FIX: Call the synchronous redactor directly with error handling
         try:
-            result = redactor(data, patterns)
+            # Pass is_documentation flag to nlp_presidio_redactor
+            if effective_method == "nlp_presidio":
+                result = nlp_presidio_redactor(data, patterns, apply_allowlist=True, is_documentation=is_documentation)
+            else:
+                result = redactor(data, patterns)
         except SystemExit:
             # CRITICAL: Catch SystemExit from redactor execution
             logger.warning(
@@ -819,7 +849,7 @@ def redact_secrets(
             try:
                 log_audit_event(
                     action="security_redact",
-                    data={"method": effective_method, "data_type": str(type(data))},
+                    data={"method": effective_method, "data_type": str(type(data)), "is_documentation": is_documentation},
                 )
             except Exception:
                 # Silently ignore logging failures - never crash due to logging

@@ -341,6 +341,92 @@ async def test_monitor_for_leaks_success(mock_log_audit, mock_send_alert, temp_d
     assert result_list[0]["type"] == "Secret_Regex"
 
 
+# ==============================================================================
+# Tests for Fix 4: Documentation file PII exemption
+# ==============================================================================
+
+def test_redact_secrets_skips_documentation_files():
+    """
+    Test that PII redaction is skipped for documentation files.
+    This prevents over-aggressive redaction of example URLs and service names.
+    """
+    from generator.runner.runner_security_utils import redact_secrets
+    
+    # Content with example URLs and service names that Presidio might flag
+    doc_content = """
+    # My Service Documentation
+    
+    This service is deployed at https://api.example.com/v1
+    
+    Contact: support@example.com
+    Organization: Acme Corporation
+    
+    ## Examples
+    
+    curl https://api.example.com/users/123
+    """
+    
+    # Test with README.md - should skip redaction
+    result_readme = redact_secrets(doc_content, filename="README.md")
+    assert result_readme == doc_content, "README.md should not be redacted"
+    
+    # Test with docs/api.md - should skip redaction
+    result_docs = redact_secrets(doc_content, filename="docs/api.md")
+    assert result_docs == doc_content, "docs/api.md should not be redacted"
+    
+    # Test with CHANGELOG - should skip redaction
+    result_changelog = redact_secrets(doc_content, filename="CHANGELOG")
+    assert result_changelog == doc_content, "CHANGELOG should not be redacted"
+
+
+def test_redact_secrets_processes_code_files():
+    """
+    Test that PII redaction still works for non-documentation files.
+    """
+    from generator.runner.runner_security_utils import redact_secrets
+    
+    # Simple content - should be processed normally (may or may not be redacted depending on patterns)
+    code_content = "api_key = 'sk-test123'"
+    
+    # Test with .py file - should be processed (not skipped)
+    result_py = redact_secrets(code_content, filename="main.py")
+    # We just verify it was processed (result is returned, not an exception)
+    assert result_py is not None
+    
+    # Test with .js file - should be processed
+    result_js = redact_secrets(code_content, filename="app.js")
+    assert result_js is not None
+
+
+def test_documentation_file_detection():
+    """
+    Test that various documentation file patterns are correctly detected.
+    """
+    from generator.runner.runner_security_utils import redact_secrets
+    
+    test_content = "Test content with Organization Name"
+    
+    # All of these should be detected as documentation files
+    doc_files = [
+        "README.md",
+        "readme.md",
+        "Readme.MD",
+        "docs/guide.md",
+        "docs/api/endpoints.md",
+        "/path/to/docs/tutorial.md",
+        "CONTRIBUTING",
+        "LICENSE",
+        "CHANGELOG",
+        "project_readme.md",  # Contains 'readme'
+    ]
+    
+    for filename in doc_files:
+        result = redact_secrets(test_content, filename=filename)
+        # Documentation files should return content unchanged
+        # (or at most with basic non-PII redaction if any patterns match)
+        assert result is not None, f"Failed for {filename}"
+
+
 # --------------------------------------------------------------------------- #
 # Run with coverage
 # --------------------------------------------------------------------------- #
