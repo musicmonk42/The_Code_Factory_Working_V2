@@ -99,7 +99,7 @@ mock_trace_provider = MagicMock()
 mock_span_processor = MagicMock()
 
 # Mock instances for use in tests
-MockLogAction = MagicMock(side_effect=lambda *args, **kwargs: None)
+MockLogAction = MagicMock()
 MockSendAlert = AsyncMock()
 MockRedactSensitive = MagicMock(
     side_effect=lambda x: str(x)
@@ -129,7 +129,7 @@ def mock_redaction_logic(
 MockRecursiveTransform = MagicMock(side_effect=mock_redaction_logic)
 
 
-@pytest.fixture(autouse=False)  # Changed from autouse=True to avoid affecting other tests in same session
+@pytest.fixture(autouse=True)  # Enable autouse to apply mocks to all tests in this module
 def mock_dependencies():
     """Fixture to mock all dependencies for clarifier_updater tests.
     
@@ -150,7 +150,7 @@ def mock_dependencies():
         patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),
         patch("generator.clarifier.clarifier_updater.get_fernet", return_value=mock_fernet_instance),
         patch("generator.clarifier.clarifier_updater.get_logger", return_value=mock_logger),
-        patch("generator.clarifier.clarifier_updater.log_action", side_effect=MockLogAction),
+        patch("generator.clarifier.clarifier_updater.log_action", new=MockLogAction),
         patch("generator.clarifier.clarifier_updater.send_alert", new=MockSendAlert),
         patch("generator.clarifier.clarifier_updater.redact_sensitive", side_effect=MockRedactSensitive),
         patch("generator.clarifier.clarifier_updater.detect_pii", return_value=False),
@@ -201,6 +201,11 @@ except ImportError:
 # 1. They only affect this test module's scope
 # 2. Test isolation is handled by the fixture above during test execution
 # 3. pytest cleans up the test module after all tests complete
+
+# First, import the module so it exists
+import generator.clarifier.clarifier_updater as clarifier_updater_module
+
+# Then patch it for the rest of the test session
 _module_level_patches = [
     patch("generator.clarifier.clarifier.get_config", return_value=mock_config_instance),
     patch("generator.clarifier.clarifier_updater.get_config", return_value=mock_config_instance),
@@ -208,7 +213,6 @@ _module_level_patches = [
 for p in _module_level_patches:
     p.start()
 
-import generator.clarifier.clarifier_updater as clarifier_updater_module
 
 # Import the classes we need
 from generator.clarifier.clarifier_updater import (
