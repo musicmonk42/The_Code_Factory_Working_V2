@@ -1696,7 +1696,10 @@ class OmniCoreService:
                 # Look for project subdirectories
                 subdirs = [d for d in loc.iterdir() if d.is_dir() and not d.name.startswith('.')]
                 if subdirs:
-                    return str(subdirs[0])  # Return first project subdir
+                    # Return first project subdir (sorted alphabetically for determinism)
+                    # In typical generator output, there's only one project directory
+                    # If multiple exist, alphabetical sort provides consistent selection
+                    return str(sorted(subdirs, key=lambda p: p.name)[0])
                 # If no subdirs but has Python files, use this dir
                 py_files = list(loc.glob("*.py"))
                 if py_files:
