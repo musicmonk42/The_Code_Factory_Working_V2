@@ -334,7 +334,22 @@ The following are MANDATORY checks:
    - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)
    - .env.example (example environment variables with NO real secrets)
 
-5a. README.md REQUIREMENTS (CRITICAL - PIPELINE WILL FAIL IF INCOMPLETE):
+5a. DEPENDENCY VERSIONS (CRITICAL FOR COMPATIBILITY):
+   ⚠️ IMPORTANT: Use CURRENT, STABLE package versions from 2024-2025.
+   ⚠️ DO NOT use outdated versions from 2021 or earlier.
+   
+   For Python/FastAPI projects, use these MINIMUM versions:
+   - fastapi>=0.109.0  (NOT 0.70.0 from 2021)
+   - uvicorn>=0.27.0   (NOT 0.15.0 from 2021)
+   - pydantic>=2.5.0   (Pydantic V2 - REQUIRED as explicit dependency)
+   - pytest>=8.0.0     (NOT 6.2.5 from 2021)
+   - httpx>=0.26.0     (for testing)
+   
+   Use >= constraints instead of == pins to allow minor updates.
+   Always include pydantic as an explicit dependency.
+   Check PyPI for latest stable versions if unsure.
+
+5b. README.md REQUIREMENTS (CRITICAL - PIPELINE WILL FAIL IF INCOMPLETE):
    ⚠️ IMPORTANT: The README.md is NOT optional and MUST NOT be a stub.
    ⚠️ A README with missing sections will cause contract validation to FAIL.
    

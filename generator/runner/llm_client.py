@@ -615,8 +615,10 @@ class LLMClient:
         self._ensure_initialization()
         await self._is_initialized.wait()
         provider = provider or getattr(self.config, 'llm_provider', 'openai') or "openai"
-        # FIX: Ensure default_llm_model exists on the mock object (or provide a safe fallback)
-        model = model or getattr(self.config, "default_llm_model", "gpt-4")
+        # FIX #4: Changed default model from gpt-4 to gpt-4o to handle higher TPM limits
+        # The critique semantic analysis was hitting 10,000 TPM limit with gpt-4 (20,587 tokens requested)
+        # gpt-4o has much higher rate limits and is also cheaper and faster
+        model = model or getattr(self.config, "default_llm_model", "gpt-4o")
 
         # [FIX] Redact secrets from the prompt *before* it's used in cache keys or logs
         # [FIX] redact_secrets is now synchronous, remove await

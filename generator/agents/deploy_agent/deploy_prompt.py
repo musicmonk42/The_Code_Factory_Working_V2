@@ -679,10 +679,30 @@ class PromptTemplateRegistry:
         class ReloadHandler(FileSystemEventHandler):
             def __init__(self, registry_instance: "PromptTemplateRegistry"):
                 self.registry_instance = registry_instance
+                # FIX #5: Add debouncing to prevent multiple reload events in quick succession
+                # The file watcher was triggering 6+ reload events for the same file within 1 second
+                self.last_reload_time = {}
+                self.debounce_seconds = 0.5  # Ignore events within 500ms of previous event
 
             def dispatch(self, event):
                 # Only reload if the event is for a .jinja file and it's not a directory
                 if not event.is_directory and event.src_path.endswith(".jinja"):
+                    import time
+                    current_time = time.time()
+                    last_time = self.last_reload_time.get(event.src_path, 0)
+                    
+                    # FIX #5: Debounce - ignore if we reloaded this file recently
+                    if current_time - last_time < self.debounce_seconds:
+                        logger.debug(
+                            "Debounced template reload for %s (%.2fs since last reload)",
+                            event.src_path,
+                            current_time - last_time
+                        )
+                        return
+                    
+                    # Record this reload time
+                    self.last_reload_time[event.src_path] = current_time
+                    
                     logger.info(
                         "Template file changed: %s. Triggering template reload.",
                         event.src_path,
