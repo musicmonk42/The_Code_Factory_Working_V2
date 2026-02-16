@@ -218,11 +218,26 @@ class SFEService:
                         issues = []
                         if hasattr(summary, 'defects'):
                             for defect in summary.defects:
+                                # FIX: Validate file exists before adding to issues
+                                defect_file = getattr(defect, 'file', '')
+                                if defect_file:
+                                    defect_file_path = Path(defect_file)
+                                    # Make path absolute if it's relative
+                                    if not defect_file_path.is_absolute():
+                                        defect_file_path = code_path_obj / defect_file_path
+                                    
+                                    # Only include defects for files that actually exist
+                                    if not defect_file_path.exists():
+                                        logger.warning(
+                                            f"Skipping defect for non-existent file: {defect_file}"
+                                        )
+                                        continue
+                                
                                 issues.append({
                                     "type": getattr(defect, 'type', 'unknown'),
                                     "severity": getattr(defect, 'severity', 'medium'),
                                     "message": str(defect),
-                                    "file": getattr(defect, 'file', ''),
+                                    "file": defect_file,
                                     "line": getattr(defect, 'line', 0),
                                 })
                     
