@@ -9,6 +9,7 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 import logging
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -120,7 +121,6 @@ async def analyze_code(
         code_path = f"./uploads/{job_id}/generated"
     
     # Validate that the path exists before analysis
-    from pathlib import Path
     code_path_obj = Path(code_path)
     if not code_path_obj.exists():
         logger.warning(f"Code path does not exist for job {job_id}: {code_path}")

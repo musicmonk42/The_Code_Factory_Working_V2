@@ -241,6 +241,11 @@ def _sanitize_config_content(config_content: str) -> str:
     content from YAML code fences. This prevents YAML parsing failures caused by
     LLM responses that wrap configs in markdown formatting.
     
+    LIMITATION: This function assumes no nested code blocks within YAML content.
+    If the YAML itself contains markdown-formatted code examples, those may be
+    incorrectly processed. This is acceptable for deployment configs which should
+    not contain nested markdown.
+    
     Args:
         config_content: Raw config content that may contain markdown artifacts
         
