@@ -1080,7 +1080,7 @@ class SFEService:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
                         
                         for issue in issues:
-                            bug_id = f"bug-{hash(str(issue)) % 10000}"
+                            bug_id = f"bug-{abs(hash(str(issue))) % 100000}"
                             severity = issue.get("risk_level", "medium")
                             details = issue.get("details", {})
                             
@@ -1112,7 +1112,7 @@ class SFEService:
                                 issues = await analyzer.analyze_and_propose(py_file)
                                 
                                 for issue in issues:
-                                    bug_id = f"bug-{hash(py_file + str(issue)) % 10000}"
+                                    bug_id = f"bug-{abs(hash(py_file + str(issue))) % 100000}"
                                     severity = issue.get("risk_level", "medium")
                                     details = issue.get("details", {})
                                     
