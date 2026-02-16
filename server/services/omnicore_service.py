@@ -4253,12 +4253,11 @@ class OmniCoreService:
         try:
             # Lazy import SFE components to avoid circular dependencies
             from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
-            from self_fixing_engineer.arbiter.bug_manager import BugManager
         except ImportError as e:
-            logger.warning(f"[SFE_ANALYSIS] SFE components not available for job {job_id}: {e}")
+            logger.warning(f"[SFE_ANALYSIS] CodebaseAnalyzer not available for job {job_id}: {e}")
             return {
                 "status": "skipped",
-                "message": f"SFE components not available: {e}",
+                "message": f"CodebaseAnalyzer not available: {e}",
                 "job_id": job_id,
             }
         
@@ -4311,7 +4310,8 @@ class OmniCoreService:
                     issues_fixed = 0
                     remediation_results = []
                     
-                    # If critical/high severity issues found, use BugManager for auto-remediation
+                    # If critical/high severity issues found, attempt auto-remediation using BugManager
+                    # Note: BugManager might not have detect_errors method, so we handle gracefully
                     if critical_high_issues:
                         logger.info(
                             f"[SFE_ANALYSIS] Found {len(critical_high_issues)} critical/high severity issues, "
@@ -4319,31 +4319,41 @@ class OmniCoreService:
                         )
                         
                         try:
-                            bug_manager = BugManager()
-                            errors = await bug_manager.detect_errors(str(code_path_obj))
+                            from self_fixing_engineer.arbiter.bug_manager import BugManager
                             
-                            # Attempt remediation for detected errors
-                            for error in errors:
-                                try:
-                                    # BugManager.fix_error may not be async, handle both cases
-                                    if hasattr(bug_manager, 'fix_error'):
-                                        fix_result = bug_manager.fix_error(error)
-                                    else:
-                                        # Fallback - just log that we detected the error
-                                        fix_result = {"status": "detected", "error": error}
-                                    
-                                    remediation_results.append(fix_result)
-                                    if fix_result.get("status") == "fixed":
-                                        issues_fixed += 1
-                                except Exception as fix_err:
-                                    logger.warning(
-                                        f"[SFE_ANALYSIS] Failed to fix error for job {job_id}: {fix_err}",
-                                        exc_info=True
-                                    )
-                            
-                            logger.info(
-                                f"[SFE_ANALYSIS] BugManager processed {len(errors)} errors, "
-                                f"fixed {issues_fixed} for job {job_id}"
+                            # BugManager requires Settings - try to create with defaults
+                            try:
+                                from self_fixing_engineer.arbiter.bug_manager.utils import Settings
+                                settings = Settings()
+                                bug_manager = BugManager(settings)
+                                await bug_manager._initialize()
+                                
+                                # BugManager uses report() method, not detect_errors
+                                # For now, just log that we would attempt remediation
+                                logger.info(
+                                    f"[SFE_ANALYSIS] BugManager initialized for job {job_id}, "
+                                    f"would attempt remediation for {len(critical_high_issues)} issues"
+                                )
+                                
+                                # In the future, could iterate through critical_high_issues
+                                # and call bug_manager.report() for each one
+                                # For now, just mark them as detected
+                                for issue in critical_high_issues[:5]:  # Limit to first 5 to avoid overwhelming
+                                    remediation_results.append({
+                                        "status": "detected",
+                                        "issue": issue,
+                                        "message": "Issue detected, remediation would be applied here"
+                                    })
+                                
+                            except ImportError as settings_err:
+                                logger.warning(
+                                    f"[SFE_ANALYSIS] Could not import Settings for BugManager: {settings_err}",
+                                    extra={"job_id": job_id}
+                                )
+                        except ImportError as bug_mgr_import_err:
+                            logger.warning(
+                                f"[SFE_ANALYSIS] BugManager not available: {bug_mgr_import_err}",
+                                extra={"job_id": job_id}
                             )
                         except Exception as bug_mgr_err:
                             logger.warning(
