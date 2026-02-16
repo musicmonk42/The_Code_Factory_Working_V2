@@ -29,7 +29,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type
 
 import aiofiles  # For asynchronous file operations
 
@@ -172,6 +172,20 @@ DANGEROUS_CONFIG_PATTERNS = {
     "HardcodedCredentials_Pattern": r"(?i)password:\s*\S+|secret:\s*\S+|api_key:\s*\S+",  # Generic pattern for illustrative purposes
 }
 
+# Module-level singleton instances for Presidio to avoid log spam from repeated initialization
+_analyzer: Optional[AnalyzerEngine] = None
+_anonymizer: Optional[AnonymizerEngine] = None
+
+
+def _get_presidio_instances():
+    """Lazily initialize and return singleton Presidio instances."""
+    global _analyzer, _anonymizer
+    if _analyzer is None:
+        _analyzer = AnalyzerEngine(supported_languages=["en"])
+    if _anonymizer is None:
+        _anonymizer = AnonymizerEngine()
+    return _analyzer, _anonymizer
+
 
 def scrub_text(text: str) -> str:
     """
@@ -182,9 +196,8 @@ def scrub_text(text: str) -> str:
         return ""
 
     try:
-        # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-        analyzer = AnalyzerEngine(supported_languages=["en"])
-        anonymizer = AnonymizerEngine()
+        # Use singleton instances to avoid repeated initialization log spam
+        analyzer, anonymizer = _get_presidio_instances()
 
         # Define entities for Presidio to analyze (comprehensive standard list)
         presidio_entities = [
@@ -218,6 +231,50 @@ def scrub_text(text: str) -> str:
         raise RuntimeError(
             f"Critical error during sensitive data scrubbing with Presidio: {e}"
         ) from e
+
+
+def _sanitize_config_content(config_content: str) -> str:
+    """
+    Sanitize LLM output by removing markdown artifacts before YAML parsing.
+    
+    Removes mermaid diagrams, other diagram blocks, markdown prose, and extracts
+    content from YAML code fences. This prevents YAML parsing failures caused by
+    LLM responses that wrap configs in markdown formatting.
+    
+    LIMITATION: This function assumes no nested code blocks within YAML content.
+    If the YAML itself contains markdown-formatted code examples, those may be
+    incorrectly processed. This is acceptable for deployment configs which should
+    not contain nested markdown.
+    
+    Args:
+        config_content: Raw config content that may contain markdown artifacts
+        
+    Returns:
+        Sanitized config content ready for YAML parsing
+    """
+    # STEP 1: Remove mermaid and diagram blocks completely (not part of deployment config)
+    config_content = re.sub(r'```\s*mermaid[\s\S]*?```', '', config_content, flags=re.MULTILINE | re.IGNORECASE)
+    config_content = re.sub(r'```\s*(dot|plantuml|graphviz)[\s\S]*?```', '', config_content, flags=re.MULTILINE | re.IGNORECASE)
+    
+    # STEP 2: Extract content from YAML code fences
+    # Look for yaml, helm, kubernetes code blocks and extract only the inner content
+    # Note: Uses first match if multiple blocks exist; assumes no nested code blocks
+    deployment_fence_pattern = r'```\s*(?:yaml|yml|kubernetes|k8s|helm)\s*\n?([\s\S]*?)```'
+    matches = re.findall(deployment_fence_pattern, config_content, flags=re.IGNORECASE)
+    
+    if matches:
+        # If we found yaml code blocks, use the first one
+        config_content = matches[0]
+    else:
+        # No code fences found, strip any remaining code fence markers
+        config_content = re.sub(r'```[a-z]*\n?', '', config_content, flags=re.IGNORECASE)
+        config_content = re.sub(r'```', '', config_content)
+    
+    # STEP 3: Remove markdown headers and links
+    config_content = re.sub(r'^#{1,6}\s+.*$', '', config_content, flags=re.MULTILINE)
+    config_content = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', config_content)
+    
+    return config_content.strip()
 
 
 # --- FIX: MOVED scan_config_for_findings function here ---
@@ -716,6 +773,9 @@ class KubernetesValidator(Validator):
 
     async def validate(self, config_content: str, target_type: str) -> Dict[str, Any]:
         """Validates Kubernetes manifests for YAML syntax and basic structure."""
+        # Sanitize markdown/mermaid artifacts from LLM output before YAML parsing
+        config_content = _sanitize_config_content(config_content)
+        
         report = {
             "lint_status": "unknown",
             "lint_output": "",
@@ -875,6 +935,9 @@ class HelmValidator(Validator):
 
     async def validate(self, config_content: str, target_type: str) -> Dict[str, Any]:
         """Validates a Helm chart by linting and running security scans."""
+        # Sanitize markdown/mermaid artifacts from LLM output before YAML parsing
+        config_content = _sanitize_config_content(config_content)
+        
         report = {
             "lint_status": "unknown",
             "lint_output": "",

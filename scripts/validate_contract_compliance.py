@@ -96,10 +96,10 @@ class ContractValidator:
         
         schema_content = schemas_path.read_text()
         
-        # Check for @validator decorator usage
-        if "@validator" not in schema_content:
+        # Check for @validator or @field_validator decorator usage (Pydantic V1 or V2)
+        if "@validator" not in schema_content and "@field_validator" not in schema_content:
             raise AssertionError(
-                "app/schemas.py should use @validator decorators for validation"
+                "app/schemas.py should use @validator or @field_validator decorators for validation"
             )
         
         # Check routes.py for absence of manual validation

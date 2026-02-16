@@ -491,6 +491,14 @@ class DocGenPlugin(ABC):
         pass
 
 
+# Known Presidio PII entity placeholders - these are legitimate redaction artifacts, not unsubstituted template vars
+PRESIDIO_ENTITY_PLACEHOLDERS = {
+    "<PERSON>", "<EMAIL_ADDRESS>", "<PHONE_NUMBER>", "<CREDIT_CARD>",
+    "<US_SSN>", "<IP_ADDRESS>", "<URL>", "<NRP>", "<LOCATION>",
+    "<DATE_TIME>", "<ORGANIZATION>",
+}
+
+
 # --- Concrete Plugin Implementations ---
 class MarkdownPlugin(DocGenPlugin):
     """Plugin for Markdown documentation validation and formatting."""
@@ -557,6 +565,7 @@ class MarkdownPlugin(DocGenPlugin):
             )
 
         # Check for unsubstituted placeholders in documentation
+        # Filter out known Presidio entity placeholders which are legitimate PII redaction artifacts
         placeholder_patterns = [
             r'<[A-Z_]+>',  # <SERVICE_NAME>, <API_KEY>, etc.
             r'\{[A-Z_]+\}',  # {SERVICE_NAME}, {API_KEY}, etc.
@@ -571,11 +580,22 @@ class MarkdownPlugin(DocGenPlugin):
             if matches:
                 placeholders_found.extend(matches)
 
+        # Filter out known Presidio entity placeholders (case-insensitive)
         if placeholders_found:
-            issues.append(
-                f"Documentation contains unsubstituted placeholders: {set(placeholders_found)}. "
-                f"All placeholders must be replaced with actual values."
-            )
+            placeholders_set = set(placeholders_found)
+            # Remove Presidio placeholders (case-insensitive comparison)
+            # Normalize both sides to uppercase for accurate matching
+            presidio_upper = {p.upper() for p in PRESIDIO_ENTITY_PLACEHOLDERS}
+            non_presidio_placeholders = {
+                p for p in placeholders_set 
+                if p.upper() not in presidio_upper
+            }
+            
+            if non_presidio_placeholders:
+                issues.append(
+                    f"Documentation contains unsubstituted placeholders: {non_presidio_placeholders}. "
+                    f"All placeholders must be replaced with actual values."
+                )
 
 
         return {"valid": len(issues) == 0, "issues": issues}

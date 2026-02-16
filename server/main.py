@@ -472,6 +472,13 @@ if is_production and not _is_test_environment:
     logging.getLogger("presidio-analyzer").setLevel(logging.WARNING)
     logging.getLogger("presidio_analyzer").setLevel(logging.WARNING)
     
+    # Add filter to suppress "not added to registry because language is not supported" messages
+    # This filter must be added EARLY before any AnalyzerEngine is instantiated
+    presidio_logger = logging.getLogger("presidio-analyzer")
+    presidio_logger.addFilter(
+        lambda record: "not added to registry because language is not supported" not in record.getMessage()
+    )
+    
     # Reduce LLM provider loading noise (missing API keys are expected)
     logging.getLogger("runner").setLevel(logging.WARNING)
     
