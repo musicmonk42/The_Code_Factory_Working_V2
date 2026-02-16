@@ -82,6 +82,13 @@ class MessageBusE2ETest(unittest.TestCase):
         cls.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(cls.loop)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Tear down test environment after all tests."""
+        if hasattr(cls, 'loop') and cls.loop is not None:
+            if not cls.loop.is_closed():
+                cls.loop.close()
+
     def setUp(self):
         """Set up test fixtures before each test."""
         self.config = E2ETestConfig()

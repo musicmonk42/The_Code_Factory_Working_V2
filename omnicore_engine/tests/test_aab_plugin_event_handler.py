@@ -17,6 +17,8 @@ import pytest
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import omnicore_engine.plugin_event_handler as _plugin_event_handler_module
+
 from omnicore_engine.plugin_event_handler import (
     PluginEventHandler,
     start_plugin_observer,
@@ -326,20 +328,19 @@ class TestPluginEventHandler:
 class TestStartPluginObserver:
     """Test the start_plugin_observer function"""
 
-    @patch("omnicore_engine.plugin_event_handler.Observer")
-    @patch("omnicore_engine.plugin_event_handler.PluginEventHandler")
-    def test_start_observer_success(self, mock_handler_class, mock_observer_class):
+    def test_start_observer_success(self):
         """Test successful observer start"""
         mock_registry = Mock()
         plugin_dir = "/tmp/plugins"
 
         mock_observer = Mock()
-        mock_observer_class.return_value = mock_observer
-
         mock_handler = Mock()
-        mock_handler_class.return_value = mock_handler
 
-        with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
+        with (
+            patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class,
+            patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class,
+            patch.object(_plugin_event_handler_module, "logger") as mock_logger,
+        ):
             start_plugin_observer(mock_registry, plugin_dir)
 
             mock_handler_class.assert_called_once_with(mock_registry, plugin_dir)
@@ -350,21 +351,20 @@ class TestStartPluginObserver:
             mock_logger.info.assert_called()
             assert "Watchdog started" in mock_logger.info.call_args[0][0]
 
-    @patch("omnicore_engine.plugin_event_handler.Observer")
-    @patch("omnicore_engine.plugin_event_handler.PluginEventHandler")
-    def test_start_observer_failure(self, mock_handler_class, mock_observer_class):
+    def test_start_observer_failure(self):
         """Test observer start failure"""
         mock_registry = Mock()
         plugin_dir = "/tmp/plugins"
 
         mock_observer = Mock()
         mock_observer.start.side_effect = Exception("Start failed")
-        mock_observer_class.return_value = mock_observer
-
         mock_handler = Mock()
-        mock_handler_class.return_value = mock_handler
 
-        with patch("omnicore_engine.plugin_event_handler.logger") as mock_logger:
+        with (
+            patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class,
+            patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class,
+            patch.object(_plugin_event_handler_module, "logger") as mock_logger,
+        ):
             start_plugin_observer(mock_registry, plugin_dir)
 
             mock_logger.error.assert_called()
