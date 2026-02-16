@@ -4246,6 +4246,202 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
     
+    async def _run_sfe_analysis(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute Self-Fixing Engineer analysis with CodebaseAnalyzer and BugManager."""
+        logger.info(f"[SFE_ANALYSIS] Starting analysis for job {job_id}")
+        
+        try:
+            # Lazy import SFE components to avoid circular dependencies
+            from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
+        except ImportError as e:
+            logger.warning(f"[SFE_ANALYSIS] CodebaseAnalyzer not available for job {job_id}: {e}")
+            return {
+                "status": "skipped",
+                "message": f"CodebaseAnalyzer not available: {e}",
+                "job_id": job_id,
+            }
+        
+        try:
+            # Wrap analysis with configurable timeout
+            async with asyncio.timeout(DEFAULT_SFE_ANALYSIS_TIMEOUT):
+                code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
+                code_path_obj = Path(code_path)
+                
+                if not code_path_obj.exists():
+                    logger.warning(f"[SFE_ANALYSIS] Code path {code_path} does not exist for job {job_id}")
+                    return {
+                        "status": "error",
+                        "message": f"Code path {code_path} does not exist",
+                    }
+                
+                logger.info(f"[SFE_ANALYSIS] Running CodebaseAnalyzer for job {job_id} on {code_path}")
+                
+                # Use CodebaseAnalyzer as async context manager
+                # Don't ignore tests - we want to analyze both code AND test files
+                async with CodebaseAnalyzer(
+                    root_dir=str(code_path_obj),
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                ) as analyzer:
+                    summary = await analyzer.scan_codebase(str(code_path_obj))
+                    
+                    defects = summary.get("defects", [])
+                    # Filter out defects for non-existent files
+                    valid_defects = []
+                    for defect in defects:
+                        defect_file = defect.get("file", "")
+                        if defect_file:
+                            defect_path = Path(defect_file)
+                            if not defect_path.is_absolute():
+                                defect_path = code_path_obj / defect_path
+                            if defect_path.exists():
+                                valid_defects.append(defect)
+                            else:
+                                logger.debug(f"[SFE_ANALYSIS] Skipping defect for non-existent file: {defect_file}")
+                    
+                    issues_found = len(valid_defects)
+                    logger.info(f"[SFE_ANALYSIS] Found {issues_found} total issues for job {job_id}")
+                    
+                    # Filter for critical and high severity issues
+                    critical_high_issues = [
+                        d for d in valid_defects 
+                        if d.get("severity", "").lower() in ["critical", "high"]
+                    ]
+                    
+                    issues_fixed = 0
+                    remediation_results = []
+                    
+                    # If critical/high severity issues found, attempt auto-remediation using BugManager
+                    # Note: BugManager might not have detect_errors method, so we handle gracefully
+                    if critical_high_issues:
+                        logger.info(
+                            f"[SFE_ANALYSIS] Found {len(critical_high_issues)} critical/high severity issues, "
+                            f"attempting auto-remediation for job {job_id}"
+                        )
+                        
+                        try:
+                            from self_fixing_engineer.arbiter.bug_manager import BugManager
+                            
+                            # BugManager requires Settings - try to create with defaults
+                            try:
+                                from self_fixing_engineer.arbiter.bug_manager.utils import Settings
+                                settings = Settings()
+                                bug_manager = BugManager(settings)
+                                
+                                # Check if BugManager has an async initialization method
+                                # Some versions may require explicit initialization
+                                if hasattr(bug_manager, '_initialize') and asyncio.iscoroutinefunction(bug_manager._initialize):
+                                    await bug_manager._initialize()
+                                
+                                # BugManager uses report() method, not detect_errors
+                                # For now, just log that we would attempt remediation
+                                logger.info(
+                                    f"[SFE_ANALYSIS] BugManager initialized for job {job_id}, "
+                                    f"would attempt remediation for {len(critical_high_issues)} issues"
+                                )
+                                
+                                # In the future, could iterate through critical_high_issues
+                                # and call bug_manager.report() for each one
+                                # For now, just mark them as detected
+                                for issue in critical_high_issues[:5]:  # Limit to first 5 to avoid overwhelming
+                                    remediation_results.append({
+                                        "status": "detected",
+                                        "issue": issue,
+                                        "message": "Issue detected, remediation would be applied here"
+                                    })
+                                
+                            except ImportError as settings_err:
+                                logger.warning(
+                                    f"[SFE_ANALYSIS] Could not import Settings for BugManager: {settings_err}",
+                                    extra={"job_id": job_id}
+                                )
+                        except ImportError as bug_mgr_import_err:
+                            logger.warning(
+                                f"[SFE_ANALYSIS] BugManager not available: {bug_mgr_import_err}",
+                                extra={"job_id": job_id}
+                            )
+                        except Exception as bug_mgr_err:
+                            logger.warning(
+                                f"[SFE_ANALYSIS] BugManager error for job {job_id}: {bug_mgr_err}",
+                                exc_info=True
+                            )
+                    
+                    # Write JSON report
+                    reports_dir = code_path_obj / "reports"
+                    reports_dir.mkdir(parents=True, exist_ok=True)
+                    report_path = reports_dir / "sfe_analysis_report.json"
+                    
+                    report_data = {
+                        "job_id": job_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "code_path": str(code_path_obj),
+                        "issues_found": issues_found,
+                        "issues_fixed": issues_fixed,
+                        "critical_high_count": len(critical_high_issues),
+                        "all_defects": valid_defects,
+                        "critical_high_defects": critical_high_issues,
+                        "remediation_results": remediation_results,
+                        "summary": summary,
+                    }
+                    
+                    async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
+                        await f.write(json.dumps(report_data, indent=2))
+                    
+                    logger.info(
+                        f"[SFE_ANALYSIS] Wrote analysis report to {report_path}",
+                        extra={
+                            "job_id": job_id,
+                            "report_path": str(report_path),
+                            "file_size": report_path.stat().st_size
+                        }
+                    )
+                    
+                    # Structured logging
+                    logger.info(
+                        f"[PIPELINE] Job {job_id} completed step: sfe_analysis - "
+                        f"found {issues_found} issues, fixed {issues_fixed}",
+                        extra={
+                            "job_id": job_id,
+                            "stage": "sfe_analysis",
+                            "issues_found": issues_found,
+                            "issues_fixed": issues_fixed,
+                            "critical_high_count": len(critical_high_issues)
+                        }
+                    )
+                    
+                    return {
+                        "status": "completed",
+                        "job_id": job_id,
+                        "code_path": str(code_path_obj),
+                        "issues_found": issues_found,
+                        "issues_fixed": issues_fixed,
+                        "critical_high_count": len(critical_high_issues),
+                        "report_path": str(report_path),
+                        "total_files": summary.get("files", 0),
+                    }
+        
+        except asyncio.TimeoutError:
+            logger.warning(f"[SFE_ANALYSIS] Analysis timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT}s for job {job_id}")
+            return {
+                "status": "error",
+                "message": f"SFE analysis timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT} seconds",
+                "timeout": True,
+                "job_id": job_id,
+            }
+        except ImportError as e:
+            logger.warning(f"[SFE_ANALYSIS] Import error for job {job_id}: {e}")
+            return {
+                "status": "skipped",
+                "message": f"SFE components not available: {e}",
+                "job_id": job_id,
+            }
+        except Exception as e:
+            logger.error(f"[SFE_ANALYSIS] Error for job {job_id}: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "message": str(e),
+                "error_type": type(e).__name__,
+            }
+    
     async def _run_clarifier(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute requirements clarification using LLM-based or rule-based approach.
@@ -5234,6 +5430,109 @@ class OmniCoreService:
                                 if not test_execution_failed:
                                     stages_completed.append("testgen")
                                     logger.info(f"[PIPELINE] Job {job_id} completed step: testgen")
+                                    
+                                    # Run ImportFixerEngine on test files after testgen
+                                    # This fixes missing imports in generated test files (e.g., missing "import pytest")
+                                    try:
+                                        from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+                                        
+                                        # Find test files in the tests/ directory
+                                        tests_dir = Path(output_path) / "tests"
+                                        if tests_dir.exists():
+                                            test_files = list(tests_dir.rglob("*.py"))
+                                            
+                                            if test_files:
+                                                logger.info(
+                                                    f"[TESTGEN] Running ImportFixerEngine on {len(test_files)} test files for job {job_id}"
+                                                )
+                                                
+                                                fixer = ImportFixerEngine()
+                                                fixed_count = 0
+                                                error_count = 0
+                                                total_fixes = 0
+                                                
+                                                for test_file in test_files:
+                                                    try:
+                                                        # Read the test file
+                                                        content = test_file.read_text(encoding="utf-8")
+                                                        
+                                                        # Skip empty files
+                                                        if not content.strip():
+                                                            continue
+                                                        
+                                                        # Fix imports
+                                                        fix_result = fixer.fix_code(content, file_path=str(test_file))
+                                                        
+                                                        if fix_result["status"] == "error":
+                                                            error_count += 1
+                                                            logger.warning(
+                                                                f"[TESTGEN] Failed to auto-fix imports in test file {test_file.name}: {fix_result['message']}",
+                                                                extra={"job_id": job_id, "filename": str(test_file), "error": fix_result["message"]}
+                                                            )
+                                                            continue
+                                                        
+                                                        # Check if any fixes were applied
+                                                        if fix_result["fixed_code"] != content and fix_result["fixes_applied"]:
+                                                            # Write fixed content back to disk
+                                                            test_file.write_text(fix_result["fixed_code"], encoding="utf-8")
+                                                            fixed_count += 1
+                                                            total_fixes += len(fix_result["fixes_applied"])
+                                                            fixes_applied = fix_result["fixes_applied"]
+                                                            
+                                                            logger.info(
+                                                                f"[TESTGEN] Auto-fixed imports in test file {test_file.name}: {', '.join(fixes_applied)}",
+                                                                extra={
+                                                                    "job_id": job_id,
+                                                                    "filename": str(test_file),
+                                                                    "fixes": fixes_applied,
+                                                                    "fix_count": len(fixes_applied)
+                                                                }
+                                                            )
+                                                    except Exception as file_err:
+                                                        error_count += 1
+                                                        logger.warning(
+                                                            f"[TESTGEN] Exception while fixing imports in test file {test_file.name}: {file_err}",
+                                                            exc_info=True,
+                                                            extra={"job_id": job_id, "filename": str(test_file), "error": str(file_err)}
+                                                        )
+                                                
+                                                # Summary logging
+                                                if fixed_count > 0:
+                                                    logger.info(
+                                                        f"[TESTGEN] Import auto-fix summary for test files: {fixed_count} file(s) fixed with {total_fixes} total fix(es)",
+                                                        extra={
+                                                            "job_id": job_id,
+                                                            "files_fixed": fixed_count,
+                                                            "total_fixes": total_fixes,
+                                                            "errors": error_count
+                                                        }
+                                                    )
+                                                elif error_count > 0:
+                                                    logger.warning(
+                                                        f"[TESTGEN] Import auto-fix for test files completed with {error_count} error(s), no files fixed",
+                                                        extra={"job_id": job_id, "error_count": error_count}
+                                                    )
+                                                else:
+                                                    logger.debug(
+                                                        f"[TESTGEN] Import auto-fix for test files completed: no missing imports detected",
+                                                        extra={"job_id": job_id}
+                                                    )
+                                            else:
+                                                logger.debug(f"[TESTGEN] No test files found in {tests_dir} for import fixing")
+                                        else:
+                                            logger.debug(f"[TESTGEN] No tests/ directory found at {tests_dir}")
+                                    
+                                    except ImportError as import_err:
+                                        logger.warning(
+                                            f"[TESTGEN] ImportFixerEngine unavailable for test files: {import_err}",
+                                            extra={"job_id": job_id, "error": str(import_err)}
+                                        )
+                                    except Exception as fixer_err:
+                                        logger.error(
+                                            f"[TESTGEN] Import auto-fix system error for test files: {fixer_err}",
+                                            exc_info=True,
+                                            extra={"job_id": job_id, "error": str(fixer_err), "error_type": type(fixer_err).__name__}
+                                        )
                             elif testgen_result.get("status") == "error":
                                 # Test generation failed - use specific marker
                                 testgen_error = testgen_result.get('message', 'Unknown error')
@@ -5372,7 +5671,53 @@ class OmniCoreService:
                     except Exception as e:
                         logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
             
-            # 5. Deploy (if requested)
+            # 5. SFE Analysis (Self-Fixing Engineer)
+            # Run deeper AST-level analysis after critique but before deploy
+            # This provides more comprehensive defect detection than critique
+            sfe_result = None  # Initialize as None for proper None-check later
+            if payload.get("run_sfe_analysis", True):
+                try:
+                    sfe_payload = {
+                        "code_path": codegen_result.get("output_path"),
+                        "language": detected_language,
+                    }
+                    logger.info(f"[PIPELINE] Job {job_id} starting step: sfe_analysis")
+                    sfe_result = await self._run_sfe_analysis(job_id, sfe_payload)
+                    
+                    if sfe_result.get("status") == "completed":
+                        stages_completed.append("sfe_analysis")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} completed step: sfe_analysis - "
+                            f"found {sfe_result.get('issues_found', 0)} issues, "
+                            f"fixed {sfe_result.get('issues_fixed', 0)}"
+                        )
+                    elif sfe_result.get("status") == "skipped":
+                        stages_completed.append("sfe_analysis:skipped")
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} skipped SFE analysis: {sfe_result.get('message', 'Components not available')}"
+                        )
+                    elif sfe_result.get("status") == "error":
+                        stages_completed.append("sfe_analysis:error")
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} SFE analysis error: {sfe_result.get('message', 'Unknown error')} "
+                            f"(continuing pipeline)"
+                        )
+                except Exception as sfe_err:
+                    logger.error(
+                        f"[PIPELINE] Job {job_id} SFE analysis exception: {sfe_err}",
+                        exc_info=True,
+                        extra={
+                            "job_id": job_id,
+                            "stage": "sfe_analysis",
+                            "error_type": type(sfe_err).__name__,
+                        }
+                    )
+                    stages_completed.append("sfe_analysis:exception")
+                    logger.warning(f"[PIPELINE] Job {job_id} continuing pipeline despite SFE analysis exception")
+            else:
+                logger.info(f"[PIPELINE] Job {job_id} skipping SFE analysis step (run_sfe_analysis={payload.get('run_sfe_analysis', True)})")
+            
+            # 6. Deploy (if requested)
             # RESILIENCE FIX: Pipeline continues even if deployment fails
             # Industry Standard: Deploy failures shouldn't prevent documentation generation
             # or critique, allowing maximum value delivery from the pipeline
@@ -5459,7 +5804,7 @@ class OmniCoreService:
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
-            # 6. Docgen (if requested)
+            # 7. Docgen (if requested)
             # RESILIENCE FIX: Pipeline continues even if docgen fails
             # Industry Standard: Documentation generation failure shouldn't prevent
             # code critique, ensuring comprehensive quality analysis
@@ -5665,6 +6010,9 @@ class OmniCoreService:
                 job.metadata["output_path"] = output_path
                 if validation_warnings:
                     job.metadata["validation_warnings"] = validation_warnings
+                # Store SFE analysis results for dispatch to SFE (only if analysis ran)
+                if sfe_result is not None:
+                    job.metadata["sfe_analysis"] = sfe_result
 
             # NOTE: Do NOT call _finalize_successful_job here.
             # Finalization is handled by finalize_job_success() in generator.py
@@ -5675,6 +6023,7 @@ class OmniCoreService:
                 "stages_completed": stages_completed,
                 "output_path": output_path,
                 "validation_warnings": validation_warnings,
+                "sfe_analysis": sfe_result if sfe_result is not None else {},  # Include SFE results in pipeline return
             }
             
         except Exception as e:
@@ -5793,6 +6142,7 @@ class OmniCoreService:
                     "validation_errors": job.metadata.get("validation_errors", []),
                     "validation_warnings": job.metadata.get("validation_warnings", []),
                     "stages_completed": stages_completed,
+                    "sfe_analysis": job.metadata.get("sfe_analysis", {}),  # Include SFE results
                 }
                 await self._dispatch_to_sfe(job_id, output_path, validation_context)
             except Exception as dispatch_error:
