@@ -20,7 +20,8 @@ if 'omnicore_engine' not in sys.modules:
 if 'omnicore_engine.plugin_registry' not in sys.modules:
     mock_plugin_registry = MagicMock()
     mock_plugin_registry.PlugInKind = MagicMock()
-    mock_plugin_registry.plugin = MagicMock()
+    # plugin decorator must return the original function unchanged
+    mock_plugin_registry.plugin = lambda *args, **kwargs: lambda fn: fn
     sys.modules['omnicore_engine.plugin_registry'] = mock_plugin_registry
 
 # --- Mock Configuration and Core Utilities ---

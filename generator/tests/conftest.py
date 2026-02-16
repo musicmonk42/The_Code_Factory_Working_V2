@@ -548,6 +548,10 @@ if "opentelemetry" in sys.modules:
                 
             def record_exception(self, exception):
                 self.events.append({"name": "exception", "exception": exception})
+
+            def end(self):
+                """End the span."""
+                pass
         
         class MockTracer:
             """Mock OpenTelemetry Tracer."""

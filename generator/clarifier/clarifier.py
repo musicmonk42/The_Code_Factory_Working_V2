@@ -909,6 +909,7 @@ class SQLiteContextManager(ContextManager):
     async def _init_db(self):
         max_retries = 5
         current_attempt = 0
+        _permission_fallback_used = False
         while current_attempt < max_retries:
             try:
 
@@ -959,6 +960,26 @@ class SQLiteContextManager(ContextManager):
                     status="success",
                 )
                 return
+            except PermissionError as e:
+                if _permission_fallback_used:
+                    # Already tried fallback, re-raise to avoid infinite loop
+                    self.logger.critical(
+                        f"PermissionError on fallback path {self.db_path}: {e}",
+                        exc_info=True,
+                    )
+                    raise
+                # Fallback to /tmp if the configured path is not writable
+                fallback_path = os.path.join("/tmp", "clarifier_context.db")
+                self.logger.warning(
+                    f"PermissionError initializing SQLiteContextManager at {self.db_path}: {e}. "
+                    f"Falling back to {fallback_path}.",
+                    exc_info=True,
+                )
+                self.db_path = fallback_path
+                _permission_fallback_used = True
+                # Reset attempt counter to retry with the fallback path
+                current_attempt = 0
+                continue
             except sqlite3.OperationalError as e:
                 current_attempt += 1
                 if current_attempt >= max_retries:

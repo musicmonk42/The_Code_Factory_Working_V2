@@ -159,15 +159,26 @@ def _initialize_prometheus_mock():
             self.type = metric_type
             self.samples = samples
 
+    class _MockValueClass:
+        """Mock for prometheus_client ValueClass that wraps an int with .get()."""
+        def __init__(self, value=0):
+            self._val = value
+        def get(self):
+            return self._val
+        def set(self, value):
+            self._val = value
+        def inc(self, amount=1):
+            self._val += amount
+
     class _MockCounterChild:
         """Child counter for a specific label combination."""
         def __init__(self, parent, label_key, label_values):
             self.parent = parent
             self.label_key = label_key
             self.label_values = label_values
-            self._value = 0
+            self._value = _MockValueClass(0)
         def inc(self, amount=1):
-            self._value += amount
+            self._value.inc(amount)
         def labels(self, **kwargs):
             return self.parent.labels(**kwargs)
         def collect(self):
@@ -201,7 +212,7 @@ def _initialize_prometheus_mock():
                 sample = _MockSample(
                     name=self.name + '_total',
                     labels=dict(label_key) if label_key else {},
-                    value=child._value,
+                    value=child._value.get(),
                 )
                 samples.append(sample)
             return [_MockMetricFamily(self.name, self.description, 'counter', samples)]
@@ -217,6 +228,9 @@ def _initialize_prometheus_mock():
             decorator.__enter__ = lambda: None
             decorator.__exit__ = lambda *args: None
             return decorator
+        def clear(self):
+            """Clear all metric values."""
+            self._metrics = {}
 
     class MockMetric:
         def __init__(self, *args, **kwargs):
@@ -237,6 +251,9 @@ def _initialize_prometheus_mock():
             decorator.__enter__ = lambda: None
             decorator.__exit__ = lambda *args: None
             return decorator
+        def clear(self):
+            """Clear all metric values."""
+            pass
     
     class MockRegistry:
         def __init__(self, *args, **kwargs):
@@ -314,6 +331,9 @@ def _initialize_opentelemetry_mock():
             pass
         def record_exception(self, exception):
             """Record an exception on this span."""
+            pass
+        def end(self):
+            """End the span."""
             pass
     
     # Create mock Status and StatusCode
