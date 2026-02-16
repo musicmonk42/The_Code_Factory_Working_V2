@@ -4326,7 +4326,11 @@ class OmniCoreService:
                                 from self_fixing_engineer.arbiter.bug_manager.utils import Settings
                                 settings = Settings()
                                 bug_manager = BugManager(settings)
-                                await bug_manager._initialize()
+                                
+                                # Check if BugManager has an async initialization method
+                                # Some versions may require explicit initialization
+                                if hasattr(bug_manager, '_initialize') and asyncio.iscoroutinefunction(bug_manager._initialize):
+                                    await bug_manager._initialize()
                                 
                                 # BugManager uses report() method, not detect_errors
                                 # For now, just log that we would attempt remediation
@@ -5670,7 +5674,7 @@ class OmniCoreService:
             # 5. SFE Analysis (Self-Fixing Engineer)
             # Run deeper AST-level analysis after critique but before deploy
             # This provides more comprehensive defect detection than critique
-            sfe_result = {}  # Initialize for later reference
+            sfe_result = None  # Initialize as None for proper None-check later
             if payload.get("run_sfe_analysis", True):
                 try:
                     sfe_payload = {
@@ -6006,8 +6010,8 @@ class OmniCoreService:
                 job.metadata["output_path"] = output_path
                 if validation_warnings:
                     job.metadata["validation_warnings"] = validation_warnings
-                # Store SFE analysis results for dispatch to SFE
-                if sfe_result:
+                # Store SFE analysis results for dispatch to SFE (only if analysis ran)
+                if sfe_result is not None:
                     job.metadata["sfe_analysis"] = sfe_result
 
             # NOTE: Do NOT call _finalize_successful_job here.
@@ -6019,7 +6023,7 @@ class OmniCoreService:
                 "stages_completed": stages_completed,
                 "output_path": output_path,
                 "validation_warnings": validation_warnings,
-                "sfe_analysis": sfe_result,  # Include SFE results in pipeline return
+                "sfe_analysis": sfe_result if sfe_result is not None else {},  # Include SFE results in pipeline return
             }
             
         except Exception as e:
