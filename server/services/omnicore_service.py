@@ -1649,7 +1649,28 @@ class OmniCoreService:
         }
     
     def _resolve_job_output_path(self, job_id: str, hint_path: str = "") -> Optional[str]:
-        """Resolve the actual output path for a job, checking multiple standard locations."""
+        """
+        Resolve the actual output path for a job, checking multiple standard locations.
+        
+        This method implements a multi-tier fallback strategy to locate generated job files:
+        1. Uses hint_path if provided and exists
+        2. Checks job metadata for output_path, code_path, or generated_path
+        3. Searches standard upload locations (generated/, output/, base dir)
+        4. Within standard locations, prioritizes project subdirectories over root
+        
+        Args:
+            job_id: Unique job identifier
+            hint_path: Optional path hint to check first (e.g., from user input)
+            
+        Returns:
+            Absolute path string to the job output directory, or None if not found
+            
+        Examples:
+            >>> service._resolve_job_output_path("job-123", "/custom/path")
+            '/custom/path'  # if exists
+            >>> service._resolve_job_output_path("job-456")
+            './uploads/job-456/generated/my_project'  # found in standard location
+        """
         
         # 1. Check hint path first
         if hint_path and Path(hint_path).exists():

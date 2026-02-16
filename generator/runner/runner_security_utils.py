@@ -260,6 +260,36 @@ def _add_custom_recognizers(analyzer_engine):
         logger.warning(f"Failed to add custom recognizers: {e}")
 
 
+def _create_presidio_log_filter():
+    """
+    Create a reusable log filter for Presidio warnings.
+    
+    Filters out non-critical warnings about:
+    - Unmapped entity types (CARDINAL, MONEY, etc.)
+    - Recognizers not added due to unsupported languages
+    
+    Returns:
+        Callable log filter function
+    """
+    return lambda record: not any(
+        entity in record.getMessage()
+        for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
+    )
+
+
+def _apply_presidio_log_filters():
+    """
+    Apply log filters to both Presidio logger name variants.
+    
+    Presidio uses both 'presidio_analyzer' and 'presidio-analyzer' logger names
+    depending on the version and component, so we filter both.
+    """
+    presidio_filter = _create_presidio_log_filter()
+    for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+        pres_logger = logging.getLogger(logger_name)
+        pres_logger.addFilter(presidio_filter)
+
+
 # [NEW] Function to lazily load Presidio/spaCy dependencies
 def _load_presidio_engine() -> bool:
     """
@@ -355,34 +385,8 @@ def _load_presidio_engine() -> bool:
             # HIGH: Add custom recognizers for API_KEY and CARDINAL entities
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
-            # Suppress non-critical Presidio warnings for unmapped entities
-            # These warnings clutter logs but don't affect functionality
-            presidio_logger = logging.getLogger("presidio_analyzer")
-            
-            def presidio_log_filter(record):
-                """Filter out non-critical unmapped entity warnings from Presidio.
-                
-                Uses compiled regex for efficient filtering. Matches patterns like:
-                - "Entity CARDINAL is not mapped"
-                - "entity MONEY is not mapped"
-                - "PERCENT is not mapped"
-                - "Recognizer not added to registry because language is not supported"
-                
-                Case-insensitive with word boundaries to prevent false positives.
-                """
-                msg = record.getMessage()
-                # Filter unmapped entity warnings
-                if _presidio_filter_pattern.search(msg):
-                    return False
-                # Filter unsupported language warnings for recognizers
-                if "not added to registry because language is not supported" in msg.lower():
-                    return False
-                return True
-            
-            # Add filter to both logger name variants (underscore and hyphen)
-            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
-                pres_logger = logging.getLogger(logger_name)
-                pres_logger.addFilter(presidio_log_filter)
+            # Suppress non-critical Presidio warnings
+            _apply_presidio_log_filters()
             
             logger.info(
                 f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"
@@ -409,14 +413,7 @@ def _load_presidio_engine() -> bool:
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
-            # Add filter to both logger name variants (underscore and hyphen)
-            presidio_filter = lambda record: not any(
-                entity in record.getMessage()
-                for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
-            )
-            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
-                pres_logger = logging.getLogger(logger_name)
-                pres_logger.addFilter(presidio_filter)
+            _apply_presidio_log_filters()
             
             logger.info("Presidio running in REGEX-ONLY mode (NLP unavailable)")
             return True
@@ -440,14 +437,7 @@ def _load_presidio_engine() -> bool:
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
-            # Add filter to both logger name variants (underscore and hyphen)
-            presidio_filter = lambda record: not any(
-                entity in record.getMessage()
-                for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
-            )
-            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
-                pres_logger = logging.getLogger(logger_name)
-                pres_logger.addFilter(presidio_filter)
+            _apply_presidio_log_filters()
             
             logger.info("Presidio running in REGEX-ONLY mode (NLP failed to load)")
             return True
