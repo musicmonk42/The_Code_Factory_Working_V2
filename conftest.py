@@ -638,12 +638,21 @@ async def async_client():
 
 @pytest.fixture(autouse=True)
 def reset_environment_vars():
-    """Reset environment variables after each test."""
+    """Reset environment variables after each test.
+    
+    Uses surgical key-by-key restore instead of os.environ.clear() to avoid
+    disrupting pytest-xdist worker communication during parallel test execution.
+    """
     original_env = os.environ.copy()
     yield
-    # Restore original environment
-    os.environ.clear()
-    os.environ.update(original_env)
+    # Restore original environment surgically (avoid os.environ.clear()
+    # which can disrupt xdist worker communication)
+    added_keys = set(os.environ.keys()) - set(original_env.keys())
+    for key in added_keys:
+        os.environ.pop(key, None)
+    for key, value in original_env.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 @pytest.fixture(autouse=True)
