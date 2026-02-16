@@ -193,6 +193,13 @@ def mock_llm_calls():
 @pytest.fixture
 def mock_presidio_instances():
     """Mock Presidio analyzer and anonymizer instances for scrub_text."""
+    import agents.docgen_agent.docgen_agent as _docgen_mod
+
+    # Reset singletons so that _get_analyzer()/_get_anonymizer() will
+    # call AnalyzerEngine()/AnonymizerEngine() again, picking up our mocks.
+    _docgen_mod._analyzer_singleton = None
+    _docgen_mod._anonymizer_singleton = None
+
     mock_analyzer.AnalyzerEngine.reset_mock()
     mock_anonymizer.AnonymizerEngine.reset_mock()
 
@@ -208,6 +215,10 @@ def mock_presidio_instances():
         "analyzer_instance": analyzer_instance,
         "anonymizer_instance": anonymizer_instance,
     }
+
+    # Clean up singletons after test
+    _docgen_mod._analyzer_singleton = None
+    _docgen_mod._anonymizer_singleton = None
 
 
 @pytest.fixture
