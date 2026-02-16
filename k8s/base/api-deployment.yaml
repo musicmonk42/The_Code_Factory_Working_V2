@@ -223,6 +223,8 @@ spec:
               mountPath: /app/workspace
             - name: logs
               mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
             - name: tmp
               mountPath: /tmp
           lifecycle:
@@ -237,6 +239,8 @@ spec:
           persistentVolumeClaim:
             claimName: codefactory-workspace
         - name: logs
+          emptyDir: {}
+        - name: data
           emptyDir: {}
         - name: tmp
           emptyDir: {}

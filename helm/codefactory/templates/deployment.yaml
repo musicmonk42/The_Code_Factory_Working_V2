@@ -233,6 +233,8 @@ spec:
             {{- end }}
             - name: logs
               mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
             - name: tmp
               mountPath: /tmp
             {{- with .Values.volumeMounts }}
@@ -254,6 +256,8 @@ spec:
             claimName: {{ include "codefactory.fullname" . }}-workspace
         {{- end }}
         - name: logs
+          emptyDir: {}
+        - name: data
           emptyDir: {}
         - name: tmp
           emptyDir: {}
