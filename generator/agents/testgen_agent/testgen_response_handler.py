@@ -86,13 +86,13 @@ def _local_regex_sanitize(text: str) -> str:
 
 def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, str]] = None, language: str = "python") -> Dict[str, str]:
     """
-    FIX #3: Post-process generated test imports against the actual file tree.
+    Post-process generated test imports against the actual file tree.
     
-    The LLM consistently generates wrong import paths. For example:
-    - Generates: "from main import app"
-    - Correct: "from app.main import app"
+    Fixes import path issues where the LLM generates incorrect paths, such as
+    'from main import app' when the correct path is 'from app.main import app'.
+    This commonly occurs because the LLM doesn't know the actual project structure.
     
-    This function scans for import statements, verifies them against the project's
+    The function scans for import statements, verifies them against the project's
     actual module structure, and fixes incorrect paths automatically.
     
     Args:
@@ -124,6 +124,10 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
     
     # Pattern to match Python import statements
     # Matches: "from X import Y" or "import X"
+    # Group 1: Leading whitespace (indentation)
+    # Group 2: "from " keyword
+    # Group 3: Module path (e.g., "main" or "app.main")
+    # Group 4: " import Y" rest of statement
     import_pattern = re.compile(r'^(\s*)(from\s+)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*?)(\s+import\s+.+)$', re.MULTILINE)
     
     for filename, content in test_files.items():

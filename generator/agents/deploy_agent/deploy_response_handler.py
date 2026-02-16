@@ -773,8 +773,10 @@ def _sanitize_llm_output(raw_output: str) -> str:
     """
     Remove Markdown code fences and artifacts from LLM output before YAML parsing.
     
-    This function addresses systemic failure: LLM wraps deployment configs in markdown
-    formatting, causing parsing failures like "found duplicate key" and "unexpected '`'".
+    Handles cases where the LLM wraps deployment configs (Dockerfiles, Kubernetes YAML,
+    Helm charts) in markdown formatting including mermaid diagrams, prose explanations,
+    and code fences. These artifacts cause parsing failures like "found duplicate key"
+    and "unexpected '`' character".
     
     LLM responses sometimes contain Markdown artifacts like:
     - Mermaid diagrams (```mermaid...```)

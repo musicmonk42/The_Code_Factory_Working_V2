@@ -138,6 +138,8 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
     fi
 
 # Pre-download SpaCy models to prevent runtime download issues
+# FIX: Only download English models since Presidio is configured for English-only
+# Multilingual models (es, it, pl) are not needed and waste ~600MB+ of image space
 # Using both sm (small) and lg (large) for flexibility
 # Upgrade pip first to ensure we have the latest version for model downloads
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
@@ -145,19 +147,12 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Upgrading pip and downloading SpaCy models..."; \
         echo "========================================"; \
         python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
-        # Download English models (required for basic PII detection)
+        # Download English models (required for PII detection)
         python -m spacy download en_core_web_sm && \
         python -m spacy download en_core_web_lg && \
-        # MEDIUM: Download multilingual models for Presidio PII detection
-        # Spanish (for ES_NIF, ES_DNI, etc.)
-        python -m spacy download es_core_news_sm && \
-        # Italian (for IT_FISCAL_CODE, IT_DRIVER_LICENSE, etc.)
-        python -m spacy download it_core_news_sm && \
-        # Polish (for PL_PESEL, PL_NIP, etc.)
-        python -m spacy download pl_core_news_sm && \
         # Verify the large model loads successfully
         python -c "import spacy; nlp = spacy.load('en_core_web_lg'); print('✓ SpaCy model en_core_web_lg loaded successfully')" && \
-        echo "✓ SpaCy model downloads complete (en, es, it, pl)"; \
+        echo "✓ SpaCy model downloads complete (English only)"; \
     fi
 
 # Pre-download NLTK data to prevent runtime download issues
