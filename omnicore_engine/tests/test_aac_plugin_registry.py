@@ -18,6 +18,8 @@ import pytest
 # Add the parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import omnicore_engine.plugin_registry as _plugin_registry_module
+
 from omnicore_engine.plugin_registry import (
     Plugin,
     PluginDependencyGraph,
@@ -79,8 +81,8 @@ def test_func():
         # Create a mock settings object with the signing key attribute
         mock_settings = Mock(PLUGIN_SIGNING_KEY=test_key)
         
-        # Patch settings with our configured mock
-        with patch("omnicore_engine.plugin_registry.settings", mock_settings):
+        # Use patch.object on the imported module for importlib compatibility
+        with patch.object(_plugin_registry_module, "settings", mock_settings):
             # Calculate HMAC signature (not plain SHA256)
             import hmac
             import hashlib
@@ -96,7 +98,7 @@ def test_func():
         # Create a mock settings object with the signing key attribute
         mock_settings = Mock(PLUGIN_SIGNING_KEY="test_key")
         
-        with patch("omnicore_engine.plugin_registry.settings", mock_settings):
+        with patch.object(_plugin_registry_module, "settings", mock_settings):
             assert verify_plugin_signature(code, "invalid_signature") == False
 
     def test_validate_plugin_path_valid(self):
@@ -571,7 +573,7 @@ class TestPluginDecorator:
 
     def test_plugin_decorator_registration(self):
         """Test that decorator registers plugin"""
-        with patch("omnicore_engine.plugin_registry.PLUGIN_REGISTRY") as mock_registry:
+        with patch.object(_plugin_registry_module, "PLUGIN_REGISTRY") as mock_registry:
             mock_registry.performance_tracker = None
             mock_registry.register = Mock()
             mock_registry.db = None
@@ -692,7 +694,7 @@ class TestPytestCollectionFix:
         # This simulates the scenario during pytest collection
         from omnicore_engine.plugin_registry import PlugInKind
         
-        with patch("omnicore_engine.plugin_registry.PLUGIN_REGISTRY") as mock_registry:
+        with patch.object(_plugin_registry_module, "PLUGIN_REGISTRY") as mock_registry:
             # Simulate early initialization where performance_tracker is None
             mock_registry.performance_tracker = None
             mock_registry.register = Mock()
