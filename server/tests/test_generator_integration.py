@@ -443,7 +443,7 @@ class TestMultiWorkerDatabaseFallback:
     def job_in_database(self):
         """Create a job that exists in database but not in memory."""
         job = Job(
-            id="db-job-123",
+            id="db000000-0000-4000-8000-000000000123",
             status=JobStatus.RUNNING,
             input_files=["README.md"],
             created_at=datetime.now(timezone.utc),
@@ -574,8 +574,10 @@ class TestMultiWorkerDatabaseFallback:
         self, mock_add_job, mock_load_job, client, job_in_database
     ):
         """Test dispatch to SFE falls back to database."""
-        # Set job to completed state
+        # Set job to completed state with output files (required by endpoint)
         job_in_database.status = JobStatus.COMPLETED
+        job_in_database.output_files = ["generated_output.py"]
+        job_in_database.completed_at = datetime.now(timezone.utc)
         
         # Ensure job is NOT in memory
         if job_in_database.id in jobs_db:
@@ -585,8 +587,8 @@ class TestMultiWorkerDatabaseFallback:
         mock_load_job.return_value = job_in_database
         mock_add_job.return_value = None
         
-        with patch("server.services.dispatch_service.dispatch_job_completion") as mock_dispatch:
-            mock_dispatch.return_value = {"status": "dispatched"}
+        with patch("server.routers.generator.dispatch_job_completion") as mock_dispatch:
+            mock_dispatch.return_value = True
             
             response = client.post(f"/api/generator/{job_in_database.id}/dispatch-to-sfe")
             
