@@ -66,7 +66,7 @@ class MockConfigObject:
     is_production_env = False
 
 
-mock_config_instance = MagicMock(spec=MockConfigObject)
+mock_config_instance = MagicMock()
 for attr, value in MockConfigObject.__dict__.items():
     if not attr.startswith("_"):
         setattr(mock_config_instance, attr, value)
