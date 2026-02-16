@@ -192,9 +192,9 @@ try:
     from presidio_analyzer import AnalyzerEngine  # type: ignore
     from presidio_anonymizer import AnonymizerEngine  # type: ignore
     from presidio_anonymizer.entities import OperatorConfig  # type: ignore
-    
+
     PRESIDIO_AVAILABLE = True
-    
+
     # --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
     _analyzer_singleton = None
     _anonymizer_singleton = None
@@ -212,7 +212,7 @@ try:
         if _anonymizer_singleton is None:
             _anonymizer_singleton = AnonymizerEngine()
         return _anonymizer_singleton
-    
+
 except Exception:  # pragma: no cover
     AnalyzerEngine = None
     AnonymizerEngine = None
