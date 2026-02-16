@@ -89,10 +89,16 @@ try:
     anonymizer = AnonymizerEngine()
     
     # FIX: Set presidio logger to ERROR level to reduce log spam
-    presidio_logger = logging.getLogger("presidio-analyzer")
-    presidio_logger.setLevel(logging.ERROR)
-    presidio_anonymizer_logger = logging.getLogger("presidio-anonymizer")
-    presidio_anonymizer_logger.setLevel(logging.ERROR)
+    # Also add filter to suppress "not added to registry" warnings
+    presidio_filter = lambda record: "not added to registry" not in record.getMessage().lower()
+    for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+        pres_logger = logging.getLogger(logger_name)
+        pres_logger.setLevel(logging.ERROR)
+        pres_logger.addFilter(presidio_filter)
+    
+    for logger_name in ["presidio_anonymizer", "presidio-anonymizer"]:
+        anon_logger = logging.getLogger(logger_name)
+        anon_logger.setLevel(logging.ERROR)
     
 except (ImportError, OSError):
     PRESIDIO_AVAILABLE = False

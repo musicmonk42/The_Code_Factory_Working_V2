@@ -1397,6 +1397,37 @@ class OmniCoreService:
                     "data": {"status": "error", "message": str(e)},
                 }
 
+        # If target is SFE, dispatch to Self-Fixing Engineer components
+        elif target_module == "sfe":
+            action = payload.get("action")
+            logger.info(f"Task Dispatched: Job {job_id} dispatching SFE action: {action}")
+            
+            try:
+                result = await self._dispatch_sfe_action(job_id, action, payload)
+                result_status = result.get("status", "unknown")
+                if result_status in ["completed", "success"]:
+                    logger.info(f"Task Completed: Job {job_id} SFE action {action} finished successfully")
+                elif result_status in ["failed", "error"]:
+                    logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {result.get('message', 'Unknown error')}")
+                
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
         # Use message bus if available for inter-module communication
         if self._message_bus and self._omnicore_components_available["message_bus"]:
             try:
@@ -1517,6 +1548,140 @@ class OmniCoreService:
         else:
             logger.warning(f"Unknown generator action: {action}")
             return {"status": "error", "message": f"Unknown action: {action}"}
+    
+    async def _dispatch_sfe_action(self, job_id: str, action: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Dispatch action to Self-Fixing Engineer components directly."""
+        
+        if action == "analyze_code":
+            code_path = payload.get("code_path", "")
+            # Resolve the actual output path from job metadata or standard locations
+            code_path = self._resolve_job_output_path(job_id, code_path)
+            
+            if not code_path or not Path(code_path).exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path not found for job {job_id}: {code_path}",
+                    "issues_found": 0,
+                    "issues": [],
+                }
+            
+            try:
+                from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
+                
+                code_path_obj = Path(code_path)
+                # Don't ignore tests when analyzing generated output
+                async with CodebaseAnalyzer(
+                    root_dir=str(code_path_obj),
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                ) as analyzer:
+                    summary = await analyzer.scan_codebase(str(code_path_obj))
+                    
+                    defects = summary.get("defects", [])
+                    # Filter out defects for non-existent files
+                    valid_defects = []
+                    for defect in defects:
+                        defect_file = defect.get("file", "")
+                        if defect_file:
+                            defect_path = Path(defect_file)
+                            if not defect_path.is_absolute():
+                                defect_path = code_path_obj / defect_path
+                            if defect_path.exists():
+                                valid_defects.append(defect)
+                            else:
+                                logger.debug(f"Skipping defect for non-existent file: {defect_file}")
+                    
+                    return {
+                        "status": "completed",
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "issues_found": len(valid_defects),
+                        "issues": valid_defects,
+                        "total_files": summary.get("files", 0),
+                        "source": "direct_sfe",
+                    }
+            except ImportError:
+                return {"status": "error", "message": "CodebaseAnalyzer not available"}
+            except Exception as e:
+                logger.error(f"Error in analyze_code for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
+        elif action == "detect_errors":
+            code_path = self._resolve_job_output_path(job_id, payload.get("code_path", ""))
+            
+            if not code_path or not Path(code_path).exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path not found for job {job_id}",
+                    "errors": [],
+                }
+            
+            try:
+                from self_fixing_engineer.arbiter.bug_manager import BugManager
+                
+                bug_manager = BugManager()
+                errors = await bug_manager.detect_errors(code_path)
+                
+                return {
+                    "status": "completed",
+                    "job_id": job_id,
+                    "code_path": code_path,
+                    "errors": errors,
+                    "error_count": len(errors),
+                    "source": "direct_sfe",
+                }
+            except ImportError:
+                return {"status": "error", "message": "BugManager not available"}
+            except Exception as e:
+                logger.error(f"Error in detect_errors for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
+        elif action in ["propose_fix", "analyze_bug", "deep_analyze"]:
+            # These actions need more complex handling - for now return a not implemented response
+            logger.info(f"SFE action {action} not yet implemented in direct dispatch")
+            return {
+                "status": "error",
+                "message": f"SFE action {action} not yet implemented in direct dispatch",
+            }
+        
+        return {
+            "status": "error",
+            "message": f"Unknown SFE action: {action}",
+        }
+    
+    def _resolve_job_output_path(self, job_id: str, hint_path: str = "") -> Optional[str]:
+        """Resolve the actual output path for a job, checking multiple standard locations."""
+        
+        # 1. Check hint path first
+        if hint_path and Path(hint_path).exists():
+            return hint_path
+        
+        # 2. Check job metadata
+        job = jobs_db.get(job_id)
+        if job and job.metadata:
+            for key in ("output_path", "code_path", "generated_path"):
+                path = job.metadata.get(key)
+                if path and Path(path).exists():
+                    return path
+        
+        # 3. Check standard locations
+        standard_locations = [
+            Path(f"./uploads/{job_id}/generated"),
+            Path(f"./uploads/{job_id}/output"),
+            Path(f"./uploads/{job_id}"),
+        ]
+        
+        for loc in standard_locations:
+            if loc.exists() and loc.is_dir():
+                # Look for project subdirectories
+                subdirs = [d for d in loc.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                if subdirs:
+                    return str(subdirs[0])  # Return first project subdir
+                # If no subdirs but has Python files, use this dir
+                py_files = list(loc.glob("*.py"))
+                if py_files:
+                    return str(loc)
+        
+        return None
     
     def _unwrap_nested_json_content(self, content: str, job_id: str) -> Optional[Dict[str, str]]:
         """

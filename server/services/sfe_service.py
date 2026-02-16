@@ -194,7 +194,11 @@ class SFEService:
                 if code_path_obj.is_file():
                     # Analyze single file using analyze_and_propose
                     root_dir = str(code_path_obj.parent)
-                    async with CodebaseAnalyzer(root_dir=root_dir) as analyzer:
+                    # Don't ignore tests when analyzing generated output
+                    async with CodebaseAnalyzer(
+                        root_dir=root_dir,
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                    ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
                     
                     result = {
@@ -211,7 +215,11 @@ class SFEService:
                     
                 elif code_path_obj.is_dir():
                     # Analyze directory using scan_codebase
-                    async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
+                    # Don't ignore tests when analyzing generated output
+                    async with CodebaseAnalyzer(
+                        root_dir=str(code_path_obj),
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                    ) as analyzer:
                         summary = await analyzer.scan_codebase(str(code_path_obj))
                         
                         # Convert FileSummary to expected format
@@ -327,28 +335,47 @@ class SFEService:
             try:
                 logger.info(f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}")
                 
-                # Resolve code path from job_id
-                # Job output typically at ./uploads/{job_id}/generated/{project_name}/
-                uploads_dir = Path("./uploads")
-                job_base = uploads_dir / job_id
+                # Resolve code path using improved path resolution
+                # First check job metadata, then standard locations
+                from server.storage import jobs_db
                 
-                # Try to find the generated code directory
                 job_dir = None
-                if job_base.exists():
-                    generated_dir = job_base / "generated"
-                    if generated_dir.exists():
-                        # Look for project subdirectories in generated/
-                        subdirs = [d for d in generated_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
-                        if subdirs:
-                            # Use the first non-hidden subdirectory (typically the project directory)
-                            job_dir = subdirs[0]
-                            logger.info(f"Found generated project at {job_dir}")
-                        else:
-                            # No subdirectories, use generated/ directly
-                            job_dir = generated_dir
-                    else:
-                        # No generated/ directory, use job_base directly
-                        job_dir = job_base
+                job = jobs_db.get(job_id)
+                if job and job.metadata:
+                    # Check metadata for output paths
+                    for key in ("output_path", "code_path", "generated_path"):
+                        path = job.metadata.get(key)
+                        if path and Path(path).exists():
+                            job_dir = Path(path)
+                            logger.info(f"Found job path from metadata.{key}: {job_dir}")
+                            break
+                
+                # If not in metadata, check standard locations
+                if not job_dir:
+                    uploads_dir = Path("./uploads")
+                    job_base = uploads_dir / job_id
+                    
+                    # Try to find the generated code directory
+                    if job_base.exists():
+                        # Check standard subdirectories
+                        for subdir_name in ["generated", "output"]:
+                            subdir = job_base / subdir_name
+                            if subdir.exists():
+                                # Look for project subdirectories
+                                subdirs = [d for d in subdir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                                if subdirs:
+                                    # Use the first non-hidden subdirectory (typically the project directory)
+                                    job_dir = subdirs[0]
+                                    logger.info(f"Found generated project at {job_dir}")
+                                    break
+                                else:
+                                    # No subdirectories, use this directory directly
+                                    job_dir = subdir
+                                    break
+                        
+                        # If no generated/ or output/, use job_base directly
+                        if not job_dir:
+                            job_dir = job_base
                 
                 if not job_dir or not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
@@ -358,6 +385,7 @@ class SFEService:
                         "note": f"Job directory not found for {job_id}",
                     }
                 
+                logger.info(f"Analyzing errors in directory: {job_dir}")
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 
                 # Discover Python files in the job directory

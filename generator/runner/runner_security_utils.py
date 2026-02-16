@@ -379,7 +379,10 @@ def _load_presidio_engine() -> bool:
                     return False
                 return True
             
-            presidio_logger.addFilter(presidio_log_filter)
+            # Add filter to both logger name variants (underscore and hyphen)
+            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+                pres_logger = logging.getLogger(logger_name)
+                pres_logger.addFilter(presidio_log_filter)
             
             logger.info(
                 f"Presidio analyzer loaded successfully with {model_name} model (full NLP mode)"
@@ -406,13 +409,14 @@ def _load_presidio_engine() -> bool:
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
-            presidio_logger = logging.getLogger("presidio_analyzer")
-            presidio_logger.addFilter(
-                lambda record: not any(
-                    entity in record.getMessage()
-                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
-                )
+            # Add filter to both logger name variants (underscore and hyphen)
+            presidio_filter = lambda record: not any(
+                entity in record.getMessage()
+                for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
             )
+            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+                pres_logger = logging.getLogger(logger_name)
+                pres_logger.addFilter(presidio_filter)
             
             logger.info("Presidio running in REGEX-ONLY mode (NLP unavailable)")
             return True
@@ -436,14 +440,15 @@ def _load_presidio_engine() -> bool:
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
-            # FIX: Use correct logger name "presidio-analyzer" (with hyphen) to match library
-            presidio_logger = logging.getLogger("presidio-analyzer")
-            presidio_logger.addFilter(
-                lambda record: not any(
-                    entity in record.getMessage()
-                    for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped"]
-                )
+            # Add filter to both logger name variants (underscore and hyphen)
+            presidio_filter = lambda record: not any(
+                entity in record.getMessage()
+                for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
             )
+            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+                pres_logger = logging.getLogger(logger_name)
+                pres_logger.addFilter(presidio_filter)
+            
             logger.info("Presidio running in REGEX-ONLY mode (NLP failed to load)")
             return True
 

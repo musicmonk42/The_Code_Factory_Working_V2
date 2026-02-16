@@ -91,6 +91,13 @@ def _get_presidio_analyzer():
         try:
             # FIX: Specify supported_languages to avoid warnings about non-English recognizers
             _presidio_analyzer = AnalyzerEngine(supported_languages=["en"])
+            
+            # Suppress Presidio warnings for both logger name variants
+            import logging
+            presidio_filter = lambda record: "not added to registry" not in record.getMessage().lower()
+            for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+                pres_logger = logging.getLogger(logger_name)
+                pres_logger.addFilter(presidio_filter)
         except Exception as e:
             import logging
 
