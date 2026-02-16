@@ -580,6 +580,11 @@ class AdvancedTemplateTracker:
         class TemplateReloadHandler(FileSystemEventHandler):
             def __init__(self, tracker: "AdvancedTemplateTracker"):
                 self.tracker = tracker
+                # FIX #5: Add debouncing
+                import time as time_module
+                self.time = time_module
+                self.last_reload_time = {}
+                self.debounce_seconds = 0.5
 
             def dispatch(self, event):
                 if (
@@ -587,6 +592,17 @@ class AdvancedTemplateTracker:
                     and event.src_path.endswith(".jinja")
                     and event.event_type in ("created", "modified", "deleted")
                 ):
+                    current_time = self.time.time()
+                    last_time = self.last_reload_time.get(event.src_path, 0)
+                    
+                    if current_time - last_time < self.debounce_seconds:
+                        logger.debug(
+                            f"Debounced template reload for {event.src_path} (%.2fs since last)",
+                            current_time - last_time
+                        )
+                        return
+                    
+                    self.last_reload_time[event.src_path] = current_time
                     logger.info(
                         f"Template file changed: {event.src_path} (Event: {event.event_type}). Triggering reload."
                     )
