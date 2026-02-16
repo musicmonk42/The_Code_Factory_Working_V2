@@ -16,6 +16,7 @@ This implementation includes:
 
 import logging
 from pathlib import Path
+import tempfile
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -312,20 +313,35 @@ class SFEService:
                 logger.info(f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}")
                 
                 # Resolve code path from job_id
-                # Job output typically at ./uploads/{job_id}/generated/
+                # Job output typically at ./uploads/{job_id}/generated/{project_name}/
                 uploads_dir = Path("./uploads")
-                job_dir = uploads_dir / job_id / "generated"
+                job_base = uploads_dir / job_id
                 
-                if not job_dir.exists():
-                    # Try alternative paths
-                    job_dir = uploads_dir / job_id
-                    if not job_dir.exists():
-                        logger.warning(f"Job directory not found for {job_id}")
-                        return {
-                            "errors": [],
-                            "count": 0,
-                            "note": f"Job directory not found for {job_id}",
-                        }
+                # Try to find the generated code directory
+                job_dir = None
+                if job_base.exists():
+                    generated_dir = job_base / "generated"
+                    if generated_dir.exists():
+                        # Look for project subdirectories in generated/
+                        subdirs = [d for d in generated_dir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                        if subdirs:
+                            # Use the first non-hidden subdirectory (typically the project directory)
+                            job_dir = subdirs[0]
+                            logger.info(f"Found generated project at {job_dir}")
+                        else:
+                            # No subdirectories, use generated/ directly
+                            job_dir = generated_dir
+                    else:
+                        # No generated/ directory, use job_base directly
+                        job_dir = job_base
+                
+                if not job_dir or not job_dir.exists():
+                    logger.warning(f"Job directory not found for {job_id}")
+                    return {
+                        "errors": [],
+                        "count": 0,
+                        "note": f"Job directory not found for {job_id}",
+                    }
                 
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 
@@ -345,7 +361,7 @@ class SFEService:
                             
                             # Convert issues to error format
                             for issue in issues:
-                                error_id = f"err-{hash(str(py_file) + str(issue)) % 10000}"
+                                error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
                                 severity = issue.get("risk_level", "medium")
                                 details = issue.get("details", {})
                                 
@@ -988,7 +1004,7 @@ class SFEService:
             return result.get("data", {})
 
         return {
-            "competition_id": f"comp_{hash(code_path) % 10000}",
+            "competition_id": f"comp_{abs(hash(code_path)) % 10000}",
             "status": "completed",
             "winner": "agent_1",
             "rounds_completed": rounds,
@@ -1019,7 +1035,7 @@ class SFEService:
                 "include_potential": include_potential,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"bug_scan_{hash(code_path) % 10000}",
+                job_id=f"bug_scan_{abs(hash(code_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -1082,8 +1098,16 @@ class SFEService:
                         # Discover Python files
                         py_files = analyzer.discover_files()
                         
+                        # Limit files analyzed based on scan_depth
+                        if scan_depth == "quick":
+                            max_files = 5
+                        elif scan_depth == "standard":
+                            max_files = 20
+                        else:  # deep
+                            max_files = 100
+                        
                         # Analyze each file
-                        for py_file in py_files[:10]:  # Limit to first 10 files for performance
+                        for py_file in py_files[:max_files]:
                             try:
                                 issues = await analyzer.analyze_and_propose(py_file)
                                 
@@ -1304,7 +1328,7 @@ class SFEService:
                 "generate_report": generate_report,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"analysis_{hash(code_path) % 10000}",
+                job_id=f"analysis_{abs(hash(code_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -1326,7 +1350,7 @@ class SFEService:
                 # Validate path exists
                 if not code_path_obj.exists():
                     return {
-                        "analysis_id": f"analysis_{hash(code_path) % 10000}",
+                        "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
                         "error": f"Path does not exist: {code_path}",
                         "source": "direct_sfe",
                     }
@@ -1335,21 +1359,22 @@ class SFEService:
                 async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
                     if generate_report:
                         # Generate full report
-                        report_path = f"/tmp/codebase_analysis_{hash(code_path) % 10000}.md"
+                        tmp_dir = Path(tempfile.gettempdir())
+                        report_path = tmp_dir / f"codebase_analysis_{abs(hash(code_path)) % 10000}.md"
                         report = await analyzer.generate_report(
                             output_format="markdown",
-                            output_path=report_path,
+                            output_path=str(report_path),
                             use_baseline=False,
                         )
                         
                         result = {
-                            "analysis_id": f"analysis_{hash(code_path) % 10000}",
+                            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
                             "total_files": report.get("total_files", 0),
                             "total_loc": report.get("total_loc", 0),
                             "avg_complexity": report.get("avg_complexity", 0),
                             "analysis_summary": report.get("summary", "Analysis complete"),
                             "issues": report.get("issues", []),
-                            "report_path": report_path,
+                            "report_path": str(report_path),
                             "source": "direct_sfe",
                         }
                     else:
@@ -1360,7 +1385,7 @@ class SFEService:
                         total_files = len(analyzer.discover_files()) if hasattr(analyzer, 'discover_files') else 0
                         
                         result = {
-                            "analysis_id": f"analysis_{hash(code_path) % 10000}",
+                            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
                             "total_files": total_files,
                             "total_loc": getattr(summary, 'total_lines', 0),
                             "avg_complexity": getattr(summary, 'avg_complexity', 0),
@@ -1379,7 +1404,7 @@ class SFEService:
         # Fallback
         logger.warning("Neither OmniCore nor direct SFE available, using fallback")
         return {
-            "analysis_id": f"analysis_{hash(code_path) % 10000}",
+            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
             "total_files": 50,
             "total_loc": 5000,
             "avg_complexity": 3.5,
@@ -1544,7 +1569,7 @@ class SFEService:
                 "generate_report": generate_report,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"compliance_{hash(code_path) % 10000}",
+                job_id=f"compliance_{abs(hash(code_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -1693,7 +1718,7 @@ class SFEService:
                 "fix_style": fix_style,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"import_fix_{hash(code_path) % 10000}",
+                job_id=f"import_fix_{abs(hash(code_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
