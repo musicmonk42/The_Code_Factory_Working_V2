@@ -1904,8 +1904,11 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                 history_data = history_data.encode()
             encrypted_data = self.fernet.encrypt(history_data)
             temp_file = f"{save_path}.{uuid.uuid4()}.tmp"
-            async with aiofiles.open(temp_file, "wb") as f:
-                await f.write(encrypted_data)
+            # Use synchronous write to ensure data is flushed before rename
+            with open(temp_file, "wb") as f:
+                f.write(encrypted_data)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
             os.rename(temp_file, save_path)
             os.chmod(save_path, stat.S_IREAD | stat.S_IWRITE)
             self.logger.info(

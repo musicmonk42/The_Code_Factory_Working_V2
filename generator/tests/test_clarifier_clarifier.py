@@ -307,10 +307,12 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
             "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
         ):
             # FIX: Pass mock dependencies directly to the constructor
+            # Also pass config to ensure we use the correct mock_config_instance
             self.clarifier = Clarifier(
                 llm=mock_llm_instance,
                 prioritizer=mock_prioritizer_instance,
                 context_manager=self.context_manager_instance,
+                config=mock_config_instance,  # Explicitly pass config to avoid cross-test interference
             )
 
     async def asyncTearDown(self):
@@ -323,12 +325,22 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
         if os.path.exists(self.temp_db.name):
             os.unlink(self.temp_db.name)
 
+        # Cleanup backup files created by _backup_corrupt_history
+        history_dir = os.path.dirname(self.temp_history.name)
+        history_basename = os.path.basename(self.temp_history.name)
+        for f in os.listdir(history_dir):
+            if f.startswith(history_basename) and "corrupt_backup" in f:
+                try:
+                    os.unlink(os.path.join(history_dir, f))
+                except OSError:  # Catch only file operation errors
+                    pass
+
         # Cleanup any .tmp files
         for f in os.listdir("."):
             if f.startswith("mock_history_clarifier") and f.endswith(".tmp"):
                 try:
                     os.unlink(f)
-                except:
+                except OSError:  # Catch only file operation errors
                     pass
 
     async def test_get_clarifications_success(self):

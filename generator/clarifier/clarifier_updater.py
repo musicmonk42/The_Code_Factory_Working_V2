@@ -724,7 +724,7 @@ class RequirementsUpdater:
                 "Updater self-test failed on initialization. System exiting.",
                 severity="critical",
             )
-            raise SystemExit(1)
+            raise RuntimeError("Updater self-test failed on initialization")
 
     async def _migrate_schema(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Migrates requirements schema. Uses a class-level lock for concurrent safety."""
