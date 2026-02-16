@@ -1204,8 +1204,9 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     if _is_production and not sentry_dsn:
         logger.warning("=" * 80)
         logger.warning("⚠ SENTRY NOT CONFIGURED IN PRODUCTION")
-        logger.warning("  Error tracking is disabled. Set SENTRY_DSN to enable.")
-        logger.warning("  This reduces visibility into production exceptions.")
+        logger.warning("  Error tracking is disabled. Set SENTRY_DSN environment variable to enable.")
+        logger.warning("  Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>")
+        logger.warning("  Without Sentry, production errors will only be visible in container logs.")
         logger.warning("=" * 80)
     elif sentry_dsn:
         logger.info("✓ Sentry error tracking: ENABLED")

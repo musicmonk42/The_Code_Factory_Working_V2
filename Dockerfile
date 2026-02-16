@@ -261,6 +261,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NLTK_DATA="/opt/nltk_data" \
     HF_HOME="/opt/huggingface_cache" \
     TRANSFORMERS_CACHE="/opt/huggingface_cache"
+    # SENTRY_DSN: Set at deployment time for error tracking
+    # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support

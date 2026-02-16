@@ -316,6 +316,21 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
 
         # 3. Process response and metrics
         optimized = summary_response.get("content", prompt_text)
+        
+        # Guard against over-aggressive compression
+        # If the optimized prompt loses more than 50% of the content, 
+        # the LLM likely stripped critical context
+        min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.5"))
+        if len(optimized) < len(prompt_text) * min_length_ratio:
+            logger.warning(
+                "Prompt optimization too aggressive: %d -> %d chars (%.0f%% reduction, threshold: %.0f%%). "
+                "Returning original prompt to preserve context.",
+                len(prompt_text),
+                len(optimized),
+                (1 - len(optimized) / len(prompt_text)) * 100,
+                (1 - min_length_ratio) * 100,
+            )
+            return prompt_text
 
         LLM_CALLS_TOTAL.labels(provider="deploy_prompt", model=SUMMARY_MODEL).inc()
         LLM_LATENCY_SECONDS.labels(
