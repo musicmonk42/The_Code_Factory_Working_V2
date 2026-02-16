@@ -234,7 +234,7 @@ def _initialize_prometheus_mock():
 
     class MockMetric:
         def __init__(self, *args, **kwargs):
-            pass
+            self._value = _MockValueClass(0)
         def labels(self, *args, **kwargs):
             return self
         def inc(self, *args, **kwargs):
