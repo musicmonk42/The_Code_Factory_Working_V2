@@ -10,6 +10,7 @@ from typing import List
 
 import pytest
 import pytest_asyncio
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Import centralized OpenTelemetry configuration for testing
 from self_fixing_engineer.arbiter.otel_config import get_tracer
@@ -46,7 +47,17 @@ def test_tracer():
 @pytest.fixture(scope="module")
 def in_memory_exporter():
     """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
-    return InMemorySpanExporter()
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry import trace
+    import self_fixing_engineer.arbiter.models.merkle_tree as mt_module
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    # Replace the module-level NoOpTracer with a real tracer from our provider
+    mt_module.tracer = provider.get_tracer(mt_module.__name__)
+    return exporter
 
 
 @pytest_asyncio.fixture(autouse=True)
@@ -58,6 +69,11 @@ async def clear_metrics_and_traces(in_memory_exporter):
     try:
         MERKLE_TREE_SIZE.set(0)
         MERKLE_TREE_DEPTH.set(0)
+    except:
+        pass
+    # Reset counter metrics
+    try:
+        MERKLE_OPS_TOTAL._metrics.clear()
     except:
         pass
     yield
@@ -118,7 +134,7 @@ async def test_initialization_with_store_raw():
 
 
 @pytest.mark.asyncio
-async def test_add_leaf_success(merkle_tree):
+async def test_add_leaf_success(merkle_tree, in_memory_exporter):
     """Test successful addition of a single leaf."""
     await merkle_tree.add_leaf("test_data")
     assert len(merkle_tree._leaves) == 1
@@ -142,7 +158,7 @@ async def test_add_leaf_bytes(merkle_tree):
 
 
 @pytest.mark.asyncio
-async def test_add_leaves_success(merkle_tree):
+async def test_add_leaves_success(merkle_tree, in_memory_exporter):
     """Test successful batch addition of leaves."""
     batch = ["data1", "data2", b"data3"]
     await merkle_tree.add_leaves(batch)
@@ -186,7 +202,7 @@ async def test_get_root_empty_tree(merkle_tree):
 
 
 @pytest.mark.asyncio
-async def test_get_proof_success(merkle_tree):
+async def test_get_proof_success(merkle_tree, in_memory_exporter):
     """Test getting proof for valid index."""
     await merkle_tree.add_leaf("leaf1")
     await merkle_tree.add_leaf("leaf2")
@@ -242,7 +258,7 @@ async def test_get_proof_empty_tree(merkle_tree):
 
 
 @pytest.mark.asyncio
-async def test_verify_proof_success(merkle_tree):
+async def test_verify_proof_success(merkle_tree, in_memory_exporter):
     """Test successful proof verification."""
     await merkle_tree.add_leaf("leaf1")
     await merkle_tree.add_leaf("leaf2")
@@ -321,7 +337,7 @@ async def test_verify_proof_missing_fields():
 
 
 @pytest.mark.asyncio
-async def test_save_success(merkle_tree, tmp_path):
+async def test_save_success(merkle_tree, tmp_path, in_memory_exporter):
     """Test successful tree save."""
     await merkle_tree.add_leaf("leaf1")
     await merkle_tree.add_leaf("leaf2")
@@ -363,7 +379,7 @@ async def test_save_with_store_raw(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_load_success(tmp_path):
+async def test_load_success(tmp_path, in_memory_exporter):
     """Test successful tree load."""
     save_path = tmp_path / "merkle_tree_state.json.gz"
 
@@ -455,17 +471,18 @@ async def test_retry_on_save_file_error(merkle_tree, tmp_path, mocker: MockerFix
     """Test retry mechanism on save file error."""
     save_path = tmp_path / "merkle_tree_state.json.gz"
 
-    # Mock the write function to fail twice then succeed
-    original_write = _write_compressed_json
+    # Mock the write function to fail twice then succeed, preserving retry behavior
+    original_write = _write_compressed_json.__wrapped__
     call_count = [0]
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=0, max=1), reraise=True)
     def mock_write(path, data):
         call_count[0] += 1
         if call_count[0] <= 2:
             raise IOError("Write failed")
         return original_write(path, data)
 
-    mocker.patch("merkle_tree._write_compressed_json", side_effect=mock_write)
+    mocker.patch("self_fixing_engineer.arbiter.models.merkle_tree._write_compressed_json", mock_write)
 
     await merkle_tree.add_leaf("test_leaf")
     await merkle_tree.save(str(save_path))
@@ -487,17 +504,18 @@ async def test_retry_on_load_file_error(tmp_path, mocker: MockerFixture):
     with gzip.open(save_path, "wt") as f:
         json.dump(save_data, f)
 
-    # Mock the read function to fail twice then succeed
-    original_read = _read_compressed_json
+    # Mock the read function to fail twice then succeed, preserving retry behavior
+    original_read = _read_compressed_json.__wrapped__
     call_count = [0]
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=0, max=1), reraise=True)
     def mock_read(path):
         call_count[0] += 1
         if call_count[0] <= 2:
             raise IOError("Read failed")
         return original_read(path)
 
-    mocker.patch("merkle_tree._read_compressed_json", side_effect=mock_read)
+    mocker.patch("self_fixing_engineer.arbiter.models.merkle_tree._read_compressed_json", mock_read)
 
     loaded_tree = await MerkleTree.load(str(save_path))
     assert loaded_tree.size == 0

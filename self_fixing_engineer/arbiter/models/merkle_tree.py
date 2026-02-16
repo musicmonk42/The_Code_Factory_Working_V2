@@ -336,7 +336,7 @@ class MerkleTree:
 
     def _root_bytes(self) -> bytes:
         """Internal helper to get root bytes, handling different merklelib API versions."""
-        if not self._tree:
+        if self._tree is None:
             raise MerkleTreeEmptyError("Merkle tree is empty or not initialized.")
         if hasattr(self._tree, "get_root"):
             rb = self._tree.get_root()
@@ -349,15 +349,19 @@ class MerkleTree:
     def _proof_for_index(self, idx: int) -> List[Tuple[bytes, str]]:
         """Internal helper to get proof for an index, handling different merklelib API versions."""
         if hasattr(self._tree, "get_proof"):
-            try:
-                return self._tree.get_proof(idx)
-            except TypeError:
-                target = (
-                    self._leaves[idx]
-                    if not self._store_raw
-                    else self._hash_leaf(self._leaves[idx])
-                )
-                return self._tree.get_proof(target)
+            target = (
+                self._leaves[idx]
+                if not self._store_raw
+                else self._hash_leaf(self._leaves[idx])
+            )
+            proof = self._tree.get_proof(target)
+            # Convert AuditProof to List[Tuple[bytes, str]]
+            if hasattr(proof, "_nodes"):
+                return [
+                    (node.hash, "left" if node.type == 0 else "right")
+                    for node in proof._nodes
+                ]
+            return proof
         raise MerkleTreeError("Unsupported merklelib version: cannot get proof.")
 
     async def add_leaf(self, data: Union[str, bytes]) -> None:
@@ -379,7 +383,7 @@ class MerkleTree:
                         leaf_bytes = (
                             data.encode("utf-8") if isinstance(data, str) else data
                         )
-                        if not MERKLELIB_AVAILABLE or not self._tree:
+                        if not MERKLELIB_AVAILABLE or self._tree is None:
                             raise MerkleTreeError(
                                 "MerkleTree not initialized or merklelib not available."
                             )
@@ -438,7 +442,7 @@ class MerkleTree:
                         operation="add_leaves", status="attempt"
                     ).inc()
                     try:
-                        if not MERKLELIB_AVAILABLE or not self._tree:
+                        if not MERKLELIB_AVAILABLE or self._tree is None:
                             raise MerkleTreeError(
                                 "MerkleTree not initialized or merklelib not available."
                             )
@@ -493,7 +497,7 @@ class MerkleTree:
                 start_time = time.monotonic()
                 MERKLE_OPS_TOTAL.labels(operation="get_root", status="attempt").inc()
                 try:
-                    if not self._leaves or not self._tree:
+                    if not self._leaves or self._tree is None:
                         raise MerkleTreeEmptyError(
                             "Merkle tree is empty or not initialized."
                         )
@@ -548,7 +552,7 @@ class MerkleTree:
                             f"Leaf index {index} out of bounds for {len(self._leaves)} leaves."
                         )
 
-                    if not MERKLELIB_AVAILABLE or not self._tree:
+                    if not MERKLELIB_AVAILABLE or self._tree is None:
                         raise MerkleTreeError(
                             "MerkleTree not properly initialized (merklelib not available). Cannot get proof."
                         )
@@ -645,9 +649,23 @@ class MerkleTree:
                             f"Malformed proof node: {node_data}. Expected 'node' and 'position'."
                         )
 
-                is_valid = verify_inclusion(root_bytes, leaf_once, proof_for_lib)
+                # Verify by reconstructing root from leaf hash and proof
+                # Uses merklelib's hash scheme: leaf_hash = sha256(b'\x00' + data),
+                # node_hash = sha256(b'\x01' + left + right)
+                def _compute_root(leaf_hash: bytes) -> bytes:
+                    current = hashlib.sha256(b'\x00' + leaf_hash).digest()
+                    for sibling_hash, position in proof_for_lib:
+                        if position == "left":
+                            current = hashlib.sha256(b'\x01' + sibling_hash + current).digest()
+                        else:
+                            current = hashlib.sha256(b'\x01' + current + sibling_hash).digest()
+                    return current
+
+                computed = _compute_root(leaf_once)
+                is_valid = computed == root_bytes
                 if not is_valid:
-                    is_valid = verify_inclusion(root_bytes, leaf_twice, proof_for_lib)
+                    computed = _compute_root(leaf_twice)
+                    is_valid = computed == root_bytes
 
                 MERKLE_OPS_TOTAL.labels(
                     operation="verify_proof",
