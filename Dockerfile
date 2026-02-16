@@ -62,6 +62,10 @@ ENV PATH="/opt/venv/bin:${PATH}"
 # If builds fail due to SSL issues, fix the underlying CA certificate configuration
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
+# Create directories for ML models and data (will be populated if SKIP_HEAVY_DEPS != 1)
+# These directories must exist for COPY commands in runtime stage
+RUN mkdir -p /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache
+
 WORKDIR /app
 
 # Copy only requirements first for better layer caching
