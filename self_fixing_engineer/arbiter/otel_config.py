@@ -60,7 +60,18 @@ except ImportError:
     GRPC_AVAILABLE = False
     grpc = None  # type: ignore
 
-from circuitbreaker import circuit
+try:
+    from circuitbreaker import circuit
+
+    CIRCUITBREAKER_AVAILABLE = True
+except ImportError:
+    CIRCUITBREAKER_AVAILABLE = False
+
+    def circuit(**kwargs):
+        """No-op fallback when circuitbreaker is not installed."""
+        def decorator(func):
+            return func
+        return decorator
 
 # OpenTelemetry imports with comprehensive fallback
 try:
