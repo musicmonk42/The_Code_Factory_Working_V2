@@ -187,6 +187,13 @@ def _get_presidio_instances():
     return _analyzer, _anonymizer
 
 
+def _reset_presidio_instances():
+    """Reset singleton Presidio instances (used by tests)."""
+    global _analyzer, _anonymizer
+    _analyzer = None
+    _anonymizer = None
+
+
 def scrub_text(text: str) -> str:
     """
     Strictly redacts sensitive information from the text using Presidio.

@@ -284,8 +284,8 @@ def scrub_text(text: str) -> str:
     if not text:
         return ""
 
-    # Try Presidio path if available
-    if PRESIDIO_AVAILABLE:
+    # Try Presidio path if available (also check classes aren't patched to None)
+    if PRESIDIO_AVAILABLE and AnalyzerEngine is not None and AnonymizerEngine is not None:
         try:
             # Use singleton instances to avoid repeated initialization and log spam
             analyzer = _get_analyzer()
