@@ -179,6 +179,11 @@ def mock_web3_dependencies(mocker: MockerFixture):
     mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.Account", mock_account)
     mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.ETHEREUM_AVAILABLE", True)
     mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client._EXPLAIN_AUDIT_REAL", False)
+    
+    # Mock ExplainAudit to accept any arguments
+    mock_explain_audit = MagicMock()
+    mock_explain_audit.return_value = MagicMock()
+    mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.ExplainAudit", mock_explain_audit)
 
     def mock_checksum(addr):
         return addr
