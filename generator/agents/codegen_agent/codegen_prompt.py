@@ -451,6 +451,8 @@ The following are MANDATORY checks:
      *     @field_validator('message', mode='before')
      *     def trim_and_validate_message(cls, v):
      *         # Trim whitespace and validate message is not empty
+     *         if not isinstance(v, str):
+     *             raise ValueError('Message must be a string')
      *         v = v.strip()
      *         if not v:
      *             raise ValueError('Message cannot be empty after trimming whitespace')
@@ -484,6 +486,9 @@ The following are MANDATORY checks:
    - Return the validated (and trimmed) value from the validator
    - Use `Field(..., min_length=1, max_length=500)` for basic constraints
    - Validators run BEFORE Field constraints, so trim first, then Field checks length
+   - When testing for Pydantic validation error messages, ALWAYS use case-insensitive comparison to handle both "Field required" (Pydantic V2) and "field required" (older versions):
+     * CORRECT: assert "field required" in response.json()["detail"][0]["msg"].lower()
+     * WRONG: assert "field required" in response.json()["detail"][0]["msg"]  # Fails when Pydantic returns "Field required"
    
    HTTP Status Codes for Tests (CRITICAL):
    - Pydantic validation failures (from @field_validator raising ValueError) return HTTP 422 (Unprocessable Entity)

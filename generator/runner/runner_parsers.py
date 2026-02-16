@@ -499,6 +499,19 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
         ] = f"JUnit XML file not found: {file_path.name}"
         return results
 
+    # Handle case where file_path is actually a directory
+    if file_path.is_dir():
+        logger.warning(f"JUnit XML path is a directory: {file_path}. Searching for XML files within.")
+        xml_files = sorted(file_path.glob("*.xml"))  # Sort for deterministic behavior
+        if xml_files:
+            file_path = xml_files[0]  # Use the first XML file found (alphabetically)
+            logger.info(f"Found JUnit XML file in directory: {file_path}")
+        else:
+            logger.warning(f"No XML files found in directory: {file_path}")
+            results["_parser_info"]["status"] = "failed"
+            results["_parser_info"]["message"] = f"Directory contains no XML files: {file_path.name}"
+            return results
+
     xml_content = b""
     try:
         async with aiofiles.open(
