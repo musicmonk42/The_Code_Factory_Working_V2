@@ -130,22 +130,26 @@ apiVersion: v1
 class TestExtractConfigFromResponse:
     """Test suite for extract_config_from_response function."""
     
-    def test_rejects_mermaid_diagrams(self):
-        """Test that responses with mermaid diagrams are rejected."""
+    def test_strips_mermaid_and_extracts_yaml(self):
+        """Test that mermaid blocks are stripped and valid YAML is extracted."""
         response = """```mermaid
 graph TD;
     A-->B;
 ```
 ```yaml
 apiVersion: v1
+kind: Service
 ```"""
-        with pytest.raises(ValueError, match="mermaid diagram"):
-            extract_config_from_response(response, "yaml")
+        result = extract_config_from_response(response, "yaml")
+        assert "mermaid" not in result.lower()
+        assert "graph TD" not in result
+        assert "apiVersion: v1" in result
+        assert "kind: Service" in result
     
     def test_case_insensitive_mermaid_rejection(self):
-        """Test mermaid rejection is case-insensitive."""
-        response = "```MERMAID\ngraph\n```\napiVersion: v1"
-        with pytest.raises(ValueError, match="mermaid diagram"):
+        """Test mermaid rejection when ONLY mermaid content is present with no config."""
+        response = "```MERMAID\ngraph\n```"
+        with pytest.raises(ValueError, match="only mermaid diagram"):
             extract_config_from_response(response, "yaml")
     
     def test_extracts_clean_docker(self):
@@ -197,6 +201,24 @@ RUN pip install requirements.txt"""
         result = extract_config_from_response(response, "dockerfile")
         assert result.startswith("FROM python")
         assert "This Dockerfile" not in result
+    
+    def test_strips_embedded_markdown_from_yaml(self):
+        """Test that embedded markdown code blocks are stripped from YAML."""
+        response = """---
+apiVersion: v1
+kind: Service
+```python
+# Some embedded code block
+print("hello")
+```
+metadata:
+  name: test-service"""
+        result = extract_config_from_response(response, "yaml")
+        assert "apiVersion: v1" in result
+        assert "kind: Service" in result
+        assert "metadata:" in result
+        assert "```python" not in result
+        assert "print" not in result
 
 
 class TestYAMLHandlerSanitization:

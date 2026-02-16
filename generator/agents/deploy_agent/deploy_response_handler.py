@@ -607,13 +607,16 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     raw = raw_response.strip()
     
     # FIX Issue 2: Early detection of mermaid diagrams and markdown contamination
-    # Reject responses that look like markdown explanations rather than config
+    # Strip mermaid blocks instead of immediately rejecting
     if '```mermaid' in raw.lower() or '``` mermaid' in raw.lower():
-        logger.error(f"Response contains mermaid diagram, rejecting: {raw[:200]}")
-        raise ValueError(
-            "Invalid LLM response: Contains mermaid diagram instead of configuration. "
-            "Expected pure configuration content (Dockerfile, YAML, etc.) without diagrams or markdown formatting."
-        )
+        # Strip mermaid blocks instead of immediately rejecting
+        cleaned = re.sub(r'```\s*[Mm]ermaid\b.*?```', '', raw, flags=re.DOTALL).strip()
+        if not cleaned:
+            raise ValueError(
+                "Invalid LLM response: Contains only mermaid diagram(s) with no configuration content."
+            )
+        logger.warning(f"Stripped mermaid diagram(s) from response, continuing with {len(cleaned)} chars of config")
+        raw = cleaned
     
     # Check for multiple code blocks which indicates explanatory markdown document
     code_block_count = raw.count('```')
@@ -707,6 +710,19 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         match = re.search(r'^(---\s*\n|apiVersion:)', raw, re.MULTILINE)
         if match:
             extracted = raw[match.start():]
+            # Strip any embedded markdown code blocks from YAML content
+            extracted = re.sub(r'```[a-zA-Z]*\n.*?```', '', extracted, flags=re.DOTALL).strip()
+            # Strip trailing prose/explanations
+            trailing_patterns = [
+                r'\n\n(?:This|The above|Note:|Explanation:|To use this)',
+                r'\n\n(?:Here\'s|This is|Above is)',
+                r'\n\n(?:You can|To build|To run|To deploy)',
+            ]
+            for pattern in trailing_patterns:
+                trail_match = re.search(pattern, extracted, re.IGNORECASE)
+                if trail_match:
+                    extracted = extracted[:trail_match.start()].rstrip()
+                    break
             logger.debug(f"Extracted YAML from first --- or apiVersion: {len(extracted)} chars")
             # FIX 6: Record prose format
             if llm_output_format_counter:

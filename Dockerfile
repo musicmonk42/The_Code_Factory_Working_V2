@@ -261,6 +261,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NLTK_DATA="/opt/nltk_data" \
     HF_HOME="/opt/huggingface_cache" \
     TRANSFORMERS_CACHE="/opt/huggingface_cache"
+    # SENTRY_DSN: Set at deployment time for error tracking
+    # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 
 # Optional: curl for debugging and healthchecks
 # Install ca-certificates first for SSL support
@@ -341,10 +343,11 @@ WORKDIR /app
 # Note: /app/logs is needed for default audit_log.jsonl path
 # Note: /app/logs/checkpoint is needed for SFE checkpoint audit logs and DLQ
 # Note: /app/uploads is needed for job file uploads
+# Note: /app/data is needed for clarifier context database and history files
 # Create NLTK data directory (/opt/nltk_data) and HuggingFace cache directory (/opt/huggingface_cache)
 # for pre-downloaded ML resources accessible by appuser
-RUN mkdir -p /opt/venv /app /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache && \
-    chown -R appuser:appgroup /opt/venv /app /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache
+RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache && \
+    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
