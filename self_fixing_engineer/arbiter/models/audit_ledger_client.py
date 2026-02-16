@@ -369,7 +369,8 @@ class AuditLedgerClient:
             dlt_type (str): Type of DLT to use ('ethereum').
             extra_metric_labels (Optional[Dict[str, str]]): Additional labels for Prometheus metrics (e.g., {'env': 'prod'}).
         """
-        self.dlt_type: str = dlt_type.strip().lower() if isinstance(dlt_type, str) and dlt_type.strip() else "ethereum"
+        _cleaned = dlt_type.strip().lower() if isinstance(dlt_type, str) else ""
+        self.dlt_type: str = _cleaned or "ethereum"
         self.metric_labels: Dict[str, str] = {
             "env": os.getenv("APP_ENV", "development"),
             "cluster": os.getenv("CLUSTER_NAME", "default"),
