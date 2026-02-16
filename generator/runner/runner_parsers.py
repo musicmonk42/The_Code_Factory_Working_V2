@@ -502,9 +502,9 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
     # Handle case where file_path is actually a directory
     if file_path.is_dir():
         logger.warning(f"JUnit XML path is a directory: {file_path}. Searching for XML files within.")
-        xml_files = list(file_path.glob("*.xml"))
+        xml_files = sorted(file_path.glob("*.xml"))  # Sort for deterministic behavior
         if xml_files:
-            file_path = xml_files[0]  # Use the first XML file found
+            file_path = xml_files[0]  # Use the first XML file found (alphabetically)
             logger.info(f"Found JUnit XML file in directory: {file_path}")
         else:
             logger.warning(f"No XML files found in directory: {file_path}")

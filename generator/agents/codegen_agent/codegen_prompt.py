@@ -486,9 +486,9 @@ The following are MANDATORY checks:
    - Return the validated (and trimmed) value from the validator
    - Use `Field(..., min_length=1, max_length=500)` for basic constraints
    - Validators run BEFORE Field constraints, so trim first, then Field checks length
-   - When testing for Pydantic validation error messages, use case-insensitive comparison:
-     * assert "field required" in response.json()["detail"][0]["msg"].lower()
-     * NOT: assert "field required" in response.json()["detail"][0]["msg"]
+   - When testing for Pydantic validation error messages, ALWAYS use case-insensitive comparison to handle both "Field required" (Pydantic V2) and "field required" (older versions):
+     * CORRECT: assert "field required" in response.json()["detail"][0]["msg"].lower()
+     * WRONG: assert "field required" in response.json()["detail"][0]["msg"]  # Fails when Pydantic returns "Field required"
    
    HTTP Status Codes for Tests (CRITICAL):
    - Pydantic validation failures (from @field_validator raising ValueError) return HTTP 422 (Unprocessable Entity)
