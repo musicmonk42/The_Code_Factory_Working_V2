@@ -20,6 +20,7 @@ from generator.agents.deploy_agent.deploy_validator import (
     DockerValidator,
     HelmValidator,
     ValidatorRegistry,
+    _reset_presidio_instances,
     scan_config_for_findings,
     scrub_text,
 )
@@ -261,6 +262,7 @@ class TestScrubText:
     @patch("generator.agents.deploy_agent.deploy_validator.AnalyzerEngine")
     def test_scrub_presidio_failure(self, mock_analyzer_cls):
         """Test scrubbing when Presidio fails."""
+        _reset_presidio_instances()
         mock_analyzer_cls.side_effect = Exception("Presidio error")
 
         text = "Some text with data"
