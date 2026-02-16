@@ -592,17 +592,40 @@ class DockerValidator(Validator):
                 total_issues = len(report["lint_issues"]) + len(
                     report["security_findings"]
                 )
-                report["compliance_score"] = (
-                    1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
-                )
                 
-                # FIX Issue 5: Set 'valid' key based on validation results
-                # Consider valid if build succeeded (or skipped) and no critical issues
-                report["valid"] = (
-                    report["build_status"] in ("success", "skipped", "lint_warning") and
-                    report["lint_status"] in ("success", "skipped", "warning") and
-                    not any("failed to build" in i.lower() for i in report["lint_issues"])
-                )
+                # FIX Issue 7: Set 'valid' key based on validation results
+                # A Dockerfile that can't be parsed should NEVER be marked valid
+                # Check for parse errors in lint_issues (e.g., "unexpected '!' expecting '#', ADD, ARG...")
+                has_parse_error = False
+                parse_error_keywords = [
+                    "unexpected", "expecting", "parse error", "syntax error",
+                    "cannot start any token", "found character", "invalid instruction"
+                ]
+                
+                for issue in report["lint_issues"]:
+                    issue_lower = issue.lower()
+                    if any(keyword in issue_lower for keyword in parse_error_keywords):
+                        has_parse_error = True
+                        logger.warning(f"Parse error detected in Dockerfile: {issue}")
+                        break
+                
+                # If there's a parse error, compliance score should be 0.0 and valid should be False
+                if has_parse_error or report["lint_status"] == "failed":
+                    report["compliance_score"] = 0.0
+                    report["valid"] = False
+                    logger.error("Dockerfile failed validation due to parse errors - marked as invalid")
+                else:
+                    # Normal compliance score calculation
+                    report["compliance_score"] = (
+                        1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
+                    )
+                    
+                    # Consider valid if build succeeded (or skipped) and no critical issues
+                    report["valid"] = (
+                        report["build_status"] in ("success", "skipped", "lint_warning") and
+                        report["lint_status"] in ("success", "skipped", "warning") and
+                        not any("failed to build" in i.lower() for i in report["lint_issues"])
+                    )
 
             except FileNotFoundError as e:
                 report["build_status"] = "tool_not_found"

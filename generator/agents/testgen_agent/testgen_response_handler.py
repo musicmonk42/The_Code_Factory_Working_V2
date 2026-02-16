@@ -84,6 +84,81 @@ def _local_regex_sanitize(text: str) -> str:
     return text
 
 
+def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, str]] = None, language: str = "python") -> Dict[str, str]:
+    """
+    FIX #3: Post-process generated test imports against the actual file tree.
+    
+    The LLM consistently generates wrong import paths. For example:
+    - Generates: "from main import app"
+    - Correct: "from app.main import app"
+    
+    This function scans for import statements, verifies them against the project's
+    actual module structure, and fixes incorrect paths automatically.
+    
+    Args:
+        test_files: Dictionary of test filename to content
+        code_files: Optional source code files to determine correct import paths
+        language: Programming language (currently only supports Python)
+        
+    Returns:
+        Dictionary with corrected test file contents
+    """
+    if language != "python" or not code_files:
+        # Only Python is supported for now, and we need code_files to fix imports
+        return test_files
+    
+    fixed_files = {}
+    
+    # Build a map of module names to their correct import paths
+    # e.g., {"main": "app.main", "utils": "app.utils", "models": "app.models"}
+    module_map = {}
+    for filepath in code_files.keys():
+        # Convert file paths to import paths
+        # e.g., "app/main.py" -> "app.main", "app/utils/helpers.py" -> "app.utils.helpers"
+        if filepath.endswith('.py'):
+            import_path = filepath[:-3].replace('/', '.')
+            # Extract just the module name (last component)
+            module_name = import_path.split('.')[-1]
+            module_map[module_name] = import_path
+            logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
+    
+    # Pattern to match Python import statements
+    # Matches: "from X import Y" or "import X"
+    import_pattern = re.compile(r'^(\s*)(from\s+)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*?)(\s+import\s+.+)$', re.MULTILINE)
+    
+    for filename, content in test_files.items():
+        fixed_content = content
+        imports_fixed = 0
+        
+        def replace_import(match):
+            nonlocal imports_fixed
+            indent = match.group(1)
+            from_keyword = match.group(2)
+            old_path = match.group(3)
+            import_rest = match.group(4)
+            
+            # Check if this is a simple module name that needs fixing
+            # e.g., "from main import" should become "from app.main import"
+            if '.' not in old_path and old_path in module_map:
+                new_path = module_map[old_path]
+                if new_path != old_path:
+                    imports_fixed += 1
+                    logger.info(f"Fixed import in {filename}: '{old_path}' -> '{new_path}'")
+                    return f"{indent}{from_keyword}{new_path}{import_rest}"
+            
+            # Return unchanged if no fix needed
+            return match.group(0)
+        
+        fixed_content = import_pattern.sub(replace_import, fixed_content)
+        
+        if imports_fixed > 0:
+            logger.info(f"Fixed {imports_fixed} import(s) in {filename}")
+        
+        fixed_files[filename] = fixed_content
+    
+    return fixed_files
+
+
 # Mapping of language to configuration for extensions, linters, and scanners
 LANGUAGE_CONFIG = {
     "python": {
@@ -1140,6 +1215,10 @@ async def parse_llm_response(
 
     try:
         test_files = parser.parse(response, language)
+        
+        # FIX #3: Fix import paths after parsing but before validation
+        test_files = fix_import_paths(test_files, code_files, language)
+        
         await parser.validate(test_files, language, code_files)
         metadata = parser.extract_metadata(test_files, language)
         await add_provenance(
@@ -1158,6 +1237,9 @@ async def parse_llm_response(
         healed_files = await parser._llm_auto_heal(response, str(e), language)
 
         if healed_files:
+            # FIX #3: Also fix import paths in healed files
+            healed_files = fix_import_paths(healed_files, code_files, language)
+            
             try:
                 await parser.validate(healed_files, language, code_files)
                 metadata = parser.extract_metadata(healed_files, language)
