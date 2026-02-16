@@ -2466,7 +2466,7 @@ async function detectBugs() {
         const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/detect`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code_path: '.', analysis_depth: 'deep'})
+            body: JSON.stringify({code_path: '.', scan_depth: 'deep', include_potential: false})
         });
         const data = await response.json();
         showSuccess(`Detected ${data.bugs_found} bugs`);
@@ -2517,7 +2517,11 @@ async function analyzeCodebase() {
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code_path: '.', include_dependencies: true})
+            body: JSON.stringify({
+                code_path: '.', 
+                analysis_type: ['structure', 'dependencies', 'complexity', 'quality'],
+                generate_report: true
+            })
         });
         const data = await response.json();
         
@@ -2628,7 +2632,7 @@ async function fixImports() {
         const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({file_path: '.', auto_install: false})
+            body: JSON.stringify({code_path: '.', auto_install: false, fix_style: true})
         });
         const data = await response.json();
         showSuccess(`Fixed ${data.imports_fixed || 0} imports`);
