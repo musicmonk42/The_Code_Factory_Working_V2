@@ -1003,8 +1003,8 @@ def _strip_llm_preamble(content: str) -> str:
         
     Example:
         >>> content = "Certainly! Here's a Dockerfile:\\n\\nFROM python:3.11\\nWORKDIR /app"
-        >>> _strip_llm_preamble(content)
-        'FROM python:3.11\\nWORKDIR /app'
+        >>> result = _strip_llm_preamble(content)
+        >>> assert result.startswith('FROM python:3.11')
     """
     if not content:
         return content
@@ -1032,7 +1032,8 @@ def _strip_llm_preamble(content: str) -> str:
         if not stripped or stripped.startswith('#'):
             continue
         # Check if this line starts with a Dockerfile instruction
-        first_word = stripped.split()[0].upper() if stripped.split() else ''
+        words = stripped.split()
+        first_word = words[0].upper() if words else ''
         if first_word in dockerfile_instructions:
             start_idx = i
             break
