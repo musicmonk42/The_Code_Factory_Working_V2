@@ -88,7 +88,6 @@ class MessageBusE2ETest(unittest.TestCase):
         if hasattr(cls, 'loop') and cls.loop is not None:
             if not cls.loop.is_closed():
                 cls.loop.close()
-            asyncio.set_event_loop(None)
 
     def setUp(self):
         """Set up test fixtures before each test."""

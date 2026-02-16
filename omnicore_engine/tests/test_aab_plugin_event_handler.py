@@ -336,9 +336,11 @@ class TestStartPluginObserver:
         mock_observer = Mock()
         mock_handler = Mock()
 
-        with patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class, \
-             patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class, \
-             patch.object(_plugin_event_handler_module, "logger") as mock_logger:
+        with (
+            patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class,
+            patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class,
+            patch.object(_plugin_event_handler_module, "logger") as mock_logger,
+        ):
             start_plugin_observer(mock_registry, plugin_dir)
 
             mock_handler_class.assert_called_once_with(mock_registry, plugin_dir)
@@ -358,9 +360,11 @@ class TestStartPluginObserver:
         mock_observer.start.side_effect = Exception("Start failed")
         mock_handler = Mock()
 
-        with patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class, \
-             patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class, \
-             patch.object(_plugin_event_handler_module, "logger") as mock_logger:
+        with (
+            patch.object(_plugin_event_handler_module, "Observer", return_value=mock_observer) as mock_observer_class,
+            patch.object(_plugin_event_handler_module, "PluginEventHandler", return_value=mock_handler) as mock_handler_class,
+            patch.object(_plugin_event_handler_module, "logger") as mock_logger,
+        ):
             start_plugin_observer(mock_registry, plugin_dir)
 
             mock_logger.error.assert_called()
