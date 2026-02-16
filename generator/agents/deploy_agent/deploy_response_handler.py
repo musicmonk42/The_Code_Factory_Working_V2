@@ -984,6 +984,63 @@ class FormatHandler(ABC):
             ) from e
 
 
+def _strip_llm_preamble(content: str) -> str:
+    """
+    Strip conversational preamble and markdown fences from LLM-generated Dockerfile content.
+    
+    LLMs often generate conversational text before the actual Dockerfile content, such as:
+    - "Certainly! Here's a structured Dockerfile..."
+    - "I'll create a Dockerfile for you..."
+    - Markdown code fences (```dockerfile ... ```)
+    
+    This function strips such preamble to extract the actual Dockerfile content.
+    
+    Args:
+        content: Raw content from LLM that may include preamble
+        
+    Returns:
+        Cleaned content with preamble removed
+        
+    Example:
+        >>> content = "Certainly! Here's a Dockerfile:\\n\\nFROM python:3.11\\nWORKDIR /app"
+        >>> result = _strip_llm_preamble(content)
+        >>> assert result.startswith('FROM python:3.11')
+    """
+    if not content:
+        return content
+    
+    lines = content.strip().splitlines()
+    
+    # Remove markdown code fences
+    if lines and lines[0].strip().startswith('```'):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == '```':
+        lines = lines[:-1]
+    
+    # Find the first actual Dockerfile instruction
+    # Valid Dockerfile instructions (comprehensive list)
+    dockerfile_instructions = {
+        'FROM', 'ARG', 'RUN', 'CMD', 'LABEL', 'EXPOSE', 'ENV',
+        'ADD', 'COPY', 'ENTRYPOINT', 'VOLUME', 'USER', 'WORKDIR',
+        'ONBUILD', 'STOPSIGNAL', 'HEALTHCHECK', 'SHELL'
+    }
+    
+    start_idx = 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        # Skip empty lines and comments
+        if not stripped or stripped.startswith('#'):
+            continue
+        # Check if this line starts with a Dockerfile instruction
+        words = stripped.split()
+        first_word = words[0].upper() if words else ''
+        if first_word in dockerfile_instructions:
+            start_idx = i
+            break
+    
+    return '\n'.join(lines[start_idx:]).strip()
+
+
 def validate_dockerfile(content: str) -> bool:
     """
     Validate Dockerfile structure and syntax according to industry best practices.
@@ -1118,6 +1175,10 @@ class DockerfileHandler(FormatHandler):
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
         # Remove leading "!" token (common LLM error)
         sanitized = re.sub(r'^!+\s*', '', sanitized)
+        
+        # ✅ STRIP LLM PREAMBLE: Remove conversational text before Dockerfile content
+        # This handles cases where LLM generates text like "Certainly! Here's a Dockerfile..."
+        sanitized = _strip_llm_preamble(sanitized)
         
         # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
         validate_dockerfile(sanitized)
