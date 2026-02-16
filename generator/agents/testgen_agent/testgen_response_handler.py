@@ -126,9 +126,10 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
     # Matches: "from X import Y" or "import X"
     # Group 1: Leading whitespace (indentation)
     # Group 2: "from " keyword
-    # Group 3: Module path (e.g., "main" or "app.main")
+    # Group 3: Module path (e.g., "main" or "app.main" or "app.utils.helpers")
     # Group 4: " import Y" rest of statement
-    import_pattern = re.compile(r'^(\s*)(from\s+)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*?)(\s+import\s+.+)$', re.MULTILINE)
+    # Using greedy * to capture full module paths like "app.utils.helpers"
+    import_pattern = re.compile(r'^(\s*)(from\s+)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)(\s+import\s+.+)$', re.MULTILINE)
     
     for filename, content in test_files.items():
         fixed_content = content

@@ -314,14 +314,14 @@ def _load_presidio_engine() -> bool:
         # Enterprise-grade: Make model configurable via environment
         model_name = os.getenv("PRESIDIO_SPACY_MODEL", "en_core_web_sm")
 
-        # FIX: Only load English recognizers to suppress unsupported language warnings
+        # FIX: Only load English recognizers to prevent unsupported language warnings
         # The multilingual models (es, it, pl) were generating 132+ warnings per run:
         # "Recognizer not added to registry because language is not supported by registry"
         # We only support English for now to avoid log pollution
         models_config = [{"lang_code": "en", "model_name": model_name}]
         supported_langs = ["en"]
         
-        logger.info("Configuring Presidio with English-only support to suppress unsupported language warnings")
+        logger.info("Configuring Presidio with English-only support to prevent unsupported language warnings")
         
         configuration = {
             "nlp_engine_name": "spacy",

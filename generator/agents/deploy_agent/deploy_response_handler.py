@@ -810,7 +810,8 @@ def _sanitize_llm_output(raw_output: str) -> str:
     
     # STEP 2: Extract content from deployment config code fences
     # Look for yaml, dockerfile, hcl, kubernetes, helm code blocks and extract only the inner content
-    deployment_fence_pattern = r'```\s*(?:yaml|yml|dockerfile|docker|kubernetes|k8s|helm|hcl|terraform)\s*\n([\s\S]*?)```'
+    # Pattern matches: ```yaml\n or ```yaml (with optional newline)
+    deployment_fence_pattern = r'```\s*(?:yaml|yml|dockerfile|docker|kubernetes|k8s|helm|hcl|terraform)\s*\n?([\s\S]*?)```'
     matches = re.findall(deployment_fence_pattern, raw_output, flags=re.IGNORECASE)
     
     if matches:
@@ -854,9 +855,8 @@ def _sanitize_llm_output(raw_output: str) -> str:
     raw_output = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw_output)
     raw_output = re.sub(r'\*\*', '', raw_output)  # Orphaned ** markers
     
-    # Strip markdown italic markers (*text* or _text_)
-    raw_output = re.sub(r'(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)', r'\1', raw_output)
-    raw_output = re.sub(r'(?<!_)_(?!_)([^_]+?)_(?!_)', r'\1', raw_output)
+    # Skip italic removal as it may interfere with variable names in YAML/code
+    # Italics are uncommon in deployment configs and the patterns can cause false positives
     
     # STEP 5: Remove excess blank lines (more than 2 consecutive)
     raw_output = re.sub(r'\n{3,}', '\n\n', raw_output)
