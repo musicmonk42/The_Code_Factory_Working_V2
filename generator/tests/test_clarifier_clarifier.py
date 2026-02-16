@@ -332,7 +332,7 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
             if f.startswith(history_basename) and "corrupt_backup" in f:
                 try:
                     os.unlink(os.path.join(history_dir, f))
-                except:
+                except OSError:  # Catch only file operation errors
                     pass
 
         # Cleanup any .tmp files
@@ -340,7 +340,7 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
             if f.startswith("mock_history_clarifier") and f.endswith(".tmp"):
                 try:
                     os.unlink(f)
-                except:
+                except OSError:  # Catch only file operation errors
                     pass
 
     async def test_get_clarifications_success(self):

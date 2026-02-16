@@ -129,7 +129,7 @@ def mock_redaction_logic(
 MockRecursiveTransform = MagicMock(side_effect=mock_redaction_logic)
 
 
-@pytest.fixture(autouse=False)  # Changed from autouse=True to avoid affecting other test files
+@pytest.fixture(autouse=False)  # Changed from autouse=True to avoid affecting other tests in same session
 def mock_dependencies():
     """Fixture to mock all dependencies for clarifier_updater tests.
     
