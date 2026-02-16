@@ -773,15 +773,23 @@ def _sanitize_llm_output(raw_output: str) -> str:
     """
     Remove Markdown code fences and artifacts from LLM output before YAML parsing.
     
-    This function addresses Issue 4: LLM Deploy Output Not Sanitized
+    This function addresses systemic failure: LLM wraps deployment configs in markdown
+    formatting, causing parsing failures like "found duplicate key" and "unexpected '`'".
     
     LLM responses sometimes contain Markdown artifacts like:
     - Mermaid diagrams (```mermaid...```)
     - Code fences wrapping the actual content (```yaml...```)
-    - Explanatory text before/after the actual config
+    - Explanatory text/prose before/after the actual config
+    - Markdown headers (##, ---) and links
     
     These artifacts cause YAML parsing failures with errors like:
     "found character '`' that cannot start any token"
+    
+    Strategy:
+    1. Extract content from within deployment config code fences (yaml, dockerfile, hcl)
+    2. Remove all mermaid and diagram blocks
+    3. Strip markdown prose, headers, and links
+    4. Clean up remaining artifacts
     
     Args:
         raw_output: Raw LLM output potentially containing Markdown artifacts
@@ -794,40 +802,62 @@ def _sanitize_llm_output(raw_output: str) -> str:
         >>> _sanitize_llm_output(raw)
         'apiVersion: v1'
     """
-    # FIX Issue 2: Enhanced mermaid and markdown block detection
-    # Strip mermaid blocks completely (they're not part of the config)
-    # Use case-insensitive matching and handle variations like "```mermaid" or "``` mermaid"
+    # STEP 1: Remove mermaid and diagram blocks completely (not part of deployment config)
     raw_output = re.sub(r'```\s*mermaid[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
-    
-    # Strip other common diagram/visualization blocks
     raw_output = re.sub(r'```\s*(dot|plantuml|graphviz)[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
     
-    # Strip any remaining triple backtick blocks that aren't YAML/Dockerfile content
-    # This catches explanatory text blocks and other non-config markdown
-    # Match blocks that start with ```<non-config-language>
-    raw_output = re.sub(r'```\s*(bash|sh|python|javascript|json)[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
+    # STEP 2: Extract content from deployment config code fences
+    # Look for yaml, dockerfile, hcl, kubernetes, helm code blocks and extract only the inner content
+    deployment_fence_pattern = r'```\s*(?:yaml|yml|dockerfile|docker|kubernetes|k8s|helm|hcl|terraform)\s*\n([\s\S]*?)```'
+    matches = re.findall(deployment_fence_pattern, raw_output, flags=re.IGNORECASE)
     
-    # Strip code fences wrapping the actual content
-    # Match: ```yaml (or ```yml, ```dockerfile, etc.) at start of line
-    raw_output = re.sub(r'^```\w*\n', '', raw_output, flags=re.MULTILINE)
-    # Match: ``` at end of string
-    raw_output = re.sub(r'\n```$', '', raw_output, flags=re.MULTILINE)
+    if matches:
+        # If we found deployment config blocks, use only their content
+        # Join multiple blocks with newlines (handles multi-document scenarios)
+        raw_output = '\n---\n'.join(matches)
+        logger.debug(f"Extracted {len(matches)} deployment config block(s) from code fences")
+    else:
+        # No specific deployment fences found, proceed with generic cleanup
+        # Remove non-deployment code blocks (bash, python, javascript, etc.)
+        raw_output = re.sub(r'```\s*(bash|sh|python|javascript|js|json|txt|text)[\s\S]*?```', '', raw_output, flags=re.MULTILINE | re.IGNORECASE)
+        
+        # Strip generic code fences
+        raw_output = re.sub(r'^```\w*\n', '', raw_output, flags=re.MULTILINE)
+        raw_output = re.sub(r'\n```$', '', raw_output, flags=re.MULTILINE)
+        
+        # Handle edge case: code fence at very start/end
+        raw_output = raw_output.strip()
+        if raw_output.startswith('```'):
+            newline_idx = raw_output.find('\n')
+            if newline_idx != -1:
+                raw_output = raw_output[newline_idx + 1:]
+        if raw_output.endswith('```'):
+            raw_output = raw_output[:-3]
     
-    # Also handle cases where code fence is at the very start/end
-    raw_output = raw_output.strip()
-    if raw_output.startswith('```'):
-        # Find the first newline after the opening fence
-        newline_idx = raw_output.find('\n')
-        if newline_idx != -1:
-            raw_output = raw_output[newline_idx + 1:]
-    if raw_output.endswith('```'):
-        raw_output = raw_output[:-3]
+    # STEP 3: Remove markdown prose and headers that appear before/after configs
+    # Remove markdown headers (## Header, ### Header, etc.)
+    raw_output = re.sub(r'^#{1,6}\s+.*$', '', raw_output, flags=re.MULTILINE)
     
-    # FIX Issue 3: Strip markdown bold markers (**text**) which are never valid in YAML/K8s configs
-    # This should be done after stripping code blocks but before returning
+    # Remove horizontal rules (---, ***, ___)
+    raw_output = re.sub(r'^[-*_]{3,}\s*$', '', raw_output, flags=re.MULTILINE)
+    
+    # Remove markdown links [text](url) - keep the text, remove the link
+    raw_output = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', raw_output)
+    
+    # Remove markdown bullet lists that are prose (starts with "- [" for links)
+    raw_output = re.sub(r'^-\s+\[.*$', '', raw_output, flags=re.MULTILINE)
+    
+    # STEP 4: Clean up markdown formatting
+    # Strip markdown bold markers (**text**)
     raw_output = re.sub(r'\*\*([^*]+?)\*\*', r'\1', raw_output)
-    # Also strip orphaned ** markers that don't have a closing pair
-    raw_output = re.sub(r'\*\*', '', raw_output)
+    raw_output = re.sub(r'\*\*', '', raw_output)  # Orphaned ** markers
+    
+    # Strip markdown italic markers (*text* or _text_)
+    raw_output = re.sub(r'(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)', r'\1', raw_output)
+    raw_output = re.sub(r'(?<!_)_(?!_)([^_]+?)_(?!_)', r'\1', raw_output)
+    
+    # STEP 5: Remove excess blank lines (more than 2 consecutive)
+    raw_output = re.sub(r'\n{3,}', '\n\n', raw_output)
     
     return raw_output.strip()
 

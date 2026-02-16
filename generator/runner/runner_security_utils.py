@@ -105,17 +105,67 @@ PRESIDIO_IGNORED_ENTITY_TYPES = [
 
 # Technical terms and patterns that should NOT be redacted as PII
 # These are common in technical documentation and code requirements
+# FIX: Expanded allowlist to prevent tool names from being marked as PII
 TECHNICAL_ALLOWLIST = [
-    # Technologies and frameworks
-    "GitHub", "GitLab", "Bitbucket", "API", "REST", "RESTful", "GraphQL", "HTTP", "HTTPS", "SSL", "TLS",
-    "Python", "JavaScript", "TypeScript", "Java", "C#", "C++", "Go", "Rust", "Ruby", "PHP",
-    "Django", "Flask", "FastAPI", "Express", "React", "Angular", "Vue", "Next.js", "Node.js",
+    # Container and orchestration tools
+    "Docker", "Kubernetes", "Helm", "K8s", "Podman", "Containerd",
+    
+    # CI/CD and DevOps
+    "Jenkins", "GitHub", "GitLab", "Bitbucket", "CircleCI", "Travis", "Actions",
+    "Ansible", "Terraform", "Puppet", "Chef", "SaltStack",
+    
+    # Web servers and proxies
+    "nginx", "Nginx", "NGINX", "Apache", "Caddy", "Traefik", "HAProxy",
+    
+    # Databases
     "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "SQLite",
-    "Docker", "Kubernetes", "AWS", "Azure", "GCP", "Heroku", "Vercel", "Netlify",
-    "OAuth", "JWT", "SAML", "LDAP", "Active Directory",
+    "Cassandra", "DynamoDB", "Postgres", "MariaDB", "InfluxDB",
+    
+    # Programming languages and runtimes
+    "Python", "JavaScript", "TypeScript", "Java", "C#", "C++", "Go", "Rust", "Ruby", "PHP",
+    "Node.js", "Deno", "Bun",
+    
+    # Python web frameworks and tools
+    "Django", "Flask", "FastAPI", "Gunicorn", "uWSGI", "uvicorn", "Uvicorn",
+    "Celery", "Pydantic", "SQLAlchemy",
+    
+    # JavaScript frameworks
+    "Express", "React", "Angular", "Vue", "Next.js", "Svelte", "Nuxt",
+    
+    # Testing and linting tools
+    "pytest", "unittest", "Jest", "Mocha", "Jasmine",
+    "ruff", "Ruff", "pylint", "flake8", "black", "isort", "mypy",
+    "eslint", "prettier", "tslint",
+    
+    # Security scanning tools
+    "Bandit", "Semgrep", "Snyk", "Trivy", "Hadolint", "Checkov",
+    "SonarQube", "Dependabot", "SAST", "DAST",
+    
+    # Cloud providers and platforms
+    "AWS", "Azure", "GCP", "Heroku", "Vercel", "Netlify", "DigitalOcean",
+    "Cloudflare", "Linode", "Vultr",
+    
+    # Protocols and standards
+    "API", "REST", "RESTful", "GraphQL", "gRPC", "WebSocket",
+    "HTTP", "HTTPS", "SSL", "TLS", "OAuth", "JWT", "SAML", "LDAP",
+    "CORS", "DNS", "TCP", "UDP", "SMTP", "IMAP", "POP3",
+    
+    # Message queues and streaming
+    "Kafka", "RabbitMQ", "NATS", "ActiveMQ", "ZeroMQ",
+    
+    # Monitoring and observability
+    "Prometheus", "Grafana", "Datadog", "New Relic", "Sentry",
+    "OpenTelemetry", "Jaeger", "Zipkin",
+    
+    # Version control
+    "Git", "SVN", "Mercurial",
+    
+    # Package managers
+    "npm", "pip", "yarn", "pnpm", "cargo", "gem", "composer",
     
     # Common technical patterns
     "localhost", "127.0.0.1", "0.0.0.0", "example.com", "test.com",
+    "Active Directory",
     
     # URL patterns (will be handled by custom logic)
     # NOTE: Actual sensitive URLs will still be caught by context-aware detection
@@ -264,34 +314,14 @@ def _load_presidio_engine() -> bool:
         # Enterprise-grade: Make model configurable via environment
         model_name = os.getenv("PRESIDIO_SPACY_MODEL", "en_core_web_sm")
 
-        # MEDIUM: Support multilingual PII detection for Spanish, Italian, Polish
-        # Try with configured model (default: small), fallback to regex-only
-        # Using smaller models reduces memory footprint and startup time
-        # Start with English and try to add multilingual models if available
+        # FIX: Only load English recognizers to suppress unsupported language warnings
+        # The multilingual models (es, it, pl) were generating 132+ warnings per run:
+        # "Recognizer not added to registry because language is not supported by registry"
+        # We only support English for now to avoid log pollution
         models_config = [{"lang_code": "en", "model_name": model_name}]
         supported_langs = ["en"]
         
-        # Try to detect if multilingual spaCy models are available
-        try:
-            import spacy
-            # Check for available multilingual models
-            multilang_models = [
-                {"lang_code": "es", "model_name": "es_core_news_sm"},
-                {"lang_code": "it", "model_name": "it_core_news_sm"},
-                {"lang_code": "pl", "model_name": "pl_core_news_sm"},
-            ]
-            for model_config in multilang_models:
-                try:
-                    # Try to load the model to verify it exists
-                    spacy.load(model_config["model_name"])
-                    models_config.append(model_config)
-                    supported_langs.append(model_config["lang_code"])
-                    logger.debug(f"Added multilingual support for {model_config['lang_code']}")
-                except OSError:
-                    # Model not available, skip it
-                    logger.debug(f"Skipping {model_config['lang_code']} - model not available")
-        except Exception as e:
-            logger.debug(f"Could not check for multilingual models: {e}")
+        logger.info("Configuring Presidio with English-only support to suppress unsupported language warnings")
         
         configuration = {
             "nlp_engine_name": "spacy",
