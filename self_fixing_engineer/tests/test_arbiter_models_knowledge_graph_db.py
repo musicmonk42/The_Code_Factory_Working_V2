@@ -80,8 +80,16 @@ def test_tracer():
 @pytest.fixture(scope="module")
 def in_memory_exporter():
     """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    return InMemorySpanExporter()
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    original_tracer = knowledge_graph_db.tracer
+    knowledge_graph_db.tracer = provider.get_tracer(__name__)
+    yield exporter
+    knowledge_graph_db.tracer = original_tracer
 
 
 
