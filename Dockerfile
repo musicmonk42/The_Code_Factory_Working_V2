@@ -367,8 +367,10 @@ WORKDIR /app
 # Create NLTK data directory (/opt/nltk_data) and HuggingFace cache directory (/opt/huggingface_cache)
 # for pre-downloaded ML resources accessible by appuser
 # Create ChromaDB cache directory (/opt/chroma_cache) for pre-downloaded ONNX models
-RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache && \
-    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache
+# Also create the default ChromaDB cache path at /home/appuser/.cache/chroma/ since
+# ChromaDB may not respect CHROMA_CACHE_DIR and defaults to ~/.cache/chroma/onnx_models/
+RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma && \
+    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
@@ -378,6 +380,9 @@ COPY --from=builder --chown=appuser:appgroup /opt/nltk_data /opt/nltk_data
 COPY --from=builder --chown=appuser:appgroup /opt/huggingface_cache /opt/huggingface_cache
 # Copy ChromaDB ONNX models from builder stage to avoid runtime downloads
 COPY --from=builder --chown=appuser:appgroup /opt/chroma_cache /opt/chroma_cache
+# Symlink ChromaDB cache to appuser's default cache path so ChromaDB finds pre-downloaded models
+# ChromaDB defaults to ~/.cache/chroma/onnx_models/ which may not respect CHROMA_CACHE_DIR
+RUN ln -sf /opt/chroma_cache /home/appuser/.cache/chroma/onnx_models
 
 USER appuser
 

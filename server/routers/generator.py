@@ -48,6 +48,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
 
+
+def _stage_ran(stage: str, completed: list) -> bool:
+    """Check if a stage ran (exact match or prefix match with colon-separated suffix).
+    
+    Handles stage entries like 'testgen:error', 'testgen:execution_failed',
+    'testgen:skipped' being recognized as the 'testgen' stage having run.
+    """
+    return any(s == stage or s.startswith(stage + ":") for s in completed)
+
+
 # Maximum number of concurrent pipeline tasks to prevent event loop saturation
 # This limits the number of pipeline coroutines that can run simultaneously
 # Tune this value based on your system resources and load requirements
@@ -354,17 +364,17 @@ async def _trigger_pipeline_background(
         # Define auxiliary stages (always requested in this function)
         auxiliary_stages = ["deploy", "docgen", "critique"]
 
-        # Check if ALL CRITICAL stages completed successfully
+        # Check if ALL CRITICAL stages completed (or ran with error/failure suffix)
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        all_critical_completed = all(stage in stages_completed for stage in critical_stages)
+        all_critical_completed = all(_stage_ran(stage, stages_completed) for stage in critical_stages)
 
         # At minimum, codegen must have succeeded to finalize as success
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         codegen_succeeded = "codegen" in stages_completed
         
         # Identify any auxiliary stages that failed (for warning logging)
-        failed_auxiliary = [s for s in auxiliary_stages if s not in stages_completed]
+        failed_auxiliary = [s for s in auxiliary_stages if not _stage_ran(s, stages_completed)]
 
         # FIX: Only finalize as SUCCESS if codegen succeeded AND all CRITICAL stages completed
         # Auxiliary stage failures are logged as warnings but do NOT prevent success
@@ -419,7 +429,7 @@ async def _trigger_pipeline_background(
         elif codegen_succeeded and not all_critical_completed:
             # FAILURE: Codegen succeeded but some CRITICAL stages failed
             # FIX: This is now treated as FAILURE only for critical stages
-            failed_critical = [stage for stage in critical_stages if stage not in stages_completed]
+            failed_critical = [stage for stage in critical_stages if not _stage_ran(stage, stages_completed)]
             logger.error(
                 f"[Pipeline] Job {job_id} FAILED: Codegen succeeded but the following "
                 f"CRITICAL stages failed: {', '.join(failed_critical)}. "
@@ -553,16 +563,16 @@ async def _resume_pipeline_after_clarification(
         # In clarification flow, all auxiliary stages are always requested (see lines 400-403)
         auxiliary_stages = ["deploy", "docgen", "critique"]
 
-        # Check if ALL CRITICAL stages completed
+        # Check if ALL CRITICAL stages completed (or ran with error/failure suffix)
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        all_critical_completed = all(stage in stages_completed for stage in critical_stages)
+        all_critical_completed = all(_stage_ran(stage, stages_completed) for stage in critical_stages)
 
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         codegen_succeeded = "codegen" in stages_completed
         
         # Identify any auxiliary stages that failed (for warning logging)
-        failed_auxiliary = [s for s in auxiliary_stages if s not in stages_completed]
+        failed_auxiliary = [s for s in auxiliary_stages if not _stage_ran(s, stages_completed)]
 
         # FIX: Apply same logic as _trigger_pipeline_background
         # Only finalize as SUCCESS if ALL CRITICAL stages completed
@@ -585,7 +595,7 @@ async def _resume_pipeline_after_clarification(
                 logger.error(f"[Pipeline] Failed to finalize job {job_id}")
         elif codegen_succeeded and not all_critical_completed:
             # FAILURE: Some CRITICAL stages failed
-            failed_critical = [stage for stage in critical_stages if stage not in stages_completed]
+            failed_critical = [stage for stage in critical_stages if not _stage_ran(stage, stages_completed)]
             logger.error(
                 f"[Pipeline] Job {job_id} FAILED after clarification: Codegen succeeded but "
                 f"the following CRITICAL stages failed: {', '.join(failed_critical)}"
