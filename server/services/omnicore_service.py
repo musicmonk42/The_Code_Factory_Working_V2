@@ -206,7 +206,8 @@ except ImportError:
 _clarification_sessions = {}
 
 # Constants for configurable timeouts
-DEFAULT_TESTGEN_TIMEOUT = int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "300"))
+DEFAULT_TESTGEN_TIMEOUT = int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "600"))
+DEFAULT_TESTGEN_LLM_TIMEOUT = int(os.getenv("TESTGEN_LLM_TIMEOUT_SECONDS", "180"))
 DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
 DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
@@ -2538,12 +2539,21 @@ class OmniCoreService:
                 )
                 logger.info(f"[TESTGEN] Code files (relative to repo_path): {code_files}")
                 
-                # Generate tests
-                result = await agent.generate_tests(
-                    target_files=code_files,
-                    language=language,
-                    policy=policy
-                )
+                # Apply inner LLM timeout to fail fast if LLM is unresponsive
+                try:
+                    async with asyncio.timeout(DEFAULT_TESTGEN_LLM_TIMEOUT):
+                        result = await agent.generate_tests(
+                            target_files=code_files,
+                            language=language,
+                            policy=policy
+                        )
+                except asyncio.TimeoutError:
+                    logger.warning(f"[TESTGEN] Job {job_id} inner LLM call timed out after {DEFAULT_TESTGEN_LLM_TIMEOUT}s")
+                    return {
+                        "status": "error",
+                        "message": f"Test generation LLM call timed out after {DEFAULT_TESTGEN_LLM_TIMEOUT} seconds",
+                        "timeout": True,
+                    }
                 
                 logger.info(f"[TESTGEN] Test generation completed for job {job_id}")
                 

@@ -62,6 +62,10 @@ ENV PATH="/opt/venv/bin:${PATH}"
 # If builds fail due to SSL issues, fix the underlying CA certificate configuration
 RUN python -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
+# Create directories for ML models and data (will be populated if SKIP_HEAVY_DEPS != 1)
+# These directories must exist for COPY commands in runtime stage
+RUN mkdir -p /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache
+
 WORKDIR /app
 
 # Copy only requirements first for better layer caching
@@ -163,7 +167,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading NLTK data..."; \
         echo "========================================"; \
-        mkdir -p /opt/nltk_data && \
         NLTK_DATA=/opt/nltk_data python -c "import nltk; \
             nltk.download('punkt', quiet=True); \
             nltk.download('stopwords', quiet=True); \
@@ -183,7 +186,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading HuggingFace models..."; \
         echo "========================================"; \
-        mkdir -p /opt/huggingface_cache && \
         HF_HOME=/opt/huggingface_cache TRANSFORMERS_CACHE=/opt/huggingface_cache \
         python -c "from transformers import pipeline; \
             print('Downloading facebook/bart-large-cnn model...'); \
@@ -191,6 +193,23 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
             print('✓ Model download complete')" && \
         echo "✓ HuggingFace model downloads complete" || \
         echo "WARNING: Failed to download HuggingFace model"; \
+    fi
+
+# Pre-cache ChromaDB ONNX embedding model to avoid runtime downloads
+# The testgen agent uses ChromaDB which requires the all-MiniLM-L6-v2 ONNX model (~79MB)
+# Downloading at runtime adds significant time to the testgen timeout budget
+RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        echo "========================================"; \
+        echo "Pre-caching ChromaDB ONNX embedding model..."; \
+        echo "========================================"; \
+        CHROMA_CACHE_DIR=/opt/chroma_cache \
+        python -c "import chromadb; \
+            from chromadb.config import Settings; \
+            client = chromadb.Client(Settings(anonymized_telemetry=False, is_persistent=False)); \
+            col = client.get_or_create_collection('warmup'); \
+            col.add(documents=['warmup text'], ids=['warmup']); \
+            print('✓ ChromaDB ONNX model cached successfully')" && \
+        echo "✓ ChromaDB ONNX model pre-cached"; \
     fi
 
 # Copy the rest of the application
@@ -260,7 +279,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TOKENIZERS_PARALLELISM="false" \
     NLTK_DATA="/opt/nltk_data" \
     HF_HOME="/opt/huggingface_cache" \
-    TRANSFORMERS_CACHE="/opt/huggingface_cache"
+    TRANSFORMERS_CACHE="/opt/huggingface_cache" \
+    CHROMA_CACHE_DIR="/opt/chroma_cache"
     # SENTRY_DSN: Set at deployment time for error tracking
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 
@@ -346,8 +366,9 @@ WORKDIR /app
 # Note: /app/data is needed for clarifier context database and history files
 # Create NLTK data directory (/opt/nltk_data) and HuggingFace cache directory (/opt/huggingface_cache)
 # for pre-downloaded ML resources accessible by appuser
-RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache && \
-    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache
+# Create ChromaDB cache directory (/opt/chroma_cache) for pre-downloaded ONNX models
+RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache && \
+    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
@@ -355,6 +376,8 @@ COPY --from=builder --chown=appuser:appgroup /app /app
 # Copy NLTK data and HuggingFace models from builder stage to avoid runtime downloads
 COPY --from=builder --chown=appuser:appgroup /opt/nltk_data /opt/nltk_data
 COPY --from=builder --chown=appuser:appgroup /opt/huggingface_cache /opt/huggingface_cache
+# Copy ChromaDB ONNX models from builder stage to avoid runtime downloads
+COPY --from=builder --chown=appuser:appgroup /opt/chroma_cache /opt/chroma_cache
 
 USER appuser
 
