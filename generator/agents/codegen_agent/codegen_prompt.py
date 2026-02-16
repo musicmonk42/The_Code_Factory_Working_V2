@@ -477,6 +477,7 @@ The following are MANDATORY checks:
    
    Validation Rules:
    - Use `@field_validator('field_name', mode='before')` decorators for all validation logic (Pydantic V2)
+   - `mode='before'` runs validation BEFORE Pydantic's internal validation, allowing you to modify input (e.g., .strip())
    - Always add `@classmethod` decorator before `@field_validator` (standard Python decorator order)
    - Trim whitespace in validators using `.strip()`
    - Validate min/max length after trimming
