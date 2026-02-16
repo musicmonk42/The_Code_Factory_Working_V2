@@ -3253,11 +3253,11 @@ class OmniCoreService:
                     target_files = target_result.get("generated_files", [])
                     all_generated_files.extend(target_files)
                     
-                    # FIX Issue 5: Check if target produced 0 files and mark as partially failed
+                    # FIX Issue 5: Check if target produced 0 files and mark as failed
                     if len(target_files) == 0:
                         failed_targets.append(target)
                         logger.warning(
-                            f"[DEPLOY_ALL] Target '{target}' completed but produced 0 files - marking as partially failed",
+                            f"[DEPLOY_ALL] Target '{target}' completed but produced 0 files - marking as failed",
                             extra={"job_id": job_id, "target": target}
                         )
                     else:

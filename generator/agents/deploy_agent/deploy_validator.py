@@ -29,7 +29,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Optional, Type
 
 import aiofiles  # For asynchronous file operations
 
@@ -173,8 +173,8 @@ DANGEROUS_CONFIG_PATTERNS = {
 }
 
 # Module-level singleton instances for Presidio to avoid log spam from repeated initialization
-_analyzer: AnalyzerEngine = None
-_anonymizer: AnonymizerEngine = None
+_analyzer: Optional[AnalyzerEngine] = None
+_anonymizer: Optional[AnonymizerEngine] = None
 
 
 def _get_presidio_instances():
@@ -253,6 +253,7 @@ def _sanitize_config_content(config_content: str) -> str:
     
     # STEP 2: Extract content from YAML code fences
     # Look for yaml, helm, kubernetes code blocks and extract only the inner content
+    # Note: Uses first match if multiple blocks exist; assumes no nested code blocks
     deployment_fence_pattern = r'```\s*(?:yaml|yml|kubernetes|k8s|helm)\s*\n?([\s\S]*?)```'
     matches = re.findall(deployment_fence_pattern, config_content, flags=re.IGNORECASE)
     

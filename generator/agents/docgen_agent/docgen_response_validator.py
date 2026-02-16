@@ -584,9 +584,11 @@ class MarkdownPlugin(DocGenPlugin):
         if placeholders_found:
             placeholders_set = set(placeholders_found)
             # Remove Presidio placeholders (case-insensitive comparison)
+            # Normalize both sides to uppercase for accurate matching
+            presidio_upper = {p.upper() for p in PRESIDIO_ENTITY_PLACEHOLDERS}
             non_presidio_placeholders = {
                 p for p in placeholders_set 
-                if p.upper() not in PRESIDIO_ENTITY_PLACEHOLDERS
+                if p.upper() not in presidio_upper
             }
             
             if non_presidio_placeholders:
