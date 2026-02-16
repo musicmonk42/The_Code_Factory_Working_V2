@@ -306,6 +306,49 @@ def _is_test_file(file_path: Path, language: str) -> bool:
     return file_path.name.startswith("test_") or "test" in file_path.name.lower()
 
 
+def _ensure_python_package_structure(output_dir: Path) -> None:
+    """
+    Ensure all directories with .py files have __init__.py for proper package imports.
+    
+    This function is critical for generated Python code that uses relative imports
+    (e.g., `from .routes import router`). Without __init__.py files, Python raises
+    ImportError when trying to import from packages.
+    
+    Args:
+        output_dir: Root directory to scan for Python files
+    """
+    if not output_dir.exists():
+        logger.warning(f"Output directory {output_dir} does not exist, skipping __init__.py creation")
+        return
+    
+    skip_dirs = {'__pycache__', '.git', '.pytest_cache', '.mypy_cache', 
+                 'node_modules', '.venv', 'venv', 'env', 'reports'}
+    
+    # Track directories where we create __init__.py files
+    created_count = 0
+    
+    # Check the root directory first
+    if any(output_dir.glob('*.py')):
+        init_file = output_dir / '__init__.py'
+        if not init_file.exists():
+            init_file.write_text('# Auto-generated for package imports\n')
+            logger.debug(f"Created __init__.py in root: {output_dir}")
+            created_count += 1
+    
+    # Check all subdirectories
+    for subdir in output_dir.rglob('*'):
+        if subdir.is_dir() and subdir.name not in skip_dirs:
+            has_python_files = any(subdir.glob('*.py'))
+            if has_python_files:
+                init_file = subdir / '__init__.py'
+                if not init_file.exists():
+                    init_file.write_text('# Auto-generated for package imports\n')
+                    logger.debug(f"Created __init__.py in {subdir}")
+                    created_count += 1
+    
+    if created_count > 0:
+        logger.info(f"Created {created_count} __init__.py files in {output_dir}")
+
 
 def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
     """
@@ -2290,6 +2333,22 @@ class OmniCoreService:
                                             output_path = output_path / project_name
                                     except ImportError:
                                         logger.warning("[CODEGEN] _enforce_output_layout not available, skipping layout enforcement")
+                                
+                                # FIX Bug 1: Create __init__.py files for Python packages after materialization
+                                # This must happen BEFORE testgen, critique, and SFE stages run
+                                # Without __init__.py, Python cannot import from packages using relative imports
+                                if language.lower() == "python":
+                                    try:
+                                        _ensure_python_package_structure(output_path)
+                                        logger.info(
+                                            f"[CODEGEN] Ensured Python package structure in {output_path}",
+                                            extra={"job_id": job_id}
+                                        )
+                                    except Exception as init_err:
+                                        logger.warning(
+                                            f"[CODEGEN] Failed to create __init__.py files: {init_err}",
+                                            extra={"job_id": job_id}, exc_info=True
+                                        )
                             else:
                                 for err in mat_result.get("errors", []):
                                     files_failed.append({"filename": "(materializer)", "error": err})
@@ -2401,6 +2460,21 @@ class OmniCoreService:
                                 raise
                             except Exception as write_error:
                                 files_failed.append({"filename": filename, "error": str(write_error)})
+                        
+                        # FIX Bug 1: Create __init__.py files for Python packages after fallback writing
+                        # This must happen for both materializer and fallback paths
+                        if language.lower() == "python":
+                            try:
+                                _ensure_python_package_structure(output_path)
+                                logger.info(
+                                    f"[CODEGEN] Fallback: Ensured Python package structure in {output_path}",
+                                    extra={"job_id": job_id}
+                                )
+                            except Exception as init_err:
+                                logger.warning(
+                                    f"[CODEGEN] Fallback: Failed to create __init__.py files: {init_err}",
+                                    extra={"job_id": job_id}, exc_info=True
+                                )
                 else:
                     logger.warning(
                         f"Code generation returned non-dict result - type={type(result).__name__}",
