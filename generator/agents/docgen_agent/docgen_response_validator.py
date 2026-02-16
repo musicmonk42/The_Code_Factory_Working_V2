@@ -50,6 +50,7 @@ from nltk.tokenize import sent_tokenize
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer.entities import OperatorConfig
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -422,6 +423,8 @@ def scrub_text(text: str) -> str:
     Remove PII and secrets from text using Presidio.
     STRICT ENFORCEMENT: Presidio is REQUIRED - no regex fallback.
     Uses singleton instances to avoid repeated initialization.
+    Uses [REDACTED] replacement to avoid placeholder tags like <PERSON>, <URL>
+    that would fail markdown validation.
     """
     if not text:
         return ""
@@ -433,8 +436,12 @@ def scrub_text(text: str) -> str:
     # Analyze text for PII
     results = analyzer.analyze(text=text, language="en")
 
-    # Anonymize the detected PII
-    anonymized_result = anonymizer.anonymize(text=text, analyzer_results=results)
+    # Anonymize the detected PII using [REDACTED] to avoid placeholder-like tags
+    anonymized_result = anonymizer.anonymize(
+        text=text,
+        analyzer_results=results,
+        operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
+    )
 
     return anonymized_result.text
 
