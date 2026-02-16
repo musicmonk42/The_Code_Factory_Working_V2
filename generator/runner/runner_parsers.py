@@ -499,18 +499,20 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
         ] = f"JUnit XML file not found: {file_path.name}"
         return results
 
-    # Handle case where file_path is actually a directory
+    # Handle case where file_path is a directory (e.g., temp dir containing results.xml)
     if file_path.is_dir():
-        logger.warning(f"JUnit XML path is a directory: {file_path}. Searching for XML files within.")
-        xml_files = sorted(file_path.glob("*.xml"))  # Sort for deterministic behavior
-        if xml_files:
-            file_path = xml_files[0]  # Use the first XML file found (alphabetically)
-            logger.info(f"Found JUnit XML file in directory: {file_path}")
-        else:
-            logger.warning(f"No XML files found in directory: {file_path}")
+        logger.info(f"JUnit XML path is a directory, searching for XML files in: {file_path}")
+        # Look for common JUnit XML result files (prefer results.xml)
+        candidates = list(file_path.glob("results.xml")) + list(file_path.glob("TEST-*.xml")) + list(file_path.glob("*.xml"))
+        xml_files = [f for f in candidates if f.is_file()]
+        if not xml_files:
+            logger.warning(f"No JUnit XML files found in directory: {file_path}")
             results["_parser_info"]["status"] = "failed"
-            results["_parser_info"]["message"] = f"Directory contains no XML files: {file_path.name}"
+            results["_parser_info"]["message"] = f"No JUnit XML files found in directory: {file_path.name}"
             return results
+        # Use the first found XML file (prefer results.xml)
+        file_path = xml_files[0]
+        logger.info(f"Using JUnit XML file from directory: {file_path}")
 
     xml_content = b""
     try:
