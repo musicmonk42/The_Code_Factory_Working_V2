@@ -50,8 +50,29 @@ from nltk.tokenize import sent_tokenize
 # --- External Dependencies (Strictly Required) ---
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
+from presidio_anonymizer.entities import OperatorConfig
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+
+# --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
+_analyzer_singleton = None
+_anonymizer_singleton = None
+
+
+def _get_analyzer():
+    """Get or create singleton AnalyzerEngine instance."""
+    global _analyzer_singleton
+    if _analyzer_singleton is None:
+        _analyzer_singleton = AnalyzerEngine(supported_languages=["en"])
+    return _analyzer_singleton
+
+
+def _get_anonymizer():
+    """Get or create singleton AnonymizerEngine instance."""
+    global _anonymizer_singleton
+    if _anonymizer_singleton is None:
+        _anonymizer_singleton = AnonymizerEngine()
+    return _anonymizer_singleton
 
 try:
     from plantuml import PlantUML
@@ -401,19 +422,26 @@ def scrub_text(text: str) -> str:
     """
     Remove PII and secrets from text using Presidio.
     STRICT ENFORCEMENT: Presidio is REQUIRED - no regex fallback.
+    Uses singleton instances to avoid repeated initialization.
+    Uses [REDACTED] replacement to avoid placeholder tags like <PERSON>, <URL>
+    that would fail markdown validation.
     """
     if not text:
         return ""
 
-    # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-    analyzer = AnalyzerEngine(supported_languages=["en"])
-    anonymizer = AnonymizerEngine()
+    # Use singleton instances to avoid repeated initialization and log spam
+    analyzer = _get_analyzer()
+    anonymizer = _get_anonymizer()
 
     # Analyze text for PII
     results = analyzer.analyze(text=text, language="en")
 
-    # Anonymize the detected PII
-    anonymized_result = anonymizer.anonymize(text=text, analyzer_results=results)
+    # Anonymize the detected PII using [REDACTED] to avoid placeholder-like tags
+    anonymized_result = anonymizer.anonymize(
+        text=text,
+        analyzer_results=results,
+        operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
+    )
 
     return anonymized_result.text
 

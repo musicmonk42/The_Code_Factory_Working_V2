@@ -435,18 +435,20 @@ The following are MANDATORY checks:
    EVERY section above MUST be included with actual, executable content.
    The README must be complete enough for a new developer to run the service.
 
-6. INPUT VALIDATION (CRITICAL - Use Pydantic validators ONLY):
-   - ALL validation MUST be implemented in the Pydantic schema using @validator decorators
+6. INPUT VALIDATION (CRITICAL - Use Pydantic V2 field validators ONLY):
+   - ALL validation MUST be implemented in the Pydantic schema using @field_validator decorators (Pydantic V2)
+   - NEVER use deprecated @validator decorator (Pydantic V1) - it will produce deprecation warnings
    - NEVER add manual validation logic in route handlers
    - Route handlers should only return responses - validation is automatic via Pydantic
    
    CORRECT Pattern (Use This):
-   - In app/schemas.py - All validation in schema using @validator:
-     * from pydantic import BaseModel, Field, validator
+   - In app/schemas.py - All validation in schema using @field_validator (Pydantic V2):
+     * from pydantic import BaseModel, Field, field_validator
      * class EchoRequest(BaseModel):
      *     message: str = Field(..., min_length=1, max_length=500)
      *     
-     *     @validator('message')
+     *     @classmethod
+     *     @field_validator('message', mode='before')
      *     def trim_and_validate_message(cls, v):
      *         # Trim whitespace and validate message is not empty
      *         v = v.strip()
@@ -461,6 +463,10 @@ The following are MANDATORY checks:
      *     return {{'echo': request.message}}
    
    WRONG Pattern (DO NOT USE):
+   - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
+     * from pydantic import BaseModel, Field, validator  # ❌ DEPRECATED
+     *     @validator('message')  # ❌ Use @field_validator instead
+   
    - ❌ app/routes.py - Manual validation (WRONG):
      * @router.post('/echo', response_model=dict)
      * async def echo_message(request: EchoRequest):
@@ -470,18 +476,29 @@ The following are MANDATORY checks:
      *     return {{'echo': message}}
    
    Validation Rules:
-   - Use `@validator('field_name')` decorators for all validation logic
+   - Use `@field_validator('field_name', mode='before')` decorators for all validation logic (Pydantic V2)
+   - `mode='before'` runs validation BEFORE Pydantic's internal validation, allowing you to modify input (e.g., .strip())
+   - Always add `@classmethod` decorator before `@field_validator` (standard Python decorator order)
    - Trim whitespace in validators using `.strip()`
    - Validate min/max length after trimming
    - Return the validated (and trimmed) value from the validator
    - Use `Field(..., min_length=1, max_length=500)` for basic constraints
    - Validators run BEFORE Field constraints, so trim first, then Field checks length
    
+   HTTP Status Codes for Tests (CRITICAL):
+   - Pydantic validation failures (from @field_validator raising ValueError) return HTTP 422 (Unprocessable Entity)
+   - Manual HTTPException(status_code=400) returns HTTP 400 (Bad Request)
+   - ALWAYS use status_code == 422 for Pydantic validation error tests, NOT 400
+   
    - For test boundary cases:
      * CRITICAL: Use `"x" * N` for max-length boundary tests, NOT `"" * N`
      * Empty string multiplied by any number is still empty: `"" * 501 == ""`
-     * Example: `("x" * 501, 400)` tests 501-character message (correct)
-     * Example: `("" * 501, 400)` tests empty string (WRONG - this is a bug)
+     * Example: `("x" * 501, 422)` tests 501-character message - expects 422 from Pydantic
+     * Example: `("" * 501, 422)` tests empty string (WRONG - this is a bug)
+     * Example test for empty message after trim:
+       def test_echo_empty_message():
+           response = client.post("/echo", json={{"message": "   "}})
+           assert response.status_code == 422  # Pydantic validation error → 422, NOT 400
 
 7. PRE-GENERATION CHECKLIST:
    Before submitting your response, mentally verify:

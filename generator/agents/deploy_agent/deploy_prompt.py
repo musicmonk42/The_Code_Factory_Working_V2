@@ -187,13 +187,36 @@ from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL
 
 # --- External Dependencies (optional) ---
 # Presidio stack pulls in spaCy/thinc/torch, which may not be available in all envs
+PRESIDIO_AVAILABLE = False
 try:
     from presidio_analyzer import AnalyzerEngine  # type: ignore
     from presidio_anonymizer import AnonymizerEngine  # type: ignore
     from presidio_anonymizer.entities import OperatorConfig  # type: ignore
+
+    PRESIDIO_AVAILABLE = True
+
+    # --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
+    _analyzer_singleton = None
+    _anonymizer_singleton = None
+
+    def _get_analyzer():
+        """Get or create singleton AnalyzerEngine instance."""
+        global _analyzer_singleton
+        if _analyzer_singleton is None:
+            _analyzer_singleton = AnalyzerEngine(supported_languages=["en"])
+        return _analyzer_singleton
+
+    def _get_anonymizer():
+        """Get or create singleton AnonymizerEngine instance."""
+        global _anonymizer_singleton
+        if _anonymizer_singleton is None:
+            _anonymizer_singleton = AnonymizerEngine()
+        return _anonymizer_singleton
+
 except Exception:  # pragma: no cover
     AnalyzerEngine = None
     AnonymizerEngine = None
+    OperatorConfig = None
 # -----------------------------------
 
 
@@ -256,16 +279,17 @@ def scrub_text(text: str) -> str:
     Redacts sensitive information from the text using Presidio if available,
     otherwise falls back to regex-based redaction using COMMON_SECRET_PATTERNS.
     Safe for environments without torch/spacy/presidio.
+    Uses singleton instances to avoid repeated initialization.
     """
     if not text:
         return ""
 
     # Try Presidio path if available
-    if AnalyzerEngine is not None and AnonymizerEngine is not None:
+    if PRESIDIO_AVAILABLE:
         try:
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-            analyzer = AnalyzerEngine(supported_languages=["en"])
-            anonymizer = AnonymizerEngine()
+            # Use singleton instances to avoid repeated initialization and log spam
+            analyzer = _get_analyzer()
+            anonymizer = _get_anonymizer()
 
             entities = [
                 "PERSON",

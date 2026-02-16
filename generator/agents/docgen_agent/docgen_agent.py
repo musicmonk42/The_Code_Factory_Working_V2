@@ -59,6 +59,26 @@ from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
+# --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
+_analyzer_singleton = None
+_anonymizer_singleton = None
+
+
+def _get_analyzer():
+    """Get or create singleton AnalyzerEngine instance."""
+    global _analyzer_singleton
+    if _analyzer_singleton is None:
+        _analyzer_singleton = AnalyzerEngine(supported_languages=["en"])
+    return _analyzer_singleton
+
+
+def _get_anonymizer():
+    """Get or create singleton AnonymizerEngine instance."""
+    global _anonymizer_singleton
+    if _anonymizer_singleton is None:
+        _anonymizer_singleton = AnonymizerEngine()
+    return _anonymizer_singleton
+
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner import tracer
 from runner.llm_client import call_llm_api
@@ -148,13 +168,14 @@ def scrub_text(text: str) -> str:
     """
     Strictly redacts sensitive information from the text using Presidio.
     Raises RuntimeError if Presidio fails.
+    Uses singleton instances to avoid repeated initialization.
     """
     if not text:
         return ""
     try:
-        # FIX: Specify supported_languages to avoid warnings about non-English recognizers
-        analyzer = AnalyzerEngine(supported_languages=["en"])
-        anonymizer = AnonymizerEngine()
+        # Use singleton instances to avoid repeated initialization and log spam
+        analyzer = _get_analyzer()
+        anonymizer = _get_anonymizer()
         presidio_entities = [
             "PERSON",
             "EMAIL_ADDRESS",
