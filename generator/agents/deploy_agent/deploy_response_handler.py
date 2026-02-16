@@ -3383,6 +3383,20 @@ async def handle_deploy_response(
                 '<GROUP_ID>': '1000',
                 '<APP_NAME>': 'app',
                 '<APP_PORT>': '8000',
+                '{PYTHON_VERSION}': '3.11',
+                '<PYTHON_VERSION>': '3.11',
+                '{PYTHON_MAJOR_VERSION}': '3',
+                '<PYTHON_MAJOR_VERSION>': '3',
+                '{PYTHON_MINOR_VERSION}': '11',
+                '<PYTHON_MINOR_VERSION>': '11',
+                '{RUNTIME_VERSION}': '3.11',
+                '<RUNTIME_VERSION>': '3.11',
+                '{NODE_VERSION}': '20',
+                '<NODE_VERSION>': '20',
+                '{JAVA_VERSION}': '21',
+                '<JAVA_VERSION>': '21',
+                '{GO_VERSION}': '1.22',
+                '<GO_VERSION>': '1.22',
             }
             
             # Pre-substitute common environment placeholders in a single pass
