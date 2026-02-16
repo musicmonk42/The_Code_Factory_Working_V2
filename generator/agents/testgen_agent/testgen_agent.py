@@ -1077,7 +1077,26 @@ Agent --> Dev : Deliver Report
                     
                     # Add import for the module being tested
                     # Use explicit imports to avoid namespace pollution (industry best practice)
-                    module_name = Path(file_path).stem
+                    # FIX Bug 2: Compute correct import path for nested packages
+                    # Strip "generated/<project>/" prefix to get package-relative path
+                    file_path_obj = Path(file_path)
+                    
+                    # Check if path starts with "generated/<project>/" and strip it
+                    parts = file_path_obj.parts
+                    if len(parts) >= 3 and parts[0] == 'generated':
+                        # Skip first two parts: "generated" and "<project_name>"
+                        # e.g., "generated/hello_generator/app/schemas.py" -> "app/schemas.py"
+                        parts = parts[2:]
+                        file_path_obj = Path(*parts) if parts else Path(file_path_obj.name)
+                    
+                    # Remove .py extension and convert path separators to dots
+                    # e.g., "app/schemas.py" -> "app.schemas", "schemas.py" -> "schemas"
+                    parts = file_path_obj.with_suffix('').parts
+                    if parts:
+                        module_name = '.'.join(parts)
+                    else:
+                        module_name = file_path_obj.stem
+                    
                     test_lines.append(f'# Import the module being tested')
                     if functions:
                         funcs_to_import = ', '.join(functions[:10])  # Limit to first 10
