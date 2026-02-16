@@ -1741,10 +1741,12 @@ def test_{file_stem}_syntax_error_documentation():
                         if last_execution_errors:
                             error_lines = ["## Test Execution Errors\n"]
                             for v_type, errors in last_execution_errors.items():
-                                if errors.get("stderr"):
-                                    error_lines.append(f"### {v_type} stderr:\n```\n{errors['stderr']}\n```\n")
-                                if errors.get("stdout"):
-                                    error_lines.append(f"### {v_type} stdout:\n```\n{errors['stdout']}\n```\n")
+                                stderr_content = errors.get("stderr", "").strip()
+                                stdout_content = errors.get("stdout", "").strip()
+                                if stderr_content:
+                                    error_lines.append(f"### {v_type} stderr:\n```\n{stderr_content}\n```\n")
+                                if stdout_content:
+                                    error_lines.append(f"### {v_type} stdout:\n```\n{stdout_content}\n```\n")
                             execution_errors_str = "\n".join(error_lines)
 
                         refinement_prompt = await build_agentic_prompt(

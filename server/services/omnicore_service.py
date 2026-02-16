@@ -5278,7 +5278,8 @@ class OmniCoreService:
             critique_result = {}  # Initialize for later reference
             if payload.get("run_critique", True):
                 # Enrich critique with test and validation results for better context
-                # Only mark stages as "failed" if they were expected (via include_* flags) but not completed
+                # NOTE: Only testgen can have failed at this point since critique runs before deploy/docgen
+                # Deploy and docgen failures will be detected in later pipeline runs
                 stages_failed = []
                 if payload.get("include_tests", True) and "testgen" not in stages_completed:
                     stages_failed.append("testgen")
@@ -5309,7 +5310,7 @@ class OmniCoreService:
                                 "code_path": codegen_result.get("output_path"),
                                 "language": detected_language,
                                 "run_tests": True,
-                                "generate_tests": False,  # Don't regenerate, just run existing tests
+                                "generate_tests": False,  # Do not regenerate, just run existing tests
                             }
                             testgen_rerun_result = await self._run_testgen(job_id, testgen_rerun_payload)
                             
