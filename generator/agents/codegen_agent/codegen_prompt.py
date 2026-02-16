@@ -864,11 +864,13 @@ async def translate_requirements_if_needed(
         # Note: This requires a Google Cloud Translate API key/credentials.
         api_key = secrets_manager.get_secret("GOOGLE_TRANSLATE_API_KEY")
         if not api_key:
+            logger.debug("Skipping translation: GOOGLE_TRANSLATE_API_KEY not configured")
             return requirements
 
         # Use Google Cloud Natural Language API for language detection
         nlp_api_key = secrets_manager.get_secret("GOOGLE_CLOUD_NLP_API_KEY")
         if not nlp_api_key:
+            logger.debug("Skipping translation: GOOGLE_CLOUD_NLP_API_KEY not configured")
             return requirements
 
         async with aiohttp.ClientSession() as session:

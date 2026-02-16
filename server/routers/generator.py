@@ -48,6 +48,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
 
+
+def _stage_ran(stage: str, completed: list) -> bool:
+    """Check if a stage ran (exact match or prefix match with colon-separated suffix).
+    
+    Handles stage entries like 'testgen:error', 'testgen:execution_failed',
+    'testgen:skipped' being recognized as the 'testgen' stage having run.
+    """
+    return any(s == stage or s.startswith(stage + ":") for s in completed)
+
+
 # Maximum number of concurrent pipeline tasks to prevent event loop saturation
 # This limits the number of pipeline coroutines that can run simultaneously
 # Tune this value based on your system resources and load requirements
@@ -357,10 +367,6 @@ async def _trigger_pipeline_background(
         # Check if ALL CRITICAL stages completed (or ran with error/failure suffix)
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        # FIX: Use startswith to match stages like "testgen:error" and "testgen:execution_failed"
-        def _stage_ran(stage, completed):
-            return any(s == stage or s.startswith(stage + ":") for s in completed)
-
         all_critical_completed = all(_stage_ran(stage, stages_completed) for stage in critical_stages)
 
         # At minimum, codegen must have succeeded to finalize as success
@@ -560,10 +566,6 @@ async def _resume_pipeline_after_clarification(
         # Check if ALL CRITICAL stages completed (or ran with error/failure suffix)
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         # We must verify actual stage completion, not just trust pipeline status
-        # FIX: Use startswith to match stages like "testgen:error" and "testgen:execution_failed"
-        def _stage_ran(stage, completed):
-            return any(s == stage or s.startswith(stage + ":") for s in completed)
-
         all_critical_completed = all(_stage_ran(stage, stages_completed) for stage in critical_stages)
 
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
