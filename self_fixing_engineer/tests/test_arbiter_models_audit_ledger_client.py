@@ -73,12 +73,8 @@ class MockReceipt(dict):
 @pytest.fixture(autouse=True)
 def setup_environment(mocker: MockerFixture):
     """Set up test environment variables"""
-    for key, value in TEST_ENV.items():
-        mocker.patch.dict(os.environ, {key: value})
+    mocker.patch.dict(os.environ, TEST_ENV)
     yield
-    # Cleanup
-    for key in TEST_ENV:
-        os.environ.pop(key, None)
 
 
 @pytest.fixture
@@ -182,6 +178,7 @@ def mock_web3_dependencies(mocker: MockerFixture):
     )
     mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.Account", mock_account)
     mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client.ETHEREUM_AVAILABLE", True)
+    mocker.patch("self_fixing_engineer.arbiter.models.audit_ledger_client._EXPLAIN_AUDIT_REAL", False)
 
     def mock_checksum(addr):
         return addr
