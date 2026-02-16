@@ -591,6 +591,9 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
     errors_before = get_metric_value(
         KG_ERRORS, operation="connect", error_type="ServiceUnavailable"
     )
+    success_before = get_metric_value(
+        KG_OPS_TOTAL, operation="connect", status="success"
+    )
     await client.connect()
     assert client._connected
     assert (
@@ -599,7 +602,7 @@ async def test_retry_on_connect_failure(mocker: MockerFixture):
         )
         == errors_before
     )
-    assert get_metric_value(KG_OPS_TOTAL, operation="connect", status="success") >= 1
+    assert get_metric_value(KG_OPS_TOTAL, operation="connect", status="success") == success_before + 1
 
 
 @pytest.mark.asyncio
