@@ -162,7 +162,7 @@ Before submitting, verify EVERY item below. Failure on any item = REJECTION:
 7. ✓ EVERY Pydantic request model uses Field() with constraints
 8. ✓ NO `@Field.validator` — use `@field_validator` (standalone import from pydantic)
 9. ✓ NO plain type annotations like `message: str` - MUST be `message: str = Field(..., min_length=1, max_length=500)`
-10. ✓ String fields have min_length, max_length, and strip_whitespace=True
+10. ✓ String fields have min_length, max_length, and use @field_validator for trimming if needed
 11. ✓ Numeric fields have ge/le/gt/lt constraints where applicable
 12. ✓ Validation is at SCHEMA level, NOT in route handlers
 

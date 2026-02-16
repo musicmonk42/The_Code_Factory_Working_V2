@@ -468,6 +468,7 @@ The following are MANDATORY checks:
    - ❌ @Field.validator('message', mode='before')  # WRONG: Field has no .validator attribute
    - ❌ @validator('message')  # WRONG: Deprecated Pydantic V1 decorator
    
+   Examples of WRONG patterns:
    - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
      * from pydantic import BaseModel, Field, validator  # ❌ DEPRECATED
      *     @validator('message')  # ❌ Use @field_validator instead
