@@ -88,11 +88,21 @@ try:
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["en"])
     anonymizer = AnonymizerEngine()
     
-    # FIX: Set presidio logger to ERROR level to reduce log spam
-    presidio_logger = logging.getLogger("presidio-analyzer")
-    presidio_logger.setLevel(logging.ERROR)
-    presidio_anonymizer_logger = logging.getLogger("presidio-anonymizer")
-    presidio_anonymizer_logger.setLevel(logging.ERROR)
+    # FIX: Set presidio logger to ERROR level and add filters to reduce log spam
+    # Filter for both underscore and hyphen variants of logger names
+    presidio_filter = lambda record: not any(
+        msg_part in record.getMessage().lower()
+        for msg_part in ["not added to registry", "is not mapped"]
+    )
+    
+    for logger_name in ["presidio_analyzer", "presidio-analyzer"]:
+        pres_logger = logging.getLogger(logger_name)
+        pres_logger.setLevel(logging.ERROR)
+        pres_logger.addFilter(presidio_filter)
+    
+    for logger_name in ["presidio_anonymizer", "presidio-anonymizer"]:
+        anon_logger = logging.getLogger(logger_name)
+        anon_logger.setLevel(logging.ERROR)
     
 except (ImportError, OSError):
     PRESIDIO_AVAILABLE = False
