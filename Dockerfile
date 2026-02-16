@@ -167,7 +167,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading NLTK data..."; \
         echo "========================================"; \
-        mkdir -p /opt/nltk_data && \
         NLTK_DATA=/opt/nltk_data python -c "import nltk; \
             nltk.download('punkt', quiet=True); \
             nltk.download('stopwords', quiet=True); \
@@ -187,7 +186,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading HuggingFace models..."; \
         echo "========================================"; \
-        mkdir -p /opt/huggingface_cache && \
         HF_HOME=/opt/huggingface_cache TRANSFORMERS_CACHE=/opt/huggingface_cache \
         python -c "from transformers import pipeline; \
             print('Downloading facebook/bart-large-cnn model...'); \
@@ -204,7 +202,6 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Pre-caching ChromaDB ONNX embedding model..."; \
         echo "========================================"; \
-        mkdir -p /opt/chroma_cache && \
         CHROMA_CACHE_DIR=/opt/chroma_cache \
         python -c "import chromadb; \
             from chromadb.config import Settings; \
