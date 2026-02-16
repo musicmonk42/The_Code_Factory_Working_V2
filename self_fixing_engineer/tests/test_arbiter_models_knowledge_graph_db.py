@@ -86,8 +86,10 @@ def in_memory_exporter():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
+    original_tracer = knowledge_graph_db.tracer
     knowledge_graph_db.tracer = provider.get_tracer(__name__)
-    return exporter
+    yield exporter
+    knowledge_graph_db.tracer = original_tracer
 
 
 
