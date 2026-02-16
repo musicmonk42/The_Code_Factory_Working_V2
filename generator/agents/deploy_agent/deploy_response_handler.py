@@ -607,10 +607,10 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     raw = raw_response.strip()
     
     # FIX Issue 2: Early detection of mermaid diagrams and markdown contamination
-    # Strip mermaid blocks instead of immediately rejecting
-    if '```mermaid' in raw.lower() or '``` mermaid' in raw.lower():
+    # Case-insensitive mermaid detection
+    if re.search(r'```\s*mermaid', raw, re.IGNORECASE):
         # Strip mermaid blocks instead of immediately rejecting
-        cleaned = re.sub(r'```\s*[Mm]ermaid\b.*?```', '', raw, flags=re.DOTALL).strip()
+        cleaned = re.sub(r'```\s*mermaid\b.*?```', '', raw, flags=re.DOTALL | re.IGNORECASE).strip()
         if not cleaned:
             raise ValueError(
                 "Invalid LLM response: Contains only mermaid diagram(s) with no configuration content."
@@ -643,6 +643,24 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     # Only accept document separator or apiVersion as valid starts (avoid false positives)
     if format_type in ("yaml", "kubernetes", "helm"):
         if raw.startswith(("---", "apiVersion:", "# Kubernetes", "# Helm")):
+            # Strip any embedded code blocks within the YAML before returning
+            # This handles cases where LLM embeds code examples inside YAML
+            lines = []
+            in_code_block = False
+            for line in raw.split('\n'):
+                # Detect code block boundaries
+                if line.strip().startswith('```'):
+                    in_code_block = not in_code_block
+                    continue  # Skip the fence line itself
+                
+                # Skip lines inside code blocks
+                if in_code_block:
+                    continue
+                    
+                lines.append(line)
+            
+            raw = '\n'.join(lines)
+            
             # FIX 6: Record valid format
             if llm_output_format_counter:
                 llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
@@ -1372,16 +1390,16 @@ class YAMLHandler(FormatHandler):
             Sanitized YAML string with markdown artifacts removed
         """
         lines = []
-        in_mermaid_block = False  # Track if we're inside a mermaid block
+        in_code_block = False  # Track if we're inside any code block (mermaid, python, etc.)
         for line in raw.split('\n'):
             # FIX Issue 2: Enhanced markdown detection and stripping
-            # Skip mermaid diagram blocks completely
-            if '```mermaid' in line.lower() or '``` mermaid' in line.lower():
-                in_mermaid_block = True
-                continue
-            if in_mermaid_block:
-                if '```' in line:
-                    in_mermaid_block = False
+            # Detect code block boundaries (```language or just ```)
+            if line.strip().startswith('```'):
+                in_code_block = not in_code_block
+                continue  # Skip the fence line itself
+            
+            # Skip lines inside code blocks
+            if in_code_block:
                 continue
             
             # Skip lines that start with markdown headers (# followed by space and any letter)
