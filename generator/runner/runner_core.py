@@ -421,6 +421,9 @@ async def run_tests_in_sandbox(
             "pass_count": results.get("pass_count", 0),
             "fail_count": results.get("fail_count", 0),
             "status": "success" if result.status == "completed" else "failed",
+            # FIX Problem 2A: Include stdout/stderr for testgen refinement
+            "stdout": results.get("stdout", ""),
+            "stderr": results.get("stderr", ""),
         }
 
     except Exception as e:
@@ -2222,6 +2225,24 @@ add_package_parent_dirs(code_path)
                 )
                 span.set_attribute("runner.test_cmd_return_code", returncode)
                 span.set_attribute("runner.test_cmd_stderr_snippet", stderr[:500])
+                
+                # FIX Problem 2C: Log test execution failures to audit system
+                try:
+                    log_audit_event = _get_log_audit_event()
+                    await log_audit_event(
+                        "test_execution_failed",
+                        {
+                            "task_id": task_id,
+                            "returncode": returncode,
+                            "stdout": stdout,
+                            "stderr": stderr,
+                            "framework": actual_framework_name,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    )
+                except Exception as audit_err:
+                    # Don't fail the pipeline if audit logging fails
+                    logger.warning(f"Failed to log test execution failure to audit: {audit_err}")
 
             # --- Parsing Results Phase ---
             span.add_event("Parsing test results")

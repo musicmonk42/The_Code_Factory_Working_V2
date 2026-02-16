@@ -1731,6 +1731,23 @@ def test_{file_stem}_syntax_error_documentation():
                         last_generated_tests_content = last_step_in_history.get(
                             "generated_tests_content", {}
                         )
+                        # FIX Problem 2B: Extract execution errors from history
+                        last_execution_errors = last_step_in_history.get(
+                            "execution_errors", {}
+                        )
+                        
+                        # Format execution errors for the prompt
+                        execution_errors_str = ""
+                        if last_execution_errors:
+                            error_lines = ["## Test Execution Errors\n"]
+                            for v_type, errors in last_execution_errors.items():
+                                stderr_content = errors.get("stderr", "").strip()
+                                stdout_content = errors.get("stdout", "").strip()
+                                if stderr_content:
+                                    error_lines.append(f"### {v_type} stderr:\n```\n{stderr_content}\n```\n")
+                                if stdout_content:
+                                    error_lines.append(f"### {v_type} stdout:\n```\n{stdout_content}\n```\n")
+                            execution_errors_str = "\n".join(error_lines)
 
                         refinement_prompt = await build_agentic_prompt(
                             "refinement",
@@ -1739,6 +1756,7 @@ def test_{file_stem}_syntax_error_documentation():
                             generated_tests=last_generated_tests_content,
                             validation_feedback=json.dumps(last_validation_report),
                             critique=last_critique_content,
+                            execution_errors=execution_errors_str,  # FIX Problem 2B: Pass execution errors
                         )
                         logger.info(
                             f"Calling LLM for refinement attempt {attempt}.",
@@ -1860,6 +1878,25 @@ def test_{file_stem}_syntax_error_documentation():
                         **log_extra,
                     )
                     history[-1]["validation_report"] = validation_report
+                    
+                    # FIX Problem 2A: Capture execution errors from validation report
+                    execution_errors = {}
+                    for v_type, v_result in validation_report.items():
+                        if isinstance(v_result, dict):
+                            # Collect stdout/stderr from validation results
+                            if v_result.get("execution_stdout") or v_result.get("execution_stderr"):
+                                execution_errors[v_type] = {
+                                    "stdout": v_result.get("execution_stdout", ""),
+                                    "stderr": v_result.get("execution_stderr", ""),
+                                }
+                    
+                    # Store execution errors in history for refinement prompt
+                    if execution_errors:
+                        history[-1]["execution_errors"] = execution_errors
+                        logger.info(
+                            f"Captured execution errors from {len(execution_errors)} validation types",
+                            extra=log_extra,
+                        )
 
                     # Safely access the nested primary metric
                     current_metric_value = 0.0

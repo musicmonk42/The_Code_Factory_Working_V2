@@ -4068,10 +4068,29 @@ class OmniCoreService:
                         "warning": f"No code files found to critique (language: {detected_language})",
                     }
                 
+                # FIX Problem 1D: Gather test files from tests/ directory
+                test_files = {}
+                tests_dir = repo_path / "tests"
+                if tests_dir.exists():
+                    for pattern in file_patterns:
+                        for file_path in tests_dir.rglob(pattern):
+                            if not any(part.startswith('.') for part in file_path.parts):
+                                try:
+                                    rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
+                                    test_files[rel_path] = file_path.read_text(encoding="utf-8")
+                                except ValueError as e:
+                                    logger.warning(f"[CRITIQUE] Test file {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
+                                    continue
+                                except Exception as e:
+                                    logger.warning(f"[CRITIQUE] Failed to read test file {file_path}: {e}")
+                    logger.info(f"[CRITIQUE] Job {job_id} gathered {len(test_files)} test files for critique")
+                else:
+                    logger.info(f"[CRITIQUE] Job {job_id} no tests/ directory found, critique will run without test files")
+                
                 # Run critique
                 critique_result = await agent.run(
                     code_files=code_files,
-                    test_files={},
+                    test_files=test_files,  # FIX: Pass test files instead of empty dict
                     requirements={
                         "scan_types": scan_types, 
                         "auto_fix": auto_fix,
@@ -4100,6 +4119,32 @@ class OmniCoreService:
                         f"Unexpected type for fixes_applied: {type(fixes_applied_raw)}. Defaulting to 0."
                     )
                     issues_fixed = 0
+                
+                # FIX Problem 1C: Write fixed code files back to disk
+                if auto_fix and issues_fixed > 0 and "code_files" in critique_result:
+                    logger.info(f"[CRITIQUE] Job {job_id} writing {len(critique_result['code_files'])} fixed files back to disk")
+                    fixed_files = critique_result["code_files"]
+                    for file_path, file_content in fixed_files.items():
+                        try:
+                            # Ensure the file path is relative to repo_path
+                            if Path(file_path).is_absolute():
+                                full_path = Path(file_path)
+                            else:
+                                full_path = repo_path / file_path
+                            
+                            # Ensure parent directories exist
+                            full_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            # Write the fixed file
+                            async with aiofiles.open(full_path, "w", encoding="utf-8") as f:
+                                await f.write(file_content)
+                            
+                            logger.info(f"[CRITIQUE] Job {job_id} wrote fixed file: {full_path}")
+                        except Exception as write_err:
+                            logger.error(
+                                f"[CRITIQUE] Job {job_id} failed to write fixed file {file_path}: {write_err}",
+                                exc_info=True
+                            )
                 
                 # Write critique report
                 output_dir = repo_path / "reports"
@@ -5226,7 +5271,108 @@ class OmniCoreService:
                         extra={"job_id": job_id, "remaining_stages": ["deploy", "docgen", "critique"]}
                     )
             
-            # 4. Deploy (if requested)
+            # 4. Critique (if requested)
+            # PIPELINE REORDER: Critique now runs AFTER testgen but BEFORE deploy/docgen
+            # This allows auto-fix to repair issues before deployment
+            # FIX: Default to True since critique is a core pipeline feature for quality
+            critique_result = {}  # Initialize for later reference
+            if payload.get("run_critique", True):
+                # Enrich critique with test and validation results for better context
+                # NOTE: Only testgen can have failed at this point since critique runs before deploy/docgen
+                # Deploy and docgen failures will be detected in later pipeline runs
+                stages_failed = []
+                if payload.get("include_tests", True) and "testgen" not in stages_completed:
+                    stages_failed.append("testgen")
+                
+                critique_payload = {
+                    "code_path": codegen_result.get("output_path"),
+                    "scan_types": ["security", "quality"],
+                    "auto_fix": True,  # FIX: Enable auto-fix to apply fixes before deploy/docgen
+                    # Feed test results so critique can suggest fixes
+                    "test_results": testgen_result,
+                    "validation_results": val_result,
+                    "stages_completed": stages_completed,
+                    "stages_failed": stages_failed,
+                    "output_dir": payload.get("output_dir", ""),
+                    "language": detected_language,
+                }
+                logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
+                critique_result = await self._run_critique(job_id, critique_payload)
+                if critique_result.get("status") == "completed":
+                    stages_completed.append("critique")
+                    logger.info(f"[PIPELINE] Job {job_id} completed step: critique - found {critique_result.get('issues_found', 0)} issues, fixed {critique_result.get('issues_fixed', 0)}")
+                    
+                    # 4a. Re-run tests if fixes were applied
+                    if critique_result.get("issues_fixed", 0) > 0 and payload.get("include_tests", True):
+                        logger.info(f"[PIPELINE] Job {job_id} re-running tests after critique fixes")
+                        try:
+                            testgen_rerun_payload = {
+                                "code_path": codegen_result.get("output_path"),
+                                "language": detected_language,
+                                "run_tests": True,
+                                "generate_tests": False,  # Do not regenerate, just run existing tests
+                            }
+                            testgen_rerun_result = await self._run_testgen(job_id, testgen_rerun_payload)
+                            
+                            if testgen_rerun_result.get("status") == "completed":
+                                # Check if tests now pass
+                                test_results = testgen_rerun_result.get("test_results", {})
+                                fail_count = test_results.get("failed", 0)
+                                pass_count = test_results.get("passed", 0)
+                                
+                                if fail_count == 0:
+                                    logger.info(f"[PIPELINE] Job {job_id} tests PASSED after critique fixes ({pass_count} passed)")
+                                    stages_completed.append("testgen:rerun_passed")
+                                else:
+                                    logger.warning(f"[PIPELINE] Job {job_id} tests still failing after critique fixes ({fail_count} failed, {pass_count} passed)")
+                                    stages_completed.append("testgen:rerun_failed")
+                            else:
+                                logger.warning(f"[PIPELINE] Job {job_id} test re-run failed: {testgen_rerun_result.get('message', 'Unknown error')}")
+                        except Exception as rerun_err:
+                            logger.error(f"[PIPELINE] Job {job_id} test re-run exception: {rerun_err}", exc_info=True)
+                    
+                elif critique_result.get("status") == "error":
+                    logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
+                    # Generate placeholder critique report if critique failed
+                    output_path = codegen_result.get("output_path")
+                    if output_path:
+                        try:
+                            output_path_obj = Path(output_path)
+                            reports_dir = output_path_obj / "reports"
+                            reports_dir.mkdir(parents=True, exist_ok=True)
+                            report_path = reports_dir / "critique_report.json"
+                            
+                            # Only create placeholder if report doesn't exist
+                            if not report_path.exists():
+                                placeholder_report = _create_placeholder_critique_report(
+                                    job_id, "Critique stage failed or was skipped"
+                                )
+                                report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                                logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report at {report_path}")
+                        except Exception as e:
+                            logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
+            else:
+                # Generate placeholder critique report if critique was not requested
+                logger.info(f"[PIPELINE] Job {job_id} skipping critique step (run_critique={payload.get('run_critique', True)})")
+                output_path = codegen_result.get("output_path")
+                if output_path:
+                    try:
+                        output_path_obj = Path(output_path)
+                        reports_dir = output_path_obj / "reports"
+                        reports_dir.mkdir(parents=True, exist_ok=True)
+                        report_path = reports_dir / "critique_report.json"
+                        
+                        # Only create placeholder if report doesn't exist
+                        if not report_path.exists():
+                            placeholder_report = _create_placeholder_critique_report(
+                                job_id, "Critique stage was not requested"
+                            )
+                            report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
+                            logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report (critique not requested) at {report_path}")
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
+            
+            # 5. Deploy (if requested)
             # RESILIENCE FIX: Pipeline continues even if deployment fails
             # Industry Standard: Deploy failures shouldn't prevent documentation generation
             # or critique, allowing maximum value delivery from the pipeline
@@ -5313,7 +5459,7 @@ class OmniCoreService:
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")
             
-            # 5. Docgen (if requested)
+            # 6. Docgen (if requested)
             # RESILIENCE FIX: Pipeline continues even if docgen fails
             # Industry Standard: Documentation generation failure shouldn't prevent
             # code critique, ensuring comprehensive quality analysis
@@ -5415,77 +5561,6 @@ class OmniCoreService:
                             f"[PIPELINE] Job {job_id} fallback README generation after exception failed: {fallback_err}",
                             exc_info=True
                         )
-            
-            # 6. Critique (if requested)
-            # FIX: Default to True since critique is a core pipeline feature for quality
-            if payload.get("run_critique", True):
-                # Enrich critique with test and validation results for better context
-                # Only mark stages as "failed" if they were expected (via include_* flags) but not completed
-                stages_failed = []
-                if payload.get("include_tests", True) and "testgen" not in stages_completed:
-                    stages_failed.append("testgen")
-                if payload.get("include_deployment", True) and "deploy" not in stages_completed:
-                    stages_failed.append("deploy")
-                if payload.get("include_docs", True) and "docgen" not in stages_completed:
-                    stages_failed.append("docgen")
-                
-                critique_payload = {
-                    "code_path": codegen_result.get("output_path"),
-                    "scan_types": ["security", "quality"],
-                    "auto_fix": False,
-                    # Feed test results so critique can suggest fixes
-                    "test_results": testgen_result,
-                    "validation_results": val_result,
-                    "stages_completed": stages_completed,
-                    "stages_failed": stages_failed,
-                    "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
-                    "language": detected_language,  # FIX Issue A: Propagate detected language
-                }
-                logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
-                critique_result = await self._run_critique(job_id, critique_payload)
-                if critique_result.get("status") == "completed":
-                    stages_completed.append("critique")
-                    logger.info(f"[PIPELINE] Job {job_id} completed step: critique")
-                elif critique_result.get("status") == "error":
-                    logger.warning(f"[PIPELINE] Job {job_id} failed step: critique - {critique_result.get('message', 'Unknown error')} (continuing pipeline)")
-                    # FIX Issue 5: Generate placeholder critique report if critique failed
-                    output_path = codegen_result.get("output_path")
-                    if output_path:
-                        try:
-                            output_path_obj = Path(output_path)
-                            reports_dir = output_path_obj / "reports"
-                            reports_dir.mkdir(parents=True, exist_ok=True)
-                            report_path = reports_dir / "critique_report.json"
-                            
-                            # Only create placeholder if report doesn't exist
-                            if not report_path.exists():
-                                placeholder_report = _create_placeholder_critique_report(
-                                    job_id, "Critique stage failed or was skipped"
-                                )
-                                report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
-                                logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report at {report_path}")
-                        except Exception as e:
-                            logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
-            else:
-                # FIX Issue 5: Generate placeholder critique report if critique was not requested
-                logger.info(f"[PIPELINE] Job {job_id} skipping critique step (run_critique={payload.get('run_critique', True)})")
-                output_path = codegen_result.get("output_path")
-                if output_path:
-                    try:
-                        output_path_obj = Path(output_path)
-                        reports_dir = output_path_obj / "reports"
-                        reports_dir.mkdir(parents=True, exist_ok=True)
-                        report_path = reports_dir / "critique_report.json"
-                        
-                        # Only create placeholder if report doesn't exist
-                        if not report_path.exists():
-                            placeholder_report = _create_placeholder_critique_report(
-                                job_id, "Critique stage was not requested"
-                            )
-                            report_path.write_text(json.dumps(placeholder_report, indent=2), encoding="utf-8")
-                            logger.info(f"[PIPELINE] Job {job_id} generated placeholder critique report (critique not requested) at {report_path}")
-                    except Exception as e:
-                        logger.error(f"[PIPELINE] Job {job_id} failed to generate placeholder critique report: {e}")
             
             logger.info(f"[PIPELINE] Pipeline completed successfully for job {job_id}")
             
