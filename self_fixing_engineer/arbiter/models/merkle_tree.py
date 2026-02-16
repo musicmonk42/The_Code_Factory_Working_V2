@@ -16,6 +16,11 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 # Merklelib import
+# Python 3.10+ removed collections.Iterable; merklelib still references it.
+import collections
+import collections.abc
+if not hasattr(collections, "Iterable"):
+    collections.Iterable = collections.abc.Iterable
 try:
     from merklelib import MerkleTree as MerkleLibTree
 
@@ -662,7 +667,7 @@ class MerkleTree:
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, f"Proof format error: {e}"))
                 logger.error(f"Merkle proof format error: {e}", exc_info=True)
-                return False
+                raise
             except Exception as e:
                 MERKLE_OPS_TOTAL.labels(
                     operation="verify_proof", status="failure"
