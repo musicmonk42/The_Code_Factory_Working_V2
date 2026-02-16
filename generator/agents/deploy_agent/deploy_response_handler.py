@@ -607,10 +607,10 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     raw = raw_response.strip()
     
     # FIX Issue 2: Early detection of mermaid diagrams and markdown contamination
-    # Case-insensitive mermaid detection
-    if re.search(r'```\s*mermaid', raw, re.IGNORECASE):
+    # Case-insensitive mermaid detection using character class for reliability
+    if re.search(r'```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]', raw):
         # Strip mermaid blocks instead of immediately rejecting
-        cleaned = re.sub(r'```\s*mermaid\b.*?```', '', raw, flags=re.DOTALL | re.IGNORECASE).strip()
+        cleaned = re.sub(r'```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]\b.*?```', '', raw, flags=re.DOTALL | re.IGNORECASE).strip()
         if not cleaned:
             raise ValueError(
                 "Invalid LLM response: Contains only mermaid diagram(s) with no configuration content."
