@@ -675,6 +675,35 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
     sections_found = []
     commands_found = []
     
+    # 0. Check for markdown code fence wrappers (Fix 5)
+    # This detects when README content is wrapped in ```markdown ... ``` or ```md ... ```
+    readme_stripped = readme_content.strip()
+    if readme_stripped.startswith("```markdown") or readme_stripped.startswith("```md"):
+        errors.append(
+            "README content is wrapped in markdown code fences (```markdown or ```md). "
+            "The content should be pure markdown, not markdown-wrapped markdown. "
+            "This indicates improper extraction from the LLM response."
+        )
+        # Try to auto-extract the content for further validation
+        # Pattern: ```markdown\n<content>\n```
+        fence_pattern = r'^```(?:markdown|md)\s*\n(.*?)\n```$'
+        match = re.search(fence_pattern, readme_stripped, re.DOTALL)
+        if match:
+            logger.info("Auto-extracting README content from markdown code fence")
+            readme_content = match.group(1).strip()
+            readme_stripped = readme_content
+            warnings.append("Auto-extracted README content from code fence wrapper")
+        else:
+            # Can't extract - content is malformed
+            logger.error("README has markdown fence wrapper but content can't be extracted")
+    
+    # Additional check: detect incomplete fence extraction (starts with ``` but no closing)
+    if readme_stripped.startswith("```") and not readme_stripped.endswith("```"):
+        errors.append(
+            "README appears to have incomplete markdown code fence (starts with ``` but doesn't end properly). "
+            "This indicates malformed LLM response."
+        )
+    
     # 1. Check minimum length
     length = len(readme_content)
     if length < 500:

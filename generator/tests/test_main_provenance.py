@@ -496,3 +496,192 @@ curl http://localhost:8000/api/users
         assert result["valid"] is False
         # Should be missing venv, pip, uvicorn, pytest commands
         assert any("venv" in err.lower() for err in result["errors"])
+
+
+# ==============================================================================
+# Tests for Fix 5: README markdown wrapper detection
+# ==============================================================================
+
+def test_validate_readme_with_markdown_wrapper():
+    """
+    Test that README content wrapped in ```markdown fences is detected and flagged.
+    This addresses the docs/README.md wrapper bug.
+    """
+    from generator.main.provenance import validate_readme_completeness
+    
+    wrapped_readme = """```markdown
+# My Project
+
+A great project for testing.
+
+## Installation
+
+Run `pip install -r requirements.txt`
+
+## Running
+
+Run `python -m uvicorn app:main`
+
+## Testing
+
+Run `pytest`
+
+## Examples
+
+Use `curl http://localhost:8000/api/endpoint`
+```"""
+    
+    result = validate_readme_completeness(wrapped_readme, language="python")
+    # Should have an error about markdown fence wrapper
+    assert any("markdown code fence" in err.lower() or "wrapped" in err.lower() 
+               for err in result["errors"]), \
+        f"Should detect markdown wrapper. Errors: {result['errors']}"
+
+
+def test_validate_readme_with_md_wrapper():
+    """
+    Test that README content wrapped in ```md fences is also detected.
+    """
+    from generator.main.provenance import validate_readme_completeness
+    
+    wrapped_readme = """```md
+# My Project
+
+A great project.
+
+## Setup
+
+Run `python -m venv venv` and `pip install -r requirements.txt`
+
+## Run
+
+Run `uvicorn app:main`
+
+## Test
+
+Run `pytest`
+
+## Examples
+
+Use `curl http://localhost:8000`
+```"""
+    
+    result = validate_readme_completeness(wrapped_readme, language="python")
+    # Should have an error about markdown fence wrapper
+    assert any("markdown code fence" in err.lower() or "wrapped" in err.lower() 
+               for err in result["errors"]), \
+        f"Should detect md wrapper. Errors: {result['errors']}"
+
+
+def test_validate_readme_unwrapped_valid():
+    """
+    Test that a properly unwrapped README passes validation.
+    """
+    from generator.main.provenance import validate_readme_completeness
+    
+    good_readme = """# My Project
+
+A great project for testing and production use.
+
+## Installation
+
+First, create a virtual environment:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+## Running the Server
+
+Start the server with:
+
+```bash
+uvicorn app:main --reload
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+## API Examples
+
+Test the API with curl:
+
+```bash
+curl http://localhost:8000/api/users
+```
+"""
+    
+    result = validate_readme_completeness(good_readme, language="python")
+    # Should pass validation (no wrapper error)
+    wrapper_errors = [err for err in result["errors"] 
+                     if "markdown code fence" in err.lower() or "wrapped" in err.lower()]
+    assert len(wrapper_errors) == 0, \
+        f"Should not have wrapper errors for unwrapped README. Errors: {wrapper_errors}"
+
+
+def test_validate_readme_auto_extract_from_wrapper():
+    """
+    Test that content can be auto-extracted from markdown wrapper for validation.
+    """
+    from generator.main.provenance import validate_readme_completeness
+    
+    # Valid content wrapped in markdown fence
+    wrapped_readme = """```markdown
+# My Project
+
+A comprehensive README with all required sections.
+
+## Installation
+
+Set up your environment:
+
+```bash
+python -m venv venv
+pip install -r requirements.txt
+```
+
+## Running
+
+Start the application:
+
+```bash
+uvicorn app:main
+```
+
+## Testing
+
+Run tests:
+
+```bash
+pytest
+```
+
+## Examples
+
+Test endpoints:
+
+```bash
+curl http://localhost:8000/health
+```
+```"""
+    
+    result = validate_readme_completeness(wrapped_readme, language="python")
+    
+    # Should have an error about the wrapper
+    assert any("markdown code fence" in err.lower() for err in result["errors"])
+    
+    # But should also have a warning about auto-extraction
+    assert any("auto-extract" in warn.lower() for warn in result.get("warnings", [])), \
+        f"Should have auto-extraction warning. Warnings: {result.get('warnings', [])}"

@@ -42,6 +42,12 @@ import tempfile
 from functools import lru_cache
 from typing import Any, Dict, List, Tuple, Union
 
+try:
+    import yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
 from .syntax_auto_repair import SyntaxAutoRepair
 
 logger = logging.getLogger(__name__)
@@ -869,8 +875,8 @@ def _clean_code_block(code_content: str) -> str:
     
     # Strategy 1: Extract from language-specific markdown fences (```python, ```py, etc.)
     # Pattern matches: ```<language>\ncode\n```
-    # Supports: python, py, javascript, js, typescript, ts, java, go, rust, cpp, c++, json, etc.
-    code_block_pattern = r'```(?:python|py|javascript|js|typescript|ts|java|go|rust|cpp|c\+\+|c#|csharp|ruby|php|swift|kotlin|json)\s*\n(.*?)```'
+    # Supports: python, py, javascript, js, typescript, ts, java, go, rust, cpp, c++, json, yaml, yml, markdown, md, etc.
+    code_block_pattern = r'```(?:python|py|javascript|js|typescript|ts|java|go|rust|cpp|c\+\+|c#|csharp|ruby|php|swift|kotlin|json|yaml|yml|markdown|md|dockerfile|toml|xml|html|css|bash|sh|shell|sql)\s*\n(.*?)```'
     matches = re.findall(code_block_pattern, text, flags=re.DOTALL | re.IGNORECASE)
     
     if matches:
@@ -1141,6 +1147,67 @@ def _should_skip_syntax_validation(filename: str) -> bool:
         return False
 
 
+def _validate_yaml_content(code: str, filename: str) -> Tuple[bool, str]:
+    """
+    Validates YAML content to ensure it's actual YAML, not markdown wrapping.
+    
+    This function is critical for catching cases where LLM returns markdown-wrapped
+    YAML content (e.g., ```yaml ... ```) that wasn't properly extracted by _clean_code_block.
+    
+    Args:
+        code: The content to validate as YAML
+        filename: The filename (for error messages)
+        
+    Returns:
+        Tuple of (is_valid, message):
+            - is_valid: True if content is valid YAML
+            - message: Empty if valid, error description otherwise
+    
+    Examples:
+        >>> _validate_yaml_content("apiVersion: v2\\nname: my-chart", "Chart.yaml")
+        (True, "")
+        >>> _validate_yaml_content("```yaml\\napiVersion: v2\\n```", "Chart.yaml")
+        (False, "YAML file contains markdown code fences...")
+    """
+    if not code.strip():
+        return False, "Empty YAML content"
+    
+    # Check for markdown code fences - these indicate improper extraction
+    if code.strip().startswith("```") or "```yaml" in code or "```yml" in code:
+        return False, (
+            f"YAML file '{filename}' contains markdown code fences. "
+            "This indicates the content was not properly extracted from the LLM response. "
+            "The file should contain pure YAML, not markdown-wrapped YAML."
+        )
+    
+    # Check for other markdown indicators (badges, mermaid diagrams)
+    markdown_indicators = ["![", "[![", "```mermaid", "##", "###"]
+    for indicator in markdown_indicators:
+        if indicator in code[:200]:  # Check first 200 chars for markdown
+            return False, (
+                f"YAML file '{filename}' appears to contain markdown content (found '{indicator}'). "
+                "Expected pure YAML format."
+            )
+    
+    # Validate actual YAML syntax
+    if not HAS_YAML:
+        logger.warning("PyYAML not available; skipping YAML syntax validation for %s", filename)
+        return True, "PyYAML not available; skipped."
+    
+    try:
+        # Parse YAML to verify it's valid
+        yaml.safe_load(code)
+        return True, ""
+    except yaml.YAMLError as e:
+        error_msg = f"Invalid YAML syntax in {filename}: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+    except Exception as e:
+        error_msg = f"Error validating YAML in {filename}: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
 def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     """
     Validates code syntax using language-appropriate mechanisms.
@@ -1180,6 +1247,13 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     
     if not isinstance(filename, str):
         raise TypeError(f"filename must be a string, got {type(filename).__name__}")
+    
+    # SPECIAL CASE: Validate YAML files BEFORE skipping validation
+    # This is critical to catch markdown-wrapped YAML content that wasn't properly extracted
+    ext = os.path.splitext(os.path.basename(filename))[1].lstrip(".").lower()
+    if ext in ("yaml", "yml") or lang.lower() in ("yaml", "yml"):
+        logger.debug("Performing YAML validation for %s", filename)
+        return _validate_yaml_content(code, filename)
     
     # Check if this file should skip validation (e.g., README.md, config files)
     try:
