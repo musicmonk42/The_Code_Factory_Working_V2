@@ -393,6 +393,9 @@ class CoverageValidator(TestValidator):
             lines_covered = coverage_outputs.get("lines_covered", 0)
             total_lines = coverage_outputs.get("total_lines", 0)
             test_results = coverage_outputs.get("test_results", {})
+            # FIX Problem 2A: Capture execution stdout/stderr
+            stdout = coverage_outputs.get("stdout", "")
+            stderr = coverage_outputs.get("stderr", "")
 
             if coverage_percentage < 80.0:
                 issues_list.append(f"Low coverage: {coverage_percentage:.2f}%")
@@ -411,6 +414,9 @@ class CoverageValidator(TestValidator):
                 "metrics": {
                     "coverage_percentage": coverage_percentage
                 },  # Nested for compatibility
+                # FIX Problem 2A: Include execution errors for refinement
+                "execution_stdout": stdout,
+                "execution_stderr": stderr,
             }
 
             if (
