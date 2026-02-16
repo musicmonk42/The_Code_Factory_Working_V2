@@ -52,6 +52,7 @@ class MockConfigObject:
     LLM_INFERENCE_ENDPOINT = "http://mock.llm/inference"
     LLM_INFERENCE_MODEL = "mock-model"
     LLM_INFERENCE_TIMEOUT = 30
+    INFERENCE_LLM = "grok"  # Required for inference
     MAX_RETRIES = 3
     RETRY_DELAY = 0.1
     is_production_env = False
