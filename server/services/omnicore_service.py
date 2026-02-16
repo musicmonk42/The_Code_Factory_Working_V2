@@ -207,10 +207,11 @@ _clarification_sessions = {}
 
 # Constants for configurable timeouts
 DEFAULT_TESTGEN_TIMEOUT = int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "600"))
-DEFAULT_TESTGEN_LLM_TIMEOUT = int(os.getenv("TESTGEN_LLM_TIMEOUT_SECONDS", "180"))
+DEFAULT_TESTGEN_LLM_TIMEOUT = int(os.getenv("TESTGEN_LLM_TIMEOUT_SECONDS", "360"))
 DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
 DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
+DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "600"))
 
 # Constants for clarification session cleanup
 CLARIFICATION_SESSION_TTL_SECONDS = int(os.getenv("CLARIFICATION_SESSION_TTL_SECONDS", "3600"))  # 1 hour default
@@ -1570,34 +1571,45 @@ class OmniCoreService:
                 
                 code_path_obj = Path(code_path)
                 # Don't ignore tests when analyzing generated output
-                async with CodebaseAnalyzer(
-                    root_dir=str(code_path_obj),
-                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
-                ) as analyzer:
-                    summary = await analyzer.scan_codebase(str(code_path_obj))
-                    
-                    defects = summary.get("defects", [])
-                    # Filter out defects for non-existent files
-                    valid_defects = []
-                    for defect in defects:
-                        defect_file = defect.get("file", "")
-                        if defect_file:
-                            defect_path = Path(defect_file)
-                            if not defect_path.is_absolute():
-                                defect_path = code_path_obj / defect_path
-                            if defect_path.exists():
-                                valid_defects.append(defect)
-                            else:
-                                logger.debug(f"Skipping defect for non-existent file: {defect_file}")
-                    
+                # Wrap analysis with configurable timeout to prevent long-running scans
+                try:
+                    async with asyncio.timeout(DEFAULT_SFE_ANALYSIS_TIMEOUT):
+                        async with CodebaseAnalyzer(
+                            root_dir=str(code_path_obj),
+                            ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                        ) as analyzer:
+                            summary = await analyzer.scan_codebase(str(code_path_obj))
+                            
+                            defects = summary.get("defects", [])
+                            # Filter out defects for non-existent files
+                            valid_defects = []
+                            for defect in defects:
+                                defect_file = defect.get("file", "")
+                                if defect_file:
+                                    defect_path = Path(defect_file)
+                                    if not defect_path.is_absolute():
+                                        defect_path = code_path_obj / defect_path
+                                    if defect_path.exists():
+                                        valid_defects.append(defect)
+                                    else:
+                                        logger.debug(f"Skipping defect for non-existent file: {defect_file}")
+                            
+                            return {
+                                "status": "completed",
+                                "job_id": job_id,
+                                "code_path": code_path,
+                                "issues_found": len(valid_defects),
+                                "issues": valid_defects,
+                                "total_files": summary.get("files", 0),
+                                "source": "direct_sfe",
+                            }
+                except asyncio.TimeoutError:
+                    logger.warning(f"SFE analysis timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT}s for job {job_id}")
                     return {
-                        "status": "completed",
+                        "status": "error",
+                        "message": f"Code analysis timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT} seconds",
+                        "timeout": True,
                         "job_id": job_id,
-                        "code_path": code_path,
-                        "issues_found": len(valid_defects),
-                        "issues": valid_defects,
-                        "total_files": summary.get("files", 0),
-                        "source": "direct_sfe",
                     }
             except ImportError:
                 return {"status": "error", "message": "CodebaseAnalyzer not available"}
