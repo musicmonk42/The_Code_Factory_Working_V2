@@ -107,7 +107,7 @@ project/
 
 **1. Pydantic Models for Validation with Field Constraints**
 ```python
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 class CalculationRequest(BaseModel):
     \"\"\"Request model for calculations.\"\"\"
@@ -124,7 +124,14 @@ class CalculationRequest(BaseModel):
 
 class MessageRequest(BaseModel):
     \"\"\"Request model with string validation constraints.\"\"\"
-    message: str = Field(..., min_length=1, max_length=500, strip_whitespace=True, description="Message text")
+    message: str = Field(..., min_length=1, max_length=500, description="Message text")
+    
+    @field_validator('message', mode='before')
+    @classmethod
+    def validate_message(cls, v):
+        if not isinstance(v, str):
+            raise ValueError('message must be a string')
+        return v.strip()
     
 class CalculationResponse(BaseModel):
     \"\"\"Response model for calculations.\"\"\"

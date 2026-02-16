@@ -162,6 +162,103 @@ async def test_parse_junit_xml_invalid_xml(temp_file: Path, mock_aiofiles):
         await parse_junit_xml(temp_file)
 
 
+@pytest.mark.asyncio
+async def test_parse_junit_xml_directory_with_results_xml(temp_dir: Path, mock_aiofiles):
+    """Test that parse_junit_xml handles directory with results.xml file"""
+    xml_content = """
+<testsuites>
+<testsuite name="suite" tests="2" failures="0" errors="0" skipped="0">
+<testcase name="test1" time="1.0" />
+<testcase name="test2" time="2.0" />
+</testsuite>
+</testsuites>
+"""
+    results_file = temp_dir / "results.xml"
+    results_file.write_text(xml_content)
+    
+    mock_reader = AsyncMock()
+    mock_reader.read.return_value = xml_content.encode()
+    mock_file = AsyncMock()
+    mock_file.__aenter__.return_value = mock_reader
+    mock_aiofiles.open.return_value = mock_file
+
+    result = await parse_junit_xml(temp_dir)  # Pass directory, not file
+
+    assert result.total_tests == 2
+    assert result.passed_tests == 2
+    assert result.failed_tests == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_junit_xml_directory_with_test_xml(temp_dir: Path, mock_aiofiles):
+    """Test that parse_junit_xml finds TEST-*.xml when results.xml is not present"""
+    xml_content = """
+<testsuites>
+<testsuite name="suite" tests="1" failures="0" errors="0" skipped="0">
+<testcase name="test1" time="1.0" />
+</testsuite>
+</testsuites>
+"""
+    test_file = temp_dir / "TEST-MyTests.xml"
+    test_file.write_text(xml_content)
+    
+    mock_reader = AsyncMock()
+    mock_reader.read.return_value = xml_content.encode()
+    mock_file = AsyncMock()
+    mock_file.__aenter__.return_value = mock_reader
+    mock_aiofiles.open.return_value = mock_file
+
+    result = await parse_junit_xml(temp_dir)
+
+    assert result.total_tests == 1
+    assert result.passed_tests == 1
+
+
+@pytest.mark.asyncio
+async def test_parse_junit_xml_directory_prefers_results_xml(temp_dir: Path, mock_aiofiles):
+    """Test that parse_junit_xml prefers results.xml over other XML files"""
+    results_content = """
+<testsuites>
+<testsuite name="results" tests="3" failures="0" errors="0" skipped="0">
+<testcase name="test1" time="1.0" />
+<testcase name="test2" time="2.0" />
+<testcase name="test3" time="3.0" />
+</testsuite>
+</testsuites>
+"""
+    other_content = """
+<testsuites>
+<testsuite name="other" tests="1" failures="0" errors="0" skipped="0">
+<testcase name="test1" time="1.0" />
+</testsuite>
+</testsuites>
+"""
+    # Create multiple XML files
+    (temp_dir / "results.xml").write_text(results_content)
+    (temp_dir / "TEST-Other.xml").write_text(other_content)
+    (temp_dir / "other.xml").write_text(other_content)
+    
+    mock_reader = AsyncMock()
+    mock_reader.read.return_value = results_content.encode()
+    mock_file = AsyncMock()
+    mock_file.__aenter__.return_value = mock_reader
+    mock_aiofiles.open.return_value = mock_file
+
+    result = await parse_junit_xml(temp_dir)
+
+    # Should use results.xml which has 3 tests
+    assert result.total_tests == 3
+
+
+@pytest.mark.asyncio
+async def test_parse_junit_xml_directory_no_xml_files(temp_dir: Path):
+    """Test that parse_junit_xml handles directory with no XML files"""
+    result = await parse_junit_xml(temp_dir)
+
+    assert result.parser_info.status == "failed"
+    assert "No JUnit XML files found" in result.parser_info.message
+
+
 # --------------------------------------------------------------------------- #
 # Tests for parse_coverage_xml (async)
 # --------------------------------------------------------------------------- #

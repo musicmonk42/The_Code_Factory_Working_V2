@@ -443,7 +443,7 @@ The following are MANDATORY checks:
    
    CORRECT Pattern (Use This):
    - In app/schemas.py - All validation in schema using @field_validator (Pydantic V2):
-     * from pydantic import BaseModel, Field, field_validator
+     * from pydantic import BaseModel, Field, field_validator  # field_validator is a STANDALONE import
      * class EchoRequest(BaseModel):
      *     message: str = Field(..., min_length=1, max_length=500)
      *     
@@ -465,6 +465,9 @@ The following are MANDATORY checks:
      *     return {{'echo': request.message}}
    
    WRONG Pattern (DO NOT USE):
+   - ❌ @Field.validator('message', mode='before')  # WRONG: Field has no .validator attribute
+   - ❌ @validator('message')  # WRONG: Deprecated Pydantic V1 decorator
+   
    - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
      * from pydantic import BaseModel, Field, validator  # ❌ DEPRECATED
      *     @validator('message')  # ❌ Use @field_validator instead
