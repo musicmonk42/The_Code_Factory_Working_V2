@@ -436,7 +436,8 @@ def _load_presidio_engine() -> bool:
             _add_custom_recognizers(_PRESIDIO_ANALYZER_ENGINE)
             
             # Suppress non-critical Presidio warnings
-            presidio_logger = logging.getLogger("presidio_analyzer")
+            # FIX: Use correct logger name "presidio-analyzer" (with hyphen) to match library
+            presidio_logger = logging.getLogger("presidio-analyzer")
             presidio_logger.addFilter(
                 lambda record: not any(
                     entity in record.getMessage()

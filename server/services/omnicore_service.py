@@ -3252,10 +3252,19 @@ class OmniCoreService:
                     # Track generated files
                     target_files = target_result.get("generated_files", [])
                     all_generated_files.extend(target_files)
-                    logger.info(
-                        f"[DEPLOY_ALL] Target {target} completed with {len(target_files)} files",
-                        extra={"job_id": job_id, "target": target, "duration": time.time() - target_start}
-                    )
+                    
+                    # FIX Issue 5: Check if target produced 0 files and mark as partially failed
+                    if len(target_files) == 0:
+                        failed_targets.append(target)
+                        logger.warning(
+                            f"[DEPLOY_ALL] Target '{target}' completed but produced 0 files - marking as partially failed",
+                            extra={"job_id": job_id, "target": target}
+                        )
+                    else:
+                        logger.info(
+                            f"[DEPLOY_ALL] Target {target} completed with {len(target_files)} files",
+                            extra={"job_id": job_id, "target": target, "duration": time.time() - target_start}
+                        )
                     
             except Exception as e:
                 # FIX Bug 5: Track exceptions as failures
