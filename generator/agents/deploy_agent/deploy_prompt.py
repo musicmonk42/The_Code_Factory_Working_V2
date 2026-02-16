@@ -187,10 +187,13 @@ from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL
 
 # --- External Dependencies (optional) ---
 # Presidio stack pulls in spaCy/thinc/torch, which may not be available in all envs
+PRESIDIO_AVAILABLE = False
 try:
     from presidio_analyzer import AnalyzerEngine  # type: ignore
     from presidio_anonymizer import AnonymizerEngine  # type: ignore
     from presidio_anonymizer.entities import OperatorConfig  # type: ignore
+    
+    PRESIDIO_AVAILABLE = True
     
     # --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
     _analyzer_singleton = None
@@ -213,8 +216,7 @@ try:
 except Exception:  # pragma: no cover
     AnalyzerEngine = None
     AnonymizerEngine = None
-    _get_analyzer = None
-    _get_anonymizer = None
+    OperatorConfig = None
 # -----------------------------------
 
 
@@ -283,7 +285,7 @@ def scrub_text(text: str) -> str:
         return ""
 
     # Try Presidio path if available
-    if _get_analyzer is not None and _get_anonymizer is not None:
+    if PRESIDIO_AVAILABLE:
         try:
             # Use singleton instances to avoid repeated initialization and log spam
             analyzer = _get_analyzer()

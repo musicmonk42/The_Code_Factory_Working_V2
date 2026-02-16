@@ -447,8 +447,8 @@ The following are MANDATORY checks:
      * class EchoRequest(BaseModel):
      *     message: str = Field(..., min_length=1, max_length=500)
      *     
-     *     @field_validator('message', mode='before')
      *     @classmethod
+     *     @field_validator('message', mode='before')
      *     def trim_and_validate_message(cls, v):
      *         # Trim whitespace and validate message is not empty
      *         v = v.strip()
@@ -477,7 +477,7 @@ The following are MANDATORY checks:
    
    Validation Rules:
    - Use `@field_validator('field_name', mode='before')` decorators for all validation logic (Pydantic V2)
-   - Always add `@classmethod` decorator after `@field_validator`
+   - Always add `@classmethod` decorator before `@field_validator` (standard Python decorator order)
    - Trim whitespace in validators using `.strip()`
    - Validate min/max length after trimming
    - Return the validated (and trimmed) value from the validator
