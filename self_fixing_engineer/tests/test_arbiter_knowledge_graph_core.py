@@ -73,7 +73,19 @@ def setup_langchain_mocks():
 # Setup langchain mocks FIRST
 setup_langchain_mocks()
 
-# Mock other problematic modules
+# Mock other problematic modules (save originals so we can restore after import)
+_original_modules = {
+    k: sys.modules.get(k)
+    for k in [
+        "self_fixing_engineer.arbiter.models",
+        "self_fixing_engineer.arbiter.models.redis_client",
+        "self_fixing_engineer.arbiter.models.audit_ledger_client",
+        "redis",
+        "redis.asyncio",
+        "redis.client",
+        "asyncpg",
+    ]
+}
 sys.modules["self_fixing_engineer.arbiter.models"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.models.redis_client"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.models.audit_ledger_client"] = MagicMock()
@@ -134,6 +146,13 @@ from self_fixing_engineer.arbiter.knowledge_graph.core import (
     get_transcript,
     setup_conversation,
 )
+
+# Restore original modules so other test files are not contaminated
+for _mod_key, _orig in _original_modules.items():
+    if _orig is not None:
+        sys.modules[_mod_key] = _orig
+    else:
+        sys.modules.pop(_mod_key, None)
 
 
 # Global fixture to prevent all external connections
