@@ -326,25 +326,36 @@ def _ensure_python_package_structure(output_dir: Path) -> None:
     
     # Track directories where we create __init__.py files
     created_count = 0
+    dirs_with_python = set()
     
-    # Check the root directory first
+    # First pass: collect all directories that contain Python files
     if any(output_dir.glob('*.py')):
-        init_file = output_dir / '__init__.py'
-        if not init_file.exists():
-            init_file.write_text('# Auto-generated for package imports\n')
-            logger.debug(f"Created __init__.py in root: {output_dir}")
-            created_count += 1
+        dirs_with_python.add(output_dir)
     
-    # Check all subdirectories
     for subdir in output_dir.rglob('*'):
         if subdir.is_dir() and subdir.name not in skip_dirs:
             has_python_files = any(subdir.glob('*.py'))
             if has_python_files:
-                init_file = subdir / '__init__.py'
-                if not init_file.exists():
-                    init_file.write_text('# Auto-generated for package imports\n')
-                    logger.debug(f"Created __init__.py in {subdir}")
-                    created_count += 1
+                dirs_with_python.add(subdir)
+    
+    # Second pass: for each directory with Python files, ensure all parent dirs
+    # up to output_dir also have __init__.py (for proper package hierarchy)
+    all_package_dirs = set()
+    for pydir in dirs_with_python:
+        current = pydir
+        while current != output_dir and current.parent != output_dir.parent:
+            all_package_dirs.add(current)
+            current = current.parent
+        all_package_dirs.add(output_dir)  # Include root
+    
+    # Create __init__.py in all package directories
+    for pkg_dir in sorted(all_package_dirs):
+        if pkg_dir.name not in skip_dirs:
+            init_file = pkg_dir / '__init__.py'
+            if not init_file.exists():
+                init_file.write_text('# Auto-generated for package imports\n')
+                logger.debug(f"Created __init__.py in {pkg_dir}")
+                created_count += 1
     
     if created_count > 0:
         logger.info(f"Created {created_count} __init__.py files in {output_dir}")
