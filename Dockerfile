@@ -359,13 +359,14 @@ WORKDIR /app
 # Note: /app/logs/checkpoint is needed for SFE checkpoint audit logs and DLQ
 # Note: /app/uploads is needed for job file uploads
 # Note: /app/data is needed for clarifier context database and history files
+# Note: /var/lib/clarifier is needed for clarifier persistent storage
 # Create NLTK data directory (/opt/nltk_data) and HuggingFace cache directory (/opt/huggingface_cache)
 # for pre-downloaded ML resources accessible by appuser
 # Create ChromaDB cache directory (/opt/chroma_cache) for pre-downloaded ONNX models
 # Also create the default ChromaDB cache path at /home/appuser/.cache/chroma/ since
 # ChromaDB may not respect CHROMA_CACHE_DIR and defaults to ~/.cache/chroma/onnx_models/
-RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma && \
-    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma
+RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma && \
+    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv

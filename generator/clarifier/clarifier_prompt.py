@@ -403,30 +403,20 @@ async def run(
     user_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """OmniCore plugin entry point for the prompt-focused clarification pipeline."""
-    # Mock the core clarifier and its dependencies for plugin execution if needed
-    with patch("generator.clarifier.clarifier.Clarifier") as MockClarifier:
-        # Configure the mock to have async methods
-        mock_clarifier_instance = MagicMock()
-        mock_clarifier_instance.get_clarifications = AsyncMock(
-            return_value=requirements
+    # CRITICAL FIX: Use the real Clarifier instead of mocking it
+    # The mock was causing clarification to be skipped entirely in production
+    clarifier = PromptClarifier()
+    try:
+        if user_context is None:
+            user_context = {"user_id": "default"}
+        clarified_requirements = await clarifier.get_clarifications(
+            ambiguities, requirements, user_context
         )
-        mock_clarifier_instance.graceful_shutdown = AsyncMock()
-        MockClarifier.return_value = mock_clarifier_instance
-
-        clarifier = PromptClarifier()
-        # Note: clarifier.core_clarifier is now already set to mock_clarifier_instance
-        # via PromptClarifier.__init__ calling Clarifier()
-        try:
-            if user_context is None:
-                user_context = {"user_id": "default"}
-            clarified_requirements = await clarifier.get_clarifications(
-                ambiguities, requirements, user_context
-            )
-            return {"requirements": clarified_requirements}
-        finally:
-            # Graceful shutdown should be called on the core clarifier instance
-            if hasattr(clarifier, "core_clarifier"):
-                await clarifier.core_clarifier.graceful_shutdown("plugin_run_complete")
+        return {"requirements": clarified_requirements}
+    finally:
+        # Graceful shutdown should be called on the core clarifier instance
+        if hasattr(clarifier, "core_clarifier"):
+            await clarifier.core_clarifier.graceful_shutdown("plugin_run_complete")
 
 
 async def main():
