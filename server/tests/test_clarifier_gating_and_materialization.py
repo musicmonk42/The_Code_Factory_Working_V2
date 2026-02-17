@@ -105,7 +105,7 @@ class TestClarifierGating:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
@@ -148,7 +148,7 @@ class TestClarifierGating:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
@@ -875,7 +875,7 @@ class TestEmptyQuestionFiltering:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
