@@ -222,6 +222,88 @@ class TestOmniCoreServiceIntegration:
         assert metrics["job_id"] == "test-job-123"
         assert metrics["source"] == "fallback"
 
+    @pytest.mark.asyncio
+    async def test_route_job_generator_uses_direct_dispatch(self):
+        """Test that generator targets always use direct dispatch, even when message bus is available.
+        
+        This test validates the fix for the bug where generator jobs were published to
+        the message bus with no subscriber, causing immediate failures.
+        """
+        service = OmniCoreService()
+        
+        # Create mock message bus to simulate production environment
+        mock_bus = AsyncMock()
+        mock_bus.publish = AsyncMock(return_value=True)
+        service._message_bus = mock_bus
+        service._omnicore_components_available["message_bus"] = True
+        
+        # Mock the _dispatch_generator_action to return test data
+        async def mock_dispatch(job_id, action, payload):
+            return {
+                "status": "completed",
+                "job_id": job_id,
+                "action": action,
+                "message": "Generator action completed successfully"
+            }
+        
+        service._dispatch_generator_action = mock_dispatch
+        
+        # Test routing to generator
+        result = await service.route_job(
+            job_id="test-gen-123",
+            source_module="api",
+            target_module="generator",
+            payload={"action": "run_full_pipeline", "readme_content": "test"}
+        )
+        
+        # Verify that direct dispatch was used, not message bus
+        assert result["routed"] == True
+        assert result["job_id"] == "test-gen-123"
+        assert result["transport"] == "direct_dispatch"
+        assert result["target"] == "generator"
+        
+        # Verify that the data key is present with actual results
+        assert "data" in result
+        assert result["data"]["status"] == "completed"
+        assert result["data"]["job_id"] == "test-gen-123"
+        
+        # Verify that message bus publish was NOT called for generator
+        mock_bus.publish.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_route_job_non_generator_uses_message_bus(self):
+        """Test that non-generator targets (e.g., sfe) still use message bus when available.
+        
+        This ensures the fix doesn't break message bus routing for other modules.
+        """
+        service = OmniCoreService()
+        
+        # Create mock message bus
+        mock_bus = AsyncMock()
+        mock_bus.publish = AsyncMock(return_value=True)
+        service._message_bus = mock_bus
+        service._omnicore_components_available["message_bus"] = True
+        
+        # Test routing to sfe (not generator)
+        result = await service.route_job(
+            job_id="test-sfe-123",
+            source_module="api",
+            target_module="sfe",
+            payload={"action": "analyze_code"}
+        )
+        
+        # Verify that message bus was used for non-generator target
+        assert result["routed"] == True
+        assert result["job_id"] == "test-sfe-123"
+        assert result["transport"] == "message_bus"
+        assert result["target"] == "sfe"
+        
+        # Verify that message bus publish WAS called for sfe
+        mock_bus.publish.assert_called_once()
+        
+        # Verify that the result does NOT have a data key (fire-and-forget for message bus)
+        assert "data" not in result
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
