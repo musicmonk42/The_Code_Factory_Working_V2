@@ -163,7 +163,10 @@ async def clear_metrics_and_traces(in_memory_exporter):
 def get_metric_value(metric, **labels):
     """Helper to get metric value with labels."""
     try:
-        return metric.labels(**labels)._value.get()
+        if labels:
+            return metric.labels(**labels)._value.get()
+        else:
+            return metric._value.get()
     except:
         return 0
 
@@ -300,10 +303,12 @@ async def test_disconnect_success(kg_client, in_memory_exporter):
     """Test successful disconnection."""
     success_before = get_metric_value(KG_OPS_TOTAL, operation="disconnect", status="success")
     await kg_client.connect()
+    conn_after_connect = get_metric_value(KG_CONNECTIONS)
     await kg_client.disconnect()
     assert not kg_client._connected
     assert kg_client._driver is None
     assert get_metric_value(KG_OPS_TOTAL, operation="disconnect", status="success") == success_before + 1
+    assert get_metric_value(KG_CONNECTIONS) == conn_after_connect - 1
     spans = in_memory_exporter.get_finished_spans()
     assert any(span.name == "neo4j_disconnect" and span.status.is_ok for span in spans)
 
