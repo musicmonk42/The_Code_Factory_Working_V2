@@ -27,6 +27,9 @@ class Message:
         Compare messages for ordering in PriorityQueue.
         Higher priority values are processed first (reverse order).
         If priorities are equal, earlier timestamps are processed first.
+        
+        Note: This only defines ordering for priority queue purposes.
+        Equality (__eq__) is handled by the dataclass default implementation.
         """
         if not isinstance(other, Message):
             return NotImplemented
@@ -50,12 +53,13 @@ class Message:
             return NotImplemented
         return not self < other
     
-    def __eq__(self, other):
-        if not isinstance(other, Message):
-            return NotImplemented
-        return (self.priority, self.timestamp, self.trace_id) == (
-            other.priority, other.timestamp, other.trace_id
-        )
+    def with_topic(self, new_topic: str) -> "Message":
+        """
+        Create a copy of this message with a different topic.
+        Useful for republishing messages to different topics (e.g., DLQ).
+        """
+        from dataclasses import replace
+        return replace(self, topic=new_topic)
 
 
 class MessageSchema(BaseModel):
