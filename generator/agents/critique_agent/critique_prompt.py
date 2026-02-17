@@ -163,7 +163,7 @@ except ImportError as e:
     )
 
 # Constants
-MAX_PROMPT_TOKENS = 8000
+MAX_PROMPT_TOKENS = 16000
 TEMPLATE_DIR = "prompt_templates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 
