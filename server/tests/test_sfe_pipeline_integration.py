@@ -75,11 +75,12 @@ class TestSFEPipelineIntegration:
     @pytest.mark.asyncio
     async def test_run_sfe_analysis_with_mocked_components(self):
         """Test that _run_sfe_analysis works with mocked SFE components."""
+        # Mock the imports at the module level where they're actually used
         with patch('server.services.omnicore_service.get_agent_config') as mock_config, \
              patch('server.services.omnicore_service.get_llm_config') as mock_llm_config, \
              patch('server.services.omnicore_service.detect_available_llm_provider') as mock_detect, \
-             patch('server.services.omnicore_service.CodebaseAnalyzer', create=True) as mock_analyzer_class, \
-             patch('server.services.omnicore_service.BugManager', create=True) as mock_bug_mgr_class, \
+             patch('self_fixing_engineer.arbiter.codebase_analyzer.CodebaseAnalyzer') as mock_analyzer_class, \
+             patch('self_fixing_engineer.arbiter.bug_manager.BugManager') as mock_bug_mgr_class, \
              patch('server.services.omnicore_service.aiofiles.open', new_callable=AsyncMock) as mock_aiofiles, \
              patch('pathlib.Path.exists', return_value=True), \
              patch('pathlib.Path.mkdir'), \

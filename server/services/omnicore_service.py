@@ -1704,6 +1704,7 @@ class OmniCoreService:
                     "routed": True,
                     "source": source_module,
                     "target": target_module,
+                    "transport": "message_bus" if (self._message_bus and self._omnicore_components_available["message_bus"]) else "direct_dispatch_fallback",
                     "data": result,
                 }
             except Exception as e:
@@ -1713,6 +1714,7 @@ class OmniCoreService:
                     "routed": False,
                     "source": source_module,
                     "target": target_module,
+                    "transport": "direct_dispatch_fallback",
                     "error": str(e),
                     "data": {"status": "error", "message": str(e)},
                 }
@@ -1735,6 +1737,7 @@ class OmniCoreService:
                     "routed": True,
                     "source": source_module,
                     "target": target_module,
+                    "transport": "message_bus" if (self._message_bus and self._omnicore_components_available["message_bus"]) else "direct_dispatch_fallback",
                     "data": result,
                 }
             except Exception as e:
@@ -1744,6 +1747,7 @@ class OmniCoreService:
                     "routed": False,
                     "source": source_module,
                     "target": target_module,
+                    "transport": "direct_dispatch_fallback",
                     "error": str(e),
                     "data": {"status": "error", "message": str(e)},
                 }

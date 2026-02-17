@@ -536,20 +536,17 @@ class SFEService:
 
         # Fallback
         logger.warning("Neither OmniCore nor direct SFE available, using fallback")
-        return {
-            "errors": [
-                {
-                    "error_id": "err-001",
-                    "job_id": job_id,
-                    "severity": "high",
-                    "message": "Undefined variable 'config' in main.py (fallback)",
-                    "file": "main.py",
-                    "line": 42,
-                    "type": "NameError",
-                },
-            ],
-            "count": 1,
-        }
+        return [
+            {
+                "error_id": "err-001",
+                "job_id": job_id,
+                "severity": "high",
+                "message": "Undefined variable 'config' in main.py (fallback)",
+                "file": "main.py",
+                "line": 42,
+                "type": "NameError",
+            },
+        ]
 
     async def propose_fix(self, error_id: str) -> Dict[str, Any]:
         """
