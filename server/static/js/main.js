@@ -1063,6 +1063,14 @@ async function analyzeCode() {
         });
         const data = await response.json();
         
+        // Check if analysis is unavailable
+        if (data.note) {
+            showError(`Analysis unavailable: ${data.note}`);
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<div class="error-message">${escapeHtml(data.note)}</div>`;
+            return;
+        }
+        
         showSuccess(`Analysis complete: ${data.issues_found} issues found`);
         loadErrors(jobId);
     } catch (error) {
@@ -1113,11 +1121,15 @@ async function loadErrors(jobId) {
         });
     } catch (error) {
         console.error('Failed to load errors:', error);
+        // Show user-visible error message
+        container.innerHTML = `<div class="error-message"><strong>Error loading detected issues:</strong> ${escapeHtml(error.message)}</div>`;
+        showError('Failed to load detected issues: ' + error.message);
     }
 }
 
 async function proposeFix(errorId) {
     try {
+        // Try the error endpoint first (for issues from analyze_code)
         const response = await fetchWithRetry(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
             method: 'POST'
         });
@@ -1126,7 +1138,28 @@ async function proposeFix(errorId) {
         showSuccess(`Fix proposed: ${data.description}`);
         loadFixes();
     } catch (error) {
-        showError('Failed to propose fix: ' + error.message);
+        // If the error endpoint doesn't work, try the bug analysis endpoint as fallback
+        // (for bugs from detect_bugs which use bug_id instead of error_id)
+        try {
+            const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/${errorId}/analyze`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    include_root_cause: true,
+                    suggest_fixes: true
+                })
+            });
+            const data = await response.json();
+            
+            if (data.fix_suggestions && data.fix_suggestions.length > 0) {
+                showSuccess(`Fix suggested: ${data.fix_suggestions[0]}`);
+            } else {
+                showSuccess('Bug analysis complete - check console for details');
+                console.log('Bug analysis result:', data);
+            }
+        } catch (bugError) {
+            showError('Failed to propose fix: ' + error.message);
+        }
     }
 }
 
@@ -2492,6 +2525,15 @@ async function detectBugs() {
             body: JSON.stringify({code_path: '.', scan_depth: 'deep', include_potential: false, job_id: jobId})
         });
         const data = await response.json();
+        
+        // Check if bug detection is unavailable
+        if (data.note) {
+            showError(`Bug detection unavailable: ${data.note}`);
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<div class="error-message">${escapeHtml(data.note)}</div>`;
+            return;
+        }
+        
         showSuccess(`Detected ${data.bugs_found} bugs`);
         
         // Populate the errors list with detected bugs
@@ -2556,6 +2598,12 @@ async function analyzeCodebase() {
             })
         });
         const data = await response.json();
+        
+        // Check if analysis is unavailable
+        if (data.note) {
+            showError(`Codebase analysis unavailable: ${data.note}`);
+            return;
+        }
         
         // Display results in a formatted way
         const resultMessage = `Codebase Analysis Complete:\n\n` +

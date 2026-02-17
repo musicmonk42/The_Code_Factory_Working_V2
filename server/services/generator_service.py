@@ -421,13 +421,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore codegen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Codegen agent unavailable for job {job_id}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "generated_files": ["main.py"],
-            "output_path": f"./uploads/{job_id}/generated",
+            "status": "error",
+            "message": "Code generation agent unavailable. OmniCore service is not available or codegen agent is not loaded.",
         }
 
     async def run_testgen_agent(
@@ -461,13 +469,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore testgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Testgen agent unavailable for job {job_id}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "generated_tests": ["tests/test_main.py"],
-            "coverage": coverage_target,
+            "status": "error",
+            "message": "Test generation agent unavailable. OmniCore service is not available or testgen agent is not loaded.",
         }
 
     async def run_deploy_agent(
@@ -501,13 +517,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore deploy agent execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Deploy agent unavailable for job {job_id}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "generated_files": ["Dockerfile", "docker-compose.yml"],
-            "platform": platform,
+            "status": "error",
+            "message": "Deployment agent unavailable. OmniCore service is not available or deploy agent is not loaded.",
         }
 
     async def run_docgen_agent(
@@ -541,13 +565,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore docgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Docgen agent unavailable for job {job_id}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "generated_docs": ["docs/API.md", "docs/README.md"],
-            "doc_type": doc_type,
+            "status": "error",
+            "message": "Documentation generation agent unavailable. OmniCore service is not available or docgen agent is not loaded.",
         }
 
     async def run_critique_agent(
@@ -581,14 +613,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore critique execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Critique agent unavailable for job {job_id}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "issues_found": 5,
-            "issues_fixed": 3 if auto_fix else 0,
-            "scan_types": scan_types,
+            "status": "error",
+            "message": "Critique agent unavailable. OmniCore service is not available or critique agent is not loaded.",
         }
 
     async def get_readme_content(self, job_id: str) -> Optional[str]:
@@ -698,13 +737,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
-            return result.get("data", {})
+            data = result.get("data", {})
+            # Check if OmniCore returned an error
+            if data.get("status") == "error":
+                logger.error(f"OmniCore pipeline execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
+                return data
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
+                return data
 
+        # No OmniCore or routing failed - return error instead of fake success
+        logger.error(f"Full pipeline execution unavailable for job {job_id} - OmniCore service not available or returned no data")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "stages_completed": ["clarify", "codegen", "testgen", "deploy", "docgen", "critique"],
-            "output_path": f"./uploads/{job_id}/output",
+            "status": "error",
+            "message": "Code generation pipeline unavailable. OmniCore service is not available or agents are not loaded.",
         }
 
     async def configure_llm_provider(

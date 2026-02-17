@@ -362,35 +362,16 @@ class SFEService:
                 logger.error(f"Direct SFE analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fallback - return empty results instead of fake issues
+        logger.warning("Neither OmniCore nor direct SFE available, code analysis unavailable")
         return {
             "job_id": job_id,
             "code_path": code_path,
-            "issues_found": 3,
-            "issues": [
-                {
-                    "type": "code_quality",
-                    "severity": "high",
-                    "message": "Potential undefined variable",
-                    "line": 42,
-                },
-                {
-                    "type": "code_quality",
-                    "severity": "medium",
-                    "message": "Missing error handling",
-                    "line": 55,
-                },
-                {
-                    "type": "code_quality",
-                    "severity": "medium",
-                    "message": "Complex function detected",
-                    "line": 78,
-                },
-            ],
-            "severity": {"critical": 0, "high": 1, "medium": 2, "low": 0},
-            "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer (fallback)",
+            "issues_found": 0,
+            "issues": [],
+            "severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
             "source": "fallback",
+            "note": "Code analysis unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
         }
 
     async def detect_errors(self, job_id: str) -> Dict[str, Any]:
@@ -906,15 +887,16 @@ class SFEService:
                 logger.error(f"Error querying SFE metrics: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback: Return mock metrics
+        # Fallback: Return empty metrics with note
         logger.debug(f"Using fallback SFE metrics for job {job_id}")
         return {
             "job_id": job_id,
-            "errors_detected": 3,
-            "fixes_proposed": 3,
-            "fixes_applied": 2,
-            "success_rate": 0.67,
+            "errors_detected": 0,
+            "fixes_proposed": 0,
+            "fixes_applied": 0,
+            "success_rate": 0.0,
             "source": "fallback",
+            "note": "SFE metrics unavailable. OmniCore service and SFE components are not available.",
         }
 
     async def get_learning_insights(
@@ -1364,58 +1346,18 @@ class SFEService:
                 logger.error(f"Direct SFE bug detection failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback with bugs array
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fallback - return empty results instead of fake bugs
+        logger.warning("Neither OmniCore nor direct SFE available, bug detection unavailable")
         return {
-            "bugs_found": 5,
-            "bugs": [
-                {
-                    "bug_id": "bug-001",
-                    "type": "SECURITY",
-                    "message": "Potential SQL injection vulnerability",
-                    "file": "database.py",
-                    "line": 45,
-                    "severity": "critical",
-                },
-                {
-                    "bug_id": "bug-002",
-                    "type": "COMPLEXITY",
-                    "message": "High cyclomatic complexity detected",
-                    "file": "main.py",
-                    "line": 120,
-                    "severity": "high",
-                },
-                {
-                    "bug_id": "bug-003",
-                    "type": "CODE_QUALITY",
-                    "message": "Unused variable 'temp'",
-                    "file": "utils.py",
-                    "line": 78,
-                    "severity": "medium",
-                },
-                {
-                    "bug_id": "bug-004",
-                    "type": "CODE_QUALITY",
-                    "message": "Missing error handling",
-                    "file": "api.py",
-                    "line": 92,
-                    "severity": "medium",
-                },
-                {
-                    "bug_id": "bug-005",
-                    "type": "STYLE",
-                    "message": "Line too long (>120 characters)",
-                    "file": "config.py",
-                    "line": 15,
-                    "severity": "low",
-                },
-            ],
-            "critical": 1,
-            "high": 1,
-            "medium": 2,
-            "low": 1,
+            "bugs_found": 0,
+            "bugs": [],
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
             "scan_depth": scan_depth,
             "source": "fallback",
+            "note": "Bug detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
         }
 
     async def analyze_bug(
@@ -1719,32 +1661,18 @@ class SFEService:
                 logger.error(f"Direct SFE deep analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fallback - return minimal data with note
+        logger.warning("Neither OmniCore nor direct SFE available, deep codebase analysis unavailable")
         return {
             "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
-            "total_files": 50,
-            "total_loc": 5000,
-            "avg_complexity": 3.5,
-            "analysis_summary": "Deep codebase analysis complete (fallback data)",
-            "issues": [
-                {
-                    "type": "complexity",
-                    "severity": "high",
-                    "message": "High complexity detected",
-                    "file": "main.py",
-                    "line": 100,
-                },
-                {
-                    "type": "security",
-                    "severity": "medium",
-                    "message": "Potential security issue",
-                    "file": "auth.py",
-                    "line": 45,
-                },
-            ],
-            "report_path": "/reports/analysis.md" if generate_report else None,
+            "total_files": 0,
+            "total_loc": 0,
+            "avg_complexity": 0,
+            "analysis_summary": "",
+            "issues": [],
+            "report_path": None,
             "source": "fallback",
+            "note": "Deep codebase analysis unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
         }
 
     async def query_knowledge_graph(
