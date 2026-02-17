@@ -388,14 +388,15 @@ USER appuser
 # The FastAPI server runs on port 8080 (Railway) or PORT env var, Prometheus metrics on port 9090
 EXPOSE 8080 9090
 
-# Docker healthcheck to verify the container is ready to serve traffic
-# Uses /ready endpoint which checks both API health AND agent readiness
-# This ensures container orchestrators don't route traffic before agents are loaded
+# Docker healthcheck for container liveness
+# Uses /health endpoint (liveness probe) which always returns 200 if the process is alive
+# Use /ready for readiness checks in orchestrators that support separate probes
+# This aligns with Railway's healthcheckPath="/health" in railway.toml and railway.json
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
 # Starts checking after 120 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost:${PORT:-8080}/ready || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Start the unified platform API server
 # Single worker mode (1 worker) for production deployment
