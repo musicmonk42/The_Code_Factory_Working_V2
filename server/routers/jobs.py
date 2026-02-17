@@ -20,7 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
-from server.dependencies import require_agents_ready
+from server.dependencies import require_agents_ready, get_job_or_404
 from server.schemas import (
     GeneratedFile,
     Job,
@@ -52,10 +52,10 @@ async def _emit_event_fire_and_forget(
 ) -> None:
     """
     Fire-and-forget wrapper for emitting OmniCore events.
-    
+
     This function runs in the background without blocking the response.
     FIX Issue 4: Errors are logged prominently and should be monitored.
-    
+
     Args:
         omnicore_service: OmniCore service instance
         topic: Event topic
@@ -80,6 +80,35 @@ async def _emit_event_fire_and_forget(
                 "topic": topic,
                 "error_type": type(e).__name__
             }
+        )
+
+
+def _handle_background_task_error(task: asyncio.Task, task_name: str = "background task") -> None:
+    """
+    Callback to handle errors in background tasks.
+
+    This callback ensures that exceptions in fire-and-forget tasks are properly logged
+    and don't get silently swallowed by asyncio.
+
+    Args:
+        task: Completed asyncio Task
+        task_name: Human-readable name of the task for logging
+    """
+    try:
+        exception = task.exception()
+        if exception is not None:
+            logger.error(
+                f"Background task '{task_name}' failed: {type(exception).__name__}: {exception}",
+                exc_info=exception,
+                extra={"task_name": task_name, "error_type": type(exception).__name__}
+            )
+    except asyncio.CancelledError:
+        logger.warning(f"Background task '{task_name}' was cancelled")
+    except Exception as e:
+        logger.error(
+            f"Error checking task status for '{task_name}': {type(e).__name__}: {e}",
+            exc_info=True,
+            extra={"task_name": task_name}
         )
 
 
@@ -189,7 +218,7 @@ async def create_job(
     
     # Emit job.created event to message bus in background (fire-and-forget)
     if not os.environ.get("SKIP_BACKGROUND_TASKS"):
-        asyncio.create_task(
+        task = asyncio.create_task(
             _emit_event_fire_and_forget(
                 omnicore_service=omnicore_service,
                 topic="job.created",
@@ -203,6 +232,8 @@ async def create_job(
                 priority=5,
             )
         )
+        # Add error callback to ensure failures are logged
+        task.add_done_callback(lambda t: _handle_background_task_error(t, f"emit_job_created_{job_id}"))
     else:
         logger.info(f"Skipping job.created event emission for job {job_id} (SKIP_BACKGROUND_TASKS={os.environ.get('SKIP_BACKGROUND_TASKS')})")
 
@@ -264,24 +295,10 @@ async def get_job(job_id: str) -> Job:
 
     **Errors:**
     - 404: Job not found
-    
+
     **FIX Issue 3:** Now checks database if job not found in memory.
     """
-    # First check in-memory storage
-    if job_id in jobs_db:
-        return jobs_db[job_id]
-    
-    # FIX Issue 3: Fallback to database if not in memory
-    logger.debug(f"Job {job_id} not in memory, checking database")
-    job = await load_job_from_database(job_id)
-    
-    if job is not None:
-        # Restore to in-memory cache for faster subsequent access
-        await add_job(job)
-        logger.info(f"Restored job {job_id} from database to memory cache")
-        return job
-
-    raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return await get_job_or_404(job_id)
 
 
 @router.get("/{job_id}/progress", response_model=JobProgress)

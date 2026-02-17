@@ -196,8 +196,11 @@ async def websocket_endpoint(websocket: WebSocket):
         )
         try:
             await websocket.close(code=1008, reason=reason)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                f"Failed to close WebSocket connection - client_ip={client_ip}, error={type(e).__name__}: {e}",
+                extra={"client_ip": client_ip, "error_type": type(e).__name__, "status": "close_failed"}
+            )
         return
     
     # Record connection attempt for rate limiting

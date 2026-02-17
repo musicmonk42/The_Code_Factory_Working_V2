@@ -20,7 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from server.dependencies import require_agents_ready
+from server.dependencies import require_agents_ready, get_job_or_404
 from server.middleware import arbiter_policy_check
 from server.schemas import (
     ClarificationResponseRequest,
@@ -77,39 +77,6 @@ def get_generator_service() -> GeneratorService:
 
     omnicore = get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
-
-
-async def _get_job_or_404(job_id: str) -> "Job":
-    """
-    Get a job from memory or fall back to database lookup.
-    
-    In multi-worker deployments, a job may exist in another worker's memory
-    but be persisted in the shared database. This function checks memory first
-    for performance, then falls back to database if not found.
-    
-    Args:
-        job_id: Unique job identifier
-        
-    Returns:
-        Job instance
-        
-    Raises:
-        HTTPException(404): If job not found in memory or database
-    """
-    if job_id in jobs_db:
-        return jobs_db[job_id]
-    
-    # FIX: Database fallback for multi-worker deployments
-    logger.debug(f"Job {job_id} not in memory, checking database")
-    job = await load_job_from_database(job_id)
-    
-    if job is not None:
-        # Restore to in-memory cache for faster subsequent access
-        await add_job(job)
-        logger.info(f"Restored job {job_id} from database to memory cache")
-        return job
-    
-    raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
 def detect_language_from_content(readme_content: str) -> str:

@@ -286,19 +286,92 @@ async def _delete_job_from_postgresql(job_id: str):
     """Delete a job from PostgreSQL (async background operation)."""
     if not _pg_enabled or not _pg_session_maker:
         return
-    
+
     try:
         from sqlalchemy import text
-        
+
         async with _pg_session_maker() as session:
             await session.execute(
                 text("DELETE FROM jobs WHERE id = :id"),
                 {"id": job_id}
             )
             await session.commit()
-            
+
     except Exception as e:
         logger.error(f"Failed to delete job {job_id} from PostgreSQL: {e}", exc_info=True)
+
+
+def _handle_save_job_error(job_id: str, task: asyncio.Task) -> None:
+    """
+    Callback to handle errors in background job save tasks.
+
+    This callback is invoked when a background task completes (successfully or with error).
+    It ensures that any exceptions during PostgreSQL save operations are properly logged
+    and don't get silently swallowed.
+
+    Args:
+        job_id: ID of the job being saved
+        task: Completed asyncio Task
+    """
+    try:
+        # Check if task raised an exception
+        exception = task.exception()
+        if exception is not None:
+            logger.error(
+                f"Background task failed to save job {job_id} to PostgreSQL: "
+                f"{type(exception).__name__}: {exception}",
+                exc_info=exception,
+                extra={
+                    "job_id": job_id,
+                    "operation": "save_job_postgresql_callback",
+                    "error_type": type(exception).__name__,
+                }
+            )
+    except asyncio.CancelledError:
+        logger.warning(
+            f"Background task cancelled while saving job {job_id} to PostgreSQL",
+            extra={"job_id": job_id, "operation": "save_job_postgresql_callback"}
+        )
+    except Exception as e:
+        logger.error(
+            f"Error checking task status for job {job_id}: {type(e).__name__}: {e}",
+            exc_info=True,
+            extra={"job_id": job_id, "operation": "save_job_postgresql_callback"}
+        )
+
+
+def _handle_delete_job_error(job_id: str, task: asyncio.Task) -> None:
+    """
+    Callback to handle errors in background job delete tasks.
+
+    Args:
+        job_id: ID of the job being deleted
+        task: Completed asyncio Task
+    """
+    try:
+        exception = task.exception()
+        if exception is not None:
+            logger.error(
+                f"Background task failed to delete job {job_id} from PostgreSQL: "
+                f"{type(exception).__name__}: {exception}",
+                exc_info=exception,
+                extra={
+                    "job_id": job_id,
+                    "operation": "delete_job_postgresql_callback",
+                    "error_type": type(exception).__name__,
+                }
+            )
+    except asyncio.CancelledError:
+        logger.warning(
+            f"Background task cancelled while deleting job {job_id} from PostgreSQL",
+            extra={"job_id": job_id, "operation": "delete_job_postgresql_callback"}
+        )
+    except Exception as e:
+        logger.error(
+            f"Error checking task status for job deletion {job_id}: {type(e).__name__}: {e}",
+            exc_info=True,
+            extra={"job_id": job_id, "operation": "delete_job_postgresql_callback"}
+        )
 
 
 class JobsDBProxy:
@@ -361,11 +434,13 @@ class JobsDBProxy:
     def __setitem__(self, job_id: str, job: Job):
         """Set a job (write-through to PostgreSQL)."""
         _jobs_memory_cache[job_id] = job
-        
+
         # Asynchronously save to PostgreSQL if enabled
         if _pg_enabled:
             try:
-                asyncio.create_task(_save_job_to_postgresql(job_id, job))
+                task = asyncio.create_task(_save_job_to_postgresql(job_id, job))
+                # Add error callback to ensure failures are logged
+                task.add_done_callback(lambda t: _handle_save_job_error(job_id, t))
             except RuntimeError:
                 # No event loop running - this can happen in test mode
                 # Log a warning but don't fail, as the job is still in memory
@@ -379,11 +454,13 @@ class JobsDBProxy:
         """Delete a job (from both memory and PostgreSQL)."""
         if job_id in _jobs_memory_cache:
             del _jobs_memory_cache[job_id]
-        
+
         # Asynchronously delete from PostgreSQL if enabled
         if _pg_enabled:
             try:
-                asyncio.create_task(_delete_job_from_postgresql(job_id))
+                task = asyncio.create_task(_delete_job_from_postgresql(job_id))
+                # Add error callback to ensure failures are logged
+                task.add_done_callback(lambda t: _handle_delete_job_error(job_id, t))
             except RuntimeError:
                 # No event loop running - this can happen in test mode
                 # Log a warning but don't fail

@@ -8,7 +8,11 @@ into route handlers to enforce preconditions and gate access.
 """
 
 import logging
+from typing import TYPE_CHECKING
 from fastapi import HTTPException
+
+if TYPE_CHECKING:
+    from server.schemas import Job
 
 logger = logging.getLogger(__name__)
 
@@ -107,3 +111,54 @@ async def require_agents_ready():
             },
             headers={"Retry-After": "10"}
         )
+
+
+async def get_job_or_404(job_id: str) -> "Job":
+    """
+    Get a job from memory or fall back to database lookup.
+
+    This shared utility function consolidates duplicate job retrieval logic
+    that was previously scattered across multiple routers. In multi-worker
+    deployments, a job may exist in another worker's memory but be persisted
+    in the shared database. This function checks memory first for performance,
+    then falls back to database if not found.
+
+    Industry Standards:
+        - Read-through cache pattern (Martin Fowler)
+        - Fail-fast with clear error messages
+        - Logging for observability
+
+    Args:
+        job_id: Unique job identifier
+
+    Returns:
+        Job instance from memory cache or database
+
+    Raises:
+        HTTPException(404): If job not found in memory or database
+
+    Example:
+        >>> from server.dependencies import get_job_or_404
+        >>> job = await get_job_or_404("job-123")
+        >>> print(f"Found job: {job.id}")
+    """
+    # Import here to avoid circular dependencies
+    from server.storage import jobs_db, add_job
+    from server.persistence import load_job_from_database
+
+    # Fast path: Check in-memory cache first
+    if job_id in jobs_db:
+        return jobs_db[job_id]
+
+    # Slow path: Database fallback for multi-worker deployments
+    logger.debug(f"Job {job_id} not in memory, checking database")
+    job = await load_job_from_database(job_id)
+
+    if job is not None:
+        # Restore to in-memory cache for faster subsequent access
+        await add_job(job)
+        logger.info(f"Restored job {job_id} from database to memory cache")
+        return job
+
+    # Job not found anywhere
+    raise HTTPException(status_code=404, detail=f"Job {job_id} not found")

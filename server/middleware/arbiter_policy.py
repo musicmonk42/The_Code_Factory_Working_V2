@@ -32,9 +32,9 @@ try:
         ['route']
     )
     METRICS_AVAILABLE = True
-except Exception:
+except Exception as e:
     METRICS_AVAILABLE = False
-    logger.debug("Prometheus metrics not available for policy middleware")
+    logger.debug(f"Prometheus metrics not available for policy middleware: {type(e).__name__}: {e}")
 
 
 class ArbiterPolicyMiddleware:
