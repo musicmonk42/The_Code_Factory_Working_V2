@@ -310,7 +310,10 @@ class InputValidator:
 
             # Apply PII masking if enabled
             if security_config.mask_pii_in_logs:
-                for pattern in security_config.pii_patterns.values():
+                patterns = security_config.pii_patterns
+                if isinstance(patterns, dict):
+                    patterns = patterns.values()
+                for pattern in patterns:
                     data = re.sub(pattern, "[PII_MASKED]", data)
                 logger.debug("PII masking applied to text input.")
 

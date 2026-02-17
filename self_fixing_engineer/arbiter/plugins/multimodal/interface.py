@@ -21,7 +21,7 @@ from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 # Using Pydantic for robust data validation and serialization.
 # This makes results automatically JSON-serializable and validates structure.
 try:
-    from prometheus_client import Counter, Histogram
+    from prometheus_client import REGISTRY, Counter, Histogram
     from pydantic import BaseModel, ConfigDict, Field, ValidationError
 except ImportError:
     raise ImportError(
@@ -34,8 +34,20 @@ T = TypeVar("T")
 
 # Helper function for metrics
 def get_or_create(metric):
-    """Helper function to wrap metric creation."""
+    """Helper function to wrap metric creation, handling duplicate registration."""
     return metric
+
+
+def _safe_create_metric(metric_class, name, documentation, labelnames=()):
+    """Idempotently get or create a Prometheus metric."""
+    try:
+        return metric_class(name, documentation, labelnames)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing and isinstance(existing, metric_class):
+                return existing
+        raise
 
 
 # --- Exception Classes (MOVED HERE from where they were conceptually defined in multi_modal_plugin.py) ---
@@ -715,19 +727,17 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
             config.get("model_id", "dummy-v1.0") if config else "dummy-v1.0"
         )
         self.call_count = 0  # For demonstrating resource management/tracking
-        self.requests_total = get_or_create(
-            Counter(
-                "dummy_plugin_requests_total",
-                "Total dummy plugin requests",
-                ["modality", "status"],
-            )
+        self.requests_total = _safe_create_metric(
+            Counter,
+            "dummy_plugin_requests_total",
+            "Total dummy plugin requests",
+            ["modality", "status"],
         )
-        self.processing_latency_seconds = get_or_create(
-            Histogram(
-                "dummy_plugin_processing_latency_seconds",
-                "Dummy plugin processing latency",
-                ["modality"],
-            )
+        self.processing_latency_seconds = _safe_create_metric(
+            Histogram,
+            "dummy_plugin_processing_latency_seconds",
+            "Dummy plugin processing latency",
+            ["modality"],
         )
 
     def analyze_image(

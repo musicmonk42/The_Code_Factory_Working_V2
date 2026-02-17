@@ -304,16 +304,16 @@ class DefaultImageProcessor(ImageProcessor):
         start_time = asyncio.get_event_loop().time()
 
         try:
-            if image_data is None or (
-                isinstance(image_data, str) and not os.path.exists(image_data)
-            ):
+            if image_data is None:
                 raise InvalidInputError(
                     "Invalid image_data: must be non-empty bytes or valid file path"
                 )
 
             image_bytes = self._decode_data(image_data)
             if not image_bytes:
-                raise InvalidInputError("Invalid or empty image data provided")
+                raise InvalidInputError(
+                    "Invalid image_data: must be non-empty bytes or valid file path"
+                )
 
             if len(image_bytes) > self.config.max_size_mb * 1024 * 1024:
                 raise InvalidInputError(
