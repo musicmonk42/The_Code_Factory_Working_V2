@@ -43,7 +43,7 @@ Exponential backoff prevents thundering herd problems by spacing out retry attem
 ```python
 for attempt in range(MAX_RETRY_ATTEMPTS):
     delay = min(
-        RETRY_BASE_DELAY_SECONDS * (attempt + 1),
+        RETRY_BASE_DELAY_SECONDS * (2 ** attempt),  # True exponential: 2^0, 2^1, 2^2...
         RETRY_MAX_DELAY_SECONDS
     )
     await asyncio.sleep(delay)
