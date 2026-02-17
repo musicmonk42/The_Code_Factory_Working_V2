@@ -70,5 +70,5 @@ def test_testgen_response_handler_has_fix_import_paths():
     # Should have fix_import_paths function that handles "from main import"
     assert "def fix_import_paths" in content, \
         "Should have fix_import_paths function"
-    assert "from main import" in content or "from X import" in content, \
-        "Should handle import path fixing"
+    assert "from main import" in content, \
+        "Should handle 'from main import' path fixing"
