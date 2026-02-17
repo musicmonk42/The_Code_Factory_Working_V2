@@ -467,8 +467,9 @@ class SFEService:
 
                 if not job_dir or not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
-                    # Fall through to fallback instead of returning empty list
-                    # This ensures we return sample data when analyzer can't run
+                    # Skip analyzer execution when job directory not found,
+                    # and fall through to return sample fallback errors for UI consistency
+                    pass
                 else:
                     # BUG FIX 3: Industry Standard DRY principle
                     # Use centralized report loading function (eliminates duplication)

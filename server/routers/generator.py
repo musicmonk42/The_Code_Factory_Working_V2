@@ -30,6 +30,7 @@ from server.schemas import (
     DeployRequest,
     DocgenRequest,
     GeneratorStatus,
+    Job,
     JobStage,
     JobStatus,
     LLMConfigRequest,
@@ -79,7 +80,7 @@ def get_generator_service() -> GeneratorService:
     return GeneratorService(omnicore_service=omnicore)
 
 
-async def _get_job_with_db_fallback(job_id: str):
+async def _get_job_with_db_fallback(job_id: str) -> Job:
     """
     Get a job from memory or fall back to database lookup.
     
