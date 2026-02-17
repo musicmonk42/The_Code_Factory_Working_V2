@@ -438,16 +438,22 @@ def get_provider():
     """
     Plugin manager entry point.
     Loads the (optional) API key from config/env and instantiates the provider.
+    Priority: runner config > LOCAL_API_KEY env var
 
     Raises:
         ConfigurationError: If no API key is found (when required)
     """
     config = load_config()
-    # API_KEY is optional for most local setups
-    key = config.llm_provider_api_key
-    # Handle SecretStr from Pydantic
-    if hasattr(key, "get_secret_value"):
-        key = key.get_secret_value()
+    
+    # Try to get API key from runner config first
+    key = None
+    if hasattr(config, 'llm_provider_api_key') and config.llm_provider_api_key:
+        key = config.llm_provider_api_key
+        # Handle SecretStr from Pydantic
+        if hasattr(key, "get_secret_value"):
+            key = key.get_secret_value()
+    
+    # Fall back to environment variable if not in config
     API_KEY = key or os.getenv("LOCAL_API_KEY")
 
     # For local providers, we typically don't require an API key
