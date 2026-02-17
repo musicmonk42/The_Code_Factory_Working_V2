@@ -299,3 +299,4 @@ test_subscription_fix.py
 *.tar.gz
 policies/integration_policy_*.json
 test_bug_fixes_standalone.py
+*.jsonl
