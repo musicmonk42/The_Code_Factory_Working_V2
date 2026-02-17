@@ -143,8 +143,9 @@ instance_id: test-remote-loaded
             return_value=MockAiohttpSession(self.mock_aiohttp_response)
         )
 
+        # FIX: Patch aiohttp.ClientSession directly since fetch_remote does local import
         self.patch_aiohttp = patch(
-            f"{_mod}.aiohttp.ClientSession",
+            "aiohttp.ClientSession",
             new=self.mock_aiohttp_session_cls,
         )
         self.patch_aiohttp.start()
@@ -242,6 +243,10 @@ instance_id: test-remote-loaded
         self.assertEqual(config.secrets["api_key"], "sk-abc123")
 
     def test_vault_integration(self):
+        # Clear config cache to ensure fresh load
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
+        
         # This test relies on the hook (1.3) added to load_config
         self.mock_hvac.Client.return_value.is_authenticated.return_value = True
         self.mock_hvac.Client.return_value.secrets.kv.v2.read_secret_version.return_value = {
