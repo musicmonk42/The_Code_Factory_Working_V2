@@ -223,5 +223,188 @@ class TestPresidioLoggerFixes:
                '"presidio_analyzer"' in source and '"presidio-analyzer"' in source
 
 
+class TestSFETabFixes:
+    """Test suite for SFE tab UI fixes."""
+
+    @pytest.mark.asyncio
+    async def test_get_errors_unwraps_nested_response(self):
+        """Test that get_errors endpoint properly unwraps the detect_errors response."""
+        from server.routers.sfe import get_errors
+        from server.storage import jobs_db, Job
+        
+        # Create a test job
+        test_job_id = "test-job-unwrap"
+        jobs_db[test_job_id] = Job(job_id=test_job_id)
+        
+        # Mock SFEService
+        mock_sfe_service = AsyncMock()
+        mock_sfe_service.detect_errors = AsyncMock(return_value={
+            "errors": [
+                {"error_id": "e1", "message": "Test error", "severity": "high"},
+                {"error_id": "e2", "message": "Another error", "severity": "medium"},
+            ],
+            "count": 2,
+        })
+        
+        # Call the endpoint
+        result = await get_errors(test_job_id, mock_sfe_service)
+        
+        # Verify the response is properly unwrapped
+        assert "errors" in result
+        assert isinstance(result["errors"], list)
+        assert len(result["errors"]) == 2
+        assert result["count"] == 2
+        assert result["errors"][0]["error_id"] == "e1"
+        
+        # Clean up
+        del jobs_db[test_job_id]
+
+    @pytest.mark.asyncio
+    async def test_resolve_job_code_path_from_metadata(self):
+        """Test that _resolve_job_code_path resolves path from job metadata."""
+        from server.storage import jobs_db, Job
+        
+        service = SFEService(omnicore_service=None)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test job with metadata
+            test_job_id = "test-job-metadata"
+            test_path = Path(tmpdir) / "test_project"
+            test_path.mkdir()
+            
+            job = Job(job_id=test_job_id)
+            job.metadata = {"output_path": str(test_path)}
+            jobs_db[test_job_id] = job
+            
+            # Resolve path
+            resolved = service._resolve_job_code_path(test_job_id, "/default/path")
+            
+            # Should return the metadata path
+            assert resolved == str(test_path)
+            
+            # Clean up
+            del jobs_db[test_job_id]
+
+    @pytest.mark.asyncio
+    async def test_resolve_job_code_path_from_standard_location(self):
+        """Test that _resolve_job_code_path finds path in standard location."""
+        from server.storage import jobs_db, Job
+        
+        service = SFEService(omnicore_service=None)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create standard job structure
+            test_job_id = "test-job-standard"
+            uploads_dir = Path(tmpdir) / "uploads"
+            job_dir = uploads_dir / test_job_id / "generated" / "my_project"
+            job_dir.mkdir(parents=True)
+            
+            # Create a Python file to make it valid
+            (job_dir / "main.py").write_text("# test")
+            
+            # Create job without metadata
+            jobs_db[test_job_id] = Job(job_id=test_job_id)
+            
+            # Mock Path("./uploads") to point to our temp uploads_dir
+            with patch('server.services.sfe_service.Path') as mock_path_class:
+                def path_side_effect(p):
+                    if p == "./uploads":
+                        return uploads_dir
+                    return Path(p)
+                
+                mock_path_class.side_effect = path_side_effect
+                
+                # Resolve path
+                resolved = service._resolve_job_code_path(test_job_id, "/default/path")
+                
+                # Should find the generated project
+                assert "my_project" in resolved or test_job_id in resolved
+            
+            # Clean up
+            del jobs_db[test_job_id]
+
+    @pytest.mark.asyncio
+    async def test_resolve_job_code_path_fallback(self):
+        """Test that _resolve_job_code_path falls back to default when job not found."""
+        service = SFEService(omnicore_service=None)
+        
+        # Try to resolve path for non-existent job
+        resolved = service._resolve_job_code_path("nonexistent-job", "/default/path")
+        
+        # Should return the default path
+        assert resolved == "/default/path"
+
+    @pytest.mark.asyncio
+    async def test_detect_bugs_uses_job_id(self):
+        """Test that detect_bugs uses job_id to resolve path."""
+        from server.storage import jobs_db, Job
+        
+        service = SFEService(omnicore_service=None)
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test job
+            test_job_id = "test-job-bugs"
+            test_path = Path(tmpdir) / "test_code"
+            test_path.mkdir()
+            
+            job = Job(job_id=test_job_id)
+            job.metadata = {"output_path": str(test_path)}
+            jobs_db[test_job_id] = job
+            
+            # Call detect_bugs with job_id
+            result = await service.detect_bugs(
+                code_path=".",
+                scan_depth="quick",
+                include_potential=False,
+                job_id=test_job_id
+            )
+            
+            # Should have attempted to scan the resolved path
+            # Result will be empty since no Python files exist, but should not error
+            assert "bugs" in result
+            assert isinstance(result["bugs"], list)
+            
+            # Clean up
+            del jobs_db[test_job_id]
+
+    @pytest.mark.asyncio
+    async def test_prioritize_bugs_uses_real_data(self):
+        """Test that prioritize_bugs attempts to use real bug data."""
+        from server.storage import jobs_db, Job
+        
+        service = SFEService(omnicore_service=None)
+        
+        # Create test job
+        test_job_id = "test-job-prioritize"
+        jobs_db[test_job_id] = Job(job_id=test_job_id)
+        
+        # Mock detect_errors to return real bugs
+        with patch.object(service, 'detect_errors', new_callable=AsyncMock) as mock_detect:
+            mock_detect.return_value = {
+                "errors": [
+                    {"error_id": "e1", "message": "Critical bug", "severity": "critical", "type": "Security"},
+                    {"error_id": "e2", "message": "High bug", "severity": "high", "type": "Logic"},
+                    {"error_id": "e3", "message": "Medium bug", "severity": "medium", "type": "Style"},
+                ],
+                "count": 3,
+            }
+            
+            # Call prioritize_bugs
+            result = await service.prioritize_bugs(test_job_id, ["severity"])
+            
+            # Verify it used real data
+            assert result["source"] == "real_analysis"
+            assert len(result["prioritized_bugs"]) == 3
+            
+            # Verify bugs are sorted by severity (critical first)
+            assert result["prioritized_bugs"][0]["severity"] == "critical"
+            assert result["prioritized_bugs"][0]["priority"] == 1
+            assert result["prioritized_bugs"][1]["severity"] == "high"
+            assert result["prioritized_bugs"][2]["severity"] == "medium"
+        
+        # Clean up
+        del jobs_db[test_job_id]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
