@@ -25,6 +25,7 @@ coordination layer for centralized control and monitoring.
 # This prevents circular imports, SystemExit crashes, and reduces startup time
 import os
 import sys
+import warnings
 
 # --- PRODUCTION MODE CONFIGURATION START ---
 # Detect if we're running in a test environment BEFORE setting production defaults
@@ -117,7 +118,6 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 # Suppress known Python 3.13 deprecation warnings from transitive dependencies
 # These warnings are from libraries that haven't yet updated for Python 3.13
-import warnings
 warnings.filterwarnings("ignore", message=".*'crypt' is deprecated.*", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=".*'aifc' is deprecated.*", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=".*'audioop' is deprecated.*", category=DeprecationWarning)
