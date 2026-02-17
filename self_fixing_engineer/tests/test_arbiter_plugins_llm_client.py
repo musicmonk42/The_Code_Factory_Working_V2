@@ -216,7 +216,7 @@ class TestLLMClient:
             mock_openai.return_value = mock_client
             mock_client.chat.completions.create.side_effect = Exception("API Error")
 
-            client = LLMClient("openai", "test-key", "gpt-4", retry_attempts=0)
+            client = LLMClient("openai", "test-key", "gpt-4", retry_attempts=1)
             client.circuit_breaker_threshold = 3
 
             # Fail 3 times
@@ -296,7 +296,11 @@ class TestLLMClient:
             mock_response.content.__aiter__ = mock_iter
             mock_response.raise_for_status = Mock()
 
-            mock_session_obj.post.return_value.__aenter__.return_value = mock_response
+            # Create an async context manager for session.post()
+            mock_cm = AsyncMock()
+            mock_cm.__aenter__.return_value = mock_response
+            mock_cm.__aexit__.return_value = False
+            mock_session_obj.post.return_value = mock_cm
 
             client = LLMClient("ollama", None, "llama3")
             result = await client.generate_text("Test prompt")

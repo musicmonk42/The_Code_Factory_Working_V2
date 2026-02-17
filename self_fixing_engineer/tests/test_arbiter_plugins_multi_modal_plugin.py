@@ -123,7 +123,7 @@ class TestCacheManager:
         config.port = 6379
 
         with patch(
-            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis.asyncio.Redis"
+            "self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis.Redis"
         ) as mock_redis:
             mock_redis_instance = AsyncMock()
             mock_redis.return_value = mock_redis_instance
@@ -143,9 +143,9 @@ class TestCacheManager:
         config.host = "localhost"
         config.port = 6379
 
-        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis.Redis") as mock_redis_cls:
             mock_redis = AsyncMock()
-            mock_redis_module.asyncio.Redis.return_value = mock_redis
+            mock_redis_cls.return_value = mock_redis
             mock_redis.ping.return_value = True
             mock_redis.get.return_value = json.dumps({"cached": "data"})
 
@@ -355,9 +355,9 @@ class TestMultiModalPlugin:
             "ttl_seconds": 60,
         }
 
-        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis") as mock_redis_module:
+        with patch("self_fixing_engineer.arbiter.plugins.multi_modal_plugin.redis.Redis") as mock_redis_cls:
             mock_redis = AsyncMock()
-            mock_redis_module.asyncio.Redis.return_value = mock_redis
+            mock_redis_cls.return_value = mock_redis
             mock_redis.ping.return_value = True
 
             # First call - cache miss
@@ -368,7 +368,7 @@ class TestMultiModalPlugin:
             ) as mock_get:
                 mock_processor = AsyncMock()
                 mock_processor.process.return_value = ProcessingResult(
-                    success=True, data={"result": "processed"}
+                    success=True, data={"result": "processed"}, operation_id="test-op-id"
                 )
                 mock_get.return_value = mock_processor
 

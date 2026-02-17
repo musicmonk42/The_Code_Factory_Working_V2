@@ -90,8 +90,17 @@ def test_tracer():
 @pytest.fixture(scope="module")
 def in_memory_exporter():
     """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-    return InMemorySpanExporter()
+    import self_fixing_engineer.arbiter.models.meta_learning_data_store as mlds_module
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    # Replace the module-level NoOpTracer with a real tracer from our provider
+    mlds_module.tracer = provider.get_tracer(mlds_module.__name__)
+    return exporter
 
 
 
@@ -296,8 +305,6 @@ async def test_list_records_success(store_type, inmemory_store, redis_store):
         stored_json = store._redis.hset.call_args[0][2] if store._redis.hset.call_args else store._redis.hset.call_args_list[-1][0][2]
         store._redis.hgetall.return_value = {"test_exp_001": stored_json}
 
-    await store.add_record(SAMPLE_RECORD)
-
     records = await store.list_records()
     assert len(records) == 1
     assert records[0].experiment_id == "test_exp_001"
@@ -333,8 +340,6 @@ async def test_update_record_success(store_type, inmemory_store, redis_store):
         # Capture what was stored (encrypted) and return it for hget
         stored_json = store._redis.hset.call_args[0][2] if store._redis.hset.call_args else store._redis.hset.call_args_list[-1][0][2]
         store._redis.hget.return_value = stored_json
-
-    await store.add_record(SAMPLE_RECORD)
 
     updates = {
         "metrics": {"accuracy": 0.96},
@@ -582,8 +587,8 @@ async def test_context_manager(store_type, inmemory_store, redis_store):
         assert record.experiment_id == "test_exp_001"
 
     if store_type == "redis":
-        # Check that close was called
-        assert store._redis.close.called
+        # Check that aclose was called (RedisMetaLearningDataStore.__aexit__ calls aclose)
+        assert store._redis.aclose.called
 
 
 @pytest.mark.asyncio
