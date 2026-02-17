@@ -157,7 +157,9 @@ class DeadLetterQueue:
                     # Attempt to publish the DLQ message to Kafka if the circuit is closed
                     if self.kafka_bridge.circuit.can_attempt():
                         try:
-                            await self.kafka_bridge.publish(message, topic="dlq_events")
+                            # Create a copy of the message with dlq_events topic
+                            dlq_message = message.with_topic("dlq_events")
+                            await self.kafka_bridge.publish(dlq_message)
                             logger.info(
                                 f"DLQ message published to Kafka bridge. trace_id={message.trace_id}"
                             )
