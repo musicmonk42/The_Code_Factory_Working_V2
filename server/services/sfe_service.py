@@ -44,7 +44,7 @@ class SFEService:
             omnicore_service: OmniCoreService instance for centralized routing
         """
         self.omnicore_service = omnicore_service
-        
+
         # Track SFE component availability
         self._sfe_components = {
             "codebase_analyzer": None,
@@ -60,22 +60,23 @@ class SFEService:
             "checkpoint": False,
             "mesh_metrics": False,
         }
-        
+
         # Initialize SFE components
         self._init_sfe_components()
-        
+
         logger.info("SFEService initialized")
-    
+
     def _init_sfe_components(self):
         """
         Initialize SFE components with graceful degradation.
-        
+
         Attempts to load actual SFE modules, falling back to mock
         implementations if unavailable.
         """
         # Try to load codebase analyzer
         try:
             from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
+
             self._sfe_components["codebase_analyzer"] = CodebaseAnalyzer
             self._sfe_available["codebase_analyzer"] = True
             logger.info("✓ SFE codebase analyzer loaded")
@@ -83,10 +84,11 @@ class SFEService:
             logger.warning(f"SFE codebase analyzer unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading codebase analyzer: {e}")
-        
+
         # Try to load bug manager
         try:
             from self_fixing_engineer.arbiter.bug_manager import BugManager
+
             self._sfe_components["bug_manager"] = BugManager
             self._sfe_available["bug_manager"] = True
             logger.info("✓ SFE bug manager loaded")
@@ -94,10 +96,11 @@ class SFEService:
             logger.warning(f"SFE bug manager unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading bug manager: {e}")
-        
+
         # Try to load arbiter (for fix proposal/application)
         try:
             from self_fixing_engineer.arbiter.arbiter import Arbiter
+
             self._sfe_components["arbiter"] = Arbiter
             self._sfe_available["arbiter"] = True
             logger.info("✓ SFE arbiter loaded")
@@ -105,10 +108,11 @@ class SFEService:
             logger.warning(f"SFE arbiter unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading arbiter: {e}")
-        
+
         # Try to load checkpoint manager
         try:
             from self_fixing_engineer.mesh.checkpoint import CheckpointManager
+
             self._sfe_components["checkpoint"] = CheckpointManager
             self._sfe_available["checkpoint"] = True
             logger.info("✓ SFE checkpoint manager loaded")
@@ -116,11 +120,12 @@ class SFEService:
             logger.warning(f"SFE checkpoint manager unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading checkpoint manager: {e}")
-        
+
         # Try to load mesh metrics
         try:
             # Note: The mesh module may have various metric tracking
             from self_fixing_engineer.mesh import mesh_adapter
+
             self._sfe_components["mesh_metrics"] = mesh_adapter
             self._sfe_available["mesh_metrics"] = True
             logger.info("✓ SFE mesh metrics loaded")
@@ -128,70 +133,82 @@ class SFEService:
             logger.warning(f"SFE mesh metrics unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading mesh metrics: {e}")
-        
+
         # Log component availability summary
         available = [k for k, v in self._sfe_available.items() if v]
         unavailable = [k for k, v in self._sfe_available.items() if not v]
-        
+
         if available:
             logger.info(f"SFE components available: {', '.join(available)}")
         if unavailable:
-            logger.info(f"SFE components unavailable (using fallback): {', '.join(unavailable)}")
+            logger.info(
+                f"SFE components unavailable (using fallback): {', '.join(unavailable)}"
+            )
 
     def _resolve_job_code_path(self, job_id: Optional[str], default_path: str) -> str:
         """
         Resolve the actual code path from a job ID if provided, or use default path.
-        
+
         Args:
             job_id: Optional job ID to look up
             default_path: Default path to use if job_id is not provided or not found
-        
+
         Returns:
             Resolved code path as string
         """
         if not job_id:
             return default_path
-        
+
         # Try to resolve path from job metadata
         from server.storage import jobs_db
-        
+
         job = jobs_db.get(job_id)
         if job and job.metadata:
             # Check metadata for output paths
             for key in ("output_path", "code_path", "generated_path"):
                 path = job.metadata.get(key)
                 if path and Path(path).exists():
-                    logger.info(f"Resolved job {job_id} path from metadata.{key}: {path}")
+                    logger.info(
+                        f"Resolved job {job_id} path from metadata.{key}: {path}"
+                    )
                     return str(path)
-        
+
         # If not in metadata, check standard locations
         uploads_dir = Path("./uploads")
         job_base = uploads_dir / job_id
-        
+
         if job_base.exists():
             # Check standard subdirectories
             for subdir_name in ["generated", "output"]:
                 subdir = job_base / subdir_name
                 if subdir.exists():
                     # Look for project subdirectories
-                    subdirs = [d for d in subdir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                    subdirs = [
+                        d
+                        for d in subdir.iterdir()
+                        if d.is_dir() and not d.name.startswith(".")
+                    ]
                     if subdirs:
                         # Use the first non-hidden subdirectory (typically the project directory)
                         resolved_path = str(subdirs[0])
-                        logger.info(f"Resolved job {job_id} path to generated project: {resolved_path}")
+                        logger.info(
+                            f"Resolved job {job_id} path to generated project: {resolved_path}"
+                        )
                         return resolved_path
                     else:
                         # No subdirectories, use this directory directly
                         resolved_path = str(subdir)
                         logger.info(f"Resolved job {job_id} path to: {resolved_path}")
                         return resolved_path
-            
+
             # If no generated/ or output/, use job_base directly
             logger.info(f"Resolved job {job_id} path to job base: {job_base}")
             return str(job_base)
-        
+
         # Fallback to default path
-        logger.warning(f"Could not resolve path for job {job_id}, using default: {default_path}")
+        logger.warning(
+            f"Could not resolve path for job {job_id}, using default: {default_path}"
+        )
         return default_path
 
     async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
@@ -228,16 +245,18 @@ class SFEService:
             if result.get("data"):
                 logger.info(f"Analysis for job {job_id} completed via OmniCore")
                 return result["data"]
-            logger.info(f"OmniCore routing returned no data, falling through to direct SFE")
+            logger.info(
+                "OmniCore routing returned no data, falling through to direct SFE"
+            )
 
         # Try direct SFE integration if analyzer available
         if self._sfe_available["codebase_analyzer"]:
             try:
                 logger.info(f"Using direct SFE CodebaseAnalyzer for job {job_id}")
-                
+
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 code_path_obj = Path(code_path)
-                
+
                 # Validate path exists
                 if not code_path_obj.exists():
                     return {
@@ -248,7 +267,7 @@ class SFEService:
                         "error": f"Path does not exist: {code_path}",
                         "source": "direct_sfe",
                     }
-                
+
                 # Use CodebaseAnalyzer properly as async context manager
                 if code_path_obj.is_file():
                     # Analyze single file using analyze_and_propose
@@ -256,10 +275,10 @@ class SFEService:
                     # Don't ignore tests when analyzing generated output
                     async with CodebaseAnalyzer(
                         root_dir=root_dir,
-                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
                     ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
-                    
+
                     result = {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -268,46 +287,54 @@ class SFEService:
                         "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer",
                         "source": "direct_sfe",
                     }
-                    
-                    logger.info(f"Direct SFE analysis complete: {len(issues)} issues found")
+
+                    logger.info(
+                        f"Direct SFE analysis complete: {len(issues)} issues found"
+                    )
                     return result
-                    
+
                 elif code_path_obj.is_dir():
                     # Analyze directory using scan_codebase
                     # Don't ignore tests when analyzing generated output
                     async with CodebaseAnalyzer(
                         root_dir=str(code_path_obj),
-                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
                     ) as analyzer:
                         summary = await analyzer.scan_codebase(str(code_path_obj))
-                        
+
                         # Convert FileSummary to expected format
                         issues = []
-                        if hasattr(summary, 'defects'):
+                        if hasattr(summary, "defects"):
                             for defect in summary.defects:
                                 # FIX: Validate file exists before adding to issues
-                                defect_file = getattr(defect, 'file', '')
+                                defect_file = getattr(defect, "file", "")
                                 if defect_file:
                                     defect_file_path = Path(defect_file)
                                     # Make path absolute if it's relative
                                     if not defect_file_path.is_absolute():
-                                        defect_file_path = code_path_obj / defect_file_path
-                                    
+                                        defect_file_path = (
+                                            code_path_obj / defect_file_path
+                                        )
+
                                     # Only include defects for files that actually exist
                                     if not defect_file_path.exists():
                                         logger.warning(
                                             f"Skipping defect for non-existent file: {defect_file}"
                                         )
                                         continue
-                                
-                                issues.append({
-                                    "type": getattr(defect, 'type', 'unknown'),
-                                    "severity": getattr(defect, 'severity', 'medium'),
-                                    "message": str(defect),
-                                    "file": defect_file,
-                                    "line": getattr(defect, 'line', 0),
-                                })
-                    
+
+                                issues.append(
+                                    {
+                                        "type": getattr(defect, "type", "unknown"),
+                                        "severity": getattr(
+                                            defect, "severity", "medium"
+                                        ),
+                                        "message": str(defect),
+                                        "file": defect_file,
+                                        "line": getattr(defect, "line", 0),
+                                    }
+                                )
+
                     result = {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -316,10 +343,12 @@ class SFEService:
                         "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer",
                         "source": "direct_sfe",
                     }
-                    
-                    logger.info(f"Direct SFE analysis complete: {len(issues)} issues found")
+
+                    logger.info(
+                        f"Direct SFE analysis complete: {len(issues)} issues found"
+                    )
                     return result
-                    
+
             except Exception as e:
                 logger.error(f"Direct SFE analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
@@ -387,17 +416,21 @@ class SFEService:
             if result.get("data"):
                 logger.info(f"Error detection for job {job_id} completed via OmniCore")
                 return result["data"]
-            logger.info(f"OmniCore routing returned no data, falling through to direct SFE")
+            logger.info(
+                "OmniCore routing returned no data, falling through to direct SFE"
+            )
 
         # Try direct SFE integration if analyzer available
         if self._sfe_available["codebase_analyzer"]:
             try:
-                logger.info(f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}")
-                
+                logger.info(
+                    f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}"
+                )
+
                 # Resolve code path using improved path resolution
                 # First check job metadata, then standard locations
                 from server.storage import jobs_db
-                
+
                 job_dir = None
                 job = jobs_db.get(job_id)
                 if job and job.metadata:
@@ -406,14 +439,16 @@ class SFEService:
                         path = job.metadata.get(key)
                         if path and Path(path).exists():
                             job_dir = Path(path)
-                            logger.info(f"Found job path from metadata.{key}: {job_dir}")
+                            logger.info(
+                                f"Found job path from metadata.{key}: {job_dir}"
+                            )
                             break
-                
+
                 # If not in metadata, check standard locations
                 if not job_dir:
                     uploads_dir = Path("./uploads")
                     job_base = uploads_dir / job_id
-                    
+
                     # Try to find the generated code directory
                     if job_base.exists():
                         # Check standard subdirectories
@@ -421,7 +456,11 @@ class SFEService:
                             subdir = job_base / subdir_name
                             if subdir.exists():
                                 # Look for project subdirectories
-                                subdirs = [d for d in subdir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                                subdirs = [
+                                    d
+                                    for d in subdir.iterdir()
+                                    if d.is_dir() and not d.name.startswith(".")
+                                ]
                                 if subdirs:
                                     # Use the first non-hidden subdirectory (typically the project directory)
                                     job_dir = subdirs[0]
@@ -431,11 +470,11 @@ class SFEService:
                                     # No subdirectories, use this directory directly
                                     job_dir = subdir
                                     break
-                        
+
                         # If no generated/ or output/, use job_base directly
                         if not job_dir:
                             job_dir = job_base
-                
+
                 if not job_dir or not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
                     return {
@@ -443,12 +482,12 @@ class SFEService:
                         "count": 0,
                         "note": f"Job directory not found for {job_id}",
                     }
-                
+
                 # BUG FIX 3: Industry Standard DRY principle
                 # Use centralized report loading function (eliminates duplication)
                 report_path = job_dir / "reports" / "sfe_analysis_report.json"
                 cached_report = _load_sfe_analysis_report(report_path, job_id)
-                
+
                 if cached_report:
                     # Return cached data with appropriate structure for detect_errors
                     return {
@@ -457,46 +496,50 @@ class SFEService:
                         "source": cached_report["source"],
                         "cached": True,
                     }
-                
+
                 logger.info(f"Analyzing errors in directory: {job_dir}")
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
-                
+
                 # Discover Python files in the job directory
                 python_files = list(job_dir.rglob("*.py"))
-                
+
                 if not python_files:
                     logger.info(f"No Python files found in {job_dir}")
                     return {"errors": [], "count": 0}
-                
+
                 # Analyze files and collect errors
                 errors = []
                 async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
                     for py_file in python_files:
                         try:
                             issues = await analyzer.analyze_and_propose(str(py_file))
-                            
+
                             # Convert issues to error format
                             for issue in issues:
                                 error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
                                 severity = issue.get("risk_level", "medium")
                                 details = issue.get("details", {})
-                                
-                                errors.append({
-                                    "error_id": error_id,
-                                    "job_id": job_id,
-                                    "severity": severity,
-                                    "message": details.get("message", str(issue)),
-                                    "file": str(py_file.relative_to(job_dir)),
-                                    "line": details.get("line", 0),
-                                    "type": issue.get("type", "unknown"),
-                                })
+
+                                errors.append(
+                                    {
+                                        "error_id": error_id,
+                                        "job_id": job_id,
+                                        "severity": severity,
+                                        "message": details.get("message", str(issue)),
+                                        "file": str(py_file.relative_to(job_dir)),
+                                        "line": details.get("line", 0),
+                                        "type": issue.get("type", "unknown"),
+                                    }
+                                )
                         except Exception as e:
                             logger.warning(f"Error analyzing {py_file}: {e}")
                             continue
-                
-                logger.info(f"Direct SFE error detection complete: {len(errors)} errors found")
+
+                logger.info(
+                    f"Direct SFE error detection complete: {len(errors)} errors found"
+                )
                 return {"errors": errors, "count": len(errors)}
-                
+
             except Exception as e:
                 logger.error(f"Direct SFE error detection failed: {e}", exc_info=True)
                 # Fall through to fallback
@@ -537,12 +580,16 @@ class SFEService:
         # Try to look up the error from in-memory cache
         # In a real implementation, we'd have an errors_db similar to fixes_db
         # For now, we'll generate contextual fixes based on common error patterns
-        
+
         # Generate fix ID
         fix_id = f"fix-{error_id}"
-        
+
         # Generate contextual fix based on error_id patterns
-        if "import" in error_id.lower() or "undefined" in error_id.lower() or "name" in error_id.lower():
+        if (
+            "import" in error_id.lower()
+            or "undefined" in error_id.lower()
+            or "name" in error_id.lower()
+        ):
             # Missing import error
             fix = {
                 "fix_id": fix_id,
@@ -627,11 +674,11 @@ class SFEService:
                 "confidence": 0.65,
                 "reasoning": "Generic code quality improvement",
             }
-        
+
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
         from server.schemas import Fix
-        
+
         try:
             fix_obj = Fix(
                 fix_id=fix_id,
@@ -644,7 +691,7 @@ class SFEService:
             logger.info(f"Stored fix {fix_id} in fixes_db")
         except Exception as e:
             logger.warning(f"Could not store fix in fixes_db: {e}")
-        
+
         return fix
 
     async def apply_fix(self, fix_id: str, dry_run: bool = False) -> Dict[str, Any]:
@@ -666,7 +713,7 @@ class SFEService:
 
         # Look up fix from fixes_db
         from server.storage import fixes_db
-        
+
         if fix_id not in fixes_db:
             logger.warning(f"Fix {fix_id} not found in fixes_db")
             return {
@@ -677,10 +724,10 @@ class SFEService:
                 "error": "Fix not found",
                 "files_modified": [],
             }
-        
+
         fix = fixes_db[fix_id]
         files_modified = []
-        
+
         try:
             # Apply each proposed change
             for change in fix.proposed_changes:
@@ -688,78 +735,79 @@ class SFEService:
                 action = change["action"]
                 content = change["content"]
                 line = change.get("line", 1)
-                
+
                 files_modified.append(str(file_path))
-                
+
                 if dry_run:
                     logger.info(f"[DRY RUN] Would {action} at {file_path}:{line}")
                     continue
-                
+
                 # Create backup before modifying
                 if file_path.exists():
                     backup_path = Path(f"{file_path}.bak")
                     try:
                         import shutil
+
                         shutil.copy2(file_path, backup_path)
                         logger.info(f"Created backup at {backup_path}")
                     except Exception as e:
                         logger.warning(f"Could not create backup: {e}")
-                
+
                 # Apply the change
                 if action == "insert":
                     # Insert content at specified line
                     if file_path.exists():
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                        with open(file_path, "r", encoding="utf-8") as f:
                             lines = f.readlines()
-                        
+
                         # Insert at line (1-indexed)
                         insert_pos = max(0, line - 1)
-                        lines.insert(insert_pos, content + '\n')
-                        
-                        with open(file_path, 'w', encoding='utf-8') as f:
+                        lines.insert(insert_pos, content + "\n")
+
+                        with open(file_path, "w", encoding="utf-8") as f:
                             f.writelines(lines)
                         logger.info(f"Inserted content at {file_path}:{line}")
                     else:
                         # Create new file
                         file_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(content + '\n')
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            f.write(content + "\n")
                         logger.info(f"Created new file {file_path}")
-                
+
                 elif action == "replace":
                     # Replace line with new content
                     if file_path.exists():
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                        with open(file_path, "r", encoding="utf-8") as f:
                             lines = f.readlines()
-                        
+
                         if 0 < line <= len(lines):
-                            lines[line - 1] = content + '\n'
-                            
-                            with open(file_path, 'w', encoding='utf-8') as f:
+                            lines[line - 1] = content + "\n"
+
+                            with open(file_path, "w", encoding="utf-8") as f:
                                 f.writelines(lines)
                             logger.info(f"Replaced line at {file_path}:{line}")
                         else:
                             logger.warning(f"Line {line} out of range for {file_path}")
                     else:
                         logger.warning(f"File {file_path} does not exist")
-                
+
                 elif action == "delete":
                     # Delete line
                     if file_path.exists():
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                        with open(file_path, "r", encoding="utf-8") as f:
                             lines = f.readlines()
-                        
+
                         if 0 < line <= len(lines):
                             del lines[line - 1]
-                            
-                            with open(file_path, 'w', encoding='utf-8') as f:
+
+                            with open(file_path, "w", encoding="utf-8") as f:
                                 f.writelines(lines)
                             logger.info(f"Deleted line at {file_path}:{line}")
                         else:
                             logger.warning(f"Line {line} out of range for {file_path}")
                     else:
                         logger.warning(f"File {file_path} does not exist")
-            
+
             return {
                 "fix_id": fix_id,
                 "applied": not dry_run,
@@ -767,7 +815,7 @@ class SFEService:
                 "status": "success" if not dry_run else "simulated",
                 "files_modified": files_modified,
             }
-        
+
         except Exception as e:
             logger.error(f"Error applying fix {fix_id}: {e}", exc_info=True)
             return {
@@ -827,13 +875,13 @@ class SFEService:
         if self._sfe_available["mesh_metrics"]:
             try:
                 mesh_adapter = self._sfe_components["mesh_metrics"]
-                
+
                 # Try to extract metrics from mesh adapter
                 metrics_data = {
                     "job_id": job_id,
                     "source": "sfe_mesh",
                 }
-                
+
                 # Check if mesh_adapter has metrics methods
                 if hasattr(mesh_adapter, "get_metrics"):
                     try:
@@ -841,10 +889,10 @@ class SFEService:
                         metrics_data.update(mesh_metrics)
                     except Exception as e:
                         logger.debug(f"Could not get mesh metrics: {e}")
-                
+
                 logger.info(f"Retrieved SFE mesh metrics for job {job_id}")
                 return metrics_data
-                
+
             except Exception as e:
                 logger.error(f"Error querying SFE metrics: {e}", exc_info=True)
                 # Fall through to fallback
@@ -876,7 +924,9 @@ class SFEService:
             >>> # Route through OmniCore to SFE meta-learning
             >>> # insights = await omnicore.query_sfe_insights(job_id)
         """
-        logger.debug(f"Fetching learning insights{f' for job {job_id}' if job_id else ''}")
+        logger.debug(
+            f"Fetching learning insights{f' for job {job_id}' if job_id else ''}"
+        )
 
         # Route through OmniCore
         if self.omnicore_service:
@@ -967,7 +1017,9 @@ class SFEService:
             >>> # Query SFE logs through OmniCore
             >>> # logs = await omnicore.query_sfe_logs(job_id, limit)
         """
-        logger.debug(f"Fetching SFE logs for job {job_id} (limit: {limit}, level: {level})")
+        logger.debug(
+            f"Fetching SFE logs for job {job_id} (limit: {limit}, level: {level})"
+        )
 
         # Route through OmniCore
         if self.omnicore_service:
@@ -1032,12 +1084,17 @@ class SFEService:
                 target_module="sfe",
                 payload=payload,
             )
-            logger.info(f"Command '{command}' sent to SFE for job {job_id} via OmniCore")
-            return result.get("data", {
-                "job_id": job_id,
-                "command": command,
-                "status": "command_executed",
-            })
+            logger.info(
+                f"Command '{command}' sent to SFE for job {job_id} via OmniCore"
+            )
+            return result.get(
+                "data",
+                {
+                    "job_id": job_id,
+                    "command": command,
+                    "status": "command_executed",
+                },
+            )
 
         # Fallback
         return {
@@ -1048,7 +1105,10 @@ class SFEService:
         }
 
     async def control_arbiter(
-        self, command: str, job_id: Optional[str] = None, config: Optional[Dict[str, Any]] = None
+        self,
+        command: str,
+        job_id: Optional[str] = None,
+        config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Control Arbiter AI via OmniCore.
@@ -1085,7 +1145,12 @@ class SFEService:
         }
 
     async def trigger_arena_competition(
-        self, problem_type: str, code_path: str, agents: Optional[List[str]], rounds: int, evaluation_criteria: List[str]
+        self,
+        problem_type: str,
+        code_path: str,
+        agents: Optional[List[str]],
+        rounds: int,
+        evaluation_criteria: List[str],
     ) -> Dict[str, Any]:
         """
         Trigger arena agent competition via OmniCore.
@@ -1127,7 +1192,11 @@ class SFEService:
         }
 
     async def detect_bugs(
-        self, code_path: str, scan_depth: str, include_potential: bool, job_id: Optional[str] = None
+        self,
+        code_path: str,
+        scan_depth: str,
+        include_potential: bool,
+        job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Detect bugs in code via OmniCore or direct SFE integration.
@@ -1165,18 +1234,20 @@ class SFEService:
                 # Ensure bugs array exists
                 if "bugs" not in data:
                     data["bugs"] = []
-                logger.info(f"Bug detection completed via OmniCore")
+                logger.info("Bug detection completed via OmniCore")
                 return data
-            logger.info(f"OmniCore routing returned no data, falling through to direct SFE")
+            logger.info(
+                "OmniCore routing returned no data, falling through to direct SFE"
+            )
 
         # Try direct SFE integration if analyzer available
         if self._sfe_available["codebase_analyzer"]:
             try:
-                logger.info(f"Using direct SFE CodebaseAnalyzer to detect bugs")
-                
+                logger.info("Using direct SFE CodebaseAnalyzer to detect bugs")
+
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 code_path_obj = Path(resolved_path)
-                
+
                 # Validate path exists
                 if not code_path_obj.exists():
                     return {
@@ -1189,34 +1260,38 @@ class SFEService:
                         "scan_depth": scan_depth,
                         "note": f"Path does not exist: {resolved_path}",
                     }
-                
+
                 bugs = []
-                
+
                 # Use CodebaseAnalyzer to scan for bugs
                 if code_path_obj.is_file():
                     root_dir = str(code_path_obj.parent)
                     async with CodebaseAnalyzer(root_dir=root_dir) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
-                        
+
                         for issue in issues:
                             bug_id = f"bug-{abs(hash(str(issue))) % 100000}"
                             severity = issue.get("risk_level", "medium")
                             details = issue.get("details", {})
-                            
-                            bugs.append({
-                                "bug_id": bug_id,
-                                "type": issue.get("type", "unknown"),
-                                "message": details.get("message", str(issue)),
-                                "file": str(code_path_obj.name),
-                                "line": details.get("line", 0),
-                                "severity": severity,
-                            })
-                
+
+                            bugs.append(
+                                {
+                                    "bug_id": bug_id,
+                                    "type": issue.get("type", "unknown"),
+                                    "message": details.get("message", str(issue)),
+                                    "file": str(code_path_obj.name),
+                                    "line": details.get("line", 0),
+                                    "severity": severity,
+                                }
+                            )
+
                 elif code_path_obj.is_dir():
-                    async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
+                    async with CodebaseAnalyzer(
+                        root_dir=str(code_path_obj)
+                    ) as analyzer:
                         # Discover Python files
                         py_files = analyzer.discover_files()
-                        
+
                         # Limit files analyzed based on scan_depth
                         if scan_depth == "quick":
                             max_files = 5
@@ -1224,36 +1299,42 @@ class SFEService:
                             max_files = 20
                         else:  # deep
                             max_files = 100
-                        
+
                         # Analyze each file
                         for py_file in py_files[:max_files]:
                             try:
                                 issues = await analyzer.analyze_and_propose(py_file)
-                                
+
                                 for issue in issues:
                                     bug_id = f"bug-{abs(hash(py_file + str(issue))) % 100000}"
                                     severity = issue.get("risk_level", "medium")
                                     details = issue.get("details", {})
-                                    
-                                    bugs.append({
-                                        "bug_id": bug_id,
-                                        "type": issue.get("type", "unknown"),
-                                        "message": details.get("message", str(issue)),
-                                        "file": str(Path(py_file).relative_to(code_path_obj)),
-                                        "line": details.get("line", 0),
-                                        "severity": severity,
-                                    })
+
+                                    bugs.append(
+                                        {
+                                            "bug_id": bug_id,
+                                            "type": issue.get("type", "unknown"),
+                                            "message": details.get(
+                                                "message", str(issue)
+                                            ),
+                                            "file": str(
+                                                Path(py_file).relative_to(code_path_obj)
+                                            ),
+                                            "line": details.get("line", 0),
+                                            "severity": severity,
+                                        }
+                                    )
                             except Exception as e:
                                 logger.warning(f"Error analyzing {py_file}: {e}")
                                 continue
-                
+
                 # Count by severity
                 severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
                 for bug in bugs:
                     severity = bug.get("severity", "medium")
                     if severity in severity_counts:
                         severity_counts[severity] += 1
-                
+
                 result = {
                     "bugs_found": len(bugs),
                     "bugs": bugs,
@@ -1264,10 +1345,12 @@ class SFEService:
                     "scan_depth": scan_depth,
                     "source": "direct_sfe",
                 }
-                
-                logger.info(f"Direct SFE bug detection complete: {len(bugs)} bugs found")
+
+                logger.info(
+                    f"Direct SFE bug detection complete: {len(bugs)} bugs found"
+                )
                 return result
-                
+
             except Exception as e:
                 logger.error(f"Direct SFE bug detection failed: {e}", exc_info=True)
                 # Fall through to fallback
@@ -1358,20 +1441,26 @@ class SFEService:
             )
             # Check if route_job actually returned data
             if result.get("data"):
-                logger.info(f"Bug analysis completed via OmniCore")
+                logger.info("Bug analysis completed via OmniCore")
                 return result["data"]
-            logger.info(f"OmniCore routing returned no data, falling through to fallback")
+            logger.info(
+                "OmniCore routing returned no data, falling through to fallback"
+            )
 
         # Fallback with contextual analysis
         logger.warning("Neither OmniCore nor direct SFE available, using fallback")
         return {
             "bug_id": bug_id,
-            "root_cause": "Complex code path with multiple potential causes" if include_root_cause else None,
-            "suggested_fixes": [
-                "Add input validation",
-                "Add error handling",
-                "Refactor complex logic"
-            ] if suggest_fixes else [],
+            "root_cause": (
+                "Complex code path with multiple potential causes"
+                if include_root_cause
+                else None
+            ),
+            "suggested_fixes": (
+                ["Add input validation", "Add error handling", "Refactor complex logic"]
+                if suggest_fixes
+                else []
+            ),
             "severity": "medium",
             "confidence": 0.70,
         }
@@ -1406,52 +1495,65 @@ class SFEService:
             )
             # Check if route_job actually returned data
             if result.get("data"):
-                logger.info(f"Bug prioritization completed via OmniCore")
+                logger.info("Bug prioritization completed via OmniCore")
                 return result["data"]
-            logger.info(f"OmniCore routing returned no data, falling through to fallback")
+            logger.info(
+                "OmniCore routing returned no data, falling through to fallback"
+            )
 
         # Fallback: try to load real bugs from analysis or detect_errors
-        logger.warning("OmniCore not available, attempting to load real bugs from job analysis")
-        
+        logger.warning(
+            "OmniCore not available, attempting to load real bugs from job analysis"
+        )
+
         try:
             # First, try to get errors for this job
             errors_result = await self.detect_errors(job_id)
             bugs = errors_result.get("errors", [])
-            
+
             if bugs:
                 # Prioritize the real bugs
                 criteria = criteria or ["severity", "impact", "effort"]
-                
+
                 # Map severity to priority scores
                 severity_scores = {"critical": 100, "high": 75, "medium": 50, "low": 25}
-                
+
                 # Calculate priority for each bug
                 prioritized = []
                 for bug in bugs:
                     severity = bug.get("severity", "medium")
                     priority_score = severity_scores.get(severity, 50)
-                    
-                    prioritized.append({
-                        "bug_id": bug.get("error_id", bug.get("bug_id", f"bug-{len(prioritized)}")),
-                        "type": bug.get("type", "Unknown"),
-                        "message": bug.get("message", ""),
-                        "file": bug.get("file", ""),
-                        "line": bug.get("line", 0),
-                        "severity": severity,
-                        "priority": len(prioritized) + 1,  # Will be recalculated after sorting
-                        "priority_score": priority_score,
-                        "impact": "high" if severity in ["critical", "high"] else "medium",
-                        "effort": "medium",
-                    })
-                
+
+                    prioritized.append(
+                        {
+                            "bug_id": bug.get(
+                                "error_id", bug.get("bug_id", f"bug-{len(prioritized)}")
+                            ),
+                            "type": bug.get("type", "Unknown"),
+                            "message": bug.get("message", ""),
+                            "file": bug.get("file", ""),
+                            "line": bug.get("line", 0),
+                            "severity": severity,
+                            "priority": len(prioritized)
+                            + 1,  # Will be recalculated after sorting
+                            "priority_score": priority_score,
+                            "impact": (
+                                "high" if severity in ["critical", "high"] else "medium"
+                            ),
+                            "effort": "medium",
+                        }
+                    )
+
                 # Sort by priority score (highest first)
                 prioritized.sort(key=lambda x: x["priority_score"], reverse=True)
-                
+
                 # Update priority numbers after sorting
                 for i, bug in enumerate(prioritized):
                     bug["priority"] = i + 1
-                
-                logger.info(f"Prioritized {len(prioritized)} real bugs from job {job_id}")
+
+                logger.info(
+                    f"Prioritized {len(prioritized)} real bugs from job {job_id}"
+                )
                 return {
                     "job_id": job_id,
                     "prioritized_bugs": prioritized,
@@ -1460,21 +1562,43 @@ class SFEService:
                 }
         except Exception as e:
             logger.warning(f"Failed to load real bugs for prioritization: {e}")
-        
+
         # Final fallback with mock data
         logger.warning("Using mock fallback data for bug prioritization")
         return {
             "job_id": job_id,
             "prioritized_bugs": [
-                {"bug_id": "bug_1", "priority": 1, "severity": "critical", "impact": "high", "effort": "medium"},
-                {"bug_id": "bug_2", "priority": 2, "severity": "high", "impact": "high", "effort": "low"},
-                {"bug_id": "bug_3", "priority": 3, "severity": "medium", "impact": "medium", "effort": "low"},
+                {
+                    "bug_id": "bug_1",
+                    "priority": 1,
+                    "severity": "critical",
+                    "impact": "high",
+                    "effort": "medium",
+                },
+                {
+                    "bug_id": "bug_2",
+                    "priority": 2,
+                    "severity": "high",
+                    "impact": "high",
+                    "effort": "low",
+                },
+                {
+                    "bug_id": "bug_3",
+                    "priority": 3,
+                    "severity": "medium",
+                    "impact": "medium",
+                    "effort": "low",
+                },
             ],
             "criteria": criteria or ["severity", "impact", "effort"],
         }
 
     async def deep_analyze_codebase(
-        self, code_path: str, analysis_types: List[str], generate_report: bool, job_id: Optional[str] = None
+        self,
+        code_path: str,
+        analysis_types: List[str],
+        generate_report: bool,
+        job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Perform deep codebase analysis via OmniCore or direct SFE integration.
@@ -1508,18 +1632,20 @@ class SFEService:
             )
             # Check if route_job actually returned data
             if result.get("data"):
-                logger.info(f"Deep analysis completed via OmniCore")
+                logger.info("Deep analysis completed via OmniCore")
                 return result["data"]
-            logger.info(f"OmniCore routing returned no data, falling through to direct SFE")
+            logger.info(
+                "OmniCore routing returned no data, falling through to direct SFE"
+            )
 
         # Try direct SFE integration if analyzer available
         if self._sfe_available["codebase_analyzer"]:
             try:
-                logger.info(f"Using direct SFE CodebaseAnalyzer for deep analysis")
-                
+                logger.info("Using direct SFE CodebaseAnalyzer for deep analysis")
+
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 code_path_obj = Path(resolved_path)
-                
+
                 # Validate path exists
                 if not code_path_obj.exists():
                     return {
@@ -1527,25 +1653,30 @@ class SFEService:
                         "error": f"Path does not exist: {resolved_path}",
                         "source": "direct_sfe",
                     }
-                
+
                 # Use CodebaseAnalyzer to perform deep analysis
                 async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
                     if generate_report:
                         # Generate full report
                         tmp_dir = Path(tempfile.gettempdir())
-                        report_path = tmp_dir / f"codebase_analysis_{abs(hash(resolved_path)) % 10000}.md"
+                        report_path = (
+                            tmp_dir
+                            / f"codebase_analysis_{abs(hash(resolved_path)) % 10000}.md"
+                        )
                         report = await analyzer.generate_report(
                             output_format="markdown",
                             output_path=str(report_path),
                             use_baseline=False,
                         )
-                        
+
                         result = {
                             "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
                             "total_files": report.get("total_files", 0),
                             "total_loc": report.get("total_loc", 0),
                             "avg_complexity": report.get("avg_complexity", 0),
-                            "analysis_summary": report.get("summary", "Analysis complete"),
+                            "analysis_summary": report.get(
+                                "summary", "Analysis complete"
+                            ),
                             "issues": report.get("issues", []),
                             "report_path": str(report_path),
                             "source": "direct_sfe",
@@ -1553,23 +1684,27 @@ class SFEService:
                     else:
                         # Just scan without generating report
                         summary = await analyzer.scan_codebase(str(code_path_obj))
-                        
+
                         # Extract information from summary
-                        total_files = len(analyzer.discover_files()) if hasattr(analyzer, 'discover_files') else 0
-                        
+                        total_files = (
+                            len(analyzer.discover_files())
+                            if hasattr(analyzer, "discover_files")
+                            else 0
+                        )
+
                         result = {
                             "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
                             "total_files": total_files,
-                            "total_loc": getattr(summary, 'total_lines', 0),
-                            "avg_complexity": getattr(summary, 'avg_complexity', 0),
+                            "total_loc": getattr(summary, "total_lines", 0),
+                            "avg_complexity": getattr(summary, "avg_complexity", 0),
                             "analysis_summary": str(summary),
                             "issues": [],
                             "source": "direct_sfe",
                         }
-                
-                logger.info(f"Direct SFE deep analysis complete")
+
+                logger.info("Direct SFE deep analysis complete")
                 return result
-                
+
             except Exception as e:
                 logger.error(f"Direct SFE deep analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
@@ -1679,7 +1814,11 @@ class SFEService:
         }
 
     async def execute_in_sandbox(
-        self, code: str, language: str, timeout: int, resource_limits: Optional[Dict[str, Any]]
+        self,
+        code: str,
+        language: str,
+        timeout: int,
+        resource_limits: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
         Execute code in sandbox via OmniCore.
@@ -1757,7 +1896,11 @@ class SFEService:
         }
 
     async def query_dlt_audit(
-        self, start_block: Optional[int], end_block: Optional[int], transaction_type: Optional[str], limit: int
+        self,
+        start_block: Optional[int],
+        end_block: Optional[int],
+        transaction_type: Optional[str],
+        limit: int,
     ) -> Dict[str, Any]:
         """
         Query DLT/blockchain audit logs via OmniCore.
@@ -1797,7 +1940,11 @@ class SFEService:
         }
 
     async def configure_siem(
-        self, siem_type: str, endpoint: str, api_key: Optional[str], export_config: Dict[str, Any]
+        self,
+        siem_type: str,
+        endpoint: str,
+        api_key: Optional[str],
+        export_config: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Configure SIEM integration via OmniCore.
@@ -1868,7 +2015,11 @@ class SFEService:
         }
 
     async def fix_imports(
-        self, code_path: str, auto_install: bool, fix_style: bool, job_id: Optional[str] = None
+        self,
+        code_path: str,
+        auto_install: bool,
+        fix_style: bool,
+        job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Fix import issues via OmniCore.
