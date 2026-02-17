@@ -32,6 +32,7 @@ Version: 2.0 (Enhanced code extraction with industry-standard robustness)
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
