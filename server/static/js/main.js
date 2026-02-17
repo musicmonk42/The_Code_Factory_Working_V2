@@ -1086,14 +1086,29 @@ async function loadErrors(jobId) {
         data.errors.forEach(error => {
             const card = document.createElement('div');
             card.className = 'error-card';
+            
+            // Escape all user-generated content to prevent XSS
+            const errorType = escapeHtml(error.type || 'Error');
+            const errorMessage = escapeHtml(error.message || '');
+            const errorFile = escapeHtml(error.file || 'N/A');
+            const errorLine = escapeHtml(String(error.line || 'N/A'));
+            const errorSeverity = escapeHtml(error.severity || 'medium');
+            
             card.innerHTML = `
-                <h4>${error.type}: ${error.message}</h4>
-                <p>File: ${error.file}, Line: ${error.line}</p>
-                <p>Severity: <span class="severity-${error.severity}">${error.severity}</span></p>
-                <button class="btn btn-primary" onclick="proposeFix('${error.error_id}')">
-                    Propose Fix
-                </button>
+                <h4>${errorType}: ${errorMessage}</h4>
+                <p>File: ${errorFile}, Line: ${errorLine}</p>
+                <p>Severity: <span class="severity-${errorSeverity}">${errorSeverity}</span></p>
             `;
+            
+            // Add button using safe method if error_id exists
+            if (error.error_id) {
+                const button = document.createElement('button');
+                button.className = 'btn btn-primary';
+                button.textContent = 'Propose Fix';
+                button.addEventListener('click', () => proposeFix(error.error_id));
+                card.appendChild(button);
+            }
+            
             container.appendChild(card);
         });
     } catch (error) {
@@ -2461,12 +2476,20 @@ async function listDeadLetterQueue() {
 // ===== SFE ADVANCED FUNCTIONS =====
 
 async function detectBugs() {
+    const jobIdInput = document.getElementById('analyze-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
+    
     try {
         showSuccess('Detecting bugs...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/detect`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code_path: '.', scan_depth: 'deep', include_potential: false})
+            body: JSON.stringify({code_path: '.', scan_depth: 'deep', include_potential: false, job_id: jobId})
         });
         const data = await response.json();
         showSuccess(`Detected ${data.bugs_found} bugs`);
@@ -2512,6 +2535,14 @@ async function detectBugs() {
 }
 
 async function analyzeCodebase() {
+    const jobIdInput = document.getElementById('analyze-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
+    
     try {
         showSuccess('Analyzing codebase...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
@@ -2520,7 +2551,8 @@ async function analyzeCodebase() {
             body: JSON.stringify({
                 code_path: '.', 
                 analysis_type: ['structure', 'dependencies', 'complexity', 'quality'],
-                generate_report: true
+                generate_report: true,
+                job_id: jobId
             })
         });
         const data = await response.json();
@@ -2627,12 +2659,20 @@ async function prioritizeBugs() {
 }
 
 async function fixImports() {
+    const jobIdInput = document.getElementById('analyze-job-id').value;
+    if (!jobIdInput) return showError('Please enter a job ID');
+    
+    const jobId = sanitizeJobId(jobIdInput);
+    if (!jobId) {
+        return; // Error already shown by sanitizeJobId
+    }
+    
     try {
         showSuccess('Fixing imports...');
         const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({code_path: '.', auto_install: false, fix_style: true})
+            body: JSON.stringify({code_path: '.', auto_install: false, fix_style: true, job_id: jobId})
         });
         const data = await response.json();
         showSuccess(`Fixed ${data.imports_fixed || 0} imports`);
