@@ -19,6 +19,9 @@ from pathlib import Path
 import tempfile
 from typing import Any, Dict, List, Optional
 
+# Industry Standard: Import centralized utilities to eliminate code duplication
+from server.services.omnicore_service import _load_sfe_analysis_report
+
 logger = logging.getLogger(__name__)
 
 
@@ -383,6 +386,20 @@ class SFEService:
                         "errors": [],
                         "count": 0,
                         "note": f"Job directory not found for {job_id}",
+                    }
+                
+                # BUG FIX 3: Industry Standard DRY principle
+                # Use centralized report loading function (eliminates duplication)
+                report_path = job_dir / "reports" / "sfe_analysis_report.json"
+                cached_report = _load_sfe_analysis_report(report_path, job_id)
+                
+                if cached_report:
+                    # Return cached data with appropriate structure for detect_errors
+                    return {
+                        "errors": cached_report["issues"],
+                        "count": cached_report["count"],
+                        "source": cached_report["source"],
+                        "cached": True,
                     }
                 
                 logger.info(f"Analyzing errors in directory: {job_dir}")
