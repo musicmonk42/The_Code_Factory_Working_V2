@@ -1683,6 +1683,36 @@ class OmniCoreService:
         
         logger.info(f"Routing job {job_id} from {source_module} to {target_module}")
 
+        # Generator runs in the same process — always dispatch directly
+        # to ensure synchronous results are returned to the caller.
+        # This prevents the fire-and-forget message bus issue where messages
+        # are published but no subscriber processes them, causing jobs to fail
+        # immediately with "OmniCore service unavailable" error.
+        if target_module == "generator":
+            action = payload.get("action")
+            logger.info(f"Using direct dispatch for generator job {job_id} action: {action}")
+            try:
+                result = await self._dispatch_generator_action(job_id, action, payload)
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch",
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Direct dispatch failed for generator job {job_id}: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch",
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
         # Use message bus if available for inter-module communication (PRIORITY 1)
         if self._message_bus and self._omnicore_components_available["message_bus"]:
             try:
