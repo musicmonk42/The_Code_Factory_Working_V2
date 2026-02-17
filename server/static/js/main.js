@@ -2574,31 +2574,6 @@ async function detectBugs() {
         showError('Bug detection failed: ' + error.message);
     }
 }
-                
-                card.innerHTML = `
-                    <h4>${bugType}: ${bugMessage}</h4>
-                    <p>File: ${bugFile}, Line: ${bugLine}</p>
-                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
-                `;
-                
-                // Add button using safe method if bug_id exists
-                if (bug.bug_id) {
-                    const button = document.createElement('button');
-                    button.className = 'btn btn-primary';
-                    button.textContent = 'Propose Fix';
-                    button.addEventListener('click', () => proposeFix(bug.bug_id));
-                    card.appendChild(button);
-                }
-                
-                container.appendChild(card);
-            });
-        } else {
-            container.innerHTML = '<p class="no-data">No bugs detected</p>';
-        }
-    } catch (error) {
-        showError('Bug detection failed: ' + error.message);
-    }
-}
 
 async function analyzeCodebase() {
     const jobIdInput = document.getElementById('analyze-job-id').value;
