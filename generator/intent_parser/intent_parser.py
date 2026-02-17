@@ -406,6 +406,10 @@ FRONTEND_INDICATORS = {
     'html': 0.8,
     'css': 0.8,
     'client-side': 0.8,
+    'front_readme': 0.8,
+    'item creation': 0.8,
+    'create item': 0.8,
+    'crud': 0.8,
     
     # Component indicators (medium - 0.6-0.7)
     'template': 0.7,

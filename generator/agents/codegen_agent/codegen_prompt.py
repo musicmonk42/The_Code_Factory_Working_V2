@@ -450,8 +450,8 @@ The following are MANDATORY checks:
      * class EchoRequest(BaseModel):
      *     message: str = Field(..., min_length=1, max_length=500)
      *     
-     *     @classmethod
      *     @field_validator('message', mode='before')
+     *     @classmethod
      *     def trim_and_validate_message(cls, v):
      *         # Trim whitespace and validate message is not empty
      *         if not isinstance(v, str):
@@ -470,6 +470,8 @@ The following are MANDATORY checks:
    WRONG Pattern (DO NOT USE):
    - ❌ @Field.validator('message', mode='before')  # WRONG: Field has no .validator attribute
    - ❌ @validator('message')  # WRONG: Deprecated Pydantic V1 decorator
+   - ❌ @classmethod then @field_validator  # WRONG: Decorator order must be @field_validator FIRST, then @classmethod
+   - ❌ @staticmethod with @field_validator  # WRONG: field_validator REQUIRES @classmethod, NOT @staticmethod
    
    Examples of WRONG patterns:
    - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
@@ -487,12 +489,19 @@ The following are MANDATORY checks:
    Validation Rules:
    - Use `@field_validator('field_name', mode='before')` decorators for all validation logic (Pydantic V2)
    - `mode='before'` runs validation BEFORE Pydantic's internal validation, allowing you to modify input (e.g., .strip())
-   - Always add `@classmethod` decorator before `@field_validator` (standard Python decorator order)
+   - CRITICAL DECORATOR ORDER: `@field_validator` MUST come FIRST, then `@classmethod` (NOT the other way around)
+   - NEVER use @staticmethod with @field_validator - it REQUIRES @classmethod
    - Trim whitespace in validators using `.strip()`
    - Validate min/max length after trimming
    - Return the validated (and trimmed) value from the validator
    - Use `Field(..., min_length=1, max_length=500)` for basic constraints
    - Validators run BEFORE Field constraints, so trim first, then Field checks length
+   
+   IMPORTANT NOTES ON PYDANTIC V2 ERROR MESSAGES:
+   - When using `mode='before'` to strip whitespace, the `min_length=1` Field constraint will catch empty-after-strip values
+   - The error message will be Pydantic's default (e.g., "String should have at least 1 character"), NOT your custom message
+   - Tests should assert on error TYPE (e.g., `string_too_short`, `string_type`) rather than specific error message text
+   - Custom validation error messages only appear if you raise ValueError/TypeError BEFORE returning from the validator
    - When testing for Pydantic validation error messages, ALWAYS use case-insensitive comparison to handle both "Field required" (Pydantic V2) and "field required" (older versions):
      * CORRECT: assert "field required" in response.json()["detail"][0]["msg"].lower()
      * WRONG: assert "field required" in response.json()["detail"][0]["msg"]  # Fails when Pydantic returns "Field required"
@@ -1187,7 +1196,19 @@ Review the error carefully and ensure your generated code does not repeat the sa
 """
                 logger.info(f"Including previous error context in prompt: {error_type}")
 
-            # 7. Load and Render Template
+            # 7. Extract required endpoints from MD content
+            required_endpoints = []
+            md_content = requirements.get("md_content", "")
+            if md_content:
+                from generator.main.provenance import extract_endpoints_from_md
+                try:
+                    required_endpoints = extract_endpoints_from_md(md_content)
+                    if required_endpoints:
+                        logger.info(f"Extracted {len(required_endpoints)} required endpoints from specification")
+                except Exception as e:
+                    logger.warning(f"Failed to extract endpoints from MD content: {e}")
+            
+            # 8. Load and Render Template
             template_name = f"{target_language}.jinja2"
             try:
                 template = env.get_template(template_name)
@@ -1214,9 +1235,10 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 target_framework=target_framework,
                 include_frontend=include_frontend,
                 frontend_type=frontend_type or DEFAULT_FRONTEND_TYPE,
+                required_endpoints=required_endpoints,
             )
 
-            # 8. Final self-critique and refinement (if enabled)
+            # 9. Final self-critique and refinement (if enabled)
             if enable_meta_llm_critique and META_LLM_API_KEY:
                 with tracer.start_as_current_span("meta_llm_critique"):
                     try:

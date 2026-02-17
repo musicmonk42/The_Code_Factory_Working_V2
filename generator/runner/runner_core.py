@@ -2109,6 +2109,14 @@ def add_package_parent_dirs(base_dir):
                     added_paths.add(parent_dir)
 
 add_package_parent_dirs(code_path)
+
+# Fallback: if 'main.py' doesn't exist at code root but exists in code/app/, add code/app/ to path
+# This handles cases where tests use "from main import app" but main.py is at code/app/main.py
+app_main = os.path.join(code_path, "app", "main.py")
+if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main.py")):
+    app_dir = os.path.join(code_path, "app")
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
 '''
                 conftest_path = temp_dir_path / "conftest.py"
                 async with aiofiles.open(conftest_path, "w", encoding="utf-8") as f:
