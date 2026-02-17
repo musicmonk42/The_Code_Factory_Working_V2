@@ -844,6 +844,11 @@ Verify your implementation includes:
 - [ ] if __name__ == "__main__" guard for entry point
 - [ ] Separation of concerns (models, routes, utils, config)
 - [ ] Configuration management (not hardcoded values)
+{% if include_frontend %}
+- [ ] Frontend files included (templates/static or frontend/ directory based on type)
+- [ ] Static file serving configured (StaticFiles middleware)
+- [ ] CORS middleware enabled for API access
+{% endif %}
 
 **Dependencies**:
 - [ ] requirements.txt with specific versions

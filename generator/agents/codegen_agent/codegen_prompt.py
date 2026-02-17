@@ -328,11 +328,13 @@ The following are MANDATORY checks:
 5. ORGANIZE INTO FILES:
    Structure as a proper project with separate files using app/ directory:
    - app/main.py (FastAPI app instance, imports router from app/routes.py, includes middleware)
-   - app/routes.py (API route definitions with APIRouter - ALL endpoints defined here)
+   - app/routes.py (API route definitions with APIRouter - ALL endpoints from spec defined here)
    - app/schemas.py (Pydantic models for request/response validation)
-   - tests/test_health.py (health endpoint tests)
-   - tests/test_version.py (version endpoint tests)
-   - tests/test_echo.py (echo endpoint tests if /echo is required)
+   - tests/test_<endpoint>.py (ONE test file for EACH endpoint required by the specification)
+     * Create test files dynamically based on spec requirements
+     * Do NOT hardcode only /health, /version, /echo
+     * If spec requires POST /items, create tests/test_items.py
+     * In tests, ALWAYS use: from app.main import app (NOT from main import app)
    - requirements.txt (dependencies)
    - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)
    - .env.example (example environment variables with NO real secrets)
@@ -477,6 +479,12 @@ The following are MANDATORY checks:
    - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
      * from pydantic import BaseModel, Field, validator  # ❌ DEPRECATED
      *     @validator('message')  # ❌ Use @field_validator instead
+   
+   - ❌ app/schemas.py - Using @staticmethod with @field_validator (BREAKS PYDANTIC):
+     * @staticmethod
+     * @field_validator('message', mode='before')
+     * def trim_message(cls, v):  # ❌ WRONG: @staticmethod prevents Pydantic from calling validator
+     *     return v.strip()
    
    - ❌ app/routes.py - Manual validation (WRONG):
      * @router.post('/echo', response_model=dict)
