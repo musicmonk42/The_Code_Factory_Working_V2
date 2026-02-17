@@ -35,8 +35,8 @@ def transform_pipeline_issues_to_frontend_errors(
         ...     "details": {"message": "Module not found", "line": 15}
         ... }]
         >>> errors = transform_pipeline_issues_to_frontend_errors(pipeline_issues, "job-123")
-        >>> errors[0]["error_id"]  # Returns unique ID
-        'err-a1b2c3d4'
+        >>> errors[0]["error_id"]  # Returns unique 16-character ID
+        'err-a1b2c3d4e5f6a7b8'
         >>> errors[0]["severity"]
         'high'
     """
@@ -59,8 +59,9 @@ def transform_pipeline_issues_to_frontend_errors(
         
         # Generate unique, deterministic error_id using hash of key identifying fields
         # This ensures the same issue gets the same ID across multiple calls
+        # Using 16 characters (64 bits of entropy) for sufficient collision resistance
         id_components = f"{job_id}:{file_path}:{line}:{issue_type}:{message}"
-        error_id = "err-" + hashlib.sha256(id_components.encode()).hexdigest()[:12]
+        error_id = "err-" + hashlib.sha256(id_components.encode()).hexdigest()[:16]
         
         errors.append({
             "error_id": error_id,
