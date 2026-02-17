@@ -44,6 +44,25 @@ class GeneratorService:
     RETRY_BASE_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_BASE_DELAY", "5"))  # Base delay for exponential backoff
     RETRY_MAX_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_MAX_DELAY", "30"))  # Maximum delay cap
 
+    @staticmethod
+    def _create_retryable_error(job_id: str, message: str) -> Dict[str, Any]:
+        """
+        Create a standardized retryable error response.
+        
+        Args:
+            job_id: Job identifier
+            message: Error message to display
+            
+        Returns:
+            Dict with error status and retry flag
+        """
+        return {
+            "status": "error",
+            "retry": True,
+            "message": message,
+            "job_id": job_id,
+        }
+
     def __init__(self, storage_path: Optional[Path] = None, omnicore_service=None):
         """
         Initialize the GeneratorService.
@@ -836,24 +855,20 @@ class GeneratorService:
             
             # If routing failed, treat as agents still loading (retryable)
             if not routed:
-                logger.warning(f"Full pipeline routing failed for job {job_id} - OmniCore may be initializing or agents still loading")
+                logger.warning(f"Full pipeline routing failed for job {job_id} - code generation service is initializing or agents still loading")
                 # Create retryable error response
-                data = {
-                    "status": "error",
-                    "retry": True,
-                    "message": "Code generation service is initializing. Please retry in a few seconds.",
-                    "job_id": job_id,
-                }
+                data = self._create_retryable_error(
+                    job_id=job_id,
+                    message="Code generation service is initializing. Please retry in a few seconds."
+                )
             # If routing succeeded but data is empty, treat as agents still loading (retryable)
             elif routed and not data:
                 logger.warning(f"Full pipeline routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 # Create retryable error response
-                data = {
-                    "status": "error",
-                    "retry": True,
-                    "message": "Code generation agents are still loading or returned no data. Please retry in a few seconds.",
-                    "job_id": job_id,
-                }
+                data = self._create_retryable_error(
+                    job_id=job_id,
+                    message="Code generation agents are still loading or returned no data. Please retry in a few seconds."
+                )
             
             # Check if OmniCore returned a retryable error (agents not loaded yet)
             if data.get("retry") and data.get("status") == "error":
@@ -908,21 +923,17 @@ class GeneratorService:
                     # If routing failed on retry, create retryable error
                     if not routed:
                         logger.warning(f"Retry {attempt + 1} routing failed for job {job_id}")
-                        data = {
-                            "status": "error",
-                            "retry": True,
-                            "message": "Code generation service is still initializing.",
-                            "job_id": job_id,
-                        }
+                        data = self._create_retryable_error(
+                            job_id=job_id,
+                            message="Code generation service is still initializing."
+                        )
                     # If routing succeeded but no data, create retryable error
                     elif routed and not data:
                         logger.warning(f"Retry {attempt + 1} succeeded but no data for job {job_id}")
-                        data = {
-                            "status": "error",
-                            "retry": True,
-                            "message": "Code generation agents are still loading.",
-                            "job_id": job_id,
-                        }
+                        data = self._create_retryable_error(
+                            job_id=job_id,
+                            message="Code generation agents are still loading."
+                        )
                     
                     # Check if we can stop retrying (success or non-retryable error)
                     if not data.get("retry"):
@@ -970,12 +981,10 @@ class GeneratorService:
             # but just in case, treat it as a retryable error
             if routed:
                 logger.warning(f"Full pipeline routing succeeded but ended without data for job {job_id}")
-                return {
-                    "job_id": job_id,
-                    "status": "error",
-                    "retry": True,
-                    "message": "Code generation agents did not return data. Please retry in a few seconds.",
-                }
+                return self._create_retryable_error(
+                    job_id=job_id,
+                    message="Code generation agents did not return data. Please retry in a few seconds."
+                )
 
         # No OmniCore or routing failed - return hard error (not retryable)
         logger.error(f"Full pipeline execution unavailable for job {job_id} - OmniCore service not available or routing failed")
