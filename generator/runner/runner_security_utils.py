@@ -779,6 +779,8 @@ def redact_secrets(
         )
         if is_documentation:
             logger.debug(f"Detected documentation file: {filename}, skipping PII redaction")
+            # FIX: Return early for documentation files - skip all redaction
+            return data
 
     try:
         # FIX: Lazy import to break circular dependency - use sync version

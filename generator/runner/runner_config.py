@@ -692,15 +692,12 @@ class RunnerConfig(BaseModel):
                     and "data" in secrets_response["data"]
                 ):
                     secrets = secrets_response["data"]["data"]
+                    # FIX: Use object.__setattr__ to ensure Pydantic model is properly updated
                     if "api_key" in secrets:
-                        self.api_key = SecretStr(
-                            secrets["api_key"]
-                        )  # Store as SecretStr
+                        object.__setattr__(self, "api_key", SecretStr(secrets["api_key"]))
                         logger.info("API key fetched from Vault.")
                     if "llm_provider_api_key" in secrets:
-                        self.llm_provider_api_key = SecretStr(
-                            secrets["llm_provider_api_key"]
-                        )
+                        object.__setattr__(self, "llm_provider_api_key", SecretStr(secrets["llm_provider_api_key"]))
                         logger.info("LLM provider API key fetched from Vault.")
                     logger.info("Vault secrets loaded successfully.")
                 else:
@@ -1348,8 +1345,12 @@ class ConfigWatcher:
         Args:
             remote_url (Optional[str]): The URL to fetch the config from. If None, uses dist_url from current_config.
         """
-        if not aiohttp:
-            logger.error("aiohttp package not installed. Cannot fetch remote config.")
+        # FIX: Check for ClientSession availability instead of aiohttp module
+        # This allows tests to mock ClientSession even if aiohttp module is not fully available
+        try:
+            from aiohttp import ClientSession
+        except ImportError:
+            logger.error("aiohttp.ClientSession not available. Cannot fetch remote config.")
             return
 
         fetch_url = remote_url or (
@@ -1361,7 +1362,7 @@ class ConfigWatcher:
 
         logger.info(f"Fetching config from remote URL: {fetch_url}")
         try:
-            async with aiohttp.ClientSession() as session:
+            async with ClientSession() as session:
                 async with session.get(fetch_url) as resp:
                     resp.raise_for_status()  # Raise exception for 4xx/5xx responses
                     data = yaml.safe_load(await resp.text())
