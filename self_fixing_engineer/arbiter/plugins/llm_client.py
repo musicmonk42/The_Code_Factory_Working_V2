@@ -541,6 +541,7 @@ class LLMClient:
         try:
             return await _call_with_retry()
         except Exception as final_e:
+            self._update_circuit_breaker(success=False)
             type(final_e).__name__
             status_code = getattr(
                 final_e,

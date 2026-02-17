@@ -400,7 +400,12 @@ class GeminiAdapter:
             self.logger.warning(
                 f"Gemini API call failed. Consecutive failures: {self.circuit_breaker_failures}/{self.circuit_breaker_threshold}."
             )
-            if self.circuit_breaker_failures >= self.circuit_breaker_threshold:
+            if self.circuit_breaker_state == "half-open":
+                self.circuit_breaker_state = "open"
+                self.logger.error(
+                    "Circuit breaker failed in 'half-open' state and is now 'open'."
+                )
+            elif self.circuit_breaker_failures >= self.circuit_breaker_threshold:
                 self.circuit_breaker_state = "open"
                 self.logger.error(
                     "Circuit breaker is now 'open' due to too many consecutive failures."

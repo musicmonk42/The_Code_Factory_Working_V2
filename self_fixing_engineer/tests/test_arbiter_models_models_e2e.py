@@ -116,7 +116,7 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         mock_lock.release = mocker.AsyncMock()
         mock_lock.__aenter__ = mocker.AsyncMock(return_value=mock_lock)
         mock_lock.__aexit__ = mocker.AsyncMock()
-        mocker.patch.object(mock_redis, "lock", return_value=mock_lock)
+        mock_redis.lock = mocker.MagicMock(return_value=mock_lock)
 
         mocker.patch("redis.asyncio.from_url", return_value=mock_redis)
     except ImportError:
