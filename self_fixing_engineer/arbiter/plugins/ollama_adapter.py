@@ -109,18 +109,28 @@ class OllamaAdapter:
         self.circuit_breaker_state_gauge.set(0)  # 0 for "closed" initially
 
     @staticmethod
-    def _get_or_create_metric(metric_class, name, documentation, labelnames=(), buckets=None):
+    def _get_or_create_metric(
+        metric_class, name, documentation, labelnames=(), buckets=None
+    ):
         """Idempotently get or create a Prometheus metric."""
         try:
-            kwargs = {"name": name, "documentation": documentation, "labelnames": labelnames}
+            kwargs = {
+                "name": name,
+                "documentation": documentation,
+                "labelnames": labelnames,
+            }
             if buckets is not None:
                 kwargs["buckets"] = buckets
             return metric_class(**kwargs)
         except ValueError as e:
             if "Duplicated timeseries" in str(e):
-                existing = REGISTRY._names_to_collectors.get(name)
-                if existing and isinstance(existing, metric_class):
-                    return existing
+                # Prometheus stores Counters under the base name (without _total suffix)
+                # and may also use _total or _created variants internally.
+                # Try both the original name and the base name without _total.
+                for candidate in [name, name.removesuffix("_total")]:
+                    existing = REGISTRY._names_to_collectors.get(candidate)
+                    if existing is not None and isinstance(existing, metric_class):
+                        return existing
             raise
 
     async def __aenter__(self):
