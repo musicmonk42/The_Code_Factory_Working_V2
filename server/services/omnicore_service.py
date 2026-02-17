@@ -1888,15 +1888,25 @@ class OmniCoreService:
         # Check if agents are loaded before attempting to dispatch
         # Implements fail-fast pattern for better system responsiveness
         if not self._agents_loaded:
-            logger.info(
-                f"Agents not yet loaded, attempting lazy loading",
-                extra={"job_id": job_id, "action": action}
-            )
-            # _ensure_agents_loaded is synchronous and sets _agents_loaded flag immediately
-            # It loads agents in the current thread before returning
-            self._ensure_agents_loaded()
+            # Check if the loader has actually finished but we haven't synced yet
+            # This fixes the race condition where loader completes before _ensure_agents_loaded is called
+            loader = get_agent_loader()
+            if loader and not loader.is_loading():
+                # Loader finished but we haven't synced - do it now
+                logger.info(
+                    f"Agent loader finished, syncing state for job {job_id}",
+                    extra={"job_id": job_id, "action": action}
+                )
+                self._ensure_agents_loaded()
+            else:
+                # Loader still running, attempt lazy loading
+                logger.info(
+                    f"Agents not yet loaded, attempting lazy loading",
+                    extra={"job_id": job_id, "action": action}
+                )
+                self._ensure_agents_loaded()
             
-        # Double-check after lazy loading attempt
+        # Re-check after potential sync or lazy loading
         if not self._agents_loaded:
             # Return structured retryable error following industry-standard error response format
             error_response = {

@@ -52,6 +52,7 @@ from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db, add_job
 from server.persistence import load_job_from_database, save_job_to_database
 from server.utils.agent_loader import get_agent_loader
+from server.services.omnicore_service import get_omnicore_service
 
 logger = logging.getLogger(__name__)
 
@@ -433,7 +434,10 @@ async def _trigger_pipeline_background(
         last_log_time = 0  # Track last progress log time
         while elapsed < AGENT_WAIT_TIMEOUT:
             loader = get_agent_loader()
-            if loader and not loader.is_loading():
+            omnicore = get_omnicore_service()
+            # Check both loader completion AND OmniCore service readiness
+            # This fixes the race condition where loader finishes but _agents_loaded is still False
+            if loader and not loader.is_loading() and omnicore._agents_loaded:
                 agent_ready = True
                 logger.info(
                     f"[Pipeline] Agents ready after {elapsed}s",
