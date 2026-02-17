@@ -438,17 +438,32 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
-            # Check if OmniCore returned an error
+            
+            # Check if OmniCore returned an error in data
             if data.get("status") == "error":
                 logger.error(f"OmniCore codegen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded but data is empty, agents may still be loading - return retryable error
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Codegen routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Code generation agents are still loading or returned no data. Please retry in a few seconds.",
+                }
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Codegen agent unavailable for job {job_id}")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Codegen agent unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
@@ -486,17 +501,32 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
-            # Check if OmniCore returned an error
+            
+            # Check if OmniCore returned an error in data
             if data.get("status") == "error":
                 logger.error(f"OmniCore testgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded but data is empty, agents may still be loading - return retryable error
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Testgen routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Test generation agents are still loading or returned no data. Please retry in a few seconds.",
+                }
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Testgen agent unavailable for job {job_id}")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Testgen agent unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
@@ -534,17 +564,32 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
-            # Check if OmniCore returned an error
+            
+            # Check if OmniCore returned an error in data
             if data.get("status") == "error":
                 logger.error(f"OmniCore deploy agent execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded but data is empty, agents may still be loading - return retryable error
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Deploy routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Deployment agents are still loading or returned no data. Please retry in a few seconds.",
+                }
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Deploy agent unavailable for job {job_id}")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Deploy agent unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
@@ -582,17 +627,32 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
-            # Check if OmniCore returned an error
+            
+            # Check if OmniCore returned an error in data
             if data.get("status") == "error":
                 logger.error(f"OmniCore docgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded but data is empty, agents may still be loading - return retryable error
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Docgen routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Documentation generation agents are still loading or returned no data. Please retry in a few seconds.",
+                }
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Docgen agent unavailable for job {job_id}")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Docgen agent unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
@@ -630,17 +690,32 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
-            # Check if OmniCore returned an error
+            
+            # Check if OmniCore returned an error in data
             if data.get("status") == "error":
                 logger.error(f"OmniCore critique execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded but data is empty, agents may still be loading - return retryable error
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Critique routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Critique agents are still loading or returned no data. Please retry in a few seconds.",
+                }
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Critique agent unavailable for job {job_id}")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Critique agent unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
@@ -754,7 +829,21 @@ class GeneratorService:
                 target_module="generator",
                 payload=payload,
             )
+            
+            # Check if routing succeeded
+            routed = result.get("routed", False)
             data = result.get("data", {})
+            
+            # If routing succeeded but data is empty, treat as agents still loading (retryable)
+            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+                logger.warning(f"Full pipeline routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                # Create retryable error response
+                data = {
+                    "status": "error",
+                    "retry": True,
+                    "message": "Code generation agents are still loading or returned no data. Please retry in a few seconds.",
+                    "job_id": job_id,
+                }
             
             # Check if OmniCore returned a retryable error (agents not loaded yet)
             if data.get("retry") and data.get("status") == "error":
@@ -836,12 +925,24 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore pipeline execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back (non-empty dict)
-            if data and isinstance(data, dict):
+            
+            # If routing succeeded and we have data, return it
+            if routed and isinstance(data, dict):
                 return data
+            
+            # If we got here with routed=True but no data, this shouldn't happen after our fix above
+            # but just in case, treat it as a retryable error
+            if routed:
+                logger.warning(f"Full pipeline routing succeeded but ended without data for job {job_id}")
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "retry": True,
+                    "message": "Code generation agents did not return data. Please retry in a few seconds.",
+                }
 
-        # No OmniCore or routing failed - return error instead of fake success
-        logger.error(f"Full pipeline execution unavailable for job {job_id} - OmniCore service not available or returned no data")
+        # No OmniCore or routing failed - return hard error (not retryable)
+        logger.error(f"Full pipeline execution unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,
             "status": "error",
