@@ -86,16 +86,16 @@ This document provides a comprehensive reference for all environment variables u
 - **Pattern:** Health check polling interval
 
 ### AGENT_RETRY_ATTEMPTS
-- **Purpose:** Number of retry attempts when agents are not ready
+- **Purpose:** Number of retry attempts when agents are not ready (initial attempt not counted)
 - **Type:** Integer
 - **Values:** `0` to `10` recommended
-- **Default:** `3` (total 4 attempts: initial + 3 retries)
+- **Default:** `3` (4 total calls: 1 initial + 3 retries)
 - **Development:** `2` (faster failure)
 - **Production:** `5` (more resilient)
 - **Example:** `AGENT_RETRY_ATTEMPTS=5`
 - **Impact:** Implements resilient retry with exponential backoff
 - **Pattern:** Retry pattern with exponential backoff (2^n multiplier)
-- **Delays:** With default base=5s: 5s, 10s, 20s (capped at max)
+- **Delays:** With default (3 retries): 5s, 10s, 20s, 30s (capped at max 30s)
 
 ### AGENT_RETRY_BASE_DELAY
 - **Purpose:** Base delay for exponential backoff between retry attempts
