@@ -164,7 +164,7 @@ def get_or_create_counter(name: str, description: str, labelnames=None):
 # ==============================================================================
 # --- Constants and Configuration ---
 # ==============================================================================
-MAX_PROMPT_TOKENS = 8000
+MAX_PROMPT_TOKENS = 16000
 META_LLM_API_URL = "https://api.x.ai/v1/chat/completions"
 META_LLM_MODEL = "grok-1.5-sonnet"
 META_LLM_API_KEY = os.getenv("GROK_API_KEY")
@@ -945,7 +945,10 @@ async def translate_requirements_if_needed(
                 translated = (await resp.json())["data"]["translations"]
                 requirements["features"] = [t["translatedText"] for t in translated]
     except Exception as e:
-        logger.error(f"Language detection/translation failed: {e}")
+        # Redact API key from error message to prevent leaking in logs
+        error_msg = str(e)
+        error_msg = re.sub(r'key=[^&\s]+', 'key=REDACTED', error_msg)
+        logger.error(f"Language detection/translation failed: {error_msg}")
         PROMPT_ERRORS.labels("TranslationFailure").inc()
     return requirements
 

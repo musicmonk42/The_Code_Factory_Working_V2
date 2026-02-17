@@ -699,6 +699,25 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             logger.error(error_msg)
             return {ERROR_FILENAME: error_msg}
         
+        # Check if the raw text contains recognizable code patterns
+        CODE_PATTERNS = (
+            'def ', 'class ', 'import ', 'from ', 'async def',
+            'function ', 'const ', 'let ', 'var ', 'export ',  # JavaScript/TypeScript
+            'package ', 'func ', 'type ',  # Go
+            'public ', 'private ', 'protected ',  # Java/C#/C++
+            '<?php', '<?=',  # PHP
+        )
+        
+        # If no code patterns found, return error instead of treating as code
+        if not any(pattern in raw for pattern in CODE_PATTERNS):
+            error_msg = (
+                "LLM response did not contain recognizable code patterns. "
+                "The response may be requirements.txt content, curl commands, or other non-code text. "
+                f"Response preview: {raw[:200]}..."
+            )
+            logger.error(error_msg)
+            return {ERROR_FILENAME: error_msg}
+        
         # Otherwise, treat as raw code (legacy behavior for compatibility)
         logger.warning(
             "No code markers found in response after cleaning. "
@@ -1249,7 +1268,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
                 if 1 <= lineno <= len(lines):
                     logger.info(
                         f"Commenting out bare identifier '{identifier}' at line {lineno}",
-                        extra={"file_name": filename}
+                        extra={"source_file": filename}
                     )
                     original_line = lines[lineno - 1]
                     # Only add comment prefix if the line isn't already a comment
@@ -1273,7 +1292,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
     except SyntaxError as e:
         logger.warning(
             f"Syntax error in generated Python code ({filename}): {e}",
-            extra={"file_name": filename, "error_line": e.lineno, "error_detail": str(e)}
+            extra={"source_file": filename, "syntax_error_line": e.lineno, "syntax_error_detail": str(e)}
         )
         return content  # Return original - let the normal validation handle syntax errors
 

@@ -190,7 +190,7 @@ class LLMSettings(BaseSettings):
         description="Default LLM provider (openai, anthropic, google)"
     )
     retry_providers: List[str] = Field(
-        default=["anthropic", "google"],
+        default=["google"],
         description="Fallback providers for retry logic"
     )
     timeout_seconds: float = Field(
