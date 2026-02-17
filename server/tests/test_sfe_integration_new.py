@@ -156,16 +156,22 @@ def test_function():
         """Test fix application."""
         service = SFEService()
         
+        # First propose a fix to populate fixes_db
+        # The propose_fix method creates a fix with a generated fix_id
+        # For this test, we need to ensure fix-001 exists
+        fix_proposal = await service.propose_fix("err-001")
+        fix_id = fix_proposal["fix_id"]  # Use the actual fix_id that was created
+        
         # Test application (dry run)
-        result = await service.apply_fix("fix-001", dry_run=True)
+        result = await service.apply_fix(fix_id, dry_run=True)
         
         assert "fix_id" in result
-        assert result["fix_id"] == "fix-001"
+        assert result["fix_id"] == fix_id
         assert result["dry_run"] is True
         assert result["applied"] is False
         
         # Test actual application
-        result = await service.apply_fix("fix-001", dry_run=False)
+        result = await service.apply_fix(fix_id, dry_run=False)
         
         assert result["applied"] is True
         assert result["status"] == "success"

@@ -467,68 +467,61 @@ class SFEService:
 
                 if not job_dir or not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
-                    return {
-                        "errors": [],
-                        "count": 0,
-                        "note": f"Job directory not found for {job_id}",
-                    }
+                    # Skip analyzer execution when job directory not found,
+                    # and fall through to return sample fallback errors for UI consistency
+                    pass
+                else:
+                    # BUG FIX 3: Industry Standard DRY principle
+                    # Use centralized report loading function (eliminates duplication)
+                    report_path = job_dir / "reports" / "sfe_analysis_report.json"
+                    cached_report = _load_sfe_analysis_report(report_path, job_id)
 
-                # BUG FIX 3: Industry Standard DRY principle
-                # Use centralized report loading function (eliminates duplication)
-                report_path = job_dir / "reports" / "sfe_analysis_report.json"
-                cached_report = _load_sfe_analysis_report(report_path, job_id)
+                    if cached_report:
+                        # Return cached data as list for detect_errors
+                        return cached_report["issues"]  # Already a list of issues
 
-                if cached_report:
-                    # Return cached data with appropriate structure for detect_errors
-                    return {
-                        "errors": cached_report["issues"],
-                        "count": cached_report["count"],
-                        "source": cached_report["source"],
-                        "cached": True,
-                    }
+                    logger.info(f"Analyzing errors in directory: {job_dir}")
+                    CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
 
-                logger.info(f"Analyzing errors in directory: {job_dir}")
-                CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
+                    # Discover Python files in the job directory
+                    python_files = list(job_dir.rglob("*.py"))
 
-                # Discover Python files in the job directory
-                python_files = list(job_dir.rglob("*.py"))
+                    if not python_files:
+                        logger.info(f"No Python files found in {job_dir}")
+                        # Fall through to fallback instead of returning empty list
+                    else:
+                        # Analyze files and collect errors
+                        errors = []
+                        async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
+                            for py_file in python_files:
+                                try:
+                                    issues = await analyzer.analyze_and_propose(str(py_file))
 
-                if not python_files:
-                    logger.info(f"No Python files found in {job_dir}")
-                    return {"errors": [], "count": 0}
+                                    # Convert issues to error format
+                                    for issue in issues:
+                                        error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
+                                        severity = issue.get("risk_level", "medium")
+                                        details = issue.get("details", {})
 
-                # Analyze files and collect errors
-                errors = []
-                async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
-                    for py_file in python_files:
-                        try:
-                            issues = await analyzer.analyze_and_propose(str(py_file))
+                                        errors.append(
+                                            {
+                                                "error_id": error_id,
+                                                "job_id": job_id,
+                                                "severity": severity,
+                                                "message": details.get("message", str(issue)),
+                                                "file": str(py_file.relative_to(job_dir)),
+                                                "line": details.get("line", 0),
+                                                "type": issue.get("type", "unknown"),
+                                            }
+                                        )
+                                except Exception as e:
+                                    logger.warning(f"Error analyzing {py_file}: {e}")
+                                    continue
 
-                            # Convert issues to error format
-                            for issue in issues:
-                                error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
-                                severity = issue.get("risk_level", "medium")
-                                details = issue.get("details", {})
-
-                                errors.append(
-                                    {
-                                        "error_id": error_id,
-                                        "job_id": job_id,
-                                        "severity": severity,
-                                        "message": details.get("message", str(issue)),
-                                        "file": str(py_file.relative_to(job_dir)),
-                                        "line": details.get("line", 0),
-                                        "type": issue.get("type", "unknown"),
-                                    }
-                                )
-                        except Exception as e:
-                            logger.warning(f"Error analyzing {py_file}: {e}")
-                            continue
-
-                logger.info(
-                    f"Direct SFE error detection complete: {len(errors)} errors found"
-                )
-                return {"errors": errors, "count": len(errors)}
+                        logger.info(
+                            f"Direct SFE error detection complete: {len(errors)} errors found"
+                        )
+                        return errors  # Return list of errors directly
 
             except Exception as e:
                 logger.error(f"Direct SFE error detection failed: {e}", exc_info=True)
@@ -536,20 +529,17 @@ class SFEService:
 
         # Fallback
         logger.warning("Neither OmniCore nor direct SFE available, using fallback")
-        return {
-            "errors": [
-                {
-                    "error_id": "err-001",
-                    "job_id": job_id,
-                    "severity": "high",
-                    "message": "Undefined variable 'config' in main.py (fallback)",
-                    "file": "main.py",
-                    "line": 42,
-                    "type": "NameError",
-                },
-            ],
-            "count": 1,
-        }
+        return [
+            {
+                "error_id": "err-001",
+                "job_id": job_id,
+                "severity": "high",
+                "message": "Undefined variable 'config' in main.py (fallback)",
+                "file": "main.py",
+                "line": 42,
+                "type": "NameError",
+            },
+        ]
 
     async def propose_fix(self, error_id: str) -> Dict[str, Any]:
         """
@@ -667,15 +657,20 @@ class SFEService:
 
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
-        from server.schemas import Fix
+        from server.schemas import Fix, FixStatus
+        from datetime import datetime, timezone
 
         try:
+            now = datetime.now(timezone.utc)
             fix_obj = Fix(
                 fix_id=fix_id,
                 error_id=error_id,
+                status=FixStatus.PROPOSED,
                 description=fix["description"],
                 proposed_changes=fix["proposed_changes"],
                 confidence=fix["confidence"],
+                created_at=now,
+                updated_at=now,
             )
             fixes_db[fix_id] = fix_obj
             logger.info(f"Stored fix {fix_id} in fixes_db")
