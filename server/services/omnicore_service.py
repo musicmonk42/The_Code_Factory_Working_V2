@@ -2557,6 +2557,30 @@ class OmniCoreService:
                 language = payload.get("language", "python")
                 framework = payload.get("framework")
                 
+                # Retrieve job to access metadata including frontend flags
+                job = jobs_db.get(job_id)
+                include_frontend = False
+                frontend_type = None
+                
+                if job and job.metadata:
+                    # Extract stack metadata if available
+                    stack_metadata = job.metadata.get("stack_metadata")
+                    if stack_metadata and isinstance(stack_metadata, dict):
+                        include_frontend = stack_metadata.get("include_frontend", False)
+                        frontend_type = stack_metadata.get("frontend_type")
+                        logger.info(
+                            f"[CODEGEN] Full-stack generation detected from job metadata: "
+                            f"include_frontend={include_frontend}, frontend_type={frontend_type}"
+                        )
+                    # Also check direct metadata keys (fallback)
+                    elif job.metadata.get("include_frontend"):
+                        include_frontend = job.metadata.get("include_frontend", False)
+                        frontend_type = job.metadata.get("frontend_type")
+                        logger.info(
+                            f"[CODEGEN] Frontend flags found in job metadata: "
+                            f"include_frontend={include_frontend}, frontend_type={frontend_type}"
+                        )
+                
                 # Debug logging - only log metadata, not content to avoid PII exposure
                 logger.info(f"[CODEGEN] Processing requirements for job {job_id}: length={len(requirements)} bytes")
                 
@@ -2573,6 +2597,8 @@ class OmniCoreService:
                     "description": requirements,
                     "target_language": language,
                     "framework": framework,
+                    "include_frontend": include_frontend,
+                    "frontend_type": frontend_type,
                 }
                 
                 # Parse requirements to extract structured features for the prompt builder

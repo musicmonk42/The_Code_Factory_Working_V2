@@ -275,6 +275,551 @@ def calculate():
 
 {% endif %}
 
+{% if include_frontend %}
+---
+
+## FULL-STACK WEB APPLICATION - FRONTEND GENERATION
+
+You are generating a **complete full-stack web application** with both backend and frontend.
+
+The frontend type is: **{{ frontend_type }}**
+
+{% if frontend_type == "jinja_templates" %}
+### JINJA2 TEMPLATES + STATIC FILES APPROACH
+
+Generate a server-rendered web application with Jinja2 templates and static assets.
+
+**Required Frontend Files:**
+
+1. **templates/base.html** - Base HTML template with proper structure:
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="{{ '{' }}{{ '{' }} description {{ '}' }}{{ '}' }}">
+    <title>{% raw %}{% block title %}{% endblock %}{% endraw %} - {{ requirements.get('title', 'App') }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    {% raw %}{% block head %}{% endblock %}{% endraw %}
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <h1 class="logo">{{ requirements.get('title', 'App') }}</h1>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                {% raw %}{% block nav_items %}{% endblock %}{% endraw %}
+            </ul>
+        </div>
+    </nav>
+    
+    <main class="main-content">
+        <div class="container">
+            {% raw %}{% block content %}{% endblock %}{% endraw %}
+        </div>
+    </main>
+    
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 {{ requirements.get('title', 'App') }}. All rights reserved.</p>
+        </div>
+    </footer>
+    
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/app.js"></script>
+    {% raw %}{% block scripts %}{% endblock %}{% endraw %}
+</body>
+</html>
+```
+
+2. **templates/index.html** - Main page that extends base:
+```html
+{% raw %}{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="hero">
+    <h2>Welcome to {{ requirements.get('title', 'App') }}</h2>
+    <p>{{ description }}</p>
+</div>
+
+<div class="features">
+    <!-- Add feature cards, forms, or content based on requirements -->
+    <div id="app-container">
+        <!-- Dynamic content loaded here -->
+    </div>
+</div>
+
+<div class="error-message" id="error-message" style="display: none;"></div>
+<div class="loading-spinner" id="loading-spinner" style="display: none;">Loading...</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Page-specific JavaScript
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeApp();
+    });
+</script>
+{% endblock %}{% endraw %}
+```
+
+3. **static/css/style.css** - Complete responsive stylesheet:
+```css
+/* CSS Variables for theming */
+:root {
+    --primary-color: #3498db;
+    --secondary-color: #2ecc71;
+    --danger-color: #e74c3c;
+    --text-color: #333;
+    --bg-color: #f5f5f5;
+    --card-bg: #ffffff;
+    --border-color: #ddd;
+    --shadow: 0 2px 4px rgba(0,0,0,0.1);
+    --transition: all 0.3s ease;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --text-color: #f5f5f5;
+        --bg-color: #1a1a1a;
+        --card-bg: #2d2d2d;
+        --border-color: #444;
+    }
+}
+
+/* Reset and base styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    line-height: 1.6;
+    color: var(--text-color);
+    background-color: var(--bg-color);
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+/* Navbar */
+.navbar {
+    background-color: var(--card-bg);
+    box-shadow: var(--shadow);
+    padding: 1rem 0;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.navbar .container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.nav-links {
+    display: flex;
+    list-style: none;
+    gap: 2rem;
+}
+
+.nav-links a {
+    text-decoration: none;
+    color: var(--text-color);
+    transition: var(--transition);
+}
+
+.nav-links a:hover {
+    color: var(--primary-color);
+}
+
+/* Main content */
+.main-content {
+    min-height: calc(100vh - 200px);
+    padding: 2rem 0;
+}
+
+/* Cards and forms */
+.card {
+    background-color: var(--card-bg);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: var(--transition);
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+/* Buttons */
+.btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+}
+
+.btn-secondary {
+    background-color: var(--secondary-color);
+    color: white;
+}
+
+/* Messages */
+.error-message {
+    background-color: var(--danger-color);
+    color: white;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.success-message {
+    background-color: var(--secondary-color);
+    color: white;
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+/* Loading spinner */
+.loading-spinner {
+    text-align: center;
+    padding: 2rem;
+    color: var(--primary-color);
+}
+
+/* Footer */
+.footer {
+    background-color: var(--card-bg);
+    padding: 2rem 0;
+    margin-top: 4rem;
+    text-align: center;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .navbar .container {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .nav-links {
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+}
+```
+
+4. **static/js/app.js** - Frontend JavaScript with API integration:
+```javascript
+// API base URL - adjust for production
+const API_BASE_URL = window.location.origin;
+
+// Initialize the application
+async function initializeApp() {
+    try {
+        // Load initial data
+        await loadData();
+    } catch (error) {
+        showError('Failed to initialize application: ' + error.message);
+    }
+}
+
+// Load data from backend API
+async function loadData() {
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/data`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        displayData(data);
+    } catch (error) {
+        showError('Failed to load data: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Display data in the UI
+function displayData(data) {
+    const container = document.getElementById('app-container');
+    if (!container) return;
+    
+    // Clear existing content
+    container.innerHTML = '';
+    
+    // Render data (customize based on requirements)
+    if (Array.isArray(data)) {
+        data.forEach(item => {
+            const card = createDataCard(item);
+            container.appendChild(card);
+        });
+    }
+}
+
+// Create a card element for displaying data
+function createDataCard(item) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+        <h3>${escapeHtml(item.title || 'Item')}</h3>
+        <p>${escapeHtml(item.description || '')}</p>
+    `;
+    return card;
+}
+
+// Form submission handler (customize based on requirements)
+async function handleFormSubmit(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/submit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Submission failed');
+        }
+        
+        const result = await response.json();
+        showSuccess('Submission successful!');
+        form.reset();
+        
+        // Reload data to show updated information
+        await loadData();
+    } catch (error) {
+        showError('Submission failed: ' + error.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Attach form handlers on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form[data-ajax]');
+    forms.forEach(form => {
+        form.addEventListener('submit', handleFormSubmit);
+    });
+});
+```
+
+5. **static/js/utils.js** - Utility functions:
+```javascript
+// Show loading indicator
+function showLoading(show) {
+    const spinner = document.getElementById('loading-spinner');
+    if (spinner) {
+        spinner.style.display = show ? 'block' : 'none';
+    }
+}
+
+// Show error message
+function showError(message) {
+    const errorDiv = document.getElementById('error-message');
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        setTimeout(() => {
+            errorDiv.style.display = 'none';
+        }, 5000);
+    }
+}
+
+// Show success message
+function showSuccess(message) {
+    const successDiv = document.getElementById('success-message') || createSuccessDiv();
+    successDiv.textContent = message;
+    successDiv.style.display = 'block';
+    setTimeout(() => {
+        successDiv.style.display = 'none';
+    }, 5000);
+}
+
+function createSuccessDiv() {
+    const div = document.createElement('div');
+    div.id = 'success-message';
+    div.className = 'success-message';
+    div.style.display = 'none';
+    document.querySelector('.main-content').prepend(div);
+    return div;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Format date for display
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+}
+
+// Debounce function for search/input handlers
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+```
+
+**FastAPI Backend Configuration:**
+
+In **main.py** or **app/main.py**, add:
+
+```python
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="{{ requirements.get('title', 'App') }}")
+
+# Configure CORS for API endpoints
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Configure Jinja2 templates
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/")
+async def root(request: Request):
+    \"\"\"Serve the main page.\"\"\"
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "title": "Home",
+        "description": "{{ requirements.get('description', 'Welcome') }}"
+    })
+```
+
+{% elif frontend_type == "vanilla_js" %}
+### VANILLA JAVASCRIPT SPA APPROACH
+
+Generate a separate frontend directory with vanilla JavaScript:
+
+**Required Frontend Files:**
+
+1. **frontend/index.html** - Main HTML file
+2. **frontend/css/style.css** - Responsive stylesheet
+3. **frontend/js/app.js** - Main application logic
+4. **frontend/js/api.js** - API client for backend communication
+
+Include CORS configuration in backend to allow frontend access.
+
+{% elif frontend_type in ["react", "vue", "angular"] %}
+### {{ frontend_type.upper() }} FRAMEWORK APPROACH
+
+For {{ frontend_type }}, provide:
+1. Clear instructions in README for setting up {{ frontend_type }} frontend separately
+2. Backend API endpoints with proper CORS configuration
+3. Example API calls from {{ frontend_type }}
+
+Note: Full {{ frontend_type }} scaffold generation is complex. Focus on backend API with clear frontend integration docs.
+
+{% endif %}
+
+### CRITICAL FULL-STACK REQUIREMENTS:
+
+1. ✓ **Static File Serving**: Mount `/static` directory with StaticFiles
+2. ✓ **Template Rendering**: Configure Jinja2Templates for HTML templates
+3. ✓ **CORS Configuration**: Enable CORS middleware for API endpoints
+4. ✓ **Responsive Design**: CSS uses flexbox/grid, mobile-first approach
+5. ✓ **Form Handling**: JavaScript handles form submissions with fetch API
+6. ✓ **Error States**: Display errors to users, don't just log to console
+7. ✓ **Loading States**: Show loading indicators during async operations
+8. ✓ **Accessibility**: Use semantic HTML5, ARIA attributes where needed
+9. ✓ **Security**: Escape user inputs, use Content-Security-Policy headers
+10. ✓ **API Integration**: Frontend JavaScript calls backend API endpoints correctly
+
+{% endif %}
+
 ---
 
 ## PYTHON IMPLEMENTATION CHECKLIST

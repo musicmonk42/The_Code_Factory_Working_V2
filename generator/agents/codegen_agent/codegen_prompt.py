@@ -1068,6 +1068,8 @@ async def build_code_generation_prompt(
     multi_modal_inputs: Optional[Dict[str, Any]] = None,
     audit_logger: Any = None,  # <-- FIX: Defaulted to None. Implementation uses log_audit_event.
     redis_client: Optional[aioredis.Redis] = None,
+    include_frontend: bool = False,
+    frontend_type: Optional[str] = None,
 ) -> str:
     """
     Builds a production-ready, context-aware, and optimized prompt for code generation.
@@ -1083,6 +1085,8 @@ async def build_code_generation_prompt(
         multi_modal_inputs: Optional multimodal inputs (images, diagrams)
         audit_logger: Optional audit logger (uses log_audit_event if None)
         redis_client: Optional Redis client for RAG
+        include_frontend: Whether to include frontend generation (default: False)
+        frontend_type: Type of frontend to generate (jinja_templates, vanilla_js, react, vue, angular)
 
     Returns:
         str: The constructed prompt for code generation
@@ -1202,6 +1206,8 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 diagram_descriptions=diagram_desc,
                 target_language=target_language,
                 target_framework=target_framework,
+                include_frontend=include_frontend,
+                frontend_type=frontend_type or "jinja_templates",
             )
 
             # 8. Final self-critique and refinement (if enabled)
