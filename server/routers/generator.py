@@ -430,6 +430,7 @@ async def _trigger_pipeline_background(
         
         elapsed = 0
         agent_ready = False
+        last_log_time = 0  # Track last progress log time
         while elapsed < AGENT_WAIT_TIMEOUT:
             loader = get_agent_loader()
             if loader and not loader.is_loading():
@@ -440,7 +441,8 @@ async def _trigger_pipeline_background(
                 )
                 break
             
-            if elapsed % 10 == 0 and elapsed > 0:  # Log progress every 10 seconds
+            # Log progress approximately every 10 seconds
+            if elapsed > 0 and (elapsed - last_log_time) >= 10:
                 logger.info(
                     f"[Pipeline] Waiting for agents to load before running pipeline for job {job_id} ({elapsed}s elapsed)",
                     extra={
@@ -450,6 +452,7 @@ async def _trigger_pipeline_background(
                         "progress_percentage": round((elapsed / AGENT_WAIT_TIMEOUT) * 100, 1)
                     }
                 )
+                last_log_time = elapsed
             
             await asyncio.sleep(AGENT_WAIT_INTERVAL)
             elapsed += AGENT_WAIT_INTERVAL

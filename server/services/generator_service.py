@@ -769,9 +769,10 @@ class GeneratorService:
                 # Retry with exponential backoff (3 retries after initial attempt = 4 total calls)
                 # Implements resilience pattern with capped exponential backoff
                 for attempt in range(self.MAX_RETRY_ATTEMPTS):
-                    # Calculate delay with exponential backoff and cap at max delay
+                    # Calculate delay with true exponential backoff: 2^0 * base, 2^1 * base, 2^2 * base
+                    # With base=5: 5s, 10s, 20s (capped at max)
                     delay = min(
-                        self.RETRY_BASE_DELAY_SECONDS * (attempt + 1),
+                        self.RETRY_BASE_DELAY_SECONDS * (2 ** attempt),
                         self.RETRY_MAX_DELAY_SECONDS
                     )
                     logger.info(

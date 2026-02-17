@@ -1892,8 +1892,11 @@ class OmniCoreService:
                 f"Agents not yet loaded, attempting lazy loading",
                 extra={"job_id": job_id, "action": action}
             )
+            # _ensure_agents_loaded is synchronous and sets _agents_loaded flag immediately
+            # It loads agents in the current thread before returning
             self._ensure_agents_loaded()
             
+        # Double-check after lazy loading attempt
         if not self._agents_loaded:
             # Return structured retryable error following industry-standard error response format
             error_response = {
