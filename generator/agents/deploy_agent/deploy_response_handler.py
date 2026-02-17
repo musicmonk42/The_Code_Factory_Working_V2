@@ -841,8 +841,11 @@ def _sanitize_llm_output(raw_output: str) -> str:
     # Remove markdown headers (## Header, ### Header, etc.)
     raw_output = re.sub(r'^#{1,6}\s+.*$', '', raw_output, flags=re.MULTILINE)
     
-    # Remove horizontal rules (---, ***, ___)
-    raw_output = re.sub(r'^[-*_]{3,}\s*$', '', raw_output, flags=re.MULTILINE)
+    # Remove horizontal rules (----, ***, ___)
+    # IMPORTANT: Preserve YAML document separators (---) by only matching 4+ dashes or * and _
+    # Match: ---- (4+ dashes), *** (3+ asterisks), ___ (3+ underscores)
+    # Don't match: --- (YAML document separator)
+    raw_output = re.sub(r'^(?:[-]{4,}|[*]{3,}|[_]{3,})\s*$', '', raw_output, flags=re.MULTILINE)
     
     # Remove markdown links [text](url) - keep the text, remove the link
     raw_output = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', raw_output)
@@ -1173,15 +1176,17 @@ class DockerfileHandler(FormatHandler):
         # Remove leading/trailing markdown fences (```dockerfile ... ```)
         sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
-        # Remove leading "!" token (common LLM error)
-        sanitized = re.sub(r'^!+\s*', '', sanitized)
+        # Remove leading "!" token only when followed by valid Dockerfile instructions
+        # This allows validation to catch invalid content like "! Invalid start"
+        sanitized = re.sub(r'^!+\s*(?=FROM|ARG)', '', sanitized, flags=re.IGNORECASE)
+        
+        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
+        # IMPORTANT: Validate BEFORE stripping LLM preamble to catch invalid content
+        validate_dockerfile(sanitized)
         
         # ✅ STRIP LLM PREAMBLE: Remove conversational text before Dockerfile content
         # This handles cases where LLM generates text like "Certainly! Here's a Dockerfile..."
         sanitized = _strip_llm_preamble(sanitized)
-        
-        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
-        validate_dockerfile(sanitized)
         
         # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
         lines = []
