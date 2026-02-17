@@ -1368,6 +1368,56 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.warning(f"Failed to initialize periodic audit flush: {e}", exc_info=True)
 
 
+async def _protect_running_jobs_on_shutdown():
+    """
+    Mark any RUNNING jobs as FAILED before shutdown to prevent
+    orphaned jobs that get discovered on next restart.
+    
+    This runs during graceful shutdown (SIGTERM) to ensure jobs
+    have clear error messages rather than being silently abandoned.
+    """
+    try:
+        from server.storage import jobs_db
+        
+        # Get all jobs and find RUNNING ones
+        all_jobs = list(jobs_db.values())
+        running_jobs = [j for j in all_jobs if j.status.value == "running"]
+        
+        if not running_jobs:
+            logger.info("No running jobs to protect during shutdown")
+            return
+        
+        shutdown_time = datetime.now(timezone.utc).isoformat()
+        for job in running_jobs:
+            job_id = job.id
+            try:
+                # Update job status to FAILED with clear error message
+                job.status = JobStatus.FAILED
+                job.error = "Job interrupted by SIGTERM during container shutdown. Please resubmit."
+                job.updated_at = datetime.now(timezone.utc)
+                job.completed_at = datetime.now(timezone.utc)
+                
+                # Add metadata about the shutdown
+                if job.metadata is None:
+                    job.metadata = {}
+                job.metadata.update({
+                    "shutdown_signal": True,
+                    "interrupted_at": shutdown_time,
+                    "reason": "SIGTERM",
+                })
+                
+                # Save updated job back to storage (will persist to PostgreSQL if enabled)
+                jobs_db[job_id] = job
+                
+                logger.info(f"Protected job {job_id}: marked as FAILED before shutdown")
+            except Exception as e:
+                logger.error(f"Failed to protect job {job_id} during shutdown: {e}")
+        
+        logger.info(f"Protected {len(running_jobs)} running job(s) before shutdown")
+    except Exception as e:
+        logger.error(f"Error protecting running jobs during shutdown: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -1465,6 +1515,9 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Code Factory API Server")
+    
+    # Protect running jobs before shutting down
+    await _protect_running_jobs_on_shutdown()
     
     # Cancel background task if still running
     if background_task is not None and not background_task.done():
