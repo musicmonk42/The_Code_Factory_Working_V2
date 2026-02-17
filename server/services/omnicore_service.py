@@ -3460,12 +3460,48 @@ class OmniCoreService:
                                             generated_files.append(str(values_file.relative_to(repo_path)))
                                             logger.info(f"Generated helm file: {values_file}")
                             else:
-                                # Final fallback: write entire content as Chart.yaml
+                                # Final fallback: validate content is valid YAML before writing
+                                # BUG FIX 5: Don't write invalid markdown/prose as Chart.yaml
                                 chart_file = target_dir / "Chart.yaml"
-                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
-                                    await f.write(config_content)
-                                generated_files.append(str(chart_file.relative_to(repo_path)))
-                                logger.info(f"Generated helm file (fallback): {chart_file}")
+                                try:
+                                    # Try to parse as YAML to validate
+                                    parsed_yaml = yaml.safe_load(config_content)
+                                    if isinstance(parsed_yaml, dict):
+                                        # Content is valid YAML, write it
+                                        async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                            await f.write(config_content)
+                                        generated_files.append(str(chart_file.relative_to(repo_path)))
+                                        logger.info(f"Generated helm file (fallback): {chart_file}")
+                                    else:
+                                        # Not a dict, use default chart
+                                        logger.warning("[DEPLOY] Helm content is not a valid YAML dict, using default chart")
+                                        default_chart = {
+                                            "apiVersion": "v2",
+                                            "name": "app",
+                                            "description": "A Helm chart for Kubernetes",
+                                            "type": "application",
+                                            "version": "0.1.0",
+                                            "appVersion": "1.0.0"
+                                        }
+                                        async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                            await f.write(yaml.dump(default_chart, default_flow_style=False))
+                                        generated_files.append(str(chart_file.relative_to(repo_path)))
+                                        logger.info(f"Generated helm file (default fallback): {chart_file}")
+                                except yaml.YAMLError as e:
+                                    # Invalid YAML, use default chart
+                                    logger.warning(f"[DEPLOY] Helm content is not valid YAML: {e}, using default chart")
+                                    default_chart = {
+                                        "apiVersion": "v2",
+                                        "name": "app",
+                                        "description": "A Helm chart for Kubernetes",
+                                        "type": "application",
+                                        "version": "0.1.0",
+                                        "appVersion": "1.0.0"
+                                    }
+                                    async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                        await f.write(yaml.dump(default_chart, default_flow_style=False))
+                                    generated_files.append(str(chart_file.relative_to(repo_path)))
+                                    logger.info(f"Generated helm file (default fallback): {chart_file}")
                                 
                                 # Create minimal values.yaml
                                 values_file = target_dir / "values.yaml"
