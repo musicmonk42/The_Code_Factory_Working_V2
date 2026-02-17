@@ -22,7 +22,10 @@ from uuid import uuid4
 
 # Industry Standard: Import centralized utilities to eliminate code duplication
 from server.services.omnicore_service import _load_sfe_analysis_report
-from server.services.sfe_utils import transform_pipeline_issues_to_frontend_errors
+from server.services.sfe_utils import (
+    transform_pipeline_issues_to_frontend_errors,
+    transform_pipeline_issues_to_bugs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +240,70 @@ class SFEService:
             >>> # await omnicore.route_to_sfe('analyze', {...})
         """
         logger.info(f"Analyzing code for job {job_id} at {code_path}")
+
+        # FIX 1: Check for cached SFE analysis report first (before OmniCore/direct SFE)
+        # This resolves the issue where "Analyze Code" re-runs analysis from scratch
+        # instead of using the already-generated report from the pipeline
+        if job_id:
+            # Resolve job directory using same logic as detect_errors()
+            from server.storage import jobs_db
+            
+            job = jobs_db.get(job_id)
+            job_dir = None
+            
+            if job and job.metadata:
+                # Check metadata for output paths
+                for key in ("output_path", "code_path", "generated_path"):
+                    path = job.metadata.get(key)
+                    if path and Path(path).exists():
+                        job_dir = Path(path)
+                        logger.info(f"Using job path from metadata.{key}: {path}")
+                        break
+            
+            # If not in metadata, check standard locations
+            if not job_dir:
+                uploads_dir = Path("./uploads")
+                job_base = uploads_dir / job_id
+                
+                if job_base.exists():
+                    # Check standard subdirectories
+                    for subdir_name in ["generated", "output"]:
+                        subdir = job_base / subdir_name
+                        if subdir.exists():
+                            # Look for project subdirectories
+                            subdirs = [d for d in subdir.iterdir() if d.is_dir()]
+                            if subdirs:
+                                # Use first project directory
+                                job_dir = subdirs[0]
+                            else:
+                                # No subdirectories, use this directory directly
+                                job_dir = subdir
+                            break
+                    
+                    # If no generated/ or output/, use job_base directly
+                    if not job_dir:
+                        job_dir = job_base
+            
+            # Try to load cached report
+            if job_dir and job_dir.exists():
+                report_path = job_dir / "reports" / "sfe_analysis_report.json"
+                cached_report = _load_sfe_analysis_report(report_path, job_id)
+                
+                if cached_report:
+                    logger.info(f"Using cached SFE analysis report for job {job_id}")
+                    # Transform cached pipeline issues to frontend format
+                    issues = transform_pipeline_issues_to_frontend_errors(
+                        cached_report["issues"], job_id
+                    )
+                    
+                    return {
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "issues_found": len(issues),
+                        "issues": issues,
+                        "source": cached_report["source"],
+                        "cached": True,
+                    }
 
         # Try routing through OmniCore first
         if self.omnicore_service:
@@ -538,19 +605,15 @@ class SFEService:
                 logger.error(f"Direct SFE error detection failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback
+        # FIX 4: Fallback - return structured empty result instead of mock data
+        # The previous mock error was confusing to users as it didn't correspond to real issues
         logger.warning("Neither OmniCore nor direct SFE available, using fallback")
-        return [
-            {
-                "error_id": "err-001",
-                "job_id": job_id,
-                "severity": "high",
-                "message": "Undefined variable 'config' in main.py (fallback)",
-                "file": "main.py",
-                "line": 42,
-                "type": "NameError",
-            },
-        ]
+        return {
+            "errors": [],
+            "count": 0,
+            "source": "fallback",
+            "note": "Error detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available.",
+        }
 
     async def propose_fix(self, error_id: str) -> Dict[str, Any]:
         """
@@ -1236,6 +1299,79 @@ class SFEService:
             logger.info(
                 "OmniCore routing returned no data, falling through to direct SFE"
             )
+
+        # FIX 2: Check for cached SFE analysis report before running direct SFE
+        # This resolves the issue where "Detect Bugs" re-runs analysis from scratch
+        if job_id:
+            # Resolve job directory using same logic as detect_errors()
+            from server.storage import jobs_db
+            
+            job = jobs_db.get(job_id)
+            job_dir = None
+            
+            if job and job.metadata:
+                # Check metadata for output paths
+                for key in ("output_path", "code_path", "generated_path"):
+                    path = job.metadata.get(key)
+                    if path and Path(path).exists():
+                        job_dir = Path(path)
+                        logger.info(f"Using job path from metadata.{key}: {path}")
+                        break
+            
+            # If not in metadata, check standard locations
+            if not job_dir:
+                uploads_dir = Path("./uploads")
+                job_base = uploads_dir / job_id
+                
+                if job_base.exists():
+                    # Check standard subdirectories
+                    for subdir_name in ["generated", "output"]:
+                        subdir = job_base / subdir_name
+                        if subdir.exists():
+                            # Look for project subdirectories
+                            subdirs = [d for d in subdir.iterdir() if d.is_dir()]
+                            if subdirs:
+                                # Use first project directory
+                                job_dir = subdirs[0]
+                            else:
+                                # No subdirectories, use this directory directly
+                                job_dir = subdir
+                            break
+                    
+                    # If no generated/ or output/, use job_base directly
+                    if not job_dir:
+                        job_dir = job_base
+            
+            # Try to load cached report
+            if job_dir and job_dir.exists():
+                report_path = job_dir / "reports" / "sfe_analysis_report.json"
+                cached_report = _load_sfe_analysis_report(report_path, job_id)
+                
+                if cached_report:
+                    logger.info(f"Using cached SFE analysis report for bug detection in job {job_id}")
+                    # Transform cached pipeline issues to bug format
+                    bugs = transform_pipeline_issues_to_bugs(
+                        cached_report["issues"], job_id, "unknown"
+                    )
+                    
+                    # Count by severity
+                    severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+                    for bug in bugs:
+                        severity = bug.get("severity", "medium")
+                        if severity in severity_counts:
+                            severity_counts[severity] += 1
+                    
+                    return {
+                        "bugs_found": len(bugs),
+                        "bugs": bugs,
+                        "critical": severity_counts["critical"],
+                        "high": severity_counts["high"],
+                        "medium": severity_counts["medium"],
+                        "low": severity_counts["low"],
+                        "scan_depth": scan_depth,
+                        "source": cached_report["source"],
+                        "cached": True,
+                    }
 
         # Try direct SFE integration if analyzer available
         if self._sfe_available["codebase_analyzer"]:

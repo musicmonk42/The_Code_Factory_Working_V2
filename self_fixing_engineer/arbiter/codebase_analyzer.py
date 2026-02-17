@@ -772,7 +772,24 @@ class CodebaseAnalyzer:
                     )
                 elif tool["name"] == "Mypy" and MYPY_AVAILABLE:
                     stdout, stderr, _ = mypy_run([str(file_path)])
-                    for line in (stdout + stderr).splitlines():
+                    
+                    # FIX 3: Filter mypy INTERNAL ERROR lines before parsing
+                    # mypy v1.17.1 on Python 3.11 produces INTERNAL ERROR messages
+                    # that break the parsing logic and create malformed defect entries
+                    output_lines = (stdout + stderr).splitlines()
+                    has_internal_error = False
+                    
+                    for line in output_lines:
+                        # Filter out mypy INTERNAL ERROR and related diagnostic lines
+                        if "INTERNAL ERROR" in line:
+                            has_internal_error = True
+                            continue
+                        if "Please try using mypy master" in line:
+                            continue
+                        if "please use --show-traceback" in line:
+                            continue
+                        
+                        # Parse actual type-checking errors
                         if ":" in line and "error:" in line:
                             parts = line.split(":", 4)
                             if len(parts) >= 4:
@@ -787,6 +804,14 @@ class CodebaseAnalyzer:
                                         "source": "mypy",
                                     }
                                 )
+                    
+                    # Log warning if INTERNAL ERROR was detected
+                    if has_internal_error:
+                        logger.warning(
+                            f"mypy INTERNAL ERROR detected while analyzing {file_path}. "
+                            "Some type checking results may be incomplete. "
+                            "Consider upgrading mypy or Python version."
+                        )
             except Exception as e:
                 logger.warning(
                     f"Linter '{tool['name']}' failed on {file_path}: {e}", exc_info=True
