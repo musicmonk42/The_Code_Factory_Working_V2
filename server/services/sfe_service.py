@@ -503,33 +503,27 @@ class SFEService:
                     logger.info(f"No Python files found in {job_dir}")
                     return {"errors": [], "count": 0}
 
-                # Analyze files and collect errors
-                errors = []
+                # Analyze files and collect issues
+                all_issues = []
                 async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
                     for py_file in python_files:
                         try:
                             issues = await analyzer.analyze_and_propose(str(py_file))
-
-                            # Convert issues to error format
+                            
+                            # Add file path to each issue for proper transformation
                             for issue in issues:
-                                error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
-                                severity = issue.get("risk_level", "medium")
-                                details = issue.get("details", {})
-
-                                errors.append(
-                                    {
-                                        "error_id": error_id,
-                                        "job_id": job_id,
-                                        "severity": severity,
-                                        "message": details.get("message", str(issue)),
-                                        "file": str(py_file.relative_to(job_dir)),
-                                        "line": details.get("line", 0),
-                                        "type": issue.get("type", "unknown"),
-                                    }
-                                )
+                                if "file" not in issue and "details" not in issue:
+                                    issue["details"] = {}
+                                if "file" not in issue:
+                                    issue["file"] = str(py_file.relative_to(job_dir))
+                                all_issues.append(issue)
+                                
                         except Exception as e:
                             logger.warning(f"Error analyzing {py_file}: {e}")
                             continue
+                
+                # Transform all issues to error format using utility function
+                errors = transform_pipeline_issues_to_frontend_errors(all_issues, job_id)
 
                 logger.info(
                     f"Direct SFE error detection complete: {len(errors)} errors found"
@@ -1265,22 +1259,11 @@ class SFEService:
                     root_dir = str(code_path_obj.parent)
                     async with CodebaseAnalyzer(root_dir=root_dir) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
-
-                        for issue in issues:
-                            bug_id = f"bug-{abs(hash(str(issue))) % 100000}"
-                            severity = issue.get("risk_level", "medium")
-                            details = issue.get("details", {})
-
-                            bugs.append(
-                                {
-                                    "bug_id": bug_id,
-                                    "type": issue.get("type", "unknown"),
-                                    "message": details.get("message", str(issue)),
-                                    "file": str(code_path_obj.name),
-                                    "line": details.get("line", 0),
-                                    "severity": severity,
-                                }
-                            )
+                        
+                        # Transform issues to bugs using utility function
+                        bugs = transform_pipeline_issues_to_bugs(
+                            issues, job_id, str(code_path_obj.name)
+                        )
 
                 elif code_path_obj.is_dir():
                     async with CodebaseAnalyzer(
@@ -1297,33 +1280,28 @@ class SFEService:
                         else:  # deep
                             max_files = 100
 
-                        # Analyze each file
+                        # Collect all issues from files
+                        all_issues = []
                         for py_file in py_files[:max_files]:
                             try:
                                 issues = await analyzer.analyze_and_propose(py_file)
-
+                                
+                                # Add file path to each issue
                                 for issue in issues:
-                                    bug_id = f"bug-{abs(hash(py_file + str(issue))) % 100000}"
-                                    severity = issue.get("risk_level", "medium")
-                                    details = issue.get("details", {})
-
-                                    bugs.append(
-                                        {
-                                            "bug_id": bug_id,
-                                            "type": issue.get("type", "unknown"),
-                                            "message": details.get(
-                                                "message", str(issue)
-                                            ),
-                                            "file": str(
-                                                Path(py_file).relative_to(code_path_obj)
-                                            ),
-                                            "line": details.get("line", 0),
-                                            "severity": severity,
-                                        }
-                                    )
+                                    if "file" not in issue:
+                                        issue["file"] = str(
+                                            Path(py_file).relative_to(code_path_obj)
+                                        )
+                                    all_issues.append(issue)
+                                    
                             except Exception as e:
                                 logger.warning(f"Error analyzing {py_file}: {e}")
                                 continue
+                        
+                        # Transform all issues to bugs using utility function
+                        bugs = transform_pipeline_issues_to_bugs(
+                            all_issues, job_id, "unknown"
+                        )
 
                 # Count by severity
                 severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}

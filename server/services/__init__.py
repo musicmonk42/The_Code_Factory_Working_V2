@@ -24,6 +24,7 @@ from .sfe_service import SFEService
 # Import SFE utilities
 from .sfe_utils import (
     transform_pipeline_issues_to_frontend_errors,
+    transform_pipeline_issues_to_bugs,
     MAX_ISSUES_PER_BATCH,
     ERROR_ID_PREFIX,
     DEFAULT_SEVERITY,
@@ -56,6 +57,7 @@ __all__ = [
     
     # SFE utilities
     "transform_pipeline_issues_to_frontend_errors",
+    "transform_pipeline_issues_to_bugs",
     "MAX_ISSUES_PER_BATCH",
     "ERROR_ID_PREFIX",
     "DEFAULT_SEVERITY",

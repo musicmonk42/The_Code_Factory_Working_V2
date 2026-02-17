@@ -109,10 +109,105 @@ VALID_SEVERITIES = {"critical", "high", "medium", "low", "info", "warning"}
 # Export public API
 __all__ = [
     "transform_pipeline_issues_to_frontend_errors",
+    "transform_pipeline_issues_to_bugs",
     "MAX_ISSUES_PER_BATCH",
     "ERROR_ID_PREFIX",
     "DEFAULT_SEVERITY",
 ]
+
+
+def _transform_issues(
+    issues: List[Dict[str, Any]],
+    job_id: str,
+    id_prefix: str,
+    id_field_name: str,
+    file_context: str = "unknown"
+) -> List[Dict[str, Any]]:
+    """
+    Internal helper to transform pipeline issues with configurable ID field.
+    
+    This is the core transformation logic shared by both error and bug transformations.
+    
+    Args:
+        issues: List of issues in pipeline format
+        job_id: Job identifier
+        id_prefix: Prefix for generated IDs (e.g., "err-" or "bug-")
+        id_field_name: Name of ID field (e.g., "error_id" or "bug_id")
+        file_context: Optional file context for relative path calculation
+        
+    Returns:
+        List of transformed issues with specified ID field
+    """
+    results = []
+    issues_with_errors = 0
+    
+    for idx, issue in enumerate(issues):
+        try:
+            # Validate issue is a dictionary
+            if not isinstance(issue, dict):
+                logger.error(
+                    f"Issue at index {idx} is not a dict: {type(issue).__name__}",
+                    extra={"job_id": job_id, "index": idx}
+                )
+                issues_with_errors += 1
+                continue
+            
+            # Extract fields from pipeline format
+            severity = issue.get("risk_level", DEFAULT_SEVERITY)
+            details = issue.get("details", {})
+            issue_type = issue.get("type", "unknown")
+            
+            # Validate severity level
+            if severity not in VALID_SEVERITIES:
+                logger.warning(
+                    f"Invalid severity '{severity}' at index {idx}, using '{DEFAULT_SEVERITY}'",
+                    extra={"job_id": job_id, "index": idx, "severity": severity}
+                )
+                severity = DEFAULT_SEVERITY
+            
+            # Determine file path (check both top-level and details)
+            file_path = issue.get("file", details.get("file", file_context))
+            
+            # Get line number with validation
+            line = details.get("line", 0)
+            if not isinstance(line, int):
+                try:
+                    line = int(line)
+                except (ValueError, TypeError):
+                    line = 0
+            
+            # Get message
+            message = details.get("message", str(issue))
+            
+            # Generate unique, deterministic ID using hash of key identifying fields
+            id_components = f"{job_id}:{file_path}:{line}:{issue_type}:{message}"
+            generated_id = id_prefix + hashlib.sha256(
+                id_components.encode("utf-8")
+            ).hexdigest()[:ERROR_ID_LENGTH]
+            
+            result = {
+                id_field_name: generated_id,
+                "job_id": job_id,
+                "type": issue_type,
+                "severity": severity,
+                "message": message,
+                "file": file_path,
+                "line": line,
+            }
+            
+            results.append(result)
+            
+        except Exception as e:
+            # Log unexpected errors but continue processing
+            logger.error(
+                f"Error transforming issue at index {idx}: {e}",
+                extra={"job_id": job_id, "index": idx, "error": str(e)},
+                exc_info=True
+            )
+            issues_with_errors += 1
+            continue
+    
+    return results, issues_with_errors
 
 
 def transform_pipeline_issues_to_frontend_errors(
@@ -191,82 +286,18 @@ def transform_pipeline_issues_to_frontend_errors(
     
     # Log transformation start
     logger.debug(
-        f"Transforming {len(issues)} pipeline issues to frontend format",
+        f"Transforming {len(issues)} pipeline issues to frontend errors",
         extra={"job_id": job_id, "issue_count": len(issues)}
     )
     
-    errors = []
-    issues_with_errors = 0
-    
-    for idx, issue in enumerate(issues):
-        try:
-            # Validate issue is a dictionary
-            if not isinstance(issue, dict):
-                logger.error(
-                    f"Issue at index {idx} is not a dict: {type(issue).__name__}",
-                    extra={"job_id": job_id, "index": idx}
-                )
-                issues_with_errors += 1
-                continue
-            
-            # Extract fields from pipeline format
-            severity = issue.get("risk_level", DEFAULT_SEVERITY)
-            details = issue.get("details", {})
-            issue_type = issue.get("type", "unknown")
-            
-            # Validate severity level
-            if severity not in VALID_SEVERITIES:
-                logger.warning(
-                    f"Invalid severity '{severity}' at index {idx}, using '{DEFAULT_SEVERITY}'",
-                    extra={"job_id": job_id, "index": idx, "severity": severity}
-                )
-                severity = DEFAULT_SEVERITY
-            
-            # Determine file path (check both top-level and details)
-            file_path = issue.get("file", details.get("file", "unknown"))
-            
-            # Get line number with validation
-            line = details.get("line", 0)
-            if not isinstance(line, int):
-                try:
-                    line = int(line)
-                except (ValueError, TypeError):
-                    line = 0
-            
-            # Get message
-            message = details.get("message", str(issue))
-            
-            # Generate unique, deterministic error_id using hash of key identifying fields
-            # This ensures the same issue gets the same ID across multiple calls
-            # Using 16 characters (64 bits of entropy) for sufficient collision resistance
-            id_components = f"{job_id}:{file_path}:{line}:{issue_type}:{message}"
-            error_id = ERROR_ID_PREFIX + hashlib.sha256(
-                id_components.encode("utf-8")
-            ).hexdigest()[:ERROR_ID_LENGTH]
-            
-            errors.append({
-                "error_id": error_id,
-                "job_id": job_id,
-                "severity": severity,
-                "message": message,
-                "file": file_path,
-                "line": line,
-                "type": issue_type,
-            })
-            
-        except Exception as e:
-            # Log unexpected errors but continue processing
-            logger.error(
-                f"Error transforming issue at index {idx}: {e}",
-                extra={"job_id": job_id, "index": idx, "error": str(e)},
-                exc_info=True
-            )
-            issues_with_errors += 1
-            continue
+    # Use internal helper for transformation
+    errors, issues_with_errors = _transform_issues(
+        issues, job_id, ERROR_ID_PREFIX, "error_id", "unknown"
+    )
     
     # Log completion
     logger.debug(
-        f"Transformation complete: {len(errors)} errors created, "
+        f"Error transformation complete: {len(errors)} errors created, "
         f"{issues_with_errors} issues skipped due to errors",
         extra={
             "job_id": job_id,
@@ -277,3 +308,90 @@ def transform_pipeline_issues_to_frontend_errors(
     )
     
     return errors
+
+
+def transform_pipeline_issues_to_bugs(
+    issues: List[Dict[str, Any]], job_id: str, file_context: str = "unknown"
+) -> List[Dict[str, Any]]:
+    """
+    Transform pipeline format issues to bug format.
+    
+    Similar to transform_pipeline_issues_to_frontend_errors but returns bugs
+    with bug_id instead of error_id. Used by bug detection functionality.
+    
+    Args:
+        issues: List of issues in pipeline format
+        job_id: Job identifier to include in each bug
+        file_context: Optional file context for relative path (default: "unknown")
+        
+    Returns:
+        List of bugs with all required fields:
+        - bug_id: Unique identifier (e.g., "bug-a1b2c3d4e5f6a7b8")
+        - job_id: Associated job ID
+        - type: Issue type
+        - severity: Severity level
+        - message: Human-readable error message
+        - file: File path where bug occurs
+        - line: Line number (0 if not specified)
+        
+    Raises:
+        ValueError: If issues is not a list, or if job_id is empty/invalid
+        
+    Example:
+        >>> pipeline_issues = [{
+        ...     "type": "TypeError",
+        ...     "risk_level": "high",
+        ...     "details": {"message": "Type mismatch", "line": 42, "file": "utils.py"}
+        ... }]
+        >>> bugs = transform_pipeline_issues_to_bugs(pipeline_issues, "job-456")
+        >>> bugs[0]["bug_id"]
+        'bug-b2c3d4e5f6a7b8c9'
+        >>> bugs[0]["type"]
+        'TypeError'
+    
+    Security Notes:
+        - Same security guarantees as transform_pipeline_issues_to_frontend_errors
+        - Deterministic bug IDs for deduplication
+    """
+    # Input validation (same as errors)
+    if not isinstance(issues, list):
+        raise ValueError(f"issues must be a list, got {type(issues).__name__}")
+    
+    if not job_id or not isinstance(job_id, str):
+        raise ValueError(f"job_id must be a non-empty string, got {job_id!r}")
+    
+    if len(job_id.strip()) == 0:
+        raise ValueError("job_id cannot be empty or whitespace-only")
+    
+    # Validate batch size
+    if len(issues) > MAX_ISSUES_PER_BATCH:
+        logger.warning(
+            f"Large issue batch: {len(issues)} issues exceeds recommended limit "
+            f"of {MAX_ISSUES_PER_BATCH}",
+            extra={"job_id": job_id, "issue_count": len(issues)}
+        )
+    
+    # Log transformation start
+    logger.debug(
+        f"Transforming {len(issues)} pipeline issues to bugs",
+        extra={"job_id": job_id, "issue_count": len(issues), "file_context": file_context}
+    )
+    
+    # Use internal helper for transformation
+    bugs, issues_with_errors = _transform_issues(
+        issues, job_id, "bug-", "bug_id", file_context
+    )
+    
+    # Log completion
+    logger.debug(
+        f"Bug transformation complete: {len(bugs)} bugs created, "
+        f"{issues_with_errors} issues skipped due to errors",
+        extra={
+            "job_id": job_id,
+            "input_count": len(issues),
+            "output_count": len(bugs),
+            "error_count": issues_with_errors
+        }
+    )
+    
+    return bugs
