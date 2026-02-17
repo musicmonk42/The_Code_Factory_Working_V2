@@ -1176,9 +1176,9 @@ class DockerfileHandler(FormatHandler):
         # Remove leading/trailing markdown fences (```dockerfile ... ```)
         sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
-        # Remove leading "!" token only when followed by valid Dockerfile instructions
-        # This allows validation to catch invalid content like "! Invalid start"
-        sanitized = re.sub(r'^!+\s*(?=FROM|ARG)', '', sanitized, flags=re.IGNORECASE)
+        # Remove leading "!" tokens that LLMs sometimes emit (invalid Dockerfile token)
+        # Strip all leading ! characters from the start of the file only (not each line)
+        sanitized = re.sub(r'\A!+\s*', '', sanitized)
         
         # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
         # IMPORTANT: Validate BEFORE stripping LLM preamble to catch invalid content

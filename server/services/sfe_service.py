@@ -1276,7 +1276,7 @@ class SFEService:
                         root_dir=str(code_path_obj)
                     ) as analyzer:
                         # Discover Python files
-                        py_files = analyzer.discover_files()
+                        py_files = await analyzer.discover_files_async()
 
                         # Limit files analyzed based on scan_depth
                         if scan_depth == "quick":
@@ -1629,8 +1629,8 @@ class SFEService:
 
                         # Extract information from summary
                         total_files = (
-                            len(analyzer.discover_files())
-                            if hasattr(analyzer, "discover_files")
+                            len(await analyzer.discover_files_async())
+                            if hasattr(analyzer, "discover_files_async")
                             else 0
                         )
 

@@ -1401,10 +1401,26 @@ class CodebaseAnalyzer:
         }
 
     def discover_files(self) -> List[str]:
-        """Backward compatibility wrapper for discover_files."""
-        loop = asyncio.new_event_loop()
-        py_files = loop.run_until_complete(self._collect_py_files(self.root_dir))
-        loop.close()
+        """Backward compatibility wrapper for discover_files.
+        
+        Safe to call from both sync and async contexts. Uses direct synchronous
+        file walking since _collect_py_files only uses os.walk() (no async I/O).
+        This avoids RuntimeError when called from within a running event loop
+        (e.g., from FastAPI/uvicorn handlers).
+        """
+        # Direct synchronous implementation to avoid event loop conflicts.
+        # This mirrors _collect_py_files logic but without async wrapper.
+        py_files = []
+        for root, dirs, files in os.walk(self.root_dir, topdown=True):
+            dirs[:] = [d for d in dirs if not self._should_ignore(Path(root) / d)]
+            for f in files:
+                if f.endswith(".py") and not self._should_ignore(Path(root) / f):
+                    py_files.append(str(Path(root) / f))
+        return py_files
+
+    async def discover_files_async(self) -> List[str]:
+        """Async version of discover_files for use in async contexts."""
+        py_files = await self._collect_py_files(self.root_dir)
         return [str(f) for f in py_files]
 
     def _filter_baseline(self, defects: List[Defect]) -> List[Defect]:

@@ -1208,6 +1208,75 @@ def _validate_yaml_content(code: str, filename: str) -> Tuple[bool, str]:
         return False, error_msg
 
 
+def _validate_python_syntax(content: str, filename: str = "") -> str:
+    """Validate Python syntax and attempt to fix common LLM artifacts.
+    
+    Common LLM artifacts that cause bare NameError at module level:
+    - Comment text leaking as bare identifiers (e.g., 'directly' from '# Run this directly')
+    - Prose descriptions mixed into code
+    
+    This function detects bare name expressions at module level (e.g., standalone
+    identifiers that will cause NameError at runtime) and comments them out.
+    
+    Args:
+        content: Python source code to validate
+        filename: Optional filename for logging
+        
+    Returns:
+        Validated (and possibly fixed) Python source code
+    """
+    try:
+        tree = ast.parse(content)
+        
+        # Look for bare name expressions at module level
+        # These are Expr nodes containing a Name node (single identifier with no assignment)
+        bare_names = []
+        for node in tree.body:
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Name):
+                # This is a bare identifier - e.g., just "directly" on a line by itself
+                bare_names.append((node.lineno, node.value.id))
+        
+        if bare_names:
+            logger.warning(
+                f"Found {len(bare_names)} bare identifier(s) in {filename}: {[name for _, name in bare_names]}"
+            )
+            # Detect line ending style
+            line_ending = "\r\n" if "\r\n" in content else "\n"
+            lines = content.splitlines()
+            # Comment out each bare identifier line (in reverse order to preserve line numbers)
+            for lineno, identifier in reversed(bare_names):
+                if 1 <= lineno <= len(lines):
+                    logger.info(
+                        f"Commenting out bare identifier '{identifier}' at line {lineno}",
+                        extra={"filename": filename}
+                    )
+                    original_line = lines[lineno - 1]
+                    # Only add comment prefix if the line isn't already a comment
+                    if not original_line.strip().startswith("#"):
+                        lines[lineno - 1] = f"# {original_line}  # AUTO-FIXED: bare identifier"
+                    else:
+                        # Already a comment, just add the marker
+                        lines[lineno - 1] = f"{original_line}  # AUTO-FIXED: bare identifier"
+            
+            fixed_content = line_ending.join(lines)
+            # Verify the fix worked
+            try:
+                ast.parse(fixed_content)
+                return fixed_content
+            except SyntaxError:
+                logger.error(f"Failed to parse fixed content for {filename}")
+                return content  # Return original if fix broke something
+        
+        return content  # Valid Python with no bare identifiers
+        
+    except SyntaxError as e:
+        logger.warning(
+            f"Syntax error in generated Python code ({filename}): {e}",
+            extra={"filename": filename, "line": e.lineno, "error": str(e)}
+        )
+        return content  # Return original - let the normal validation handle syntax errors
+
+
 def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     """
     Validates code syntax using language-appropriate mechanisms.
@@ -1457,6 +1526,13 @@ def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[
     """
     # Normalize content first to handle escaped characters from LLM
     code = _normalize_file_content(code)
+    
+    # For Python files, apply bare identifier fix before validation
+    if language.lower() in ("python", "py"):
+        fixed_code = _validate_python_syntax(code, filename)
+        if fixed_code != code:
+            logger.info(f"Fixed bare identifiers in {filename} before validation")
+            code = fixed_code
     
     # Try original code first
     is_valid, error_msg = _validate_syntax(code, language, filename)
