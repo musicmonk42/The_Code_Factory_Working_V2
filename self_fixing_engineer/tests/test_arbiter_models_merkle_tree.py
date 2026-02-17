@@ -77,12 +77,25 @@ async def clear_metrics_and_traces(in_memory_exporter):
         MERKLE_TREE_DEPTH.set(0)
     except:
         pass
-    # Reset counter metrics
+    # Reset counter metrics - properly clear the internal _metrics dict
     try:
+        # For Counter metrics, we need to clear the internal LabelWrapper dict
         MERKLE_OPS_TOTAL._metrics.clear()
+        # Also clear any cached child metrics
+        if hasattr(MERKLE_OPS_TOTAL, '_lock'):
+            with MERKLE_OPS_TOTAL._lock:
+                MERKLE_OPS_TOTAL._metrics.clear()
     except:
         pass
     yield
+    # Also clear after the test to ensure clean state
+    try:
+        MERKLE_OPS_TOTAL._metrics.clear()
+        if hasattr(MERKLE_OPS_TOTAL, '_lock'):
+            with MERKLE_OPS_TOTAL._lock:
+                MERKLE_OPS_TOTAL._metrics.clear()
+    except:
+        pass
 
 
 @pytest_asyncio.fixture
