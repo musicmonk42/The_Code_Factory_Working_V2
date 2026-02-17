@@ -1151,27 +1151,81 @@ class CodebaseAnalyzer:
 
     def _is_local_module(self, module_name: str) -> bool:
         """
-        Check if a module is local to the project (not external).
+        Determine if a module is local to the project (not external/installed).
+        
+        Industry Standard: Follow Python module resolution rules to distinguish
+        between project-local modules and external dependencies. This is critical
+        for accurate dependency analysis and avoiding false positives.
+        
+        Algorithm:
+        1. Empty/None module names indicate relative imports → local
+        2. Check if module path exists in project root directory
+        3. Check if module.py file exists
+        4. Check if top-level package directory exists
         
         Args:
-            module_name: Name of the module to check
+            module_name: Fully qualified module name (e.g., 'app.routes', 'django')
             
         Returns:
-            False if module is external/installed, True if local to project
+            True if module is local to project, False if external/installed
+            
+        Examples:
+            >>> analyzer._is_local_module('app')  # Project has app/ directory
+            True
+            >>> analyzer._is_local_module('django')  # External package
+            False
+            >>> analyzer._is_local_module('')  # Relative import
+            True
+            
+        Note:
+            This method is called in exception handlers when importlib.util.find_spec()
+            fails with ModuleNotFoundError, which occurs when analyzing generated
+            projects whose modules aren't installed in the analyzer's environment.
         """
+        # Industry Standard: Explicit validation and early returns for clarity
         if not module_name:
-            return True  # Relative imports with no module are local
+            return True  # Relative imports with no module name are always local
         
+        # Guard against edge cases
         module_parts = module_name.split('.')
-        if not module_parts:  # Guard against empty list
+        if not module_parts:  # Should not happen, but guard for safety
+            logger.debug(
+                f"Empty module_parts after split for module: {module_name!r}",
+                extra={"module_name": module_name}
+            )
             return True
         
-        possible_path = self.root_dir / Path(*module_parts)
-        return (
-            possible_path.exists() or 
-            possible_path.with_suffix('.py').exists() or
-            (self.root_dir / module_parts[0]).is_dir()
-        )
+        # Industry Standard: Try multiple path resolution strategies
+        # Strategy 1: Check for exact module path (e.g., app/routes/__init__.py)
+        try:
+            possible_path = self.root_dir / Path(*module_parts)
+            if possible_path.exists():
+                return True
+        except (ValueError, OSError) as e:
+            # Path construction can fail for invalid module names
+            logger.debug(
+                f"Path construction failed for module {module_name}: {e}",
+                extra={"module_name": module_name, "error": str(e)}
+            )
+        
+        # Strategy 2: Check for module.py file (e.g., app/routes.py)
+        try:
+            module_file = self.root_dir / Path(*module_parts[:-1]) / f"{module_parts[-1]}.py"
+            if module_file.exists():
+                return True
+        except (ValueError, OSError, IndexError):
+            pass
+        
+        # Strategy 3: Check for top-level package directory (e.g., app/)
+        try:
+            top_level = self.root_dir / module_parts[0]
+            if top_level.is_dir():
+                return True
+        except (ValueError, OSError, IndexError):
+            pass
+        
+        # Module not found in project → external
+        return False
 
     async def _extract_dependencies_from_file(
         self, file_path: Path

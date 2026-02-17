@@ -385,23 +385,71 @@ class SFEService:
                         "note": f"Job directory not found for {job_id}",
                     }
                 
-                # BUG FIX 3: Check for existing SFE analysis report first
+                # BUG FIX 3: Industry Standard cache-first strategy
+                # Check for existing SFE analysis report first
                 # If the pipeline already ran and wrote sfe_analysis_report.json, use that
                 report_path = job_dir / "reports" / "sfe_analysis_report.json"
-                if report_path.exists():
+                if report_path.exists() and report_path.is_file():
                     try:
                         import json
-                        with open(report_path) as f:
-                            report = json.load(f)
-                        issues = report.get("all_defects", report.get("issues", []))
-                        logger.info(f"Loaded {len(issues)} errors from existing SFE analysis report")
-                        return {
-                            "errors": issues,
-                            "count": len(issues),
-                            "source": "sfe_analysis_report",
-                        }
+                        
+                        # Industry Standard: Validate file size to prevent memory issues
+                        file_size = report_path.stat().st_size
+                        max_size = 10 * 1024 * 1024  # 10 MB limit
+                        
+                        if file_size > max_size:
+                            logger.warning(
+                                f"[SFE] Analysis report file too large ({file_size} bytes), skipping cache",
+                                extra={"job_id": job_id, "file_size": file_size, "max_size": max_size}
+                            )
+                        else:
+                            with open(report_path, 'r', encoding='utf-8') as f:
+                                report = json.load(f)
+                            
+                            # Validate structure
+                            if not isinstance(report, dict):
+                                raise ValueError(f"Invalid report format: expected dict, got {type(report)}")
+                            
+                            issues = report.get("all_defects", report.get("issues", []))
+                            
+                            if not isinstance(issues, list):
+                                raise ValueError(f"Invalid issues format: expected list, got {type(issues)}")
+                            
+                            logger.info(
+                                f"[SFE] Loaded {len(issues)} errors from existing analysis report",
+                                extra={
+                                    "job_id": job_id,
+                                    "error_count": len(issues),
+                                    "source": "cache"
+                                }
+                            )
+                            return {
+                                "errors": issues,
+                                "count": len(issues),
+                                "source": "sfe_analysis_report",
+                                "cached": True,
+                            }
+                    except json.JSONDecodeError as e:
+                        logger.warning(
+                            f"[SFE] Invalid JSON in analysis report: {e}",
+                            extra={"job_id": job_id, "error": str(e)}
+                        )
+                    except (IOError, OSError) as e:
+                        logger.warning(
+                            f"[SFE] Failed to read analysis report: {type(e).__name__}: {e}",
+                            extra={"job_id": job_id, "error_type": type(e).__name__}
+                        )
+                    except ValueError as e:
+                        logger.warning(
+                            f"[SFE] Invalid report structure: {e}",
+                            extra={"job_id": job_id, "error": str(e)}
+                        )
                     except Exception as e:
-                        logger.warning(f"Failed to load SFE analysis report: {e}, falling back to fresh analysis")
+                        logger.warning(
+                            f"[SFE] Unexpected error loading report: {type(e).__name__}: {e}",
+                            extra={"job_id": job_id, "error_type": type(e).__name__},
+                            exc_info=True
+                        )
                 
                 logger.info(f"Analyzing errors in directory: {job_dir}")
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
