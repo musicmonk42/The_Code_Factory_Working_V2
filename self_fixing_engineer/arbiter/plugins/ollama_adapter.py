@@ -109,10 +109,16 @@ class OllamaAdapter:
         self.circuit_breaker_state_gauge.set(0)  # 0 for "closed" initially
 
     @staticmethod
-    def _get_or_create_metric(metric_class, name, documentation, labelnames=(), buckets=None):
+    def _get_or_create_metric(
+        metric_class, name, documentation, labelnames=(), buckets=None
+    ):
         """Idempotently get or create a Prometheus metric."""
         try:
-            kwargs = {"name": name, "documentation": documentation, "labelnames": labelnames}
+            kwargs = {
+                "name": name,
+                "documentation": documentation,
+                "labelnames": labelnames,
+            }
             if buckets is not None:
                 kwargs["buckets"] = buckets
             return metric_class(**kwargs)
