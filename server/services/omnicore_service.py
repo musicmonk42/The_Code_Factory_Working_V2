@@ -1977,6 +1977,44 @@ class OmniCoreService:
         
         return None
     
+    def _get_default_helm_chart(self) -> Dict[str, Any]:
+        """
+        Get default Helm Chart.yaml structure.
+        
+        Used as fallback when LLM-generated content is invalid or unparseable.
+        
+        Returns:
+            Dict with standard Helm chart metadata
+        """
+        return {
+            "apiVersion": "v2",
+            "name": "app",
+            "description": "A Helm chart for Kubernetes",
+            "type": "application",
+            "version": "0.1.0",
+            "appVersion": "1.0.0"
+        }
+    
+    async def _write_default_helm_chart(
+        self, 
+        chart_file: Path, 
+        repo_path: Path, 
+        generated_files: List[str]
+    ) -> None:
+        """
+        Write default Helm Chart.yaml to disk.
+        
+        Args:
+            chart_file: Path where Chart.yaml should be written
+            repo_path: Repository root path for computing relative paths
+            generated_files: List to append generated file path to
+        """
+        default_chart = self._get_default_helm_chart()
+        async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+            await f.write(yaml.dump(default_chart, default_flow_style=False))
+        generated_files.append(str(chart_file.relative_to(repo_path)))
+        logger.info(f"Generated helm file (default fallback): {chart_file}")
+    
     def _unwrap_nested_json_content(self, content: str, job_id: str) -> Optional[Dict[str, str]]:
         """
         Helper to recursively unwrap nested JSON strings in file content.
@@ -3475,33 +3513,11 @@ class OmniCoreService:
                                     else:
                                         # Not a dict, use default chart
                                         logger.warning("[DEPLOY] Helm content is not a valid YAML dict, using default chart")
-                                        default_chart = {
-                                            "apiVersion": "v2",
-                                            "name": "app",
-                                            "description": "A Helm chart for Kubernetes",
-                                            "type": "application",
-                                            "version": "0.1.0",
-                                            "appVersion": "1.0.0"
-                                        }
-                                        async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
-                                            await f.write(yaml.dump(default_chart, default_flow_style=False))
-                                        generated_files.append(str(chart_file.relative_to(repo_path)))
-                                        logger.info(f"Generated helm file (default fallback): {chart_file}")
+                                        await self._write_default_helm_chart(chart_file, repo_path, generated_files)
                                 except yaml.YAMLError as e:
                                     # Invalid YAML, use default chart
                                     logger.warning(f"[DEPLOY] Helm content is not valid YAML: {e}, using default chart")
-                                    default_chart = {
-                                        "apiVersion": "v2",
-                                        "name": "app",
-                                        "description": "A Helm chart for Kubernetes",
-                                        "type": "application",
-                                        "version": "0.1.0",
-                                        "appVersion": "1.0.0"
-                                    }
-                                    async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
-                                        await f.write(yaml.dump(default_chart, default_flow_style=False))
-                                    generated_files.append(str(chart_file.relative_to(repo_path)))
-                                    logger.info(f"Generated helm file (default fallback): {chart_file}")
+                                    await self._write_default_helm_chart(chart_file, repo_path, generated_files)
                                 
                                 # Create minimal values.yaml
                                 values_file = target_dir / "values.yaml"

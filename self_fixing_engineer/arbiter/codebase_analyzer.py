@@ -1149,6 +1149,27 @@ class CodebaseAnalyzer:
 
         return dependencies
 
+    def _is_local_module(self, module_name: str) -> bool:
+        """
+        Check if a module is local to the project (not external).
+        
+        Args:
+            module_name: Name of the module to check
+            
+        Returns:
+            False if module is external/installed, True if local to project
+        """
+        if not module_name:
+            return True  # Relative imports with no module are local
+        
+        module_parts = module_name.split('.')
+        possible_path = self.root_dir / Path(*module_parts)
+        return (
+            possible_path.exists() or 
+            possible_path.with_suffix('.py').exists() or
+            (self.root_dir / module_parts[0]).is_dir()
+        )
+
     async def _extract_dependencies_from_file(
         self, file_path: Path
     ) -> List[Dependency]:
@@ -1175,14 +1196,7 @@ class CodebaseAnalyzer:
                                 ).startswith(str(self.root_dir))
                             except (ModuleNotFoundError, ValueError):
                                 # Module not installed - check if it's a local project module
-                                # by seeing if a matching directory or .py file exists in root_dir
-                                module_parts = alias.name.split('.')
-                                possible_path = self.root_dir / Path(*module_parts)
-                                is_external = not (
-                                    possible_path.exists() or 
-                                    possible_path.with_suffix('.py').exists() or
-                                    (self.root_dir / module_parts[0]).is_dir()
-                                )
+                                is_external = not self._is_local_module(alias.name)
                             deps.append(
                                 {
                                     "file": str(file_path),
@@ -1205,17 +1219,7 @@ class CodebaseAnalyzer:
                             )
                         except (ModuleNotFoundError, ValueError):
                             # Module not installed - check if it's a local project module
-                            module_parts = module.split('.') if module else []
-                            if module_parts:
-                                possible_path = self.root_dir / Path(*module_parts)
-                                is_external = not (
-                                    possible_path.exists() or 
-                                    possible_path.with_suffix('.py').exists() or
-                                    (self.root_dir / module_parts[0]).is_dir()
-                                )
-                            else:
-                                # Relative import with no module (e.g., "from . import foo")
-                                is_external = False
+                            is_external = not self._is_local_module(module)
                         for alias in node.names:
                             deps.append(
                                 {
