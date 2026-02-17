@@ -8,12 +8,24 @@ file processing, and code generation tasks. ALL operations are routed through
 OmniCore as the central coordinator.
 """
 
+import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class AgentNotReadyError(Exception):
+    """Raised when agents are not ready for processing."""
+    pass
+
+
+class AgentLoadingTimeoutError(Exception):
+    """Raised when agents fail to load within timeout period."""
+    pass
 
 
 class GeneratorService:
@@ -26,6 +38,11 @@ class GeneratorService:
     The implementation includes placeholder logic with extensible hooks for
     actual generator integration via OmniCore.
     """
+    
+    # Retry configuration for agent loading (configurable via environment variables)
+    MAX_RETRY_ATTEMPTS = int(os.getenv("AGENT_RETRY_ATTEMPTS", "3"))  # Number of retry attempts after initial call
+    RETRY_BASE_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_BASE_DELAY", "5"))  # Base delay for exponential backoff
+    RETRY_MAX_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_MAX_DELAY", "30"))  # Maximum delay cap
 
     def __init__(self, storage_path: Optional[Path] = None, omnicore_service=None):
         """
@@ -738,6 +755,83 @@ class GeneratorService:
                 payload=payload,
             )
             data = result.get("data", {})
+            
+            # Check if OmniCore returned a retryable error (agents not loaded yet)
+            if data.get("retry") and data.get("status") == "error":
+                logger.info(
+                    f"Agents not ready for job {job_id}, implementing retry with exponential backoff",
+                    extra={
+                        "job_id": job_id,
+                        "max_retries": self.MAX_RETRY_ATTEMPTS,
+                        "base_delay": self.RETRY_BASE_DELAY_SECONDS
+                    }
+                )
+                # Retry with exponential backoff (3 retries after initial attempt = 4 total calls)
+                # Implements resilience pattern with capped exponential backoff
+                for attempt in range(self.MAX_RETRY_ATTEMPTS):
+                    # Calculate delay with true exponential backoff
+                    # attempt 0: 2^0 * 5 = 1 * 5 = 5s
+                    # attempt 1: 2^1 * 5 = 2 * 5 = 10s
+                    # attempt 2: 2^2 * 5 = 4 * 5 = 20s (capped at max)
+                    delay = min(
+                        self.RETRY_BASE_DELAY_SECONDS * (2 ** attempt),
+                        self.RETRY_MAX_DELAY_SECONDS
+                    )
+                    logger.info(
+                        f"Waiting {delay}s before retry attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS}",
+                        extra={
+                            "job_id": job_id,
+                            "attempt": attempt + 1,
+                            "delay_seconds": delay
+                        }
+                    )
+                    await asyncio.sleep(delay)
+                    
+                    logger.info(
+                        f"Retry attempt {attempt + 1}/{self.MAX_RETRY_ATTEMPTS} for job {job_id}",
+                        extra={
+                            "job_id": job_id,
+                            "attempt": attempt + 1,
+                            "total_attempts": self.MAX_RETRY_ATTEMPTS
+                        }
+                    )
+                    result = await self.omnicore_service.route_job(
+                        job_id=job_id,
+                        source_module="api",
+                        target_module="generator",
+                        payload=payload,
+                    )
+                    data = result.get("data", {})
+                    if not data.get("retry"):
+                        logger.info(
+                            f"Retry succeeded on attempt {attempt + 1}",
+                            extra={
+                                "job_id": job_id,
+                                "attempt": attempt + 1,
+                                "status": data.get("status")
+                            }
+                        )
+                        break
+                    logger.warning(
+                        f"Retry {attempt + 1} still returned retry status for job {job_id}",
+                        extra={
+                            "job_id": job_id,
+                            "attempt": attempt + 1,
+                            "message": data.get("message")
+                        }
+                    )
+                else:
+                    # All retries exhausted
+                    logger.error(
+                        f"All {self.MAX_RETRY_ATTEMPTS} retry attempts exhausted for job {job_id}",
+                        extra={
+                            "job_id": job_id,
+                            "total_attempts": self.MAX_RETRY_ATTEMPTS + 1,
+                            "final_status": data.get("status"),
+                            "final_message": data.get("message")
+                        }
+                    )
+            
             # Check if OmniCore returned an error
             if data.get("status") == "error":
                 logger.error(f"OmniCore pipeline execution failed for job {job_id}: {data.get('message', 'Unknown error')}")

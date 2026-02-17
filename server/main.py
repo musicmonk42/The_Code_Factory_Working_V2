@@ -1204,11 +1204,18 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         logger.warning("  /ready endpoint will return 503 until loading completes")
                     else:
                         logger.info("✓ Agent loading completed just before timeout")
+            except asyncio.CancelledError:
+                logger.warning("⚠ Agent loading cancelled due to shutdown signal - background loading will continue")
+                # Re-raise to allow proper shutdown handling
+                raise
             except Exception as e:
                 logger.error(f"Error waiting for agent loading: {e}", exc_info=True)
             
             logger.info("✓ Check /health for liveness and /ready for readiness")
             
+        except asyncio.CancelledError:
+            logger.info("Background initialization cancelled during agent loading - graceful shutdown in progress")
+            raise
         except Exception as e:
             logger.error(f"Error starting background agent loading: {e}", exc_info=True)
             logger.warning("Continuing startup despite agent loading error")

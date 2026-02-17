@@ -51,10 +51,15 @@ from server.services.job_finalization import finalize_job_success, finalize_job_
 from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db, add_job
 from server.persistence import load_job_from_database, save_job_to_database
+from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
+
+# Configuration for agent loading wait (configurable via environment variables)
+AGENT_WAIT_TIMEOUT = int(os.getenv("AGENT_WAIT_TIMEOUT", "90"))  # Maximum seconds to wait for agents
+AGENT_WAIT_INTERVAL = int(os.getenv("AGENT_WAIT_INTERVAL", "2"))  # Check interval in seconds
 
 
 def _stage_ran(stage: str, completed: list) -> bool:
@@ -416,9 +421,62 @@ async def _trigger_pipeline_background(
             job.metadata["clarification_error"] = str(clarify_error)
         
         # Step 2: Run full pipeline (code generation, tests, deployment, docs, critique)
+        # Wait for agents to be ready before running full pipeline
+        # Implements industry-standard health check pattern with timeout
+        logger.info(
+            f"[Pipeline] Checking agent readiness before pipeline execution",
+            extra={"job_id": job_id, "max_wait": AGENT_WAIT_TIMEOUT}
+        )
+        
+        elapsed = 0
+        agent_ready = False
+        last_log_time = 0  # Track last progress log time
+        while elapsed < AGENT_WAIT_TIMEOUT:
+            loader = get_agent_loader()
+            if loader and not loader.is_loading():
+                agent_ready = True
+                logger.info(
+                    f"[Pipeline] Agents ready after {elapsed}s",
+                    extra={"job_id": job_id, "wait_time": elapsed}
+                )
+                break
+            
+            # Log progress approximately every 10 seconds
+            if elapsed > 0 and (elapsed - last_log_time) >= 10:
+                logger.info(
+                    f"[Pipeline] Waiting for agents to load before running pipeline for job {job_id} ({elapsed}s elapsed)",
+                    extra={
+                        "job_id": job_id,
+                        "elapsed_seconds": elapsed,
+                        "timeout_seconds": AGENT_WAIT_TIMEOUT,
+                        "progress_percentage": round((elapsed / AGENT_WAIT_TIMEOUT) * 100, 1)
+                    }
+                )
+                last_log_time = elapsed
+            
+            await asyncio.sleep(AGENT_WAIT_INTERVAL)
+            elapsed += AGENT_WAIT_INTERVAL
+
+        if not agent_ready:
+            error_message = f"Agent loading timed out after {AGENT_WAIT_TIMEOUT}s - agents not available for code generation"
+            logger.error(
+                f"[Pipeline] Timed out waiting for agents to load for job {job_id}",
+                extra={
+                    "job_id": job_id,
+                    "timeout_seconds": AGENT_WAIT_TIMEOUT,
+                    "error": "agent_loading_timeout"
+                }
+            )
+            error = Exception(error_message)
+            await finalize_job_failure(job_id, error)
+            return
+        
         job.current_stage = JobStage.GENERATOR_GENERATION
         job.updated_at = datetime.now(timezone.utc)
-        logger.info(f"[Pipeline] Running code generation for job {job_id}")
+        logger.info(
+            f"[Pipeline] Running code generation for job {job_id}",
+            extra={"job_id": job_id, "language": language}
+        )
         
         result = await generator_service.run_full_pipeline(
             job_id=job_id,
