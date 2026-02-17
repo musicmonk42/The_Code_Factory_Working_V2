@@ -324,6 +324,7 @@ The following are MANDATORY checks:
      * from typing import Optional, List, Dict, Any
    - Check EVERY function signature and ensure all type hints have imports
    - Double-check middleware functions - they commonly use Request and time
+   - ✓ CRITICAL: For BaseHTTPMiddleware, use: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
 
 5. ORGANIZE INTO FILES:
    Structure as a proper project with separate files using app/ directory:

@@ -223,6 +223,7 @@ python-dotenv==1.0.0
 - ✓ Every type annotation must have a corresponding import
 - ✓ CRITICAL: When using middleware with Request parameter, import: from fastapi import Request
 - ✓ CRITICAL: When using time in middleware, import: import time
+- ✓ CRITICAL: For BaseHTTPMiddleware, import from starlette: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
 
 {% elif target_framework == "flask" %}
 ---

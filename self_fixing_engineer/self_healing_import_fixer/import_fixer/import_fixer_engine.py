@@ -1026,6 +1026,13 @@ class ImportFixerEngine:
             # Build new import lines
             new_imports = []
             
+            # Fix incorrect BaseHTTPMiddleware import path
+            for i, line in enumerate(lines):
+                if 'from fastapi.middleware.base import' in line.strip():
+                    lines[i] = line.replace('from fastapi.middleware.base import', 'from starlette.middleware.base import')
+                    fixes_applied.append("Fixed BaseHTTPMiddleware import: fastapi.middleware.base -> starlette.middleware.base")
+                    self.logger.info("Fixed BaseHTTPMiddleware import path")
+            
             # Add missing stdlib imports
             for module in sorted(missing_stdlib):
                 new_imports.append(f'import {module}')
