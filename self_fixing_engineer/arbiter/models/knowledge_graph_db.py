@@ -849,8 +849,10 @@ class Neo4jKnowledgeGraph:
             try:
                 safe_label = _safe_name(label)
 
+                node = KGNode(label=label, properties=properties)
+
                 hashed_properties = {}
-                for key, value in properties.items():
+                for key, value in node.properties.items():
                     if "id" in key.lower() or "email" in key.lower():
                         hashed_properties[key] = hashlib.sha256(
                             str(value).encode()
