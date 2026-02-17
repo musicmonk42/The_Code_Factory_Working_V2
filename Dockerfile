@@ -389,14 +389,31 @@ USER appuser
 EXPOSE 8080 9090
 
 # Docker healthcheck for container liveness
-# Uses /health endpoint (liveness probe) which always returns 200 if the process is alive
-# Use /ready for readiness checks in orchestrators that support separate probes
-# This aligns with Railway's healthcheckPath="/health" in railway.toml and railway.json
+# CRITICAL: Uses /health endpoint for liveness checks, NOT /ready
+# 
+# Why /health instead of /ready?
+# - /health: Returns 200 immediately when HTTP server is up (liveness check)
+# - /ready: Returns 503 until ALL agents are loaded (~45-55 seconds) (readiness check)
+# 
+# Using /ready caused premature SIGTERM during agent loading on Railway:
+# - Container starts, begins loading agents
+# - Docker HEALTHCHECK queries /ready endpoint
+# - /ready returns 503 (agents still loading)
+# - Railway kills container before agents finish loading
+# 
+# Solution: Use /health for Docker HEALTHCHECK (liveness)
+# - Load balancers/orchestrators should use /ready for traffic routing (readiness)
+# - This aligns with Railway's healthcheckPath="/health" in railway.json
+# 
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
 # Starts checking after 120 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+
+# Explicitly set SIGTERM as the stop signal
+# This ensures proper signal propagation for graceful shutdown
+STOPSIGNAL SIGTERM
 
 # Start the unified platform API server
 # Single worker mode (1 worker) for production deployment
