@@ -296,6 +296,9 @@ LLM_RESPONSE_PREFIXES = [
 ]
 
 # Code patterns to detect if content is actual code vs non-code text (requirements.txt, curl commands, etc.)
+# Note: Some patterns like 'package ' are intentionally generic since we check for ANY pattern match,
+# not ALL patterns. The combination of multiple patterns provides reasonable confidence that content is code.
+# Trade-off: Generic patterns may have false positives, but this is acceptable as we only need one match.
 _CODE_PATTERNS = (
     'def ', 'class ', 'import ', 'from ', 'async def',
     'function ', 'const ', 'let ', 'var ', 'export ',  # JavaScript/TypeScript
@@ -709,6 +712,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             return {ERROR_FILENAME: error_msg}
         
         # Check if the raw text contains recognizable code patterns
+        # Limitation: This check may produce false negatives for minimal/unusual code (e.g., Python
+        # scripts with only print statements or comments). However, this is an acceptable trade-off
+        # as the primary goal is to prevent requirements.txt and curl commands from being treated as code.
         # If no code patterns found, return error instead of treating as code
         if not any(pattern in raw for pattern in _CODE_PATTERNS):
             error_msg = (

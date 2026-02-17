@@ -116,13 +116,13 @@ def test_api_key_redaction():
     """Test that API keys are redacted from error messages."""
     import re
     
-    # Simulate an error message with API key
-    error_with_key = "403, message='Forbidden', url='https://language.googleapis.com/v1/documents:analyzeEntities?key=AIzaSyABBFaBk9QvTTbUjIDXvOwr3JifH9GBNdg'"
+    # Simulate an error message with API key (using obviously fake key pattern)
+    error_with_key = "403, message='Forbidden', url='https://language.googleapis.com/v1/documents:analyzeEntities?key=AIzaSyTEST_FAKE_KEY_FOR_TESTING'"
     
     # Apply redaction
     redacted = re.sub(r'key=[^&\s]+', 'key=REDACTED', error_with_key)
     
-    assert "AIzaSyABBFaBk9QvTTbUjIDXvOwr3JifH9GBNdg" not in redacted, "API key should be redacted"
+    assert "AIzaSyTEST_FAKE_KEY_FOR_TESTING" not in redacted, "API key should be redacted"
     assert "key=REDACTED" in redacted, "Should contain key=REDACTED"
 
 
