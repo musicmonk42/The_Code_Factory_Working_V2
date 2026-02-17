@@ -274,6 +274,10 @@ class FileAuditLogger(AuditLogger):
 # The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
+# Frontend detection keywords for safety net
+# Used to detect frontend requirements from md_content when not explicitly set
+FRONTEND_DETECTION_KEYWORDS = ["item creation", "create item", "crud", "form", "submit"]
+
 
 # ==============================================================================
 # --- Integrated Utilities & Security ---
@@ -1139,7 +1143,7 @@ if PLUGIN_AVAILABLE:
                     md_content = requirements.get("md_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
-                        frontend_keywords = ["item creation", "create item", "crud", "form", "submit"]
+                        frontend_keywords = FRONTEND_DETECTION_KEYWORDS
                         for keyword in frontend_keywords:
                             if keyword in md_lower:
                                 logger.info(
@@ -1458,7 +1462,7 @@ else:
                     md_content = requirements.get("md_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
-                        frontend_keywords = ["item creation", "create item", "crud", "form", "submit"]
+                        frontend_keywords = FRONTEND_DETECTION_KEYWORDS
                         for keyword in frontend_keywords:
                             if keyword in md_lower:
                                 logger.info(

@@ -490,6 +490,8 @@ The following are MANDATORY checks:
    - Use `@field_validator('field_name', mode='before')` decorators for all validation logic (Pydantic V2)
    - `mode='before'` runs validation BEFORE Pydantic's internal validation, allowing you to modify input (e.g., .strip())
    - CRITICAL DECORATOR ORDER: `@field_validator` MUST come FIRST, then `@classmethod` (NOT the other way around)
+     * Note: While Python decorators execute bottom-to-top, Pydantic v2 specifically requires @field_validator to be written first (top) in source code
+     * This is because Pydantic v2's @field_validator needs to wrap the @classmethod decorator for proper method binding
    - NEVER use @staticmethod with @field_validator - it REQUIRES @classmethod
    - Trim whitespace in validators using `.strip()`
    - Validate min/max length after trimming
