@@ -28,7 +28,7 @@ for _mod in _modules_to_mock_rc:
 
 # Import runner modules
 import runner.runner_config as _runner_config_module
-from runner.runner_config import ConfigWatcher, RunnerConfig, load_config
+from runner.runner_config import ConfigWatcher, RunnerConfig, clear_config_cache, load_config
 from runner.runner_errors import ConfigurationError
 
 # Get the actual module that load_config belongs to (may differ from
@@ -46,8 +46,7 @@ for _mod in _modules_to_mock_rc:
 class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         # Clear config cache to prevent stale config from previous tests
-        _load_config_module._cached_config = None
-        _load_config_module._cached_config_file = None
+        clear_config_cache()
         self.temp_dir = Path(tempfile.mkdtemp())
         self.config_file = self.temp_dir / "config.yaml"
         # FIX: Updated YAML to match the modern schema (first-class api_key)
@@ -244,8 +243,7 @@ instance_id: test-remote-loaded
 
     def test_vault_integration(self):
         # Clear config cache to ensure fresh load
-        _load_config_module._cached_config = None
-        _load_config_module._cached_config_file = None
+        clear_config_cache()
         
         # This test relies on the hook (1.3) added to load_config
         self.mock_hvac.Client.return_value.is_authenticated.return_value = True
