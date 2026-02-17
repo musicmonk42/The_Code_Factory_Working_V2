@@ -1683,73 +1683,7 @@ class OmniCoreService:
         
         logger.info(f"Routing job {job_id} from {source_module} to {target_module}")
 
-        # If target is generator, dispatch to actual generator agents
-        if target_module == "generator":
-            action = payload.get("action")
-            logger.info(f"Task Dispatched: Job {job_id} dispatching generator action: {action}")
-            
-            try:
-                result = await self._dispatch_generator_action(job_id, action, payload)
-                # CRITICAL FIX: Check actual result status before logging success
-                # Don't log "finished successfully" if the job actually failed
-                result_status = result.get("status", "unknown")
-                if result_status in ["completed", "success", "acknowledged"]:
-                    logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
-                elif result_status in ["failed", "error"]:
-                    logger.error(f"Task Failed: Job {job_id} action {action} failed: {result.get('message', 'Unknown error')}")
-                else:
-                    logger.warning(f"Task Status: Job {job_id} action {action} finished with status: {result_status}")
-                
-                return {
-                    "job_id": job_id,
-                    "routed": True,
-                    "source": source_module,
-                    "target": target_module,
-                    "data": result,
-                }
-            except Exception as e:
-                logger.error(f"Task Failed: Job {job_id} action {action} failed: {e}", exc_info=True)
-                return {
-                    "job_id": job_id,
-                    "routed": False,
-                    "source": source_module,
-                    "target": target_module,
-                    "error": str(e),
-                    "data": {"status": "error", "message": str(e)},
-                }
-
-        # If target is SFE, dispatch to Self-Fixing Engineer components
-        elif target_module == "sfe":
-            action = payload.get("action")
-            logger.info(f"Task Dispatched: Job {job_id} dispatching SFE action: {action}")
-            
-            try:
-                result = await self._dispatch_sfe_action(job_id, action, payload)
-                result_status = result.get("status", "unknown")
-                if result_status in ["completed", "success"]:
-                    logger.info(f"Task Completed: Job {job_id} SFE action {action} finished successfully")
-                elif result_status in ["failed", "error"]:
-                    logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {result.get('message', 'Unknown error')}")
-                
-                return {
-                    "job_id": job_id,
-                    "routed": True,
-                    "source": source_module,
-                    "target": target_module,
-                    "data": result,
-                }
-            except Exception as e:
-                logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {e}", exc_info=True)
-                return {
-                    "job_id": job_id,
-                    "routed": False,
-                    "source": source_module,
-                    "target": target_module,
-                    "error": str(e),
-                    "data": {"status": "error", "message": str(e)},
-                }
-
-        # Use message bus if available for inter-module communication
+        # Use message bus if available for inter-module communication (PRIORITY 1)
         if self._message_bus and self._omnicore_components_available["message_bus"]:
             try:
                 # Construct topic for target module
@@ -1815,9 +1749,81 @@ class OmniCoreService:
             except Exception as e:
                 logger.error(f"Message bus routing error: {e}", exc_info=True)
                 # Fall through to direct dispatch fallback
-        
-        # Fallback: Direct dispatch for modules without message bus
+
+        # Fallback: Direct dispatch when message bus not available
         logger.info(f"Using direct dispatch for job {job_id} (message bus not available)")
+        
+        # If target is generator, dispatch to actual generator agents
+        if target_module == "generator":
+            action = payload.get("action")
+            logger.info(f"Task Dispatched: Job {job_id} dispatching generator action: {action}")
+            
+            try:
+                result = await self._dispatch_generator_action(job_id, action, payload)
+                # CRITICAL FIX: Check actual result status before logging success
+                # Don't log "finished successfully" if the job actually failed
+                result_status = result.get("status", "unknown")
+                if result_status in ["completed", "success", "acknowledged"]:
+                    logger.info(f"Task Completed: Job {job_id} action {action} finished successfully")
+                elif result_status in ["failed", "error"]:
+                    logger.error(f"Task Failed: Job {job_id} action {action} failed: {result.get('message', 'Unknown error')}")
+                else:
+                    logger.warning(f"Task Status: Job {job_id} action {action} finished with status: {result_status}")
+                
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch_fallback",
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Task Failed: Job {job_id} action {action} failed: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch_fallback",
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
+        # If target is SFE, dispatch to Self-Fixing Engineer components
+        elif target_module == "sfe":
+            action = payload.get("action")
+            logger.info(f"Task Dispatched: Job {job_id} dispatching SFE action: {action}")
+            
+            try:
+                result = await self._dispatch_sfe_action(job_id, action, payload)
+                result_status = result.get("status", "unknown")
+                if result_status in ["completed", "success"]:
+                    logger.info(f"Task Completed: Job {job_id} SFE action {action} finished successfully")
+                elif result_status in ["failed", "error"]:
+                    logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {result.get('message', 'Unknown error')}")
+                
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch_fallback",
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Task Failed: Job {job_id} SFE action {action} failed: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch_fallback",
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
+        # For unknown targets, return fallback
         return {
             "job_id": job_id,
             "routed": True,
