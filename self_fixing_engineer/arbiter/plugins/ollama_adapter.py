@@ -118,9 +118,13 @@ class OllamaAdapter:
             return metric_class(**kwargs)
         except ValueError as e:
             if "Duplicated timeseries" in str(e):
-                existing = REGISTRY._names_to_collectors.get(name)
-                if existing and isinstance(existing, metric_class):
-                    return existing
+                # Prometheus stores Counters under the base name (without _total suffix)
+                # and may also use _total or _created variants internally.
+                # Try both the original name and the base name without _total.
+                for candidate in [name, name.removesuffix("_total")]:
+                    existing = REGISTRY._names_to_collectors.get(candidate)
+                    if existing is not None:
+                        return existing
             raise
 
     async def __aenter__(self):
