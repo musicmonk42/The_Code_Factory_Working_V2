@@ -1163,6 +1163,9 @@ class CodebaseAnalyzer:
             return True  # Relative imports with no module are local
         
         module_parts = module_name.split('.')
+        if not module_parts:  # Guard against empty list
+            return True
+        
         possible_path = self.root_dir / Path(*module_parts)
         return (
             possible_path.exists() or 

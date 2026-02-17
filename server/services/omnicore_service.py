@@ -1710,8 +1710,9 @@ class OmniCoreService:
                 try:
                     from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
                     settings = ArbiterConfig()
-                except Exception:
+                except Exception as e:
                     # Fallback to minimal settings object
+                    logger.info(f"ArbiterConfig unavailable ({e}), using fallback Settings")
                     from self_fixing_engineer.arbiter.bug_manager.bug_manager import Settings
                     settings = Settings()
                 
