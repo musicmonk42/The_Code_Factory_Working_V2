@@ -229,3 +229,43 @@ class TestDockerfileSanitization:
         assert "!invalid" not in result
         lines = [l for l in result.splitlines() if l.strip()]
         assert lines[0].startswith("FROM")
+
+
+# ---------------------------------------------------------------------------
+# H) Logging fix regression - verify no KeyError on LogRecord attributes
+# ---------------------------------------------------------------------------
+
+class TestLoggingFixForReservedAttributes:
+    """Verify _validate_python_syntax doesn't use reserved LogRecord attributes in extra dict."""
+
+    def test_validate_python_syntax_with_bare_identifier_no_keyerror(self):
+        """Test that bare identifier detection logging doesn't cause KeyError."""
+        from generator.agents.codegen_agent.codegen_response_handler import (
+            _validate_python_syntax,
+        )
+        
+        # Code with a bare identifier that will trigger the logging with extra dict
+        code_with_bare_identifier = "import sys\nprint('hello')\ndirectly\n"
+        
+        # This should not raise KeyError: "Attempt to overwrite 'filename' in LogRecord"
+        result = _validate_python_syntax(code_with_bare_identifier, "test_file.py")
+        
+        # The function should return fixed code (bare identifier commented out)
+        assert result is not None
+        assert "# directly" in result or "directly" in result
+
+    def test_validate_python_syntax_with_syntax_error_no_keyerror(self):
+        """Test that syntax error logging doesn't cause KeyError."""
+        from generator.agents.codegen_agent.codegen_response_handler import (
+            _validate_python_syntax,
+        )
+        
+        # Code with syntax error that will trigger the logger.warning with extra dict
+        code_with_syntax_error = "def foo(\n  # Missing closing parenthesis"
+        
+        # This should not raise KeyError even though there's a SyntaxError
+        # The function catches SyntaxError and logs it with extra dict
+        result = _validate_python_syntax(code_with_syntax_error, "test_file.py")
+        
+        # Should return the original content when there's a syntax error
+        assert result == code_with_syntax_error

@@ -1249,7 +1249,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
                 if 1 <= lineno <= len(lines):
                     logger.info(
                         f"Commenting out bare identifier '{identifier}' at line {lineno}",
-                        extra={"filename": filename}
+                        extra={"file_name": filename}
                     )
                     original_line = lines[lineno - 1]
                     # Only add comment prefix if the line isn't already a comment
@@ -1273,7 +1273,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
     except SyntaxError as e:
         logger.warning(
             f"Syntax error in generated Python code ({filename}): {e}",
-            extra={"filename": filename, "line": e.lineno, "error": str(e)}
+            extra={"file_name": filename, "error_line": e.lineno, "error_detail": str(e)}
         )
         return content  # Return original - let the normal validation handle syntax errors
 
