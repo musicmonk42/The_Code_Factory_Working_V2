@@ -14,7 +14,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
@@ -119,50 +119,115 @@ async def _get_job_with_db_fallback(job_id: str) -> Job:
     raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
 
-def detect_language_from_content(readme_content: str) -> str:
+def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, Any]]:
     """
-    Detect programming language from README content using keyword analysis.
+    Detect programming language and stack requirements from README content.
+    
+    Enhanced to detect full-stack requirements including frontend needs.
+    Returns structured metadata when frontend is detected, otherwise returns
+    a string for backward compatibility.
     
     Args:
         readme_content: Content of the README file
         
     Returns:
-        Detected language (defaults to 'python' if no match found)
+        Union[str, Dict]: 
+            - str: Backend language name for backend-only projects (backward compatible)
+            - Dict: Stack metadata for full-stack projects with keys:
+                - backend_language: Programming language
+                - include_frontend: Boolean indicating frontend generation needed
+                - frontend_type: Type of frontend ("jinja_templates", "vanilla_js", "react", "vue")
     """
     readme_lower = readme_content.lower()
     
+    # Detect backend language first
+    backend_language = "python"  # Default
+    
     # Check for language-specific keywords in priority order
-    # Use word boundaries and specific patterns to avoid false matches
-    
+    # Look for strong backend framework indicators first (more specific)
+    if "fastapi" in readme_lower or "flask" in readme_lower or "django" in readme_lower or "python" in readme_lower:
+        backend_language = "python"
     # TypeScript must be checked before JavaScript since JS is often mentioned in TS projects
-    if "typescript" in readme_lower:
-        return "typescript"
-    
+    elif "typescript" in readme_lower:
+        backend_language = "typescript"
     # Java check - must come BEFORE JavaScript to avoid false detection
     # Improved patterns to explicitly check for Java without JavaScript
-    if (re.search(r'\bjava\s', readme_lower, re.IGNORECASE) or 
+    elif (re.search(r'\bjava\s', readme_lower, re.IGNORECASE) or 
         re.search(r'\bjava\.', readme_lower, re.IGNORECASE) or 
         re.search(r'\bjava\b(?!script)', readme_lower, re.IGNORECASE)):
-        return "java"
-    
-    # JavaScript check with common patterns, using word boundaries for npm
-    if ("javascript" in readme_lower or 
-        "node.js" in readme_lower or 
-        "nodejs" in readme_lower or 
-        re.search(r'\bnpm\b', readme_lower)):
-        return "javascript"
-    
+        backend_language = "java"
+    # JavaScript check with common patterns - detect if there are strong backend indicators
+    elif ("node.js" in readme_lower or "nodejs" in readme_lower or "express" in readme_lower or
+          re.search(r'\bnpm\b', readme_lower)):
+        backend_language = "javascript"
     # Rust check
-    if "rust" in readme_lower:
-        return "rust"
-    
+    elif "rust" in readme_lower:
+        backend_language = "rust"
     # Go check - use specific patterns to avoid false positives
     # Look for "golang" or "go " with word boundaries
-    if "golang" in readme_lower or re.search(r'\bgo\s+(language|lang|programming)\b', readme_lower, re.IGNORECASE):
-        return "go"
+    elif "golang" in readme_lower or re.search(r'\bgo\s+(language|lang|programming)\b', readme_lower, re.IGNORECASE):
+        backend_language = "go"
     
-    # Default to Python
-    return "python"
+    # Detect frontend requirements
+    # Keywords that indicate a web UI/frontend is needed
+    frontend_keywords = [
+        r'\bfrontend\b', r'\bfront-end\b', r'\bfront end\b',
+        r'\bweb\s+app\b', r'\bweb\s+application\b', r'\bwebapp\b',
+        r'\bui\b', r'\buser\s+interface\b', r'\buser interface\b',
+        r'\bdashboard\b',
+        r'\bhtml\b', r'\bcss\b',
+        r'\breact\b', r'\bvue\b', r'\bangular\b',
+        r'\btemplate\b', r'\btemplates\b', r'\bjinja\b',
+        r'\bform\b', r'\bforms\b',
+        r'\bpage\b', r'\bpages\b', r'\blanding\s+page\b',
+        r'\bresponsive\b', r'\bmobile-friendly\b',
+        r'\bsingle\s+page\b', r'\bspa\b',
+        r'\bweb\s+interface\b', r'\bweb interface\b',
+        r'\bbrowser\b', r'\bclient-side\b', r'\bclient side\b',
+        r'\bstatic\s+files\b', r'\bstatic files\b',
+        r'\bsite\b', r'\bwebsite\b',
+        r'\bviews\b',
+    ]
+    
+    include_frontend = False
+    for pattern in frontend_keywords:
+        if re.search(pattern, readme_lower):
+            include_frontend = True
+            break
+    
+    # If no frontend detected, return simple string for backward compatibility
+    if not include_frontend:
+        return backend_language
+    
+    # Determine frontend type based on additional context
+    frontend_type = "jinja_templates"  # Default for Python full-stack
+    
+    # Check for specific frontend frameworks
+    if re.search(r'\breact\b', readme_lower):
+        frontend_type = "react"
+    elif re.search(r'\bvue\b', readme_lower):
+        frontend_type = "vue"
+    elif re.search(r'\bangular\b', readme_lower):
+        frontend_type = "angular"
+    elif re.search(r'\bvanilla\s+js\b', readme_lower) or re.search(r'\bplain\s+javascript\b', readme_lower):
+        frontend_type = "vanilla_js"
+    elif backend_language == "python":
+        # For Python, check if Jinja2 templates are mentioned
+        if re.search(r'\bjinja\b', readme_lower) or re.search(r'\btemplate\b', readme_lower):
+            frontend_type = "jinja_templates"
+        else:
+            # Default to Jinja templates for Python full-stack
+            frontend_type = "jinja_templates"
+    else:
+        # For non-Python backends, default to vanilla JS
+        frontend_type = "vanilla_js"
+    
+    # Return structured metadata for full-stack projects
+    return {
+        "backend_language": backend_language,
+        "include_frontend": True,
+        "frontend_type": frontend_type,
+    }
 
 
 def _filter_empty_questions(questions: list) -> list:
@@ -258,17 +323,38 @@ async def _trigger_pipeline_background(
         
         # Check if language is already set in job metadata; only auto-detect if not present
         language = job.metadata.get("language")
+        stack_metadata = None
+        
         if language:
             logger.info(f"[Pipeline] Using explicit language '{language}' from job metadata for job {job_id}")
         else:
             # Auto-detect language from README content
-            language = detect_language_from_content(readme_content)
-            logger.info(f"[Pipeline] Auto-detected language '{language}' for job {job_id}")
+            stack_result = detect_language_from_content(readme_content)
+            
+            # Handle both string (backward compatible) and dict (new full-stack) return types
+            if isinstance(stack_result, dict):
+                language = stack_result["backend_language"]
+                stack_metadata = stack_result
+                logger.info(
+                    f"[Pipeline] Auto-detected full-stack: language='{language}', "
+                    f"frontend={stack_result.get('include_frontend', False)}, "
+                    f"type={stack_result.get('frontend_type', 'none')}"
+                )
+            else:
+                language = stack_result
+                logger.info(f"[Pipeline] Auto-detected language '{language}' for job {job_id}")
         
         # Update job stage to GENERATOR_CLARIFICATION
         job.current_stage = JobStage.GENERATOR_CLARIFICATION
         job.updated_at = datetime.now(timezone.utc)
         job.metadata["language"] = language
+        
+        # Store stack metadata if detected (for full-stack projects)
+        if stack_metadata:
+            job.metadata["stack_metadata"] = stack_metadata
+            job.metadata["include_frontend"] = stack_metadata.get("include_frontend", False)
+            job.metadata["frontend_type"] = stack_metadata.get("frontend_type", None)
+        
         job.metadata["pipeline_started_at"] = datetime.now(timezone.utc).isoformat()
         
         # Step 1: Run clarification to analyze requirements
