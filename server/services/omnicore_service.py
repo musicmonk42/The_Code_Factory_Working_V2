@@ -1879,6 +1879,18 @@ class OmniCoreService:
         """
         import asyncio
         
+        # Check if agents are loaded before attempting to dispatch
+        if not self._agents_loaded:
+            self._ensure_agents_loaded()
+            
+        if not self._agents_loaded:
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": "Agents are still loading. Please retry in a few seconds.",
+                "retry": True,
+            }
+        
         if action == "run_codegen":
             return await self._run_codegen(job_id, payload)
         elif action == "run_testgen":

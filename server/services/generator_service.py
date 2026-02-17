@@ -8,6 +8,7 @@ file processing, and code generation tasks. ALL operations are routed through
 OmniCore as the central coordinator.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -738,6 +739,25 @@ class GeneratorService:
                 payload=payload,
             )
             data = result.get("data", {})
+            
+            # Check if OmniCore returned a retryable error (agents not loaded yet)
+            if data.get("retry") and data.get("status") == "error":
+                logger.info(f"Agents not ready for job {job_id}, retrying with backoff...")
+                # Retry with exponential backoff
+                for attempt in range(3):
+                    await asyncio.sleep(5 * (attempt + 1))  # 5s, 10s, 15s
+                    logger.info(f"Retry attempt {attempt + 1}/3 for job {job_id}")
+                    result = await self.omnicore_service.route_job(
+                        job_id=job_id,
+                        source_module="api",
+                        target_module="generator",
+                        payload=payload,
+                    )
+                    data = result.get("data", {})
+                    if not data.get("retry"):
+                        break
+                    logger.warning(f"Retry {attempt + 1} still returned retry status for job {job_id}")
+            
             # Check if OmniCore returned an error
             if data.get("status") == "error":
                 logger.error(f"OmniCore pipeline execution failed for job {job_id}: {data.get('message', 'Unknown error')}")

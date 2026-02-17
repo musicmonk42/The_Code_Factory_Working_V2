@@ -51,6 +51,7 @@ from server.services.job_finalization import finalize_job_success, finalize_job_
 from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db, add_job
 from server.persistence import load_job_from_database, save_job_to_database
+from server.utils.agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
 
@@ -416,6 +417,24 @@ async def _trigger_pipeline_background(
             job.metadata["clarification_error"] = str(clarify_error)
         
         # Step 2: Run full pipeline (code generation, tests, deployment, docs, critique)
+        # Wait for agents to be ready before running full pipeline
+        max_wait = 90  # seconds, matches startup timeout
+        wait_interval = 2  # seconds
+        elapsed = 0
+        while elapsed < max_wait:
+            loader = get_agent_loader()
+            if loader and not loader.is_loading():
+                break
+            logger.info(f"[Pipeline] Waiting for agents to load before running pipeline for job {job_id} ({elapsed}s elapsed)...")
+            await asyncio.sleep(wait_interval)
+            elapsed += wait_interval
+
+        if elapsed >= max_wait:
+            logger.error(f"[Pipeline] Timed out waiting for agents to load for job {job_id}")
+            error = Exception("Agent loading timed out - agents not available for code generation")
+            await finalize_job_failure(job_id, error)
+            return
+        
         job.current_stage = JobStage.GENERATOR_GENERATION
         job.updated_at = datetime.now(timezone.utc)
         logger.info(f"[Pipeline] Running code generation for job {job_id}")
