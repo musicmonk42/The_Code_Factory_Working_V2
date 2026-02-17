@@ -1897,14 +1897,15 @@ class OmniCoreService:
                     f"Agent loader finished, syncing state for job {job_id}",
                     extra={"job_id": job_id, "action": action}
                 )
-                self._ensure_agents_loaded()
             else:
                 # Loader still running, attempt lazy loading
                 logger.info(
                     f"Agents not yet loaded, attempting lazy loading",
                     extra={"job_id": job_id, "action": action}
                 )
-                self._ensure_agents_loaded()
+            
+            # Call _ensure_agents_loaded in both cases
+            self._ensure_agents_loaded()
             
         # Re-check after potential sync or lazy loading
         if not self._agents_loaded:

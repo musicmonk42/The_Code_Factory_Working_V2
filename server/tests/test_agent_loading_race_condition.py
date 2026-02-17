@@ -225,7 +225,7 @@ class TestAgentLoadingRaceCondition:
         # refactor _trigger_pipeline_background to accept max_wait as parameter
     
     @pytest.mark.asyncio
-    async def test_dispatch_syncs_state_when_loader_done_but_agents_not_loaded(self):
+    async def test_dispatch_syncs_state_on_race_condition(self):
         """Test that _dispatch_generator_action syncs state when loader is done but _agents_loaded is False.
         
         This test validates Fix #2 from the race condition issue:
@@ -262,7 +262,7 @@ class TestAgentLoadingRaceCondition:
         assert result["status"] == "success"
     
     @pytest.mark.asyncio
-    async def test_trigger_pipeline_waits_for_both_conditions(self):
+    async def test_trigger_pipeline_waits_for_loader_and_omnicore_ready(self):
         """Test that _trigger_pipeline_background waits for both loader AND omnicore._agents_loaded.
         
         This test validates Fix #1 from the race condition issue:
@@ -271,7 +271,6 @@ class TestAgentLoadingRaceCondition:
         from server.routers.generator import _trigger_pipeline_background
         from server.storage import jobs_db
         from server.schemas.jobs import Job, JobStatus, JobStage
-        import asyncio
         
         # Create a test job
         job_id = "test-job-race"
