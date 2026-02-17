@@ -524,61 +524,15 @@ class SFEService:
                 
                 # Transform all issues to error format using utility function
                 errors = transform_pipeline_issues_to_frontend_errors(all_issues, job_id)
-                    # Skip analyzer execution when job directory not found,
-                    # and fall through to return sample fallback errors for UI consistency
-                    pass
-                else:
-                    # BUG FIX 3: Industry Standard DRY principle
-                    # Use centralized report loading function (eliminates duplication)
-                    report_path = job_dir / "reports" / "sfe_analysis_report.json"
-                    cached_report = _load_sfe_analysis_report(report_path, job_id)
 
-                    if cached_report:
-                        # Return cached data as list for detect_errors
-                        return cached_report["issues"]  # Already a list of issues
-
-                    logger.info(f"Analyzing errors in directory: {job_dir}")
-                    CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
-
-                    # Discover Python files in the job directory
-                    python_files = list(job_dir.rglob("*.py"))
-
-                    if not python_files:
-                        logger.info(f"No Python files found in {job_dir}")
-                        # Fall through to fallback instead of returning empty list
-                    else:
-                        # Analyze files and collect errors
-                        errors = []
-                        async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
-                            for py_file in python_files:
-                                try:
-                                    issues = await analyzer.analyze_and_propose(str(py_file))
-
-                                    # Convert issues to error format
-                                    for issue in issues:
-                                        error_id = f"err-{abs(hash(str(py_file) + str(issue))) % 100000}"
-                                        severity = issue.get("risk_level", "medium")
-                                        details = issue.get("details", {})
-
-                                        errors.append(
-                                            {
-                                                "error_id": error_id,
-                                                "job_id": job_id,
-                                                "severity": severity,
-                                                "message": details.get("message", str(issue)),
-                                                "file": str(py_file.relative_to(job_dir)),
-                                                "line": details.get("line", 0),
-                                                "type": issue.get("type", "unknown"),
-                                            }
-                                        )
-                                except Exception as e:
-                                    logger.warning(f"Error analyzing {py_file}: {e}")
-                                    continue
-
-                        logger.info(
-                            f"Direct SFE error detection complete: {len(errors)} errors found"
-                        )
-                        return errors  # Return list of errors directly
+                logger.info(
+                    f"Direct SFE error detection complete: {len(errors)} errors found"
+                )
+                return {
+                    "errors": errors,
+                    "count": len(errors),
+                    "source": "direct_sfe",
+                }
 
             except Exception as e:
                 logger.error(f"Direct SFE error detection failed: {e}", exc_info=True)
