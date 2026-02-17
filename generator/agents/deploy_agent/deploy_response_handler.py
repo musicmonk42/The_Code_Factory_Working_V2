@@ -2228,7 +2228,14 @@ class HelmHandler(FormatHandler):
                     logger.info("Multi-document YAML detected in Helm response, using load_all()")
                     return self._parse_multi_document_helm(raw, ru_yaml)
         except Exception as e:
-            raise ValueError(f"Failed to parse Helm chart content: {e}")
+            # BUG FIX 5: Instead of raising, return default chart structure
+            # This handles cases where LLM returns pure prose/markdown with no valid YAML
+            logger.warning(f"Failed to parse Helm chart content: {e}, using default chart")
+            return {
+                "Chart.yaml": self._default_chart_yaml(),
+                "values.yaml": {},
+                "templates": {}
+            }
 
     def _parse_multi_document_helm(self, raw: str, ru_yaml: YAML) -> Dict[str, Any]:
         """

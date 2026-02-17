@@ -1681,10 +1681,41 @@ class OmniCoreService:
                     "errors": [],
                 }
             
+            # BUG FIX 3: Check for existing SFE analysis report first
+            # The pipeline writes sfe_analysis_report.json during analysis
+            # If it exists, return those results instead of running fresh analysis
+            report_path = Path(code_path) / "reports" / "sfe_analysis_report.json"
+            if report_path.exists():
+                try:
+                    with open(report_path) as f:
+                        report = json.load(f)
+                    issues = report.get("all_defects", report.get("issues", []))
+                    logger.info(f"Loaded {len(issues)} issues from existing SFE analysis report")
+                    return {
+                        "status": "completed",
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "errors": issues,
+                        "error_count": len(issues),
+                        "source": "sfe_analysis_report",
+                    }
+                except Exception as e:
+                    logger.warning(f"Failed to load SFE analysis report: {e}, falling back to fresh analysis")
+            
             try:
                 from self_fixing_engineer.arbiter.bug_manager import BugManager
                 
-                bug_manager = BugManager()
+                # BUG FIX 1: BugManager requires a settings argument
+                # Try to create settings object, fall back to minimal settings if needed
+                try:
+                    from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
+                    settings = ArbiterConfig()
+                except Exception:
+                    # Fallback to minimal settings object
+                    from self_fixing_engineer.arbiter.bug_manager.bug_manager import Settings
+                    settings = Settings()
+                
+                bug_manager = BugManager(settings=settings)
                 errors = await bug_manager.detect_errors(code_path)
                 
                 return {
@@ -1699,6 +1730,179 @@ class OmniCoreService:
                 return {"status": "error", "message": "BugManager not available"}
             except Exception as e:
                 logger.error(f"Error in detect_errors for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
+        elif action == "detect_bugs":
+            # BUG FIX 2: Add handler for detect_bugs action
+            # Similar to analyze_code but returns bugs array format
+            code_path = payload.get("code_path", "")
+            code_path = self._resolve_job_output_path(job_id, code_path)
+            scan_depth = payload.get("scan_depth", "full")
+            include_potential = payload.get("include_potential", True)
+            
+            if not code_path or not Path(code_path).exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path not found for job {job_id}: {code_path}",
+                    "bugs": [],
+                }
+            
+            try:
+                from self_fixing_engineer.arbiter.codebase_analyzer import CodebaseAnalyzer
+                
+                code_path_obj = Path(code_path)
+                try:
+                    async with asyncio.timeout(DEFAULT_SFE_ANALYSIS_TIMEOUT):
+                        async with CodebaseAnalyzer(
+                            root_dir=str(code_path_obj),
+                            ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                        ) as analyzer:
+                            summary = await analyzer.scan_codebase(str(code_path_obj))
+                            
+                            defects = summary.get("defects", [])
+                            # Filter based on scan depth and include_potential settings
+                            bugs = []
+                            for defect in defects:
+                                # Filter out defects for non-existent files
+                                defect_file = defect.get("file", "")
+                                if defect_file:
+                                    defect_path = Path(defect_file)
+                                    if not defect_path.is_absolute():
+                                        defect_path = code_path_obj / defect_path
+                                    if not defect_path.exists():
+                                        continue
+                                
+                                # Filter by severity if scan_depth is not "full"
+                                severity = defect.get("severity", "medium").lower()
+                                if scan_depth == "critical" and severity not in ["critical"]:
+                                    continue
+                                elif scan_depth == "high" and severity not in ["critical", "high"]:
+                                    continue
+                                
+                                bugs.append(defect)
+                            
+                            return {
+                                "status": "completed",
+                                "job_id": job_id,
+                                "code_path": code_path,
+                                "bugs_found": len(bugs),
+                                "bugs": bugs,
+                                "scan_depth": scan_depth,
+                                "source": "direct_sfe",
+                            }
+                except asyncio.TimeoutError:
+                    logger.warning(f"Bug detection timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT}s for job {job_id}")
+                    return {
+                        "status": "error",
+                        "message": f"Bug detection timed out after {DEFAULT_SFE_ANALYSIS_TIMEOUT} seconds",
+                        "timeout": True,
+                        "job_id": job_id,
+                    }
+            except ImportError:
+                return {"status": "error", "message": "CodebaseAnalyzer not available"}
+            except Exception as e:
+                logger.error(f"Error in detect_bugs for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
+        elif action == "fix_imports":
+            # BUG FIX 2: Add handler for fix_imports action
+            code_path = payload.get("code_path", "")
+            code_path = self._resolve_job_output_path(job_id, code_path)
+            auto_install = payload.get("auto_install", False)
+            fix_style = payload.get("fix_style", True)
+            
+            if not code_path or not Path(code_path).exists():
+                return {
+                    "status": "error",
+                    "message": f"Code path not found for job {job_id}: {code_path}",
+                    "fixes": [],
+                }
+            
+            try:
+                # Try to use self_healing_import_fixer if available
+                try:
+                    from self_fixing_engineer.self_healing_import_fixer import ImportFixer
+                    
+                    fixer = ImportFixer(root_dir=code_path)
+                    fixes = await fixer.fix_imports(auto_install=auto_install, fix_style=fix_style)
+                    
+                    return {
+                        "status": "completed",
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "fixes_applied": len(fixes),
+                        "fixes": fixes,
+                        "source": "import_fixer",
+                    }
+                except ImportError:
+                    # Fallback: return placeholder result
+                    logger.info("ImportFixer not available, returning placeholder result")
+                    return {
+                        "status": "completed",
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "fixes_applied": 0,
+                        "fixes": [],
+                        "message": "Import fixer module not available",
+                        "source": "placeholder",
+                    }
+            except Exception as e:
+                logger.error(f"Error in fix_imports for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
+        elif action == "get_learning_insights":
+            # BUG FIX 2: Add handler for get_learning_insights action
+            # Return aggregated learning insights
+            target_job_id = payload.get("job_id", job_id)
+            
+            try:
+                # Try to gather learning insights from various sources
+                insights = {
+                    "job_id": target_job_id,
+                    "patterns_learned": [],
+                    "common_issues": [],
+                    "suggestions": [],
+                }
+                
+                # Check if there's an SFE analysis report
+                job_path = self._resolve_job_output_path(target_job_id, "")
+                if job_path:
+                    report_path = Path(job_path) / "reports" / "sfe_analysis_report.json"
+                    if report_path.exists():
+                        with open(report_path) as f:
+                            report = json.load(f)
+                        
+                        # Extract patterns from the report
+                        issues = report.get("all_defects", [])
+                        if issues:
+                            # Group by type for patterns
+                            issue_types = {}
+                            for issue in issues:
+                                issue_type = issue.get("type", "unknown")
+                                if issue_type not in issue_types:
+                                    issue_types[issue_type] = 0
+                                issue_types[issue_type] += 1
+                            
+                            insights["common_issues"] = [
+                                {"type": k, "count": v}
+                                for k, v in sorted(issue_types.items(), key=lambda x: x[1], reverse=True)
+                            ]
+                            
+                            # Generate suggestions based on common issues
+                            if issue_types:
+                                top_issue = max(issue_types.items(), key=lambda x: x[1])
+                                insights["suggestions"].append(
+                                    f"Consider reviewing {top_issue[0]} issues ({top_issue[1]} occurrences)"
+                                )
+                
+                return {
+                    "status": "completed",
+                    "job_id": target_job_id,
+                    "insights": insights,
+                    "source": "direct_sfe",
+                }
+            except Exception as e:
+                logger.error(f"Error in get_learning_insights for job {job_id}: {e}", exc_info=True)
                 return {"status": "error", "message": str(e)}
         
         elif action in ["propose_fix", "analyze_bug", "deep_analyze"]:

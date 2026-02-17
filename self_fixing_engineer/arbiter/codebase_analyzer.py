@@ -1166,10 +1166,23 @@ class CodebaseAnalyzer:
                 for node in ast.walk(tree):
                     if isinstance(node, ast.Import):
                         for alias in node.names:
-                            spec = importlib.util.find_spec(alias.name)
-                            is_external = spec is None or not str(
-                                spec.origin
-                            ).startswith(str(self.root_dir))
+                            # BUG FIX 4: Wrap find_spec in try/except to handle ModuleNotFoundError
+                            # When analyzing generated projects, their modules aren't installed
+                            try:
+                                spec = importlib.util.find_spec(alias.name)
+                                is_external = spec is None or not str(
+                                    spec.origin
+                                ).startswith(str(self.root_dir))
+                            except (ModuleNotFoundError, ValueError):
+                                # Module not installed - check if it's a local project module
+                                # by seeing if a matching directory or .py file exists in root_dir
+                                module_parts = alias.name.split('.')
+                                possible_path = self.root_dir / Path(*module_parts)
+                                is_external = not (
+                                    possible_path.exists() or 
+                                    possible_path.with_suffix('.py').exists() or
+                                    (self.root_dir / module_parts[0]).is_dir()
+                                )
                             deps.append(
                                 {
                                     "file": str(file_path),
@@ -1184,10 +1197,25 @@ class CodebaseAnalyzer:
                             )
                     elif isinstance(node, ast.ImportFrom):
                         module = node.module or ""
-                        spec = importlib.util.find_spec(module)
-                        is_external = spec is None or not str(spec.origin).startswith(
-                            str(self.root_dir)
-                        )
+                        # BUG FIX 4: Wrap find_spec in try/except to handle ModuleNotFoundError
+                        try:
+                            spec = importlib.util.find_spec(module)
+                            is_external = spec is None or not str(spec.origin).startswith(
+                                str(self.root_dir)
+                            )
+                        except (ModuleNotFoundError, ValueError):
+                            # Module not installed - check if it's a local project module
+                            module_parts = module.split('.') if module else []
+                            if module_parts:
+                                possible_path = self.root_dir / Path(*module_parts)
+                                is_external = not (
+                                    possible_path.exists() or 
+                                    possible_path.with_suffix('.py').exists() or
+                                    (self.root_dir / module_parts[0]).is_dir()
+                                )
+                            else:
+                                # Relative import with no module (e.g., "from . import foo")
+                                is_external = False
                         for alias in node.names:
                             deps.append(
                                 {

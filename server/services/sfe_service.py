@@ -385,6 +385,24 @@ class SFEService:
                         "note": f"Job directory not found for {job_id}",
                     }
                 
+                # BUG FIX 3: Check for existing SFE analysis report first
+                # If the pipeline already ran and wrote sfe_analysis_report.json, use that
+                report_path = job_dir / "reports" / "sfe_analysis_report.json"
+                if report_path.exists():
+                    try:
+                        import json
+                        with open(report_path) as f:
+                            report = json.load(f)
+                        issues = report.get("all_defects", report.get("issues", []))
+                        logger.info(f"Loaded {len(issues)} errors from existing SFE analysis report")
+                        return {
+                            "errors": issues,
+                            "count": len(issues),
+                            "source": "sfe_analysis_report",
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to load SFE analysis report: {e}, falling back to fresh analysis")
+                
                 logger.info(f"Analyzing errors in directory: {job_dir}")
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 
