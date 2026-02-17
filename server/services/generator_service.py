@@ -855,7 +855,7 @@ class GeneratorService:
             
             # If routing failed, treat as agents still loading (retryable)
             if not routed:
-                logger.warning(f"Full pipeline routing failed for job {job_id} - code generation service is initializing or agents still loading")
+                logger.warning(f"Full pipeline routing failed for job {job_id} - code generation service is not ready")
                 # Create retryable error response
                 data = self._create_retryable_error(
                     job_id=job_id,
@@ -863,7 +863,7 @@ class GeneratorService:
                 )
             # If routing succeeded but data is empty, treat as agents still loading (retryable)
             elif routed and not data:
-                logger.warning(f"Full pipeline routing succeeded but no data returned for job {job_id} - agents may still be loading")
+                logger.warning(f"Full pipeline routing succeeded but agents have not returned data for job {job_id}")
                 # Create retryable error response
                 data = self._create_retryable_error(
                     job_id=job_id,
