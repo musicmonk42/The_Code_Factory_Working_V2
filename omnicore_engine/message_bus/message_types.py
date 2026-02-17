@@ -4,7 +4,7 @@
 
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
@@ -58,7 +58,6 @@ class Message:
         Create a copy of this message with a different topic.
         Useful for republishing messages to different topics (e.g., DLQ).
         """
-        from dataclasses import replace
         return replace(self, topic=new_topic)
 
 
