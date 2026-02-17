@@ -1961,6 +1961,143 @@ async def validate_generated_project(
                 "to reject whitespace-only input"
             )
     
+    # Check frontend files if full-stack project
+    # Look for templates/ or static/ directories which indicate frontend generation
+    templates_dir = output_dir / "templates"
+    static_dir = output_dir / "static"
+    frontend_dir = output_dir / "frontend"
+    
+    has_frontend = templates_dir.exists() or static_dir.exists() or frontend_dir.exists()
+    
+    if has_frontend:
+        result["has_frontend"] = True
+        result["frontend_files_valid"] = 0
+        result["frontend_files_invalid"] = 0
+        
+        # Validate templates directory (Jinja2/server-rendered)
+        if templates_dir.exists():
+            html_files = list(templates_dir.glob("*.html"))
+            if not html_files:
+                result["warnings"].append("templates/ directory exists but contains no HTML files")
+            else:
+                # Validate HTML structure
+                for html_file in html_files:
+                    try:
+                        content = html_file.read_text(encoding="utf-8")
+                        # Basic HTML validation
+                        if not content.strip():
+                            result["warnings"].append(f"{html_file.name} is empty")
+                            result["frontend_files_invalid"] += 1
+                        elif "<html" not in content.lower() and html_file.name not in ["layout.html"]:
+                            # Allow layout/partial files without <html>
+                            result["warnings"].append(
+                                f"{html_file.name} missing <html> tag (may be a partial template)"
+                            )
+                        else:
+                            # Check for proper structure
+                            has_head = "<head" in content.lower()
+                            has_body = "<body" in content.lower()
+                            
+                            if "<html" in content.lower() and not (has_head and has_body):
+                                result["warnings"].append(
+                                    f"{html_file.name} has <html> but missing <head> or <body>"
+                                )
+                            
+                            result["frontend_files_valid"] += 1
+                    except Exception as e:
+                        result["warnings"].append(f"Could not validate {html_file.name}: {e}")
+                        result["frontend_files_invalid"] += 1
+        
+        # Validate static directory
+        if static_dir.exists():
+            css_files = list(static_dir.rglob("*.css"))
+            js_files = list(static_dir.rglob("*.js"))
+            
+            if not css_files and not js_files:
+                result["warnings"].append("static/ directory exists but contains no CSS or JS files")
+            
+            # Check for expected static file structure
+            if not (static_dir / "css").exists() and css_files:
+                result["warnings"].append("CSS files found but static/css/ directory not used")
+            
+            if not (static_dir / "js").exists() and js_files:
+                result["warnings"].append("JS files found but static/js/ directory not used")
+            
+            # Basic validation of CSS files
+            for css_file in css_files:
+                try:
+                    content = css_file.read_text(encoding="utf-8")
+                    if not content.strip():
+                        result["warnings"].append(f"{css_file.name} is empty")
+                        result["frontend_files_invalid"] += 1
+                    else:
+                        result["frontend_files_valid"] += 1
+                except Exception as e:
+                    result["warnings"].append(f"Could not read {css_file.name}: {e}")
+                    result["frontend_files_invalid"] += 1
+            
+            # Basic validation of JS files
+            for js_file in js_files:
+                try:
+                    content = js_file.read_text(encoding="utf-8")
+                    if not content.strip():
+                        result["warnings"].append(f"{js_file.name} is empty")
+                        result["frontend_files_invalid"] += 1
+                    else:
+                        # Check for common JavaScript issues
+                        if "var " in content and "let " not in content and "const " not in content:
+                            result["warnings"].append(
+                                f"{js_file.name} uses 'var' instead of modern 'let'/'const'"
+                            )
+                        result["frontend_files_valid"] += 1
+                except Exception as e:
+                    result["warnings"].append(f"Could not read {js_file.name}: {e}")
+                    result["frontend_files_invalid"] += 1
+        
+        # Check for FastAPI static file mounting in Python projects
+        if lang in ("python", "py") and static_dir.exists():
+            main_files = [
+                output_dir / "main.py",
+                output_dir / "app" / "main.py",
+            ]
+            has_static_mount = False
+            for main_file in main_files:
+                if main_file.exists():
+                    try:
+                        content = main_file.read_text(encoding="utf-8")
+                        if "StaticFiles" in content and "mount" in content:
+                            has_static_mount = True
+                            break
+                    except Exception:
+                        pass
+            
+            if not has_static_mount:
+                result["warnings"].append(
+                    "static/ directory exists but FastAPI StaticFiles mounting not found in main.py"
+                )
+        
+        # Check for template rendering setup
+        if lang in ("python", "py") and templates_dir.exists():
+            main_files = [
+                output_dir / "main.py",
+                output_dir / "app" / "main.py",
+            ]
+            has_template_setup = False
+            for main_file in main_files:
+                if main_file.exists():
+                    try:
+                        content = main_file.read_text(encoding="utf-8")
+                        if "Jinja2Templates" in content:
+                            has_template_setup = True
+                            break
+                    except Exception:
+                        pass
+            
+            if not has_template_setup:
+                result["warnings"].append(
+                    "templates/ directory exists but Jinja2Templates setup not found in main.py"
+                )
+    
     # Calculate validation time
     result["validation_time_ms"] = (time.time() - start_time) * 1000
     
