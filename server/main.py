@@ -118,9 +118,10 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 
 # Suppress known Python 3.13 deprecation warnings from transitive dependencies
 # These warnings are from libraries that haven't yet updated for Python 3.13
-warnings.filterwarnings("ignore", message=".*'crypt' is deprecated.*", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=".*'aifc' is deprecated.*", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=".*'audioop' is deprecated.*", category=DeprecationWarning)
+# The warnings originate from Python's standard library when deprecated modules are imported
+warnings.filterwarnings("ignore", message=r"^'crypt' is deprecated and slated for removal", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=r"^'aifc' is deprecated and slated for removal", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=r"^'audioop' is deprecated and slated for removal", category=DeprecationWarning)
 
 # Import path_setup first to ensure all component paths are in sys.path
 import path_setup  # noqa: F401
