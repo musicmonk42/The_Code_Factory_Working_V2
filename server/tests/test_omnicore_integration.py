@@ -257,7 +257,7 @@ class TestOmniCoreServiceIntegration:
         )
         
         # Verify that direct dispatch was used, not message bus
-        assert result["routed"] == True
+        assert result["routed"] is True
         assert result["job_id"] == "test-gen-123"
         assert result["transport"] == "direct_dispatch"
         assert result["target"] == "generator"
@@ -293,7 +293,7 @@ class TestOmniCoreServiceIntegration:
         )
         
         # Verify that message bus was used for non-generator target
-        assert result["routed"] == True
+        assert result["routed"] is True
         assert result["job_id"] == "test-sfe-123"
         assert result["transport"] == "message_bus"
         assert result["target"] == "sfe"
