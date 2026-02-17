@@ -12,16 +12,19 @@ Test validation for the 5 interrelated fixes:
 import pytest
 import sys
 import os
+import re
+from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def test_max_prompt_tokens_codegen():
     """Test that MAX_PROMPT_TOKENS is 16000 in codegen_prompt.py."""
-    with open('generator/agents/codegen_agent/codegen_prompt.py', 'r') as f:
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_prompt.py'
+    with open(filepath, 'r') as f:
         content = f.read()
-        import re
         match = re.search(r'^MAX_PROMPT_TOKENS\s*=\s*(\d+)', content, re.MULTILINE)
         assert match, "MAX_PROMPT_TOKENS not found in codegen_prompt.py"
         assert int(match.group(1)) == 16000, f"Expected 16000, got {match.group(1)}"
@@ -29,9 +32,9 @@ def test_max_prompt_tokens_codegen():
 
 def test_max_prompt_tokens_critique():
     """Test that MAX_PROMPT_TOKENS is 16000 in critique_prompt.py (all occurrences)."""
-    with open('generator/agents/critique_agent/critique_prompt.py', 'r') as f:
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'critique_agent' / 'critique_prompt.py'
+    with open(filepath, 'r') as f:
         content = f.read()
-        import re
         matches = re.findall(r'MAX_PROMPT_TOKENS\s*=\s*(\d+)', content)
         assert len(matches) >= 2, f"Expected at least 2 MAX_PROMPT_TOKENS assignments, found {len(matches)}"
         for val in matches:
@@ -40,7 +43,8 @@ def test_max_prompt_tokens_critique():
 
 def test_tiktoken_encoding_for_model():
     """Test that count_tokens uses encoding_for_model with fallback."""
-    with open('generator/runner/llm_client.py', 'r') as f:
+    filepath = PROJECT_ROOT / 'generator' / 'runner' / 'llm_client.py'
+    with open(filepath, 'r') as f:
         content = f.read()
         
     # Check for encoding_for_model usage
@@ -54,10 +58,10 @@ def test_tiktoken_encoding_for_model():
 
 def test_arbiter_max_tokens():
     """Test that max_tokens default is 4096 in arbiter config."""
-    with open('self_fixing_engineer/arbiter/config.py', 'r') as f:
+    filepath = PROJECT_ROOT / 'self_fixing_engineer' / 'arbiter' / 'config.py'
+    with open(filepath, 'r') as f:
         content = f.read()
         
-    import re
     match = re.search(r'max_tokens:\s*int\s*=\s*Field\(\s*default=(\d+)', content)
     assert match, "max_tokens field not found in arbiter config"
     assert int(match.group(1)) == 4096, f"Expected 4096, got {match.group(1)}"
@@ -66,7 +70,8 @@ def test_arbiter_max_tokens():
 def test_basehttpmiddleware_import_instructions():
     """Test that BaseHTTPMiddleware import instructions are added to codegen."""
     # Check codegen_prompt.py
-    with open('generator/agents/codegen_agent/codegen_prompt.py', 'r') as f:
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_prompt.py'
+    with open(filepath, 'r') as f:
         content = f.read()
         assert 'from starlette.middleware.base import BaseHTTPMiddleware' in content, \
             "BaseHTTPMiddleware import instruction not found in codegen_prompt.py"
@@ -74,7 +79,8 @@ def test_basehttpmiddleware_import_instructions():
             "Warning about incorrect import not found in codegen_prompt.py"
     
     # Check python.jinja2 template
-    with open('generator/agents/codegen_agent/templates/python.jinja2', 'r') as f:
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'templates' / 'python.jinja2'
+    with open(filepath, 'r') as f:
         content = f.read()
         assert 'from starlette.middleware.base import BaseHTTPMiddleware' in content, \
             "BaseHTTPMiddleware import instruction not found in python.jinja2"

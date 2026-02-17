@@ -950,10 +950,19 @@ class ImportFixerEngine:
             }
 
             # Fix incorrect BaseHTTPMiddleware import path (ALWAYS check this first)
+            # Use regex to ensure we only match actual import statements, not comments or strings
             lines = code.split('\n')
+            import_pattern = re.compile(r'^(\s*)from\s+fastapi\.middleware\.base\s+import\s+')
             for i, line in enumerate(lines):
-                if 'from fastapi.middleware.base import' in line.strip():
-                    lines[i] = line.replace('from fastapi.middleware.base import', 'from starlette.middleware.base import')
+                # Only match lines that start with 'from fastapi.middleware.base import' (after whitespace)
+                # This avoids modifying comments or strings
+                match = import_pattern.match(line)
+                if match:
+                    # Preserve indentation and replace only the module path
+                    indent = match.group(1)
+                    replacement = line.replace('from fastapi.middleware.base import', 
+                                              'from starlette.middleware.base import', 1)
+                    lines[i] = replacement
                     fixes_applied.append("Fixed BaseHTTPMiddleware import: fastapi.middleware.base -> starlette.middleware.base")
                     self.logger.info("Fixed BaseHTTPMiddleware import path")
             
