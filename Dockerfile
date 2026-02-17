@@ -177,11 +177,12 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
 # Pre-download HuggingFace transformer models to prevent runtime downloads
 # Download to /opt/huggingface_cache (accessible by non-root user)
 # The docgen agent uses facebook/bart-large-cnn for summarization
+# Note: Using HF_HOME instead of deprecated TRANSFORMERS_CACHE
 RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading HuggingFace models..."; \
         echo "========================================"; \
-        HF_HOME=/opt/huggingface_cache TRANSFORMERS_CACHE=/opt/huggingface_cache \
+        HF_HOME=/opt/huggingface_cache \
         python -c "from transformers import pipeline; \
             print('Downloading facebook/bart-large-cnn model...'); \
             pipeline('summarization', model='facebook/bart-large-cnn'); \
@@ -246,7 +247,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # FEATURE FLAGS: Set to "1" to enable, "0" to disable, "auto" for auto-detection
 # PARALLEL AGENT LOADING: Enabled by default for faster startup
 # NLTK_DATA: Set to /opt/nltk_data (accessible by appuser, not /root/nltk_data)
-# HF_HOME/TRANSFORMERS_CACHE: Set to /opt/huggingface_cache for pre-downloaded models
+# HF_HOME: Set to /opt/huggingface_cache for pre-downloaded models (replaces deprecated TRANSFORMERS_CACHE)
+# MPLCONFIGDIR: Set to /tmp/matplotlib to prevent permission errors
 # KAFKA: Multiple variables for compatibility - different components check different names
 #   - KAFKA_ENABLED: Primary flag checked by ArbiterConfig (via Pydantic validation_alias)
 #   - ENABLE_KAFKA: Alias checked by some older components
@@ -274,8 +276,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TOKENIZERS_PARALLELISM="false" \
     NLTK_DATA="/opt/nltk_data" \
     HF_HOME="/opt/huggingface_cache" \
-    TRANSFORMERS_CACHE="/opt/huggingface_cache" \
-    CHROMA_CACHE_DIR="/opt/chroma_cache"
+    CHROMA_CACHE_DIR="/opt/chroma_cache" \
+    MPLCONFIGDIR="/tmp/matplotlib"
     # SENTRY_DSN: Set at deployment time for error tracking
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 

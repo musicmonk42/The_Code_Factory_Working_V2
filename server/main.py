@@ -111,6 +111,17 @@ os.environ.setdefault("APP_STARTUP", "1")  # Skip plugin loading during startup
 os.environ.setdefault("SKIP_IMPORT_TIME_VALIDATION", "1")  # Skip validation during import
 os.environ.setdefault("SPACY_WARNING_IGNORE", "W007")  # Suppress spaCy warnings
 
+# Set matplotlib cache directory to writable location to prevent permission errors
+# This prevents: mkdir -p failed for path /home/appuser/.cache/matplotlib
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
+# Suppress known Python 3.13 deprecation warnings from transitive dependencies
+# These warnings are from libraries that haven't yet updated for Python 3.13
+import warnings
+warnings.filterwarnings("ignore", message=".*'crypt' is deprecated.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*'aifc' is deprecated.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*'audioop' is deprecated.*", category=DeprecationWarning)
+
 # Import path_setup first to ensure all component paths are in sys.path
 import path_setup  # noqa: F401
 
