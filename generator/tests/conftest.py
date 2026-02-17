@@ -754,6 +754,28 @@ def cleanup_memory_after_test():
     gc.collect()
 
 
+@pytest.fixture(autouse=True)
+def clear_runner_config_cache():
+    """Clear the runner config cache before each test to ensure clean state.
+    
+    This prevents config caching issues where one test's loaded config
+    affects subsequent tests, especially when tests use mocked load_config().
+    """
+    try:
+        from generator.runner.runner_config import clear_config_cache
+        clear_config_cache()
+    except ImportError:
+        # If runner_config isn't available, skip
+        pass
+    yield
+    # Also clear after test to prevent cache pollution
+    try:
+        from generator.runner.runner_config import clear_config_cache
+        clear_config_cache()
+    except ImportError:
+        pass
+
+
 # ---- Global Async Mock Fixtures ----
 # These fixtures automatically mock commonly awaited async functions
 # to prevent "TypeError: object MagicMock can't be used in 'await' expression"
