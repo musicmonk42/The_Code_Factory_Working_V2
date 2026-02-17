@@ -1113,11 +1113,15 @@ async function loadErrors(jobId) {
         });
     } catch (error) {
         console.error('Failed to load errors:', error);
+        // Show user-visible error message
+        container.innerHTML = `<div class="error-message"><strong>Error loading detected issues:</strong> ${escapeHtml(error.message)}</div>`;
+        showError('Failed to load detected issues: ' + error.message);
     }
 }
 
 async function proposeFix(errorId) {
     try {
+        // Handle both error IDs and bug IDs - they can be used interchangeably
         const response = await fetchWithRetry(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
             method: 'POST'
         });
@@ -1126,7 +1130,27 @@ async function proposeFix(errorId) {
         showSuccess(`Fix proposed: ${data.description}`);
         loadFixes();
     } catch (error) {
-        showError('Failed to propose fix: ' + error.message);
+        // If the error endpoint doesn't work, try it as a bug analysis
+        try {
+            const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/${errorId}/analyze`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    include_root_cause: true,
+                    suggest_fixes: true
+                })
+            });
+            const data = await response.json();
+            
+            if (data.fix_suggestions && data.fix_suggestions.length > 0) {
+                showSuccess(`Fix suggested: ${data.fix_suggestions[0]}`);
+            } else {
+                showSuccess('Bug analysis complete - check console for details');
+                console.log('Bug analysis result:', data);
+            }
+        } catch (bugError) {
+            showError('Failed to propose fix: ' + error.message);
+        }
     }
 }
 
@@ -2492,6 +2516,15 @@ async function detectBugs() {
             body: JSON.stringify({code_path: '.', scan_depth: 'deep', include_potential: false, job_id: jobId})
         });
         const data = await response.json();
+        
+        // Check if bug detection is unavailable
+        if (data.note) {
+            showError(`Bug detection unavailable: ${data.note}`);
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<div class="error-message">${escapeHtml(data.note)}</div>`;
+            return;
+        }
+        
         showSuccess(`Detected ${data.bugs_found} bugs`);
         
         // Populate the errors list with detected bugs
@@ -2508,6 +2541,31 @@ async function detectBugs() {
                 const bugFile = escapeHtml(bug.file || 'N/A');
                 const bugLine = escapeHtml(String(bug.line || 'N/A'));
                 const bugSeverity = escapeHtml(bug.severity || 'medium');
+                
+                card.innerHTML = `
+                    <h4>${bugType}: ${bugMessage}</h4>
+                    <p>File: ${bugFile}, Line: ${bugLine}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
+                `;
+                
+                // Add button using safe method if bug_id exists
+                if (bug.bug_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    card.appendChild(button);
+                }
+                
+                container.appendChild(card);
+            });
+        } else {
+            container.innerHTML = '<p class="no-data">No bugs detected</p>';
+        }
+    } catch (error) {
+        showError('Bug detection failed: ' + error.message);
+    }
+}
                 
                 card.innerHTML = `
                     <h4>${bugType}: ${bugMessage}</h4>

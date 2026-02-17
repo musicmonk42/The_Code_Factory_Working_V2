@@ -1364,58 +1364,18 @@ class SFEService:
                 logger.error(f"Direct SFE bug detection failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # Fallback with bugs array
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fallback - return empty results instead of fake bugs
+        logger.warning("Neither OmniCore nor direct SFE available, bug detection unavailable")
         return {
-            "bugs_found": 5,
-            "bugs": [
-                {
-                    "bug_id": "bug-001",
-                    "type": "SECURITY",
-                    "message": "Potential SQL injection vulnerability",
-                    "file": "database.py",
-                    "line": 45,
-                    "severity": "critical",
-                },
-                {
-                    "bug_id": "bug-002",
-                    "type": "COMPLEXITY",
-                    "message": "High cyclomatic complexity detected",
-                    "file": "main.py",
-                    "line": 120,
-                    "severity": "high",
-                },
-                {
-                    "bug_id": "bug-003",
-                    "type": "CODE_QUALITY",
-                    "message": "Unused variable 'temp'",
-                    "file": "utils.py",
-                    "line": 78,
-                    "severity": "medium",
-                },
-                {
-                    "bug_id": "bug-004",
-                    "type": "CODE_QUALITY",
-                    "message": "Missing error handling",
-                    "file": "api.py",
-                    "line": 92,
-                    "severity": "medium",
-                },
-                {
-                    "bug_id": "bug-005",
-                    "type": "STYLE",
-                    "message": "Line too long (>120 characters)",
-                    "file": "config.py",
-                    "line": 15,
-                    "severity": "low",
-                },
-            ],
-            "critical": 1,
-            "high": 1,
-            "medium": 2,
-            "low": 1,
+            "bugs_found": 0,
+            "bugs": [],
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
             "scan_depth": scan_depth,
             "source": "fallback",
+            "note": "Bug detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
         }
 
     async def analyze_bug(
