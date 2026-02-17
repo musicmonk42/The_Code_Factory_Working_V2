@@ -1382,7 +1382,7 @@ async def _protect_running_jobs_on_shutdown():
         
         # Get all jobs and find RUNNING ones
         all_jobs = list(jobs_db.values())
-        running_jobs = [j for j in all_jobs if j.status.value == "running"]
+        running_jobs = [j for j in all_jobs if j.status == JobStatus.RUNNING]
         
         if not running_jobs:
             logger.info("No running jobs to protect during shutdown")
@@ -1394,7 +1394,7 @@ async def _protect_running_jobs_on_shutdown():
             try:
                 # Update job status to FAILED with clear error message
                 job.status = JobStatus.FAILED
-                job.error = "Job interrupted by SIGTERM during container shutdown. Please resubmit."
+                job.error = f"Job interrupted by container shutdown (SIGTERM). Job ID: {job_id}. Please resubmit your request."
                 job.updated_at = datetime.now(timezone.utc)
                 job.completed_at = datetime.now(timezone.utc)
                 

@@ -391,7 +391,7 @@ EXPOSE 8080 9090
 # Docker healthcheck for container liveness
 # Uses /health endpoint (liveness probe) which always returns 200 if the process is alive
 # Use /ready for readiness checks in orchestrators that support separate probes
-# This aligns with Railway's healthcheckPath="/health" in railway.toml
+# This aligns with Railway's healthcheckPath="/health" in railway.toml and railway.json
 # Uses PORT env var if set (Railway sets it to 8080), otherwise defaults to 8080
 # Starts checking after 120 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
