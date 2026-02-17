@@ -447,11 +447,13 @@ def get_provider():
     
     # Try to get API key from runner config first
     key = None
-    if hasattr(config, 'llm_provider_api_key') and config.llm_provider_api_key:
-        key = config.llm_provider_api_key
-        # Handle SecretStr from Pydantic
-        if hasattr(key, "get_secret_value"):
-            key = key.get_secret_value()
+    if hasattr(config, 'llm_provider_api_key'):
+        api_key_value = config.llm_provider_api_key
+        if api_key_value:  # Check if not None/empty
+            key = api_key_value
+            # Handle SecretStr from Pydantic
+            if hasattr(key, "get_secret_value"):
+                key = key.get_secret_value()
     
     # Fall back to environment variable if not in config
     API_KEY = key or os.getenv("LOCAL_API_KEY")

@@ -1349,7 +1349,7 @@ class ConfigWatcher:
         # This allows tests to mock ClientSession even if aiohttp module is not fully available
         try:
             from aiohttp import ClientSession
-        except (ImportError, AttributeError):
+        except ImportError:
             logger.error("aiohttp.ClientSession not available. Cannot fetch remote config.")
             return
 
