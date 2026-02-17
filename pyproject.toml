@@ -63,7 +63,7 @@ addopts = [
     "-p no:randomly",                   # Disable pytest-randomly plugin
     "-p no:cacheprovider",              # Disable cache for faster collection
     "--import-mode=importlib",          # Use importlib for imports
-    "--maxfail=5",                      # Stop after 5 failures
+    "--maxfail=100",                    # Stop after 100 failures
 ]
 
 python_files = ["test_*.py"]
