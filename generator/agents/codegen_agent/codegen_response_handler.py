@@ -1240,6 +1240,8 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
             logger.warning(
                 f"Found {len(bare_names)} bare identifier(s) in {filename}: {[name for _, name in bare_names]}"
             )
+            # Detect line ending style
+            line_ending = "\r\n" if "\r\n" in content else "\n"
             lines = content.splitlines()
             # Comment out each bare identifier line (in reverse order to preserve line numbers)
             for lineno, identifier in reversed(bare_names):
@@ -1248,10 +1250,15 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
                         f"Commenting out bare identifier '{identifier}' at line {lineno}",
                         extra={"filename": filename}
                     )
-                    # Comment out the line
-                    lines[lineno - 1] = f"# {lines[lineno - 1]}  # AUTO-FIXED: bare identifier"
+                    original_line = lines[lineno - 1]
+                    # Only add comment prefix if the line isn't already a comment
+                    if not original_line.strip().startswith("#"):
+                        lines[lineno - 1] = f"# {original_line}  # AUTO-FIXED: bare identifier"
+                    else:
+                        # Already a comment, just add the marker
+                        lines[lineno - 1] = f"{original_line}  # AUTO-FIXED: bare identifier"
             
-            fixed_content = "\n".join(lines)
+            fixed_content = line_ending.join(lines)
             # Verify the fix worked
             try:
                 ast.parse(fixed_content)
