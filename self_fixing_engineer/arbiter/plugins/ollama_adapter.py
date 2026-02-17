@@ -129,7 +129,7 @@ class OllamaAdapter:
                 # Try both the original name and the base name without _total.
                 for candidate in [name, name.removesuffix("_total")]:
                     existing = REGISTRY._names_to_collectors.get(candidate)
-                    if existing is not None:
+                    if existing is not None and isinstance(existing, metric_class):
                         return existing
             raise
 
