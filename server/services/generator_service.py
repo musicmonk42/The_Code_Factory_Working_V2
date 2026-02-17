@@ -834,8 +834,18 @@ class GeneratorService:
             routed = result.get("routed", False)
             data = result.get("data", {})
             
+            # If routing failed, treat as agents still loading (retryable)
+            if not routed:
+                logger.warning(f"Full pipeline routing failed for job {job_id} - OmniCore may be initializing or agents still loading")
+                # Create retryable error response
+                data = {
+                    "status": "error",
+                    "retry": True,
+                    "message": "Code generation service is initializing. Please retry in a few seconds.",
+                    "job_id": job_id,
+                }
             # If routing succeeded but data is empty, treat as agents still loading (retryable)
-            if routed and not data:
+            elif routed and not data:
                 logger.warning(f"Full pipeline routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 # Create retryable error response
                 data = {
@@ -890,14 +900,39 @@ class GeneratorService:
                         target_module="generator",
                         payload=payload,
                     )
+                    
+                    # Update both routed and data from retry result
+                    routed = result.get("routed", False)
                     data = result.get("data", {})
+                    
+                    # If routing failed on retry, create retryable error
+                    if not routed:
+                        logger.warning(f"Retry {attempt + 1} routing failed for job {job_id}")
+                        data = {
+                            "status": "error",
+                            "retry": True,
+                            "message": "Code generation service is still initializing.",
+                            "job_id": job_id,
+                        }
+                    # If routing succeeded but no data, create retryable error
+                    elif routed and not data:
+                        logger.warning(f"Retry {attempt + 1} succeeded but no data for job {job_id}")
+                        data = {
+                            "status": "error",
+                            "retry": True,
+                            "message": "Code generation agents are still loading.",
+                            "job_id": job_id,
+                        }
+                    
+                    # Check if we can stop retrying (success or non-retryable error)
                     if not data.get("retry"):
                         logger.info(
                             f"Retry succeeded on attempt {attempt + 1}",
                             extra={
                                 "job_id": job_id,
                                 "attempt": attempt + 1,
-                                "status": data.get("status")
+                                "status": data.get("status"),
+                                "routed": routed
                             }
                         )
                         break
@@ -906,7 +941,8 @@ class GeneratorService:
                         extra={
                             "job_id": job_id,
                             "attempt": attempt + 1,
-                            "retry_message": data.get("message")
+                            "retry_message": data.get("message"),
+                            "routed": routed
                         }
                     )
                 else:
