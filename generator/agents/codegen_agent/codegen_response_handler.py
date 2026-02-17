@@ -295,6 +295,18 @@ LLM_RESPONSE_PREFIXES = [
     'python\r\n', 'PYTHON\r\n',
 ]
 
+# Code patterns to detect if content is actual code vs non-code text (requirements.txt, curl commands, etc.)
+# Note: Some patterns like 'package ' are intentionally generic since we check for ANY pattern match,
+# not ALL patterns. The combination of multiple patterns provides reasonable confidence that content is code.
+# Trade-off: Generic patterns may have false positives, but this is acceptable as we only need one match.
+_CODE_PATTERNS = (
+    'def ', 'class ', 'import ', 'from ', 'async def',
+    'function ', 'const ', 'let ', 'var ', 'export ',  # JavaScript/TypeScript
+    'package ', 'func ', 'type ',  # Go
+    'public ', 'private ', 'protected ',  # Java/C#/C++
+    '<?php', '<?=',  # PHP
+)
+
 # Very lightweight heuristic: any assignment to a suspicious name is flagged.
 SECRET_REGEX = re.compile(
     r"(api_key|apikey|secret|token|password)\s*=",
@@ -694,6 +706,20 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             error_msg = (
                 "LLM response did not contain recognizable code. "
                 "The response appears to be an explanation or clarification request. "
+                f"Response preview: {raw[:200]}..."
+            )
+            logger.error(error_msg)
+            return {ERROR_FILENAME: error_msg}
+        
+        # Check if the raw text contains recognizable code patterns
+        # Limitation: This check may produce false negatives for minimal/unusual code (e.g., Python
+        # scripts with only print statements or comments). However, this is an acceptable trade-off
+        # as the primary goal is to prevent requirements.txt and curl commands from being treated as code.
+        # If no code patterns found, return error instead of treating as code
+        if not any(pattern in raw for pattern in _CODE_PATTERNS):
+            error_msg = (
+                "LLM response did not contain recognizable code patterns. "
+                "The response may be requirements.txt content, curl commands, or other non-code text. "
                 f"Response preview: {raw[:200]}..."
             )
             logger.error(error_msg)
@@ -1249,7 +1275,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
                 if 1 <= lineno <= len(lines):
                     logger.info(
                         f"Commenting out bare identifier '{identifier}' at line {lineno}",
-                        extra={"file_name": filename}
+                        extra={"source_file": filename}
                     )
                     original_line = lines[lineno - 1]
                     # Only add comment prefix if the line isn't already a comment
@@ -1273,7 +1299,7 @@ def _validate_python_syntax(content: str, filename: str = "") -> str:
     except SyntaxError as e:
         logger.warning(
             f"Syntax error in generated Python code ({filename}): {e}",
-            extra={"file_name": filename, "error_line": e.lineno, "error_detail": str(e)}
+            extra={"source_file": filename, "syntax_error_line": e.lineno, "syntax_error_detail": str(e)}
         )
         return content  # Return original - let the normal validation handle syntax errors
 

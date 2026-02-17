@@ -585,8 +585,8 @@ class LLMClient:
             List of fallback provider names
         """
         # Define provider fallback hierarchy
-        # Priority: openai > grok > gemini > claude > local
-        all_providers = ["openai", "grok", "gemini", "claude", "local"]
+        # Priority: openai > gemini > local
+        all_providers = ["openai", "gemini", "local"]
         
         # Remove the primary provider from the list
         fallback_providers = [p for p in all_providers if p != primary_provider]
