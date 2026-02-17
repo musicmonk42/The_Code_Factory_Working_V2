@@ -449,7 +449,7 @@ class GeneratorService:
                 return data
             
             # If routing succeeded but data is empty, agents may still be loading - return retryable error
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Codegen routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 return {
                     "job_id": job_id,
@@ -512,7 +512,7 @@ class GeneratorService:
                 return data
             
             # If routing succeeded but data is empty, agents may still be loading - return retryable error
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Testgen routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 return {
                     "job_id": job_id,
@@ -575,7 +575,7 @@ class GeneratorService:
                 return data
             
             # If routing succeeded but data is empty, agents may still be loading - return retryable error
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Deploy routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 return {
                     "job_id": job_id,
@@ -638,7 +638,7 @@ class GeneratorService:
                 return data
             
             # If routing succeeded but data is empty, agents may still be loading - return retryable error
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Docgen routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 return {
                     "job_id": job_id,
@@ -701,7 +701,7 @@ class GeneratorService:
                 return data
             
             # If routing succeeded but data is empty, agents may still be loading - return retryable error
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Critique routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 return {
                     "job_id": job_id,
@@ -835,7 +835,7 @@ class GeneratorService:
             data = result.get("data", {})
             
             # If routing succeeded but data is empty, treat as agents still loading (retryable)
-            if routed and (not data or not isinstance(data, dict) or len(data) == 0):
+            if routed and (not data or not isinstance(data, dict)):
                 logger.warning(f"Full pipeline routing succeeded but no data returned for job {job_id} - agents may still be loading")
                 # Create retryable error response
                 data = {
