@@ -18,11 +18,20 @@ import logging
 from pathlib import Path
 import tempfile
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 # Industry Standard: Import centralized utilities to eliminate code duplication
 from server.services.omnicore_service import _load_sfe_analysis_report
 
 logger = logging.getLogger(__name__)
+
+# Bug prioritization severity scores
+SEVERITY_SCORES = {
+    "critical": 100,
+    "high": 75,
+    "medium": 50,
+    "low": 25,
+}
 
 
 class SFEService:
@@ -1515,20 +1524,21 @@ class SFEService:
                 # Prioritize the real bugs
                 criteria = criteria or ["severity", "impact", "effort"]
 
-                # Map severity to priority scores
-                severity_scores = {"critical": 100, "high": 75, "medium": 50, "low": 25}
-
                 # Calculate priority for each bug
                 prioritized = []
                 for bug in bugs:
                     severity = bug.get("severity", "medium")
-                    priority_score = severity_scores.get(severity, 50)
+                    priority_score = SEVERITY_SCORES.get(severity, 50)
+
+                    # Generate unique bug_id if not present
+                    bug_id = bug.get("error_id") or bug.get("bug_id")
+                    if not bug_id:
+                        # Use uuid for truly unique IDs
+                        bug_id = f"bug-{uuid4().hex[:8]}"
 
                     prioritized.append(
                         {
-                            "bug_id": bug.get(
-                                "error_id", bug.get("bug_id", f"bug-{len(prioritized)}")
-                            ),
+                            "bug_id": bug_id,
                             "type": bug.get("type", "Unknown"),
                             "message": bug.get("message", ""),
                             "file": bug.get("file", ""),
