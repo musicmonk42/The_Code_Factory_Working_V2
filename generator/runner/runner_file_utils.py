@@ -19,6 +19,14 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import aiofiles  # For async I/O (add to reqs: aiofiles)
 import yaml
 
+# Optional HTTP client for integration testing
+try:
+    import aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    HAS_AIOHTTP = False
+    # Integration testing will be skipped if aiohttp not available
+
 # Conditional import for xattr based on OS
 try:
     import xattr  # For metadata (add to reqs: xattr for Linux; win: win32security)
@@ -107,6 +115,61 @@ except ImportError:
 # --- END REFACTOR FIX ---
 
 from .runner_logging import add_provenance, logger
+
+# ==============================================================================
+# --- Frontend Validation Constants ---
+# ==============================================================================
+# Common partial/layout template files that don't require full HTML structure
+PARTIAL_TEMPLATE_FILES = [
+    "layout.html",
+    "base.html", 
+    "header.html",
+    "footer.html",
+    "navbar.html",
+    "sidebar.html",
+    "nav.html",
+]
+
+# Frontend type indicators with confidence weights for detection
+FRONTEND_INDICATORS = {
+    # Strong indicators (high confidence)
+    'web app': 1.0,
+    'web application': 1.0,
+    'dashboard': 1.0,
+    'user interface': 0.9,
+    'ui': 0.8,
+    'frontend': 1.0,
+    'front-end': 1.0,
+    # UI component indicators
+    'html': 0.8,
+    'css': 0.8,
+    'template': 0.7,
+    'templates': 0.7,
+    'form': 0.6,
+    'forms': 0.6,
+    'page': 0.5,
+    'pages': 0.5,
+    # Framework indicators (very strong)
+    'react': 0.95,
+    'vue': 0.95,
+    'angular': 0.95,
+    'jinja': 0.9,
+    # User experience indicators
+    'responsive': 0.7,
+    'mobile-friendly': 0.7,
+    'single page': 0.8,
+    'spa': 0.9,
+    'website': 0.7,
+    'site': 0.5,
+    'browser': 0.6,
+    'client-side': 0.8,
+    'static files': 0.7,
+    'web interface': 0.9,
+}
+
+# ==============================================================================
+# --- Metrics & Observability ---
+# ==============================================================================
 
 # Metrics + decorator for utility functions (latency / errors)
 try:
@@ -1961,6 +2024,322 @@ async def validate_generated_project(
                 "to reject whitespace-only input"
             )
     
+    # Check frontend files if full-stack project
+    # Look for templates/ or static/ directories which indicate frontend generation
+    templates_dir = output_dir / "templates"
+    static_dir = output_dir / "static"
+    frontend_dir = output_dir / "frontend"
+    
+    has_frontend = templates_dir.exists() or static_dir.exists() or frontend_dir.exists()
+    
+    if has_frontend:
+        result["has_frontend"] = True
+        result["frontend_files_valid"] = 0
+        result["frontend_files_invalid"] = 0
+        
+        # Validate templates directory (Jinja2/server-rendered)
+        if templates_dir.exists():
+            html_files = list(templates_dir.glob("*.html"))
+            if not html_files:
+                result["warnings"].append("templates/ directory exists but contains no HTML files")
+            else:
+                # Validate HTML structure
+                for html_file in html_files:
+                    try:
+                        content = html_file.read_text(encoding="utf-8")
+                        # Basic HTML validation
+                        if not content.strip():
+                            result["warnings"].append(f"{html_file.name} is empty")
+                            result["frontend_files_invalid"] += 1
+                        elif "<html" not in content.lower() and html_file.name not in PARTIAL_TEMPLATE_FILES:
+                            # Allow common partial/layout template files without <html>
+                            result["warnings"].append(
+                                f"{html_file.name} missing <html> tag (may be a partial template)"
+                            )
+                        else:
+                            # Check for proper structure
+                            has_head = "<head" in content.lower()
+                            has_body = "<body" in content.lower()
+                            
+                            if "<html" in content.lower() and not (has_head and has_body):
+                                result["warnings"].append(
+                                    f"{html_file.name} has <html> but missing <head> or <body>"
+                                )
+                            
+                            result["frontend_files_valid"] += 1
+                    except Exception as e:
+                        result["warnings"].append(f"Could not validate {html_file.name}: {e}")
+                        result["frontend_files_invalid"] += 1
+        
+        # Validate static directory
+        if static_dir.exists():
+            css_files = list(static_dir.rglob("*.css"))
+            js_files = list(static_dir.rglob("*.js"))
+            
+            if not css_files and not js_files:
+                result["warnings"].append("static/ directory exists but contains no CSS or JS files")
+            
+            # Check for expected static file structure
+            if not (static_dir / "css").exists() and css_files:
+                result["warnings"].append("CSS files found but static/css/ directory not used")
+            
+            if not (static_dir / "js").exists() and js_files:
+                result["warnings"].append("JS files found but static/js/ directory not used")
+            
+            # Basic validation of CSS files
+            for css_file in css_files:
+                try:
+                    content = css_file.read_text(encoding="utf-8")
+                    if not content.strip():
+                        result["warnings"].append(f"{css_file.name} is empty")
+                        result["frontend_files_invalid"] += 1
+                    else:
+                        result["frontend_files_valid"] += 1
+                except Exception as e:
+                    result["warnings"].append(f"Could not read {css_file.name}: {e}")
+                    result["frontend_files_invalid"] += 1
+            
+            # Basic validation of JS files
+            for js_file in js_files:
+                try:
+                    content = js_file.read_text(encoding="utf-8")
+                    if not content.strip():
+                        result["warnings"].append(f"{js_file.name} is empty")
+                        result["frontend_files_invalid"] += 1
+                    else:
+                        # Check for common JavaScript issues
+                        if "var " in content and "let " not in content and "const " not in content:
+                            result["warnings"].append(
+                                f"{js_file.name} uses 'var' instead of modern 'let'/'const'"
+                            )
+                        result["frontend_files_valid"] += 1
+                except Exception as e:
+                    result["warnings"].append(f"Could not read {js_file.name}: {e}")
+                    result["frontend_files_invalid"] += 1
+        
+        # Check for FastAPI static file mounting in Python projects
+        if lang in ("python", "py") and static_dir.exists():
+            main_files = [
+                output_dir / "main.py",
+                output_dir / "app" / "main.py",
+            ]
+            has_static_mount = False
+            for main_file in main_files:
+                if main_file.exists():
+                    try:
+                        content = main_file.read_text(encoding="utf-8")
+                        if "StaticFiles" in content and "mount" in content:
+                            has_static_mount = True
+                            break
+                    except Exception:
+                        pass
+            
+            if not has_static_mount:
+                result["warnings"].append(
+                    "static/ directory exists but FastAPI StaticFiles mounting not found in main.py"
+                )
+        
+        # Check for template rendering setup
+        if lang in ("python", "py") and templates_dir.exists():
+            main_files = [
+                output_dir / "main.py",
+                output_dir / "app" / "main.py",
+            ]
+            has_template_setup = False
+            for main_file in main_files:
+                if main_file.exists():
+                    try:
+                        content = main_file.read_text(encoding="utf-8")
+                        if "Jinja2Templates" in content:
+                            has_template_setup = True
+                            break
+                    except Exception:
+                        pass
+            
+            if not has_template_setup:
+                result["warnings"].append(
+                    "templates/ directory exists but Jinja2Templates setup not found in main.py"
+                )
+        
+        # ============================================================================
+        # FRONTEND-BACKEND INTEGRATION VALIDATION
+        # ============================================================================
+        # Comprehensive integration testing for full-stack applications
+        # This ensures frontend and backend are properly connected
+        if has_frontend and lang in ("python", "py"):
+            result["frontend_backend_integration"] = {
+                "static_mount_configured": False,
+                "template_setup_configured": False,
+                "cors_configured": False,
+                "template_routes_exist": False,
+                "static_imports_correct": False,
+                "integration_score": 0.0,
+                "integration_issues": [],
+            }
+            
+            integration = result["frontend_backend_integration"]
+            
+            # Find main.py or app/main.py
+            main_file = None
+            for candidate in [output_dir / "main.py", output_dir / "app" / "main.py"]:
+                if candidate.exists():
+                    main_file = candidate
+                    break
+            
+            if main_file:
+                try:
+                    main_content = main_file.read_text(encoding="utf-8")
+                    
+                    # Check 1: Static file mounting
+                    if static_dir.exists():
+                        # Check for proper StaticFiles mounting
+                        has_static_import = "from fastapi.staticfiles import StaticFiles" in main_content or "from fastapi import FastAPI, StaticFiles" in main_content
+                        has_static_mount = 'app.mount("/static"' in main_content or 'app.mount(\'/static\'' in main_content
+                        
+                        if has_static_import and has_static_mount:
+                            integration["static_mount_configured"] = True
+                            integration["integration_score"] += 1.0
+                        else:
+                            if not has_static_import:
+                                integration["integration_issues"].append(
+                                    "Missing 'from fastapi.staticfiles import StaticFiles'"
+                                )
+                                result["errors"].append(
+                                    "Frontend-Backend Integration: Missing StaticFiles import"
+                                )
+                                result["valid"] = False
+                            if not has_static_mount:
+                                integration["integration_issues"].append(
+                                    "Missing app.mount('/static', StaticFiles(directory='static'), name='static')"
+                                )
+                                result["errors"].append(
+                                    "Frontend-Backend Integration: Static files not mounted"
+                                )
+                                result["valid"] = False
+                    
+                    # Check 2: Template rendering setup
+                    if templates_dir.exists():
+                        has_templates_import = "from fastapi.templating import Jinja2Templates" in main_content
+                        has_templates_init = "Jinja2Templates(directory=" in main_content or 'Jinja2Templates(directory=' in main_content
+                        
+                        if has_templates_import and has_templates_init:
+                            integration["template_setup_configured"] = True
+                            integration["integration_score"] += 1.0
+                        else:
+                            if not has_templates_import:
+                                integration["integration_issues"].append(
+                                    "Missing 'from fastapi.templating import Jinja2Templates'"
+                                )
+                                result["errors"].append(
+                                    "Frontend-Backend Integration: Missing Jinja2Templates import"
+                                )
+                                result["valid"] = False
+                            if not has_templates_init:
+                                integration["integration_issues"].append(
+                                    "Missing templates = Jinja2Templates(directory='templates')"
+                                )
+                                result["errors"].append(
+                                    "Frontend-Backend Integration: Jinja2Templates not initialized"
+                                )
+                                result["valid"] = False
+                    
+                    # Check 3: CORS configuration (important for API + frontend)
+                    has_cors_import = "from fastapi.middleware.cors import CORSMiddleware" in main_content
+                    has_cors_config = "add_middleware(CORSMiddleware" in main_content or "app.add_middleware(CORSMiddleware" in main_content
+                    
+                    if has_cors_import and has_cors_config:
+                        integration["cors_configured"] = True
+                        integration["integration_score"] += 0.5
+                    else:
+                        # CORS is recommended but not required for server-rendered templates
+                        integration["integration_issues"].append(
+                            "CORS not configured - may be needed if frontend makes API calls"
+                        )
+                        result["warnings"].append(
+                            "Frontend-Backend Integration: CORS not configured (recommended for API endpoints)"
+                        )
+                    
+                    # Check 4: Template routes exist
+                    if templates_dir.exists():
+                        # Look for routes that return template responses
+                        has_template_response = "TemplateResponse" in main_content or "templates.TemplateResponse" in main_content
+                        has_get_route = "@app.get(" in main_content or "@router.get(" in main_content
+                        
+                        if has_template_response and has_get_route:
+                            integration["template_routes_exist"] = True
+                            integration["integration_score"] += 1.0
+                        else:
+                            integration["integration_issues"].append(
+                                "No template routes found - templates exist but no routes serve them"
+                            )
+                            result["warnings"].append(
+                                "Frontend-Backend Integration: Templates directory exists but no routes serve templates"
+                            )
+                    
+                    # Check 5: Static file imports in templates
+                    if templates_dir.exists() and static_dir.exists():
+                        # Check if templates reference static files correctly
+                        html_files = list(templates_dir.glob("*.html"))
+                        correct_imports = True
+                        
+                        for html_file in html_files:
+                            try:
+                                html_content = html_file.read_text(encoding="utf-8")
+                                
+                                # Check for correct static file references
+                                if '<link' in html_content or '<script' in html_content:
+                                    # Should use /static/ prefix
+                                    if 'href="/static/' in html_content or 'src="/static/' in html_content:
+                                        integration["static_imports_correct"] = True
+                                        integration["integration_score"] += 0.5
+                                    else:
+                                        # Check if they're using wrong paths
+                                        if ('href="static/' in html_content or 'src="static/' in html_content or
+                                            'href="./static/' in html_content or 'src="./static/' in html_content):
+                                            correct_imports = False
+                                            integration["integration_issues"].append(
+                                                f"{html_file.name}: Static file paths should use '/static/' not 'static/' or './static/'"
+                                            )
+                            except Exception as e:
+                                logger.debug(f"Could not check static imports in {html_file.name}: {e}")
+                        
+                        if not correct_imports:
+                            result["errors"].append(
+                                "Frontend-Backend Integration: Templates use incorrect static file paths"
+                            )
+                            result["valid"] = False
+                    
+                    # Calculate final integration score (0.0 to 1.0)
+                    max_score = 4.0  # 1.0 + 1.0 + 0.5 + 1.0 + 0.5
+                    integration["integration_score"] = integration["integration_score"] / max_score
+                    
+                    # Log integration status
+                    if integration["integration_score"] >= 0.8:
+                        logger.info(
+                            f"Frontend-Backend integration: EXCELLENT (score: {integration['integration_score']:.2f})"
+                        )
+                    elif integration["integration_score"] >= 0.6:
+                        logger.warning(
+                            f"Frontend-Backend integration: GOOD (score: {integration['integration_score']:.2f}, "
+                            f"issues: {len(integration['integration_issues'])})"
+                        )
+                    else:
+                        logger.error(
+                            f"Frontend-Backend integration: POOR (score: {integration['integration_score']:.2f}, "
+                            f"issues: {integration['integration_issues']})"
+                        )
+                    
+                except Exception as e:
+                    result["warnings"].append(
+                        f"Could not validate frontend-backend integration: {e}"
+                    )
+                    logger.error(f"Integration validation failed: {e}", exc_info=True)
+            else:
+                result["errors"].append(
+                    "Frontend files exist but no main.py found for integration validation"
+                )
+                result["valid"] = False
+    
     # Calculate validation time
     result["validation_time_ms"] = (time.time() - start_time) * 1000
     
@@ -1989,6 +2368,224 @@ async def validate_generated_project(
         )
     except Exception as e:
         logger.warning(f"Failed to log validation to audit system: {e}")
+    
+    return result
+
+
+async def test_frontend_backend_integration(
+    output_dir: Union[str, Path],
+    timeout: int = 30,
+) -> Dict[str, Any]:
+    """
+    Perform runtime integration testing of frontend-backend connectivity.
+    
+    This function actually starts the application and tests that:
+    1. The server starts successfully
+    2. Static files are accessible
+    3. Template routes work
+    4. Frontend can communicate with backend API
+    
+    Industry Standard: Runtime smoke testing ensures generated code actually works.
+    
+    Args:
+        output_dir: Directory containing the generated project
+        timeout: Maximum seconds to wait for server startup (default: 30)
+        
+    Returns:
+        Dict with test results:
+            - success: bool - overall test success
+            - server_started: bool - server started successfully
+            - static_accessible: bool - static files accessible
+            - templates_working: bool - template routes work
+            - api_accessible: bool - API endpoints accessible
+            - errors: List[str] - any errors encountered
+            - warnings: List[str] - any warnings
+            
+    Example:
+        >>> result = await test_frontend_backend_integration("./generated")
+        >>> if result["success"]:
+        ...     print("Integration test passed!")
+    """
+    import subprocess
+    import time
+    import signal
+    
+    output_dir = Path(output_dir).resolve()
+    result = {
+        "success": False,
+        "server_started": False,
+        "static_accessible": False,
+        "templates_working": False,
+        "api_accessible": False,
+        "errors": [],
+        "warnings": [],
+        "test_time_seconds": 0.0,
+    }
+    
+    # Check if aiohttp is available for HTTP testing
+    if not HAS_AIOHTTP:
+        result["errors"].append(
+            "aiohttp not available - runtime integration testing skipped. "
+            "Install with: pip install aiohttp"
+        )
+        result["warnings"].append("Static validation completed but runtime test skipped")
+        return result
+    
+    start_time = time.time()
+    server_process = None
+    
+    try:
+        # Find main.py
+        main_file = None
+        for candidate in [output_dir / "main.py", output_dir / "app" / "main.py"]:
+            if candidate.exists():
+                main_file = candidate
+                break
+        
+        if not main_file:
+            result["errors"].append("No main.py found - cannot test integration")
+            return result
+        
+        # Check if requirements.txt exists and install dependencies
+        requirements_file = output_dir / "requirements.txt"
+        if requirements_file.exists():
+            logger.info("Installing dependencies for integration test...")
+            try:
+                install_process = await asyncio.create_subprocess_exec(
+                    "pip", "install", "-q", "-r", str(requirements_file),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=str(output_dir)
+                )
+                await asyncio.wait_for(install_process.wait(), timeout=60)
+            except asyncio.TimeoutError:
+                result["warnings"].append("Dependency installation timed out")
+            except Exception as e:
+                result["warnings"].append(f"Could not install dependencies: {e}")
+        
+        # Start the server
+        logger.info(f"Starting server for integration test: {main_file}")
+        
+        # Use uvicorn to start FastAPI app
+        server_process = await asyncio.create_subprocess_exec(
+            "python", "-m", "uvicorn",
+            f"{main_file.stem}:app" if main_file.name == "main.py" else "app.main:app",
+            "--host", "127.0.0.1",
+            "--port", "8765",  # Use non-standard port to avoid conflicts
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(output_dir if main_file.name == "main.py" else output_dir / "app")
+        )
+        
+        # Wait for server to start (check if it's listening)
+        server_ready = False
+        for _ in range(timeout):
+            try:
+                # Try to connect to the server
+                async with aiohttp.ClientSession() as session:
+                    async with session.get("http://127.0.0.1:8765/", timeout=aiohttp.ClientTimeout(total=1)) as resp:
+                        if resp.status in [200, 404]:  # Server is responding
+                            server_ready = True
+                            result["server_started"] = True
+                            logger.info("Server started successfully")
+                            break
+            except (aiohttp.ClientError, asyncio.TimeoutError):
+                await asyncio.sleep(1)
+        
+        if not server_ready:
+            result["errors"].append("Server failed to start within timeout period")
+            return result
+        
+        # Test static file access
+        async with aiohttp.ClientSession() as session:
+            try:
+                # Try to access a static CSS file if it exists
+                static_dir = output_dir / "static"
+                if static_dir.exists():
+                    css_files = list(static_dir.rglob("*.css"))
+                    if css_files:
+                        # Get relative path from static directory
+                        css_path = css_files[0].relative_to(static_dir)
+                        static_url = f"http://127.0.0.1:8765/static/{css_path}"
+                        
+                        async with session.get(static_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                            if resp.status == 200:
+                                result["static_accessible"] = True
+                                logger.info("Static files accessible")
+                            else:
+                                result["warnings"].append(
+                                    f"Static file returned status {resp.status}"
+                                )
+            except Exception as e:
+                result["warnings"].append(f"Could not test static file access: {e}")
+        
+        # Test template routes
+        async with aiohttp.ClientSession() as session:
+            try:
+                # Try root route which should render a template
+                async with session.get("http://127.0.0.1:8765/", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                    if resp.status == 200:
+                        content = await resp.text()
+                        # Check if it's HTML
+                        if "<html" in content.lower() or "<!doctype" in content.lower():
+                            result["templates_working"] = True
+                            logger.info("Template routes working")
+                        else:
+                            result["warnings"].append(
+                                "Root route returns 200 but content is not HTML"
+                            )
+            except Exception as e:
+                result["warnings"].append(f"Could not test template routes: {e}")
+        
+        # Test API endpoints
+        async with aiohttp.ClientSession() as session:
+            try:
+                # Try common API endpoints
+                for endpoint in ["/api", "/health", "/docs"]:
+                    try:
+                        async with session.get(
+                            f"http://127.0.0.1:8765{endpoint}",
+                            timeout=aiohttp.ClientTimeout(total=5)
+                        ) as resp:
+                            if resp.status == 200:
+                                result["api_accessible"] = True
+                                logger.info(f"API endpoint {endpoint} accessible")
+                                break
+                    except:
+                        continue
+            except Exception as e:
+                result["warnings"].append(f"Could not test API endpoints: {e}")
+        
+        # Determine overall success
+        result["success"] = (
+            result["server_started"] and
+            (result["static_accessible"] or result["templates_working"]) and
+            not result["errors"]
+        )
+        
+        logger.info(
+            f"Integration test completed: success={result['success']}, "
+            f"server_started={result['server_started']}, "
+            f"static_accessible={result['static_accessible']}, "
+            f"templates_working={result['templates_working']}"
+        )
+        
+    except Exception as e:
+        result["errors"].append(f"Integration test failed: {str(e)}")
+        logger.error(f"Integration test error: {e}", exc_info=True)
+    
+    finally:
+        # Clean up: Stop the server
+        if server_process:
+            try:
+                server_process.terminate()
+                await asyncio.wait_for(server_process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                server_process.kill()
+                await server_process.wait()
+            logger.info("Server stopped")
+        
+        result["test_time_seconds"] = time.time() - start_time
     
     return result
 

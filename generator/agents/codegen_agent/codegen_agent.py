@@ -80,6 +80,11 @@ except ImportError:
 
 
 # ==============================================================================
+# --- Frontend Type Constants ---
+# ==============================================================================
+DEFAULT_FRONTEND_TYPE = "jinja_templates"
+
+# ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
 # --- All internal AuditLogger definitions replaced with centralized call ---
@@ -846,7 +851,7 @@ async def hitl_review(
         return ("rejected", f"Internal error during HITL review: {e}")
 
 
-def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
+def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool = False) -> str:
     """
     Builds an enhanced fallback prompt when templates are unavailable.
     This ensures comprehensive spec parsing even without templates.
@@ -857,6 +862,7 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     Args:
         requirements: The requirements dict containing features, target_language, 
                      constraints, and other parsed spec data from IntentParser.
+        include_frontend: Whether to include frontend file generation (default: False)
         
     Returns:
         A detailed prompt that emphasizes spec compliance and multi-file JSON output
@@ -866,6 +872,7 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
     constraints = requirements.get("constraints", [])
     md_content = requirements.get("md_content", "")
     file_structure = requirements.get("file_structure", [])
+    frontend_type = requirements.get("frontend_type", DEFAULT_FRONTEND_TYPE)
     
     # Build features section from parsed spec
     features_text = ""
@@ -891,6 +898,24 @@ def _build_fallback_prompt(requirements: Dict[str, Any]) -> str:
 ```
 
 IMPORTANT: Implement EXACTLY what the specification describes. Do not add or remove features.
+"""
+    
+    # Build frontend files section if needed
+    frontend_files_text = ""
+    if include_frontend and target_language == "python":
+        frontend_files_text = """
+   **FRONTEND FILES (Full-Stack Web Application):**
+   - templates/base.html - Base HTML template with navbar, footer, CSS/JS links
+   - templates/index.html - Main page extending base template
+   - static/css/style.css - Complete responsive stylesheet with CSS variables
+   - static/js/app.js - Frontend JavaScript with API integration (fetch calls)
+   - static/js/utils.js - Utility functions (showError, showLoading, escapeHtml)
+   
+   For backend (main.py or app/main.py):
+   - Mount static files: app.mount("/static", StaticFiles(directory="static"), name="static")
+   - Configure templates: templates = Jinja2Templates(directory="templates")
+   - Add CORS middleware for API endpoints
+   - Add route to serve index.html template
 """
     
     prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements from the specification.
@@ -926,7 +951,7 @@ Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
    - README.md - Complete setup and usage instructions
    - Dockerfile - Container configuration for deployment
    - .env.example - Environment variable template
-
+{frontend_files_text}
    **ADDITIONAL FILES (as needed for completeness):**
    - app/config.py or config.py - Configuration management
    - app/utils.py or utils.py - Utility/helper functions
@@ -938,6 +963,8 @@ Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
    **Create subdirectories when appropriate:**
    - Use app/ directory for application code
    - Use tests/ for test files
+   - Use templates/ for HTML templates (if full-stack)
+   - Use static/ for CSS/JS/images (if full-stack)
    - Use docs/ for additional documentation
 
 4. **CODE QUALITY**:
@@ -1087,6 +1114,17 @@ if PLUGIN_AVAILABLE:
             try:
                 with tracer.start_as_current_span("prepare_prompt"):
                     previous_feedback = await feedback_store.get_feedback(req_hash)
+                    
+                    # Extract frontend generation flags from requirements
+                    include_frontend = requirements.get("include_frontend", False)
+                    frontend_type = requirements.get("frontend_type", None)
+                    
+                    # Log frontend generation decision
+                    if include_frontend:
+                        logger.info(
+                            f"Full-stack generation enabled - frontend_type={frontend_type}"
+                        )
+                    
                     try:
                         prompt = await build_code_generation_prompt(
                             requirements=requirements,
@@ -1100,17 +1138,19 @@ if PLUGIN_AVAILABLE:
                             multi_modal_inputs=None,
                             audit_logger=JsonConsoleAuditLogger(),  # Kept for prompt builder compatibility
                             redis_client=redis_client,
+                            include_frontend=include_frontend,
+                            frontend_type=frontend_type,
                         )
                     except TemplateNotFound as e:
                         logger.warning(
                             f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
                     except Exception as e:
                         logger.warning(
                             f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
@@ -1377,6 +1417,17 @@ else:
             try:
                 with tracer.start_as_current_span("prepare_prompt"):
                     previous_feedback = await feedback_store.get_feedback(req_hash)
+                    
+                    # Extract frontend generation flags from requirements
+                    include_frontend = requirements.get("include_frontend", False)
+                    frontend_type = requirements.get("frontend_type", None)
+                    
+                    # Log frontend generation decision
+                    if include_frontend:
+                        logger.info(
+                            f"Full-stack generation enabled - frontend_type={frontend_type}"
+                        )
+                    
                     try:
                         prompt = await build_code_generation_prompt(
                             requirements=requirements,
@@ -1390,17 +1441,19 @@ else:
                             multi_modal_inputs=None,
                             audit_logger=JsonConsoleAuditLogger(),  # Kept for prompt builder compatibility
                             redis_client=redis_client,
+                            include_frontend=include_frontend,
+                            frontend_type=frontend_type,
                         )
                     except TemplateNotFound as e:
                         logger.warning(
                             f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
                     except Exception as e:
                         logger.warning(
                             f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
