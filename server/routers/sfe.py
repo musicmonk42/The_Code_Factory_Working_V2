@@ -155,8 +155,9 @@ async def get_errors(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    errors = await sfe_service.detect_errors(job_id)
-    return {"job_id": job_id, "errors": errors, "count": len(errors)}
+    errors_result = await sfe_service.detect_errors(job_id)
+    errors_list = errors_result.get("errors", [])
+    return {"job_id": job_id, "errors": errors_list, "count": len(errors_list)}
 
 
 @router.post("/errors/{error_id}/propose-fix", response_model=FixProposal)
@@ -808,6 +809,7 @@ async def detect_bugs(
     - code_path: Path to code to analyze
     - scan_depth: Scan depth (quick, standard, deep)
     - include_potential: Include potential issues
+    - job_id: Optional job ID to resolve code path from job metadata
 
     **Returns:**
     - Bug detection results
@@ -816,9 +818,10 @@ async def detect_bugs(
         code_path=request.code_path,
         scan_depth=request.scan_depth,
         include_potential=request.include_potential,
+        job_id=request.job_id,
     )
 
-    logger.info(f"Bug detection completed for {request.code_path}")
+    logger.info(f"Bug detection completed for {request.code_path} (job_id: {request.job_id})")
     return result
 
 
@@ -902,6 +905,7 @@ async def deep_analyze_codebase(
     - code_path: Path to codebase
     - analysis_types: Types of analysis (structure, dependencies, complexity, quality)
     - generate_report: Generate detailed report
+    - job_id: Optional job ID to resolve code path from job metadata
 
     **Returns:**
     - Analysis results
@@ -910,9 +914,10 @@ async def deep_analyze_codebase(
         code_path=request.code_path,
         analysis_types=request.analysis_type,
         generate_report=request.generate_report,
+        job_id=request.job_id,
     )
 
-    logger.info(f"Deep codebase analysis completed for {request.code_path}")
+    logger.info(f"Deep codebase analysis completed for {request.code_path} (job_id: {request.job_id})")
     return result
 
 
@@ -1127,6 +1132,7 @@ async def fix_imports(
     - code_path: Path to code with import issues
     - auto_install: Auto-install missing packages
     - fix_style: Fix import style issues
+    - job_id: Optional job ID to resolve code path from job metadata
 
     **Returns:**
     - Import fix results
@@ -1135,7 +1141,8 @@ async def fix_imports(
         code_path=request.code_path,
         auto_install=request.auto_install,
         fix_style=request.fix_style,
+        job_id=request.job_id,
     )
 
-    logger.info(f"Imports fixed for {request.code_path}")
+    logger.info(f"Imports fixed for {request.code_path} (job_id: {request.job_id})")
     return result

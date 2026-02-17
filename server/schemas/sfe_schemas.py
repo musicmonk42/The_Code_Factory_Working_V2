@@ -46,6 +46,7 @@ class BugDetectionRequest(BaseModel):
     code_path: str = Field(..., description="Path to code to analyze")
     scan_depth: str = Field("standard", description="Scan depth (quick, standard, deep)")
     include_potential: bool = Field(False, description="Include potential issues")
+    job_id: Optional[str] = Field(None, description="Job ID to resolve code path from job metadata")
 
 
 class BugAnalysisRequest(BaseModel):
@@ -72,6 +73,7 @@ class CodebaseAnalysisRequest(BaseModel):
         description="Types of analysis to perform"
     )
     generate_report: bool = Field(True, description="Generate detailed report")
+    job_id: Optional[str] = Field(None, description="Job ID to resolve code path from job metadata")
 
 
 class KnowledgeGraphQuery(BaseModel):
@@ -140,6 +142,7 @@ class ImportFixRequest(BaseModel):
     code_path: str = Field(..., description="Path to code with import issues")
     auto_install: bool = Field(False, description="Auto-install missing packages")
     fix_style: bool = Field(True, description="Fix import style issues")
+    job_id: Optional[str] = Field(None, description="Job ID to resolve code path from job metadata")
 
 
 class ArbiterStatus(BaseModel):

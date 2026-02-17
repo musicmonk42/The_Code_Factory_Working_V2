@@ -138,6 +138,62 @@ class SFEService:
         if unavailable:
             logger.info(f"SFE components unavailable (using fallback): {', '.join(unavailable)}")
 
+    def _resolve_job_code_path(self, job_id: Optional[str], default_path: str) -> str:
+        """
+        Resolve the actual code path from a job ID if provided, or use default path.
+        
+        Args:
+            job_id: Optional job ID to look up
+            default_path: Default path to use if job_id is not provided or not found
+        
+        Returns:
+            Resolved code path as string
+        """
+        if not job_id:
+            return default_path
+        
+        # Try to resolve path from job metadata
+        from server.storage import jobs_db
+        
+        job = jobs_db.get(job_id)
+        if job and job.metadata:
+            # Check metadata for output paths
+            for key in ("output_path", "code_path", "generated_path"):
+                path = job.metadata.get(key)
+                if path and Path(path).exists():
+                    logger.info(f"Resolved job {job_id} path from metadata.{key}: {path}")
+                    return str(path)
+        
+        # If not in metadata, check standard locations
+        uploads_dir = Path("./uploads")
+        job_base = uploads_dir / job_id
+        
+        if job_base.exists():
+            # Check standard subdirectories
+            for subdir_name in ["generated", "output"]:
+                subdir = job_base / subdir_name
+                if subdir.exists():
+                    # Look for project subdirectories
+                    subdirs = [d for d in subdir.iterdir() if d.is_dir() and not d.name.startswith('.')]
+                    if subdirs:
+                        # Use the first non-hidden subdirectory (typically the project directory)
+                        resolved_path = str(subdirs[0])
+                        logger.info(f"Resolved job {job_id} path to generated project: {resolved_path}")
+                        return resolved_path
+                    else:
+                        # No subdirectories, use this directory directly
+                        resolved_path = str(subdir)
+                        logger.info(f"Resolved job {job_id} path to: {resolved_path}")
+                        return resolved_path
+            
+            # If no generated/ or output/, use job_base directly
+            logger.info(f"Resolved job {job_id} path to job base: {job_base}")
+            return str(job_base)
+        
+        # Fallback to default path
+        logger.warning(f"Could not resolve path for job {job_id}, using default: {default_path}")
+        return default_path
+
     async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
         """
         Analyze code for potential issues via OmniCore or direct SFE integration.
@@ -1071,31 +1127,34 @@ class SFEService:
         }
 
     async def detect_bugs(
-        self, code_path: str, scan_depth: str, include_potential: bool
+        self, code_path: str, scan_depth: str, include_potential: bool, job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Detect bugs in code via OmniCore or direct SFE integration.
 
         Args:
-            code_path: Path to code
+            code_path: Path to code (can be relative, resolved via job_id if provided)
             scan_depth: Scan depth
             include_potential: Include potential issues
+            job_id: Optional job ID to resolve code path from job metadata
 
         Returns:
             Bug detection results with bugs array
         """
-        logger.info(f"Detecting bugs in {code_path}")
+        # Resolve actual path if job_id provided
+        resolved_path = self._resolve_job_code_path(job_id, code_path)
+        logger.info(f"Detecting bugs in {resolved_path}")
 
         # Try routing through OmniCore first
         if self.omnicore_service:
             payload = {
                 "action": "detect_bugs",
-                "code_path": code_path,
+                "code_path": resolved_path,
                 "scan_depth": scan_depth,
                 "include_potential": include_potential,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"bug_scan_{abs(hash(code_path)) % 10000}",
+                job_id=f"bug_scan_{abs(hash(resolved_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -1116,7 +1175,7 @@ class SFEService:
                 logger.info(f"Using direct SFE CodebaseAnalyzer to detect bugs")
                 
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
-                code_path_obj = Path(code_path)
+                code_path_obj = Path(resolved_path)
                 
                 # Validate path exists
                 if not code_path_obj.exists():
@@ -1128,7 +1187,7 @@ class SFEService:
                         "medium": 0,
                         "low": 0,
                         "scan_depth": scan_depth,
-                        "note": f"Path does not exist: {code_path}",
+                        "note": f"Path does not exist: {resolved_path}",
                     }
                 
                 bugs = []
@@ -1351,8 +1410,59 @@ class SFEService:
                 return result["data"]
             logger.info(f"OmniCore routing returned no data, falling through to fallback")
 
-        # Fallback with sample prioritization
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fallback: try to load real bugs from analysis or detect_errors
+        logger.warning("OmniCore not available, attempting to load real bugs from job analysis")
+        
+        try:
+            # First, try to get errors for this job
+            errors_result = await self.detect_errors(job_id)
+            bugs = errors_result.get("errors", [])
+            
+            if bugs:
+                # Prioritize the real bugs
+                criteria = criteria or ["severity", "impact", "effort"]
+                
+                # Map severity to priority scores
+                severity_scores = {"critical": 100, "high": 75, "medium": 50, "low": 25}
+                
+                # Calculate priority for each bug
+                prioritized = []
+                for bug in bugs:
+                    severity = bug.get("severity", "medium")
+                    priority_score = severity_scores.get(severity, 50)
+                    
+                    prioritized.append({
+                        "bug_id": bug.get("error_id", bug.get("bug_id", f"bug-{len(prioritized)}")),
+                        "type": bug.get("type", "Unknown"),
+                        "message": bug.get("message", ""),
+                        "file": bug.get("file", ""),
+                        "line": bug.get("line", 0),
+                        "severity": severity,
+                        "priority": len(prioritized) + 1,  # Will be recalculated after sorting
+                        "priority_score": priority_score,
+                        "impact": "high" if severity in ["critical", "high"] else "medium",
+                        "effort": "medium",
+                    })
+                
+                # Sort by priority score (highest first)
+                prioritized.sort(key=lambda x: x["priority_score"], reverse=True)
+                
+                # Update priority numbers after sorting
+                for i, bug in enumerate(prioritized):
+                    bug["priority"] = i + 1
+                
+                logger.info(f"Prioritized {len(prioritized)} real bugs from job {job_id}")
+                return {
+                    "job_id": job_id,
+                    "prioritized_bugs": prioritized,
+                    "criteria": criteria,
+                    "source": "real_analysis",
+                }
+        except Exception as e:
+            logger.warning(f"Failed to load real bugs for prioritization: {e}")
+        
+        # Final fallback with mock data
+        logger.warning("Using mock fallback data for bug prioritization")
         return {
             "job_id": job_id,
             "prioritized_bugs": [
@@ -1364,31 +1474,34 @@ class SFEService:
         }
 
     async def deep_analyze_codebase(
-        self, code_path: str, analysis_types: List[str], generate_report: bool
+        self, code_path: str, analysis_types: List[str], generate_report: bool, job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Perform deep codebase analysis via OmniCore or direct SFE integration.
 
         Args:
-            code_path: Path to codebase
+            code_path: Path to codebase (can be relative, resolved via job_id if provided)
             analysis_types: Types of analysis
             generate_report: Generate detailed report
+            job_id: Optional job ID to resolve code path from job metadata
 
         Returns:
             Analysis results
         """
-        logger.info(f"Deep analyzing codebase at {code_path}")
+        # Resolve actual path if job_id provided
+        resolved_path = self._resolve_job_code_path(job_id, code_path)
+        logger.info(f"Deep analyzing codebase at {resolved_path}")
 
         # Try routing through OmniCore first
         if self.omnicore_service:
             payload = {
                 "action": "deep_analyze",
-                "code_path": code_path,
+                "code_path": resolved_path,
                 "analysis_types": analysis_types,
                 "generate_report": generate_report,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"analysis_{abs(hash(code_path)) % 10000}",
+                job_id=f"analysis_{abs(hash(resolved_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -1405,13 +1518,13 @@ class SFEService:
                 logger.info(f"Using direct SFE CodebaseAnalyzer for deep analysis")
                 
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
-                code_path_obj = Path(code_path)
+                code_path_obj = Path(resolved_path)
                 
                 # Validate path exists
                 if not code_path_obj.exists():
                     return {
-                        "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
-                        "error": f"Path does not exist: {code_path}",
+                        "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
+                        "error": f"Path does not exist: {resolved_path}",
                         "source": "direct_sfe",
                     }
                 
@@ -1420,7 +1533,7 @@ class SFEService:
                     if generate_report:
                         # Generate full report
                         tmp_dir = Path(tempfile.gettempdir())
-                        report_path = tmp_dir / f"codebase_analysis_{abs(hash(code_path)) % 10000}.md"
+                        report_path = tmp_dir / f"codebase_analysis_{abs(hash(resolved_path)) % 10000}.md"
                         report = await analyzer.generate_report(
                             output_format="markdown",
                             output_path=str(report_path),
@@ -1428,7 +1541,7 @@ class SFEService:
                         )
                         
                         result = {
-                            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
+                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
                             "total_files": report.get("total_files", 0),
                             "total_loc": report.get("total_loc", 0),
                             "avg_complexity": report.get("avg_complexity", 0),
@@ -1445,7 +1558,7 @@ class SFEService:
                         total_files = len(analyzer.discover_files()) if hasattr(analyzer, 'discover_files') else 0
                         
                         result = {
-                            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
+                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
                             "total_files": total_files,
                             "total_loc": getattr(summary, 'total_lines', 0),
                             "avg_complexity": getattr(summary, 'avg_complexity', 0),
@@ -1755,30 +1868,33 @@ class SFEService:
         }
 
     async def fix_imports(
-        self, code_path: str, auto_install: bool, fix_style: bool
+        self, code_path: str, auto_install: bool, fix_style: bool, job_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Fix import issues via OmniCore.
 
         Args:
-            code_path: Path to code
+            code_path: Path to code (can be relative, resolved via job_id if provided)
             auto_install: Auto-install missing packages
             fix_style: Fix import style
+            job_id: Optional job ID to resolve code path from job metadata
 
         Returns:
             Import fix results
         """
-        logger.info(f"Fixing imports for {code_path} via OmniCore")
+        # Resolve actual path if job_id provided
+        resolved_path = self._resolve_job_code_path(job_id, code_path)
+        logger.info(f"Fixing imports for {resolved_path} via OmniCore")
 
         if self.omnicore_service:
             payload = {
                 "action": "fix_imports",
-                "code_path": code_path,
+                "code_path": resolved_path,
                 "auto_install": auto_install,
                 "fix_style": fix_style,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"import_fix_{abs(hash(code_path)) % 10000}",
+                job_id=f"import_fix_{abs(hash(resolved_path)) % 10000}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
