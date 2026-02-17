@@ -38,6 +38,7 @@ except ImportError:
 from server.utils.agent_loader import get_agent_loader
 from server.storage import jobs_db
 from server.schemas.jobs import JobStatus, JobStage
+from server.services.sfe_utils import transform_pipeline_issues_to_frontend_errors
 
 # Import shared Presidio placeholders constant
 try:
@@ -1958,13 +1959,18 @@ class OmniCoreService:
             cached_report = _load_sfe_analysis_report(report_path, job_id)
             
             if cached_report:
+                # Transform cached pipeline issues to frontend error format
+                errors = transform_pipeline_issues_to_frontend_errors(
+                    cached_report["issues"], job_id
+                )
+                
                 # Return cached data with appropriate structure for detect_errors
                 return {
                     "status": "completed",
                     "job_id": job_id,
                     "code_path": code_path,
-                    "errors": cached_report["issues"],
-                    "error_count": cached_report["count"],
+                    "errors": errors,
+                    "error_count": len(errors),
                     "source": cached_report["source"],
                     "cached": True,
                 }

@@ -21,6 +21,15 @@ from .generator_service import GeneratorService, get_generator_service
 from .omnicore_service import OmniCoreService, get_omnicore_service, get_omnicore_service_async
 from .sfe_service import SFEService
 
+# Import SFE utilities
+from .sfe_utils import (
+    transform_pipeline_issues_to_frontend_errors,
+    transform_pipeline_issues_to_bugs,
+    MAX_ISSUES_PER_BATCH,
+    ERROR_ID_PREFIX,
+    DEFAULT_SEVERITY,
+)
+
 # Import job finalization service functions
 from .job_finalization import (
     finalize_job_success,
@@ -45,6 +54,13 @@ __all__ = [
     "get_omnicore_service",
     "get_omnicore_service_async",
     "SFEService",
+    
+    # SFE utilities
+    "transform_pipeline_issues_to_frontend_errors",
+    "transform_pipeline_issues_to_bugs",
+    "MAX_ISSUES_PER_BATCH",
+    "ERROR_ID_PREFIX",
+    "DEFAULT_SEVERITY",
     
     # Job finalization
     "finalize_job_success",
