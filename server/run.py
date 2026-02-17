@@ -134,7 +134,8 @@ def main():
     # Run the server
     # FIX: Add proper timeout configuration to prevent HTTP2 protocol errors
     # These errors occur when long-running requests (pipeline, codegen) exceed default timeouts
-    # FIX: Increase timeout_graceful_shutdown from 30 to 60 seconds for production resilience
+    # FIX: Reduced timeout_graceful_shutdown from 60 to 30 seconds
+    # Railway may not wait 60 seconds - ensure process exits before force-kill
     uvicorn.run(
         "server.main:app",
         host=args.host,
@@ -144,7 +145,7 @@ def main():
         log_level=args.log_level,
         access_log=True,
         timeout_keep_alive=300,  # 5 minutes for long-running operations (pipeline, codegen)
-        timeout_graceful_shutdown=60,  # 60 seconds for graceful shutdown (increased from 30)
+        timeout_graceful_shutdown=30,  # 30 seconds - must be less than Railway's kill timeout
         h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )
 
