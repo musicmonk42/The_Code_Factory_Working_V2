@@ -282,25 +282,30 @@ class TestLLMClient:
         with patch(
             "self_fixing_engineer.arbiter.plugins.llm_client.LLMClient._get_ollama_session"
         ) as mock_session:
-            mock_session_obj = AsyncMock()
-            mock_session.return_value = mock_session_obj
+            mock_session_obj = Mock()  # Use Mock, not AsyncMock, so post() returns directly
+
+            async def _get_session():
+                return mock_session_obj
+
+            mock_session.side_effect = _get_session
 
             mock_response = AsyncMock()
             mock_response.content = AsyncMock()
 
-            # Simulate streaming response
-            async def mock_iter():
-                yield b'{"response": "Part 1"}\n'
-                yield b'{"response": " Part 2"}\n'
+            # Simulate streaming response - use a class for proper async iteration
+            class MockContent:
+                async def __aiter__(self):
+                    yield b'{"response": "Part 1"}\n'
+                    yield b'{"response": " Part 2"}\n'
 
-            mock_response.content.__aiter__ = mock_iter
+            mock_response.content = MockContent()
             mock_response.raise_for_status = Mock()
 
             # Create an async context manager for session.post()
             mock_cm = AsyncMock()
             mock_cm.__aenter__.return_value = mock_response
             mock_cm.__aexit__.return_value = False
-            mock_session_obj.post.return_value = mock_cm
+            mock_session_obj.post = Mock(return_value=mock_cm)
 
             client = LLMClient("ollama", None, "llama3")
             result = await client.generate_text("Test prompt")
