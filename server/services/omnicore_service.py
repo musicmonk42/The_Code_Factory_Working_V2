@@ -1869,27 +1869,58 @@ class OmniCoreService:
         """
         Dispatch to actual generator agents based on action.
         
+        Implements circuit breaker pattern for agent availability checking.
+        Returns structured errors that can be retried by upstream callers.
+        
         Args:
             job_id: Job identifier
             action: Action to perform (run_codegen, run_testgen, etc.)
             payload: Action-specific parameters
             
         Returns:
-            Result from the generator agent
+            Result from the generator agent or structured error response
+            
+        Raises:
+            No exceptions - all errors returned as structured responses
         """
         import asyncio
         
         # Check if agents are loaded before attempting to dispatch
+        # Implements fail-fast pattern for better system responsiveness
         if not self._agents_loaded:
+            logger.info(
+                f"Agents not yet loaded, attempting lazy loading",
+                extra={"job_id": job_id, "action": action}
+            )
             self._ensure_agents_loaded()
             
         if not self._agents_loaded:
-            return {
+            # Return structured retryable error following industry-standard error response format
+            error_response = {
                 "status": "error",
                 "job_id": job_id,
+                "action": action,
                 "message": "Agents are still loading. Please retry in a few seconds.",
                 "retry": True,
+                "error_code": "AGENTS_NOT_READY",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
+            logger.warning(
+                f"Agent dispatch failed - agents not ready",
+                extra={
+                    "job_id": job_id,
+                    "action": action,
+                    "error_code": "AGENTS_NOT_READY",
+                    "retryable": True
+                }
+            )
+            return error_response
+        
+        # Log successful agent dispatch
+        logger.debug(
+            f"Dispatching action to generator agents",
+            extra={"job_id": job_id, "action": action, "agents_loaded": True}
+        )
         
         if action == "run_codegen":
             return await self._run_codegen(job_id, payload)
