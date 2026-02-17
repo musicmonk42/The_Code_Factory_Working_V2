@@ -150,6 +150,33 @@ Before generating code, extract and verify you will implement:
 - [ ] Setup/installation instructions
 {% endmacro %}
 
+{# Macro: Render required endpoints from specification #}
+{# Note: Jinja2's dot notation works for both dict keys and object attributes #}
+{# endpoint.method is equivalent to endpoint['method'] for dicts #}
+{% macro render_required_endpoints(required_endpoints) %}
+{% if required_endpoints and required_endpoints|length > 0 %}
+## ⚠️ REQUIRED API ENDPOINTS (MUST IMPLEMENT ALL) ⚠️
+
+The specification EXPLICITLY requires these endpoints. You MUST implement ALL of them:
+
+{% for endpoint in required_endpoints %}
+- **{{ endpoint.method }} {{ endpoint.path }}**
+{% endfor %}
+
+**CRITICAL VALIDATION REQUIREMENT:**
+- EVERY endpoint listed above MUST be implemented in your code
+- Use the EXACT HTTP method ({{ required_endpoints|map(attribute='method')|unique|join(', ') }})
+- Use the EXACT path (including any path parameters)
+- FAILURE TO IMPLEMENT ANY OF THESE ENDPOINTS WILL CAUSE VALIDATION FAILURE
+
+**Implementation Checklist:**
+{% for endpoint in required_endpoints %}
+- [ ] {{ endpoint.method }} {{ endpoint.path }} - Implemented with correct handler
+{% endfor %}
+
+{% endif %}
+{% endmacro %}
+
 {# Macro: Render language-specific instructions #}
 {% macro render_language_instructions(language, framework=none) %}
 {% if language == "python" %}

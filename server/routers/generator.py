@@ -908,6 +908,8 @@ async def upload_files(
     test_files = []
     other_files = []
     readme_content = ""
+    include_frontend = False  # Track if FRONT_README detected
+    frontend_type = None
 
     for file in files:
         # Read file content
@@ -915,6 +917,13 @@ async def upload_files(
         
         # Categorize file
         filename_lower = file.filename.lower()
+        
+        # Check for FRONT_README filename - strong frontend indicator
+        if 'front_readme' in filename_lower or 'front-readme' in filename_lower:
+            logger.info(f"FRONT_README file detected: {file.filename} - enabling frontend generation")
+            include_frontend = True
+            frontend_type = DEFAULT_FRONTEND_TYPE
+        
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
             # Store README content for pipeline trigger
@@ -957,6 +966,8 @@ async def upload_files(
             "readme_files": readme_files,
             "test_files": test_files,
             "other_files": other_files,
+            "include_frontend": include_frontend,
+            "frontend_type": frontend_type,
         },
     )
 

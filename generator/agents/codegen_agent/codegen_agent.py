@@ -274,6 +274,10 @@ class FileAuditLogger(AuditLogger):
 # The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
+# Frontend detection keywords for safety net
+# Used to detect frontend requirements from md_content when not explicitly set
+FRONTEND_DETECTION_KEYWORDS = ["item creation", "create item", "crud", "form", "submit"]
+
 
 # ==============================================================================
 # --- Integrated Utilities & Security ---
@@ -900,6 +904,21 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
 IMPORTANT: Implement EXACTLY what the specification describes. Do not add or remove features.
 """
     
+    # Extract and explicitly list required endpoints from MD content
+    required_endpoints_section = ""
+    if md_content:
+        from generator.main.provenance import extract_endpoints_from_md
+        try:
+            required_endpoints = extract_endpoints_from_md(md_content)
+            if required_endpoints:
+                required_endpoints_section = "\n## ⚠️ REQUIRED API ENDPOINTS (MUST IMPLEMENT ALL) ⚠️\n\n"
+                required_endpoints_section += "The specification EXPLICITLY requires these endpoints. You MUST implement ALL of them:\n\n"
+                for endpoint in required_endpoints:
+                    required_endpoints_section += f"- **{endpoint['method']} {endpoint['path']}**\n"
+                required_endpoints_section += "\n**CRITICAL:** FAILURE TO IMPLEMENT ANY OF THESE ENDPOINTS WILL CAUSE VALIDATION FAILURE.\n"
+        except Exception as e:
+            logger.warning(f"Failed to extract endpoints from MD content in fallback prompt: {e}")
+    
     # Build frontend files section if needed
     frontend_files_text = ""
     if include_frontend and target_language == "python":
@@ -923,6 +942,7 @@ IMPORTANT: Implement EXACTLY what the specification describes. Do not add or rem
 {features_text}
 {constraints_text}
 {md_section}
+{required_endpoints_section}
 
 Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
 
@@ -1118,6 +1138,21 @@ if PLUGIN_AVAILABLE:
                     # Extract frontend generation flags from requirements
                     include_frontend = requirements.get("include_frontend", False)
                     frontend_type = requirements.get("frontend_type", None)
+                    
+                    # Safety net: Check md_content for frontend keywords if not already set
+                    md_content = requirements.get("md_content", "")
+                    if not include_frontend and md_content:
+                        md_lower = md_content.lower()
+                        for keyword in FRONTEND_DETECTION_KEYWORDS:
+                            if keyword in md_lower:
+                                logger.info(
+                                    f"Safety net: Detected '{keyword}' in md_content, enabling frontend generation"
+                                )
+                                include_frontend = True
+                                frontend_type = DEFAULT_FRONTEND_TYPE
+                                requirements["include_frontend"] = include_frontend
+                                requirements["frontend_type"] = frontend_type
+                                break
                     
                     # Log frontend generation decision
                     if include_frontend:
@@ -1421,6 +1456,21 @@ else:
                     # Extract frontend generation flags from requirements
                     include_frontend = requirements.get("include_frontend", False)
                     frontend_type = requirements.get("frontend_type", None)
+                    
+                    # Safety net: Check md_content for frontend keywords if not already set
+                    md_content = requirements.get("md_content", "")
+                    if not include_frontend and md_content:
+                        md_lower = md_content.lower()
+                        for keyword in FRONTEND_DETECTION_KEYWORDS:
+                            if keyword in md_lower:
+                                logger.info(
+                                    f"Safety net: Detected '{keyword}' in md_content, enabling frontend generation"
+                                )
+                                include_frontend = True
+                                frontend_type = DEFAULT_FRONTEND_TYPE
+                                requirements["include_frontend"] = include_frontend
+                                requirements["frontend_type"] = frontend_type
+                                break
                     
                     # Log frontend generation decision
                     if include_frontend:
