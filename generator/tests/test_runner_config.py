@@ -244,6 +244,8 @@ instance_id: test-remote-loaded
     def test_vault_integration(self):
         # Clear config cache to ensure fresh load
         clear_config_cache()
+        _load_config_module._cached_config = None
+        _load_config_module._cached_config_file = None
         
         # This test relies on the hook (1.3) added to load_config
         self.mock_hvac.Client.return_value.is_authenticated.return_value = True

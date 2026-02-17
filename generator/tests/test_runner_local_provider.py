@@ -354,6 +354,11 @@ def test_get_provider_cfg_key(mock_load: MagicMock) -> None:
     from generator.runner.runner_config import clear_config_cache
     clear_config_cache()
     
+    # Also clear the module-level cache directly
+    import generator.runner.runner_config as rc_mod
+    rc_mod._cached_config = None
+    rc_mod._cached_config_file = None
+    
     mock_load.return_value = mock_cfg("cfg")
     p = get_provider()
     assert p.api_key == "cfg"
