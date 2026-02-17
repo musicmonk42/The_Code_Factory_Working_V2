@@ -479,10 +479,33 @@ class SFEService:
                 cached_report = _load_sfe_analysis_report(report_path, job_id)
 
                 if cached_report:
+                    # Transform cached pipeline issues to frontend error format
+                    errors = []
+                    for issue in cached_report["issues"]:
+                        # Generate unique error_id
+                        error_id = f"err-{abs(hash(str(issue))) % 100000}"
+                        
+                        # Extract fields from pipeline format
+                        severity = issue.get("risk_level", "medium")
+                        details = issue.get("details", {})
+                        
+                        # Determine file path
+                        file_path = issue.get("file", details.get("file", "unknown"))
+                        
+                        errors.append({
+                            "error_id": error_id,
+                            "job_id": job_id,
+                            "severity": severity,
+                            "message": details.get("message", str(issue)),
+                            "file": file_path,
+                            "line": details.get("line", 0),
+                            "type": issue.get("type", "unknown"),
+                        })
+                    
                     # Return cached data with appropriate structure for detect_errors
                     return {
-                        "errors": cached_report["issues"],
-                        "count": cached_report["count"],
+                        "errors": errors,
+                        "count": len(errors),
                         "source": cached_report["source"],
                         "cached": True,
                     }
