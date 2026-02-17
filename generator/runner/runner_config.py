@@ -67,6 +67,17 @@ _cached_config: Optional["RunnerConfig"] = None
 _cached_config_file: Optional[str] = None
 
 
+def clear_config_cache():
+    """Clear the module-level configuration cache.
+    
+    This function should be called by tests or when the configuration
+    needs to be reloaded from disk.
+    """
+    global _cached_config, _cached_config_file
+    _cached_config = None
+    _cached_config_file = None
+
+
 class RunnerConfig(BaseModel):
     """
     Configuration for the Runner system.
@@ -661,8 +672,11 @@ class RunnerConfig(BaseModel):
         )
         logger.info("Secret fields decrypted successfully.")
 
-    async def fetch_vault_secrets(self):
-        """Integrate with Hashicorp Vault for secrets."""
+    def fetch_vault_secrets(self):
+        """Integrate with Hashicorp Vault for secrets.
+        
+        Note: This method is synchronous because hvac is a synchronous library.
+        """
         if not self.vault_url or not hvac:
             if not hvac:
                 logger.warning(
@@ -683,9 +697,8 @@ class RunnerConfig(BaseModel):
             )
             if client.is_authenticated():
                 # FIX: Read secret from 'runner/secrets' using KV v2 path
-                secrets_response = await asyncio.to_thread(
-                    client.secrets.kv.v2.read_secret_version, path="runner/secrets"
-                )
+                # hvac is a synchronous library, so we don't need asyncio.to_thread
+                secrets_response = client.secrets.kv.v2.read_secret_version(path="runner/secrets")
                 if (
                     secrets_response
                     and "data" in secrets_response
@@ -1122,30 +1135,10 @@ def load_config(
     # Optional: auto-fetch secrets from Vault when enabled by env.
     if os.getenv("RUNNER_SECRETS_FROM_VAULT", "").lower() in ("1", "true", "yes"):
         try:
-            # Supports either sync or async implementation of fetch_vault_secrets
+            # fetch_vault_secrets is now synchronous for simplicity (hvac is sync)
             fetch = getattr(config, "fetch_vault_secrets", None)
             if fetch:
-                if asyncio.iscoroutinefunction(fetch):
-                    try:
-                        asyncio.get_running_loop()
-                        # Already in an async context - use a thread to avoid nested loop
-                        import threading
-                        result_holder = {}
-                        def _run():
-                            try:
-                                asyncio.run(fetch())
-                            except Exception as e:
-                                result_holder["error"] = e
-                        t = threading.Thread(target=_run)
-                        t.start()
-                        t.join()
-                        if "error" in result_holder:
-                            raise result_holder["error"]
-                    except RuntimeError:
-                        # No running loop - safe to use asyncio.run()
-                        asyncio.run(fetch())
-                else:
-                    fetch()
+                fetch()
         except Exception as e:
             logger.error(f"Failed to fetch secrets from Vault: {e}")
             raise ConfigurationError(f"Vault integration failed: {e}")
