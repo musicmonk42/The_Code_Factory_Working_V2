@@ -213,6 +213,33 @@ DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
 DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "600"))
 
+# ============================================================================
+# INDUSTRY STANDARD: Named Constants for Configuration and Limits
+# Following OWASP and industry best practices for secure, maintainable code
+# ============================================================================
+
+# File Size Limits (Industry Standard: Prevent DoS and memory exhaustion)
+MAX_REPORT_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB - reasonable for JSON reports
+MAX_CONFIG_FILE_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB - reasonable for config files
+
+# Helm Chart Validation Constants
+HELM_REQUIRED_FIELDS = {"apiVersion", "name"}  # Minimum required fields per Helm spec
+HELM_DEFAULT_API_VERSION = "v2"  # Helm 3 uses apiVersion v2
+HELM_DEFAULT_CHART_TYPE = "application"
+
+# Error Type Constants (Industry Standard: Structured error identification)
+ERROR_TYPE_IMPORT = "import_error"
+ERROR_TYPE_SETTINGS_INIT = "settings_initialization_failed"
+ERROR_TYPE_VALIDATION = "validation_error"
+ERROR_TYPE_IO = "io_error"
+ERROR_TYPE_PARSE = "parse_error"
+ERROR_TYPE_TIMEOUT = "timeout_error"
+
+# Cache/Report Source Constants
+SOURCE_CACHE = "sfe_analysis_report"
+SOURCE_DIRECT = "direct_sfe"
+SOURCE_PLACEHOLDER = "placeholder"
+
 # Constants for clarification session cleanup
 CLARIFICATION_SESSION_TTL_SECONDS = int(os.getenv("CLARIFICATION_SESSION_TTL_SECONDS", "3600"))  # 1 hour default
 
@@ -789,6 +816,244 @@ def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, 
     
     return report
 
+
+# ============================================================================
+# INDUSTRY STANDARD: Input Validation Utilities
+# Following defensive programming and contract-based design principles
+# ============================================================================
+
+def _validate_report_structure(report: Any, report_path: Path) -> Tuple[bool, Optional[str]]:
+    """
+    Validate SFE analysis report structure with comprehensive checks.
+    
+    Industry Standard: Defense-in-depth validation following OWASP guidelines.
+    Validates both structure and data types before trusting cached data.
+    
+    Args:
+        report: Parsed JSON report data (can be any type)
+        report_path: Path to report file (for error messages)
+        
+    Returns:
+        Tuple of (is_valid: bool, error_message: Optional[str])
+        If valid, error_message is None. If invalid, error_message explains why.
+        
+    Validation Rules:
+        1. Report must be a dictionary
+        2. Must contain 'all_defects' or 'issues' key
+        3. Issues must be a list
+        4. Each issue should be a dictionary (warning if not)
+        
+    Examples:
+        >>> report = {"all_defects": [{"type": "error", "file": "test.py"}]}
+        >>> _validate_report_structure(report, Path("report.json"))
+        (True, None)
+        
+        >>> report = "not a dict"
+        >>> _validate_report_structure(report, Path("report.json"))
+        (False, "Invalid report format: expected dict, got str")
+    """
+    # Validation Rule 1: Must be a dictionary
+    if not isinstance(report, dict):
+        return False, f"Invalid report format: expected dict, got {type(report).__name__}"
+    
+    # Validation Rule 2: Must contain issues data
+    if "all_defects" not in report and "issues" not in report:
+        return False, "Report missing required key: 'all_defects' or 'issues'"
+    
+    # Get issues list (prefer all_defects, fallback to issues)
+    issues = report.get("all_defects", report.get("issues", []))
+    
+    # Validation Rule 3: Issues must be a list
+    if not isinstance(issues, list):
+        return False, f"Invalid issues format: expected list, got {type(issues).__name__}"
+    
+    # Validation Rule 4: Warn if issues contain non-dict items (but don't fail)
+    if issues:
+        non_dict_count = sum(1 for item in issues if not isinstance(item, dict))
+        if non_dict_count > 0:
+            logger.warning(
+                f"Report contains {non_dict_count} non-dict issues",
+                extra={
+                    "report_path": str(report_path),
+                    "total_issues": len(issues),
+                    "non_dict_count": non_dict_count
+                }
+            )
+    
+    return True, None
+
+
+def _validate_helm_chart_structure(chart_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """
+    Validate Helm chart data structure against Helm specification.
+    
+    Industry Standard: Schema validation following Helm chart specification.
+    Ensures generated charts are valid before writing to disk.
+    
+    Args:
+        chart_data: Parsed Helm chart dictionary
+        
+    Returns:
+        Tuple of (is_valid: bool, error_message: Optional[str])
+        
+    Validation Rules:
+        1. Must be a dictionary
+        2. Must contain required fields: apiVersion, name
+        3. apiVersion should be 'v2' for Helm 3
+        4. name should be a non-empty string
+        
+    Reference:
+        https://helm.sh/docs/topics/charts/#the-chartyaml-file
+    """
+    if not isinstance(chart_data, dict):
+        return False, f"Chart must be a dict, got {type(chart_data).__name__}"
+    
+    # Check required fields
+    missing_fields = HELM_REQUIRED_FIELDS - chart_data.keys()
+    if missing_fields:
+        return False, f"Missing required fields: {missing_fields}"
+    
+    # Validate apiVersion
+    api_version = chart_data.get("apiVersion")
+    if not isinstance(api_version, str) or not api_version:
+        return False, f"apiVersion must be a non-empty string"
+    
+    # Validate name
+    name = chart_data.get("name")
+    if not isinstance(name, str) or not name:
+        return False, f"name must be a non-empty string"
+    
+    return True, None
+
+
+def _load_sfe_analysis_report(
+    report_path: Path,
+    job_id: str,
+    max_file_size: int = MAX_REPORT_FILE_SIZE_BYTES
+) -> Optional[Dict[str, Any]]:
+    """
+    Load and validate SFE analysis report with comprehensive error handling.
+    
+    Industry Standard: DRY principle - centralized report loading logic
+    with defense-in-depth validation. Eliminates code duplication between
+    omnicore_service and sfe_service.
+    
+    Args:
+        report_path: Path to sfe_analysis_report.json
+        job_id: Job identifier for logging context
+        max_file_size: Maximum allowed file size in bytes
+        
+    Returns:
+        Dictionary containing report data with keys:
+        - issues: List of detected issues/defects
+        - count: Number of issues
+        - source: "sfe_analysis_report"
+        - cached: True
+        Returns None if report doesn't exist or is invalid.
+        
+    Validation Steps:
+        1. Check file exists and is a regular file
+        2. Validate file size (prevent DoS)
+        3. Parse JSON with error handling
+        4. Validate report structure
+        5. Extract and validate issues list
+        
+    Side Effects:
+        Logs warnings for validation failures (non-fatal)
+        
+    Examples:
+        >>> report = _load_sfe_analysis_report(Path("report.json"), "job-123")
+        >>> if report:
+        ...     print(f"Found {report['count']} issues")
+    """
+    # Validation Step 1: File existence
+    if not report_path.exists() or not report_path.is_file():
+        return None
+    
+    try:
+        # Validation Step 2: File size check (DoS prevention)
+        file_size = report_path.stat().st_size
+        if file_size > max_file_size:
+            logger.warning(
+                f"[SFE] Analysis report file too large ({file_size} bytes), skipping cache",
+                extra={
+                    "job_id": job_id,
+                    "file_size": file_size,
+                    "max_size": max_file_size,
+                    "report_path": str(report_path)
+                }
+            )
+            return None
+        
+        # Validation Step 3: Parse JSON
+        with open(report_path, 'r', encoding='utf-8') as f:
+            report = json.load(f)
+        
+        # Validation Step 4: Validate report structure
+        is_valid, error_msg = _validate_report_structure(report, report_path)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
+        # Validation Step 5: Extract issues
+        issues = report.get("all_defects", report.get("issues", []))
+        
+        logger.info(
+            f"[SFE] Loaded {len(issues)} issues from cached analysis report",
+            extra={
+                "job_id": job_id,
+                "issue_count": len(issues),
+                "report_age_seconds": (datetime.now(timezone.utc).timestamp() - 
+                                      report_path.stat().st_mtime),
+                "source": "cache"
+            }
+        )
+        
+        return {
+            "issues": issues,
+            "count": len(issues),
+            "source": SOURCE_CACHE,
+            "cached": True,
+        }
+        
+    except json.JSONDecodeError as e:
+        logger.warning(
+            f"[SFE] Invalid JSON in analysis report: {e}",
+            extra={
+                "job_id": job_id,
+                "report_path": str(report_path),
+                "error": str(e)
+            }
+        )
+    except (IOError, OSError) as e:
+        logger.warning(
+            f"[SFE] Failed to read analysis report: {type(e).__name__}: {e}",
+            extra={
+                "job_id": job_id,
+                "report_path": str(report_path),
+                "error_type": type(e).__name__
+            }
+        )
+    except ValueError as e:
+        logger.warning(
+            f"[SFE] Invalid report structure: {e}",
+            extra={
+                "job_id": job_id,
+                "report_path": str(report_path),
+                "error": str(e)
+            }
+        )
+    except Exception as e:
+        logger.warning(
+            f"[SFE] Unexpected error loading report: {type(e).__name__}: {e}",
+            extra={
+                "job_id": job_id,
+                "report_path": str(report_path),
+                "error_type": type(e).__name__
+            },
+            exc_info=True
+        )
+    
+    return None
 
 
 class OmniCoreService:
@@ -1682,100 +1947,21 @@ class OmniCoreService:
                 }
             
             # BUG FIX 3: Check for existing SFE analysis report first
-            # Industry Standard: Cache-first strategy with validation
-            # The pipeline writes sfe_analysis_report.json during analysis
-            # If it exists and is valid, return those results instead of running fresh analysis
+            # Industry Standard: DRY principle - use centralized function
             report_path = Path(code_path) / "reports" / "sfe_analysis_report.json"
-            if report_path.exists() and report_path.is_file():
-                try:
-                    # Industry Standard: Validate file size to prevent memory exhaustion
-                    file_size = report_path.stat().st_size
-                    max_report_size = 10 * 1024 * 1024  # 10 MB max
-                    if file_size > max_report_size:
-                        logger.warning(
-                            f"[SFE] Report file too large ({file_size} bytes), skipping cache",
-                            extra={
-                                "job_id": job_id,
-                                "file_size": file_size,
-                                "max_size": max_report_size,
-                                "report_path": str(report_path)
-                            }
-                        )
-                    else:
-                        # Read and validate report structure
-                        with open(report_path, 'r', encoding='utf-8') as f:
-                            report = json.load(f)
-                        
-                        # Industry Standard: Validate report structure
-                        if not isinstance(report, dict):
-                            raise ValueError(f"Invalid report format: expected dict, got {type(report)}")
-                        
-                        issues = report.get("all_defects", report.get("issues", []))
-                        
-                        # Validate issues structure
-                        if not isinstance(issues, list):
-                            raise ValueError(f"Invalid issues format: expected list, got {type(issues)}")
-                        
-                        logger.info(
-                            f"[SFE] Loaded {len(issues)} issues from existing analysis report",
-                            extra={
-                                "job_id": job_id,
-                                "issue_count": len(issues),
-                                "report_age_seconds": (datetime.now(timezone.utc).timestamp() - 
-                                                      report_path.stat().st_mtime),
-                                "source": "cache"
-                            }
-                        )
-                        return {
-                            "status": "completed",
-                            "job_id": job_id,
-                            "code_path": code_path,
-                            "errors": issues,
-                            "error_count": len(issues),
-                            "source": "sfe_analysis_report",
-                            "cached": True,
-                        }
-                except json.JSONDecodeError as e:
-                    logger.warning(
-                        f"[SFE] Invalid JSON in analysis report: {e}",
-                        extra={
-                            "job_id": job_id,
-                            "report_path": str(report_path),
-                            "error": str(e),
-                            "fallback": "fresh_analysis"
-                        }
-                    )
-                except (IOError, OSError) as e:
-                    logger.warning(
-                        f"[SFE] Failed to read analysis report: {type(e).__name__}: {e}",
-                        extra={
-                            "job_id": job_id,
-                            "report_path": str(report_path),
-                            "error_type": type(e).__name__,
-                            "fallback": "fresh_analysis"
-                        }
-                    )
-                except ValueError as e:
-                    logger.warning(
-                        f"[SFE] Invalid report structure: {e}",
-                        extra={
-                            "job_id": job_id,
-                            "report_path": str(report_path),
-                            "error": str(e),
-                            "fallback": "fresh_analysis"
-                        }
-                    )
-                except Exception as e:
-                    logger.warning(
-                        f"[SFE] Unexpected error loading report: {type(e).__name__}: {e}",
-                        extra={
-                            "job_id": job_id,
-                            "report_path": str(report_path),
-                            "error_type": type(e).__name__,
-                            "fallback": "fresh_analysis"
-                        },
-                        exc_info=True
-                    )
+            cached_report = _load_sfe_analysis_report(report_path, job_id)
+            
+            if cached_report:
+                # Return cached data with appropriate structure for detect_errors
+                return {
+                    "status": "completed",
+                    "job_id": job_id,
+                    "code_path": code_path,
+                    "errors": cached_report["issues"],
+                    "error_count": cached_report["count"],
+                    "source": cached_report["source"],
+                    "cached": True,
+                }
             
             try:
                 from self_fixing_engineer.arbiter.bug_manager import BugManager
