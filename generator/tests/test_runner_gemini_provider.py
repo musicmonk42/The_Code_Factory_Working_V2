@@ -338,6 +338,11 @@ def test_get_provider_with_config_key(mock_load: MagicMock) -> None:
     if not HAS_GEMINI:
         pytest.skip("Gemini SDK not installed")
 
+    # Clear config cache to ensure mock is used
+    import generator.runner.runner_config as runner_config_module
+    runner_config_module._cached_config = None
+    runner_config_module._cached_config_file = None
+
     with patch("google.generativeai.configure"):
         mock_load.return_value = mock_cfg("cfg-key")
         p = get_provider()
