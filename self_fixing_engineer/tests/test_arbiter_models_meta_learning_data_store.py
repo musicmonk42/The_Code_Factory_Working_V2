@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 SAMPLE_ENV = {
     "MLDS_BACKEND": "inmemory",
     "REDIS_URL": "redis://localhost:6379/1",
-    "MLDS_ENCRYPTION_KEY": "dGVzdGtleXRlc3RrZXl0ZXN0a2V5dGVzdGtleQ==",  # Valid base64 Fernet key
+    "MLDS_ENCRYPTION_KEY": "ACNebwD4HY14EoAhYUEYqzA2H3G7vCMU1RXp-Ov09Rg=",  # Valid 32-byte base64 Fernet key
     "MLDS_MAX_RECORDS": "5",
     "LOG_LEVEL": "DEBUG",
     "SFE_OTEL_EXPORTER_TYPE": "console",
@@ -127,7 +127,7 @@ async def redis_store(mocker: MockerFixture):
     mock_redis.close = mocker.AsyncMock()
 
     # Mock redis.from_url to return our mock
-    mocker.patch("meta_learning_data_store.redis.from_url", return_value=mock_redis)
+    mocker.patch("self_fixing_engineer.arbiter.models.meta_learning_data_store.redis.from_url", return_value=mock_redis)
 
     store = get_meta_learning_data_store(backend="redis")
     store._redis = mock_redis
@@ -165,7 +165,7 @@ async def test_initialization_success(store_type, inmemory_store, redis_store):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("store_type", ["inmemory", "redis"])
-async def test_add_record_success(store_type, inmemory_store, redis_store):
+async def test_add_record_success(store_type, inmemory_store, redis_store, in_memory_exporter):
     """Test successful addition of a record."""
     store = inmemory_store if store_type == "inmemory" else redis_store
 

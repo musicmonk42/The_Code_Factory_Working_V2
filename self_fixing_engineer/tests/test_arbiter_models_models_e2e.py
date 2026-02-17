@@ -153,7 +153,7 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         mock_pool.acquire.return_value = mock_acquire_context
         mock_pool.close = mocker.AsyncMock()
         mock_pool.get_size.return_value = 1
-        mock_pool.is_closed.return_value = False
+        mock_pool.is_closed = mocker.MagicMock(return_value=False)
         mocker.patch("asyncpg.create_pool", mocker.AsyncMock(return_value=mock_pool))
     except ImportError:
         pass
@@ -177,8 +177,14 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         os.environ.pop(key, None)
 
 
+@pytest.fixture(scope="module")
+def in_memory_exporter():
+    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    return InMemorySpanExporter()
+
+
 @pytest_asyncio.fixture(autouse=True)
-async def clear_metrics_and_traces():
+async def clear_metrics_and_traces(in_memory_exporter):
     """Clear Prometheus metrics and OpenTelemetry traces before each test."""
     in_memory_exporter.clear()
     yield
