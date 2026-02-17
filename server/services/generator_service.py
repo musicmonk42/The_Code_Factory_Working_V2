@@ -817,7 +817,7 @@ class GeneratorService:
                         extra={
                             "job_id": job_id,
                             "attempt": attempt + 1,
-                            "message": data.get("message")
+                            "retry_message": data.get("message")
                         }
                     )
                 else:
