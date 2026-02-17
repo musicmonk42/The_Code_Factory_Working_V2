@@ -777,12 +777,12 @@ class CodebaseAnalyzer:
                     # mypy v1.17.1 on Python 3.11 produces INTERNAL ERROR messages
                     # that break the parsing logic and create malformed defect entries
                     output_lines = (stdout + stderr).splitlines()
-                    has_internal_error = False
+                    internal_error_detected = False
                     
                     for line in output_lines:
                         # Filter out mypy INTERNAL ERROR and related diagnostic lines
                         if "INTERNAL ERROR" in line:
-                            has_internal_error = True
+                            internal_error_detected = True
                             continue
                         if "Please try using mypy master" in line:
                             continue
@@ -806,7 +806,7 @@ class CodebaseAnalyzer:
                                 )
                     
                     # Log warning if INTERNAL ERROR was detected
-                    if has_internal_error:
+                    if internal_error_detected:
                         logger.warning(
                             f"mypy INTERNAL ERROR detected while analyzing {file_path}. "
                             "Some type checking results may be incomplete. "
