@@ -105,7 +105,7 @@ class TestClarifierGating:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
@@ -120,7 +120,16 @@ class TestClarifierGating:
                 "stages_completed": ["codegen"],
             })
 
-            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize:
+            # Mock agent loader and omnicore service to avoid timeout
+            mock_loader = MagicMock()
+            mock_loader.is_loading = MagicMock(return_value=False)
+            
+            mock_omnicore = MagicMock()
+            mock_omnicore._agents_loaded = True
+            
+            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize, \
+                 patch("server.routers.generator.get_agent_loader", return_value=mock_loader), \
+                 patch("server.routers.generator.get_omnicore_service", return_value=mock_omnicore):
                 mock_finalize.return_value = True
                 await _trigger_pipeline_background(
                     job_id=job_id,
@@ -148,7 +157,7 @@ class TestClarifierGating:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
@@ -160,7 +169,16 @@ class TestClarifierGating:
                 "stages_completed": ["codegen"],
             })
 
-            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize:
+            # Mock agent loader and omnicore service to avoid timeout
+            mock_loader = MagicMock()
+            mock_loader.is_loading = MagicMock(return_value=False)
+            
+            mock_omnicore = MagicMock()
+            mock_omnicore._agents_loaded = True
+            
+            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize, \
+                 patch("server.routers.generator.get_agent_loader", return_value=mock_loader), \
+                 patch("server.routers.generator.get_omnicore_service", return_value=mock_omnicore):
                 mock_finalize.return_value = True
                 await _trigger_pipeline_background(
                     job_id=job_id,
@@ -875,7 +893,7 @@ class TestEmptyQuestionFiltering:
             input_files=[],
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
-            metadata={},
+            metadata={"language": "python"},
         )
         jobs_db[job_id] = job
 
@@ -894,7 +912,16 @@ class TestEmptyQuestionFiltering:
                 "stages_completed": ["codegen"],
             })
 
-            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize:
+            # Mock agent loader and omnicore service to avoid timeout
+            mock_loader = MagicMock()
+            mock_loader.is_loading = MagicMock(return_value=False)
+            
+            mock_omnicore = MagicMock()
+            mock_omnicore._agents_loaded = True
+            
+            with patch("server.routers.generator.finalize_job_success", new_callable=AsyncMock) as mock_finalize, \
+                 patch("server.routers.generator.get_agent_loader", return_value=mock_loader), \
+                 patch("server.routers.generator.get_omnicore_service", return_value=mock_omnicore):
                 mock_finalize.return_value = True
                 await _trigger_pipeline_background(
                     job_id=job_id,
