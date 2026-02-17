@@ -615,10 +615,6 @@ class MerkleTree:
             start_time = time.monotonic()
             MERKLE_OPS_TOTAL.labels(operation="verify_proof", status="attempt").inc()
             try:
-                if not MERKLELIB_AVAILABLE:
-                    logger.critical("merklelib not available. Cannot verify proof.")
-                    return False
-
                 root_bytes = bytes.fromhex(root)
                 leaf_raw = (
                     leaf_data.encode("utf-8")
@@ -648,6 +644,10 @@ class MerkleTree:
                         raise MerkleProofError(
                             f"Malformed proof node: {node_data}. Expected 'node' and 'position'."
                         )
+
+                if not MERKLELIB_AVAILABLE:
+                    logger.critical("merklelib not available. Cannot verify proof.")
+                    return False
 
                 # Verify by reconstructing root from leaf hash and proof
                 # Uses merklelib's hash scheme: leaf_hash = sha256(b'\x00' + data),

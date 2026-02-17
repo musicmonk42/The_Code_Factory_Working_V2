@@ -20,6 +20,7 @@ from self_fixing_engineer.arbiter.models.merkle_tree import (
     MERKLE_OPS_TOTAL,
     MERKLE_TREE_DEPTH,
     MERKLE_TREE_SIZE,
+    MERKLELIB_AVAILABLE,
     MerkleProofError,
     MerkleTree,
     MerkleTreeEmptyError,
@@ -28,6 +29,11 @@ from self_fixing_engineer.arbiter.models.merkle_tree import (
 )
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pytest_mock import MockerFixture
+
+# Skip marker for tests that require merklelib
+requires_merklelib = pytest.mark.skipif(
+    not MERKLELIB_AVAILABLE, reason="merklelib library not installed"
+)
 
 # Configure logging for tests
 logging.basicConfig(
@@ -133,6 +139,7 @@ async def test_initialization_with_store_raw():
     assert tree_raw._leaves[0] == b"leaf1"
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_add_leaf_success(merkle_tree, in_memory_exporter):
     """Test successful addition of a single leaf."""
@@ -149,6 +156,7 @@ async def test_add_leaf_success(merkle_tree, in_memory_exporter):
     assert add_span.status.is_ok
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_add_leaf_bytes(merkle_tree):
     """Test adding leaf as bytes."""
@@ -157,6 +165,7 @@ async def test_add_leaf_bytes(merkle_tree):
     assert merkle_tree.size == 1
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_add_leaves_success(merkle_tree, in_memory_exporter):
     """Test successful batch addition of leaves."""
@@ -178,6 +187,7 @@ async def test_add_leaves_success(merkle_tree, in_memory_exporter):
     assert batch_span.status.is_ok
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_get_root_success(merkle_tree):
     """Test getting root for non-empty tree."""
@@ -201,6 +211,7 @@ async def test_get_root_empty_tree(merkle_tree):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_get_proof_success(merkle_tree, in_memory_exporter):
     """Test getting proof for valid index."""
@@ -223,6 +234,7 @@ async def test_get_proof_success(merkle_tree, in_memory_exporter):
     assert proof_span.status.is_ok
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_get_proof_invalid_index(merkle_tree):
     """Test getting proof for invalid index."""
@@ -234,6 +246,7 @@ async def test_get_proof_invalid_index(merkle_tree):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_get_proof_negative_index(merkle_tree):
     """Test getting proof for negative index."""
@@ -257,6 +270,7 @@ async def test_get_proof_empty_tree(merkle_tree):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_verify_proof_success(merkle_tree, in_memory_exporter):
     """Test successful proof verification."""
@@ -278,6 +292,7 @@ async def test_verify_proof_success(merkle_tree, in_memory_exporter):
     assert verify_span.status.is_ok
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_verify_proof_with_bytes(merkle_tree):
     """Test proof verification with bytes input."""
@@ -288,6 +303,7 @@ async def test_verify_proof_with_bytes(merkle_tree):
     assert is_valid
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_verify_proof_tampered(merkle_tree):
     """Test verification failure for tampered leaf."""
@@ -336,6 +352,7 @@ async def test_verify_proof_missing_fields():
         MerkleTree.verify_proof(root, "leaf", [{"node": "b" * 64}])  # Missing position
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_save_success(merkle_tree, tmp_path, in_memory_exporter):
     """Test successful tree save."""
@@ -364,6 +381,7 @@ async def test_save_success(merkle_tree, tmp_path, in_memory_exporter):
     assert save_span.status.is_ok
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_save_with_store_raw(tmp_path):
     """Test saving tree with store_raw=True."""
@@ -448,6 +466,7 @@ async def test_load_corrupted_file(tmp_path, caplog):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_concurrent_add_leaves(merkle_tree):
     """Test concurrent addition of leaves."""
@@ -466,6 +485,7 @@ async def test_concurrent_add_leaves(merkle_tree):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_retry_on_save_file_error(merkle_tree, tmp_path, mocker: MockerFixture):
     """Test retry mechanism on save file error."""
@@ -524,6 +544,7 @@ async def test_retry_on_load_file_error(tmp_path, mocker: MockerFixture):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_save_load_roundtrip(merkle_tree, tmp_path):
     """Test save and load roundtrip preserves tree state."""
@@ -551,6 +572,7 @@ async def test_save_load_roundtrip(merkle_tree, tmp_path):
     assert is_valid
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_large_batch_with_offload_threshold(mocker: MockerFixture):
     """Test batch addition with hash offload threshold."""
@@ -569,6 +591,7 @@ async def test_large_batch_with_offload_threshold(mocker: MockerFixture):
     )
 
 
+@requires_merklelib
 @pytest.mark.asyncio
 async def test_properties(merkle_tree):
     """Test tree properties."""
