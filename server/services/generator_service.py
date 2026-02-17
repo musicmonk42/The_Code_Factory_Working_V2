@@ -426,8 +426,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore codegen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success
@@ -474,8 +474,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore testgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success
@@ -522,8 +522,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore deploy agent execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success
@@ -570,8 +570,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore docgen execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success
@@ -618,8 +618,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore critique execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success
@@ -742,8 +742,8 @@ class GeneratorService:
             if data.get("status") == "error":
                 logger.error(f"OmniCore pipeline execution failed for job {job_id}: {data.get('message', 'Unknown error')}")
                 return data
-            # Check if we actually got meaningful data back
-            if data:
+            # Check if we actually got meaningful data back (non-empty dict)
+            if data and isinstance(data, dict):
                 return data
 
         # No OmniCore or routing failed - return error instead of fake success

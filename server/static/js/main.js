@@ -1129,7 +1129,7 @@ async function loadErrors(jobId) {
 
 async function proposeFix(errorId) {
     try {
-        // Handle both error IDs and bug IDs - they can be used interchangeably
+        // Try the error endpoint first (for issues from analyze_code)
         const response = await fetchWithRetry(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
             method: 'POST'
         });
@@ -1138,7 +1138,8 @@ async function proposeFix(errorId) {
         showSuccess(`Fix proposed: ${data.description}`);
         loadFixes();
     } catch (error) {
-        // If the error endpoint doesn't work, try it as a bug analysis
+        // If the error endpoint doesn't work, try the bug analysis endpoint as fallback
+        // (for bugs from detect_bugs which use bug_id instead of error_id)
         try {
             const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/${errorId}/analyze`, {
                 method: 'POST',
