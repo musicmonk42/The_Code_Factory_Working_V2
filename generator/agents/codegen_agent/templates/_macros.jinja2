@@ -151,6 +151,8 @@ Before generating code, extract and verify you will implement:
 {% endmacro %}
 
 {# Macro: Render required endpoints from specification #}
+{# Note: Jinja2's dot notation works for both dict keys and object attributes #}
+{# endpoint.method is equivalent to endpoint['method'] for dicts #}
 {% macro render_required_endpoints(required_endpoints) %}
 {% if required_endpoints and required_endpoints|length > 0 %}
 ## ⚠️ REQUIRED API ENDPOINTS (MUST IMPLEMENT ALL) ⚠️

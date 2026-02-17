@@ -1143,8 +1143,7 @@ if PLUGIN_AVAILABLE:
                     md_content = requirements.get("md_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
-                        frontend_keywords = FRONTEND_DETECTION_KEYWORDS
-                        for keyword in frontend_keywords:
+                        for keyword in FRONTEND_DETECTION_KEYWORDS:
                             if keyword in md_lower:
                                 logger.info(
                                     f"Safety net: Detected '{keyword}' in md_content, enabling frontend generation"
@@ -1462,8 +1461,7 @@ else:
                     md_content = requirements.get("md_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
-                        frontend_keywords = FRONTEND_DETECTION_KEYWORDS
-                        for keyword in frontend_keywords:
+                        for keyword in FRONTEND_DETECTION_KEYWORDS:
                             if keyword in md_lower:
                                 logger.info(
                                     f"Safety net: Detected '{keyword}' in md_content, enabling frontend generation"
