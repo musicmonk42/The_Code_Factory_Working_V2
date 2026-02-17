@@ -1063,6 +1063,14 @@ async function analyzeCode() {
         });
         const data = await response.json();
         
+        // Check if analysis is unavailable
+        if (data.note) {
+            showError(`Analysis unavailable: ${data.note}`);
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<div class="error-message">${escapeHtml(data.note)}</div>`;
+            return;
+        }
+        
         showSuccess(`Analysis complete: ${data.issues_found} issues found`);
         loadErrors(jobId);
     } catch (error) {
@@ -2614,6 +2622,12 @@ async function analyzeCodebase() {
             })
         });
         const data = await response.json();
+        
+        // Check if analysis is unavailable
+        if (data.note) {
+            showError(`Codebase analysis unavailable: ${data.note}`);
+            return;
+        }
         
         // Display results in a formatted way
         const resultMessage = `Codebase Analysis Complete:\n\n` +
