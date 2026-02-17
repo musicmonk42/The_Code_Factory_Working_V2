@@ -115,8 +115,11 @@ class LevelPrefixFormatter(logging.Formatter):
                 # Use formatTime for reliable timestamp formatting
                 timestamp = self.formatTime(record, self.datefmt)
                 formatted = f"{timestamp} - {record.name} - {record.levelname} - {str(record.msg)}"
-            except Exception:
+            except Exception as fallback_error:
                 # If all else fails, just use the raw message without timestamp
+                # Log the error to stderr so developers can diagnose formatting issues
+                import sys
+                print(f"ERROR: Log formatter failed: {type(fallback_error).__name__}: {fallback_error}", file=sys.stderr)
                 formatted = f"{record.levelname} - {str(record.msg)}"
         
         # Check if prefix already added (prevent duplicate prefixes)
