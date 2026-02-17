@@ -1057,7 +1057,7 @@ k6 run loadtest.js
 ### Related Documentation
 
 - [SCALABLE_ARCHITECTURE.md](./SCALABLE_ARCHITECTURE.md) - Scaling tiers and architecture
-- [DEPLOYMENT.md](../DEPLOYMENT.md) - Production deployment guidelines
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment guidelines
 
 ---
 

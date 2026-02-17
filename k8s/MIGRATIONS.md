@@ -274,4 +274,4 @@ deploy:production:
 
 - [Alembic Migrations README](../../omnicore_engine/migrations/README.md) - Detailed migration documentation
 - [Helm Deployment Guide](../../helm/codefactory/README.md) - Helm-based migration strategies
-- [DEPLOYMENT.md](../../DEPLOYMENT.md) - General deployment guide
+- [DEPLOYMENT.md](../../docs/DEPLOYMENT.md) - General deployment guide
