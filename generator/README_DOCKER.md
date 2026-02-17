@@ -46,5 +46,5 @@ The previous standalone generator Dockerfile has been removed as it is no longer
 
 For any questions, refer to:
 - [Main README](../README.md)
-- [Deployment Guide](../DEPLOYMENT.md)
+- [Deployment Guide](../docs/DEPLOYMENT.md)
 - [Quick Start Guide](../QUICKSTART.md)
