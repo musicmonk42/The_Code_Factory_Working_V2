@@ -330,13 +330,13 @@ class InMemoryBreakerStateManager:
 
     async def get_state(self) -> dict:
         """Fetches the current circuit breaker state from memory."""
-        async with self._lock:
-            return self._state.copy()
+        return self._state.copy()
 
     async def set_state(self, state: dict) -> None:
         """Saves the current circuit breaker state to memory."""
-        async with self._lock:
-            self._state.update(state)
+        if "failures" in state:
+            state["failures"] = min(max(state["failures"], 0), 1000)
+        self._state.update(state)
 
     def state_lock(self):
         """Context manager for async-safe access to the state."""
