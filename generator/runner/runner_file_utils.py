@@ -1988,8 +1988,11 @@ async def validate_generated_project(
                         if not content.strip():
                             result["warnings"].append(f"{html_file.name} is empty")
                             result["frontend_files_invalid"] += 1
-                        elif "<html" not in content.lower() and html_file.name not in ["layout.html"]:
-                            # Allow layout/partial files without <html>
+                        elif "<html" not in content.lower() and html_file.name not in [
+                            "layout.html", "base.html", "header.html", "footer.html", 
+                            "navbar.html", "sidebar.html", "nav.html"
+                        ]:
+                            # Allow common partial/layout template files without <html>
                             result["warnings"].append(
                                 f"{html_file.name} missing <html> tag (may be a partial template)"
                             )

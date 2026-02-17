@@ -922,6 +922,129 @@ class IntentParser:
         # Placeholder for more robust health checks
         log_action("Parser Health Check", {"status": "PASSED"})
 
+    def _detect_frontend_requirements(
+        self, 
+        content: str, 
+        features: List[str],
+        constraints: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Detect if the specification requires frontend generation.
+        
+        Industry-standard full-stack detection based on keyword analysis
+        and semantic understanding of the requirements.
+        
+        Args:
+            content: Full document content
+            features: Extracted feature list
+            constraints: Extracted constraint list
+            
+        Returns:
+            Dict with:
+                - include_frontend: bool - whether frontend is needed
+                - frontend_type: str - type of frontend (jinja_templates, vanilla_js, react, vue, angular)
+                - confidence: float - confidence score (0.0-1.0)
+                - detected_keywords: List[str] - keywords that triggered detection
+        """
+        from server.routers.generator import (
+            DEFAULT_FRONTEND_TYPE,
+            FRONTEND_TYPE_VANILLA_JS,
+            FRONTEND_TYPE_REACT,
+            FRONTEND_TYPE_VUE,
+            FRONTEND_TYPE_ANGULAR,
+        )
+        
+        content_lower = content.lower()
+        all_text = content_lower + " " + " ".join(features).lower() + " " + " ".join(constraints).lower()
+        
+        # Define frontend detection patterns with weights
+        frontend_indicators = {
+            # Strong indicators (high confidence)
+            'web app': 1.0,
+            'web application': 1.0,
+            'dashboard': 1.0,
+            'user interface': 0.9,
+            'ui': 0.8,
+            'frontend': 1.0,
+            'front-end': 1.0,
+            
+            # UI component indicators
+            'html': 0.8,
+            'css': 0.8,
+            'template': 0.7,
+            'templates': 0.7,
+            'form': 0.6,
+            'forms': 0.6,
+            'page': 0.5,
+            'pages': 0.5,
+            
+            # Framework indicators (very strong)
+            'react': 0.95,
+            'vue': 0.95,
+            'angular': 0.95,
+            'jinja': 0.9,
+            
+            # User experience indicators
+            'responsive': 0.7,
+            'mobile-friendly': 0.7,
+            'single page': 0.8,
+            'spa': 0.9,
+            'website': 0.7,
+            'site': 0.5,
+            'browser': 0.6,
+            'client-side': 0.8,
+            'static files': 0.7,
+            'web interface': 0.9,
+        }
+        
+        # Calculate confidence score
+        detected_keywords = []
+        total_score = 0.0
+        max_score = 0.0
+        
+        for keyword, weight in frontend_indicators.items():
+            if keyword in all_text:
+                detected_keywords.append(keyword)
+                total_score += weight
+                max_score = max(max_score, weight)
+        
+        # Determine if frontend is needed
+        # Use threshold-based decision with confidence calculation
+        include_frontend = total_score >= 0.8 or max_score >= 0.9
+        
+        # Normalize confidence to 0.0-1.0 range
+        confidence = min(1.0, total_score / 3.0) if include_frontend else 0.0
+        
+        # Determine frontend type based on specific indicators
+        frontend_type = DEFAULT_FRONTEND_TYPE  # Default to jinja_templates
+        
+        if 'react' in all_text:
+            frontend_type = FRONTEND_TYPE_REACT
+        elif 'vue' in all_text:
+            frontend_type = FRONTEND_TYPE_VUE
+        elif 'angular' in all_text:
+            frontend_type = FRONTEND_TYPE_ANGULAR
+        elif 'vanilla js' in all_text or 'plain javascript' in all_text:
+            frontend_type = FRONTEND_TYPE_VANILLA_JS
+        elif 'jinja' in all_text or 'template' in all_text:
+            frontend_type = DEFAULT_FRONTEND_TYPE
+        # Keep default for general web app mentions
+        
+        result = {
+            "include_frontend": include_frontend,
+            "frontend_type": frontend_type if include_frontend else None,
+            "confidence": confidence,
+            "detected_keywords": detected_keywords,
+        }
+        
+        if include_frontend:
+            logger.info(
+                f"Frontend requirements detected: type={frontend_type}, "
+                f"confidence={confidence:.2f}, keywords={detected_keywords}"
+            )
+        
+        return result
+
     @tracer.start_as_current_span("IntentParser.parse_workflow")
     async def parse(
         self,
@@ -1038,12 +1161,32 @@ class IntentParser:
             ambiguities = await self.detector.detect(
                 full_text_for_ambiguity, dry_run, language=self.input_language
             )
+            
+            # --- Frontend Detection: Industry-standard full-stack detection ---
+            # Detect if specification requires frontend generation
+            frontend_detection = await loop.run_in_executor(
+                self.executor,
+                self._detect_frontend_requirements,
+                content_redacted,
+                extracted.get("features", []),
+                extracted.get("constraints", [])
+            )
+            logger.debug(
+                f"Frontend detection: include={frontend_detection['include_frontend']}, "
+                f"type={frontend_detection.get('frontend_type')}, "
+                f"confidence={frontend_detection['confidence']:.2f}"
+            )
 
             requirements = {
                 "features": extracted.get("features", []),
                 "constraints": extracted.get("constraints", []),
                 "file_structure": extracted.get("file_structure", []),
                 "ambiguities": ambiguities,
+                # Add frontend metadata for downstream consumption
+                "include_frontend": frontend_detection["include_frontend"],
+                "frontend_type": frontend_detection.get("frontend_type"),
+                "frontend_confidence": frontend_detection["confidence"],
+                "frontend_keywords": frontend_detection["detected_keywords"],
             }
 
             # --- Summarization: May be CPU or I/O bound depending on implementation ---

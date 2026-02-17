@@ -89,6 +89,9 @@ secrets_manager = SecretsManager()
 load_dotenv()
 # Get module logger - follows Python logging best practices.
 # Do NOT call basicConfig() at module level to avoid duplicate logs.
+# Constants for frontend type defaults
+DEFAULT_FRONTEND_TYPE = "jinja_templates"
+
 logger = logging.getLogger(__name__)
 
 # OpenTelemetry Setup
@@ -1207,7 +1210,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 target_language=target_language,
                 target_framework=target_framework,
                 include_frontend=include_frontend,
-                frontend_type=frontend_type or "jinja_templates",
+                frontend_type=frontend_type or DEFAULT_FRONTEND_TYPE,
             )
 
             # 8. Final self-critique and refinement (if enabled)

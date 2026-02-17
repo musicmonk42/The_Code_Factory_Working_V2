@@ -867,7 +867,7 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
     constraints = requirements.get("constraints", [])
     md_content = requirements.get("md_content", "")
     file_structure = requirements.get("file_structure", [])
-    frontend_type = requirements.get("frontend_type", "jinja_templates")
+    frontend_type = requirements.get("frontend_type", DEFAULT_FRONTEND_TYPE)
     
     # Build features section from parsed spec
     features_text = ""

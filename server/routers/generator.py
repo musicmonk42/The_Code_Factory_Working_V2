@@ -18,6 +18,13 @@ from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+
+# Constants for frontend type defaults
+DEFAULT_FRONTEND_TYPE = "jinja_templates"
+FRONTEND_TYPE_VANILLA_JS = "vanilla_js"
+FRONTEND_TYPE_REACT = "react"
+FRONTEND_TYPE_VUE = "vue"
+FRONTEND_TYPE_ANGULAR = "angular"
 from fastapi.responses import JSONResponse
 
 from server.dependencies import require_agents_ready, get_job_or_404 as _get_job_or_404
@@ -200,27 +207,27 @@ def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, An
         return backend_language
     
     # Determine frontend type based on additional context
-    frontend_type = "jinja_templates"  # Default for Python full-stack
+    frontend_type = DEFAULT_FRONTEND_TYPE  # Default for Python full-stack
     
     # Check for specific frontend frameworks
     if re.search(r'\breact\b', readme_lower):
-        frontend_type = "react"
+        frontend_type = FRONTEND_TYPE_REACT
     elif re.search(r'\bvue\b', readme_lower):
-        frontend_type = "vue"
+        frontend_type = FRONTEND_TYPE_VUE
     elif re.search(r'\bangular\b', readme_lower):
-        frontend_type = "angular"
+        frontend_type = FRONTEND_TYPE_ANGULAR
     elif re.search(r'\bvanilla\s+js\b', readme_lower) or re.search(r'\bplain\s+javascript\b', readme_lower):
-        frontend_type = "vanilla_js"
+        frontend_type = FRONTEND_TYPE_VANILLA_JS
     elif backend_language == "python":
         # For Python, check if Jinja2 templates are mentioned
         if re.search(r'\bjinja\b', readme_lower) or re.search(r'\btemplate\b', readme_lower):
-            frontend_type = "jinja_templates"
+            frontend_type = DEFAULT_FRONTEND_TYPE
         else:
             # Default to Jinja templates for Python full-stack
-            frontend_type = "jinja_templates"
+            frontend_type = DEFAULT_FRONTEND_TYPE
     else:
         # For non-Python backends, default to vanilla JS
-        frontend_type = "vanilla_js"
+        frontend_type = FRONTEND_TYPE_VANILLA_JS
     
     # Return structured metadata for full-stack projects
     return {

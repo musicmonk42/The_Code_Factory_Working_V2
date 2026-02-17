@@ -5,17 +5,31 @@ Tests for full-stack detection in language detection.
 
 Tests the enhanced detect_language_from_content function that returns
 structured metadata including frontend requirements.
+
+This test file extracts the pure logic of detect_language_from_content
+for testing without requiring FastAPI dependencies.
 """
 
 import re
 from typing import Any, Dict, Union
+
+import pytest
+
+
+# Constants for frontend types (matching server.routers.generator)
+DEFAULT_FRONTEND_TYPE = "jinja_templates"
+FRONTEND_TYPE_VANILLA_JS = "vanilla_js"
+FRONTEND_TYPE_REACT = "react"
+FRONTEND_TYPE_VUE = "vue"
+FRONTEND_TYPE_ANGULAR = "angular"
 
 
 def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, Any]]:
     """
     Detect programming language and stack requirements from README content.
     
-    This is a copy of the function from server.routers.generator for testing purposes.
+    This is extracted from server.routers.generator.detect_language_from_content
+    for testing purposes. Keep in sync with the production implementation.
     """
     readme_lower = readme_content.lower()
     
@@ -78,27 +92,27 @@ def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, An
         return backend_language
     
     # Determine frontend type based on additional context
-    frontend_type = "jinja_templates"  # Default for Python full-stack
+    frontend_type = DEFAULT_FRONTEND_TYPE  # Default for Python full-stack
     
     # Check for specific frontend frameworks
     if re.search(r'\breact\b', readme_lower):
-        frontend_type = "react"
+        frontend_type = FRONTEND_TYPE_REACT
     elif re.search(r'\bvue\b', readme_lower):
-        frontend_type = "vue"
+        frontend_type = FRONTEND_TYPE_VUE
     elif re.search(r'\bangular\b', readme_lower):
-        frontend_type = "angular"
+        frontend_type = FRONTEND_TYPE_ANGULAR
     elif re.search(r'\bvanilla\s+js\b', readme_lower) or re.search(r'\bplain\s+javascript\b', readme_lower):
-        frontend_type = "vanilla_js"
+        frontend_type = FRONTEND_TYPE_VANILLA_JS
     elif backend_language == "python":
         # For Python, check if Jinja2 templates are mentioned
         if re.search(r'\bjinja\b', readme_lower) or re.search(r'\btemplate\b', readme_lower):
-            frontend_type = "jinja_templates"
+            frontend_type = DEFAULT_FRONTEND_TYPE
         else:
             # Default to Jinja templates for Python full-stack
-            frontend_type = "jinja_templates"
+            frontend_type = DEFAULT_FRONTEND_TYPE
     else:
         # For non-Python backends, default to vanilla JS
-        frontend_type = "vanilla_js"
+        frontend_type = FRONTEND_TYPE_VANILLA_JS
     
     # Return structured metadata for full-stack projects
     return {
@@ -106,9 +120,6 @@ def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, An
         "include_frontend": True,
         "frontend_type": frontend_type,
     }
-
-
-import pytest
 
 
 class TestStackDetection:
