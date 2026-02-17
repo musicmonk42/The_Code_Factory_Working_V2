@@ -108,6 +108,61 @@ except ImportError:
 
 from .runner_logging import add_provenance, logger
 
+# ==============================================================================
+# --- Frontend Validation Constants ---
+# ==============================================================================
+# Common partial/layout template files that don't require full HTML structure
+PARTIAL_TEMPLATE_FILES = [
+    "layout.html",
+    "base.html", 
+    "header.html",
+    "footer.html",
+    "navbar.html",
+    "sidebar.html",
+    "nav.html",
+]
+
+# Frontend type indicators with confidence weights for detection
+FRONTEND_INDICATORS = {
+    # Strong indicators (high confidence)
+    'web app': 1.0,
+    'web application': 1.0,
+    'dashboard': 1.0,
+    'user interface': 0.9,
+    'ui': 0.8,
+    'frontend': 1.0,
+    'front-end': 1.0,
+    # UI component indicators
+    'html': 0.8,
+    'css': 0.8,
+    'template': 0.7,
+    'templates': 0.7,
+    'form': 0.6,
+    'forms': 0.6,
+    'page': 0.5,
+    'pages': 0.5,
+    # Framework indicators (very strong)
+    'react': 0.95,
+    'vue': 0.95,
+    'angular': 0.95,
+    'jinja': 0.9,
+    # User experience indicators
+    'responsive': 0.7,
+    'mobile-friendly': 0.7,
+    'single page': 0.8,
+    'spa': 0.9,
+    'website': 0.7,
+    'site': 0.5,
+    'browser': 0.6,
+    'client-side': 0.8,
+    'static files': 0.7,
+    'web interface': 0.9,
+}
+
+# ==============================================================================
+# --- Metrics & Observability ---
+# ==============================================================================
+
 # Metrics + decorator for utility functions (latency / errors)
 try:
     # Preferred: use shared metrics + decorator if available
@@ -1988,10 +2043,7 @@ async def validate_generated_project(
                         if not content.strip():
                             result["warnings"].append(f"{html_file.name} is empty")
                             result["frontend_files_invalid"] += 1
-                        elif "<html" not in content.lower() and html_file.name not in [
-                            "layout.html", "base.html", "header.html", "footer.html", 
-                            "navbar.html", "sidebar.html", "nav.html"
-                        ]:
+                        elif "<html" not in content.lower() and html_file.name not in PARTIAL_TEMPLATE_FILES:
                             # Allow common partial/layout template files without <html>
                             result["warnings"].append(
                                 f"{html_file.name} missing <html> tag (may be a partial template)"

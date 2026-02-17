@@ -378,7 +378,60 @@ class IntentParserConfig(BaseModel):
         return str(path)
 
 
+# ==============================================================================
+# --- Frontend Detection Constants ---
+# ==============================================================================
+# Frontend type indicators with confidence weights for intelligent detection
+# These weights determine how strongly each keyword suggests frontend requirements
+FRONTEND_INDICATORS = {
+    # Strong indicators (high confidence - 1.0)
+    'web app': 1.0,
+    'web application': 1.0,
+    'dashboard': 1.0,
+    'frontend': 1.0,
+    'front-end': 1.0,
+    
+    # Framework indicators (very strong - 0.95)
+    'react': 0.95,
+    'vue': 0.95,
+    'angular': 0.95,
+    
+    # UI indicators (strong - 0.8-0.9)
+    'user interface': 0.9,
+    'web interface': 0.9,
+    'single page': 0.8,
+    'spa': 0.9,
+    'jinja': 0.9,
+    'ui': 0.8,
+    'html': 0.8,
+    'css': 0.8,
+    'client-side': 0.8,
+    
+    # Component indicators (medium - 0.6-0.7)
+    'template': 0.7,
+    'templates': 0.7,
+    'responsive': 0.7,
+    'mobile-friendly': 0.7,
+    'website': 0.7,
+    'static files': 0.7,
+    'browser': 0.6,
+    'form': 0.6,
+    'forms': 0.6,
+    
+    # Weak indicators (low - 0.5)
+    'page': 0.5,
+    'pages': 0.5,
+    'site': 0.5,
+}
+
+# Minimum confidence threshold for frontend detection
+FRONTEND_DETECTION_THRESHOLD = 0.8
+FRONTEND_HIGH_CONFIDENCE_THRESHOLD = 0.9
+
+
+# ==============================================================================
 # --- Parser Strategies (Formats) ---
+# ==============================================================================
 class ParserStrategy(ABC):
     @abstractmethod
     def parse(self, content: Union[str, Path]) -> Dict[str, str]:
@@ -957,45 +1010,8 @@ class IntentParser:
         content_lower = content.lower()
         all_text = content_lower + " " + " ".join(features).lower() + " " + " ".join(constraints).lower()
         
-        # Define frontend detection patterns with weights
-        frontend_indicators = {
-            # Strong indicators (high confidence)
-            'web app': 1.0,
-            'web application': 1.0,
-            'dashboard': 1.0,
-            'user interface': 0.9,
-            'ui': 0.8,
-            'frontend': 1.0,
-            'front-end': 1.0,
-            
-            # UI component indicators
-            'html': 0.8,
-            'css': 0.8,
-            'template': 0.7,
-            'templates': 0.7,
-            'form': 0.6,
-            'forms': 0.6,
-            'page': 0.5,
-            'pages': 0.5,
-            
-            # Framework indicators (very strong)
-            'react': 0.95,
-            'vue': 0.95,
-            'angular': 0.95,
-            'jinja': 0.9,
-            
-            # User experience indicators
-            'responsive': 0.7,
-            'mobile-friendly': 0.7,
-            'single page': 0.8,
-            'spa': 0.9,
-            'website': 0.7,
-            'site': 0.5,
-            'browser': 0.6,
-            'client-side': 0.8,
-            'static files': 0.7,
-            'web interface': 0.9,
-        }
+        # Use module-level constant for frontend indicators
+        frontend_indicators = FRONTEND_INDICATORS
         
         # Calculate confidence score
         detected_keywords = []
@@ -1008,9 +1024,11 @@ class IntentParser:
                 total_score += weight
                 max_score = max(max_score, weight)
         
-        # Determine if frontend is needed
-        # Use threshold-based decision with confidence calculation
-        include_frontend = total_score >= 0.8 or max_score >= 0.9
+        # Determine if frontend is needed using module-level thresholds
+        include_frontend = (
+            total_score >= FRONTEND_DETECTION_THRESHOLD or 
+            max_score >= FRONTEND_HIGH_CONFIDENCE_THRESHOLD
+        )
         
         # Normalize confidence to 0.0-1.0 range
         confidence = min(1.0, total_score / 3.0) if include_frontend else 0.0

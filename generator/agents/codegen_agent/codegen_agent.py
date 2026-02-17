@@ -80,6 +80,11 @@ except ImportError:
 
 
 # ==============================================================================
+# --- Frontend Type Constants ---
+# ==============================================================================
+DEFAULT_FRONTEND_TYPE = "jinja_templates"
+
+# ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
 # --- All internal AuditLogger definitions replaced with centralized call ---
