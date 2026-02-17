@@ -1378,6 +1378,7 @@ async def _protect_running_jobs_on_shutdown():
     """
     try:
         from server.storage import jobs_db
+        from server.schemas.jobs import JobStatus
         
         # Get all jobs and find RUNNING ones
         all_jobs = list(jobs_db.values())
