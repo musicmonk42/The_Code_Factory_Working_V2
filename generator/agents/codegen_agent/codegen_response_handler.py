@@ -295,6 +295,15 @@ LLM_RESPONSE_PREFIXES = [
     'python\r\n', 'PYTHON\r\n',
 ]
 
+# Code patterns to detect if content is actual code vs non-code text (requirements.txt, curl commands, etc.)
+_CODE_PATTERNS = (
+    'def ', 'class ', 'import ', 'from ', 'async def',
+    'function ', 'const ', 'let ', 'var ', 'export ',  # JavaScript/TypeScript
+    'package ', 'func ', 'type ',  # Go
+    'public ', 'private ', 'protected ',  # Java/C#/C++
+    '<?php', '<?=',  # PHP
+)
+
 # Very lightweight heuristic: any assignment to a suspicious name is flagged.
 SECRET_REGEX = re.compile(
     r"(api_key|apikey|secret|token|password)\s*=",
@@ -700,16 +709,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             return {ERROR_FILENAME: error_msg}
         
         # Check if the raw text contains recognizable code patterns
-        CODE_PATTERNS = (
-            'def ', 'class ', 'import ', 'from ', 'async def',
-            'function ', 'const ', 'let ', 'var ', 'export ',  # JavaScript/TypeScript
-            'package ', 'func ', 'type ',  # Go
-            'public ', 'private ', 'protected ',  # Java/C#/C++
-            '<?php', '<?=',  # PHP
-        )
-        
         # If no code patterns found, return error instead of treating as code
-        if not any(pattern in raw for pattern in CODE_PATTERNS):
+        if not any(pattern in raw for pattern in _CODE_PATTERNS):
             error_msg = (
                 "LLM response did not contain recognizable code patterns. "
                 "The response may be requirements.txt content, curl commands, or other non-code text. "

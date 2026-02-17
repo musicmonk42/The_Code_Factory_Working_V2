@@ -85,18 +85,24 @@ def test_fallback_providers():
         mock_manager = MagicMock()
         mock_plugin_manager.return_value = mock_manager
         
-        # Mock provider availability
+        # Mock provider availability - only openai, gemini, and local are configured
         mock_manager.get_provider.side_effect = lambda p: MagicMock() if p in ["openai", "gemini", "local"] else None
         
         client = LLMClient(api_key="test")
         fallback = client._get_fallback_providers("openai")
         
-        # Verify that the full provider list doesn't include unconfigured providers
+        # The fallback list should only contain configured providers (gemini, local)
+        # and should NOT contain unconfigured providers (grok, claude)
+        assert "grok" not in fallback, "Grok should not be in fallback providers"
+        assert "claude" not in fallback, "Claude should not be in fallback providers"
+        
+        # Fallback should only contain gemini and local (openai is the primary, so excluded)
+        assert set(fallback) <= {"gemini", "local"}, f"Fallback providers should only be gemini/local, got {fallback}"
+        
+        # Verify the base provider list is correct
         all_providers = ["openai", "gemini", "local"]
         assert "grok" not in all_providers, "Grok should not be in the default provider list"
         assert "claude" not in all_providers, "Claude should not be in the default provider list"
-        assert "gemini" in all_providers, "Gemini should be in the provider list"
-        assert "local" in all_providers, "Local should be in the provider list"
 
 
 def test_token_limit_increased():
