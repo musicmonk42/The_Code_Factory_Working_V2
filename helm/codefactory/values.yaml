@@ -185,6 +185,15 @@ env:
   LAZY_LOAD_ML: "1"
   STARTUP_TIMEOUT: "90"
 
+  # Agent Loading Race Condition Prevention
+  # Resilience settings for jobs submitted during agent loading phase
+  # Production values: longer timeouts and more retries for stability
+  AGENT_WAIT_TIMEOUT: "120"  # Max seconds to wait for agents (production: 120s)
+  AGENT_WAIT_INTERVAL: "2"   # Check interval in seconds
+  AGENT_RETRY_ATTEMPTS: "5"  # Number of retries (production: 5 for resilience)
+  AGENT_RETRY_BASE_DELAY: "5"  # Base delay for exponential backoff (seconds)
+  AGENT_RETRY_MAX_DELAY: "45"  # Maximum delay cap (seconds)
+
   # Database Configuration
   DB_POOL_SIZE: "50"
   DB_POOL_MAX_OVERFLOW: "20"

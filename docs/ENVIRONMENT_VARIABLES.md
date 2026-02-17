@@ -60,6 +60,68 @@ This document provides a comprehensive reference for all environment variables u
 
 ---
 
+## Agent Loading Configuration
+
+### AGENT_WAIT_TIMEOUT
+- **Purpose:** Maximum time to wait for agents to load before running a pipeline
+- **Type:** Integer (seconds)
+- **Values:** Positive integer
+- **Default:** `90`
+- **Development:** `30` (faster feedback)
+- **Production:** `120` (more resilient)
+- **Example:** `AGENT_WAIT_TIMEOUT=120`
+- **Impact:** Prevents job failures when agents are still loading during startup
+- **Pattern:** Health check pattern with timeout
+- **Related:** Part of agent loading race condition prevention (see docs/AGENT_LOADING_INDUSTRY_STANDARDS.md)
+
+### AGENT_WAIT_INTERVAL
+- **Purpose:** How frequently to check if agents have finished loading
+- **Type:** Integer (seconds)
+- **Values:** `1` to `5` recommended
+- **Default:** `2`
+- **Development:** `1` (faster checks)
+- **Production:** `2` (balanced)
+- **Example:** `AGENT_WAIT_INTERVAL=2`
+- **Impact:** Balances system responsiveness with overhead
+- **Pattern:** Health check polling interval
+
+### AGENT_RETRY_ATTEMPTS
+- **Purpose:** Number of retry attempts when agents are not ready
+- **Type:** Integer
+- **Values:** `0` to `10` recommended
+- **Default:** `3` (total 4 attempts: initial + 3 retries)
+- **Development:** `2` (faster failure)
+- **Production:** `5` (more resilient)
+- **Example:** `AGENT_RETRY_ATTEMPTS=5`
+- **Impact:** Implements resilient retry with exponential backoff
+- **Pattern:** Retry pattern with exponential backoff (2^n multiplier)
+- **Delays:** With default base=5s: 5s, 10s, 20s (capped at max)
+
+### AGENT_RETRY_BASE_DELAY
+- **Purpose:** Base delay for exponential backoff between retry attempts
+- **Type:** Integer (seconds)
+- **Values:** `3` to `10` recommended
+- **Default:** `5`
+- **Development:** `3` (faster retries)
+- **Production:** `5` (standard)
+- **Example:** `AGENT_RETRY_BASE_DELAY=5`
+- **Impact:** Controls initial retry delay (grows exponentially: 5s, 10s, 20s...)
+- **Pattern:** Exponential backoff to prevent thundering herd
+- **Formula:** delay = min(base * 2^attempt, max_delay)
+
+### AGENT_RETRY_MAX_DELAY
+- **Purpose:** Maximum delay cap for exponential backoff
+- **Type:** Integer (seconds)
+- **Values:** `20` to `60` recommended
+- **Default:** `30`
+- **Development:** `15` (faster failure feedback)
+- **Production:** `45` (more resilient)
+- **Example:** `AGENT_RETRY_MAX_DELAY=45`
+- **Impact:** Prevents extremely long waits on later retry attempts
+- **Pattern:** Capped exponential backoff for bounded recovery time
+
+---
+
 ## Testing and CI/CD
 
 ### PYTEST_CURRENT_TEST
