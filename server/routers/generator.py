@@ -20,7 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from server.dependencies import require_agents_ready, get_job_or_404
+from server.dependencies import require_agents_ready, get_job_or_404 as _get_job_or_404
 from server.middleware import arbiter_policy_check
 from server.schemas import (
     ClarificationResponseRequest,
