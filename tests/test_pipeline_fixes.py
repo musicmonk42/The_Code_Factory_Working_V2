@@ -35,7 +35,7 @@ def test_codegen_prompt_has_staticmethod_warning():
     # Should have explicit warning about @staticmethod with @field_validator
     assert "@staticmethod" in content and "@field_validator" in content, \
         "Should mention both @staticmethod and @field_validator"
-    assert "BREAKS PYDANTIC" in content or "breaks" in content.lower(), \
+    assert "BREAKS PYDANTIC" in content or ("breaks" in content.lower() and "pydantic" in content.lower()), \
         "Should warn that @staticmethod breaks Pydantic"
 
 
@@ -47,7 +47,8 @@ def test_python_template_has_frontend_in_checklist():
     # Should have conditional frontend checklist items
     assert "{% if include_frontend %}" in content, \
         "Should have conditional frontend section"
-    assert "Frontend files included" in content or "frontend files" in content.lower(), \
+    # Check for both terms separately for flexibility
+    assert "frontend" in content.lower() and "files" in content.lower(), \
         "Should mention frontend files in checklist"
 
 

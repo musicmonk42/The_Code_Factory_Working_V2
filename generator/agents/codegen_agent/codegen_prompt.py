@@ -483,7 +483,7 @@ The following are MANDATORY checks:
    - ❌ app/schemas.py - Using @staticmethod with @field_validator (BREAKS PYDANTIC):
      * @staticmethod
      * @field_validator('message', mode='before')
-     * def trim_message(cls, v):  # ❌ WRONG: @staticmethod prevents Pydantic from calling validator
+     * def trim_message(v):  # ❌ WRONG: @staticmethod prevents Pydantic from calling validator
      *     return v.strip()
    
    - ❌ app/routes.py - Manual validation (WRONG):
