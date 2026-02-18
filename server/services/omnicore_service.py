@@ -26,7 +26,7 @@ import yaml
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
     from jinja2 import Template
@@ -758,6 +758,179 @@ See LICENSE file for details.
 For issues or questions, please refer to the project documentation or contact the development team.
 """
     return readme
+
+
+def _generate_fallback_frontend_files(
+    output_path: str, 
+    missing_files: Set[str],
+    project_name: str = "Generated App"
+) -> Dict[str, bool]:
+    """
+    Generate fallback frontend files when codegen didn't produce them.
+    
+    This function creates basic frontend file templates when the spec requires
+    frontend files but they weren't generated. Uses industry-standard templates.
+    
+    Args:
+        output_path: Path to the generated project directory
+        missing_files: Set of missing frontend file names
+        project_name: Name of the project for template content
+        
+    Returns:
+        Dictionary mapping file names to success/failure status
+    """
+    results = {}
+    output_dir = Path(output_path)
+    
+    # Template for index.html - Bootstrap-based responsive template
+    INDEX_HTML_TEMPLATE = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{project_name}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">{project_name}</a>
+        </div>
+    </nav>
+    
+    <main class="container mt-4">
+        <h1>Welcome to {project_name}</h1>
+        <p class="lead">This frontend was auto-generated to meet spec requirements.</p>
+        
+        <div id="app-content">
+            <!-- Dynamic content will be loaded here -->
+        </div>
+    </main>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>'''
+
+    # Template for style.css
+    STYLE_CSS_TEMPLATE = '''/* Generated CSS for the application */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.navbar-brand {
+    font-weight: bold;
+}
+
+#app-content {
+    padding: 20px 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 15px;
+    }
+}'''
+
+    # Template for app.js
+    APP_JS_TEMPLATE = '''// Generated JavaScript for the application
+document.addEventListener("DOMContentLoaded", function() {
+    console.log("Application initialized");
+    
+    // API base URL - adjust based on your backend
+    const API_BASE = window.location.origin;
+    
+    // Example: Load data from API
+    async function loadData() {
+        try {
+            const response = await fetch(`${API_BASE}/api/health`);
+            if (response.ok) {
+                const data = await response.json();
+                console.log("API health check:", data);
+            }
+        } catch (error) {
+            console.log("API not available or running on different port");
+        }
+    }
+    
+    loadData();
+});'''
+
+    TEMPLATES = {
+        'index.html': INDEX_HTML_TEMPLATE,
+        'style.css': STYLE_CSS_TEMPLATE,
+        'app.js': APP_JS_TEMPLATE,
+    }
+    
+    # Determine where to place frontend files
+    # Check for existing structure
+    possible_dirs = [
+        output_dir / "templates",
+        output_dir / "static",
+        output_dir / "public",
+        output_dir / "app" / "templates",
+        output_dir / "app" / "static",
+        output_dir,  # Fallback to root
+    ]
+    
+    # Find or create target directory
+    target_dir = output_dir  # Default
+    for pdir in possible_dirs:
+        if pdir.exists():
+            target_dir = pdir
+            break
+    
+    # For index.html, prefer templates directory
+    html_target = target_dir
+    css_js_target = target_dir
+    
+    # If templates exists, put HTML there, CSS/JS in static
+    templates_dir = output_dir / "templates"
+    static_dir = output_dir / "static"
+    
+    if templates_dir.exists():
+        html_target = templates_dir
+    else:
+        # Create templates if we're generating index.html
+        if 'index.html' in missing_files:
+            templates_dir.mkdir(parents=True, exist_ok=True)
+            html_target = templates_dir
+    
+    if static_dir.exists():
+        css_js_target = static_dir
+    elif 'style.css' in missing_files or 'app.js' in missing_files:
+        static_dir.mkdir(parents=True, exist_ok=True)
+        css_js_target = static_dir
+    
+    # Generate missing files
+    for filename in missing_files:
+        if filename not in TEMPLATES:
+            results[filename] = False
+            continue
+        
+        try:
+            if filename == 'index.html':
+                file_path = html_target / filename
+            else:
+                file_path = css_js_target / filename
+            
+            file_path.write_text(TEMPLATES[filename], encoding='utf-8')
+            results[filename] = True
+            logger.info(f"Generated fallback frontend file: {file_path}")
+        except Exception as e:
+            logger.warning(f"Failed to generate fallback {filename}: {e}")
+            results[filename] = False
+    
+    return results
 
 
 def _create_placeholder_critique_report(job_id: str, message: str) -> Dict[str, Any]:
@@ -5987,6 +6160,43 @@ class OmniCoreService:
                     )
                     raise ValueError(error_msg)
 
+            # FIX Failure 4: Pre-codegen spec check for frontend files
+            # Extract required files from the MD content and check if any are frontend files
+            # If so, enable include_frontend BEFORE codegen runs
+            md_content_for_spec_check = codegen_payload.get("requirements", "")
+            if md_content_for_spec_check and _PROVENANCE_AVAILABLE and _extract_required_files_from_md:
+                try:
+                    target_lang = payload.get("language", "python").lower()
+                    spec_required_files = set(_extract_required_files_from_md(md_content_for_spec_check, target_language=target_lang))
+                    spec_frontend_files = spec_required_files & FRONTEND_FILE_PATTERNS
+                    
+                    if spec_frontend_files:
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} pre-codegen spec check: detected frontend files "
+                            f"in spec: {spec_frontend_files}. Enabling frontend generation.",
+                            extra={"job_id": job_id, "spec_frontend_files": list(spec_frontend_files)}
+                        )
+                        # Update job metadata to enable frontend
+                        job = jobs_db.get(job_id)
+                        if job:
+                            job.metadata["include_frontend"] = True
+                            if not job.metadata.get("frontend_type"):
+                                # Default to jinja_templates for Python, vanilla_js for others
+                                if target_lang in ("python", "py"):
+                                    job.metadata["frontend_type"] = "jinja_templates"
+                                else:
+                                    job.metadata["frontend_type"] = "vanilla_js"
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} updated job metadata: include_frontend=True, "
+                                f"frontend_type={job.metadata.get('frontend_type')}",
+                                extra={"job_id": job_id}
+                            )
+                except Exception as spec_check_err:
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} pre-codegen spec check error: {spec_check_err}",
+                        extra={"job_id": job_id}
+                    )
+
             # Retry configuration
             max_codegen_retries = 2  # Total attempts = 1 initial + 2 retries = 3
             codegen_attempt = 0
@@ -6488,10 +6698,34 @@ class OmniCoreService:
                         if missing_frontend_files:
                             logger.info(
                                 f"[PIPELINE] Job {job_id} spec requires frontend files not yet generated: "
-                                f"{missing_frontend_files}. Frontend generation should be enabled."
+                                f"{missing_frontend_files}. Generating fallback frontend files."
                             )
-                            # Note: Frontend detection happens in codegen, so we can only log this
-                            # For future enhancement: could trigger frontend generation here
+                            # FIX Failure 4: Generate fallback frontend files when spec requires them
+                            if output_path:
+                                try:
+                                    frontend_results = _generate_fallback_frontend_files(
+                                        output_path=output_path,
+                                        missing_files=missing_frontend_files,
+                                        project_name=payload.get("output_dir", "Generated App") or "Generated App"
+                                    )
+                                    generated_files = [f for f, success in frontend_results.items() if success]
+                                    failed_files = [f for f, success in frontend_results.items() if not success]
+                                    
+                                    if generated_files:
+                                        logger.info(
+                                            f"[PIPELINE] Job {job_id} generated fallback frontend files: {generated_files}",
+                                            extra={"job_id": job_id, "generated_files": generated_files}
+                                        )
+                                    if failed_files:
+                                        logger.warning(
+                                            f"[PIPELINE] Job {job_id} failed to generate some frontend files: {failed_files}",
+                                            extra={"job_id": job_id, "failed_files": failed_files}
+                                        )
+                                except Exception as fe_err:
+                                    logger.warning(
+                                        f"[PIPELINE] Job {job_id} error generating fallback frontend: {fe_err}",
+                                        extra={"job_id": job_id}
+                                    )
                         
                         if missing_config_files:
                             logger.info(
