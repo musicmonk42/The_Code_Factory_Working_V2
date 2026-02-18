@@ -27,6 +27,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: pytest-all-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Tests run in parallel per module - run on every push/PR
   test-matrix:
@@ -843,7 +847,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          python -m pytest \
+          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
             --tb=short \
@@ -858,8 +862,36 @@ jobs:
             --junitxml=junit-sfe-arbiter.xml \
             > test-output-sfe-arbiter.log 2>&1 || {
             EXIT_CODE=$?
+            echo "======================================"
             echo "Arbiter tests failed with exit code $EXIT_CODE"
-            tail -100 test-output-sfe-arbiter.log
+            echo "======================================"
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "ERROR: Arbiter test execution timed out (timeout command)"
+              echo "Wall-clock time limit (45 minutes) was exceeded"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-arbiter.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            elif [ $EXIT_CODE -eq 143 ]; then
+              echo "ERROR: Process terminated (SIGTERM - exit code 143)"
+              echo "This typically indicates:"
+              echo "  - Timeout or resource exhaustion"
+              echo "  - Runner service shutdown"
+              echo "  - Memory pressure from test suite"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-arbiter.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            else
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-arbiter.log
+            fi
             exit $EXIT_CODE
           }
 
@@ -917,7 +949,7 @@ jobs:
           
           echo "=== Running Mesh Tests ==="
           # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
-          python -m pytest \
+          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
             -v \
             --tb=short \
@@ -932,8 +964,36 @@ jobs:
             --junitxml=junit-sfe-mesh.xml \
             > test-output-sfe-mesh.log 2>&1 || {
             EXIT_CODE=$?
+            echo "======================================"
             echo "Mesh tests failed with exit code $EXIT_CODE"
-            tail -100 test-output-sfe-mesh.log
+            echo "======================================"
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "ERROR: Mesh test execution timed out (timeout command)"
+              echo "Wall-clock time limit (25 minutes) was exceeded"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-mesh.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            elif [ $EXIT_CODE -eq 143 ]; then
+              echo "ERROR: Process terminated (SIGTERM - exit code 143)"
+              echo "This typically indicates:"
+              echo "  - Timeout or resource exhaustion"
+              echo "  - Runner service shutdown"
+              echo "  - Memory pressure from test suite"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-mesh.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            else
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-mesh.log
+            fi
             exit $EXIT_CODE
           }
 
@@ -991,7 +1051,7 @@ jobs:
           
           echo "=== Running Other Tests (simulation, self_healing, sfe_basic) ==="
           # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
-          python -m pytest \
+          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
             self_fixing_engineer/tests/ \
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
             --ignore=self_fixing_engineer/tests/test_mesh*.py \
@@ -1008,8 +1068,36 @@ jobs:
             --junitxml=junit-sfe-other.xml \
             > test-output-sfe-other.log 2>&1 || {
             EXIT_CODE=$?
+            echo "======================================"
             echo "Other tests failed with exit code $EXIT_CODE"
-            tail -100 test-output-sfe-other.log
+            echo "======================================"
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo "ERROR: Other test execution timed out (timeout command)"
+              echo "Wall-clock time limit (25 minutes) was exceeded"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-other.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            elif [ $EXIT_CODE -eq 143 ]; then
+              echo "ERROR: Process terminated (SIGTERM - exit code 143)"
+              echo "This typically indicates:"
+              echo "  - Timeout or resource exhaustion"
+              echo "  - Runner service shutdown"
+              echo "  - Memory pressure from test suite"
+              echo ""
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-other.log || true
+              echo ""
+              echo "=== System resources at failure ==="
+              free -h || true
+              df -h || true
+            else
+              echo "=== Last 100 lines of test output ==="
+              tail -100 test-output-sfe-other.log
+            fi
             exit $EXIT_CODE
           }
 
