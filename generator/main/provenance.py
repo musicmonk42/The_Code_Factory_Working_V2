@@ -247,10 +247,12 @@ class ProvenanceTracker:
     
     def to_dict(self) -> Dict[str, Any]:
         overwrites = self.get_artifact_overwrites()
+        finished_timestamp = datetime.now(timezone.utc).isoformat()
         return {
             "job_id": self.job_id,
+            "timestamp": finished_timestamp,  # Add timestamp field for validator compliance
             "started_at": self.started_at,
-            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": finished_timestamp,
             "version": "1.0.0",
             "stages": self.stages,
             "artifacts": self.artifacts,

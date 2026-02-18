@@ -1231,6 +1231,34 @@ async def build_code_generation_prompt(
                     "Multi-modal inputs must include a list of valid URLs."
                 )
 
+            # GATING: Validate project_type is present before proceeding with code generation
+            # This prevents the system from defaulting to FastAPI or other templates when project_type is missing
+            project_type = requirements.get("project_type")
+            # Check for missing, None, non-string, or empty/whitespace-only values
+            # Order matters: check isinstance first to avoid AttributeError on .strip()
+            if not isinstance(project_type, str) or not project_type or not project_type.strip():
+                PROMPT_ERRORS.labels("MissingProjectType").inc()
+                logger.error(
+                    "Cannot proceed with code generation: project_type is missing, invalid, or empty. "
+                    "The system requires an explicit project type string to generate appropriate scaffolding.",
+                    extra={
+                        "requirements_keys": list(requirements.keys()),
+                        "project_type_value": project_type,
+                        "project_type_type": type(project_type).__name__
+                    }
+                )
+                raise ValueError(
+                    "Cannot proceed with code generation: project_type is missing or uncertain. "
+                    "Please specify project_type explicitly in the spec block as a string "
+                    "(e.g., 'fastapi_service', 'cli_tool', 'library')."
+                )
+            
+            # Log project_type for audit trail
+            logger.info(
+                f"Code generation proceeding with project_type='{project_type}'",
+                extra={"project_type": project_type, "target_language": target_language}
+            )
+
             # 2. Internationalization
             requirements = await translate_requirements_if_needed(requirements)
 
