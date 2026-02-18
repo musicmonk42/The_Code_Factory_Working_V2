@@ -209,6 +209,8 @@ _clarification_sessions = {}
 # Constants for configurable timeouts
 DEFAULT_TESTGEN_TIMEOUT = int(os.getenv("TESTGEN_TIMEOUT_SECONDS", "600"))
 DEFAULT_TESTGEN_LLM_TIMEOUT = int(os.getenv("TESTGEN_LLM_TIMEOUT_SECONDS", "360"))
+# Add a pipeline-specific timeout that caps testgen when running in full pipeline mode
+DEFAULT_TESTGEN_PIPELINE_TIMEOUT = int(os.getenv("TESTGEN_PIPELINE_TIMEOUT_SECONDS", "120"))
 DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
 DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
@@ -227,6 +229,18 @@ MAX_CONFIG_FILE_SIZE_BYTES = 5 * 1024 * 1024   # 5 MB - reasonable for config fi
 HELM_REQUIRED_FIELDS = {"apiVersion", "name"}  # Minimum required fields per Helm spec
 HELM_DEFAULT_API_VERSION = "v2"  # Helm 3 uses apiVersion v2
 HELM_DEFAULT_CHART_TYPE = "application"
+
+# Spec-Derived File Patterns for Categorization
+DEPLOYMENT_FILE_PATTERNS = {
+    'Dockerfile', 'docker-compose.yml', 'compose.yml', 
+    'Chart.yaml', 'deployment.yaml', 'service.yaml',
+    'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
+}
+FRONTEND_FILE_PATTERNS = {
+    'index.html', 'style.css', 'app.js', 'bundle.js',
+    'main.tsx', 'App.tsx', 'index.jsx', 'App.jsx'
+}
+CONFIG_FILE_PATTERNS = {'conf.py', 'config.yaml', 'settings.py'}
 
 # Error Type Constants (Industry Standard: Structured error identification)
 ERROR_TYPE_IMPORT = "import_error"
@@ -6435,6 +6449,113 @@ class OmniCoreService:
                 detected_language = "python"
                 logger.warning(f"[PIPELINE] Job {job_id} no output path for language detection, defaulting to python")
             
+            # 2f. Post-codegen spec completeness check
+            # Check spec-derived required files against generated files to ensure completeness
+            if _PROVENANCE_AVAILABLE and _extract_required_files_from_md and md_content and output_path:
+                try:
+                    spec_required = set(_extract_required_files_from_md(md_content, target_language=detected_language))
+                    code_path = Path(output_path)
+                    
+                    # Get all generated files recursively
+                    generated_files = set()
+                    if code_path.exists():
+                        for file_path in code_path.rglob("*"):
+                            if file_path.is_file():
+                                # Get relative path from output_path
+                                rel_path = str(file_path.relative_to(code_path))
+                                generated_files.add(rel_path)
+                                # Also add just the filename for matching
+                                generated_files.add(file_path.name)
+                    
+                    missing_from_spec = spec_required - generated_files
+                    
+                    if missing_from_spec:
+                        # Categorize missing files using module-level constants
+                        missing_deploy_files = missing_from_spec & DEPLOYMENT_FILE_PATTERNS
+                        missing_frontend_files = missing_from_spec & FRONTEND_FILE_PATTERNS
+                        missing_config_files = missing_from_spec & CONFIG_FILE_PATTERNS
+                        
+                        if missing_deploy_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires deployment files not yet generated: "
+                                f"{missing_deploy_files}. Ensuring deploy step is enabled."
+                            )
+                            # Override include_deployment to ensure it runs
+                            if not payload.get("include_deployment", True):
+                                payload["include_deployment"] = True
+                                logger.info(f"[PIPELINE] Job {job_id} enabled deployment due to spec-derived requirements")
+                        
+                        if missing_frontend_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires frontend files not yet generated: "
+                                f"{missing_frontend_files}. Frontend generation should be enabled."
+                            )
+                            # Note: Frontend detection happens in codegen, so we can only log this
+                            # For future enhancement: could trigger frontend generation here
+                        
+                        if missing_config_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires config files not yet generated: "
+                                f"{missing_config_files}."
+                            )
+                        
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} spec completeness check: "
+                            f"{len(missing_from_spec)} files from spec not yet generated. "
+                            f"Deploy/docgen steps will attempt to generate these."
+                        )
+                    else:
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} spec completeness check: "
+                            f"All {len(spec_required)} spec-derived files generated successfully"
+                        )
+                except Exception as spec_check_err:
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} spec completeness check error: {spec_check_err}",
+                        exc_info=True
+                    )
+            
+            # PARALLELIZATION: Start deploy task early since it only depends on codegen output
+            # Deploy will run in parallel with testgen/critique/SFE to reduce total pipeline time
+            deploy_task = None
+            include_deployment = payload.get("include_deployment", True)
+            
+            # Collect spec-derived deployment requirements if available
+            spec_derived_deploy_files = []
+            if _PROVENANCE_AVAILABLE and _extract_required_files_from_md and md_content:
+                try:
+                    spec_files = set(_extract_required_files_from_md(md_content, target_language=detected_language))
+                    spec_derived_deploy_files = list(spec_files & DEPLOYMENT_FILE_PATTERNS)
+                except Exception:
+                    pass
+            
+            if include_deployment:
+                async def run_deploy_parallel():
+                    """Run deploy stage in parallel with other stages."""
+                    try:
+                        deploy_payload = {
+                            "code_path": codegen_result.get("output_path"),
+                            "include_ci_cd": True,
+                            "output_dir": payload.get("output_dir", ""),
+                            "generated_files": codegen_result.get("file_names", []),
+                            "language": detected_language,
+                            "spec_required_files": spec_derived_deploy_files,  # Pass spec-derived requirements
+                        }
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} starting deploy in parallel with testgen "
+                            f"with {len(deploy_payload.get('generated_files', []))} files"
+                            + (f" (spec requires: {spec_derived_deploy_files})" if spec_derived_deploy_files else "")
+                        )
+                        result = await self._run_deploy_all(job_id, deploy_payload)
+                        logger.info(f"[PIPELINE] Job {job_id} parallel deploy completed with status: {result.get('status')}")
+                        return result
+                    except Exception as e:
+                        logger.error(f"[PIPELINE] Job {job_id} parallel deploy exception: {e}", exc_info=True)
+                        return {"status": "error", "message": str(e)}
+                
+                deploy_task = asyncio.create_task(run_deploy_parallel())
+                logger.info(f"[PIPELINE] Job {job_id} deploy task created and running in background")
+            
             # 3. Testgen (if requested)
             # RESILIENCE FIX: Pipeline continues even if testgen fails
             # Industry Standard: Fail-safe pipeline design - individual stage failures
@@ -6484,7 +6605,7 @@ class OmniCoreService:
                                 "test_type": "unit",
                                 "coverage_target": 80.0,
                                 "use_llm": llm_provider_configured,  # Enable LLM-based generation when provider available
-                                "llm_timeout": DEFAULT_TESTGEN_TIMEOUT if llm_provider_configured else 30,  # Use configured timeout for LLM, 30s for rule-based
+                                "llm_timeout": DEFAULT_TESTGEN_PIPELINE_TIMEOUT if llm_provider_configured else 30,  # Use pipeline timeout for full pipeline mode
                                 "language": detected_language,  # Pass detected language
                             }
                             logger.info(
@@ -6828,52 +6949,19 @@ class OmniCoreService:
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping SFE analysis step (run_sfe_analysis={payload.get('run_sfe_analysis', True)})")
             
-            # 6. Deploy (if requested)
-            # RESILIENCE FIX: Pipeline continues even if deployment fails
-            # Industry Standard: Deploy failures shouldn't prevent documentation generation
-            # or critique, allowing maximum value delivery from the pipeline
-            # FIX: Default to True since deployment is a core pipeline feature
-            # Users who don't want deployment should explicitly set include_deployment=False
-            include_deployment = payload.get("include_deployment", True)
-            logger.info(
-                f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, "
-                f"test_status={'passed' if testgen_result and testgen_result.get('test_results', {}).get('failed', 0) == 0 else 'failed_or_skipped'}",
-                extra={
-                    "job_id": job_id,
-                    "include_deployment": include_deployment,
-                    "stages_completed": stages_completed,
-                    "payload_keys": list(payload.keys())
-                }
-            )
-            
-            if include_deployment:
-                logger.info(
-                    f"[PIPELINE] *** STARTING DEPLOY STAGE *** Job {job_id} - "
-                    f"Deploy stage will run regardless of test results (resilient pipeline design)",
-                    extra={
-                        "job_id": job_id,
-                        "stage": "deploy",
-                        "test_results": testgen_result.get("test_results") if testgen_result else None
-                    }
-                )
+            # 6. Await Deploy task (started in parallel earlier)
+            # PARALLELIZATION: Deploy was started in parallel with testgen to reduce total pipeline time
+            # Now we wait for it to complete before proceeding to docgen
+            deploy_result = {}
+            if deploy_task:
+                logger.info(f"[PIPELINE] Job {job_id} awaiting parallel deploy task completion")
                 try:
-                    # Pass generated files from codegen to deployment
-                    deploy_payload = {
-                        "code_path": codegen_result.get("output_path"),
-                        "include_ci_cd": True,
-                        "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
-                        "generated_files": codegen_result.get("file_names", []),  # FIX 1: Pass file list
-                        "language": detected_language,  # FIX Issue A: Propagate detected language
-                    }
-                    logger.info(f"[PIPELINE] Job {job_id} starting step: deploy_all (docker, kubernetes, helm) with {len(deploy_payload.get('generated_files', []))} files")
-                    
-                    # Run all deployment targets
-                    deploy_result = await self._run_deploy_all(job_id, deploy_payload)
+                    deploy_result = await deploy_task
                     
                     if deploy_result.get("status") == "completed":
                         stages_completed.append("deploy")
                         logger.info(
-                            f"[PIPELINE] Job {job_id} completed step: deploy_all - "
+                            f"[PIPELINE] Job {job_id} completed parallel deploy - "
                             f"targets: {deploy_result.get('completed_targets', [])} - "
                             f"files: {deploy_result.get('generated_files', [])}"
                         )
@@ -6903,7 +6991,7 @@ class OmniCoreService:
                     elif deploy_result.get("status") == "error":
                         deploy_error = deploy_result.get('message', 'Unknown error')
                         logger.error(
-                            f"[PIPELINE] Job {job_id} deploy_all failed - {deploy_error}",
+                            f"[PIPELINE] Job {job_id} parallel deploy failed - {deploy_error}",
                             extra={
                                 "job_id": job_id,
                                 "error": deploy_error,
@@ -6915,7 +7003,7 @@ class OmniCoreService:
                 except Exception as e:
                     # Industry Standard: Comprehensive error logging with structured context
                     logger.error(
-                        f"[PIPELINE] Job {job_id} deploy exception: {e}",
+                        f"[PIPELINE] Job {job_id} parallel deploy await exception: {e}",
                         exc_info=True,
                         extra={
                             "job_id": job_id,
@@ -6927,8 +7015,8 @@ class OmniCoreService:
                     )
                     stages_completed.append("deploy:exception")
                     logger.warning(
-                        f"[PIPELINE] Job {job_id} continuing pipeline despite deploy exception",
-                        extra={"job_id": job_id, "remaining_stages": ["docgen", "critique"]}
+                        f"[PIPELINE] Job {job_id} continuing pipeline despite parallel deploy exception",
+                        extra={"job_id": job_id, "remaining_stages": ["docgen"]}
                     )
             else:
                 logger.info(f"[PIPELINE] Job {job_id} skipping deploy step (include_deployment={include_deployment})")

@@ -1411,10 +1411,13 @@ class WorkflowEngine:
                                         metadata={"output_path": output_path, "files_count": len(codegen_files)}
                                     )
                         
-                        # [STAGE:TESTGEN] Execute test generation AFTER validation
-                        # Tests should be generated based on final validated code
+                        # [STAGE:TESTGEN & DEPLOY_GEN] Execute in parallel for faster pipeline
+                        # Deploy only depends on codegen output, so it can run alongside testgen
+                        testgen_task = None
+                        deploy_task = None
+                        
                         if self._enable_testing and "testgen" in _agent_registry:
-                            testgen_result = await self._execute_agent(
+                            testgen_task = self._execute_agent(
                                 "testgen",
                                 {
                                     "codegen_output": codegen_result,
@@ -1423,14 +1426,70 @@ class WorkflowEngine:
                                 },
                                 workflow_id
                             )
+                        
+                        enable_deploy = self.config.get('enable_deploy', True)
+                        if enable_deploy:
+                            deploy_task = self._run_deploy_stage(
+                                codegen_result=codegen_result,
+                                output_path=output_path,
+                                workflow_id=workflow_id,
+                                provenance=provenance
+                            )
+                        
+                        # Execute tasks in parallel if both are enabled
+                        if testgen_task and deploy_task:
+                            logger.info(f"[Pipeline] Running testgen and deploy in parallel for workflow {workflow_id}")
+                            testgen_result, deploy_result = await asyncio.gather(
+                                testgen_task, 
+                                deploy_task, 
+                                return_exceptions=True
+                            )
+                            
+                            # Handle testgen result
+                            if isinstance(testgen_result, Exception):
+                                logger.error(f"[Pipeline] Testgen failed with exception: {testgen_result}")
+                                result["agent_results"]["testgen"] = {
+                                    "status": AgentStatus.FAILED.value,
+                                    "error": str(testgen_result)
+                                }
+                            else:
+                                result["agent_results"]["testgen"] = testgen_result
+                                if testgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                                    result["stages_completed"].append("testgen")
+                                    logger.debug(f"[Pipeline] Stage 'testgen' completed for workflow {workflow_id}")
+                            
+                            # Handle deploy result
+                            if isinstance(deploy_result, Exception):
+                                logger.error(f"[Pipeline] Deploy failed with exception: {deploy_result}")
+                                result["agent_results"]["deploy"] = {
+                                    "status": "error",
+                                    "error": str(deploy_result)
+                                }
+                            else:
+                                result["agent_results"]["deploy"] = deploy_result
+                                if deploy_result.get("status") == "completed":
+                                    result["stages_completed"].append("deploy")
+                                    logger.debug(f"[Pipeline] Stage 'deploy' completed for workflow {workflow_id}")
+                        
+                        elif testgen_task:
+                            # Run testgen only
+                            testgen_result = await testgen_task
                             result["agent_results"]["testgen"] = testgen_result
-
-                            # Track testgen completion
                             if testgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
                                 result["stages_completed"].append("testgen")
                                 logger.debug(f"[Pipeline] Stage 'testgen' completed for workflow {workflow_id}")
-                            
-                            # [ARBITER] Publish test results event
+                        
+                        elif deploy_task:
+                            # Run deploy only
+                            deploy_result = await deploy_task
+                            result["agent_results"]["deploy"] = deploy_result
+                            if deploy_result.get("status") == "completed":
+                                result["stages_completed"].append("deploy")
+                                logger.debug(f"[Pipeline] Stage 'deploy' completed for workflow {workflow_id}")
+                        
+                        # Post-processing for testgen (arbiter events, provenance)
+                        if testgen_task and "testgen" in result["agent_results"]:
+                            testgen_result = result["agent_results"]["testgen"]
                             if self.arbiter_bridge:
                                 try:
                                     await self.arbiter_bridge.publish_event(
@@ -1452,40 +1511,27 @@ class WorkflowEngine:
                                     metadata={"iteration": iteration_num, "status": testgen_result.get("status", "unknown")}
                                 )
                         
-                        # [STAGE:DEPLOY_GEN] Generate deployment artifacts AFTER testgen
-                        # This ensures we have validated code before creating deployment configs
-                        enable_deploy = self.config.get('enable_deploy', True)
-                        if enable_deploy:
-                            try:
-                                deploy_result = await self._run_deploy_stage(
-                                    codegen_result=codegen_result,
-                                    output_path=output_path,
-                                    workflow_id=workflow_id,
-                                    provenance=provenance
+                        # Post-processing for deploy (validation checks, provenance)
+                        if deploy_task and "deploy" in result["agent_results"]:
+                            deploy_result = result["agent_results"]["deploy"]
+                            
+                            # Check if deploy validation failed - HARD FAIL
+                            if deploy_result.get("status") == "validation_failed":
+                                validation_errors = deploy_result.get("validation_errors", [])
+                                logger.error(
+                                    f"[STAGE:DEPLOY_GEN] HARD FAIL - Deploy validation failed: {validation_errors}",
+                                    extra={"validation_errors": validation_errors}
                                 )
-                                result["agent_results"]["deploy"] = deploy_result
-
-                                # Track deploy completion - only if status is completed
-                                if deploy_result.get("status") == "completed":
-                                    result["stages_completed"].append("deploy")
-                                    logger.debug(f"[Pipeline] Stage 'deploy' completed for workflow {workflow_id}")
-                                
-                                # Check if deploy validation failed - HARD FAIL
-                                if deploy_result.get("status") == "validation_failed":
-                                    validation_errors = deploy_result.get("validation_errors", [])
-                                    logger.error(
-                                        f"[STAGE:DEPLOY_GEN] HARD FAIL - Deploy validation failed: {validation_errors}",
-                                        extra={"validation_errors": validation_errors}
-                                    )
-                                    result["status"] = WorkflowStatus.FAILED.value
-                                    result["errors"].append({
-                                        "error_type": "DeployValidationError",
-                                        "message": f"Deploy validation failed: {validation_errors}",
-                                        "stage": "DEPLOY_GEN",
-                                        "timestamp": datetime.now(timezone.utc).isoformat()
-                                    })
-                                    break  # Exit iteration loop
-                                
+                                result["status"] = WorkflowStatus.FAILED.value
+                                result["errors"].append({
+                                    "error_type": "DeployValidationError",
+                                    "message": f"Deploy validation failed: {validation_errors}",
+                                    "stage": "DEPLOY_GEN",
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                })
+                                break  # Exit iteration loop
+                            
+                            if deploy_result.get("status") == "completed":
                                 logger.info(
                                     f"[STAGE:DEPLOY_GEN] Deployment artifacts generated",
                                     extra={
@@ -1493,21 +1539,6 @@ class WorkflowEngine:
                                         "files_generated": deploy_result.get("files_written", [])
                                     }
                                 )
-                            except Exception as deploy_error:
-                                logger.warning(
-                                    f"[STAGE:DEPLOY_GEN] Deployment generation failed: {deploy_error}",
-                                    extra={"workflow_id": workflow_id, "error": str(deploy_error)}
-                                )
-                                result["agent_results"]["deploy"] = {
-                                    "status": "failed",
-                                    "error": str(deploy_error)
-                                }
-                                if provenance:
-                                    provenance.record_error(
-                                        ProvenanceTracker.STAGE_DEPLOY_GEN,
-                                        "deploy_generation_error",
-                                        str(deploy_error)
-                                    )
                         
                         # Small delay between iterations
                         await asyncio.sleep(DEFAULT_ITERATION_DELAY_SECONDS)
