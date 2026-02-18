@@ -92,8 +92,19 @@ def test_float_parsing_validation():
         MyModel(price="not_a_number")
     errors = exc_info.value.errors()
     assert errors[0]["type"] == "float_parsing"  # V2 type, NOT "type_error.float"
+    # OR use substring match on error message
+    assert "valid number" in str(exc_info.value).lower()  # NOT "value is not a valid float" (v1)
 
-# Test 6: API endpoint validation error response
+# Test 6: Integer parsing error (int_parsing error)
+def test_integer_parsing_validation():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(quantity="not_an_int")
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "int_parsing"  # V2 type, NOT "type_error.integer"
+    # OR use substring match on error message
+    assert "valid integer" in str(exc_info.value).lower()  # NOT "value is not a valid integer" (v1)
+
+# Test 7: API endpoint validation error response
 def test_api_validation_error():
     response = client.post("/endpoint", json={"message": "x" * 501})
     assert response.status_code == 422
@@ -109,13 +120,20 @@ def test_api_validation_error():
 # assert errors[0]["type"] == "value_error.any_str.min_length"  # FAILS: V1 type
 # assert errors[0]["type"] == "value_error.number.not_gt"  # FAILS: V1 type
 # assert errors[0]["type"] == "type_error.float"  # FAILS: V1 type
+# assert errors[0]["type"] == "type_error.integer"  # FAILS: V1 type
+# assert "value is not a valid float" in str(exc_info.value)  # FAILS: V1 message format
+# assert "value is not a valid integer" in str(exc_info.value)  # FAILS: V1 message format
 ```
 {% endif %}
 
 ## Import Paths (CRITICAL)
 - Always use `from app.X import Y` pattern for application code
+- **The FastAPI/Flask `app` instance is typically defined in `app/main.py` or `main.py`**
+- **Import the app as: `from app.main import app`** (NOT `from app.routes import app`)
+- Routes use `APIRouter`, the app instance is in main.py
 - DO NOT use `from generated.project_name.app.X import Y` 
 - DO NOT use absolute paths like `from /path/to/app.X import Y`
+- **NEVER use paths starting with `generated.` — those are internal directory names**
 - Import from the module structure as if you're inside the project root
 
 ## Mocking and External Dependencies

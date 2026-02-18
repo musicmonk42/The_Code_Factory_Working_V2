@@ -201,10 +201,12 @@ The specification EXPLICITLY requires these endpoints. You MUST implement ALL of
 {% if framework == "fastapi" %}
 **FastAPI Best Practices**:
 - Use Pydantic models for validation
+- **CRITICAL**: Route handler parameters MUST use typed Pydantic models (e.g., `item: Item`), NEVER `dict` or `Any`
 - Add response_model to endpoints
 - Use HTTPException for errors
 - Include OpenAPI tags and descriptions
 - Add example values to schemas
+- FastAPI automatically returns 422 for validation errors when using typed Pydantic parameters
 {% elif framework == "flask" %}
 **Flask Best Practices**:
 - Use Blueprints for organization
