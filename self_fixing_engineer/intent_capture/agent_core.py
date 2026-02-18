@@ -162,7 +162,33 @@ except ImportError:
     tracer = trace.get_tracer(__name__)
     OTEL_AVAILABLE = False
 
-from prometheus_client import Counter, Histogram, start_http_server
+from prometheus_client import Counter, Histogram, REGISTRY, start_http_server
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+    """
+    Safely create or retrieve a Prometheus metric to prevent
+    'Duplicated timeseries in CollectorRegistry' errors when
+    this module is imported through multiple paths.
+    """
+    labelnames = labelnames or []
+    # Check if metric already exists in registry
+    try:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass
+    # Try to create the metric
+    try:
+        return metric_class(name, documentation, labelnames)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise
+
 
 # UPGRADE: Sentry for Error Aggregation
 try:
@@ -192,18 +218,27 @@ logger = logging.getLogger("agent_core")
 llm_breaker = CircuitBreaker(fail_max=3)
 
 # UPGRADE: Expanded Prometheus Metrics
-AGENT_CYCLE_COUNT = Counter(
+# Use safe metric creation to prevent 'Duplicated timeseries in CollectorRegistry'
+# errors when this module is imported through multiple paths during startup.
+AGENT_CYCLE_COUNT = _get_or_create_metric(
+    Counter,
     "agent_self_correction_cycles_total",
     "Self-correction cycles executed",
     ["agent_id"],
 )
-LLM_RESPONSE_LATENCY_SECONDS = Histogram(
-    "llm_response_latency_seconds", "Latency of LLM responses", ["llm_provider"]
+LLM_RESPONSE_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram,
+    "llm_response_latency_seconds",
+    "Latency of LLM responses",
+    ["llm_provider"],
 )
-RAG_QUERY_LATENCY_SECONDS = Histogram(
-    "rag_query_latency_seconds", "Latency of RAG vector store queries"
+RAG_QUERY_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram,
+    "rag_query_latency_seconds",
+    "Latency of RAG vector store queries",
 )
-AGENT_PREDICTION_ERRORS_TOTAL = Counter(
+AGENT_PREDICTION_ERRORS_TOTAL = _get_or_create_metric(
+    Counter,
     "agent_prediction_errors_total",
     "Total errors during agent prediction",
     ["agent_id", "error_type"],
