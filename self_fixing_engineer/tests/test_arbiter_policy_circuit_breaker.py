@@ -236,11 +236,20 @@ class TestBreakerStateManagement:
 
     @pytest.mark.asyncio
     async def test_provider_limit(self, mock_config, cleanup_states):
+        # Import the states dict
+        from self_fixing_engineer.arbiter.policy.circuit_breaker import _breaker_states
+        
         # Temporarily set max providers to a small number
         with patch("self_fixing_engineer.arbiter.policy.circuit_breaker._MAX_PROVIDERS", 3):
+            # CRITICAL: Clear breaker states before test
+            _breaker_states.clear()
+            
             # Create up to the limit
             for i in range(3):
                 await get_breaker_state(f"provider_{i}", mock_config)
+            
+            # Verify we're at the limit
+            assert len(_breaker_states) == 3
 
             # Should fail when exceeding limit
             with pytest.raises(RuntimeError, match="Maximum provider limit"):

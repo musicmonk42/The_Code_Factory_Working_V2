@@ -37,6 +37,37 @@ class OpenAIAdapter:
     This class provides a robust and observable interface for interacting with OpenAI's API,
     handling various error conditions and leveraging the shared LLMClient's retry mechanisms.
     """
+    
+    # Class-level metrics (shared across instances, registered once)
+    _requests_total = None
+    _processing_latency_seconds = None
+    _circuit_breaker_state_gauge = None
+    _metrics_initialized = False
+    
+    @classmethod
+    def _init_metrics(cls):
+        """Initialize Prometheus metrics once at class level."""
+        if not cls._metrics_initialized:
+            try:
+                cls._requests_total = Counter(
+                    "openai_requests_total",
+                    "Total OpenAI requests",
+                    ["status", "correlation_id"],
+                )
+                cls._processing_latency_seconds = Histogram(
+                    "openai_processing_latency_seconds",
+                    "OpenAI processing latency in seconds",
+                    ["correlation_id"],
+                    buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
+                )
+                cls._circuit_breaker_state_gauge = Gauge(
+                    "openai_circuit_breaker_state",
+                    "Circuit breaker state (0=closed, 1=half-open, 2=open)",
+                )
+                cls._metrics_initialized = True
+            except ValueError as e:
+                # Metrics already registered (e.g., in tests with custom registry)
+                logger.debug(f"Metrics already registered: {e}")
 
     def __init__(self, settings: Dict[str, Any]):
         """
@@ -79,23 +110,17 @@ class OpenAIAdapter:
         # Security configuration for PII masking
         self.security_config = settings.get("security_config", {})
 
-        # Prometheus Metrics
-        self.requests_total = Counter(
-            "openai_requests_total",
-            "Total OpenAI requests",
-            ["status", "correlation_id"],
-        )
-        self.processing_latency_seconds = Histogram(
-            "openai_processing_latency_seconds",
-            "OpenAI processing latency in seconds",
-            ["correlation_id"],
-            buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
-        )
-        self.circuit_breaker_state_gauge = Gauge(
-            "openai_circuit_breaker_state",
-            "Circuit breaker state (0=closed, 1=half-open, 2=open)",
-        )
-        self.circuit_breaker_state_gauge.set(0)
+        # Initialize class-level metrics once
+        OpenAIAdapter._init_metrics()
+        
+        # Use class-level metrics
+        self.requests_total = OpenAIAdapter._requests_total
+        self.processing_latency_seconds = OpenAIAdapter._processing_latency_seconds
+        self.circuit_breaker_state_gauge = OpenAIAdapter._circuit_breaker_state_gauge
+        
+        # Set initial circuit breaker state
+        if self.circuit_breaker_state_gauge:
+            self.circuit_breaker_state_gauge.set(0)
 
     def _check_circuit_breaker(self):
         """
