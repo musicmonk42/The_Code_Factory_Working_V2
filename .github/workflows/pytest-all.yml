@@ -836,9 +836,9 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          # Limit address space to 6GiB (6442450944 bytes) to prevent OOM killer
-          # Using binary units (6G = 6 * 1024^3 bytes)
-          prlimit --cpu=unlimited --as=6G --pid=$$ 2>/dev/null || true
+          # Remove address space limit entirely - let kernel manage memory flexibly
+          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
