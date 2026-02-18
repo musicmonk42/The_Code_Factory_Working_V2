@@ -24,6 +24,27 @@
 ## Validation Issues
 {{ validation_feedback }}
 
+{% if execution_errors %}
+## Execution Errors (CRITICAL - Read These Carefully)
+
+The following are the ACTUAL error outputs from running the tests.
+Pay special attention to assertion failures that show expected vs actual values.
+
+{{ execution_errors }}
+
+**IMPORTANT**: If you see errors like `assert 'string_too_short' == 'value_error'`, 
+this means the test expected one error type but Pydantic returned a different one.
+This happens when:
+1. The source code has a `@field_validator(mode='before')` or `@validator(pre=True)` that raises `ValueError`
+2. The validator runs BEFORE Field constraints like `min_length`, so the error type is "value_error" NOT "string_too_short"
+3. The test needs to be updated to expect "value_error" instead
+
+**Check the source code's validator implementation** to determine the correct expected error type:
+- If validator raises ValueError → expect "value_error"
+- If validator returns value and Field constraint catches it → expect "string_too_short", "string_type", etc.
+- If using deprecated @validator(pre=True, always=True) → expect "value_error" for ALL validation failures
+{% endif %}
+
 ## Task
 Refine the tests based on the critique and validation results.
 Focus on addressing the specific issues identified.
