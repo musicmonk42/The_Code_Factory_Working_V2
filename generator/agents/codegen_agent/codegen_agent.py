@@ -892,7 +892,7 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
     target_language = requirements.get("target_language", "python")
     features = requirements.get("features", [])
     constraints = requirements.get("constraints", [])
-    md_content = requirements.get("md_content", "")
+    md_content = requirements.get("md_content", "") or requirements.get("readme_content", "")
     file_structure = requirements.get("file_structure", [])
     frontend_type = requirements.get("frontend_type", DEFAULT_FRONTEND_TYPE)
     
@@ -1158,7 +1158,7 @@ if PLUGIN_AVAILABLE:
                     frontend_type = requirements.get("frontend_type", None)
                     
                     # Safety net: Check md_content for frontend keywords if not already set
-                    md_content = requirements.get("md_content", "")
+                    md_content = requirements.get("md_content", "") or requirements.get("readme_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
                         for keyword in FRONTEND_DETECTION_KEYWORDS:
@@ -1476,7 +1476,7 @@ else:
                     frontend_type = requirements.get("frontend_type", None)
                     
                     # Safety net: Check md_content for frontend keywords if not already set
-                    md_content = requirements.get("md_content", "")
+                    md_content = requirements.get("md_content", "") or requirements.get("readme_content", "")
                     if not include_frontend and md_content:
                         md_lower = md_content.lower()
                         for keyword in FRONTEND_DETECTION_KEYWORDS:
