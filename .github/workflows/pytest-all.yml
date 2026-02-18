@@ -29,7 +29,7 @@ permissions:
 
 concurrency:
   group: pytest-all-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Tests run in parallel per module - run on every push/PR
