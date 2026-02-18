@@ -222,7 +222,11 @@ class TestSpecFrontendDetection:
         spec_files = {'main.py', 'App.tsx', 'main.tsx'}
         frontend_files = spec_files & FRONTEND_FILE_PATTERNS
         
-        assert 'App.tsx' in frontend_files or 'main.tsx' in frontend_files
+        # Both React file patterns should be in FRONTEND_FILE_PATTERNS
+        assert 'App.tsx' in FRONTEND_FILE_PATTERNS, "App.tsx should be in FRONTEND_FILE_PATTERNS"
+        assert 'main.tsx' in FRONTEND_FILE_PATTERNS, "main.tsx should be in FRONTEND_FILE_PATTERNS"
+        # At least one should be detected from the spec
+        assert len(frontend_files) >= 1
 
 
 if __name__ == "__main__":

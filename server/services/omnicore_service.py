@@ -6164,10 +6164,10 @@ class OmniCoreService:
             # Extract required files from the MD content and check if any are frontend files
             # If so, enable include_frontend BEFORE codegen runs
             md_content_for_spec_check = codegen_payload.get("requirements", "")
-            if md_content_for_spec_check and _PROVENANCE_AVAILABLE and _extract_required_files_from_md:
+            if md_content_for_spec_check and _PROVENANCE_AVAILABLE:
                 try:
-                    target_lang = payload.get("language", "python").lower()
-                    spec_required_files = set(_extract_required_files_from_md(md_content_for_spec_check, target_language=target_lang))
+                    target_language = payload.get("language", "python").lower()
+                    spec_required_files = set(_extract_required_files_from_md(md_content_for_spec_check, target_language=target_language))
                     spec_frontend_files = spec_required_files & FRONTEND_FILE_PATTERNS
                     
                     if spec_frontend_files:
@@ -6182,7 +6182,7 @@ class OmniCoreService:
                             job.metadata["include_frontend"] = True
                             if not job.metadata.get("frontend_type"):
                                 # Default to jinja_templates for Python, vanilla_js for others
-                                if target_lang in ("python", "py"):
+                                if target_language in ("python", "py"):
                                     job.metadata["frontend_type"] = "jinja_templates"
                                 else:
                                     job.metadata["frontend_type"] = "vanilla_js"
@@ -6703,10 +6703,16 @@ class OmniCoreService:
                             # FIX Failure 4: Generate fallback frontend files when spec requires them
                             if output_path:
                                 try:
+                                    # Use output_dir basename as project name, falling back to job_id
+                                    output_dir = payload.get("output_dir", "")
+                                    project_name = Path(output_dir).name if output_dir else f"Project-{job_id[:8]}"
+                                    if not project_name:
+                                        project_name = "Generated App"
+                                    
                                     frontend_results = _generate_fallback_frontend_files(
                                         output_path=output_path,
                                         missing_files=missing_frontend_files,
-                                        project_name=payload.get("output_dir", "Generated App") or "Generated App"
+                                        project_name=project_name
                                     )
                                     generated_files = [f for f, success in frontend_results.items() if success]
                                     failed_files = [f for f, success in frontend_results.items() if not success]
