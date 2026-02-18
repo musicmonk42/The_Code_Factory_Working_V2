@@ -83,15 +83,19 @@ try:
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, OTLPSpanExporter
-    from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
-
+    # Use centralized OpenTelemetry configuration
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    telemetry_tracer = get_tracer(__name__)
     OTEL_AVAILABLE = True
 except ImportError:
-    OTEL_AVAILABLE = False
+    # Fallback to basic tracer if centralized config not available
+    try:
+        from opentelemetry import trace
+        telemetry_tracer = trace.get_tracer(__name__)
+        OTEL_AVAILABLE = True
+    except ImportError:
+        telemetry_tracer = None
+        OTEL_AVAILABLE = False
 
 # --- Initial Setup ---
 PROD_MODE = os.getenv("PROD_MODE", "false").lower() == "true"
@@ -127,9 +131,6 @@ else:
     FILE_OPS_TOTAL = FILE_OPS_LATENCY_SECONDS = DOWNLOAD_LATENCY_SECONDS = (
         DOWNLOAD_BYTES_TOTAL
     ) = IN_PROGRESS_DOWNLOADS = SAFETY_VIOLATIONS_TOTAL = None
-
-# --- OTEL Tracing ---
-telemetry_tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 
 # --- Circuit Breakers ---
 download_breaker = (

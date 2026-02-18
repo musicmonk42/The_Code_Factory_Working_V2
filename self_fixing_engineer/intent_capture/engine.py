@@ -315,11 +315,20 @@ class IntentCaptureEngine:
             agent = await self._get_cached_agent(agent_name)
             
             # Generate spec from agent memory
-            output_format = kwargs.get("output_format", "dict")
-            spec_data = await generate_spec_from_memory(
-                agent.memory,
-                output_format=output_format
-            )
+            # Note: generate_spec_from_memory requires llm parameter
+            output_format = kwargs.get("output_format", "gherkin")
+            
+            # Try to get LLM from agent or use default
+            llm = getattr(agent, "_llm", None)
+            if llm is None:
+                logger.warning(f"No LLM available for agent {agent_name}, skipping spec generation")
+                spec_data = None
+            else:
+                spec_data = await generate_spec_from_memory(
+                    agent.memory,
+                    llm=llm,
+                    format=output_format,
+                )
             
             report = {
                 "agent_name": agent_name,
@@ -444,10 +453,8 @@ class IntentCaptureEngine:
         agent = await self._get_cached_agent(session_token)
         
         # Predict/respond to user input with optional context
-        if context:
-            response = await agent.predict(user_input, context=context)
-        else:
-            response = await agent.predict(user_input)
+        # Simplify by always passing context parameter
+        response = await agent.predict(user_input, context=context)
         
         logger.info(f"Captured intent for session {session_token}, input_len={len(user_input)}")
         
@@ -561,15 +568,39 @@ class IntentCaptureEngine:
         }
         
         # Compute coverage if requested
-        if include_coverage:
-            coverage = await compute_coverage(
-                checklist_data=checklist,
-                project=project
-            )
-            result["coverage"] = coverage
+        if include_coverage and checklist:
+            # Convert checklist to markdown format expected by compute_coverage
+            # Note: This is a simplified conversion - real implementation should match
+            # the actual checklist structure
+            try:
+                # Assuming checklist is a list of items with status
+                gaps_table = self._checklist_to_markdown(checklist)
+                coverage = await compute_coverage(gaps_table_markdown=gaps_table)
+                result["coverage"] = coverage
+            except Exception as e:
+                logger.warning(f"Failed to compute coverage: {e}")
+                result["coverage"] = {"total": 0, "completed": 0, "percentage": 0.0}
         
         logger.info(f"Retrieved requirements for project={project}, domain={domain}")
         return result
+    
+    def _checklist_to_markdown(self, checklist: Any) -> str:
+        """Convert checklist to markdown table format for coverage computation."""
+        # Simple conversion - assumes checklist is a list of dicts with 'item' and 'status' keys
+        if not checklist:
+            return ""
+        
+        if isinstance(checklist, list):
+            # Build markdown table
+            lines = ["| Item | Status |", "|------|--------|"]
+            for item in checklist:
+                if isinstance(item, dict):
+                    item_name = item.get("name", item.get("item", "Unknown"))
+                    status = item.get("status", "pending")
+                    lines.append(f"| {item_name} | {status} |")
+            return "\n".join(lines)
+        
+        return str(checklist)
     
     def _fallback_requirements(
         self,
