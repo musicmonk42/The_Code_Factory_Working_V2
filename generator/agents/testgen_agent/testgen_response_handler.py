@@ -89,11 +89,13 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
     Post-process generated test imports against the actual file tree.
     
     Fixes import path issues where the LLM generates incorrect paths, such as
-    'from main import app' when the correct path is 'from app.main import app'.
+    'from main import app' when the correct path is 'from app.main import app',
+    or 'from generated.project.app.main import app' which should be 'from app.main import app'.
     This commonly occurs because the LLM doesn't know the actual project structure.
     
     The function scans for import statements, verifies them against the project's
-    actual module structure, and fixes incorrect paths automatically.
+    actual module structure, and fixes incorrect paths automatically. It also normalizes
+    paths to remove project-specific prefixes like 'generated.project_name.'.
     
     Args:
         test_files: Dictionary of test filename to content
@@ -103,8 +105,8 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
     Returns:
         Dictionary with corrected test file contents
     """
-    if language != "python" or not code_files:
-        # Only Python is supported for now, and we need code_files to fix imports
+    if language != "python":
+        # Only Python is supported for now
         return test_files
     
     fixed_files = {}
@@ -112,21 +114,21 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
     # Build a map of module names to their correct import paths
     # e.g., {"main": "app.main", "utils": "app.utils", "models": "app.models"}
     module_map = {}
-    for filepath in code_files.keys():
-        # Convert file paths to import paths
-        # e.g., "app/main.py" -> "app.main", "app/utils/helpers.py" -> "app.utils.helpers"
-        if filepath.endswith('.py'):
-            import_path = filepath[:-3].replace('/', '.')
-            # Extract just the module name (last component)
-            module_name = import_path.split('.')[-1]
-            module_map[module_name] = import_path
-            logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
+    if code_files:
+        for filepath in code_files.keys():
+            # Convert file paths to import paths
+            # e.g., "app/main.py" -> "app.main", "app/utils/helpers.py" -> "app.utils.helpers"
+            if filepath.endswith('.py'):
+                import_path = filepath[:-3].replace('/', '.')
+                # Extract just the module name (last component)
+                module_name = import_path.split('.')[-1]
+                module_map[module_name] = import_path
+                logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
     
-    # Pattern to match Python import statements
-    # Matches: "from X import Y" or "import X"
+    # Pattern to match Python import statements - both "from X import Y" and "import X"
     # Group 1: Leading whitespace (indentation)
     # Group 2: "from " keyword
-    # Group 3: Module path (e.g., "main" or "app.main" or "app.utils.helpers")
+    # Group 3: Module path (e.g., "main" or "app.main" or "generated.project.app.main")
     # Group 4: " import Y" rest of statement
     # Using greedy * to capture full module paths like "app.utils.helpers"
     import_pattern = re.compile(r'^(\s*)(from\s+)([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)(\s+import\s+.+)$', re.MULTILINE)
@@ -141,6 +143,25 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
             from_keyword = match.group(2)
             old_path = match.group(3)
             import_rest = match.group(4)
+            
+            # Remove any "generated.project_name." prefix to normalize imports
+            # e.g., "generated.hello_generator.app.main" -> "app.main"
+            if old_path.startswith('generated.'):
+                parts = old_path.split('.')
+                # Find where "app" or known module starts
+                if 'app' in parts:
+                    app_index = parts.index('app')
+                    new_path = '.'.join(parts[app_index:])
+                    imports_fixed += 1
+                    logger.info(f"Normalized import in {filename}: '{old_path}' -> '{new_path}'")
+                    return f"{indent}{from_keyword}{new_path}{import_rest}"
+            
+            # Fix imports from routes that should import from main
+            # e.g., "from app.routes import app" -> "from app.main import app"
+            if old_path == 'app.routes' and 'import app' in import_rest:
+                imports_fixed += 1
+                logger.info(f"Fixed routes import in {filename}: 'app.routes' -> 'app.main'")
+                return f"{indent}{from_keyword}app.main{import_rest}"
             
             # Check if this is a simple module name that needs fixing
             # e.g., "from main import" should become "from app.main import"
@@ -162,6 +183,104 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
         fixed_files[filename] = fixed_content
     
     return fixed_files
+
+
+def validate_monkeypatch_targets(test_files: Dict[str, str], code_files: Optional[Dict[str, str]] = None, language: str = "python") -> Dict[str, str]:
+    """
+    Validates and removes tests with invalid monkeypatch targets.
+    
+    Tests that attempt to patch non-existent modules (like 'some_module.some_function')
+    will cause ModuleNotFoundError at test runtime. This function detects such issues
+    and removes the problematic monkeypatch calls or warns about them.
+    
+    Args:
+        test_files: Dictionary of test filename to content
+        code_files: Optional source code files to check module existence
+        language: Programming language (currently only supports Python)
+        
+    Returns:
+        Dictionary with validated test file contents (problematic monkeypatch calls removed or commented out)
+    """
+    if language != "python":
+        return test_files
+    
+    validated_files = {}
+    
+    # Build set of known modules from code_files
+    known_modules = set()
+    if code_files:
+        for filepath in code_files.keys():
+            if filepath.endswith('.py'):
+                # e.g., "app/main.py" -> "app.main"
+                module_path = filepath[:-3].replace('/', '.')
+                known_modules.add(module_path)
+                # Also add parent modules: "app.utils.helpers" -> ["app", "app.utils", "app.utils.helpers"]
+                parts = module_path.split('.')
+                for i in range(1, len(parts) + 1):
+                    known_modules.add('.'.join(parts[:i]))
+    
+    # Add common standard library and testing modules that are always available
+    known_modules.update([
+        'os', 'sys', 'time', 'json', 're', 'math', 'random', 'datetime',
+        'pytest', 'unittest', 'mock', 'unittest.mock',
+        'requests', 'http', 'urllib', 'logging', 'collections', 'typing',
+    ])
+    
+    # Pattern to find monkeypatch.setattr calls
+    # Matches: monkeypatch.setattr("module.path", value)
+    monkeypatch_pattern = re.compile(
+        r'monkeypatch\.setattr\(\s*["\']([a-zA-Z_][a-zA-Z0-9_\.]*)["\']',
+        re.MULTILINE
+    )
+    
+    for filename, content in test_files.items():
+        fixed_content = content
+        issues_found = []
+        
+        # Find all monkeypatch.setattr calls
+        for match in monkeypatch_pattern.finditer(content):
+            target_path = match.group(1)
+            # Extract the module part (everything before the last dot)
+            if '.' in target_path:
+                module_path = '.'.join(target_path.split('.')[:-1])
+            else:
+                module_path = target_path
+            
+            # Check if it's a placeholder or known bad pattern
+            bad_patterns = ['some_module', 'placeholder', 'example', 'fake_module']
+            is_placeholder = any(bad in module_path.lower() for bad in bad_patterns)
+            
+            # Check if module exists in our known modules
+            if is_placeholder or (code_files and module_path not in known_modules and not module_path.startswith('app.')):
+                issues_found.append((target_path, module_path))
+                logger.warning(
+                    f"Found invalid monkeypatch target in {filename}: '{target_path}' "
+                    f"(module '{module_path}' does not exist in codebase)"
+                )
+        
+        # If issues were found, comment out the problematic lines and add a warning
+        if issues_found:
+            lines = fixed_content.split('\n')
+            modified = False
+            for i, line in enumerate(lines):
+                for target_path, module_path in issues_found:
+                    if f'monkeypatch.setattr("{target_path}"' in line or f"monkeypatch.setattr('{target_path}'" in line:
+                        # Comment out the line and add explanation
+                        indent = len(line) - len(line.lstrip())
+                        lines[i] = (
+                            f"{' ' * indent}# REMOVED: Invalid monkeypatch target '{target_path}' - module '{module_path}' does not exist\n"
+                            f"{' ' * indent}# {line.lstrip()}"
+                        )
+                        modified = True
+                        break
+            
+            if modified:
+                fixed_content = '\n'.join(lines)
+                logger.info(f"Commented out {len(issues_found)} invalid monkeypatch call(s) in {filename}")
+        
+        validated_files[filename] = fixed_content
+    
+    return validated_files
 
 
 # Mapping of language to configuration for extensions, linters, and scanners
@@ -1224,6 +1343,9 @@ async def parse_llm_response(
         # FIX #3: Fix import paths after parsing but before validation
         test_files = fix_import_paths(test_files, code_files, language)
         
+        # FIX #3: Validate and fix monkeypatch targets
+        test_files = validate_monkeypatch_targets(test_files, code_files, language)
+        
         await parser.validate(test_files, language, code_files)
         metadata = parser.extract_metadata(test_files, language)
         await add_provenance(
@@ -1244,6 +1366,9 @@ async def parse_llm_response(
         if healed_files:
             # FIX #3: Also fix import paths in healed files
             healed_files = fix_import_paths(healed_files, code_files, language)
+            
+            # FIX #3: Also validate monkeypatch targets in healed files
+            healed_files = validate_monkeypatch_targets(healed_files, code_files, language)
             
             try:
                 await parser.validate(healed_files, language, code_files)

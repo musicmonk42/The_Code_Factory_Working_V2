@@ -19,6 +19,39 @@ Generate comprehensive unit tests for the following code.
 - Include edge cases and error handling
 - Follow best practices for {{ language }} testing
 
+{% if language == "python" %}
+## Pydantic Validation Testing (CRITICAL for Python)
+When testing Pydantic models (v2.x):
+- Pydantic v2 error messages use format: "String should have at least X characters" (NOT v1 format "ensure this value has at least X characters")
+- Custom validator errors with `raise ValueError("msg")` appear as: "Value error, msg" (Pydantic v2 adds "Value error, " prefix)
+- Use case-insensitive substring matching: `assert "string should have" in str(exc.value).lower()` or `assert "value error" in str(exc.value).lower()`
+- DO NOT use exact string matching like `assert exc.value == "exact message"` as Pydantic versions differ
+- Test error type/category rather than exact message text where possible
+
+Example test pattern:
+```python
+def test_validation_error():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(field="invalid")
+    # CORRECT: Case-insensitive substring matching
+    assert "string should have" in str(exc_info.value).lower()
+    # WRONG: Exact match fails across Pydantic versions
+    # assert "String should have at least 1 character" == str(exc_info.value)
+```
+{% endif %}
+
+## Import Paths (CRITICAL)
+- Always use `from app.X import Y` pattern for application code
+- DO NOT use `from generated.project_name.app.X import Y` 
+- DO NOT use absolute paths like `from /path/to/app.X import Y`
+- Import from the module structure as if you're inside the project root
+
+## Mocking and External Dependencies
+- DO NOT mock or patch modules that don't exist in the codebase
+- Only use `monkeypatch.setattr()` or `@patch()` on actual functions/modules that are imported in the code under test
+- If you need to mock internal functionality, ensure the module path is correct and exists
+- NEVER create placeholder modules like "some_module.some_function"
+
 ## Output Format
 Provide the complete test code wrapped in code blocks.
 Each test file should start with:
