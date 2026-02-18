@@ -1,0 +1,446 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+"""
+Question Loop - Interactive gap-filling for incomplete specifications.
+
+This module implements an interactive question system that identifies missing
+required fields in specifications and prompts users to fill them in. It generates
+a spec.lock.yaml file that drives code generation.
+
+Industry Standards:
+- Interactive CLI with clear prompts
+- YAML-based persistence for answered specs
+- Validation at each step
+- Resume capability via spec.lock.yaml
+"""
+
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import yaml
+from pydantic import BaseModel, Field
+
+from generator.intent_parser.spec_block import SpecBlock
+
+logger = logging.getLogger(__name__)
+
+
+class QuestionResponse(BaseModel):
+    """Response to a specification question."""
+    
+    field_name: str
+    value: Any
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    source: str = Field(default="user", description="user, inferred, or default")
+
+
+class SpecLock(BaseModel):
+    """
+    Locked specification after all questions are answered.
+    
+    This is the authoritative specification used for generation, combining:
+    - Spec block from README
+    - User answers to questions
+    - Inferred values from README text
+    - Sensible defaults
+    """
+    
+    project_type: str
+    package_name: str
+    module_name: Optional[str] = None
+    output_dir: str
+    interfaces: Dict[str, List[str]] = Field(default_factory=dict)
+    dependencies: List[str] = Field(default_factory=list)
+    nonfunctional: List[str] = Field(default_factory=list)
+    adapters: Dict[str, str] = Field(default_factory=dict)
+    acceptance_checks: List[str] = Field(default_factory=list)
+    
+    # Metadata
+    schema_version: str = "1.0"
+    generated_at: str = Field(default_factory=lambda: __import__('datetime').datetime.now().isoformat())
+    answered_questions: List[QuestionResponse] = Field(default_factory=list)
+    
+    def save(self, path: Path) -> None:
+        """Save spec lock to YAML file."""
+        with open(path, "w") as f:
+            yaml.safe_dump(self.model_dump(), f, sort_keys=False, default_flow_style=False)
+        logger.info(f"Saved spec lock to {path}")
+    
+    @classmethod
+    def load(cls, path: Path) -> "SpecLock":
+        """Load spec lock from YAML file."""
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+        return cls(**data)
+
+
+class Question(BaseModel):
+    """A question to ask the user about missing specification fields."""
+    
+    field_name: str
+    prompt: str
+    hint: Optional[str] = None
+    default_value: Optional[Any] = None
+    validation_fn: Optional[str] = None  # Name of validation function
+    examples: List[str] = Field(default_factory=list)
+    
+    def ask(self, interactive: bool = True) -> QuestionResponse:
+        """
+        Ask the question and get a response.
+        
+        Args:
+            interactive: If False, use default value without prompting
+            
+        Returns:
+            QuestionResponse with the answer
+        """
+        if not interactive:
+            if self.default_value is not None:
+                logger.info(f"Using default for {self.field_name}: {self.default_value}")
+                return QuestionResponse(
+                    field_name=self.field_name,
+                    value=self.default_value,
+                    confidence=0.5,
+                    source="default"
+                )
+            else:
+                raise ValueError(f"No default available for required field: {self.field_name}")
+        
+        # Interactive prompt
+        print(f"\n{'='*60}")
+        print(f"Question: {self.prompt}")
+        if self.hint:
+            print(f"Hint: {self.hint}")
+        if self.examples:
+            print(f"Examples: {', '.join(self.examples)}")
+        if self.default_value:
+            print(f"Default: {self.default_value}")
+        print('='*60)
+        
+        while True:
+            if self.default_value:
+                user_input = input(f"Your answer [{self.default_value}]: ").strip()
+                if not user_input:
+                    user_input = str(self.default_value)
+            else:
+                user_input = input("Your answer: ").strip()
+            
+            if user_input:
+                # TODO: Add validation based on validation_fn
+                return QuestionResponse(
+                    field_name=self.field_name,
+                    value=user_input,
+                    confidence=1.0,
+                    source="user"
+                )
+            elif self.default_value:
+                return QuestionResponse(
+                    field_name=self.field_name,
+                    value=self.default_value,
+                    confidence=0.7,
+                    source="default"
+                )
+            else:
+                print("This field is required. Please provide a value.")
+
+
+def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) -> List[Question]:
+    """
+    Generate questions for missing required fields in specification.
+    
+    Args:
+        spec: The SpecBlock (may be incomplete)
+        readme_content: Optional README content for context/inference
+        
+    Returns:
+        List of Question objects for missing fields
+    """
+    questions = []
+    
+    # Question 1: Project Type
+    if not spec.project_type:
+        # Try to infer from readme
+        inferred_type = None
+        default_type = "fastapi_service"  # Reasonable default
+        
+        if readme_content:
+            content_lower = readme_content.lower()
+            if "fastapi" in content_lower or "rest api" in content_lower:
+                inferred_type = "fastapi_service"
+            elif "cli" in content_lower or "command line" in content_lower:
+                inferred_type = "cli_tool"
+            elif "library" in content_lower or "package" in content_lower:
+                inferred_type = "library"
+        
+        questions.append(Question(
+            field_name="project_type",
+            prompt="What type of project are you building?",
+            hint="This determines the scaffolding, structure, and generated files.",
+            default_value=inferred_type or default_type,
+            examples=[
+                "fastapi_service",
+                "cli_tool",
+                "library",
+                "batch_job",
+                "lambda_function"
+            ]
+        ))
+    
+    # Question 2: Package/Module Name
+    if not spec.package_name and not spec.module_name:
+        # Try to extract from output_dir
+        default_name = None
+        if spec.output_dir:
+            # e.g., "generated/my_app" -> "my_app"
+            parts = spec.output_dir.split("/")
+            default_name = parts[-1] if parts else None
+        
+        if not default_name and readme_content:
+            # Look for "# ProjectName" style headers
+            import re
+            match = re.search(r'^#\s+([A-Za-z_][A-Za-z0-9_]*)', readme_content, re.MULTILINE)
+            if match:
+                default_name = match.group(1).lower().replace("-", "_")
+        
+        questions.append(Question(
+            field_name="package_name",
+            prompt="What is the Python package/module name?",
+            hint="This will be used for imports: 'from <name> import ...'",
+            default_value=default_name or "my_app",
+            examples=["my_app", "user_service", "data_pipeline"]
+        ))
+    
+    # Question 3: Output Directory
+    if not spec.output_dir:
+        # Derive from package_name if available
+        pkg_name = spec.package_name or spec.module_name
+        default_dir = f"generated/{pkg_name}" if pkg_name else "generated/my_app"
+        
+        questions.append(Question(
+            field_name="output_dir",
+            prompt="Where should the generated code be written?",
+            hint="Relative path from the current directory",
+            default_value=default_dir,
+            examples=["generated/my_app", "output/service", "my_project"]
+        ))
+    
+    # Question 4: Interfaces (only if project_type suggests it's needed)
+    if spec.project_type in ["fastapi_service", "flask_service", "microservice"]:
+        if not spec.interfaces or not spec.interfaces.http:
+            questions.append(Question(
+                field_name="interfaces.http",
+                prompt="What HTTP endpoints should this service expose? (comma-separated)",
+                hint="Format: METHOD /path, e.g., 'GET /health, POST /items'",
+                default_value="GET /health",
+                examples=["GET /health", "GET /items, POST /items", "GET /api/v1/users"]
+            ))
+    
+    return questions
+
+
+def create_spec_lock_from_answers(
+    spec: SpecBlock,
+    answers: List[QuestionResponse],
+    readme_content: Optional[str] = None
+) -> SpecLock:
+    """
+    Create a locked specification from the original spec and user answers.
+    
+    Args:
+        spec: Original (possibly incomplete) SpecBlock
+        answers: List of QuestionResponse from answered questions
+        readme_content: Optional README for additional inference
+        
+    Returns:
+        Complete SpecLock ready for generation
+    """
+    # Start with values from spec
+    data: Dict[str, Any] = {
+        "project_type": spec.project_type,
+        "package_name": spec.package_name or spec.module_name,
+        "module_name": spec.module_name or spec.package_name,
+        "output_dir": spec.output_dir,
+        "interfaces": {},
+        "dependencies": spec.dependencies.copy() if spec.dependencies else [],
+        "nonfunctional": spec.nonfunctional.copy() if spec.nonfunctional else [],
+        "adapters": spec.adapters.copy() if spec.adapters else {},
+        "acceptance_checks": spec.acceptance_checks.copy() if spec.acceptance_checks else [],
+    }
+    
+    # Add interfaces if present
+    if spec.interfaces:
+        if spec.interfaces.http:
+            data["interfaces"]["http"] = spec.interfaces.http
+        if spec.interfaces.events:
+            data["interfaces"]["events"] = spec.interfaces.events
+        if spec.interfaces.queues:
+            data["interfaces"]["queues"] = spec.interfaces.queues
+    
+    # Apply answers to override/fill missing fields
+    for answer in answers:
+        field_name = answer.field_name
+        value = answer.value
+        
+        if field_name == "project_type":
+            data["project_type"] = value
+        elif field_name == "package_name":
+            data["package_name"] = value
+            if not data["module_name"]:
+                data["module_name"] = value
+        elif field_name == "output_dir":
+            data["output_dir"] = value
+        elif field_name == "interfaces.http":
+            # Parse comma-separated endpoints
+            if isinstance(value, str):
+                endpoints = [e.strip() for e in value.split(",") if e.strip()]
+                data["interfaces"]["http"] = endpoints
+            else:
+                data["interfaces"]["http"] = value
+        else:
+            # Handle nested fields (e.g., "adapters.database")
+            if "." in field_name:
+                parts = field_name.split(".")
+                current = data
+                for part in parts[:-1]:
+                    if part not in current:
+                        current[part] = {}
+                    current = current[part]
+                current[parts[-1]] = value
+            else:
+                data[field_name] = value
+    
+    # Ensure required fields are present
+    if not data["project_type"]:
+        data["project_type"] = "fastapi_service"  # Fallback
+    if not data["package_name"]:
+        data["package_name"] = "my_app"  # Fallback
+    if not data["output_dir"]:
+        data["output_dir"] = f"generated/{data['package_name']}"
+    
+    # Create and return SpecLock
+    lock = SpecLock(**data)
+    lock.answered_questions = answers
+    return lock
+
+
+def run_question_loop(
+    spec: SpecBlock,
+    readme_content: Optional[str] = None,
+    output_path: Optional[Path] = None,
+    interactive: bool = True
+) -> SpecLock:
+    """
+    Run the interactive question loop to complete the specification.
+    
+    Args:
+        spec: Initial SpecBlock (may be incomplete)
+        readme_content: Optional README content for context
+        output_path: Optional path to save spec.lock.yaml
+        interactive: If False, use defaults without prompting
+        
+    Returns:
+        Complete SpecLock ready for generation
+        
+    Raises:
+        ValueError: If non-interactive mode and required fields lack defaults
+    """
+    logger.info("Starting question loop for specification gap-filling")
+    
+    # Check if spec is already complete
+    if spec.is_complete():
+        logger.info("Specification is already complete, no questions needed")
+        # Still create SpecLock for consistency
+        lock = SpecLock(
+            project_type=spec.project_type,
+            package_name=spec.package_name or spec.module_name,
+            module_name=spec.module_name or spec.package_name,
+            output_dir=spec.output_dir,
+            interfaces=(
+                {
+                    "http": spec.interfaces.http if spec.interfaces else [],
+                    "events": spec.interfaces.events if spec.interfaces else [],
+                }
+                if spec.interfaces
+                else {}
+            ),
+            dependencies=spec.dependencies,
+            nonfunctional=spec.nonfunctional,
+            adapters=spec.adapters,
+            acceptance_checks=spec.acceptance_checks,
+        )
+        if output_path:
+            lock.save(output_path)
+        return lock
+    
+    # Generate questions for missing fields
+    questions = generate_questions(spec, readme_content)
+    
+    if not questions:
+        logger.warning("No questions generated but spec incomplete - using defaults")
+        # Create lock with defaults
+        lock = SpecLock(
+            project_type=spec.project_type or "fastapi_service",
+            package_name=spec.package_name or spec.module_name or "my_app",
+            module_name=spec.module_name or spec.package_name or "my_app",
+            output_dir=spec.output_dir or "generated/my_app",
+        )
+        if output_path:
+            lock.save(output_path)
+        return lock
+    
+    logger.info(f"Generated {len(questions)} questions for missing fields")
+    
+    # Ask questions and collect answers
+    answers: List[QuestionResponse] = []
+    
+    if interactive:
+        print(f"\n{'*'*60}")
+        print("SPECIFICATION GAP-FILLING")
+        print(f"{'*'*60}")
+        print(f"\nThe specification is incomplete. Please answer {len(questions)} question(s):")
+    
+    for i, question in enumerate(questions, 1):
+        if interactive:
+            print(f"\n[Question {i}/{len(questions)}]")
+        
+        try:
+            answer = question.ask(interactive=interactive)
+            answers.append(answer)
+        except ValueError as e:
+            logger.error(f"Failed to answer required question: {e}")
+            raise
+    
+    # Create locked specification
+    lock = create_spec_lock_from_answers(spec, answers, readme_content)
+    
+    # Save to file if path provided
+    if output_path:
+        lock.save(output_path)
+        if interactive:
+            print(f"\n✓ Specification saved to {output_path}")
+    
+    if interactive:
+        print(f"\n{'*'*60}")
+        print("SPECIFICATION COMPLETE")
+        print(f"{'*'*60}")
+        print(f"\nProject Type: {lock.project_type}")
+        print(f"Package Name: {lock.package_name}")
+        print(f"Output Directory: {lock.output_dir}")
+        if lock.interfaces.get("http"):
+            print(f"HTTP Endpoints: {', '.join(lock.interfaces['http'])}")
+        print()
+    
+    logger.info("Question loop completed successfully")
+    return lock
+
+
+__all__ = [
+    "Question",
+    "QuestionResponse",
+    "SpecLock",
+    "generate_questions",
+    "create_spec_lock_from_answers",
+    "run_question_loop",
+]

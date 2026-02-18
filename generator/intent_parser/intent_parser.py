@@ -1149,6 +1149,26 @@ class IntentParser:
 
             provenance = generate_provenance(content_redacted, file_path)
 
+            # --- Spec Block Parsing: HIGHEST PRIORITY ---
+            # Check for structured YAML spec blocks first before falling back to text extraction
+            # This provides authoritative, structured input that overrides unstructured parsing
+            from generator.intent_parser.spec_block import extract_spec_block
+            
+            spec_block = await loop.run_in_executor(
+                self.executor, extract_spec_block, content_redacted
+            )
+            
+            if spec_block:
+                logger.info(
+                    f"Found structured spec block: project_type={spec_block.project_type}, "
+                    f"complete={spec_block.is_complete()}"
+                )
+                # Store spec block for later use
+                self._spec_block = spec_block
+            else:
+                logger.debug("No spec block found, will use text extraction")
+                self._spec_block = None
+
             # --- Language Detection: CPU-bound - run in executor ---
             if self.config.multi_language_support.enabled and content_redacted.strip():
                 try:
@@ -1221,6 +1241,9 @@ class IntentParser:
                 "frontend_type": frontend_detection.get("frontend_type"),
                 "frontend_confidence": frontend_detection["confidence"],
                 "frontend_keywords": frontend_detection["detected_keywords"],
+                # Add spec block if found (highest priority)
+                "spec_block": self._spec_block.to_dict() if self._spec_block else None,
+                "has_spec_block": self._spec_block is not None,
             }
 
             # --- Summarization: May be CPU or I/O bound depending on implementation ---
