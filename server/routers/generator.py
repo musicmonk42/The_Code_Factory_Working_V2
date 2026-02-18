@@ -910,6 +910,14 @@ async def upload_files(
     readme_content = ""
     include_frontend = False  # Track if FRONT_README detected
     frontend_type = None
+    
+    # Frontend detection keywords (expanded list)
+    FRONTEND_KEYWORDS = [
+        'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt',
+        'vite', 'webpack', 'typescript', 'tsx', 'jsx',
+        'tailwind', 'tailwindcss', 'frontend', 'front-end', 'web ui',
+        'web/', 'npm', 'node.js', 'yarn', 'pnpm'
+    ]
 
     for file in files:
         # Read file content
@@ -938,6 +946,24 @@ async def upload_files(
                         logger.info(f"Found explicit README file: {file.filename}")
                     else:
                         logger.info(f"Using {file.filename} as specification content (no explicit README.md found)")
+                    
+                    # Content-based frontend detection (safety net)
+                    if not include_frontend and readme_content:
+                        readme_lower = readme_content.lower()
+                        for keyword in FRONTEND_KEYWORDS:
+                            if keyword in readme_lower:
+                                logger.info(f"Frontend keyword '{keyword}' detected in README content - enabling frontend generation")
+                                include_frontend = True
+                                # Try to detect specific framework
+                                if 'react' in readme_lower:
+                                    frontend_type = FRONTEND_TYPE_REACT
+                                elif 'vue' in readme_lower:
+                                    frontend_type = FRONTEND_TYPE_VUE
+                                elif 'angular' in readme_lower:
+                                    frontend_type = FRONTEND_TYPE_ANGULAR
+                                else:
+                                    frontend_type = DEFAULT_FRONTEND_TYPE
+                                break
                 except UnicodeDecodeError:
                     logger.warning(f"Could not decode {file.filename} as UTF-8")
         elif any(pattern in filename_lower for pattern in [

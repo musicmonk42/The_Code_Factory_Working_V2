@@ -276,7 +276,25 @@ logger = logging.getLogger(__name__)
 
 # Frontend detection keywords for safety net
 # Used to detect frontend requirements from md_content when not explicitly set
-FRONTEND_DETECTION_KEYWORDS = ["item creation", "create item", "crud", "form", "submit"]
+FRONTEND_DETECTION_KEYWORDS = [
+    "item creation", "create item", "crud", "form", "submit",
+    # Modern frontend frameworks
+    "react", "vue", "angular", "svelte", "next.js", "nuxt",
+    # Build tools and bundlers
+    "vite", "webpack", "parcel", "rollup",
+    # Frontend languages and supersets
+    "typescript", "tsx", "jsx",
+    # CSS frameworks and preprocessors
+    "tailwind", "tailwindcss", "bootstrap", "sass", "scss", "css",
+    # Generic frontend terms
+    "frontend", "front-end", "front end", "web ui", "ui", "user interface",
+    # Directory patterns
+    "web/", "frontend/", "client/", "src/components",
+    # Package managers and tools
+    "npm", "yarn", "pnpm", "node.js", "nodejs",
+    # Frontend libraries
+    "axios", "fetch api", "material-ui", "chakra", "ant design"
+]
 
 
 # ==============================================================================
