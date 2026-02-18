@@ -433,6 +433,16 @@ class SpecBlock(BaseModel):
         # Remove leading/trailing slashes for consistency
         v = v.strip("/")
         
+        # DOUBLE-NESTING PREVENTION: Check for and remove "generated/generated/" patterns
+        # This prevents issues where output_dir might be incorrectly joined with another "generated/" prefix
+        if "generated/generated/" in v:
+            # Remove the duplicate "generated/" prefix
+            v = v.replace("generated/generated/", "generated/", 1)
+            logger.warning(
+                f"Corrected double-nested output_dir: removed duplicate 'generated/' prefix. "
+                f"Result: '{v}'"
+            )
+        
         # Warn about suspicious patterns
         if any(suspicious in v.lower() for suspicious in ["system", "root", "etc", "usr", "bin"]):
             logger.warning(
