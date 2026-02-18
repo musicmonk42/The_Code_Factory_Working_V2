@@ -2399,6 +2399,31 @@ class OmniCoreService:
                 "message": f"SFE action {action} not yet implemented in direct dispatch",
             }
         
+        elif action == "control_arbiter":
+            # Control the Arbiter AI system
+            command = payload.get("command", "status")
+            config = payload.get("config", {})
+            
+            try:
+                from server.services.sfe_service import SFEService
+                sfe_service = SFEService()
+                result = await sfe_service.control_arbiter(command, job_id, config)
+                return {
+                    "status": "completed",
+                    "job_id": job_id,
+                    "command": command,
+                    "result": result,
+                    "source": "direct_sfe",
+                }
+            except ImportError:
+                return {
+                    "status": "error",
+                    "message": "SFEService not available for control_arbiter",
+                }
+            except Exception as e:
+                logger.error(f"Error in control_arbiter for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
         return {
             "status": "error",
             "message": f"Unknown SFE action: {action}",

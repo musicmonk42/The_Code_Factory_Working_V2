@@ -701,6 +701,11 @@ class PluginService:
                     raise ValueError("fix_id is required for rollback_fix action")
                 result = await sfe_service.rollback_fix(fix_id)
                 
+            elif action == "control_arbiter":
+                command = message.payload.get("command", "status")
+                config = message.payload.get("config", {})
+                result = await sfe_service.control_arbiter(command, job_id, config)
+                
             else:
                 self.logger.warning(f"Unknown SFE action: {action}")
                 result = {
