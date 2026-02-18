@@ -3,7 +3,7 @@
 # Test Critique Prompt
 
 ## Current Tests
-{% for filename, content in generated_tests.items %}
+{% for filename, content in generated_tests.items() %}
 ### {{ filename }}
 ```{{ language }}
 {{ content }}

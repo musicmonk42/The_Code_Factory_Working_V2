@@ -218,8 +218,8 @@ class MessageRequest(BaseModel):
 - `@validator` is deprecated and triggers runtime warnings
 - `@field_validator` is the official Pydantic V2 API
 
-**PRODUCTION FAILURE EXAMPLE:**
-Using `@validator` caused 100% test failures in a real deployment because:
+**EXAMPLE OF THE FAILURE PATTERN:**
+This bug pattern has caused test failures in production where:
 - Source code: `@validator('name', pre=True, always=True)` raises ValueError for empty strings
 - Test expected: `assert errors[0]["type"] == "string_too_short"` (Field constraint)
 - Test got: `assert errors[0]["type"] == "value_error"` (validator intercepted first)
