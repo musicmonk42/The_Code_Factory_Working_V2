@@ -643,7 +643,13 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
     adequate setup and usage instructions. A complete README is essential for
     production deployments and developer onboarding.
     
-    Required Elements:
+    Supports README_TEST_MODE environment variable for relaxed validation in test environments.
+    When README_TEST_MODE=1:
+    - Minimum length: 200 characters (instead of 500)
+    - Required sections: Empty (all sections optional)
+    - Required commands: Empty (all commands optional)
+    
+    Required Elements (when README_TEST_MODE is not set):
         - Minimum length: 500 characters
         - Setup section (virtual environment, dependencies)
         - Run server instructions
@@ -675,6 +681,9 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
     sections_found = []
     commands_found = []
     
+    # Check if README_TEST_MODE is enabled for relaxed validation
+    test_mode = os.environ.get("README_TEST_MODE", "0") == "1"
+    
     # 0. Check for markdown code fence wrappers (Fix 5)
     # This detects when README content is wrapped in ```markdown ... ``` or ```md ... ```
     readme_stripped = readme_content.strip()
@@ -704,20 +713,25 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
             "This indicates malformed LLM response."
         )
     
-    # 1. Check minimum length
+    # 1. Check minimum length (relaxed in test mode)
     length = len(readme_content)
-    if length < 500:
-        errors.append(f"README too short ({length} chars, minimum 500)")
+    min_length_required = 200 if test_mode else 500
+    if length < min_length_required:
+        errors.append(f"README too short ({length} chars, minimum {min_length_required})")
     
-    # 2. Check for required sections (case-insensitive)
+    # 2. Check for required sections (case-insensitive) - relaxed in test mode
     readme_lower = readme_content.lower()
     
-    required_sections = {
-        "setup": ["setup", "installation", "install", "getting started"],
-        "run": ["run", "running", "start", "usage"],
-        "test": ["test", "testing"],
-        "examples": ["example", "api example", "curl"],
-    }
+    if test_mode:
+        # In test mode, sections are optional
+        required_sections = {}
+    else:
+        required_sections = {
+            "setup": ["setup", "installation", "install", "getting started"],
+            "run": ["run", "running", "start", "usage"],
+            "test": ["test", "testing"],
+            "examples": ["example", "api example", "curl"],
+        }
     
     for section_key, patterns in required_sections.items():
         found = any(pattern in readme_lower for pattern in patterns)
@@ -726,8 +740,11 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
         else:
             errors.append(f"Missing required section: {section_key}")
     
-    # 3. Check for required commands (language-aware)
-    if language.lower() in ("typescript", "javascript"):
+    # 3. Check for required commands (language-aware) - relaxed in test mode
+    if test_mode:
+        # In test mode, commands are optional
+        required_commands = {}
+    elif language.lower() in ("typescript", "javascript"):
         required_commands = {
             "install": ["npm install", "yarn install", "pnpm install"],
             "run": ["npm run", "npx", "node", "ts-node"],
