@@ -389,10 +389,6 @@ class SFEService:
                     }
 
         # Try routing through OmniCore first
-        # TODO: OmniCore message bus subscriber for 'sfe.job_request' is not yet implemented.
-        # Messages are routed to shard 3 but not consumed, causing every SFE operation to
-        # waste time on a failed OmniCore round-trip before falling back to direct SFE.
-        # This works correctly due to the fallback mechanism, but adds latency.
         if self.omnicore_service:
             payload = {
                 "action": "analyze_code",
