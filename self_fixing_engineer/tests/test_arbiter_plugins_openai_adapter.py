@@ -52,10 +52,7 @@ class TestOpenAIAdapter:
         # Reset class-level metrics to prevent collisions between tests
         from self_fixing_engineer.arbiter.plugins.openai_adapter import OpenAIAdapter
 
-        OpenAIAdapter._metrics_initialized = False
-        OpenAIAdapter._requests_total = None
-        OpenAIAdapter._processing_latency_seconds = None
-        OpenAIAdapter._circuit_breaker_state_gauge = None
+        OpenAIAdapter._reset_metrics_for_testing()
 
         with patch(
             "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"

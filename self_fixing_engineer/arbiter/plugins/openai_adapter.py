@@ -69,6 +69,7 @@ class OpenAIAdapter:
                 cls._metrics_initialized = True
             except ValueError:
                 # Metrics already registered - retrieve existing ones from registry
+                # Note: This uses a private API which may need updates with prometheus_client upgrades
                 from prometheus_client import REGISTRY
 
                 for collector in REGISTRY._collector_to_names:
@@ -82,6 +83,17 @@ class OpenAIAdapter:
 
                 cls._metrics_initialized = True
                 logger.debug("Metrics already registered, using existing instances")
+
+    @classmethod
+    def _reset_metrics_for_testing(cls):
+        """
+        Reset class-level metrics for testing purposes.
+        This should only be called from test fixtures.
+        """
+        cls._metrics_initialized = False
+        cls._requests_total = None
+        cls._processing_latency_seconds = None
+        cls._circuit_breaker_state_gauge = None
 
     def __init__(self, settings: Dict[str, Any]):
         """
