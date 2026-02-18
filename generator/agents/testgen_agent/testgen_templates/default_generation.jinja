@@ -27,9 +27,29 @@ When testing Pydantic models (v2.x):
 - Use case-insensitive substring matching: `assert "string should have" in str(exc.value).lower()` or `assert "value error" in str(exc.value).lower()`
 - DO NOT use exact string matching like `assert exc.value == "exact message"` as Pydantic versions differ
 - Test error type/category rather than exact message text where possible
+- IMPORTANT: When a `@field_validator` raises ValueError BEFORE Field constraints are checked, the validator error appears, NOT the Field constraint error
+- For max_length violations on strings that pass validators: Use `assert "at most X characters" in error_str or "string_too_long" in error_str`
+- For min_length/empty string with custom validators: Use `assert "cannot be empty" in error_str or "at least X character" in error_str` to handle both custom and constraint errors
 
-Example test pattern:
+Example test patterns:
 ```python
+# Test 1: Custom validator error (appears before Field constraints)
+def test_empty_string_with_validator():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(message="")
+    error_str = str(exc_info.value).lower()
+    # Handles both custom validator message and min_length constraint
+    assert "cannot be empty" in error_str or "at least 1 character" in error_str
+
+# Test 2: Field max_length constraint (validator passes, constraint fails)
+def test_max_length_violation():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(message="x" * 501)  # Over 500 char limit
+    error_str = str(exc_info.value).lower()
+    # Pydantic V2 does NOT include "value error" for constraint violations
+    assert "at most 500 characters" in error_str or "string_too_long" in error_str
+
+# Test 3: General validation with case-insensitive matching
 def test_validation_error():
     with pytest.raises(ValidationError) as exc_info:
         MyModel(field="invalid")
