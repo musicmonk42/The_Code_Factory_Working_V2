@@ -117,8 +117,8 @@ class TestStubSecurity:
         
         hitl = HumanInLoopStub()
         result = await hitl.request_approval(
-            "deployment",
-            {"environment": "production"},
+            action="deployment",
+            context={"environment": "production"},
             timeout=300
         )
         

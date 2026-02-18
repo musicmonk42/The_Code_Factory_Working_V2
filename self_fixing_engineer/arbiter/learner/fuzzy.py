@@ -477,9 +477,14 @@ class BasicFuzzyParser:
         
         # Extract numbers
         number_pattern = r'\b(\d+\.?\d*)\b'
+        # Constants for date proximity detection
+        DATE_PROXIMITY_BEFORE = 10  # Characters before date to check for numbers
+        DATE_PROXIMITY_AFTER = 20   # Characters after date to check for numbers
+        
         for match in re.finditer(number_pattern, text):
-            # Skip if part of a date
-            if not any(match.start() >= f['position'] - 10 and match.end() <= f['position'] + 20 
+            # Skip if part of a date (within proximity of date pattern)
+            if not any(match.start() >= f['position'] - DATE_PROXIMITY_BEFORE and 
+                      match.end() <= f['position'] + DATE_PROXIMITY_AFTER 
                       for f in facts if f['type'] == 'date'):
                 facts.append({
                     "type": "number",

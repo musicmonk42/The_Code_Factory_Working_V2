@@ -461,7 +461,13 @@ class KnowledgeGraphStub:
         key: str,
         value: Any
     ) -> List[Dict[str, Any]]:
-        """Find related facts in the graph."""
+        """
+        Find related facts in the graph.
+        
+        NOTE: This implementation performs a linear scan through all nodes.
+        For large knowledge graphs (>1000 nodes), this may become a performance bottleneck.
+        Consider using the real KnowledgeGraph implementation with indexed queries for production.
+        """
         _log_stub_usage("KnowledgeGraph", "find_related_facts")
         # Simple search in persisted nodes
         results = []

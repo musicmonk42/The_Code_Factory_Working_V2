@@ -97,16 +97,25 @@ except ImportError:
         
         Persists audit events to a JSON file for basic audit trail.
         Not suitable for production - use proper audit system.
+        
+        SECURITY NOTE: Default location /tmp/arbiter_audit.jsonl is world-readable.
+        Set DUMMY_AUDIT_FILE environment variable to a secure location in production.
         """
         
         def __init__(self):
             import warnings
-            self._audit_file = Path(os.getenv("DUMMY_AUDIT_FILE", "/tmp/arbiter_audit.jsonl"))
+            # Use user-specific temp directory for better security
+            default_audit_file = os.path.join(
+                os.getenv("XDG_RUNTIME_DIR", "/tmp"),
+                f"arbiter_audit_{os.getuid() if hasattr(os, 'getuid') else 'default'}.jsonl"
+            )
+            self._audit_file = Path(os.getenv("DUMMY_AUDIT_FILE", default_audit_file))
             self._audit_file.parent.mkdir(parents=True, exist_ok=True)
             
             logger.warning(
                 f"DummyAuditLog: Persisting audit events to {self._audit_file}. "
-                "This is NOT a production-grade audit system."
+                "This is NOT a production-grade audit system. "
+                "Set DUMMY_AUDIT_FILE to a secure location with restricted permissions."
             )
             warnings.warn(
                 f"DummyAuditLog: File-based audit logging to {self._audit_file} (not production-ready)",
