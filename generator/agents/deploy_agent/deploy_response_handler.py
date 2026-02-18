@@ -1173,12 +1173,23 @@ class DockerfileHandler(FormatHandler):
         
         # ✅ PRE-SANITIZE: Strip markdown fences and leading tokens that LLMs emit
         sanitized = raw
+        
+        # Remove BOM (Byte Order Mark) if present at the start
+        if sanitized.startswith('\ufeff'):
+            sanitized = sanitized[1:]
+            logger.debug("Removed BOM from Dockerfile content")
+        
         # Remove leading/trailing markdown fences (```dockerfile ... ```)
         sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
+        
         # Remove leading "!" tokens that LLMs sometimes emit (invalid Dockerfile token)
         # Strip all leading ! characters from the start of the file only (not each line)
         sanitized = re.sub(r'\A!+\s*', '', sanitized)
+        
+        # Remove any other leading non-Dockerfile content (whitespace only)
+        # Only strip leading whitespace before FROM/ARG, not other content
+        sanitized = re.sub(r'^\s+', '', sanitized)
         
         # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
         # IMPORTANT: Validate BEFORE stripping LLM preamble to catch invalid content
@@ -3492,6 +3503,25 @@ async def handle_deploy_response(
                 # FIX Bug 4: Add PATH placeholder substitution
                 '{PATH}': '/app',
                 '<PATH>': '/app',
+                # FIX Issue 2: Add Kubernetes-specific placeholders
+                # Note: These are development defaults for validation purposes.
+                # Production deployments should use environment-specific values or CI/CD variables.
+                '<DOCKER_IMAGE>': 'app:latest',
+                '{DOCKER_IMAGE}': 'app:latest',
+                '<TAG>': 'latest',  # Separate tag for flexibility (e.g., when image and tag are in different fields)
+                '{TAG}': 'latest',
+                '<CONFIGMAPNAME>': 'app-config',
+                '{CONFIGMAPNAME}': 'app-config',
+                '<CPU_LIMIT>': '500m',
+                '{CPU_LIMIT}': '500m',
+                '<CPU_REQUEST>': '250m',
+                '{CPU_REQUEST}': '250m',
+                '<MEMORY_LIMIT>': '512Mi',
+                '{MEMORY_LIMIT}': '512Mi',
+                '<MEMORY_REQUEST>': '256Mi',
+                '{MEMORY_REQUEST}': '256Mi',
+                '<APPLICATION_PORT>': '8000',
+                '{APPLICATION_PORT}': '8000',
             }
             
             # Pre-substitute common environment placeholders in a single pass

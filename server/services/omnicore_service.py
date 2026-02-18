@@ -2399,6 +2399,31 @@ class OmniCoreService:
                 "message": f"SFE action {action} not yet implemented in direct dispatch",
             }
         
+        elif action == "control_arbiter":
+            # Control the Arbiter AI system
+            command = payload.get("command", "status")
+            config = payload.get("config", {})
+            
+            try:
+                from server.services.sfe_service import SFEService
+                sfe_service = SFEService()
+                result = await sfe_service.control_arbiter(command, job_id, config)
+                return {
+                    "status": "completed",
+                    "job_id": job_id,
+                    "command": command,
+                    "result": result,
+                    "source": "direct_sfe",
+                }
+            except ImportError:
+                return {
+                    "status": "error",
+                    "message": "SFEService not available for control_arbiter",
+                }
+            except Exception as e:
+                logger.error(f"Error in control_arbiter for job {job_id}: {e}", exc_info=True)
+                return {"status": "error", "message": str(e)}
+        
         return {
             "status": "error",
             "message": f"Unknown SFE action: {action}",
@@ -3157,6 +3182,30 @@ class OmniCoreService:
                                             f"[CODEGEN] Ensured Python package structure in {output_path}",
                                             extra={"job_id": job_id}
                                         )
+                                        
+                                        # FIX Issue 1: Sanitize Pydantic schemas to use V2 field_validator
+                                        # Find and sanitize schemas.py or models.py files
+                                        for schema_file in ["schemas.py", "models.py"]:
+                                            schema_path = output_path / "app" / schema_file
+                                            if not schema_path.exists():
+                                                # Try at root level
+                                                schema_path = output_path / schema_file
+                                            
+                                            if schema_path.exists():
+                                                try:
+                                                    schema_content = schema_path.read_text()
+                                                    sanitized_content = self._sanitize_pydantic_schema(schema_content)
+                                                    if sanitized_content != schema_content:
+                                                        schema_path.write_text(sanitized_content)
+                                                        logger.info(
+                                                            f"[CODEGEN] Sanitized {schema_file} to use Pydantic V2 field_validator",
+                                                            extra={"job_id": job_id, "file": str(schema_path)}
+                                                        )
+                                                except Exception as sanitize_err:
+                                                    logger.warning(
+                                                        f"[CODEGEN] Failed to sanitize {schema_file}: {sanitize_err}",
+                                                        extra={"job_id": job_id}, exc_info=True
+                                                    )
                                     except Exception as init_err:
                                         logger.warning(
                                             f"[CODEGEN] Failed to create __init__.py files: {init_err}",
@@ -4749,6 +4798,63 @@ class OmniCoreService:
             cleaned.insert(0, 'FROM python:3.11-slim')
 
         return '\n'.join(cleaned)
+
+    @staticmethod
+    def _sanitize_pydantic_schema(content: str) -> str:
+        """Sanitize Python schema content to use Pydantic V2 field_validator.
+
+        Converts deprecated Pydantic V1 @validator decorator to V2 @field_validator.
+        This handles cases where LLM generates old V1 patterns despite instructions.
+        
+        Args:
+            content: Python schema file content
+            
+        Returns:
+            Sanitized content with V2 validators
+        """
+        if not content or not isinstance(content, str):
+            return content
+
+        # Check if file uses @validator (Pydantic V1)
+        if '@validator' not in content:
+            return content  # Already using V2 or no validators
+            
+        logger.warning("Detected Pydantic V1 @validator usage, converting to V2 @field_validator")
+        
+        # Replace import statement
+        # from pydantic import ... validator ... -> ... field_validator ...
+        # Match validator not preceded by field_ to avoid double replacement
+        content = re.sub(
+            r'from pydantic import (.*)(?<!field_)validator(.*)',
+            r'from pydantic import \1field_validator\2',
+            content
+        )
+        
+        # Replace @validator decorator with @field_validator
+        # Only match @validator, not @field_validator
+        content = re.sub(
+            r'@validator\(',
+            r'@field_validator(',
+            content
+        )
+        
+        # Second pass: Convert pre=True to mode='before'
+        # Handle cases where pre=True has additional arguments after it
+        # Pattern: @field_validator('field', pre=True, other_arg=value) -> @field_validator('field', mode='before', other_arg=value)
+        content = re.sub(
+            r"@field_validator\(([^,\)]+),\s*pre=True\s*,",
+            r"@field_validator(\1, mode='before',",
+            content
+        )
+        
+        # Handle case where pre=True is the last/only argument after field name
+        content = re.sub(
+            r"@field_validator\(([^,\)]+),\s*pre=True\s*\)",
+            r"@field_validator(\1, mode='before')",
+            content
+        )
+        
+        return content
 
     async def _run_docgen(self, job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Execute documentation generation with timeout."""

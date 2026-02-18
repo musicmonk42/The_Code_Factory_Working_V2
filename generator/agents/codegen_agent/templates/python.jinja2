@@ -120,6 +120,11 @@ project/
 ```python
 from pydantic import BaseModel, Field, field_validator
 
+# ⚠️ CRITICAL: Use field_validator (Pydantic V2), NOT @validator (deprecated V1)
+# ❌ WRONG: from pydantic import validator  # DEPRECATED!
+# ❌ WRONG: @validator('field')  # This is Pydantic V1 - DO NOT USE
+# ✅ CORRECT: @field_validator('field', mode='before')  # Pydantic V2
+
 class CalculationRequest(BaseModel):
     \"\"\"Request model for calculations.\"\"\"
     operand1: float = Field(..., description="First operand")
