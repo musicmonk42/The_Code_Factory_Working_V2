@@ -37,8 +37,8 @@ def test_echo_request_model_min_length():
     """Test that empty message is rejected (min_length constraint)."""
     with pytest.raises(ValidationError) as exc_info:
         EchoRequest(message="")
-    assert "value error" in str(exc_info.value).lower()
-    assert "should have at least 1 character" in str(exc_info.value).lower()
+    error_str = str(exc_info.value).lower()
+    assert "message cannot be empty" in error_str or "at least 1 character" in error_str
 
 
 def test_echo_request_model_max_length():
@@ -46,7 +46,8 @@ def test_echo_request_model_max_length():
     over_length_message = "x" * 501
     with pytest.raises(ValidationError) as exc_info:
         EchoRequest(message=over_length_message)
-    assert "value error" in str(exc_info.value).lower()
+    error_str = str(exc_info.value).lower()
+    assert "at most 500 characters" in error_str or "string_too_long" in error_str
 
 
 def test_echo_request_model_boundary_min():
@@ -102,3 +103,13 @@ def test_echo_request_model_special_characters():
     """Test that special characters are allowed."""
     request = EchoRequest(message="Hello! @#$%^&*()")
     assert request.message == "Hello! @#$%^&*()"
+
+
+def test_echo_request_model_boundary_with_trim():
+    """Test that trimming doesn't affect boundary validation."""
+    # 500 chars + 2 spaces should trim to exactly 500 chars
+    message_with_spaces = " " + ("x" * 500) + " "
+    request = EchoRequest(message=message_with_spaces)
+    assert len(request.message) == 500
+    assert request.message == "x" * 500
+
