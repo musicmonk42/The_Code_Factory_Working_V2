@@ -375,6 +375,22 @@ class SFEService:
                         cached_report["issues"], job_id
                     )
                     
+                    # BUG FIX 2: Populate errors cache for fix proposals
+                    # This ensures that if user clicks "Analyze Code" first, then "Propose Fix",
+                    # the error data is available in cache for generating the fix
+                    for issue in issues:
+                        error_id = issue.get("error_id")
+                        if error_id:
+                            self._errors_cache[error_id] = {
+                                "error_id": error_id,
+                                "job_id": issue.get("job_id", job_id),
+                                "type": issue.get("type", "unknown"),
+                                "severity": issue.get("severity", "medium"),
+                                "message": issue.get("message", ""),
+                                "file": issue.get("file", "unknown"),
+                                "line": issue.get("line", 0),
+                            }
+                    
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
                     
@@ -404,7 +420,25 @@ class SFEService:
             # Check if route_job actually returned data
             if result.get("data"):
                 logger.info(f"Analysis for job {job_id} completed via OmniCore")
-                return result["data"]
+                data = result["data"]
+                
+                # BUG FIX 2: Populate errors cache for fix proposals
+                # Extract issues from OmniCore response and populate cache
+                issues = data.get("issues", [])
+                for issue in issues:
+                    error_id = issue.get("error_id")
+                    if error_id:
+                        self._errors_cache[error_id] = {
+                            "error_id": error_id,
+                            "job_id": issue.get("job_id", job_id),
+                            "type": issue.get("type", "unknown"),
+                            "severity": issue.get("severity", "medium"),
+                            "message": issue.get("message", ""),
+                            "file": issue.get("file", "unknown"),
+                            "line": issue.get("line", 0),
+                        }
+                
+                return data
             logger.info(
                 "OmniCore routing returned no data, falling through to direct SFE"
             )
@@ -438,6 +472,28 @@ class SFEService:
                         ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
                     ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
+
+                    # BUG FIX 2: Populate errors cache for fix proposals
+                    # Transform issues to frontend format if needed
+                    if issues and isinstance(issues, list):
+                        # Check if issues need transformation
+                        if issues and not issues[0].get("error_id"):
+                            # Transform to frontend format
+                            issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
+                        
+                        # Populate cache
+                        for issue in issues:
+                            error_id = issue.get("error_id")
+                            if error_id:
+                                self._errors_cache[error_id] = {
+                                    "error_id": error_id,
+                                    "job_id": issue.get("job_id", job_id),
+                                    "type": issue.get("type", "unknown"),
+                                    "severity": issue.get("severity", "medium"),
+                                    "message": issue.get("message", ""),
+                                    "file": issue.get("file", "unknown"),
+                                    "line": issue.get("line", 0),
+                                }
 
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
@@ -498,6 +554,28 @@ class SFEService:
                                         "line": getattr(defect, "line", 0),
                                     }
                                 )
+
+                    # BUG FIX 2: Populate errors cache for fix proposals
+                    # Transform issues to frontend format if needed and populate cache
+                    if issues and isinstance(issues, list):
+                        # Check if issues need transformation
+                        if issues and not issues[0].get("error_id"):
+                            # Transform to frontend format
+                            issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
+                        
+                        # Populate cache
+                        for issue in issues:
+                            error_id = issue.get("error_id")
+                            if error_id:
+                                self._errors_cache[error_id] = {
+                                    "error_id": error_id,
+                                    "job_id": issue.get("job_id", job_id),
+                                    "type": issue.get("type", "unknown"),
+                                    "severity": issue.get("severity", "medium"),
+                                    "message": issue.get("message", ""),
+                                    "file": issue.get("file", "unknown"),
+                                    "line": issue.get("line", 0),
+                                }
 
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
@@ -750,23 +828,19 @@ class SFEService:
         error_data = self._errors_cache.get(error_id)
         
         if not error_data:
-            logger.warning(f"Error {error_id} not found in cache. Returning generic fix.")
-            # Generate generic fix as fallback
+            logger.warning(f"Error {error_id} not found in cache. Run 'Detect Errors' or 'Analyze Code' first.")
+            # BUG FIX 3: Return helpful error instead of fake main.py fix
+            # The previous fallback returned a hardcoded main.py:1 fix which would target
+            # the wrong file when applied. Now we return an empty proposed_changes list
+            # with a clear error message to guide the user.
             fix = {
                 "fix_id": f"fix-{error_id}",
                 "error_id": error_id,
                 "job_id": None,
-                "description": "Apply recommended code improvement",
-                "proposed_changes": [
-                    {
-                        "file": "main.py",
-                        "line": 1,
-                        "action": "insert",
-                        "content": "# Code improvement recommended",
-                    }
-                ],
-                "confidence": 0.50,
-                "reasoning": "Error details not found in cache. Generic fix proposed.",
+                "description": "Unable to generate fix - error details not found. Please run 'Analyze Code' or 'Detect Errors' first to populate the error cache.",
+                "proposed_changes": [],  # Empty changes instead of fake main.py change
+                "confidence": 0.0,
+                "reasoning": "Error details not found in cache. The error cache is populated when you run 'Analyze Code' or 'Detect Errors'. Please run one of those operations first, then try proposing a fix again.",
             }
         else:
             # Generate contextual fix based on actual error data
@@ -927,6 +1001,24 @@ class SFEService:
             }
 
         fix = fixes_db[fix_id]
+        
+        # BUG FIX 4: Add guards for empty proposed_changes and missing job_id
+        # These guards prevent trying to apply fixes that have no changes or can't
+        # resolve the target directory because the error wasn't properly detected
+        if not fix.proposed_changes:
+            return {
+                "status": "error", 
+                "message": "No changes to apply. The fix proposal has no proposed changes.",
+                "files_modified": []
+            }
+        
+        if not fix.job_id:
+            return {
+                "status": "error",
+                "message": "Cannot apply fix: no job_id associated. Run 'Detect Errors' first to populate error cache.",
+                "files_modified": []
+            }
+        
         files_modified = []
 
         try:

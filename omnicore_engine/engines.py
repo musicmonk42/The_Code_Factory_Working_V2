@@ -641,12 +641,15 @@ class PluginService:
             self.logger.debug(f"Extracted reply topic: {reply_topic}")
         
         try:
-            # Import SFE service getter
+            # BUG FIX 1: Create standalone SFE service without OmniCore to break circular dependency
+            # The singleton from get_sfe_service_instance() has omnicore_service set, which causes
+            # infinite routing loops (SFE->OmniCore->SFE). By creating a standalone instance with
+            # omnicore_service=None, we force direct SFE execution without routing back through OmniCore.
             try:
-                from server.routers.sfe import get_sfe_service_instance
-                sfe_service = get_sfe_service_instance()
+                from server.services import SFEService
+                sfe_service = SFEService(omnicore_service=None)
             except Exception as e:
-                self.logger.error(f"Failed to get SFE service instance: {e}")
+                self.logger.error(f"Failed to create SFE service instance: {e}")
                 error_response = {
                     "job_id": message.payload.get("job_id"),
                     "status": "error",
