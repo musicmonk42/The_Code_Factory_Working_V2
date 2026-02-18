@@ -6082,7 +6082,72 @@ class OmniCoreService:
             # Ensure agents are loaded before use
             self._ensure_agents_loaded()
             
-            # Extract output_dir from README if not already set
+            # ==========================================================================
+            # [NEW] Spec-Driven Generation Integration
+            # ==========================================================================
+            # Process README through spec block parser and question loop if needed
+            # This provides structured, validated specifications that override text extraction
+            try:
+                from generator.main.spec_integration import SpecDrivenPipeline
+                
+                if payload.get("readme_content"):
+                    spec_pipeline = SpecDrivenPipeline(job_id=job_id)
+                    
+                    # Check if we should run question loop (only in interactive scenarios)
+                    # For API/batch mode, run non-interactive
+                    interactive = payload.get("interactive_spec", False)
+                    
+                    logger.info(
+                        f"[PIPELINE] Processing spec for job {job_id}, interactive={interactive}",
+                        extra={"job_id": job_id, "interactive": interactive}
+                    )
+                    
+                    spec_lock = await spec_pipeline.process_requirements(
+                        readme_content=payload["readme_content"],
+                        interactive=interactive,
+                        output_path=None  # Will be derived from spec
+                    )
+                    
+                    # Inject spec_lock into payload for downstream use
+                    payload["spec_lock"] = {
+                        "project_type": spec_lock.project_type,
+                        "package_name": spec_lock.package_name,
+                        "module_name": spec_lock.module_name,
+                        "output_dir": spec_lock.output_dir,
+                        "interfaces": spec_lock.interfaces,
+                        "dependencies": spec_lock.dependencies,
+                        "nonfunctional": spec_lock.nonfunctional,
+                        "adapters": spec_lock.adapters,
+                        "acceptance_checks": spec_lock.acceptance_checks,
+                    }
+                    
+                    # Override output_dir with spec value
+                    if spec_lock.output_dir and not payload.get("output_dir"):
+                        payload["output_dir"] = spec_lock.output_dir
+                        logger.info(
+                            f"[PIPELINE] Using spec output_dir: {spec_lock.output_dir}",
+                            extra={"job_id": job_id, "output_dir": spec_lock.output_dir}
+                        )
+                    
+                    logger.info(
+                        f"[PIPELINE] Spec processing complete: "
+                        f"type={spec_lock.project_type}, package={spec_lock.package_name}",
+                        extra={
+                            "job_id": job_id,
+                            "project_type": spec_lock.project_type,
+                            "package_name": spec_lock.package_name,
+                        }
+                    )
+            except ImportError:
+                logger.debug(f"[PIPELINE] Spec integration not available, using legacy flow")
+            except Exception as e:
+                logger.warning(
+                    f"[PIPELINE] Spec processing failed, continuing with legacy flow: {e}",
+                    exc_info=True
+                )
+            # ==========================================================================
+            
+            # Extract output_dir from README if not already set (legacy fallback)
             if not payload.get("output_dir") and payload.get("readme_content") and _PROVENANCE_AVAILABLE:
                 extracted_output_dir = _extract_output_dir_from_md(payload["readme_content"])
                 if extracted_output_dir:
@@ -7498,6 +7563,88 @@ class OmniCoreService:
                 "error_type": type(e).__name__,
             }
         finally:
+            # ==========================================================================
+            # [NEW] Post-Generation Contract Validation
+            # ==========================================================================
+            # Validate generated code against spec_lock and contract requirements
+            # This runs even if pipeline failed to generate validation reports
+            try:
+                from generator.main.spec_integration import SpecDrivenPipeline
+                
+                output_path = codegen_result.get("output_path") if codegen_result else None
+                spec_lock_data = payload.get("spec_lock")
+                
+                if output_path and Path(output_path).exists():
+                    logger.info(
+                        f"[PIPELINE] Running post-generation validation for job {job_id}",
+                        extra={"job_id": job_id, "output_path": output_path}
+                    )
+                    
+                    # Create spec lock object if we have data
+                    spec_lock = None
+                    if spec_lock_data:
+                        from generator.intent_parser.question_loop import SpecLock
+                        try:
+                            spec_lock = SpecLock(**spec_lock_data)
+                        except Exception as e:
+                            logger.warning(f"[PIPELINE] Failed to recreate SpecLock: {e}")
+                    
+                    spec_pipeline = SpecDrivenPipeline(job_id=job_id)
+                    validation_report = spec_pipeline.validate_output(
+                        output_dir=Path(output_path),
+                        spec_lock=spec_lock,
+                        language=detected_language
+                    )
+                    
+                    # Save validation report
+                    try:
+                        reports_dir = Path(output_path) / "reports"
+                        reports_dir.mkdir(exist_ok=True)
+                        
+                        validation_path = reports_dir / "validation_report.json"
+                        with open(validation_path, "w") as f:
+                            json.dump(validation_report.to_dict(), f, indent=2)
+                        
+                        validation_text_path = reports_dir / "validation_report.txt"
+                        with open(validation_text_path, "w") as f:
+                            f.write(validation_report.to_text())
+                        
+                        logger.info(
+                            f"[PIPELINE] Saved validation report to {validation_path}",
+                            extra={"job_id": job_id, "valid": validation_report.is_valid()}
+                        )
+                    except Exception as e:
+                        logger.warning(f"[PIPELINE] Failed to save validation report: {e}")
+                    
+                    # Log validation results
+                    if not validation_report.is_valid():
+                        logger.warning(
+                            f"[PIPELINE] Job {job_id} validation FAILED with {len(validation_report.errors)} errors",
+                            extra={
+                                "job_id": job_id,
+                                "errors": validation_report.errors,
+                                "checks_failed": validation_report.checks_failed,
+                            }
+                        )
+                        # Note: We don't fail the job, but log the validation issues
+                        # The validation report is available for review
+                    else:
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} validation PASSED",
+                            extra={"job_id": job_id, "checks_passed": len(validation_report.checks_passed)}
+                        )
+                else:
+                    logger.debug(f"[PIPELINE] Skipping validation (no output path or spec_lock)")
+                    
+            except ImportError:
+                logger.debug(f"[PIPELINE] Validation integration not available")
+            except Exception as e:
+                logger.warning(
+                    f"[PIPELINE] Post-generation validation failed: {e}",
+                    exc_info=True
+                )
+            # ==========================================================================
+            
             # FIX: Always remove job from in-progress set
             self._jobs_in_pipeline.discard(job_id)
             logger.debug(f"[PIPELINE] Removed job {job_id} from in-progress set")
