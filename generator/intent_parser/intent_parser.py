@@ -1032,9 +1032,10 @@ class IntentParser:
         # Cross-reference: check for frontend files in the spec content
         frontend_file_patterns = ['index.html', '.html', '.css', '.jsx', '.tsx', '.vue', 
                                   'templates/', 'static/', 'frontend/', 'public/']
+        detected_keywords_set = set(detected_keywords)  # O(1) lookup
         for pattern in frontend_file_patterns:
             if pattern in content_lower:
-                if not any(kw == pattern for kw in detected_keywords):
+                if pattern not in detected_keywords_set:
                     detected_keywords.append(f"file:{pattern}")
                     total_score += 0.9
                     max_score = max(max_score, 0.9)

@@ -230,6 +230,18 @@ HELM_REQUIRED_FIELDS = {"apiVersion", "name"}  # Minimum required fields per Hel
 HELM_DEFAULT_API_VERSION = "v2"  # Helm 3 uses apiVersion v2
 HELM_DEFAULT_CHART_TYPE = "application"
 
+# Spec-Derived File Patterns for Categorization
+DEPLOYMENT_FILE_PATTERNS = {
+    'Dockerfile', 'docker-compose.yml', 'compose.yml', 
+    'Chart.yaml', 'deployment.yaml', 'service.yaml',
+    'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
+}
+FRONTEND_FILE_PATTERNS = {
+    'index.html', 'style.css', 'app.js', 'bundle.js',
+    'main.tsx', 'App.tsx', 'index.jsx', 'App.jsx'
+}
+CONFIG_FILE_PATTERNS = {'conf.py', 'config.yaml', 'settings.py'}
+
 # Error Type Constants (Industry Standard: Structured error identification)
 ERROR_TYPE_IMPORT = "import_error"
 ERROR_TYPE_SETTINGS_INIT = "settings_initialization_failed"
@@ -6458,18 +6470,7 @@ class OmniCoreService:
                     missing_from_spec = spec_required - generated_files
                     
                     if missing_from_spec:
-                        # Categorize missing files
-                        DEPLOYMENT_FILE_PATTERNS = {
-                            'Dockerfile', 'docker-compose.yml', 'compose.yml', 
-                            'Chart.yaml', 'deployment.yaml', 'service.yaml',
-                            'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
-                        }
-                        FRONTEND_FILE_PATTERNS = {
-                            'index.html', 'style.css', 'app.js', 'bundle.js',
-                            'main.tsx', 'App.tsx', 'index.jsx', 'App.jsx'
-                        }
-                        CONFIG_FILE_PATTERNS = {'conf.py', 'config.yaml', 'settings.py'}
-                        
+                        # Categorize missing files using module-level constants
                         missing_deploy_files = missing_from_spec & DEPLOYMENT_FILE_PATTERNS
                         missing_frontend_files = missing_from_spec & FRONTEND_FILE_PATTERNS
                         missing_config_files = missing_from_spec & CONFIG_FILE_PATTERNS
@@ -6524,11 +6525,6 @@ class OmniCoreService:
             if _PROVENANCE_AVAILABLE and _extract_required_files_from_md and md_content:
                 try:
                     spec_files = set(_extract_required_files_from_md(md_content, target_language=detected_language))
-                    DEPLOYMENT_FILE_PATTERNS = {
-                        'Dockerfile', 'docker-compose.yml', 'compose.yml', 
-                        'Chart.yaml', 'deployment.yaml', 'service.yaml',
-                        'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
-                    }
                     spec_derived_deploy_files = list(spec_files & DEPLOYMENT_FILE_PATTERNS)
                 except Exception:
                     pass
