@@ -1187,9 +1187,9 @@ class DockerfileHandler(FormatHandler):
         # Strip all leading ! characters from the start of the file only (not each line)
         sanitized = re.sub(r'\A!+\s*', '', sanitized)
         
-        # Remove any other leading non-Dockerfile content (whitespace, special chars)
-        # Match any leading characters that are not FROM, ARG, or # (comment)
-        sanitized = re.sub(r'\A[^FAf#]+(?=(?:FROM|ARG|from|arg|#))', '', sanitized, flags=re.MULTILINE)
+        # Remove any other leading non-Dockerfile content (whitespace only)
+        # Only strip leading whitespace before FROM/ARG, not other content
+        sanitized = re.sub(r'^\s+', '', sanitized)
         
         # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
         # IMPORTANT: Validate BEFORE stripping LLM preamble to catch invalid content
@@ -3504,9 +3504,11 @@ async def handle_deploy_response(
                 '{PATH}': '/app',
                 '<PATH>': '/app',
                 # FIX Issue 2: Add Kubernetes-specific placeholders
+                # Note: These are development defaults for validation purposes.
+                # Production deployments should use environment-specific values or CI/CD variables.
                 '<DOCKER_IMAGE>': 'app:latest',
                 '{DOCKER_IMAGE}': 'app:latest',
-                '<TAG>': 'latest',
+                '<TAG>': 'latest',  # Separate tag for flexibility (e.g., when image and tag are in different fields)
                 '{TAG}': 'latest',
                 '<CONFIGMAPNAME>': 'app-config',
                 '{CONFIGMAPNAME}': 'app-config',

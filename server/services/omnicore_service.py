@@ -4823,18 +4823,15 @@ class OmniCoreService:
         
         # Replace import statement
         # from pydantic import ... validator ... -> ... field_validator ...
+        # Match validator not preceded by field_ to avoid double replacement
         content = re.sub(
-            r'from pydantic import (.*)validator(.*)',
+            r'from pydantic import (.*)(?<!field_)validator(.*)',
             r'from pydantic import \1field_validator\2',
             content
         )
         
         # Replace @validator decorator with @field_validator
-        # Pattern: @validator('field_name', ...) -> @field_validator('field_name', ...)
-        # Note: This handles both pre=True and other arguments
-        # The mode='before' equivalent of pre=True is handled below
-        
-        # First pass: Replace @validator with @field_validator
+        # Only match @validator, not @field_validator
         content = re.sub(
             r'@validator\(',
             r'@field_validator(',
@@ -4842,17 +4839,18 @@ class OmniCoreService:
         )
         
         # Second pass: Convert pre=True to mode='before'
-        # Pattern: @field_validator('field', pre=True, ...) -> @field_validator('field', mode='before', ...)
+        # Handle cases where pre=True has additional arguments after it
+        # Pattern: @field_validator('field', pre=True, other_arg=value) -> @field_validator('field', mode='before', other_arg=value)
         content = re.sub(
-            r"@field_validator\(([^,\)]+),\s*pre=True",
-            r"@field_validator(\1, mode='before'",
+            r"@field_validator\(([^,\)]+),\s*pre=True\s*,",
+            r"@field_validator(\1, mode='before',",
             content
         )
         
-        # Handle case where pre=True is the only argument after field name
+        # Handle case where pre=True is the last/only argument after field name
         content = re.sub(
-            r"@field_validator\(([^,\)]+)\)\s*\n\s*@classmethod",
-            r"@field_validator(\1, mode='before')\n    @classmethod",
+            r"@field_validator\(([^,\)]+),\s*pre=True\s*\)",
+            r"@field_validator(\1, mode='before')",
             content
         )
         
