@@ -178,6 +178,16 @@ Before submitting, verify EVERY item below. Failure on any item = REJECTION:
 10. ✓ String fields have min_length, max_length, and use @field_validator for trimming if needed
 11. ✓ Numeric fields have ge/le/gt/lt constraints where applicable
 12. ✓ Validation is at SCHEMA level, NOT in route handlers
+13. ✓ Route handler parameters use TYPED Pydantic models (e.g., `item: Item`), NEVER `dict` or `Any`
+
+**Pydantic V2 Error Types (CRITICAL):**
+- When testing validation, use Pydantic V2 error type strings:
+  * String constraints: `string_too_short`, `string_too_long`, `string_type`
+  * Numeric constraints: `greater_than`, `less_than`, `greater_than_equal`, `less_than_equal`
+  * Type parsing: `float_parsing`, `int_parsing`, `bool_parsing`
+  * Custom validators: `value_error`
+  * Missing fields: `missing`
+- NEVER use Pydantic V1 error types like `value_error.any_str.min_length` or `value_error.number.not_gt`
 
 **README Completeness (CRITICAL):**
 13. ✓ README has ALL required sections: Setup, Run Server, Run Tests, API Examples

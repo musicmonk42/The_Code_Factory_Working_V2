@@ -445,6 +445,12 @@ The following are MANDATORY checks:
    - NEVER add manual validation logic in route handlers
    - Route handlers should only return responses - validation is automatic via Pydantic
    - **CRITICAL**: Route handler parameters MUST use the Pydantic model class as the type annotation, NEVER `dict` or `Any`
+   - **CRITICAL**: Every POST/PUT route handler MUST accept a Pydantic model as its request body parameter
+   - **CRITICAL**: The model MUST use Field() with constraints (min_length, gt, ge, etc.)
+   - **CRITICAL**: FastAPI will automatically return 422 for invalid input when using typed Pydantic parameters
+   
+   **WRONG**: `async def create_item(data: dict): ...`  # Bypasses FastAPI's automatic request validation at framework level!
+   **CORRECT**: `async def create_item(item: Item): ...`  # Pydantic validates automatically, returns 422 for invalid data
    
    CORRECT Pattern (Use This):
    - In app/schemas.py - All validation in schema using @field_validator (Pydantic V2):
@@ -522,6 +528,47 @@ The following are MANDATORY checks:
    - Return the validated (and trimmed) value from the validator
    - Use `Field(..., min_length=1, max_length=500)` for basic constraints
    - Validators run BEFORE Field constraints, so trim first, then Field checks length
+   
+   **CRITICAL: Validator vs Field Constraint Interaction**:
+   When a @field_validator(mode='before') raises ValueError for empty strings, the error type 
+   will be "value_error" (NOT "string_too_short"). The min_length Field constraint is NEVER 
+   reached because the validator runs first and raises.
+   
+   Tests MUST match the ACTUAL validation path:
+   - If validator strips whitespace and raises ValueError("cannot be empty") → type is "value_error"
+   - If validator strips whitespace and RETURNS the empty string → min_length catches it → type is "string_too_short"
+   
+   Choose ONE approach and be consistent between code and tests:
+   - Approach A: Validator raises ValueError → test asserts type == "value_error"
+   - Approach B: Validator returns stripped value, let Field min_length catch it → test asserts type == "string_too_short"
+   
+   Example of Approach A (validator raises):
+   ```python
+   @field_validator('message', mode='before')
+   @classmethod
+   def trim_and_validate_message(cls, v):
+       if not isinstance(v, str):
+           raise ValueError('Message must be a string')
+       v = v.strip()
+       if not v:  # Empty after strip
+           raise ValueError('Message cannot be empty after trimming whitespace')
+       return v
+   # Test expects: errors[0]["type"] == "value_error"
+   ```
+   
+   Example of Approach B (validator returns, Field catches):
+   ```python
+   @field_validator('message', mode='before')
+   @classmethod
+   def trim_message(cls, v):
+       if not isinstance(v, str):
+           raise ValueError('Message must be a string')
+       return v.strip()  # Returns empty string if whitespace-only
+   
+   # Field constraint catches it:
+   # message: str = Field(..., min_length=1)
+   # Test expects: errors[0]["type"] == "string_too_short"
+   ```
    
    IMPORTANT NOTES ON PYDANTIC V2 ERROR MESSAGES:
    - When using `mode='before'` to strip whitespace, the `min_length=1` Field constraint will catch empty-after-strip values
