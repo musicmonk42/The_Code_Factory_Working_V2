@@ -168,6 +168,7 @@ class SpecDrivenPipeline:
             )
             
             # GATING: Check if clarification is required before proceeding
+            # Raise error in all modes - code generation cannot proceed without project_type
             if spec_lock.requires_clarification:
                 logger.warning(
                     f"[{self.job_id}] Spec incomplete: project_type missing or uncertain. "
@@ -178,7 +179,6 @@ class SpecDrivenPipeline:
                         "project_type": spec_lock.project_type,
                     }
                 )
-                # Raise error regardless of mode - should not proceed with unclear project_type
                 raise ValueError(
                     "Cannot proceed with code generation: project_type is missing or uncertain. "
                     "Please specify project_type explicitly in the spec block."

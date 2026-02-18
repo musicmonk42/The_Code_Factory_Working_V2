@@ -98,7 +98,7 @@ def test_generate_questions_missing_project_type():
     
     project_type_q = next(q for q in questions if q.field_name == "project_type")
     # After changes: default_value is None unless inferred from README
-    assert project_type_q.default_value is None  # No default unless inferred
+    assert project_type_q.default_value is None
     assert len(project_type_q.examples) > 0
 
 

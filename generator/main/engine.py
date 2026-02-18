@@ -1834,7 +1834,7 @@ class WorkflowEngine:
                         extra={"workflow_id": workflow_id}
                     )
                     deploy_result["status"] = "skipped"
-                    deploy_result["reason"] = "Framework not detected - likely CLI/library/batch project"
+                    deploy_result["reason"] = "Framework not detected - deployment skipped for non-service projects (CLI/library/batch)"
                     return deploy_result
                 
                 # Generate deployment configs using DeployAgent if available, otherwise fallback
