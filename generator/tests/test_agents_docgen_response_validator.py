@@ -1195,7 +1195,7 @@ This is a minimal introduction that provides basic context for the project.
     }
     
     # Test with DOCGEN_TEST_MODE enabled
-    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}):
         validation = plugin.validate(minimal_content, schema)
         
         # Should pass in test mode despite missing usage section and having only 1 section
@@ -1226,7 +1226,7 @@ This is a minimal introduction that provides basic context for the project.
     }
     
     # Test without DOCGEN_TEST_MODE (strict mode)
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {}):
         validation = plugin.validate(minimal_content, schema)
         
         # Should fail in strict mode - missing usage section
@@ -1256,7 +1256,7 @@ List of all API endpoints with detailed documentation for each endpoint.
     }
     
     # Test with DOCGEN_TEST_MODE enabled - API docs should still require authentication
-    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}):
         validation = plugin.validate(api_content, schema)
         
         # Should fail even in test mode - API docs require both sections
@@ -1286,7 +1286,7 @@ This is a comprehensive introduction that provides detailed background and conte
     }
     
     # Test with DOCGEN_TEST_MODE enabled
-    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}):
         validation = plugin.validate(content_one_section, schema)
         
         # Should not fail on insufficient sections in test mode
@@ -1294,7 +1294,7 @@ This is a comprehensive introduction that provides detailed background and conte
         assert len(issues) == 0, "Should not require 3 sections in test mode"
     
     # Test without DOCGEN_TEST_MODE (strict mode)
-    with patch.dict(os.environ, {}, clear=True):
+    with patch.dict(os.environ, {}):
         validation = plugin.validate(content_one_section, schema)
         
         # Should fail on insufficient sections in strict mode

@@ -704,7 +704,7 @@ This is a minimal README with basic information about the project that is long e
 """
         
         # Test with README_TEST_MODE enabled
-        with patch.dict('os.environ', {'README_TEST_MODE': '1'}, clear=True):
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
             result = validate_readme_completeness(short_readme)
             
             # Should not fail on length in test mode (>= 200 chars)
@@ -712,7 +712,7 @@ This is a minimal README with basic information about the project that is long e
             assert len(length_errors) == 0, f"Should not fail on length in test mode. Errors: {result['errors']}"
         
         # Test without README_TEST_MODE (strict mode)
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict('os.environ', {}):
             result = validate_readme_completeness(short_readme)
             
             # Should fail on length in strict mode (< 500 chars)
@@ -731,7 +731,7 @@ This is a minimal README with just basic content but no structured sections like
 """ * 3  # Repeat to meet minimum length
         
         # Test with README_TEST_MODE enabled
-        with patch.dict('os.environ', {'README_TEST_MODE': '1'}, clear=True):
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
             result = validate_readme_completeness(minimal_readme)
             
             # Should not fail on missing sections in test mode
@@ -739,7 +739,7 @@ This is a minimal README with just basic content but no structured sections like
             assert len(section_errors) == 0, f"Should not fail on missing sections in test mode. Errors: {result['errors']}"
         
         # Test without README_TEST_MODE (strict mode)
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict('os.environ', {}):
             result = validate_readme_completeness(minimal_readme)
             
             # Should fail on missing sections in strict mode
@@ -772,7 +772,7 @@ Here are some examples of how to use the project and its features for various us
 """ * 2  # Repeat to meet minimum length
         
         # Test with README_TEST_MODE enabled
-        with patch.dict('os.environ', {'README_TEST_MODE': '1'}, clear=True):
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
             result = validate_readme_completeness(readme_no_commands)
             
             # Should not fail on missing commands in test mode
@@ -780,7 +780,7 @@ Here are some examples of how to use the project and its features for various us
             assert len(command_errors) == 0, f"Should not fail on missing commands in test mode. Errors: {result['errors']}"
         
         # Test without README_TEST_MODE (strict mode)
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict('os.environ', {}):
             result = validate_readme_completeness(readme_no_commands)
             
             # Should fail on missing commands in strict mode
@@ -799,7 +799,7 @@ This is a minimal README with just enough content to pass the relaxed test mode 
 """
         
         # Test with README_TEST_MODE enabled
-        with patch.dict('os.environ', {'README_TEST_MODE': '1'}, clear=True):
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
             result = validate_readme_completeness(minimal_readme)
             
             # Should pass all validations in test mode
@@ -807,7 +807,7 @@ This is a minimal README with just enough content to pass the relaxed test mode 
             assert len(result["errors"]) == 0
         
         # Test without README_TEST_MODE (strict mode)
-        with patch.dict('os.environ', {}, clear=True):
+        with patch.dict('os.environ', {}):
             result = validate_readme_completeness(minimal_readme)
             
             # Should fail in strict mode
