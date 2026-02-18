@@ -92,7 +92,7 @@ except ImportError:
 
 # --- Observability Libraries ---
 try:
-    from prometheus_client import Counter, Gauge, start_http_server
+    from prometheus_client import Counter, Gauge, REGISTRY, start_http_server
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -158,12 +158,44 @@ service_breaker = (
     CircuitBreaker(fail_max=3, reset_timeout=60) if PYBREAKER_AVAILABLE else None
 )
 
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+    """
+    Safely create or retrieve a Prometheus metric to prevent
+    'Duplicated timeseries in CollectorRegistry' errors when
+    this module is imported through multiple paths.
+    """
+    labelnames = labelnames or []
+    # Check if metric already exists in registry
+    try:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass
+    # Try to create the metric
+    try:
+        return metric_class(name, documentation, labelnames)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise
+
+
 # Prometheus Metrics
+# Use safe metric creation to prevent 'Duplicated timeseries in CollectorRegistry'
+# errors when this module is imported through multiple paths.
 if PROMETHEUS_AVAILABLE:
-    CONFIG_RELOADS_TOTAL = Counter("config_reloads_total", "Config reloads", ["status"])
-    PLUGINS_LOADED_TOTAL = Gauge("config_plugins_loaded_total", "Loaded plugins")
-    SAFETY_VIOLATIONS_TOTAL = Counter(
-        "config_safety_violations_total", "Safety violations in config"
+    CONFIG_RELOADS_TOTAL = _get_or_create_metric(
+        Counter, "config_reloads_total", "Config reloads", ["status"]
+    )
+    PLUGINS_LOADED_TOTAL = _get_or_create_metric(
+        Gauge, "config_plugins_loaded_total", "Loaded plugins"
+    )
+    SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
+        Counter, "config_safety_violations_total", "Safety violations in config"
     )
 else:
     # Create mock metrics for when Prometheus is not available

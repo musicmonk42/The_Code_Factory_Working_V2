@@ -29,33 +29,59 @@ except ImportError:
 
 # P5: Observability - Prometheus Metrics
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+
+    def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+        """
+        Safely create or retrieve a Prometheus metric to prevent
+        'Duplicated timeseries in CollectorRegistry' errors when
+        this module is imported through multiple paths.
+        """
+        labelnames = labelnames or []
+        # Check if metric already exists in registry
+        try:
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        except (AttributeError, KeyError):
+            pass
+        # Try to create the metric
+        try:
+            return metric_class(name, documentation, labelnames)
+        except ValueError as e:
+            if "Duplicated timeseries" in str(e):
+                existing = REGISTRY._names_to_collectors.get(name)
+                if existing is not None:
+                    return existing
+            raise
 
     PROMETHEUS_AVAILABLE = True
-    SESSION_SAVE_ATTEMPTS = Counter(
+    SESSION_SAVE_ATTEMPTS = _get_or_create_metric(
+        Counter,
         "session_save_attempts_total",
         "Total attempts to save session",
         ["session_name"],
     )
-    SESSION_LOAD_ATTEMPTS = Counter(
+    SESSION_LOAD_ATTEMPTS = _get_or_create_metric(
+        Counter,
         "session_load_attempts_total",
         "Total attempts to load session",
         ["session_name"],
     )
-    SESSION_ERRORS = Counter(
-        "session_errors_total", "Total session errors", ["session_name", "error_type"]
+    SESSION_ERRORS = _get_or_create_metric(
+        Counter, "session_errors_total", "Total session errors", ["session_name", "error_type"]
     )
-    SESSION_SAVE_LATENCY = Histogram(
-        "session_save_latency_seconds", "Latency of saving session", ["session_name"]
+    SESSION_SAVE_LATENCY = _get_or_create_metric(
+        Histogram, "session_save_latency_seconds", "Latency of saving session", ["session_name"]
     )
-    SESSION_LOAD_LATENCY = Histogram(
-        "session_load_latency_seconds", "Latency of loading session", ["session_name"]
+    SESSION_LOAD_LATENCY = _get_or_create_metric(
+        Histogram, "session_load_latency_seconds", "Latency of loading session", ["session_name"]
     )
-    SESSIONS_PRUNED_TOTAL = Counter(
-        "sessions_pruned_total", "Total sessions pruned", ["reason"]
+    SESSIONS_PRUNED_TOTAL = _get_or_create_metric(
+        Counter, "sessions_pruned_total", "Total sessions pruned", ["reason"]
     )
-    SESSION_PRUNE_LATENCY_SECONDS = Histogram(
-        "session_prune_latency_seconds", "Latency of session pruning operation"
+    SESSION_PRUNE_LATENCY_SECONDS = _get_or_create_metric(
+        Histogram, "session_prune_latency_seconds", "Latency of session pruning operation"
     )
 except ImportError:
     PROMETHEUS_AVAILABLE = False

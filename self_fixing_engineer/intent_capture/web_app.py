@@ -28,7 +28,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
 
 # UPGRADE: Observability - Prometheus & OpenTelemetry
-from prometheus_client import Counter, start_http_server
+from prometheus_client import Counter, REGISTRY, start_http_server
 from streamlit_autorefresh import st_autorefresh
 
 # P6: Retries for Redis/Agent calls
@@ -120,15 +120,45 @@ st.set_page_config(
     page_title="Intent Capture Agent", layout="wide", initial_sidebar_state="expanded"
 )
 
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+    """
+    Safely create or retrieve a Prometheus metric to prevent
+    'Duplicated timeseries in CollectorRegistry' errors when
+    this module is imported through multiple paths.
+    """
+    labelnames = labelnames or []
+    # Check if metric already exists in registry
+    try:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass
+    # Try to create the metric
+    try:
+        return metric_class(name, documentation, labelnames)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise
+
+
 # P5: Observability - Prometheus Metrics
+# Use safe metric creation to prevent 'Duplicated timeseries in CollectorRegistry'
+# errors when this module is imported through multiple paths.
 PROMETHEUS_AVAILABLE = True
 try:
-    HTTP_REQUESTS_TOTAL = Counter(
+    HTTP_REQUESTS_TOTAL = _get_or_create_metric(
+        Counter,
         "streamlit_http_requests_total",
         "Total HTTP requests to Streamlit app",
         ["path"],
     )
-    APP_ERRORS_TOTAL = Counter(
+    APP_ERRORS_TOTAL = _get_or_create_metric(
+        Counter,
         "streamlit_app_errors_total",
         "Total errors in Streamlit app",
         ["component", "error_type"],

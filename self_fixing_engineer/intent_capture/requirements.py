@@ -69,28 +69,53 @@ except ImportError:
 # P5: Observability: Prometheus Metrics
 # Install with 'pip install prometheus-client==0.22.1'
 try:
-    from prometheus_client import Counter, Gauge, Histogram, start_http_server
+    from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
+
+    def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+        """
+        Safely create or retrieve a Prometheus metric to prevent
+        'Duplicated timeseries in CollectorRegistry' errors when
+        this module is imported through multiple paths.
+        """
+        labelnames = labelnames or []
+        # Check if metric already exists in registry
+        try:
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        except (AttributeError, KeyError):
+            pass
+        # Try to create the metric
+        try:
+            return metric_class(name, documentation, labelnames)
+        except ValueError as e:
+            if "Duplicated timeseries" in str(e):
+                existing = REGISTRY._names_to_collectors.get(name)
+                if existing is not None:
+                    return existing
+            raise
 
     PROMETHEUS_AVAILABLE = True
-    # Metrics for requirements suggestions
-    REQ_SUGGESTIONS_TOTAL = Counter(
-        "req_suggestions_total", "Total requirement suggestions", ["domain", "status"]
+    # Metrics for requirements suggestions - use safe creation
+    REQ_SUGGESTIONS_TOTAL = _get_or_create_metric(
+        Counter, "req_suggestions_total", "Total requirement suggestions", ["domain", "status"]
     )
-    REQ_SUGGESTIONS_LATENCY_SECONDS = Histogram(
+    REQ_SUGGESTIONS_LATENCY_SECONDS = _get_or_create_metric(
+        Histogram,
         "req_suggestions_latency_seconds",
         "Requirement suggestion latency in seconds",
         ["domain"],
     )
     # Metrics for DB operations
-    DB_OPS_TOTAL = Counter(
-        "req_db_ops_total", "Total DB operations", ["operation", "status"]
+    DB_OPS_TOTAL = _get_or_create_metric(
+        Counter, "req_db_ops_total", "Total DB operations", ["operation", "status"]
     )
-    DB_OPS_LATENCY_SECONDS = Histogram(
-        "req_db_ops_latency_seconds", "DB operation latency in seconds", ["operation"]
+    DB_OPS_LATENCY_SECONDS = _get_or_create_metric(
+        Histogram, "req_db_ops_latency_seconds", "DB operation latency in seconds", ["operation"]
     )
     # Metrics for ML model loading
-    ML_MODEL_LOAD_LATENCY_SECONDS = Histogram(
-        "req_ml_model_load_latency_seconds", "ML model load latency in seconds"
+    ML_MODEL_LOAD_LATENCY_SECONDS = _get_or_create_metric(
+        Histogram, "req_ml_model_load_latency_seconds", "ML model load latency in seconds"
     )
 except ImportError:
     PROMETHEUS_AVAILABLE = False
