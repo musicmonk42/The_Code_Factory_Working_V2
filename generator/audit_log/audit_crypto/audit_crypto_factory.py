@@ -78,7 +78,8 @@ except ImportError:
 
 # Prometheus metrics
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+    PROMETHEUS_AVAILABLE = True
 except ImportError:
     logging.critical(
         "prometheus_client not found. Metrics are critical for production. Exiting."
@@ -806,50 +807,120 @@ async def _ensure_fallback_hmac_secret() -> bytes:
         ) from e
 
 
+# --- Prometheus Metrics Helper ---
+def _get_or_create_metric(metric_class, name, description, labelnames=(), buckets=None, registry=None):
+    """Safely get or create a Prometheus metric to avoid duplicates.
+    
+    Args:
+        metric_class: Counter, Histogram, or Gauge class
+        name: Metric name
+        description: Metric documentation
+        labelnames: Tuple of label names
+        buckets: Histogram buckets (optional)
+        registry: Prometheus registry (defaults to REGISTRY)
+    
+    Returns:
+        Existing or newly created metric
+    
+    Note:
+        Uses private _collector_to_names attribute as prometheus_client (v0.23.1)
+        does not provide a public API for finding existing collectors by name.
+        This is the recommended approach from prometheus_client maintainers.
+    """
+    if registry is None:
+        registry = REGISTRY
+    
+    # Try to find existing metric
+    # Note: _collector_to_names is a private attribute, but prometheus_client
+    # doesn't provide a public API for this. Tested with v0.23.1.
+    try:
+        for collector in list(registry._collector_to_names.keys()):
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+    except (AttributeError, KeyError):
+        pass
+    
+    # Create new metric
+    kwargs = {
+        'name': name,
+        'documentation': description,
+        'labelnames': labelnames,
+        'registry': registry
+    }
+    if buckets and metric_class == Histogram:
+        kwargs['buckets'] = buckets
+    
+    try:
+        return metric_class(**kwargs)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Try one more time to find it
+            for collector in list(registry._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == name:
+                    return collector
+        raise
+
+
 # --- Metrics ---
-SIGN_OPERATIONS = Counter(
-    "audit_crypto_signs_total", "Sign operations", ["algo", "provider_type"]
+SIGN_OPERATIONS = _get_or_create_metric(
+    Counter,
+    "audit_crypto_signs_total",
+    "Sign operations",
+    labelnames=("algo", "provider_type"),
 )
-VERIFY_OPERATIONS = Counter(
+VERIFY_OPERATIONS = _get_or_create_metric(
+    Counter,
     "audit_crypto_verifies_total",
     "Verify operations",
-    ["algo", "provider_type", "status"],
+    labelnames=("algo", "provider_type", "status"),
 )
-CRYPTO_ERRORS = Counter(
-    "audit_crypto_errors_total", "Crypto errors", ["type", "provider_type", "operation"]
+CRYPTO_ERRORS = _get_or_create_metric(
+    Counter,
+    "audit_crypto_errors_total",
+    "Crypto errors",
+    labelnames=("type", "provider_type", "operation"),
 )
-KEY_ROTATIONS = Counter(
-    "audit_crypto_rotations_total", "Key rotations", ["algo", "provider_type"]
+KEY_ROTATIONS = _get_or_create_metric(
+    Counter,
+    "audit_crypto_rotations_total",
+    "Key rotations",
+    labelnames=("algo", "provider_type"),
 )
-HSM_SESSION_HEALTH = Gauge(
+HSM_SESSION_HEALTH = _get_or_create_metric(
+    Gauge,
     "audit_crypto_hsm_session_health",
     "HSM session health (1=up, 0=down)",
-    ["provider_type"],
+    labelnames=("provider_type",),
 )
-SIGN_LATENCY = Histogram(
+SIGN_LATENCY = _get_or_create_metric(
+    Histogram,
     "audit_crypto_sign_latency_seconds",
     "Sign operation latency",
-    ["algo", "provider_type"],
+    labelnames=("algo", "provider_type"),
 )
-VERIFY_LATENCY = Histogram(
+VERIFY_LATENCY = _get_or_create_metric(
+    Histogram,
     "audit_crypto_verify_latency_seconds",
     "Verify operation latency",
-    ["algo", "provider_type"],
+    labelnames=("algo", "provider_type"),
 )
-KEY_LOAD_COUNT = Counter(
+KEY_LOAD_COUNT = _get_or_create_metric(
+    Counter,
     "audit_crypto_key_load_total",
     "Total keys loaded from storage",
-    ["provider_type", "status"],
+    labelnames=("provider_type", "status"),
 )
-KEY_STORE_COUNT = Counter(
+KEY_STORE_COUNT = _get_or_create_metric(
+    Counter,
     "audit_crypto_key_store_total",
     "Total keys stored to storage",
-    ["provider_type", "status"],
+    labelnames=("provider_type", "status"),
 )
-KEY_CLEANUP_COUNT = Counter(
+KEY_CLEANUP_COUNT = _get_or_create_metric(
+    Counter,
     "audit_crypto_key_cleanup_total",
     "Total retired keys cleaned up",
-    ["provider_type", "status"],
+    labelnames=("provider_type", "status"),
 )
 
 

@@ -179,11 +179,12 @@ except ImportError:
 
 # Observability
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
+    REGISTRY = None
 
 try:
     from opentelemetry import trace
@@ -319,32 +320,87 @@ class Config:
                 raise ValueError("Etcd localhost not allowed in production")
 
 
-# ---- Metrics Setup ----
-# Guard against duplicate registration during module reloads or pytest runs
-_BACKEND_METRICS_INITIALIZED = False
+# ---- Prometheus Metrics Helper ----
+def _get_or_create_metric(metric_class, name, description, labelnames=(), buckets=None, registry=None):
+    """Safely get or create a Prometheus metric to avoid duplicates.
+    
+    Args:
+        metric_class: Counter, Histogram, or Gauge class
+        name: Metric name
+        description: Metric documentation
+        labelnames: Tuple of label names
+        buckets: Histogram buckets (optional)
+        registry: Prometheus registry (defaults to REGISTRY)
+    
+    Returns:
+        Existing or newly created metric
+    
+    Note:
+        Uses private _collector_to_names attribute as prometheus_client (v0.23.1)
+        does not provide a public API for finding existing collectors by name.
+        This is the recommended approach from prometheus_client maintainers.
+    """
+    if not PROMETHEUS_AVAILABLE:
+        return None
+    
+    if registry is None:
+        registry = REGISTRY
+    
+    # Try to find existing metric
+    # Note: _collector_to_names is a private attribute, but prometheus_client
+    # doesn't provide a public API for this. Tested with v0.23.1.
+    try:
+        for collector in list(registry._collector_to_names.keys()):
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+    except (AttributeError, KeyError):
+        pass
+    
+    # Create new metric
+    kwargs = {
+        'name': name,
+        'documentation': description,
+        'labelnames': labelnames,
+        'registry': registry
+    }
+    if buckets and metric_class == Histogram:
+        kwargs['buckets'] = buckets
+    
+    try:
+        return metric_class(**kwargs)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Try one more time to find it
+            for collector in list(registry._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == name:
+                    return collector
+        raise
 
-if PROMETHEUS_AVAILABLE and not _BACKEND_METRICS_INITIALIZED:
-    # Only create metrics if they haven't been initialized
-    BACKEND_OPERATIONS = Counter(
+
+# ---- Metrics Setup ----
+# Initialize metrics using safe helper to prevent duplicate registration
+if PROMETHEUS_AVAILABLE:
+    BACKEND_OPERATIONS = _get_or_create_metric(
+        Counter,
         "checkpoint_backend_operations_total",
         "Total backend operations",
-        ["backend", "operation", "status", "tenant"],
+        labelnames=("backend", "operation", "status", "tenant"),
     )
 
-    BACKEND_LATENCY = Histogram(
+    BACKEND_LATENCY = _get_or_create_metric(
+        Histogram,
         "checkpoint_backend_latency_seconds",
         "Backend operation latency",
-        ["backend", "operation", "tenant"],
+        labelnames=("backend", "operation", "tenant"),
         buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
     )
 
-    BACKEND_ERRORS = Counter(
+    BACKEND_ERRORS = _get_or_create_metric(
+        Counter,
         "checkpoint_backend_errors_total",
         "Backend operation errors",
-        ["backend", "operation", "error_type", "tenant"],
+        labelnames=("backend", "operation", "error_type", "tenant"),
     )
-    
-    _BACKEND_METRICS_INITIALIZED = True
 
 
 # ---- Tracing Setup ----

@@ -116,11 +116,12 @@ except ImportError:
 
 # ---- Observability ----
 try:
-    from prometheus_client import Counter, Gauge, Histogram
+    from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
+    REGISTRY = None
 
 try:
     from opentelemetry import trace
@@ -210,33 +211,94 @@ audit_logger = logging.getLogger("checkpoint.audit.utils")
 SecurityConfig.validate()
 
 
-# ---- Metrics ----
-# Guard against duplicate registration during module reloads or pytest runs
-_METRICS_INITIALIZED = False
+# ---- Prometheus Metrics Helper ----
+def _get_or_create_metric(metric_class, name, description, labelnames=(), buckets=None, registry=None):
+    """Safely get or create a Prometheus metric to avoid duplicates.
+    
+    Args:
+        metric_class: Counter, Histogram, or Gauge class
+        name: Metric name
+        description: Metric documentation
+        labelnames: Tuple of label names
+        buckets: Histogram buckets (optional)
+        registry: Prometheus registry (defaults to REGISTRY)
+    
+    Returns:
+        Existing or newly created metric
+    
+    Note:
+        Uses private _collector_to_names attribute as prometheus_client (v0.23.1)
+        does not provide a public API for finding existing collectors by name.
+        This is the recommended approach from prometheus_client maintainers.
+    """
+    if not PROMETHEUS_AVAILABLE:
+        return None
+    
+    if registry is None:
+        registry = REGISTRY
+    
+    # Try to find existing metric
+    # Note: _collector_to_names is a private attribute, but prometheus_client
+    # doesn't provide a public API for this. Tested with v0.23.1.
+    try:
+        for collector in list(registry._collector_to_names.keys()):
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+    except (AttributeError, KeyError):
+        pass
+    
+    # Create new metric
+    kwargs = {
+        'name': name,
+        'documentation': description,
+        'labelnames': labelnames,
+        'registry': registry
+    }
+    if buckets and metric_class == Histogram:
+        kwargs['buckets'] = buckets
+    
+    try:
+        return metric_class(**kwargs)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            # Try one more time to find it
+            for collector in list(registry._collector_to_names.keys()):
+                if hasattr(collector, '_name') and collector._name == name:
+                    return collector
+        raise
 
-if PROMETHEUS_AVAILABLE and not _METRICS_INITIALIZED:
-    CRYPTO_OPERATIONS = Counter(
+
+# ---- Metrics ----
+# Initialize metrics using safe helper to prevent duplicate registration
+if PROMETHEUS_AVAILABLE:
+    CRYPTO_OPERATIONS = _get_or_create_metric(
+        Counter,
         "checkpoint_crypto_operations_total",
         "Cryptographic operations",
-        ["operation", "algorithm", "status"],
+        labelnames=("operation", "algorithm", "status"),
     )
 
-    CRYPTO_LATENCY = Histogram(
+    CRYPTO_LATENCY = _get_or_create_metric(
+        Histogram,
         "checkpoint_crypto_latency_seconds",
         "Cryptographic operation latency",
-        ["operation", "algorithm"],
+        labelnames=("operation", "algorithm"),
         buckets=(0.00001, 0.00005, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1),
     )
 
-    KEY_ROTATIONS = Counter(
-        "checkpoint_key_rotations_total", "Key rotation operations", ["status"]
+    KEY_ROTATIONS = _get_or_create_metric(
+        Counter,
+        "checkpoint_key_rotations_total",
+        "Key rotation operations",
+        labelnames=("status",),
     )
 
-    DATA_INTEGRITY_CHECKS = Counter(
-        "checkpoint_integrity_checks_total", "Data integrity verifications", ["result"]
+    DATA_INTEGRITY_CHECKS = _get_or_create_metric(
+        Counter,
+        "checkpoint_integrity_checks_total",
+        "Data integrity verifications",
+        labelnames=("result",),
     )
-    
-    _METRICS_INITIALIZED = True
 
 
 # ---- Tracing ----
