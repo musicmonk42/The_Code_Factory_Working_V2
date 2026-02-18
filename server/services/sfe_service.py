@@ -77,6 +77,10 @@ class SFEService:
         # Initialize SFE components
         self._init_sfe_components()
 
+        # Cache for storing error/bug details for fix proposals
+        # Maps error_id/bug_id -> error details (file, line, type, message, severity, job_id)
+        self._errors_cache: Dict[str, Dict[str, Any]] = {}
+
         logger.info("SFEService initialized")
 
     def _init_sfe_components(self):
@@ -157,6 +161,81 @@ class SFEService:
             logger.info(
                 f"SFE components unavailable (using fallback): {', '.join(unavailable)}"
             )
+
+    def _compute_executive_summary(self, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Compute executive summary statistics from a list of issues.
+        
+        Args:
+            issues: List of issues in frontend format (with error_id, severity, type, file, etc.)
+            
+        Returns:
+            Dictionary with summary statistics:
+            - severity_breakdown: count by severity
+            - issues_by_type: count by issue type
+            - files_affected: count of unique files
+            - top_affected_files: list of files with most issues (top 5)
+            - summary: human-readable summary string
+        """
+        from collections import defaultdict, Counter
+        
+        # Count by severity
+        severity_breakdown = defaultdict(int)
+        for issue in issues:
+            severity = issue.get("severity", "medium")
+            severity_breakdown[severity] += 1
+        
+        # Count by type
+        issues_by_type = defaultdict(int)
+        for issue in issues:
+            issue_type = issue.get("type", "unknown")
+            issues_by_type[issue_type] += 1
+        
+        # Count files and find top affected files
+        file_issue_count = defaultdict(int)
+        for issue in issues:
+            file_path = issue.get("file", "unknown")
+            file_issue_count[file_path] += 1
+        
+        files_affected = len(file_issue_count)
+        
+        # Get top 5 affected files
+        top_affected_files = sorted(
+            file_issue_count.items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )[:5]
+        top_affected_files = [{"file": f, "count": c} for f, c in top_affected_files]
+        
+        # Generate human-readable summary
+        total_issues = len(issues)
+        critical_count = severity_breakdown.get("critical", 0)
+        high_count = severity_breakdown.get("high", 0)
+        
+        summary_parts = [f"Found {total_issues} total issue{'s' if total_issues != 1 else ''}"]
+        
+        if critical_count > 0:
+            summary_parts.append(f"{critical_count} critical")
+        if high_count > 0:
+            summary_parts.append(f"{high_count} high priority")
+        
+        summary_parts.append(f"across {files_affected} file{'s' if files_affected != 1 else ''}")
+        
+        if issues_by_type:
+            # Get top 3 issue types
+            top_types = sorted(issues_by_type.items(), key=lambda x: x[1], reverse=True)[:3]
+            type_names = [t[0] for t in top_types]
+            summary_parts.append(f"Most common: {', '.join(type_names)}")
+        
+        summary = ". ".join(summary_parts) + "."
+        
+        return {
+            "severity_breakdown": dict(severity_breakdown),
+            "issues_by_type": dict(issues_by_type),
+            "files_affected": files_affected,
+            "top_affected_files": top_affected_files,
+            "summary": summary,
+        }
 
     def _resolve_job_code_path(self, job_id: Optional[str], default_path: str) -> str:
         """
@@ -296,6 +375,9 @@ class SFEService:
                         cached_report["issues"], job_id
                     )
                     
+                    # Compute executive summary
+                    executive_summary = self._compute_executive_summary(issues)
+                    
                     return {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -303,9 +385,14 @@ class SFEService:
                         "issues": issues,
                         "source": cached_report["source"],
                         "cached": True,
+                        **executive_summary,  # Include summary statistics
                     }
 
         # Try routing through OmniCore first
+        # TODO: OmniCore message bus subscriber for 'sfe.job_request' is not yet implemented.
+        # Messages are routed to shard 3 but not consumed, causing every SFE operation to
+        # waste time on a failed OmniCore round-trip before falling back to direct SFE.
+        # This works correctly due to the fallback mechanism, but adds latency.
         if self.omnicore_service:
             payload = {
                 "action": "analyze_code",
@@ -356,6 +443,9 @@ class SFEService:
                     ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
 
+                    # Compute executive summary
+                    executive_summary = self._compute_executive_summary(issues)
+                    
                     result = {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -363,6 +453,7 @@ class SFEService:
                         "issues": issues,
                         "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer",
                         "source": "direct_sfe",
+                        **executive_summary,  # Include summary statistics
                     }
 
                     logger.info(
@@ -412,6 +503,9 @@ class SFEService:
                                     }
                                 )
 
+                    # Compute executive summary
+                    executive_summary = self._compute_executive_summary(issues)
+                    
                     result = {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -419,6 +513,7 @@ class SFEService:
                         "issues": issues,
                         "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer",
                         "source": "direct_sfe",
+                        **executive_summary,  # Include summary statistics
                     }
 
                     logger.info(
@@ -552,6 +647,18 @@ class SFEService:
                         cached_report["issues"], job_id
                     )
                     
+                    # Populate errors cache for fix proposals
+                    for error in errors:
+                        self._errors_cache[error["error_id"]] = {
+                            "error_id": error["error_id"],
+                            "job_id": error["job_id"],
+                            "type": error["type"],
+                            "severity": error["severity"],
+                            "message": error["message"],
+                            "file": error["file"],
+                            "line": error["line"],
+                        }
+                    
                     # Return cached data with appropriate structure for detect_errors
                     return {
                         "errors": errors,
@@ -592,6 +699,18 @@ class SFEService:
                 # Transform all issues to error format using utility function
                 errors = transform_pipeline_issues_to_frontend_errors(all_issues, job_id)
 
+                # Populate errors cache for fix proposals
+                for error in errors:
+                    self._errors_cache[error["error_id"]] = {
+                        "error_id": error["error_id"],
+                        "job_id": error["job_id"],
+                        "type": error["type"],
+                        "severity": error["severity"],
+                        "message": error["message"],
+                        "file": error["file"],
+                        "line": error["line"],
+                    }
+
                 logger.info(
                     f"Direct SFE error detection complete: {len(errors)} errors found"
                 )
@@ -631,91 +750,16 @@ class SFEService:
         """
         logger.info(f"Proposing fix for error {error_id}")
 
-        # Try to look up the error from in-memory cache
-        # In a real implementation, we'd have an errors_db similar to fixes_db
-        # For now, we'll generate contextual fixes based on common error patterns
-
-        # Generate fix ID
-        fix_id = f"fix-{error_id}"
-
-        # Generate contextual fix based on error_id patterns
-        if (
-            "import" in error_id.lower()
-            or "undefined" in error_id.lower()
-            or "name" in error_id.lower()
-        ):
-            # Missing import error
+        # Look up error from cache
+        error_data = self._errors_cache.get(error_id)
+        
+        if not error_data:
+            logger.warning(f"Error {error_id} not found in cache. Returning generic fix.")
+            # Generate generic fix as fallback
             fix = {
-                "fix_id": fix_id,
+                "fix_id": f"fix-{error_id}",
                 "error_id": error_id,
-                "description": "Add missing import statement",
-                "proposed_changes": [
-                    {
-                        "file": "main.py",
-                        "line": 1,
-                        "action": "insert",
-                        "content": "import sys\nimport os",
-                    }
-                ],
-                "confidence": 0.85,
-                "reasoning": "Common undefined variable errors are often caused by missing imports",
-            }
-        elif "syntax" in error_id.lower():
-            # Syntax error
-            fix = {
-                "fix_id": fix_id,
-                "error_id": error_id,
-                "description": "Fix syntax error",
-                "proposed_changes": [
-                    {
-                        "file": "main.py",
-                        "line": 10,
-                        "action": "replace",
-                        "content": "# Fixed syntax",
-                    }
-                ],
-                "confidence": 0.75,
-                "reasoning": "Syntax error detected, manual review recommended",
-            }
-        elif "complexity" in error_id.lower():
-            # Complexity issue
-            fix = {
-                "fix_id": fix_id,
-                "error_id": error_id,
-                "description": "Refactor complex function",
-                "proposed_changes": [
-                    {
-                        "file": "main.py",
-                        "line": 50,
-                        "action": "replace",
-                        "content": "# Consider breaking this function into smaller functions",
-                    }
-                ],
-                "confidence": 0.70,
-                "reasoning": "High complexity detected, refactoring recommended",
-            }
-        elif "security" in error_id.lower() or "sql" in error_id.lower():
-            # Security issue
-            fix = {
-                "fix_id": fix_id,
-                "error_id": error_id,
-                "description": "Fix security vulnerability",
-                "proposed_changes": [
-                    {
-                        "file": "database.py",
-                        "line": 25,
-                        "action": "replace",
-                        "content": "# Use parameterized queries instead of string concatenation",
-                    }
-                ],
-                "confidence": 0.90,
-                "reasoning": "Security vulnerability detected, immediate fix recommended",
-            }
-        else:
-            # Generic fix
-            fix = {
-                "fix_id": fix_id,
-                "error_id": error_id,
+                "job_id": None,
                 "description": "Apply recommended code improvement",
                 "proposed_changes": [
                     {
@@ -725,9 +769,109 @@ class SFEService:
                         "content": "# Code improvement recommended",
                     }
                 ],
-                "confidence": 0.65,
-                "reasoning": "Generic code quality improvement",
+                "confidence": 0.50,
+                "reasoning": "Error details not found in cache. Generic fix proposed.",
             }
+        else:
+            # Generate contextual fix based on actual error data
+            error_type = error_data.get("type", "unknown")
+            severity = error_data.get("severity", "medium")
+            message = error_data.get("message", "")
+            file_path = error_data.get("file", "main.py")
+            line = error_data.get("line", 1)
+            job_id = error_data.get("job_id")
+            
+            # Generate fix based on error type
+            if "import" in error_type.lower() or "import" in message.lower():
+                # Missing import error
+                fix = {
+                    "fix_id": f"fix-{error_id}",
+                    "error_id": error_id,
+                    "job_id": job_id,
+                    "description": f"Add missing import in {file_path}",
+                    "proposed_changes": [
+                        {
+                            "file": file_path,
+                            "line": line,
+                            "action": "insert",
+                            "content": "# TODO: Add missing import statement",
+                        }
+                    ],
+                    "confidence": 0.85,
+                    "reasoning": f"Import error detected at {file_path}:{line}. Manual review recommended to determine correct import.",
+                }
+            elif "syntax" in error_type.lower() or "syntax" in message.lower():
+                # Syntax error
+                fix = {
+                    "fix_id": f"fix-{error_id}",
+                    "error_id": error_id,
+                    "job_id": job_id,
+                    "description": f"Fix syntax error in {file_path}",
+                    "proposed_changes": [
+                        {
+                            "file": file_path,
+                            "line": line,
+                            "action": "replace",
+                            "content": "# TODO: Fix syntax error",
+                        }
+                    ],
+                    "confidence": 0.75,
+                    "reasoning": f"Syntax error detected at {file_path}:{line}. Manual review required.",
+                }
+            elif "complexity" in error_type.lower() or "complexity" in message.lower():
+                # Complexity issue
+                fix = {
+                    "fix_id": f"fix-{error_id}",
+                    "error_id": error_id,
+                    "job_id": job_id,
+                    "description": f"Refactor complex code in {file_path}",
+                    "proposed_changes": [
+                        {
+                            "file": file_path,
+                            "line": line,
+                            "action": "insert",
+                            "content": "# TODO: Consider refactoring to reduce complexity",
+                        }
+                    ],
+                    "confidence": 0.70,
+                    "reasoning": f"High complexity detected at {file_path}:{line}. Refactoring recommended.",
+                }
+            elif "security" in error_type.lower() or "security" in message.lower() or "sql" in message.lower():
+                # Security issue
+                fix = {
+                    "fix_id": f"fix-{error_id}",
+                    "error_id": error_id,
+                    "job_id": job_id,
+                    "description": f"Fix security vulnerability in {file_path}",
+                    "proposed_changes": [
+                        {
+                            "file": file_path,
+                            "line": line,
+                            "action": "insert",
+                            "content": "# TODO: Fix security vulnerability - use parameterized queries, sanitize input, etc.",
+                        }
+                    ],
+                    "confidence": 0.90,
+                    "reasoning": f"Security vulnerability detected at {file_path}:{line}. Immediate fix recommended.",
+                }
+            else:
+                # Generic fix based on actual error
+                fix = {
+                    "fix_id": f"fix-{error_id}",
+                    "error_id": error_id,
+                    "job_id": job_id,
+                    "description": f"Fix {error_type} in {file_path}",
+                    "proposed_changes": [
+                        {
+                            "file": file_path,
+                            "line": line,
+                            "action": "insert",
+                            "content": f"# TODO: Fix {error_type}: {message}",
+                        }
+                    ],
+                    "confidence": 0.65,
+                    "reasoning": f"{error_type} detected at {file_path}:{line}: {message}",
+                }
 
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
@@ -737,17 +881,19 @@ class SFEService:
         try:
             now = datetime.now(timezone.utc)
             fix_obj = Fix(
-                fix_id=fix_id,
-                error_id=error_id,
+                fix_id=fix["fix_id"],
+                error_id=fix["error_id"],
+                job_id=fix.get("job_id"),
                 status=FixStatus.PROPOSED,
                 description=fix["description"],
                 proposed_changes=fix["proposed_changes"],
                 confidence=fix["confidence"],
+                reasoning=fix.get("reasoning"),
                 created_at=now,
                 updated_at=now,
             )
-            fixes_db[fix_id] = fix_obj
-            logger.info(f"Stored fix {fix_id} in fixes_db")
+            fixes_db[fix["fix_id"]] = fix_obj
+            logger.info(f"Stored fix {fix['fix_id']} in fixes_db")
         except Exception as e:
             logger.warning(f"Could not store fix in fixes_db: {e}")
 
@@ -788,9 +934,21 @@ class SFEService:
         files_modified = []
 
         try:
+            # Resolve job output directory if job_id is available
+            job_output_dir = None
+            if fix.job_id:
+                resolved_path = self._resolve_job_code_path(fix.job_id, ".")
+                job_output_dir = Path(resolved_path)
+                logger.info(f"Resolved job output directory: {job_output_dir}")
+            
             # Apply each proposed change
             for change in fix.proposed_changes:
-                file_path = Path(change["file"])
+                # Resolve file path relative to job output directory
+                if job_output_dir:
+                    file_path = job_output_dir / change["file"]
+                else:
+                    file_path = Path(change["file"])
+                
                 action = change["action"]
                 content = change["content"]
                 line = change.get("line", 1)
@@ -902,17 +1060,87 @@ class SFEService:
         """
         logger.info(f"Rolling back fix {fix_id}")
 
-        # Placeholder: Call actual rollback mechanism
-        # Example:
-        # from self_fixing_engineer.arbiter.fix_applicator import rollback_fix
-        # result = await rollback_fix(fix_id)
+        # Look up fix from fixes_db
+        from server.storage import fixes_db
 
-        return {
-            "fix_id": fix_id,
-            "rolled_back": True,
-            "status": "success",
-            "files_restored": ["main.py"],
-        }
+        if fix_id not in fixes_db:
+            logger.warning(f"Fix {fix_id} not found in fixes_db")
+            return {
+                "fix_id": fix_id,
+                "rolled_back": False,
+                "status": "error",
+                "error": "Fix not found",
+                "files_restored": [],
+            }
+
+        fix = fixes_db[fix_id]
+        
+        # Check if fix has been applied
+        if not fix.applied_changes:
+            logger.warning(f"Fix {fix_id} has no applied changes to rollback")
+            return {
+                "fix_id": fix_id,
+                "rolled_back": False,
+                "status": "error",
+                "error": "Fix has not been applied",
+                "files_restored": [],
+            }
+
+        files_restored = []
+
+        try:
+            # Resolve job output directory if job_id is available
+            job_output_dir = None
+            if fix.job_id:
+                resolved_path = self._resolve_job_code_path(fix.job_id, ".")
+                job_output_dir = Path(resolved_path)
+                logger.info(f"Resolved job output directory for rollback: {job_output_dir}")
+
+            # Restore each modified file from backup
+            for file_path_str in fix.applied_changes:
+                # Resolve file path relative to job output directory
+                if job_output_dir:
+                    file_path = job_output_dir / file_path_str
+                else:
+                    file_path = Path(file_path_str)
+                
+                backup_path = Path(f"{file_path}.bak")
+
+                # Check if backup exists
+                if backup_path.exists():
+                    try:
+                        import shutil
+                        # Restore backup over modified file
+                        shutil.copy2(backup_path, file_path)
+                        logger.info(f"Restored {file_path} from backup")
+                        
+                        # Delete backup file after restoration
+                        backup_path.unlink()
+                        logger.info(f"Deleted backup file {backup_path}")
+                        
+                        files_restored.append(str(file_path))
+                    except Exception as e:
+                        logger.error(f"Error restoring {file_path} from backup: {e}")
+                        # Continue with other files
+                else:
+                    logger.warning(f"Backup file not found: {backup_path}")
+
+            return {
+                "fix_id": fix_id,
+                "rolled_back": True,
+                "status": "success",
+                "files_restored": files_restored,
+            }
+
+        except Exception as e:
+            logger.error(f"Error rolling back fix {fix_id}: {e}", exc_info=True)
+            return {
+                "fix_id": fix_id,
+                "rolled_back": False,
+                "status": "error",
+                "error": str(e),
+                "files_restored": files_restored,
+            }
 
     async def get_sfe_metrics(self, job_id: str) -> Dict[str, Any]:
         """
@@ -1354,6 +1582,18 @@ class SFEService:
                         cached_report["issues"], job_id, "unknown"
                     )
                     
+                    # Populate errors cache for fix proposals (bugs use bug_id key)
+                    for bug in bugs:
+                        self._errors_cache[bug["bug_id"]] = {
+                            "error_id": bug["bug_id"],  # Store as error_id for consistency
+                            "job_id": bug["job_id"],
+                            "type": bug["type"],
+                            "severity": bug["severity"],
+                            "message": bug["message"],
+                            "file": bug["file"],
+                            "line": bug["line"],
+                        }
+                    
                     # Count by severity
                     severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
                     for bug in bugs:
@@ -1444,6 +1684,18 @@ class SFEService:
                         bugs = transform_pipeline_issues_to_bugs(
                             all_issues, job_id, "unknown"
                         )
+
+                # Populate errors cache for fix proposals (bugs use bug_id key)
+                for bug in bugs:
+                    self._errors_cache[bug["bug_id"]] = {
+                        "error_id": bug["bug_id"],  # Store as error_id for consistency
+                        "job_id": bug["job_id"],
+                        "type": bug["type"],
+                        "severity": bug["severity"],
+                        "message": bug["message"],
+                        "file": bug["file"],
+                        "line": bug["line"],
+                    }
 
                 # Count by severity
                 severity_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
