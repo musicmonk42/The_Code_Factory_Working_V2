@@ -290,6 +290,7 @@ class ArbiterArena:
         name: Optional[str] = None,
         db_engine: Optional[Any] = None,
         intent_capture_engine: Optional[Any] = None,
+        crew_manager: Optional[Any] = None,
         **kwargs,
     ):
         self.settings = settings
@@ -316,6 +317,9 @@ class ArbiterArena:
 
         # NEW: Storing the intent capture engine for later use
         self.intent_capture_engine = intent_capture_engine
+        
+        # NEW: Store crew_manager for arbiter lifecycle tracking
+        self.crew_manager = crew_manager
 
         # Initialize SimulationEngine with proper fallback
         try:
@@ -645,8 +649,35 @@ class ArbiterArena:
                 settings=self.settings,
                 engines=engines_dict,  # Fix 5: Pass generator engine
                 message_queue_service=shared_mq_service,  # Fix 5: Inject MessageQueueService
+                crew_manager=self.crew_manager,  # Pass crew_manager to Arbiter
             )
             self.arbiters.append(arbiter)
+
+        # Register arbiters with CrewManager if available
+        if self.crew_manager:
+            async def register_arbiters_with_crew():
+                """Register all arbiters with CrewManager for unified lifecycle tracking."""
+                for arbiter in self.arbiters:
+                    try:
+                        await self.crew_manager.add_agent(
+                            name=arbiter.name,
+                            agent_class="CrewAgentBase",
+                            tags=["arbiter", "arena"],
+                            metadata={"arena": self.name, "port": arbiter.port},
+                            replace=True,
+                            caller_role="system",
+                        )
+                        logger.info(f"Registered arbiter '{arbiter.name}' with CrewManager")
+                    except Exception as e:
+                        logger.warning(f"Could not register arbiter '{arbiter.name}' with CrewManager: {e}")
+            
+            # Schedule the registration as a task
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(register_arbiters_with_crew())
+            except RuntimeError:
+                # No event loop running, we'll register later when the arena starts
+                logger.info("No event loop available yet, arbiters will be registered with CrewManager on arena start")
 
         # Fix 5: Create DecisionOptimizer after all Arbiters are initialized
         try:

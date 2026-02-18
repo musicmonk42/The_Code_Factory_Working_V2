@@ -314,6 +314,83 @@ class CrewManager:
                 "No agent_stop_commander provided. Agent graceful stopping will not be possible."
             )
 
+    @classmethod
+    async def from_config_yaml(
+        cls,
+        config_path: str,
+        caller_role: str = "admin",
+        **manager_kwargs,
+    ) -> "CrewManager":
+        """
+        Creates a CrewManager and loads agents from a crew_config.yaml file.
+
+        Args:
+            config_path: Path to the crew_config.yaml file.
+            caller_role: The role to use for RBAC checks.
+            **manager_kwargs: Additional keyword arguments for CrewManager constructor.
+
+        Returns:
+            A configured CrewManager instance with agents loaded from the YAML.
+        """
+        import yaml
+
+        with open(config_path, "r") as f:
+            config_data = yaml.safe_load(f)
+
+        manager = cls(**manager_kwargs)
+
+        for agent_def in config_data.get("agents", []):
+            agent_name = agent_def.get("name") or agent_def.get("id")
+            if not agent_name:
+                logger.warning(f"Skipping agent definition without name/id: {agent_def}")
+                continue
+
+            # Validate agent name against NAME_REGEX
+            if not NAME_REGEX.match(agent_name):
+                logger.warning(f"Skipping agent with invalid name '{agent_name}': must match {NAME_REGEX.pattern}")
+                continue
+
+            agent_type = agent_def.get("agent_type", "ai")
+            tags = [agent_type]
+            if agent_def.get("id"):
+                tags.append(agent_def["id"])
+
+            metadata = {
+                "manifest": agent_def.get("manifest"),
+                "entrypoint": agent_def.get("entrypoint"),
+                "role_ref": agent_def.get("role_ref"),
+                "skills_ref": agent_def.get("skills_ref"),
+                "compliance_controls": agent_def.get("compliance_controls", []),
+            }
+
+            # Use CrewAgentBase if no specific class is registered
+            agent_class_name = "CrewAgentBase"
+            try:
+                cls.get_agent_class_by_name(agent_name)
+                agent_class_name = agent_name
+            except ValueError:
+                pass
+
+            try:
+                await manager.add_agent(
+                    name=agent_name,
+                    agent_class=agent_class_name,
+                    config=agent_def.get("config", {}),
+                    tags=tags,
+                    metadata=metadata,
+                    caller_role=caller_role,
+                )
+                structured_log("agent_loaded_from_yaml", agent=agent_name, type=agent_type)
+            except Exception as e:
+                logger.error(f"Failed to load agent '{agent_name}' from YAML: {e}")
+
+        structured_log(
+            "crew_config_loaded",
+            path=config_path,
+            agent_count=len(manager.agents),
+        )
+        return manager
+
     # A. Security & Secrets: RBAC Check
     async def _check_rbac(self, operation: str, caller_role: str = "user") -> bool:
         """Checks if a given role is authorized for an operation."""
@@ -1667,4 +1744,6 @@ class MyWorkerAgent(CrewAgentBase):
     pass
 
 
+# Register default agent classes
 CrewManager.register_agent_class(MyWorkerAgent)
+CrewManager.register_agent_class(CrewAgentBase)
