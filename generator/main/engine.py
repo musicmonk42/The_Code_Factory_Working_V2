@@ -1810,7 +1810,7 @@ class WorkflowEngine:
                 
                 # Detect language and framework from generated code
                 language = "python"
-                framework = "fastapi"  # Default for Python web APIs
+                framework = None  # No default - detect from code or skip
                 entry_point = "main.py"
                 
                 # Check main.py content for framework detection
@@ -1821,6 +1821,21 @@ class WorkflowEngine:
                     framework = "django"
                 elif "fastapi" in main_py.lower():
                     framework = "fastapi"
+                elif "express" in main_py.lower():
+                    language = "javascript"
+                    framework = "express"
+                
+                # GATING: Skip deployment if framework cannot be determined
+                # Only web services need deployment configs
+                if not framework:
+                    logger.warning(
+                        "[STAGE:DEPLOY_GEN] Cannot determine framework from generated code. "
+                        "Skipping deployment generation for non-service project.",
+                        extra={"workflow_id": workflow_id}
+                    )
+                    deploy_result["status"] = "skipped"
+                    deploy_result["reason"] = "Framework not detected - likely CLI/library/batch project"
+                    return deploy_result
                 
                 # Generate deployment configs using DeployAgent if available, otherwise fallback
                 deploy_files = {}

@@ -167,6 +167,25 @@ class SpecDrivenPipeline:
                 interactive=interactive
             )
             
+            # GATING: Check if clarification is required before proceeding
+            if spec_lock.requires_clarification:
+                logger.warning(
+                    f"[{self.job_id}] Spec incomplete: project_type missing or uncertain. "
+                    f"Clarification required before code generation.",
+                    extra={
+                        "job_id": self.job_id,
+                        "requires_clarification": True,
+                        "project_type": spec_lock.project_type,
+                    }
+                )
+                # In interactive mode, this should have been resolved
+                # In non-interactive mode, we should not proceed
+                if not interactive:
+                    raise ValueError(
+                        "Cannot proceed with code generation: project_type is missing or uncertain. "
+                        "Please specify project_type explicitly in the spec block or run in interactive mode."
+                    )
+            
             logger.info(
                 f"[{self.job_id}] Spec processing complete: "
                 f"project_type={spec_lock.project_type}, "
