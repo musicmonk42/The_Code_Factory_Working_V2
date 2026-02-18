@@ -691,8 +691,9 @@ jobs:
             echo "  - Parallel workers: DISABLED (I/O-bound tests)"
           else
             # Other modules can use standard settings with reduced parallelism
+            # Limit to 4 workers to reduce memory pressure and prevent OOM
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
-            PYTEST_ARGS="-n auto --dist loadscope"
+            PYTEST_ARGS="-n 4 --dist loadscope"
             TIMEOUT_VALUE=300
             IGNORE_ARGS=""
           fi

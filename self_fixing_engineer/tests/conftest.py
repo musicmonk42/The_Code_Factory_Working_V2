@@ -4,9 +4,42 @@
 import asyncio
 import gc
 import os
+from pathlib import Path
 
 import psutil
 import pytest
+
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_checkpoint_test_paths():
+    """Ensure checkpoint test directories and files exist.
+    
+    This fixture creates the necessary directories and files that checkpoint
+    tests expect to exist. It runs once per test session before any tests start.
+    """
+    # Create test directory if specified in environment
+    checkpoint_dir = os.environ.get("CHECKPOINT_DIR")
+    if checkpoint_dir:
+        checkpoint_path = Path(checkpoint_dir)
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+        
+        # Touch audit.log if path is specified
+        # Create parent directory but let AuditLogger create the actual file
+        # to ensure proper permissions and file handler initialization
+        audit_log_path = os.environ.get("CHECKPOINT_AUDIT_LOG_PATH")
+        if audit_log_path:
+            audit_log = Path(audit_log_path)
+            audit_log.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Touch dlq.jsonl if path is specified
+        # Create parent directory but let DLQ handler create the actual file
+        # to ensure proper initialization and JSONL format
+        dlq_path = os.environ.get("CHECKPOINT_DLQ_PATH")
+        if dlq_path:
+            dlq_file = Path(dlq_path)
+            dlq_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    yield
 
 
 @pytest.fixture(autouse=True, scope="function")
