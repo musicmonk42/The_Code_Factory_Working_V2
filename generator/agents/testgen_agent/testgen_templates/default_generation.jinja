@@ -22,12 +22,32 @@ Generate comprehensive unit tests for the following code.
 {% if language == "python" %}
 ## Pydantic Validation Testing (CRITICAL for Python)
 When testing Pydantic models (v2.x):
+- **Pydantic V2 error types are DIFFERENT from V1** - refer to the mapping table below
 - **max_length constraint**: Pydantic v2 uses `"String should have at most N characters"` (NOT v1 `"ensure this value has at most N characters"`)
 - **min_length constraint**: Pydantic v2 uses `"String should have at least N characters"` (NOT v1 `"ensure this value has at least N characters"`)
 - **Custom @field_validator errors**: Custom `raise ValueError("msg")` appears as `"Value error, msg"` (Pydantic v2 adds `"Value error, "` prefix)
 - **ALWAYS use case-insensitive substring matching** with `in` operator - NEVER exact string equality
 - **For API endpoint tests**: When testing `response.json()['detail'][0]['msg']`, use substring matching on the msg field
 - **Best practice**: Check error type/category via `exc_info.value.errors()[0]["type"]` instead of message text when possible
+
+### Pydantic V1→V2 Error Type Mapping Table
+
+**CRITICAL**: Use these V2 types (column 2), NOT V1 types (column 1):
+
+| Pydantic V1 Type (WRONG) | Pydantic V2 Type (CORRECT) | Description |
+|--------------------------|----------------------------|-------------|
+| `value_error.any_str.min_length` | `string_too_short` | String below min_length |
+| `value_error.any_str.max_length` | `string_too_long` | String exceeds max_length |
+| `value_error.number.not_gt` | `greater_than` | Number not greater than constraint |
+| `value_error.number.not_ge` | `greater_than_equal` | Number not >= constraint |
+| `value_error.number.not_lt` | `less_than` | Number not less than constraint |
+| `value_error.number.not_le` | `less_than_equal` | Number not <= constraint |
+| `type_error.float` | `float_parsing` | Invalid float value |
+| `type_error.integer` | `int_parsing` | Invalid integer value |
+| `type_error.bool` | `bool_parsing` | Invalid boolean value |
+| `type_error.str` | `string_type` | Value is not a string |
+| `value_error.missing` | `missing` | Required field missing |
+| Custom `ValueError("msg")` | `value_error` | Custom field validator error |
 
 Example test patterns (MANDATORY):
 ```python
@@ -37,32 +57,58 @@ def test_max_length_validation():
         MyModel(message="x" * 501)  # exceeds max_length=500
     # CORRECT: Substring match for Pydantic v2 format
     assert "string should have at most" in str(exc_info.value).lower()
-    # OR check error type
+    # OR check error type (PREFERRED)
     errors = exc_info.value.errors()
-    assert errors[0]["type"] == "string_too_long"
+    assert errors[0]["type"] == "string_too_long"  # V2 type
 
-# Test 2: Custom validator with ValueError (value_error type)
+# Test 2: min_length constraint (string_too_short error)
+def test_min_length_validation():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(message="")  # below min_length=1
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "string_too_short"  # V2 type, NOT "value_error.any_str.min_length"
+
+# Test 3: Custom validator with ValueError (value_error type)
 def test_custom_validator_empty():
     with pytest.raises(ValidationError) as exc_info:
         MyModel(message="   ")  # whitespace-only
     # CORRECT: Match the "Value error, " prefix + your message
     assert "value error" in str(exc_info.value).lower()
     assert "cannot be empty" in str(exc_info.value).lower()
+    # OR check error type
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "value_error"  # V2 type for custom validators
 
-# Test 3: API endpoint validation error response
+# Test 4: Greater than constraint (greater_than error)
+def test_greater_than_validation():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(price=-10.5)  # must be > 0
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "greater_than"  # V2 type, NOT "value_error.number.not_gt"
+
+# Test 5: Float parsing error (float_parsing error)
+def test_float_parsing_validation():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(price="not_a_number")
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "float_parsing"  # V2 type, NOT "type_error.float"
+
+# Test 6: API endpoint validation error response
 def test_api_validation_error():
     response = client.post("/endpoint", json={"message": "x" * 501})
     assert response.status_code == 422
     detail = response.json()['detail'][0]
     # CORRECT: Substring match on msg field
     assert "string should have at most" in detail['msg'].lower()
-    # OR check error type
-    assert detail['type'] == "string_too_long"
+    # OR check error type (PREFERRED)
+    assert detail['type'] == "string_too_long"  # V2 type
 
 # WRONG PATTERNS (DO NOT USE):
 # assert exc_info.value == "exact message"  # FAILS: Exact match
 # assert detail['msg'] == "ensure this value has at most 500 characters"  # FAILS: V1 format
-# assert "should have at least 1 character" in str(exc_info.value).lower()  # INCOMPLETE: Use full phrase "string should have"
+# assert errors[0]["type"] == "value_error.any_str.min_length"  # FAILS: V1 type
+# assert errors[0]["type"] == "value_error.number.not_gt"  # FAILS: V1 type
+# assert errors[0]["type"] == "type_error.float"  # FAILS: V1 type
 ```
 {% endif %}
 

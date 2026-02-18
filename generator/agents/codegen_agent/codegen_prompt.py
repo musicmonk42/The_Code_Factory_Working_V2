@@ -444,6 +444,7 @@ The following are MANDATORY checks:
    - NEVER use deprecated @validator decorator (Pydantic V1) - it will produce deprecation warnings
    - NEVER add manual validation logic in route handlers
    - Route handlers should only return responses - validation is automatic via Pydantic
+   - **CRITICAL**: Route handler parameters MUST use the Pydantic model class as the type annotation, NEVER `dict` or `Any`
    
    CORRECT Pattern (Use This):
    - In app/schemas.py - All validation in schema using @field_validator (Pydantic V2):
@@ -462,9 +463,9 @@ The following are MANDATORY checks:
      *             raise ValueError('Message cannot be empty after trimming whitespace')
      *         return v
    
-   - In app/routes.py - No validation logic, just return:
+   - In app/routes.py - No validation logic, just return WITH TYPED PARAMETER:
      * @router.post('/echo', response_model=dict)
-     * async def echo_message(request: EchoRequest):
+     * async def echo_message(request: EchoRequest):  # ✓ CORRECT: Uses Pydantic model type
      *     # Pydantic already validated and trimmed - just use the value
      *     return {{'echo': request.message}}
    
@@ -473,6 +474,28 @@ The following are MANDATORY checks:
    - ❌ @validator('message')  # WRONG: Deprecated Pydantic V1 decorator
    - ❌ @classmethod then @field_validator  # WRONG: Decorator order must be @field_validator FIRST, then @classmethod
    - ❌ @staticmethod with @field_validator  # WRONG: field_validator REQUIRES @classmethod, NOT @staticmethod
+   - ❌ async def echo_message(request: dict)  # WRONG: Using dict type prevents FastAPI from running validation
+   - ❌ async def echo_message(request: Any)  # WRONG: Using Any type prevents FastAPI from running validation
+   
+   **WHY TYPED PARAMETERS MATTER**:
+   When you use `request: dict` or `request: Any`, FastAPI cannot determine what Pydantic model to use for validation.
+   This causes the route to accept ANY data and return 200 even for invalid input, instead of returning 422.
+   
+   Examples of CORRECT vs WRONG route handlers:
+   
+   ✓ CORRECT - Route will validate and return 422 for invalid data:
+   ```python
+   @router.post('/items', response_model=dict)
+   async def create_item(item: Item):  # Uses Pydantic model type
+       return {{'id': 1, 'name': item.name, 'price': item.price}}
+   ```
+   
+   ❌ WRONG - Route will accept invalid data and return 200:
+   ```python
+   @router.post('/items', response_model=dict)
+   async def create_item(data: dict):  # Uses dict type - NO validation!
+       return {{'id': 1, 'name': data['name'], 'price': data['price']}}
+   ```
    
    Examples of WRONG patterns:
    - ❌ app/schemas.py - Using deprecated @validator (Pydantic V1):
