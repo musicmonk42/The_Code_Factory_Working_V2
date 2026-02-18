@@ -856,7 +856,12 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
-            2>&1 | tee test-output-sfe-arbiter.log
+            > test-output-sfe-arbiter.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "Arbiter tests failed with exit code $EXIT_CODE"
+            tail -100 test-output-sfe-arbiter.log
+            exit $EXIT_CODE
+          }
 
       - name: Monitor memory after Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -925,7 +930,12 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-mesh.xml \
-            2>&1 | tee test-output-sfe-mesh.log
+            > test-output-sfe-mesh.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "Mesh tests failed with exit code $EXIT_CODE"
+            tail -100 test-output-sfe-mesh.log
+            exit $EXIT_CODE
+          }
 
       - name: Monitor memory after Mesh tests
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -996,7 +1006,12 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-other.xml \
-            2>&1 | tee test-output-sfe-other.log
+            > test-output-sfe-other.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "Other tests failed with exit code $EXIT_CODE"
+            tail -100 test-output-sfe-other.log
+            exit $EXIT_CODE
+          }
 
       - name: Stop memory monitor
         if: always() && matrix.module == 'self_fixing_engineer'
