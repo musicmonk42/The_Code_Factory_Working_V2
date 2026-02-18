@@ -48,11 +48,23 @@ def setup_module():
 from .audit import CircuitBreaker
 from .core import Learner, should_auto_learn
 from .encryption import ArbiterConfig
+from .fuzzy import (
+    BasicFuzzyParser,
+    FuzzyParser,
+    process_unstructured_data,
+    register_fuzzy_parser_hook,
+    register_fuzzy_parser_hook_async,
+)
 
 __all__ = [
     "Learner",
     "should_auto_learn",
     "CircuitBreaker",
     "ArbiterConfig",
+    "BasicFuzzyParser",
+    "FuzzyParser",
+    "process_unstructured_data",
+    "register_fuzzy_parser_hook",
+    "register_fuzzy_parser_hook_async",
     # Add metrics here if needed, but they're already imported in submodules
 ]

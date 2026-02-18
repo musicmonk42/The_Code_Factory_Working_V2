@@ -151,6 +151,17 @@ __all__ = [
     "HumanInLoopConfig",
     "ArbiterConfig",
     "get_component_status",
+    # Stub implementations for graceful degradation
+    "stubs",
+    "ArbiterStub",
+    "PolicyEngineStub",
+    "BugManagerStub",
+    "KnowledgeGraphStub",
+    "HumanInLoopStub",
+    "MessageQueueServiceStub",
+    "FeedbackManagerStub",
+    "ArbiterArenaStub",
+    "KnowledgeLoaderStub",
 ]
 
 
@@ -171,6 +182,15 @@ def __getattr__(name):
         if result is None:
             raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
         return result
+    
+    # Lazy load stub components
+    if name in ["stubs", "ArbiterStub", "PolicyEngineStub", "BugManagerStub", 
+                "KnowledgeGraphStub", "HumanInLoopStub", "MessageQueueServiceStub",
+                "FeedbackManagerStub", "ArbiterArenaStub", "KnowledgeLoaderStub"]:
+        from . import stubs as _stubs_module
+        if name == "stubs":
+            return _stubs_module
+        return getattr(_stubs_module, name)
     
     if name in _LAZY_COMPONENT_NAMES:
         # Load components on first access
