@@ -16,6 +16,24 @@ format: auto # Can be 'auto', 'markdown', 'rst', 'plaintext', 'yaml', 'pdf'.
 extraction_patterns:
   features: '-\s*(.+)' # Matches bullet points as features.
   constraints: 'Constraint:\s*(.+)' # Matches lines starting with 'Constraint:'.
+  
+  # Enhanced patterns for structured sections (section headers, tables)
+  # These patterns recognize section-based specifications common in technical docs
+  endpoints_section: '(?:##\s*(?:API\s*)?Endpoints?|##\s*REST\s*API|##\s*HTTP\s*Interface)' # Section headers for API endpoints
+  endpoints_table: '\|\s*Method\s*\|.*\|' # Markdown table with Method column (e.g., | Method | Path | Description |)
+  endpoints_list: '(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+/[^\s]+' # HTTP method + path (e.g., "GET /api/users")
+  
+  events_section: '(?:##\s*Events?|##\s*Event\s*Handlers?|##\s*Message\s*Types?)' # Section headers for events
+  events_list: '-\s*([a-z_]+\.[a-z_\.]+)' # Event names in dot notation (e.g., "- user.created")
+  
+  queues_section: '(?:##\s*Queues?|##\s*Message\s*Queues?|##\s*Task\s*Queues?)' # Section headers for queues
+  queues_list: '-\s*([a-z_][a-z0-9_]*(?:_queue|Queue))' # Queue names (e.g., "- task_queue")
+  
+  adapters_section: '(?:##\s*Adapters?|##\s*Backends?|##\s*Integrations?)' # Section headers for adapters/backends
+  adapters_kv: '(?:Database|Cache|Storage|Message\s*Broker|Search):\s*([a-zA-Z0-9_]+)' # Key-value pairs (e.g., "Database: postgresql")
+  
+  policies_section: '(?:##\s*Policies?|##\s*Non-?Functional\s*Requirements?|##\s*Quality\s*Attributes?)' # Section for NFRs
+  policies_list: '-\s*([A-Za-z\s]+):\s*(.+)' # Policy items (e.g., "- Rate Limiting: 100/minute")
 
 llm_config:
   provider: openai # e.g., 'openai', 'grok', 'anthropic', 'local'.

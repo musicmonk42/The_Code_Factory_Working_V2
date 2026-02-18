@@ -12,6 +12,7 @@ Table of Contents
 **Quick Links**
 - [QUICKSTART.md](./docs/QUICKSTART.md) - Get started in 5 minutes
 - [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Production deployment guide
+- [SPEC_BLOCK_FORMAT.md](./docs/SPEC_BLOCK_FORMAT.md) - **NEW:** Structured YAML spec blocks for deterministic generation
 - [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md) - Comprehensive scalability guide
 - [Manual SFE Dispatch](./docs/MANUAL_SFE_DISPATCH.md) - Control when jobs are sent to Self-Fixing Engineer
 - [Makefile Commands](#makefile-commands) - Common development commands
