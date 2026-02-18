@@ -24,14 +24,49 @@ try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
     from arbiter_plugin_registry import PlugInKind, PluginBase, registry
 except ImportError:
+    import warnings
+    
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "arbiter_plugin_registry not available. Using fallback registry, PlugInKind, and PluginBase."
+    )
+    warnings.warn(
+        "arbiter_plugin_registry not available - using fallback implementations",
+        UserWarning,
+        stacklevel=2
+    )
 
     class registry:
+        """Fallback plugin registry that tracks registered plugins."""
+        _plugins: list = []
+        
         @staticmethod
         def register(kind, name, version, author):
             def decorator(cls):
+                import warnings
+                logger = logging.getLogger(__name__)
+                plugin_info = {
+                    "kind": kind,
+                    "name": name,
+                    "version": version,
+                    "author": author,
+                    "class": cls.__name__
+                }
+                registry._plugins.append(plugin_info)
+                logger.debug(f"Registered plugin (fallback): {name} v{version} by {author}")
+                warnings.warn(
+                    f"Plugin {name} registered with fallback registry (not production-ready)",
+                    UserWarning,
+                    stacklevel=3
+                )
                 return cls
 
             return decorator
+        
+        @staticmethod
+        def get_plugins():
+            """Get list of registered plugins."""
+            return registry._plugins.copy()
 
     class PlugInKind:
         CORE_SERVICE = "core_service"
@@ -39,19 +74,54 @@ except ImportError:
 
     class PluginBase:
         """Placeholder base class when arbiter_plugin_registry is not available."""
+        
         async def initialize(self):
-            pass
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.debug(f"{self.__class__.__name__}.initialize() called (fallback)")
+            warnings.warn(
+                f"{self.__class__.__name__}.initialize() using fallback PluginBase",
+                UserWarning,
+                stacklevel=2
+            )
+        
         async def start(self):
-            pass
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.debug(f"{self.__class__.__name__}.start() called (fallback)")
+            warnings.warn(
+                f"{self.__class__.__name__}.start() using fallback PluginBase",
+                UserWarning,
+                stacklevel=2
+            )
+        
         async def stop(self):
-            pass
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.debug(f"{self.__class__.__name__}.stop() called (fallback)")
+            warnings.warn(
+                f"{self.__class__.__name__}.stop() using fallback PluginBase",
+                UserWarning,
+                stacklevel=2
+            )
+        
         async def health_check(self):
             return True
+        
         async def get_capabilities(self):
             return []
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):
+            import warnings
+            # Only warn once
+            if not hasattr(PIIRedactorFilter, '_warned'):
+                PIIRedactorFilter._warned = True
+                warnings.warn(
+                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
+                    UserWarning,
+                    stacklevel=2
+                )
             return True
 
 

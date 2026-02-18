@@ -59,11 +59,31 @@ try:
     from self_fixing_engineer.arbiter.postgres_client import PostgresClient
     from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
+    import warnings
+    
+    logger = logging.getLogger(__name__)
+    logger.warning(
+        "Failed to import arbiter modules. Using fallback implementations for "
+        "registry, PlugInKind, PIIRedactorFilter, PostgresClient, PermissionManager, ArbiterConfig."
+    )
+    warnings.warn(
+        "Arbiter modules not available - using fallback implementations",
+        UserWarning,
+        stacklevel=2
+    )
 
     class registry:
         @staticmethod
         def register(kind, name, version, author, description, tags, dependencies):
             def decorator(cls):
+                import warnings
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Fallback registry: Registered {name} v{version}")
+                warnings.warn(
+                    f"Plugin {name} registered with fallback registry (not production-ready)",
+                    UserWarning,
+                    stacklevel=3
+                )
                 return cls
 
             return decorator
@@ -74,14 +94,39 @@ except ImportError:
 
     class PIIRedactorFilter(logging.Filter):
         def filter(self, record):
+            import warnings
+            # Only warn once
+            if not hasattr(PIIRedactorFilter, '_warned'):
+                PIIRedactorFilter._warned = True
+                logger = logging.getLogger(__name__)
+                logger.warning("PIIRedactorFilter fallback: No actual PII redaction performed")
+                warnings.warn(
+                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
+                    UserWarning,
+                    stacklevel=2
+                )
             return True
 
     class PostgresClient:
         def __init__(self, db_url):
-            pass
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.warning(f"PostgresClient fallback: No actual database connection to {db_url}")
+            warnings.warn(
+                f"PostgresClient fallback used - no actual database connection",
+                UserWarning,
+                stacklevel=2
+            )
 
         async def connect(self):
-            pass
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.warning("PostgresClient fallback: connect() is a no-op")
+            warnings.warn(
+                "PostgresClient fallback: connect() does nothing",
+                UserWarning,
+                stacklevel=2
+            )
 
         async def disconnect(self):
             pass
@@ -100,6 +145,7 @@ except ImportError:
         """
 
         def __init__(self, config):
+            import warnings
             self._config = config
             self._production_mode = (
                 os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -110,6 +156,18 @@ except ImportError:
                 logger.critical(
                     "SECURITY ALERT: Running with fallback PermissionManager in PRODUCTION mode. "
                     "All permission checks will DENY by default. Install proper PermissionManager."
+                )
+                warnings.warn(
+                    "PRODUCTION: PermissionManager fallback active - all permissions DENIED",
+                    RuntimeWarning,
+                    stacklevel=2
+                )
+            else:
+                logger.warning("Using fallback PermissionManager (default-deny)")
+                warnings.warn(
+                    "PermissionManager fallback: All permissions DENIED by default",
+                    UserWarning,
+                    stacklevel=2
                 )
 
         def check_permission(self, role, permission):
@@ -126,17 +184,31 @@ except ImportError:
             Returns:
                 bool: Always False (deny) for security
             """
+            import warnings
             logger = logging.getLogger(__name__)
             logger.warning(
                 f"Fallback PermissionManager denying permission check: role={role}, "
                 f"permission={permission}. This is expected if running in dev/test mode "
                 f"without the real PermissionManager."
             )
+            warnings.warn(
+                f"PermissionManager fallback: Denied {role}.{permission}",
+                UserWarning,
+                stacklevel=2
+            )
             # SECURITY: Default DENY - safer than allowing everything
             return False
 
     class ArbiterConfig:
         def __init__(self):
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.warning("Using fallback ArbiterConfig")
+            warnings.warn(
+                "ArbiterConfig fallback used - minimal configuration only",
+                UserWarning,
+                stacklevel=2
+            )
             self.PLUGINS_ENABLED = True
 
     # Mock get_tracer if otel_config is missing
@@ -251,6 +323,16 @@ def _create_dummy_metric():
             10.0,
             float("inf"),
         )
+        
+        def __init__(self):
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.debug("DummyMetric: No-op metric created")
+            warnings.warn(
+                "DummyMetric: Using no-op metric implementation (operations will be ignored)",
+                UserWarning,
+                stacklevel=4
+            )
 
         def labels(self, **kwargs):
             """Return self to support method chaining."""

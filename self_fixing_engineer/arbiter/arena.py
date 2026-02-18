@@ -49,12 +49,26 @@ try:
     SIMULATION_AVAILABLE = True
     logger.info("SimulationEngine successfully imported")
 except ImportError as e:
+    import warnings
     logger.warning(f"SimulationEngine not available ({e}), using fallback")
+    warnings.warn(
+        f"SimulationEngine not available - using fallback implementation",
+        UserWarning,
+        stacklevel=2
+    )
 
     # Fallback implementation
     class SimulationEngine:
         @staticmethod
         def get_tools():
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.warning("SimulationEngine fallback: get_tools() returning minimal toolset")
+            warnings.warn(
+                "SimulationEngine fallback: Limited tools available",
+                UserWarning,
+                stacklevel=2
+            )
             return {"fallback_fixer": lambda x: f"fallback_fixed_{x}"}
 
         @staticmethod
@@ -62,6 +76,14 @@ except ImportError as e:
             return False
 
         async def run_simulation(self, *args, **kwargs):
+            import warnings
+            logger = logging.getLogger(__name__)
+            logger.warning("SimulationEngine fallback: run_simulation() returning stub result")
+            warnings.warn(
+                "SimulationEngine fallback: Simulation not actually run",
+                UserWarning,
+                stacklevel=2
+            )
             return {
                 "status": "fallback_complete",
                 "warning": "Using fallback simulation",
