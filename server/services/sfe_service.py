@@ -885,9 +885,9 @@ class SFEService:
         
         # Try to use ImportFixerEngine if available
         try:
-            from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+            import self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine as ife_module
             
-            fixer = ImportFixerEngine()
+            fixer = ife_module.ImportFixerEngine()
             result = fixer.fix_code(
                 source_context["full_source"],
                 file_path=str(file_path),
@@ -902,6 +902,7 @@ class SFEService:
                 # Find the difference (new import lines) using a simpler approach
                 original_lines = original_code.splitlines()
                 fixed_lines = fixed_code.splitlines()
+                original_lines_set = set(original_lines)  # O(1) lookups
                 
                 # Find new imports by comparing line-by-line
                 import_line = 1
@@ -909,7 +910,7 @@ class SFEService:
                 
                 # Simple diff: look for lines in fixed that aren't in original
                 for i, line in enumerate(fixed_lines):
-                    if "import" in line and (i >= len(original_lines) or line not in original_lines):
+                    if "import" in line and (i >= len(original_lines) or line not in original_lines_set):
                         new_imports.append(line)
                         import_line = i + 1  # Convert to 1-indexed
                 
@@ -1367,13 +1368,13 @@ class SFEService:
 
                         with open(file_path, "w", encoding="utf-8") as f:
                             f.writelines(lines)
-                        logger.info(f"✓ Inserted content at {file_path}:{line}")
+                        logger.info(f"Successfully inserted content at {file_path}:{line}")
                     else:
                         # Create new file
                         file_path.parent.mkdir(parents=True, exist_ok=True)
                         with open(file_path, "w", encoding="utf-8") as f:
                             f.write(content + "\n")
-                        logger.info(f"✓ Created new file {file_path}")
+                        logger.info(f"Successfully created new file {file_path}")
 
                 elif action == "replace":
                     # Replace line(s) with new content
@@ -1392,14 +1393,14 @@ class SFEService:
                                 # Multi-line replacement - replace one line with multiple
                                 # Ensure all lines except the last have newlines
                                 new_lines = []
-                                for i, l in enumerate(content_lines):
-                                    if i < len(content_lines) - 1 or l:  # Add newline unless it's the last empty line
-                                        new_lines.append(l + "\n")
+                                for i, content_line in enumerate(content_lines):
+                                    if i < len(content_lines) - 1 or content_line:  # Add newline unless it's the last empty line
+                                        new_lines.append(content_line + "\n")
                                 lines[line - 1:line] = new_lines
 
                             with open(file_path, "w", encoding="utf-8") as f:
                                 f.writelines(lines)
-                            logger.info(f"✓ Replaced content at {file_path}:{line}")
+                            logger.info(f"Successfully replaced content at {file_path}:{line}")
                         else:
                             logger.warning(f"Line {line} out of range for {file_path} (has {len(lines)} lines)")
                     else:
@@ -1416,7 +1417,7 @@ class SFEService:
 
                             with open(file_path, "w", encoding="utf-8") as f:
                                 f.writelines(lines)
-                            logger.info(f"✓ Deleted line at {file_path}:{line}")
+                            logger.info(f"Successfully deleted line at {file_path}:{line}")
                         else:
                             logger.warning(f"Line {line} out of range for {file_path}")
                     else:
