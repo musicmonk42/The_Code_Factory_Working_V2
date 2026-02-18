@@ -83,7 +83,7 @@ from limits import parse as parse_rate_limit
 # --- Observability Imports ---
 from opentelemetry import trace
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from prometheus_client import Counter
+from prometheus_client import Counter, REGISTRY
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
@@ -97,6 +97,31 @@ try:
     from transformers import pipeline as hf_pipeline
 except ImportError:
     hf_pipeline = None
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
+    """
+    Safely create or retrieve a Prometheus metric to prevent
+    'Duplicated timeseries in CollectorRegistry' errors when
+    this module is imported through multiple paths.
+    """
+    labelnames = labelnames or []
+    # Check if metric already exists in registry
+    try:
+        existing = REGISTRY._names_to_collectors.get(name)
+        if existing is not None:
+            return existing
+    except (AttributeError, KeyError):
+        pass
+    # Try to create the metric
+    try:
+        return metric_class(name, documentation, labelnames)
+    except ValueError as e:
+        if "Duplicated timeseries" in str(e):
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing is not None:
+                return existing
+        raise
 
 
 # RECONSTRUCTED: Full AppConfig class based on FastAPI patterns
@@ -197,8 +222,12 @@ class PredictResponse(BaseModel):
 
 
 # UPGRADE: Custom Exceptions & Prometheus Metrics - [Date: August 19, 2025]
-SAFETY_VIOLATIONS_TOTAL = Counter(
-    "agent_safety_violations_total", "Total responses blocked by safety guardrails"
+# Use safe metric creation to prevent 'Duplicated timeseries in CollectorRegistry'
+# errors when this module is imported through multiple paths.
+SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
+    Counter,
+    "agent_safety_violations_total",
+    "Total responses blocked by safety guardrails",
 )
 
 
