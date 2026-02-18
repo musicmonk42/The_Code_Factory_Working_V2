@@ -217,7 +217,7 @@ class LLMSettings(BaseSettings):
         description="Sampling temperature (0.0-2.0)"
     )
     max_tokens: int = Field(
-        default=500,
+        default=4096,
         gt=0,
         description="Maximum tokens in response"
     )

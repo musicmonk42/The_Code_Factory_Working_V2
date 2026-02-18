@@ -949,6 +949,37 @@ class ImportFixerEngine:
                 'Form', 'status', 'WebSocket', 'BackgroundTasks'
             }
 
+            # Fix incorrect BaseHTTPMiddleware import path (ALWAYS check this first)
+            # Use regex to ensure we only match actual import statements, not comments or strings
+            lines = code.split('\n')
+            import_pattern = re.compile(r'^(\s*)from\s+fastapi\.middleware\.base\s+import\s+')
+            for i, line in enumerate(lines):
+                # Only match lines that start with 'from fastapi.middleware.base import' (after whitespace)
+                # This avoids modifying comments or strings
+                match = import_pattern.match(line)
+                if match:
+                    # Preserve indentation and replace only the module path
+                    indent = match.group(1)
+                    replacement = line.replace('from fastapi.middleware.base import', 
+                                              'from starlette.middleware.base import', 1)
+                    lines[i] = replacement
+                    fixes_applied.append("Fixed BaseHTTPMiddleware import: fastapi.middleware.base -> starlette.middleware.base")
+                    self.logger.info("Fixed BaseHTTPMiddleware import path")
+            
+            # If we fixed the import, update the code and reparse
+            if fixes_applied:
+                code = '\n'.join(lines)
+                try:
+                    tree = ast.parse(code)
+                except SyntaxError as e:
+                    self.logger.warning(f"Syntax error after fixing BaseHTTPMiddleware import: {e}")
+                    return {
+                        "fixed_code": code,
+                        "fixes_applied": fixes_applied,
+                        "status": "error",
+                        "message": f"Syntax error after fixing import: {e}",
+                    }
+
             # Walk AST to find all used names
             used_names = set()
             for node in ast.walk(tree):
@@ -990,12 +1021,12 @@ class ImportFixerEngine:
                     missing_fastapi.add(name)
 
             if not missing_stdlib and not missing_fastapi:
-                # No missing imports detected
+                # No missing imports detected, but we may have fixed incorrect imports
                 return {
                     "fixed_code": code,
-                    "fixes_applied": [],
+                    "fixes_applied": fixes_applied,
                     "status": "success",
-                    "message": "No missing imports detected.",
+                    "message": "No missing imports detected." if not fixes_applied else "Fixed incorrect imports.",
                 }
 
             # Build fixed code by inserting missing imports

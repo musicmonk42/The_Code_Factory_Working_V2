@@ -163,7 +163,7 @@ except ImportError as e:
     )
 
 # Constants
-MAX_PROMPT_TOKENS = 8000
+MAX_PROMPT_TOKENS = 16000
 TEMPLATE_DIR = "prompt_templates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 
@@ -914,7 +914,7 @@ async def build_semantic_critique_prompt(
 
     # --- Token budget & truncation (safe, deterministic) ---
     try:
-        MAX_PROMPT_TOKENS = 8192
+        MAX_PROMPT_TOKENS = 16000
         token_count = await _maybe_await(count_tokens(prompt, model_name="default"))
         if token_count > MAX_PROMPT_TOKENS:
             logger.warning(

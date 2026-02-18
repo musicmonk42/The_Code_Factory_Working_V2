@@ -510,7 +510,10 @@ class LLMClient:
         if not HAS_TIKTOKEN:
             return int(len(text.split()) * 1.3)
         try:
-            encoding = tiktoken.get_encoding("cl100k_base")
+            try:
+                encoding = tiktoken.encoding_for_model(model)
+            except (KeyError, ValueError):
+                encoding = tiktoken.get_encoding("cl100k_base")
             return len(encoding.encode(text))
         except Exception as e:
             logger.warning(
@@ -1128,7 +1131,10 @@ async def count_tokens(text: str, model: str = "gpt-4") -> int:
     if not HAS_TIKTOKEN:
         return int(len(text.split()) * 1.3)
     try:
-        encoding = tiktoken.get_encoding("cl100k_base")
+        try:
+            encoding = tiktoken.encoding_for_model(model)
+        except (KeyError, ValueError):
+            encoding = tiktoken.get_encoding("cl100k_base")
         return len(encoding.encode(text))
     except Exception as e:
         logger.warning(
