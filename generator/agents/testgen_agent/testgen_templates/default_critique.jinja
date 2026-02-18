@@ -3,7 +3,7 @@
 # Test Critique Prompt
 
 ## Current Tests
-{% for filename, content in generated_tests.items() %}
+{% for filename, content in generated_tests.items %}
 ### {{ filename }}
 ```{{ language }}
 {{ content }}
@@ -13,11 +13,69 @@
 ## Validation Results
 {{ validation_feedback }}
 
+{% if language == "python" %}
+## Pydantic V2 Error Type Reference (CRITICAL for Python)
+
+When reviewing Pydantic validation tests, be aware that:
+- **Pydantic V2 error types are DIFFERENT from V1**
+- **Validator execution order matters**: `@field_validator(mode='before')` runs BEFORE Field constraints
+- **Custom validators that raise ValueError produce "value_error" type**, NOT constraint-specific types like "string_too_short"
+
+### Pydantic V1→V2 Error Type Mapping Table
+
+| Pydantic V1 Type (WRONG) | Pydantic V2 Type (CORRECT) | Description |
+|--------------------------|----------------------------|-------------|
+| `value_error.any_str.min_length` | `string_too_short` | String below min_length |
+| `value_error.any_str.max_length` | `string_too_long` | String exceeds max_length |
+| `value_error.number.not_gt` | `greater_than` | Number not greater than constraint |
+| `value_error.number.not_ge` | `greater_than_equal` | Number not >= constraint |
+| `value_error.number.not_lt` | `less_than` | Number not less than constraint |
+| `value_error.number.not_le` | `less_than_equal` | Number not <= constraint |
+| `type_error.float` | `float_parsing` | Invalid float value |
+| `type_error.integer` | `int_parsing` | Invalid integer value |
+| `type_error.bool` | `bool_parsing` | Invalid boolean value |
+| `type_error.str` | `string_type` | Value is not a string |
+| `value_error.missing` | `missing` | Required field missing |
+| Custom `ValueError("msg")` | `value_error` | Custom field validator error |
+
+### CRITICAL: Validator vs Field Constraint Interaction
+
+**Common test failure pattern**: Test expects "string_too_short" but gets "value_error"
+
+**Root cause**: When source code has `@field_validator(mode='before')` or `@validator(pre=True)` that raises `ValueError`:
+- The error type will be **"value_error"** (NOT "string_too_short")
+- The Field's `min_length` constraint is NEVER reached because the validator runs first
+- Tests must match the ACTUAL validator behavior
+
+**Diagnostic checklist for failed Pydantic validation tests:**
+1. ✓ Check if source code has a custom `@field_validator` or `@validator`
+2. ✓ Check if that validator raises `ValueError` or `TypeError`
+3. ✓ If yes → error type is "value_error", NOT the Field constraint type
+4. ✓ Check for deprecated `@validator` (Pydantic V1) vs `@field_validator` (Pydantic V2)
+5. ✓ `@validator(pre=True, always=True)` catches ALL inputs including None → "value_error" for everything
+6. ✓ `@field_validator(mode='before')` does NOT catch missing fields → "missing" for None
+
+**Example diagnoses:**
+- Empty string test fails expecting "string_too_short" but gets "value_error"
+  → **Diagnosis**: Source code has validator that raises ValueError for empty strings
+  → **Fix**: Change test to expect "value_error" OR change source to return empty string and let Field catch it
+
+- Non-string test fails expecting "string_type" but gets "value_error"
+  → **Diagnosis**: Source code has validator with `if not isinstance(v, str): raise ValueError`
+  → **Fix**: Change test to expect "value_error" OR remove the isinstance check from validator
+
+- Missing field test fails expecting "missing" but gets "value_error"
+  → **Diagnosis**: Source code uses deprecated `@validator(pre=True, always=True)` which catches None
+  → **Fix**: Migrate source code to `@field_validator(mode='before')` (does not catch missing fields)
+
+{% endif %}
+
 ## Task
 Review the tests and identify:
 1. Missing test cases
 2. Inadequate coverage areas
 3. Edge cases not tested
 4. Potential improvements
+5. **Pydantic V2 error type mismatches** (if language is Python)
 
 Provide specific, actionable feedback.

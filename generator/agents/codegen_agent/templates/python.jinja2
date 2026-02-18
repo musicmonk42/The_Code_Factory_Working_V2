@@ -165,6 +165,67 @@ class CalculationResponse(BaseModel):
 - Use strip_whitespace=True for string fields to handle leading/trailing spaces
 ```
 
+**⛔ NEVER USE DEPRECATED @validator (Pydantic V1) - WILL CAUSE TEST FAILURES ⛔**
+
+```python
+# ❌ WRONG - Pydantic V1 deprecated style (DO NOT USE)
+from pydantic import BaseModel, Field, validator  # ❌ validator is DEPRECATED
+
+class MessageRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    
+    @validator('name', pre=True, always=True)  # ❌ THIS CAUSES TEST FAILURES
+    def validate_name(cls, v):
+        if not isinstance(v, str):
+            raise ValueError('name must be a string')
+        v = v.strip()
+        if not v:
+            raise ValueError('name cannot be empty')
+        return v
+```
+
+**Why this fails in production:**
+- `@validator(pre=True, always=True)` intercepts ALL inputs including `None`
+- When validator raises `ValueError`, Pydantic returns error type `"value_error"` 
+- Tests expecting Pydantic V2 error types fail with mismatches:
+  - Test expects `"string_too_short"` → Actual: `"value_error"` (validator raises first)
+  - Test expects `"string_type"` → Actual: `"value_error"` (validator catches non-string first)
+  - Test expects `"missing"` → Actual: `"value_error"` (`always=True` catches None first)
+
+**✅ CORRECT - Pydantic V2 style (ALWAYS USE THIS)**
+
+```python
+# ✅ CORRECT - Pydantic V2 style
+from pydantic import BaseModel, Field, field_validator  # ✅ field_validator (NOT validator)
+
+class MessageRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    
+    @field_validator('name', mode='before')  # ✅ Pydantic V2 field_validator
+    @classmethod  # ✅ Must use @classmethod (NOT @staticmethod)
+    def validate_name(cls, v):
+        if not isinstance(v, str):
+            raise ValueError('name must be a string')
+        v = v.strip()
+        if not v:
+            raise ValueError('name cannot be empty')
+        return v
+```
+
+**Key differences between @validator (V1) and @field_validator (V2):**
+- `@validator(pre=True, always=True)` → catches missing/None values → error type "value_error"
+- `@field_validator(mode='before')` → does NOT catch missing fields → error type "missing" for None
+- `@validator` is deprecated and triggers runtime warnings
+- `@field_validator` is the official Pydantic V2 API
+
+**PRODUCTION FAILURE EXAMPLE:**
+Using `@validator` caused 100% test failures in a real deployment because:
+- Source code: `@validator('name', pre=True, always=True)` raises ValueError for empty strings
+- Test expected: `assert errors[0]["type"] == "string_too_short"` (Field constraint)
+- Test got: `assert errors[0]["type"] == "value_error"` (validator intercepted first)
+- Result: All validation tests failed, coverage = 0%, pipeline stuck in infinite loop
+```
+
 **2. Endpoint Implementation with Error Handling**
 ```python
 from fastapi import FastAPI, HTTPException, status

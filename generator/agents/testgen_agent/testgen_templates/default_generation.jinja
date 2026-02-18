@@ -49,6 +49,24 @@ When testing Pydantic models (v2.x):
 | `value_error.missing` | `missing` | Required field missing |
 | Custom `ValueError("msg")` | `value_error` | Custom field validator error |
 
+### CRITICAL: Validator vs Field Constraint Interaction
+
+**YOU MUST INSPECT THE SOURCE CODE BEFORE WRITING TESTS!**
+
+When source code has a `@field_validator(mode='before')` or `@validator(pre=True)` that raises `ValueError`:
+- The error type will be **"value_error"** (NOT "string_too_short" or "string_type")
+- The Field's `min_length` constraint is NEVER reached because the validator runs first
+- Tests MUST check the ACTUAL source code validator behavior before asserting error types
+
+**If the validator raises ValueError for empty strings** → assert type == "value_error"
+**If the validator returns the stripped value and lets Field catch it** → assert type == "string_too_short"
+**If the validator raises ValueError for non-string types** → assert type == "value_error"
+**If there is NO custom validator** → Pydantic's built-in applies → assert type == "string_type"
+
+Also check for `@validator` (Pydantic V1 deprecated style) vs `@field_validator` (Pydantic V2):
+- `@validator(pre=True, always=True)` catches ALL inputs including None → type is "value_error" for None/missing
+- `@field_validator(mode='before')` does NOT catch missing fields → type is "missing" for None/missing
+
 Example test patterns (MANDATORY):
 ```python
 # Test 1: max_length constraint (string_too_long error)
@@ -62,6 +80,7 @@ def test_max_length_validation():
     assert errors[0]["type"] == "string_too_long"  # V2 type
 
 # Test 2: min_length constraint (string_too_short error)
+# ⚠️ ONLY use this pattern if there is NO @field_validator that raises ValueError first!
 def test_min_length_validation():
     with pytest.raises(ValidationError) as exc_info:
         MyModel(message="")  # below min_length=1
@@ -69,15 +88,16 @@ def test_min_length_validation():
     assert errors[0]["type"] == "string_too_short"  # V2 type, NOT "value_error.any_str.min_length"
 
 # Test 3: Custom validator with ValueError (value_error type)
+# ⚠️ Use this pattern when the source code has @field_validator that raises ValueError
 def test_custom_validator_empty():
     with pytest.raises(ValidationError) as exc_info:
         MyModel(message="   ")  # whitespace-only
     # CORRECT: Match the "Value error, " prefix + your message
     assert "value error" in str(exc_info.value).lower()
     assert "cannot be empty" in str(exc_info.value).lower()
-    # OR check error type
+    # OR check error type (PREFERRED)
     errors = exc_info.value.errors()
-    assert errors[0]["type"] == "value_error"  # V2 type for custom validators
+    assert errors[0]["type"] == "value_error"  # V2 type for custom validators that raise ValueError
 
 # Test 4: Greater than constraint (greater_than error)
 def test_greater_than_validation():
