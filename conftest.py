@@ -668,14 +668,17 @@ def isolate_prometheus_registry():
     """
     try:
         from prometheus_client import REGISTRY
+        import logging
+        logger = logging.getLogger(__name__)
         
         # Clear registry before tests
         collectors = list(REGISTRY._collector_to_names.keys())
         for collector in collectors:
             try:
                 REGISTRY.unregister(collector)
-            except Exception:
-                pass  # Ignore errors during cleanup
+            except (KeyError, ValueError) as e:
+                # Collector may already be unregistered, log at debug level
+                logger.debug(f"Could not unregister collector during setup: {e}")
         
         yield
         
@@ -684,8 +687,9 @@ def isolate_prometheus_registry():
         for collector in collectors:
             try:
                 REGISTRY.unregister(collector)
-            except Exception:
-                pass  # Ignore errors during cleanup
+            except (KeyError, ValueError) as e:
+                # Collector may already be unregistered, log at debug level
+                logger.debug(f"Could not unregister collector during cleanup: {e}")
     except ImportError:
         # Prometheus client not installed, skip
         yield
