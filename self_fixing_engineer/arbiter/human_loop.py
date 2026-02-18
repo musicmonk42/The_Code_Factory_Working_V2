@@ -27,16 +27,30 @@ try:
 
     AIOSMTPLIB_AVAILABLE = True
 except ImportError:
+    import warnings
     AIOSMTPLIB_AVAILABLE = False
-    logging.getLogger(__name__).warning(
+    logger = logging.getLogger(__name__)
+    logger.warning(
         "aiosmtplib not available. Asynchronous email functionality will be disabled."
+    )
+    warnings.warn(
+        "aiosmtplib not available - email notifications disabled",
+        UserWarning,
+        stacklevel=2
     )
 
     # Create a dummy class to prevent NameError
     class aiosmtplib:
         class SMTP:
             def __init__(self, *args, **kwargs):
-                pass
+                import warnings
+                logger = logging.getLogger(__name__)
+                logger.warning("aiosmtplib.SMTP stub: Email sending disabled")
+                warnings.warn(
+                    "aiosmtplib.SMTP stub used - emails will not be sent",
+                    UserWarning,
+                    stacklevel=2
+                )
 
             async def __aenter__(self):
                 raise ImportError("aiosmtplib is not available.")
@@ -51,11 +65,24 @@ try:
 
     METRICS_AVAILABLE = True
 except ImportError:
+    import warnings
     METRICS_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("Metrics module not available. Using DummyCounter fallback.")
+    warnings.warn(
+        "Metrics not available - DummyCounter used (metrics will not be recorded)",
+        UserWarning,
+        stacklevel=2
+    )
 
     class DummyCounter:
         def inc(self, amount: float = 1.0):
-            pass
+            import warnings
+            warnings.warn(
+                "DummyCounter.inc() called - metric not recorded",
+                UserWarning,
+                stacklevel=2
+            )
 
         def labels(self, *args, **kwargs):
             return self
@@ -105,6 +132,7 @@ except ImportError:
         """
 
         def __init__(self) -> None:
+            import warnings
             self.feedback_entries: List[Dict[str, Any]] = []
             self._db_file = os.getenv("DUMMY_DB_FILE", "/tmp/dummy_db_feedback.json")
             self._backup_count = int(os.getenv("DUMMY_DB_BACKUP_COUNT", "3"))
@@ -116,6 +144,11 @@ except ImportError:
                 "Using DummyDBClient fallback with file persistence. "
                 f"Data will be persisted to: {self._db_file}. "
                 "Install a real database client for production use."
+            )
+            warnings.warn(
+                f"DummyDBClient: Using file-based persistence at {self._db_file} (not production-ready)",
+                UserWarning,
+                stacklevel=2
             )
 
             # Load existing data from file
