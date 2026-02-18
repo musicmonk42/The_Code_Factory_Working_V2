@@ -18,6 +18,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime
 
 import yaml
 from pydantic import BaseModel, Field
@@ -59,7 +60,7 @@ class SpecLock(BaseModel):
     
     # Metadata
     schema_version: str = "1.0"
-    generated_at: str = Field(default_factory=lambda: __import__('datetime').datetime.now().isoformat())
+    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     answered_questions: List[QuestionResponse] = Field(default_factory=list)
     
     def save(self, path: Path) -> None:

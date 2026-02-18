@@ -66,7 +66,7 @@ def test_validation_report_to_dict():
     
     data = report.to_dict()
     
-    assert data["valid"] == False
+    assert data["valid"] is False
     assert data["passed_count"] == 1
     assert data["failed_count"] == 1
     assert len(data["errors"]) == 1
