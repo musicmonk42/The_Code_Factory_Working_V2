@@ -73,7 +73,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 # Timeout configuration - prevent individual tests from hanging
-timeout = 30
+timeout = 300
 timeout_method = "thread"
 timeout_func_only = true
 

@@ -696,6 +696,58 @@ def isolate_prometheus_registry():
 
 
 @pytest.fixture(autouse=True)
+def cleanup_async_tasks():
+    """Clean up async tasks after each test to prevent timeouts and hangs.
+    
+    This fixture ensures all pending async tasks are cancelled after each test,
+    preventing accumulated background threads and event loop exhaustion.
+    """
+    yield
+    
+    # Cancel pending tasks
+    try:
+        import gc
+        loop = asyncio.get_event_loop()
+        if not loop.is_closed():
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                if not task.done():
+                    task.cancel()
+            # Allow cancellations to process
+            if pending:
+                try:
+                    loop.run_until_complete(asyncio.sleep(0.1))
+                except RuntimeError:
+                    pass
+        gc.collect()
+    except RuntimeError:
+        # No event loop in this thread
+        pass
+
+
+@pytest.fixture(autouse=True)
+def reset_prometheus_metrics():
+    """Reset Prometheus metric values between tests without unregistering.
+    
+    This fixture clears metric values but keeps the metrics registered,
+    allowing for clean test isolation while avoiding duplicate registration errors.
+    """
+    yield
+    
+    # Clear metric values after test
+    try:
+        from prometheus_client import REGISTRY
+        for collector in list(REGISTRY._collector_to_names.keys()):
+            if hasattr(collector, '_metrics'):
+                try:
+                    collector._metrics.clear()
+                except (AttributeError, TypeError):
+                    pass
+    except (ImportError, RuntimeError):
+        pass
+
+
+@pytest.fixture(autouse=True)
 def reset_logging_for_tests():
     """Reset logging configuration to allow caplog to capture records.
     
