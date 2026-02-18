@@ -913,6 +913,8 @@ async def upload_files(
     
     # Frontend detection keywords (expanded list)
     # Content-based detection is PRIMARY - filename doesn't matter
+    # NOTE: This list is similar to FRONTEND_DETECTION_KEYWORDS in codegen_agent.py
+    # Both serve as safety nets for frontend detection from different entry points
     FRONTEND_KEYWORDS = [
         'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt',
         'vite', 'webpack', 'typescript', 'tsx', 'jsx',
@@ -946,17 +948,20 @@ async def upload_files(
                     if readme_content:
                         readme_lower = readme_content.lower()
                         for keyword in FRONTEND_KEYWORDS:
-                            if keyword in readme_lower:
+                            # Use word boundary check to avoid partial matches (e.g., 'reaction' matching 'react')
+                            keyword_lower = keyword.lower()
+                            # Check if keyword exists as whole word or path component
+                            if f' {keyword_lower} ' in f' {readme_lower} ' or f'\n{keyword_lower}\n' in f'\n{readme_lower}\n' or f'/{keyword_lower}' in readme_lower:
                                 logger.info(f"Frontend keyword '{keyword}' detected in {file.filename} content - enabling frontend generation")
                                 include_frontend = True
-                                # Try to detect specific framework from content
-                                if 'react' in readme_lower:
+                                # Try to detect specific framework from content (with word boundary check)
+                                if ' react ' in f' {readme_lower} ' or '\nreact\n' in f'\n{readme_lower}\n':
                                     frontend_type = FRONTEND_TYPE_REACT
                                     logger.info(f"Detected React frontend from content")
-                                elif 'vue' in readme_lower:
+                                elif ' vue ' in f' {readme_lower} ' or '\nvue\n' in f'\n{readme_lower}\n':
                                     frontend_type = FRONTEND_TYPE_VUE
                                     logger.info(f"Detected Vue frontend from content")
-                                elif 'angular' in readme_lower:
+                                elif ' angular ' in f' {readme_lower} ' or '\nangular\n' in f'\n{readme_lower}\n':
                                     frontend_type = FRONTEND_TYPE_ANGULAR
                                     logger.info(f"Detected Angular frontend from content")
                                 else:

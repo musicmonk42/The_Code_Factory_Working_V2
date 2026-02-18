@@ -62,7 +62,7 @@ def test_api_validation_error():
 # WRONG PATTERNS (DO NOT USE):
 # assert exc_info.value == "exact message"  # FAILS: Exact match
 # assert detail['msg'] == "ensure this value has at most 500 characters"  # FAILS: V1 format
-# assert "should have at least 1 character" in str(exc_info.value).lower()  # FAILS: Missing "string"
+# assert "should have at least 1 character" in str(exc_info.value).lower()  # INCOMPLETE: Use full phrase "string should have"
 ```
 {% endif %}
 
