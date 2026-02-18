@@ -46,9 +46,13 @@ class SpecLock(BaseModel):
     - User answers to questions
     - Inferred values from README text
     - Sensible defaults
+    
+    Note: project_type is now Optional. When None, requires_clarification 
+    will be True, and downstream stages should return clarification questions
+    instead of proceeding with generation.
     """
     
-    project_type: str
+    project_type: Optional[str] = None
     package_name: str
     module_name: Optional[str] = None
     output_dir: str
@@ -62,6 +66,7 @@ class SpecLock(BaseModel):
     schema_version: str = "1.0"
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     answered_questions: List[QuestionResponse] = Field(default_factory=list)
+    requires_clarification: bool = False  # Flag when project_type is missing/uncertain
     
     def save(self, path: Path) -> None:
         """Save spec lock to YAML file."""
@@ -164,7 +169,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
     if not spec.project_type:
         # Try to infer from readme
         inferred_type = None
-        default_type = "fastapi_service"  # Reasonable default
+        default_type = None  # No default - require explicit choice
         
         if readme_content:
             content_lower = readme_content.lower()
@@ -174,12 +179,14 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
                 inferred_type = "cli_tool"
             elif "library" in content_lower or "package" in content_lower:
                 inferred_type = "library"
+            elif "batch" in content_lower:  # Matches both 'batch' and 'batch job' (substring)
+                inferred_type = "batch_job"
         
         questions.append(Question(
             field_name="project_type",
             prompt="What type of project are you building?",
-            hint="This determines the scaffolding, structure, and generated files.",
-            default_value=inferred_type or default_type,
+            hint="This determines the scaffolding, structure, and generated files. Required.",
+            default_value=inferred_type,  # Only use inferred type, no default
             examples=[
                 "fastapi_service",
                 "cli_tool",
@@ -312,17 +319,20 @@ def create_spec_lock_from_answers(
             else:
                 data[field_name] = value
     
-    # Ensure required fields are present
-    if not data["project_type"]:
-        data["project_type"] = "fastapi_service"  # Fallback
+    # Ensure required fields are present (except project_type which can be None)
+    # If project_type is missing, we'll set requires_clarification flag
     if not data["package_name"]:
         data["package_name"] = "my_app"  # Fallback
     if not data["output_dir"]:
         data["output_dir"] = f"generated/{data['package_name']}"
     
+    # Set requires_clarification flag if project_type is missing
+    requires_clarification = not data.get("project_type")
+    
     # Create and return SpecLock
     lock = SpecLock(**data)
     lock.answered_questions = answers
+    lock.requires_clarification = requires_clarification
     return lock
 
 
@@ -371,6 +381,8 @@ def run_question_loop(
             adapters=spec.adapters,
             acceptance_checks=spec.acceptance_checks,
         )
+        # Set requires_clarification if project_type is missing
+        lock.requires_clarification = not spec.project_type
         if output_path:
             lock.save(output_path)
         return lock
@@ -380,13 +392,15 @@ def run_question_loop(
     
     if not questions:
         logger.warning("No questions generated but spec incomplete - using defaults")
-        # Create lock with defaults
+        # Create lock with defaults (except project_type - allow None)
         lock = SpecLock(
-            project_type=spec.project_type or "fastapi_service",
+            project_type=spec.project_type,  # No default - can be None
             package_name=spec.package_name or spec.module_name or "my_app",
             module_name=spec.module_name or spec.package_name or "my_app",
             output_dir=spec.output_dir or "generated/my_app",
         )
+        # Set requires_clarification if project_type is missing
+        lock.requires_clarification = not spec.project_type
         if output_path:
             lock.save(output_path)
         return lock
