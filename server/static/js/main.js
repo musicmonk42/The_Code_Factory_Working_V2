@@ -1220,6 +1220,10 @@ function createFixCard(fix) {
         <p>Status: <span class="status-badge status-${fix.status}">${fix.status}</span></p>
         <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
             ${fix.status === 'proposed' ? `
+                <button class="btn btn-success" onclick="reviewFix('${fix.fix_id}', true)">✅ Approve</button>
+                <button class="btn btn-danger" onclick="reviewFix('${fix.fix_id}', false)">❌ Reject</button>
+            ` : ''}
+            ${fix.status === 'approved' ? `
                 <button class="btn btn-primary" onclick="applyFix('${fix.fix_id}')">Apply</button>
             ` : ''}
             ${fix.status === 'applied' ? `
@@ -1228,6 +1232,23 @@ function createFixCard(fix) {
         </div>
     `;
     return card;
+}
+
+async function reviewFix(fixId, approved) {
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/fixes/${fixId}/review`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({approved: approved})
+        });
+        
+        if (response.ok) {
+            showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
+            loadFixes();
+        }
+    } catch (error) {
+        showError('Failed to review fix: ' + error.message);
+    }
 }
 
 async function applyFix(fixId) {

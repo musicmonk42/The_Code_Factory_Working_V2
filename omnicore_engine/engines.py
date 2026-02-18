@@ -443,6 +443,11 @@ class PluginService:
         await self.message_bus.subscribe(
             "workflow:sfe_to_generator", self.handle_sfe_to_generator
         )
+        
+        # Subscribe to SFE channels
+        await self.message_bus.subscribe(
+            "sfe.job_request", self.handle_sfe_request
+        )
 
         self._subscriptions_started = True
         self.logger.info("PluginService subscriptions started")
@@ -624,6 +629,112 @@ class PluginService:
                 self.logger.warning(f"Unknown workflow type: {workflow_type}")
         except Exception as e:
             self.logger.error(f"SFE to Generator workflow failed: {e}")
+
+    async def handle_sfe_request(self, message):
+        """Handle SFE job requests routed through OmniCore."""
+        self.logger.info(f"Received SFE job request: {message.payload}")
+        
+        # Extract reply topic from trace_id for request-response pattern
+        reply_topic = None
+        if message.trace_id and message.trace_id.startswith("request-response-"):
+            reply_topic = message.trace_id.replace("request-response-", "")
+            self.logger.debug(f"Extracted reply topic: {reply_topic}")
+        
+        try:
+            # Import SFE service getter
+            try:
+                from server.routers.sfe import get_sfe_service_instance
+                sfe_service = get_sfe_service_instance()
+            except Exception as e:
+                self.logger.error(f"Failed to get SFE service instance: {e}")
+                error_response = {
+                    "job_id": message.payload.get("job_id"),
+                    "status": "error",
+                    "error": "SFE service not available",
+                }
+                if reply_topic:
+                    await self.message_bus.publish(reply_topic, error_response)
+                return
+            
+            action = message.payload.get("action")
+            job_id = message.payload.get("job_id")
+            
+            self.logger.info(f"Processing SFE action '{action}' for job {job_id}")
+            
+            result = None
+            
+            # Route to appropriate SFE method based on action
+            if action == "analyze_code":
+                code_path = message.payload.get("code_path", ".")
+                result = await sfe_service.analyze_code(job_id, code_path)
+                
+            elif action == "detect_errors":
+                result = await sfe_service.detect_errors(job_id)
+                
+            elif action == "detect_bugs":
+                code_path = message.payload.get("code_path", ".")
+                scan_depth = message.payload.get("scan_depth", "standard")
+                include_potential = message.payload.get("include_potential", True)
+                result = await sfe_service.detect_bugs(
+                    code_path, scan_depth, include_potential, job_id
+                )
+                
+            elif action == "propose_fix":
+                error_id = message.payload.get("error_id")
+                if not error_id:
+                    raise ValueError("error_id is required for propose_fix action")
+                result = await sfe_service.propose_fix(error_id)
+                
+            elif action == "apply_fix":
+                fix_id = message.payload.get("fix_id")
+                dry_run = message.payload.get("dry_run", False)
+                if not fix_id:
+                    raise ValueError("fix_id is required for apply_fix action")
+                result = await sfe_service.apply_fix(fix_id, dry_run)
+                
+            elif action == "rollback_fix":
+                fix_id = message.payload.get("fix_id")
+                if not fix_id:
+                    raise ValueError("fix_id is required for rollback_fix action")
+                result = await sfe_service.rollback_fix(fix_id)
+                
+            else:
+                self.logger.warning(f"Unknown SFE action: {action}")
+                result = {
+                    "status": "error",
+                    "error": f"Unknown action: {action}",
+                }
+            
+            # Publish success response
+            response = {
+                "job_id": job_id,
+                "action": action,
+                "status": "success",
+                "data": result,
+            }
+            
+            if reply_topic:
+                # Send response to the specific reply topic for request-response
+                await self.message_bus.publish(reply_topic, response)
+                self.logger.info(f"SFE job {job_id} action '{action}' response sent to {reply_topic}")
+            else:
+                # Fallback to general response topic if no reply topic
+                await self.message_bus.publish("sfe.job_response", response)
+                self.logger.info(f"SFE job {job_id} action '{action}' response sent to sfe.job_response")
+            
+        except Exception as e:
+            self.logger.error(f"SFE job request failed: {e}", exc_info=True)
+            error_response = {
+                "job_id": message.payload.get("job_id"),
+                "action": message.payload.get("action"),
+                "status": "error",
+                "error": str(e),
+            }
+            
+            if reply_topic:
+                await self.message_bus.publish(reply_topic, error_response)
+            else:
+                await self.message_bus.publish("sfe.job_response", error_response)
 
     async def get_companies(self):
         fetcher = self.plugin_registry.get("company_list")
