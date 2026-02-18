@@ -6705,9 +6705,12 @@ class OmniCoreService:
                                 try:
                                     # Use output_dir basename as project name, falling back to job_id
                                     output_dir = payload.get("output_dir", "")
-                                    project_name = Path(output_dir).name if output_dir else f"Project-{job_id[:8]}"
-                                    if not project_name:
-                                        project_name = "Generated App"
+                                    if output_dir:
+                                        dir_name = Path(output_dir).name
+                                        # Handle edge case where Path().name returns '.' or empty
+                                        project_name = dir_name if dir_name and dir_name != '.' else f"Project-{job_id[:8]}"
+                                    else:
+                                        project_name = f"Project-{job_id[:8]}"
                                     
                                     frontend_results = _generate_fallback_frontend_files(
                                         output_path=output_path,

@@ -225,8 +225,13 @@ class TestSpecFrontendDetection:
         # Both React file patterns should be in FRONTEND_FILE_PATTERNS
         assert 'App.tsx' in FRONTEND_FILE_PATTERNS, "App.tsx should be in FRONTEND_FILE_PATTERNS"
         assert 'main.tsx' in FRONTEND_FILE_PATTERNS, "main.tsx should be in FRONTEND_FILE_PATTERNS"
-        # At least one should be detected from the spec
-        assert len(frontend_files) >= 1
+        
+        # Verify they are actually detected in the spec files
+        assert 'App.tsx' in frontend_files, "App.tsx should be detected from spec"
+        assert 'main.tsx' in frontend_files, "main.tsx should be detected from spec"
+        
+        # Total detected files should be exactly 2 React files
+        assert len(frontend_files) == 2
 
 
 if __name__ == "__main__":
