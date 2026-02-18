@@ -14,7 +14,7 @@ agents:
   - id: refactor
     name: Refactor Agent ∞
     manifest: plugins/refactor/manifest.json
-    entrypoint: plugins/refactor/smart_refactor_agent.py
+    entrypoint: self_fixing_engineer/plugins/refactor/smart_refactor_agent.py
     agent_type: ai
     role_ref: configdb://roles/refactor
     skills_ref: configdb://skills/refactor
@@ -27,7 +27,7 @@ agents:
   - id: judge
     name: Judge Agent ∞
     manifest: plugins/judge/manifest.json
-    entrypoint: plugins/judge/judge_agent.py
+    entrypoint: self_fixing_engineer/plugins/judge/judge_agent.py
     agent_type: ai
     role_ref: configdb://roles/judge
     skills_ref: configdb://skills/judge
@@ -40,7 +40,7 @@ agents:
   - id: healer
     name: Healer Agent ∞
     manifest: plugins/healer/manifest.json
-    entrypoint: plugins/healer/healer_agent.py
+    entrypoint: self_fixing_engineer/plugins/healer/healer_agent.py
     agent_type: ai
     role_ref: configdb://roles/healer
     skills_ref: configdb://skills/healer
@@ -53,7 +53,7 @@ agents:
   - id: ethics
     name: Ethics Sentinel ∞
     manifest: plugins/ethics/manifest.json
-    entrypoint: plugins/ethics/ethics_agent.py
+    entrypoint: self_fixing_engineer/plugins/ethics/ethics_agent.py
     agent_type: ai
     role_ref: configdb://roles/ethics
     skills_ref: configdb://skills/ethics
@@ -66,7 +66,7 @@ agents:
   - id: simulation
     name: Simulation Orchestrator ∞
     manifest: plugins/simulation/manifest.json
-    entrypoint: plugins/simulation/simulation_agent.py
+    entrypoint: self_fixing_engineer/plugins/simulation/simulation_agent.py
     agent_type: ai
     role_ref: configdb://roles/simulation
     skills_ref: configdb://skills/simulation
@@ -79,7 +79,7 @@ agents:
   - id: ci_cd
     name: CI/CD Trigger ∞
     manifest: plugins/ci_cd/manifest.json
-    entrypoint: plugins/ci_cd/ci_cd_agent.py
+    entrypoint: self_fixing_engineer/plugins/ci_cd/ci_cd_agent.py
     agent_type: plugin
     role_ref: configdb://roles/ci_cd
     skills_ref: configdb://skills/ci_cd
@@ -92,7 +92,7 @@ agents:
   - id: human
     name: Human Escalation Node ∞
     manifest: plugins/human/manifest.yaml
-    entrypoint: plugins/human/human_in_the_loop.py
+    entrypoint: self_fixing_engineer/plugins/human/human_in_the_loop.py
     agent_type: human
     role_ref: configdb://roles/human
     skills_ref: configdb://skills/human
@@ -105,7 +105,7 @@ agents:
   - id: oracle
     name: Oracle Agent ∞
     manifest: plugins/oracle/manifest.json
-    entrypoint: plugins/oracle/oracle_agent.py
+    entrypoint: self_fixing_engineer/plugins/oracle/oracle_agent.py
     agent_type: oracle
     role_ref: configdb://roles/oracle
     skills_ref: configdb://skills/oracle
@@ -113,6 +113,19 @@ agents:
     allow_destructive_actions: false
     whitelisted_paths: [] # Oracle might not need filesystem access
     whitelisted_commands: []
+    is_dev_mode_agent: false
+
+  - id: intent_capture
+    name: Intent Capture Agent ∞
+    manifest: plugins/intent_capture/manifest.json
+    entrypoint: self_fixing_engineer/intent_capture/agent_core.py
+    agent_type: ai
+    role_ref: configdb://roles/intent_capture
+    skills_ref: configdb://skills/intent_capture
+    criticality: high
+    allow_destructive_actions: false
+    whitelisted_paths: ["^\\./requirements/.*$", "^\\./specs/.*$", "^\\./sessions/.*$"]
+    whitelisted_commands: ["^python(3\\.[0-9]+)?$"]
     is_dev_mode_agent: false
 
 # Escalation paths are dynamically learned and updated at runtime.

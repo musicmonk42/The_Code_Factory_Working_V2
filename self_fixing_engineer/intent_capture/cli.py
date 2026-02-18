@@ -607,8 +607,8 @@ async def main_cli_loop():
 
     # PRESERVED: Import/mocks for agent/autocomplete (mock if missing)
     try:
-        from agent_core import get_or_create_agent
-        from autocomplete import (
+        from intent_capture.agent_core import get_or_create_agent
+        from intent_capture.autocomplete import (
             add_to_history,
             execute_macro,
             handle_command_not_found,

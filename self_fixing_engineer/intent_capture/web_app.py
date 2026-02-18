@@ -17,11 +17,11 @@ import redis
 import streamlit as st
 import yaml
 
-# Import custom modules - Fixed to use absolute imports
-from intent_capture.agent_core import RedisStateBackend, get_or_create_agent
-from intent_capture.config import Config, PluginManager
-from intent_capture.requirements import generate_coverage_report, get_coverage_history
-from intent_capture.spec_utils import generate_spec_from_memory
+# Import custom modules - Fixed to use relative imports within the package
+from .agent_core import RedisStateBackend, get_or_create_agent
+from .config import Config, PluginManager
+from .requirements import generate_coverage_report, get_coverage_history
+from .spec_utils import generate_spec_from_memory
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
