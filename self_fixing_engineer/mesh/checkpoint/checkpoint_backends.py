@@ -322,10 +322,7 @@ class Config:
 # ---- Metrics Setup ----
 if PROMETHEUS_AVAILABLE:
     # Guard against duplicate registration during module reloads
-    try:
-        # Check if metrics already exist
-        BACKEND_OPERATIONS
-    except NameError:
+    if 'BACKEND_OPERATIONS' not in globals():
         # Only create metrics if they don't exist
         BACKEND_OPERATIONS = Counter(
             "checkpoint_backend_operations_total",
