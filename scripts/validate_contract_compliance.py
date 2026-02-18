@@ -14,6 +14,7 @@ Example:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -29,17 +30,35 @@ class ContractValidator:
         self.warnings: List[str] = []
     
     def validate_all(self) -> bool:
-        """Run all validation checks. Returns True if all checks pass."""
+        """
+        Run all validation checks. Returns True if all checks pass.
+        
+        Supports README_TEST_MODE environment variable to skip README completeness check.
+        When README_TEST_MODE=1, the check_readme_completeness check is skipped to allow
+        minimal README files in test environments.
+        """
         print(f"🔍 Validating contract compliance for: {self.output_dir}\n")
+        
+        # Check if README_TEST_MODE is enabled to skip README completeness check
+        test_mode = os.environ.get("README_TEST_MODE", "0") == "1"
         
         checks = [
             ("Output Directory Structure", self.check_output_structure),
             ("Schema Validation", self.check_schema_validation),
-            ("README Completeness", self.check_readme_completeness),
+        ]
+        
+        # Only add README completeness check if not in test mode
+        if not test_mode:
+            checks.append(("README Completeness", self.check_readme_completeness))
+        else:
+            print("📋 README Completeness...")
+            print("   ⏭️  SKIPPED (README_TEST_MODE=1)\n")
+        
+        checks.extend([
             ("Sphinx Documentation", self.check_sphinx_docs),
             ("Reports Location and Content", self.check_reports),
             ("No Bogus Fallback Tests", self.check_no_fallback_tests),
-        ]
+        ])
         
         for name, check_func in checks:
             print(f"📋 {name}...")

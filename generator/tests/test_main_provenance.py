@@ -685,3 +685,131 @@ curl http://localhost:8000/health
     # But should also have a warning about auto-extraction
     assert any("auto-extract" in warn.lower() for warn in result.get("warnings", [])), \
         f"Should have auto-extraction warning. Warnings: {result.get('warnings', [])}"
+
+
+class TestReadmeTestMode:
+    """Test README_TEST_MODE environment variable support."""
+
+    def test_readme_test_mode_relaxed_length(self):
+        """Test that README_TEST_MODE relaxes minimum length requirement."""
+        from unittest.mock import patch
+        from generator.main.provenance import validate_readme_completeness
+        
+        # Short README that would fail strict mode (< 500 chars) but should pass test mode (>= 200 chars)
+        short_readme = """# Test Project
+
+## Introduction
+
+This is a minimal README with basic information about the project that is long enough for test mode validation but not for production strict mode validation requirements.
+"""
+        
+        # Test with README_TEST_MODE enabled
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
+            result = validate_readme_completeness(short_readme)
+            
+            # Should not fail on length in test mode (>= 200 chars)
+            length_errors = [err for err in result["errors"] if "too short" in err.lower()]
+            assert len(length_errors) == 0, f"Should not fail on length in test mode. Errors: {result['errors']}"
+        
+        # Test without README_TEST_MODE (strict mode)
+        with patch.dict('os.environ', {}):
+            result = validate_readme_completeness(short_readme)
+            
+            # Should fail on length in strict mode (< 500 chars)
+            length_errors = [err for err in result["errors"] if "too short" in err.lower()]
+            assert len(length_errors) > 0, "Should fail on length in strict mode"
+
+    def test_readme_test_mode_relaxed_sections(self):
+        """Test that README_TEST_MODE makes sections optional."""
+        from unittest.mock import patch
+        from generator.main.provenance import validate_readme_completeness
+        
+        # README with no sections (just title and content)
+        minimal_readme = """# Test Project
+
+This is a minimal README with just basic content but no structured sections like Setup, Run, Test, or Examples sections that would normally be required.
+""" * 3  # Repeat to meet minimum length
+        
+        # Test with README_TEST_MODE enabled
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
+            result = validate_readme_completeness(minimal_readme)
+            
+            # Should not fail on missing sections in test mode
+            section_errors = [err for err in result["errors"] if "Missing required section" in err]
+            assert len(section_errors) == 0, f"Should not fail on missing sections in test mode. Errors: {result['errors']}"
+        
+        # Test without README_TEST_MODE (strict mode)
+        with patch.dict('os.environ', {}):
+            result = validate_readme_completeness(minimal_readme)
+            
+            # Should fail on missing sections in strict mode
+            section_errors = [err for err in result["errors"] if "Missing required section" in err]
+            assert len(section_errors) > 0, "Should fail on missing sections in strict mode"
+
+    def test_readme_test_mode_relaxed_commands(self):
+        """Test that README_TEST_MODE makes commands optional."""
+        from unittest.mock import patch
+        from generator.main.provenance import validate_readme_completeness
+        
+        # README with sections but no commands
+        readme_no_commands = """# Test Project
+
+## Setup
+
+You need to set up the project by following these instructions and preparing your environment appropriately.
+
+## Run
+
+To run the project, execute the application using the appropriate method for your system and configuration.
+
+## Test
+
+Testing can be performed by running the test suite with your preferred testing framework and verifying results.
+
+## Examples
+
+Here are some examples of how to use the project and its features for various use cases and scenarios.
+""" * 2  # Repeat to meet minimum length
+        
+        # Test with README_TEST_MODE enabled
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
+            result = validate_readme_completeness(readme_no_commands)
+            
+            # Should not fail on missing commands in test mode
+            command_errors = [err for err in result["errors"] if "Missing required command" in err]
+            assert len(command_errors) == 0, f"Should not fail on missing commands in test mode. Errors: {result['errors']}"
+        
+        # Test without README_TEST_MODE (strict mode)
+        with patch.dict('os.environ', {}):
+            result = validate_readme_completeness(readme_no_commands)
+            
+            # Should fail on missing commands in strict mode
+            command_errors = [err for err in result["errors"] if "Missing required command" in err]
+            assert len(command_errors) > 0, "Should fail on missing commands in strict mode"
+
+    def test_readme_test_mode_complete_validation(self):
+        """Test that a minimal README passes all validations in test mode."""
+        from unittest.mock import patch
+        from generator.main.provenance import validate_readme_completeness
+        
+        # Truly minimal README for test mode
+        minimal_readme = """# Test Project
+
+This is a minimal README with just enough content to pass the relaxed test mode validation requirements. It has sufficient length for test mode (over 200 characters) but lacks the detailed sections and commands that would be required in production strict mode.
+"""
+        
+        # Test with README_TEST_MODE enabled
+        with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
+            result = validate_readme_completeness(minimal_readme)
+            
+            # Should pass all validations in test mode
+            assert result["valid"] is True, f"Minimal README should pass in test mode. Errors: {result['errors']}"
+            assert len(result["errors"]) == 0
+        
+        # Test without README_TEST_MODE (strict mode)
+        with patch.dict('os.environ', {}):
+            result = validate_readme_completeness(minimal_readme)
+            
+            # Should fail in strict mode
+            assert result["valid"] is False, "Minimal README should fail in strict mode"
+            assert len(result["errors"]) > 0
