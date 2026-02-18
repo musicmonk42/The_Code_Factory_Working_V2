@@ -16,6 +16,7 @@ Tests cover:
 """
 
 import asyncio
+import os
 import re  # Added for smart BeautifulSoup mock
 import sys
 import tempfile
@@ -1169,6 +1170,139 @@ def test_nltk_production_environment_detection():
 
 
 # ============================================================================
+# TEST: DOCGEN_TEST_MODE Environment Variable Support
+# ============================================================================
+
+
+def test_markdown_plugin_validation_test_mode_relaxed():
+    """Test MarkdownPlugin validation in test mode with minimal content."""
+    plugin = MarkdownPlugin()
+    
+    # Minimal content that would fail in strict mode but should pass in test mode
+    minimal_content = """# Test Documentation
+
+## introduction
+This is a minimal introduction that provides basic context for the project.
+"""
+    
+    # Schema for non-API doc (README/general)
+    schema = {
+        "min_total_length": 500,
+        "sections": ["introduction", "usage", "installation"],
+        "doc_type": "readme",
+        "core_sections": ["introduction", "usage"],  # Will be relaxed to ["introduction"] in test mode
+        "required_section_minimum": 3,  # Will be relaxed to 1 in test mode
+    }
+    
+    # Test with DOCGEN_TEST_MODE enabled
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+        validation = plugin.validate(minimal_content, schema)
+        
+        # Should pass in test mode despite missing usage section and having only 1 section
+        # (though it may still fail on length - that's OK for this test)
+        # The key is that it doesn't fail on missing "usage" core section
+        issues = [issue for issue in validation["issues"] if "Missing core sections" in issue and "usage" in issue]
+        assert len(issues) == 0, "Should not require 'usage' section in test mode"
+
+
+def test_markdown_plugin_validation_strict_mode():
+    """Test MarkdownPlugin validation in strict mode (default) requires all sections."""
+    plugin = MarkdownPlugin()
+    
+    # Minimal content missing usage section
+    minimal_content = """# Test Documentation
+
+## introduction
+This is a minimal introduction that provides basic context for the project.
+"""
+    
+    # Schema for non-API doc (README/general)
+    schema = {
+        "min_total_length": 500,
+        "sections": ["introduction", "usage", "installation"],
+        "doc_type": "readme",
+        "core_sections": ["introduction", "usage"],
+        "required_section_minimum": 3,
+    }
+    
+    # Test without DOCGEN_TEST_MODE (strict mode)
+    with patch.dict(os.environ, {}, clear=True):
+        validation = plugin.validate(minimal_content, schema)
+        
+        # Should fail in strict mode - missing usage section
+        assert validation["valid"] is False
+        issues = [issue for issue in validation["issues"] if "Missing core sections" in issue and "usage" in issue]
+        assert len(issues) > 0, "Should require 'usage' section in strict mode"
+
+
+def test_markdown_plugin_validation_api_docs_unchanged_by_test_mode():
+    """Test that API documentation validation is unchanged by test mode."""
+    plugin = MarkdownPlugin()
+    
+    # API doc content with only endpoints
+    api_content = """# API Documentation
+
+## endpoints
+List of all API endpoints with detailed documentation for each endpoint.
+"""
+    
+    # Schema for API doc
+    schema = {
+        "min_total_length": 500,
+        "sections": ["endpoints", "authentication"],
+        "doc_type": "api",
+        "core_sections": ["endpoints", "authentication"],
+        "required_section_minimum": 2,
+    }
+    
+    # Test with DOCGEN_TEST_MODE enabled - API docs should still require authentication
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+        validation = plugin.validate(api_content, schema)
+        
+        # Should fail even in test mode - API docs require both sections
+        assert validation["valid"] is False
+        issues = [issue for issue in validation["issues"] if "Missing core sections" in issue and "authentication" in issue]
+        assert len(issues) > 0, "API docs should require 'authentication' even in test mode"
+
+
+def test_markdown_plugin_validation_test_mode_minimal_sections():
+    """Test that test mode relaxes minimum sections requirement."""
+    plugin = MarkdownPlugin()
+    
+    # Content with only introduction (1 section)
+    content_one_section = """# Test Documentation
+
+## introduction
+This is a comprehensive introduction that provides detailed background and context for the project with enough content to pass validation requirements based on the actual implementation logic. This section contains substantial content to meet length requirements and validation standards.
+"""
+    
+    # Schema requiring 3 sections normally
+    schema = {
+        "min_total_length": 500,
+        "sections": ["introduction", "usage", "installation"],
+        "doc_type": "readme",
+        "core_sections": ["introduction"],
+        "required_section_minimum": 3,  # Will be relaxed to 1 in test mode
+    }
+    
+    # Test with DOCGEN_TEST_MODE enabled
+    with patch.dict(os.environ, {"DOCGEN_TEST_MODE": "1"}, clear=True):
+        validation = plugin.validate(content_one_section, schema)
+        
+        # Should not fail on insufficient sections in test mode
+        issues = [issue for issue in validation["issues"] if "Insufficient sections" in issue]
+        assert len(issues) == 0, "Should not require 3 sections in test mode"
+    
+    # Test without DOCGEN_TEST_MODE (strict mode)
+    with patch.dict(os.environ, {}, clear=True):
+        validation = plugin.validate(content_one_section, schema)
+        
+        # Should fail on insufficient sections in strict mode
+        issues = [issue for issue in validation["issues"] if "Insufficient sections" in issue]
+        assert len(issues) > 0, "Should require 3 sections in strict mode"
+
+
+# ============================================================================
 # SUMMARY
 # ============================================================================
 """
@@ -1186,6 +1320,7 @@ This test suite provides comprehensive coverage of docgen_response_validator:
 ✅ Provenance tracking
 ✅ Concurrent processing
 ✅ Production environment detection for NLTK data setup
+✅ DOCGEN_TEST_MODE environment variable support for relaxed validation
 
-Total: 38 comprehensive test cases that work with the fixed implementation
+Total: 42 comprehensive test cases that work with the fixed implementation
 """
