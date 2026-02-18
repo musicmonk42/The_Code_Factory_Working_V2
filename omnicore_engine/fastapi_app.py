@@ -813,6 +813,7 @@ async def lifespan(app: FastAPI):
                 "code_health_env": omnicore_engine.code_health_env,
                 "audit_log_manager": omnicore_engine.audit,
                 "intent_capture": omnicore_engine.intent_capture_engine,
+                "crew_manager": omnicore_engine.crew_manager,  # Add crew_manager for unified access
             }
 
             chatbot_arbiter = Arbiter(
@@ -833,6 +834,7 @@ async def lifespan(app: FastAPI):
                 port=settings.ARENA_PORT,
                 settings=settings,
                 db_engine=omnicore_engine.database.engine,
+                crew_manager=omnicore_engine.crew_manager,  # Pass crew_manager to Arena
             )
             await arena.start_arena_services(http_port=settings.ARENA_PORT)
             logger.info(

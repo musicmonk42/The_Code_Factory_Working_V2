@@ -1439,6 +1439,7 @@ else:
             engines: Optional[Dict[str, Any]] = None,
             omnicore_url: str = None,
             message_queue_service: Optional[Any] = None,
+            crew_manager: Optional[Any] = None,  # Explicit crew_manager parameter
             **kwargs,
         ):
             # Initialize deferred module-level components
@@ -1621,6 +1622,22 @@ else:
             self.explainable_reasoner = _get_plugin_registry().get(
                 PlugInKind.AI_ASSISTANT, "explainable_reasoner"
             )
+    
+            # --- CrewManager Integration ---
+            self.crew_manager = crew_manager
+            if self.crew_manager:
+                logging.getLogger(__name__).info(
+                    f"[{self.name}] CrewManager integrated with Arbiter"
+                )
+                # Wire CrewManager event hooks to Arbiter's monitoring/audit
+                self.crew_manager.add_hook("on_agent_start", self._on_crew_agent_start)
+                self.crew_manager.add_hook("on_agent_stop", self._on_crew_agent_stop)
+                self.crew_manager.add_hook("on_agent_fail", self._on_crew_agent_fail)
+                self.crew_manager.add_hook("on_agent_heartbeat_missed", self._on_crew_heartbeat_missed)
+            else:
+                logging.getLogger(__name__).warning(
+                    f"[{self.name}] No CrewManager provided. Agent orchestration features will be limited."
+                )
     
             os.makedirs(
                 os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True
@@ -3091,6 +3108,22 @@ else:
                     ),
                     "monitor_report": self.monitor.generate_reports(),
                 }
+                
+                # Include crew_manager status
+                if self.crew_manager:
+                    try:
+                        crew_health = await self.crew_manager.health()
+                        status["crew_manager"] = {
+                            "available": True,
+                            "agent_count": len(self.crew_manager.list_agents()),
+                            "agents": self.crew_manager.list_agents(),
+                            "health": crew_health,
+                        }
+                    except Exception as e:
+                        status["crew_manager"] = {"available": True, "error": str(e)}
+                else:
+                    status["crew_manager"] = {"available": False}
+                    
             self.log_event("Status requested", "status_check")
             if energy_gauge is not None:
                 energy_gauge.labels(agent=self.name).set(self.state_manager.energy)
@@ -3122,6 +3155,68 @@ else:
                 return explanation_result.get("explanation", str(explanation_result))
             else:
                 return {"error": "Explainable Reasoner not available."}
+    
+        # --- CrewManager Integration Methods ---
+        async def _on_crew_agent_start(self, manager, name: str, agent_info: dict, **kwargs):
+            """Hook: Called when a crew agent starts."""
+            self.log_event(f"Crew agent '{name}' started", "crew_agent_start")
+            if self.monitor:
+                self.monitor.log_metric("crew_agent_started", {"agent": name})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_agent_lifecycle",
+                        {"event": "start", "agent": name, "arbiter": self.name}
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish crew agent start event: {e}")
+    
+        async def _on_crew_agent_stop(self, manager, name: str, agent_info: dict, **kwargs):
+            """Hook: Called when a crew agent stops."""
+            self.log_event(f"Crew agent '{name}' stopped", "crew_agent_stop")
+            if self.monitor:
+                self.monitor.log_metric("crew_agent_stopped", {"agent": name})
+    
+        async def _on_crew_agent_fail(self, manager, name: str, agent_info: dict, error=None, **kwargs):
+            """Hook: Called when a crew agent fails."""
+            self.log_event(f"Crew agent '{name}' failed: {error}", "crew_agent_fail")
+            if self.monitor:
+                self.monitor.log_metric("crew_agent_failed", {"agent": name, "error": str(error)})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_agent_lifecycle",
+                        {"event": "fail", "agent": name, "arbiter": self.name, "error": str(error)}
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish crew agent fail event: {e}")
+    
+        async def _on_crew_heartbeat_missed(self, manager, name: str, agent_info: dict, **kwargs):
+            """Hook: Called when a crew agent's heartbeat is missed."""
+            self.log_event(f"Crew agent '{name}' heartbeat missed", "crew_heartbeat_missed")
+            if self.monitor:
+                self.monitor.log_metric("crew_heartbeat_missed", {"agent": name})
+    
+        async def get_crew_status(self) -> Dict[str, Any]:
+            """Returns the current status of all managed crew agents."""
+            if not self.crew_manager:
+                return {"available": False, "reason": "No CrewManager configured"}
+            try:
+                return await self.crew_manager.status()
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Failed to get crew status: {e}")
+                return {"available": False, "error": str(e)}
+    
+        async def scale_crew(self, count: int, agent_class: str = None, tags: list = None, caller_role: str = "admin") -> Dict[str, Any]:
+            """Scales crew agents to the desired count."""
+            if not self.crew_manager:
+                return {"success": False, "reason": "No CrewManager configured"}
+            try:
+                await self.crew_manager.scale(count, agent_class=agent_class, tags=tags, caller_role=caller_role)
+                return {"success": True, "target_count": count}
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Failed to scale crew: {e}")
+                return {"success": False, "error": str(e)}
     
         async def push_metrics(self):
             """Pushes metrics to the configured Prometheus Push Gateway."""
