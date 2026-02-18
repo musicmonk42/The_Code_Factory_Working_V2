@@ -151,6 +151,35 @@ This document provides a comprehensive reference for all environment variables u
 - **Example:** `CI=true`
 - **Impact:** May trigger CI-specific behaviors
 
+### DOCGEN_TEST_MODE
+- **Purpose:** Relaxes documentation generation validation for test environments
+- **Type:** Integer (0 or 1)
+- **Values:** `0` (disabled/strict mode), `1` (enabled/relaxed mode)
+- **Default:** `0` (strict validation)
+- **Production:** `0`
+- **Example:** `DOCGEN_TEST_MODE=1`
+- **Impact:** When enabled:
+  - For non-API docs: Relaxes core sections requirement to just ["introduction"] instead of ["introduction", "usage"]
+  - For non-API docs: Relaxes minimum sections count to 1 instead of 3
+  - API documentation remains unchanged (strict validation always applies)
+- **Use Case:** Allows minimal documentation to pass validation in test/CI environments while maintaining strict requirements in production
+- **Related:** Works alongside validation in `generator/agents/docgen_agent/docgen_response_validator.py`
+
+### README_TEST_MODE
+- **Purpose:** Relaxes README completeness validation for test environments
+- **Type:** Integer (0 or 1)
+- **Values:** `0` (disabled/strict mode), `1` (enabled/relaxed mode)
+- **Default:** `0` (strict validation)
+- **Production:** `0`
+- **Example:** `README_TEST_MODE=1`
+- **Impact:** When enabled:
+  - Minimum README length reduced from 500 to 200 characters
+  - Required sections (Setup, Run, Test, Examples) become optional
+  - Required commands (venv, pip, uvicorn, pytest, etc.) become optional
+  - In `scripts/validate_contract_compliance.py`, skips README completeness check entirely
+- **Use Case:** Allows minimal README files to pass validation in test/CI environments while maintaining strict requirements in production
+- **Related:** Affects validation in `generator/main/provenance.py` and `scripts/validate_contract_compliance.py`
+
 ---
 
 ## Security and Authentication
@@ -675,6 +704,8 @@ SKIP_IMPORT_TIME_VALIDATION=1
 PYTEST_CURRENT_TEST=<set-by-pytest>
 PYTEST_COLLECTING=<set-by-pytest>
 CI=true
+DOCGEN_TEST_MODE=1
+README_TEST_MODE=1
 
 # Security (use mock keys!)
 AGENTIC_AUDIT_HMAC_KEY=test_key
