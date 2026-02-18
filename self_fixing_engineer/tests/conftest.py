@@ -8,6 +8,7 @@ from pathlib import Path
 
 import psutil
 import pytest
+from prometheus_client import REGISTRY
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -41,6 +42,42 @@ def ensure_checkpoint_test_paths():
             # Touch the file to ensure it exists for tests that check file existence
             dlq_file.touch(exist_ok=True)
     
+    yield
+
+
+@pytest.fixture(autouse=True, scope="function")
+async def cleanup_async_resources():
+    """Force cleanup of async resources after each test."""
+    yield
+    
+    # Cancel all pending tasks
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No event loop running
+        return
+    
+    tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
+    for task in tasks:
+        task.cancel()
+        try:
+            await asyncio.wait_for(task, timeout=1.0)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+            pass
+    
+    # Force garbage collection
+    gc.collect()
+
+
+@pytest.fixture(autouse=True, scope="function")
+def cleanup_prometheus_registry():
+    """Clear Prometheus registry before each test."""
+    collectors = list(REGISTRY._collector_to_names.keys())
+    for collector in collectors:
+        try:
+            REGISTRY.unregister(collector)
+        except Exception:
+            pass
     yield
 
 

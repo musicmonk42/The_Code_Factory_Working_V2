@@ -564,7 +564,9 @@ class TestKnowledgeGraphE2EWorkflow:
 class TestKnowledgeGraphPerformance:
     """Performance and stress tests for knowledge graph module"""
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
+    @pytest.mark.timeout(300)  # 5 minutes
     async def test_concurrent_agent_operations(self):
         """Test concurrent agent operations"""
         with patch("self_fixing_engineer.arbiter.knowledge_graph.core.ChatOpenAI"):
