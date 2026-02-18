@@ -258,9 +258,7 @@ async def test_generate_code_success_with_json_string_response(
 )
 async def test_generate_code_returns_error_on_bad_format(mock_llm, temp_codegen_env):
     """
-    Align with actual behavior: for a non-JSON / non-structured response,
-    current implementation falls back to treating it as a single file
-    (e.g., main.py) rather than producing error.txt.
+    Test that non-JSON/non-code responses return an error.txt file.
     """
     bad_response = "not-json, not-code-block"
     mock_llm.return_value = bad_response
@@ -273,9 +271,9 @@ async def test_generate_code_returns_error_on_bad_format(mock_llm, temp_codegen_
         temp_codegen_env["config_path"],
     )
 
-    # The implementation defaults to 'main.py' for non-JSON responses
-    assert "main.py" in result
-    assert result["main.py"] == bad_response
+    # The implementation returns error.txt for bad responses
+    assert "error.txt" in result
+    assert "LLM response did not contain recognizable code patterns" in result["error.txt"]
     assert mock_llm.called
 
 
