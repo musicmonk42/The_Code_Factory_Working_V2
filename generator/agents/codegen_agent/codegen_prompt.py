@@ -1235,7 +1235,8 @@ async def build_code_generation_prompt(
             # This prevents the system from defaulting to FastAPI or other templates when project_type is missing
             project_type = requirements.get("project_type")
             # Check for missing, None, non-string, or empty/whitespace-only values
-            if not project_type or not isinstance(project_type, str) or not project_type.strip():
+            # Order matters: check isinstance first to avoid AttributeError on .strip()
+            if not isinstance(project_type, str) or not project_type or not project_type.strip():
                 PROMPT_ERRORS.labels("MissingProjectType").inc()
                 logger.error(
                     "Cannot proceed with code generation: project_type is missing, invalid, or empty. "
