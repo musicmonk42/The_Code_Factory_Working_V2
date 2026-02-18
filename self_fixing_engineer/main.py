@@ -564,6 +564,14 @@ def _init_arbiter():
         except Exception as e:
             logger.debug(f"Monitor not available: {e}")
         
+        # Initialize IntentCaptureEngine
+        try:
+            from self_fixing_engineer.intent_capture.engine import IntentCaptureEngine
+            engines["intent_capture"] = IntentCaptureEngine()
+            logger.info("Connected IntentCaptureEngine to Arbiter")
+        except Exception as e:
+            logger.debug(f"IntentCaptureEngine not available: {e}")
+        
         # Log summary of connected engines
         connected_count = len(engines)
         logger.info(f"Arbiter initialized with {connected_count} engines: {list(engines.keys())}")

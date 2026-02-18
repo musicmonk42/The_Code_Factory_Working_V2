@@ -151,21 +151,18 @@ except ImportError:
     REDIS_AVAILABLE = False
 
 # --- Observability Setup ---
-from opentelemetry import trace
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
-from prometheus_client import Counter, Histogram, start_http_server
-
-# FIX: Make the OTLP exporter import optional to prevent startup failure
+# Use centralized OpenTelemetry configuration from arbiter
 try:
-    from opentelemetry.sdk.trace.export import OTLPSpanExporter
-
-    OTLP_EXPORTER_AVAILABLE = True
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    tracer = get_tracer(__name__)
+    OTEL_AVAILABLE = True
 except ImportError:
-    OTLPSpanExporter = None
-    OTLP_EXPORTER_AVAILABLE = False
+    # Fallback: set up a basic tracer if arbiter is not available
+    from opentelemetry import trace
+    tracer = trace.get_tracer(__name__)
+    OTEL_AVAILABLE = False
+
+from prometheus_client import Counter, Histogram, start_http_server
 
 # UPGRADE: Sentry for Error Aggregation
 try:
@@ -231,24 +228,6 @@ def _metric_timer(metric):
 
 
 # --- End Safe Metric Timer Helper ---
-
-# OpenTelemetry Tracing
-tracer = None
-if os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
-    if OTLP_EXPORTER_AVAILABLE:
-        provider = TracerProvider(
-            resource=Resource.create({SERVICE_NAME: "agent-core-service"}),
-            sampler=ParentBasedTraceIdRatio(0.1),  # Sample 10% of traces
-        )
-        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
-        trace.set_tracer_provider(provider)
-        tracer = trace.get_tracer(__name__)
-    else:
-        # This part will execute after the logger is configured, so it's safe.
-        logging.warning(
-            "OTEL_EXPORTER_OTLP_ENDPOINT is set, but the OTLP exporter dependency is not found. "
-            "Tracing will be disabled. Please run: pip install opentelemetry-exporter-otlp"
-        )
 
 
 # UPGRADE: Sentry Initialization

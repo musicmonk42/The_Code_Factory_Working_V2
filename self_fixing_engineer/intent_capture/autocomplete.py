@@ -37,7 +37,7 @@ from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet, InvalidToken
 from langchain_core.language_models.base import BaseLanguageModel
 from opentelemetry import trace
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import Counter, Gauge, Histogram, start_http_server, REGISTRY
 from rapidfuzz.process import extract
 from redis.exceptions import ConnectionError as RedisConnectionError
 from tenacity import (
@@ -55,26 +55,52 @@ llm_breaker = CircuitBreaker(fail_max=3, timeout_duration=60)
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
 
-# Prometheus Metrics
-COMPLETION_LATENCY_SECONDS = Histogram(
-    "cli_completion_latency_seconds", "CLI autocomplete latency", ["user", "operation"]
+# Helper function for idempotent metric creation
+def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
+    """Get existing metric or create new one to avoid duplication errors."""
+    if name in REGISTRY._names_to_collectors:
+        return REGISTRY._names_to_collectors[name]
+    return metric_class(name, documentation, labelnames=labelnames) if labelnames else metric_class(name, documentation)
+
+# Prometheus Metrics - Using idempotent creation to avoid collisions
+COMPLETION_LATENCY_SECONDS = _get_or_create_metric(
+    Histogram,
+    "cli_completion_latency_seconds",
+    "CLI autocomplete latency",
+    ["user", "operation"]
 )
-REDIS_OPS_TOTAL = Counter(
-    "cli_redis_ops_total", "Redis operations", ["operation", "status"]
+REDIS_OPS_TOTAL = _get_or_create_metric(
+    Counter,
+    "cli_redis_ops_total",
+    "Redis operations",
+    ["operation", "status"]
 )
-AI_SUGGESTIONS_TOTAL = Counter(
-    "cli_ai_suggestions_total", "AI suggestion requests", ["status"]
+AI_SUGGESTIONS_TOTAL = _get_or_create_metric(
+    Counter,
+    "cli_ai_suggestions_total",
+    "AI suggestion requests",
+    ["status"]
 )
-ACTIVE_PLUGINS = Gauge("cli_active_plugins_total", "Number of loaded plugins")
-SAFETY_VIOLATIONS_TOTAL = Counter(
-    "cli_safety_violations_total", "Safety violations in CLI suggestions"
+ACTIVE_PLUGINS = _get_or_create_metric(
+    Gauge,
+    "cli_active_plugins_total",
+    "Number of loaded plugins"
 )
-KEY_REFRESH_SUCCESS_TIMESTAMP = Gauge(
+SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
+    Counter,
+    "cli_safety_violations_total",
+    "Safety violations in CLI suggestions"
+)
+KEY_REFRESH_SUCCESS_TIMESTAMP = _get_or_create_metric(
+    Gauge,
     "cli_key_refresh_success_timestamp_seconds",
-    "Timestamp of last successful key refresh",
+    "Timestamp of last successful key refresh"
 )
-TOKEN_USAGE = Counter(
-    "cli_llm_token_usage_total", "Total LLM tokens used", ["user", "provider"]
+TOKEN_USAGE = _get_or_create_metric(
+    Counter,
+    "cli_llm_token_usage_total",
+    "Total LLM tokens used",
+    ["user", "provider"]
 )
 
 

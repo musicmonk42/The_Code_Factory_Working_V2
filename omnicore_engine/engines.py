@@ -800,6 +800,8 @@ class OmniCoreOmega:
         generator_runner: Optional["GeneratorRunner"] = None,
         intent_parser: Optional["IntentParser"] = None,
         llm_client: Optional[Any] = None,
+        # Intent capture engine (optional)
+        intent_capture_engine: Optional[Any] = None,
     ):
         self.logger = logging.getLogger(__name__)
         self.db = database
@@ -807,6 +809,7 @@ class OmniCoreOmega:
         self.plugin_service = plugin_service
         self.crew_manager = crew_manager
         self.intent_capture_api = intent_capture_api
+        self.intent_capture_engine = intent_capture_engine
         self.test_generation_orchestrator = test_generation_orchestrator
         self.simulation_engine = simulation_engine
         self.audit_log_manager = audit_log_manager
@@ -963,6 +966,15 @@ class OmniCoreOmega:
         intent_capture_app_instance = intent_capture_api
         test_generation_orchestrator = TestGenerationOrchestrator()
 
+        # Initialize IntentCaptureEngine if available
+        intent_capture_engine = None
+        try:
+            from self_fixing_engineer.intent_capture.engine import IntentCaptureEngine
+            intent_capture_engine = IntentCaptureEngine()
+            logger.info("IntentCaptureEngine initialized and connected to OmniCore")
+        except ImportError as e:
+            logger.debug(f"IntentCaptureEngine not available: {e}")
+
         # Try to use real audit loggers instead of mock
         audit_log_manager = None
 
@@ -1014,6 +1026,7 @@ class OmniCoreOmega:
             plugin_service=plugin_service,
             crew_manager=crew_manager,
             intent_capture_api=intent_capture_app_instance,
+            intent_capture_engine=intent_capture_engine,
             test_generation_orchestrator=test_generation_orchestrator,
             simulation_engine=simulation_engine,
             audit_log_manager=audit_log_manager,

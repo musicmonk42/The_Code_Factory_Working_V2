@@ -111,21 +111,24 @@ except ImportError:
     WEBSOCKETS_AVAILABLE = False
 
 try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, OTLPSpanExporter
-    from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
-
+    # Use centralized OpenTelemetry configuration
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    tracer = get_tracer(__name__)
     OTEL_AVAILABLE = True
 except ImportError:
-    OTEL_AVAILABLE = False
+    # Fallback to basic tracer if centralized config not available
+    try:
+        from opentelemetry import trace
+        tracer = trace.get_tracer(__name__)
+        OTEL_AVAILABLE = True
+    except ImportError:
+        tracer = None
+        OTEL_AVAILABLE = False
 
 # PRESERVED: Global configs, circuit breakers, caches, metrics, and state managers
 PROD_ENV = os.getenv("APP_ENV", "development").lower() == "production"
 logger = logging.getLogger("cli")
 CONSOLE = Console()
-tracer = trace.get_tracer(__name__) if OTEL_AVAILABLE else None
 _shutdown_event = threading.Event()
 agent_breaker = CircuitBreaker(fail_max=5, timeout_duration=60)
 COMMAND_EXECUTION_TOTAL = _get_or_create_metric(
@@ -607,8 +610,8 @@ async def main_cli_loop():
 
     # PRESERVED: Import/mocks for agent/autocomplete (mock if missing)
     try:
-        from agent_core import get_or_create_agent
-        from autocomplete import (
+        from .agent_core import get_or_create_agent
+        from .autocomplete import (
             add_to_history,
             execute_macro,
             handle_command_not_found,

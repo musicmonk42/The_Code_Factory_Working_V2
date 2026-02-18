@@ -778,20 +778,28 @@ else:
     
     
     # --- Production-Ready IntentCaptureEngine ---
-    class IntentCaptureEngine:
-        """Generates reports based on agent data and metrics."""
-    
-        async def generate_report(self, agent_name: str, **kwargs):
-            """
-            Generates a report based on agent state and metrics.
-            """
-            report = {
-                "agent_name": agent_name,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "metrics": kwargs.get("metrics", {}),
-                "summary": f"Report for {agent_name} generated with {len(kwargs.get('events', []))} events.",
-            }
-            return report
+    # Try to import the real IntentCaptureEngine from intent_capture module
+    try:
+        from self_fixing_engineer.intent_capture.engine import IntentCaptureEngine
+        logger.debug("Successfully imported real IntentCaptureEngine from intent_capture module")
+    except ImportError as e:
+        logger.debug(f"Using stub IntentCaptureEngine (real engine not available): {e}")
+        
+        # Fallback stub if real engine is not available
+        class IntentCaptureEngine:
+            """Stub IntentCaptureEngine - generates basic reports based on agent data and metrics."""
+        
+            async def generate_report(self, agent_name: str, **kwargs):
+                """
+                Generates a report based on agent state and metrics.
+                """
+                report = {
+                    "agent_name": agent_name,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "metrics": kwargs.get("metrics", {}),
+                    "summary": f"Report for {agent_name} generated with {len(kwargs.get('events', []))} events.",
+                }
+                return report
     
     
     # --- Production-Ready AuditLogManager ---
