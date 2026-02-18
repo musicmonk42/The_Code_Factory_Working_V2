@@ -3489,6 +3489,9 @@ async def handle_deploy_response(
                 '<VALUE>': '""',
                 '<ENV_VAR>': 'APP_ENV',
                 '{ENV_VAR}': 'APP_ENV',
+                # FIX Bug 4: Add PATH placeholder substitution
+                '{PATH}': '/app',
+                '<PATH>': '/app',
             }
             
             # Pre-substitute common environment placeholders in a single pass

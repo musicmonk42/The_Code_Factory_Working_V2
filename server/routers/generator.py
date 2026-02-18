@@ -908,8 +908,19 @@ async def upload_files(
     test_files = []
     other_files = []
     readme_content = ""
-    include_frontend = False  # Track if FRONT_README detected
+    include_frontend = False  # Track if frontend detected from content
     frontend_type = None
+    
+    # Frontend detection keywords (expanded list)
+    # Content-based detection is PRIMARY - filename doesn't matter
+    # NOTE: This list is similar to FRONTEND_DETECTION_KEYWORDS in codegen_agent.py
+    # Both serve as safety nets for frontend detection from different entry points
+    FRONTEND_KEYWORDS = [
+        'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt',
+        'vite', 'webpack', 'typescript', 'tsx', 'jsx',
+        'tailwind', 'tailwindcss', 'frontend', 'front-end', 'web ui',
+        'web/', 'npm', 'node.js', 'yarn', 'pnpm'
+    ]
 
     for file in files:
         # Read file content
@@ -917,12 +928,6 @@ async def upload_files(
         
         # Categorize file
         filename_lower = file.filename.lower()
-        
-        # Check for FRONT_README filename - strong frontend indicator
-        if 'front_readme' in filename_lower or 'front-readme' in filename_lower:
-            logger.info(f"FRONT_README file detected: {file.filename} - enabling frontend generation")
-            include_frontend = True
-            frontend_type = DEFAULT_FRONTEND_TYPE
         
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
@@ -938,6 +943,31 @@ async def upload_files(
                         logger.info(f"Found explicit README file: {file.filename}")
                     else:
                         logger.info(f"Using {file.filename} as specification content (no explicit README.md found)")
+                    
+                    # Content-based frontend detection (PRIMARY METHOD - filename doesn't matter)
+                    if readme_content:
+                        readme_lower = readme_content.lower()
+                        for keyword in FRONTEND_KEYWORDS:
+                            # Use word boundary check to avoid partial matches (e.g., 'reaction' matching 'react')
+                            keyword_lower = keyword.lower()
+                            # Check if keyword exists as whole word or path component
+                            if f' {keyword_lower} ' in f' {readme_lower} ' or f'\n{keyword_lower}\n' in f'\n{readme_lower}\n' or f'/{keyword_lower}' in readme_lower:
+                                logger.info(f"Frontend keyword '{keyword}' detected in {file.filename} content - enabling frontend generation")
+                                include_frontend = True
+                                # Try to detect specific framework from content (with word boundary check)
+                                if ' react ' in f' {readme_lower} ' or '\nreact\n' in f'\n{readme_lower}\n':
+                                    frontend_type = FRONTEND_TYPE_REACT
+                                    logger.info(f"Detected React frontend from content")
+                                elif ' vue ' in f' {readme_lower} ' or '\nvue\n' in f'\n{readme_lower}\n':
+                                    frontend_type = FRONTEND_TYPE_VUE
+                                    logger.info(f"Detected Vue frontend from content")
+                                elif ' angular ' in f' {readme_lower} ' or '\nangular\n' in f'\n{readme_lower}\n':
+                                    frontend_type = FRONTEND_TYPE_ANGULAR
+                                    logger.info(f"Detected Angular frontend from content")
+                                else:
+                                    frontend_type = DEFAULT_FRONTEND_TYPE
+                                    logger.info(f"Detected generic frontend from content")
+                                break
                 except UnicodeDecodeError:
                     logger.warning(f"Could not decode {file.filename} as UTF-8")
         elif any(pattern in filename_lower for pattern in [

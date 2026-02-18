@@ -2686,6 +2686,7 @@ class OmniCoreService:
                     "framework": framework,
                     "include_frontend": include_frontend,
                     "frontend_type": frontend_type,
+                    "md_content": requirements,  # For codegen agent's content-based frontend detection safety net
                 }
                 
                 # Parse requirements to extract structured features for the prompt builder
