@@ -37,13 +37,13 @@ class OpenAIAdapter:
     This class provides a robust and observable interface for interacting with OpenAI's API,
     handling various error conditions and leveraging the shared LLMClient's retry mechanisms.
     """
-    
+
     # Class-level metrics (shared across instances, registered once)
     _requests_total = None
     _processing_latency_seconds = None
     _circuit_breaker_state_gauge = None
     _metrics_initialized = False
-    
+
     @classmethod
     def _init_metrics(cls):
         """Initialize Prometheus metrics once at class level."""
@@ -112,12 +112,12 @@ class OpenAIAdapter:
 
         # Initialize class-level metrics once
         OpenAIAdapter._init_metrics()
-        
+
         # Use class-level metrics
         self.requests_total = OpenAIAdapter._requests_total
         self.processing_latency_seconds = OpenAIAdapter._processing_latency_seconds
         self.circuit_breaker_state_gauge = OpenAIAdapter._circuit_breaker_state_gauge
-        
+
         # Set initial circuit breaker state
         if self.circuit_breaker_state_gauge:
             self.circuit_breaker_state_gauge.set(0)
