@@ -23,8 +23,8 @@ def ensure_checkpoint_test_paths():
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         
-        # Create audit.log parent directory
-        # The file itself will be created by the system on first use
+        # Create audit.log parent directory and touch the file
+        # This ensures the file exists for tests that check file existence
         audit_log_path = os.environ.get("CHECKPOINT_AUDIT_LOG_PATH")
         if audit_log_path:
             audit_log = Path(audit_log_path)
@@ -32,8 +32,8 @@ def ensure_checkpoint_test_paths():
             # Touch the file to ensure it exists for tests that check file existence
             audit_log.touch(exist_ok=True)
         
-        # Create dlq.jsonl parent directory
-        # The file itself will be created by the system on first use
+        # Create dlq.jsonl parent directory and touch the file
+        # This ensures the file exists for tests that check file existence
         dlq_path = os.environ.get("CHECKPOINT_DLQ_PATH")
         if dlq_path:
             dlq_file = Path(dlq_path)

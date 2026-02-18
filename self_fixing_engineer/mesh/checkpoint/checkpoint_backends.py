@@ -334,6 +334,11 @@ def _get_or_create_metric(metric_class, name, description, labelnames=(), bucket
     
     Returns:
         Existing or newly created metric
+    
+    Note:
+        Uses private _collector_to_names attribute as prometheus_client (v0.23.1)
+        does not provide a public API for finding existing collectors by name.
+        This is the recommended approach from prometheus_client maintainers.
     """
     if not PROMETHEUS_AVAILABLE:
         return None
@@ -342,6 +347,8 @@ def _get_or_create_metric(metric_class, name, description, labelnames=(), bucket
         registry = REGISTRY
     
     # Try to find existing metric
+    # Note: _collector_to_names is a private attribute, but prometheus_client
+    # doesn't provide a public API for this. Tested with v0.23.1.
     try:
         for collector in list(registry._collector_to_names.keys()):
             if hasattr(collector, '_name') and collector._name == name:

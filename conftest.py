@@ -707,7 +707,17 @@ def cleanup_async_tasks():
     # Cancel pending tasks
     try:
         import gc
-        loop = asyncio.get_event_loop()
+        # Try to get the running loop first, fall back to get_event_loop for compatibility
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop, try to get the default loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # Can't get any loop, skip cleanup
+                return
+        
         if not loop.is_closed():
             pending = asyncio.all_tasks(loop)
             for task in pending:
@@ -731,6 +741,11 @@ def reset_prometheus_metrics():
     
     This fixture clears metric values but keeps the metrics registered,
     allowing for clean test isolation while avoiding duplicate registration errors.
+    
+    Note:
+        Uses private _collector_to_names and _metrics attributes as prometheus_client
+        (v0.23.1) doesn't provide public API for metric value reset. This is safe
+        as it only clears values, not the registration.
     """
     yield
     
