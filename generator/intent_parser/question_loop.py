@@ -179,7 +179,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
                 inferred_type = "cli_tool"
             elif "library" in content_lower or "package" in content_lower:
                 inferred_type = "library"
-            elif "batch" in content_lower or "batch job" in content_lower:
+            elif "batch" in content_lower:  # Simplified - covers both "batch" and "batch job"
                 inferred_type = "batch_job"
         
         questions.append(Question(

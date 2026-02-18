@@ -294,7 +294,7 @@ def test_spec_lock_requires_clarification_flag():
     )
     
     # Create spec_lock without project_type - should fail in non-interactive
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="No default available for required field"):
         lock = run_question_loop(spec, interactive=False)
 
 

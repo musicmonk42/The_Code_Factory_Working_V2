@@ -178,13 +178,11 @@ class SpecDrivenPipeline:
                         "project_type": spec_lock.project_type,
                     }
                 )
-                # In interactive mode, this should have been resolved
-                # In non-interactive mode, we should not proceed
-                if not interactive:
-                    raise ValueError(
-                        "Cannot proceed with code generation: project_type is missing or uncertain. "
-                        "Please specify project_type explicitly in the spec block or run in interactive mode."
-                    )
+                # Raise error regardless of mode - should not proceed with unclear project_type
+                raise ValueError(
+                    "Cannot proceed with code generation: project_type is missing or uncertain. "
+                    "Please specify project_type explicitly in the spec block."
+                )
             
             logger.info(
                 f"[{self.job_id}] Spec processing complete: "
