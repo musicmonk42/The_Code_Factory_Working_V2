@@ -478,8 +478,8 @@ class SFEService:
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # Transform issues to frontend format if needed
                     if issues and isinstance(issues, list):
-                        # Check if issues need transformation (safely check first element)
-                        if len(issues) > 0 and not issues[0].get("error_id"):
+                        # Check if issues need transformation (first element doesn't have error_id)
+                        if not issues[0].get("error_id"):
                             # Transform to frontend format
                             issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
                         
@@ -549,8 +549,8 @@ class SFEService:
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # Transform issues to frontend format if needed and populate cache
                     if issues and isinstance(issues, list):
-                        # Check if issues need transformation (safely check first element)
-                        if len(issues) > 0 and not issues[0].get("error_id"):
+                        # Check if issues need transformation (first element doesn't have error_id)
+                        if not issues[0].get("error_id"):
                             # Transform to frontend format
                             issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
                         
