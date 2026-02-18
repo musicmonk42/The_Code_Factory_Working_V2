@@ -3352,6 +3352,41 @@ class OmniCoreService:
                     }
                 )
                 
+                # Validate frontend files were generated if requested
+                if include_frontend:
+                    frontend_dirs = ["templates", "static", "app/templates", "app/static", "public", "src/components"]
+                    frontend_files_found = any(
+                        any(frontend_dir in str(Path(f).parent) for frontend_dir in frontend_dirs)
+                        for f in generated_files
+                    )
+                    
+                    if not frontend_files_found:
+                        logger.warning(
+                            f"[CODEGEN] Frontend generation was requested but no frontend files (templates/, static/, etc.) were found. "
+                            f"include_frontend={include_frontend}, frontend_type={frontend_type}",
+                            extra={
+                                "job_id": job_id,
+                                "include_frontend": include_frontend,
+                                "frontend_type": frontend_type,
+                                "generated_files": [str(Path(f).relative_to(output_path)) if Path(f).is_relative_to(output_path) else f for f in generated_files[:10]],
+                                "files_count": len(generated_files)
+                            }
+                        )
+                    else:
+                        frontend_file_count = sum(
+                            1 for f in generated_files
+                            if any(frontend_dir in str(Path(f).parent) for frontend_dir in frontend_dirs)
+                        )
+                        logger.info(
+                            f"[CODEGEN] Frontend files validated: {frontend_file_count} files in frontend directories",
+                            extra={
+                                "job_id": job_id,
+                                "include_frontend": include_frontend,
+                                "frontend_type": frontend_type,
+                                "frontend_files_count": frontend_file_count
+                            }
+                        )
+                
                 # Build detailed result dict with file information
                 result_dict = {
                     "status": "completed",
@@ -6684,9 +6719,27 @@ class OmniCoreService:
             # FIX: Default to True since deployment is a core pipeline feature
             # Users who don't want deployment should explicitly set include_deployment=False
             include_deployment = payload.get("include_deployment", True)
-            logger.info(f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, payload keys={list(payload.keys())}")
+            logger.info(
+                f"[PIPELINE] Job {job_id} deployment check: include_deployment={include_deployment}, "
+                f"test_status={'passed' if testgen_result and testgen_result.get('test_results', {}).get('failed', 0) == 0 else 'failed_or_skipped'}",
+                extra={
+                    "job_id": job_id,
+                    "include_deployment": include_deployment,
+                    "stages_completed": stages_completed,
+                    "payload_keys": list(payload.keys())
+                }
+            )
             
             if include_deployment:
+                logger.info(
+                    f"[PIPELINE] *** STARTING DEPLOY STAGE *** Job {job_id} - "
+                    f"Deploy stage will run regardless of test results (resilient pipeline design)",
+                    extra={
+                        "job_id": job_id,
+                        "stage": "deploy",
+                        "test_results": testgen_result.get("test_results") if testgen_result else None
+                    }
+                )
                 try:
                     # Pass generated files from codegen to deployment
                     deploy_payload = {
