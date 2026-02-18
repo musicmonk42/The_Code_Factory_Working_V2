@@ -18,6 +18,9 @@ from self_fixing_engineer.arbiter.plugins.openai_adapter import (
     TimeoutError,
 )
 
+# Add timeout to all tests in this module to prevent hangs
+pytestmark = pytest.mark.timeout(60)
+
 
 class TestOpenAIAdapter:
     """Test suite for OpenAIAdapter."""
@@ -44,9 +47,16 @@ class TestOpenAIAdapter:
         }
 
     @pytest.fixture
-    async def adapter(self, valid_settings):
+    def adapter(self, valid_settings):
         """Creates an OpenAIAdapter instance with mocked LLMClient."""
-        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        # Reset class-level metrics to prevent collisions between tests
+        from self_fixing_engineer.arbiter.plugins.openai_adapter import OpenAIAdapter
+
+        OpenAIAdapter._reset_metrics_for_testing()
+
+        with patch(
+            "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
+        ) as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.model = "gpt-4o-mini"
@@ -54,12 +64,11 @@ class TestOpenAIAdapter:
             adapter = OpenAIAdapter(valid_settings)
             adapter.client = mock_instance
 
-            # Fix the gauge mock
+            # Mock the metrics to avoid actual prometheus registration
             mock_gauge = Mock()
             mock_gauge.set = Mock()
             adapter.circuit_breaker_state_gauge = mock_gauge
 
-            # Fix the other metrics too
             mock_counter = Mock()
             mock_counter.labels = Mock(return_value=mock_counter)
             mock_counter.inc = Mock()
@@ -76,7 +85,9 @@ class TestOpenAIAdapter:
 
     def test_init_with_valid_settings(self, valid_settings):
         """Test successful initialization with valid settings."""
-        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch(
+            "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
+        ) as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -108,7 +119,9 @@ class TestOpenAIAdapter:
         """Test initialization with minimal settings uses defaults."""
         settings = {"OPENAI_API_KEY": "test-key"}
 
-        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch(
+            "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
+        ) as mock_client:
             mock_instance = Mock()
             mock_client.return_value = mock_instance
 
@@ -337,7 +350,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_async_context_manager(self, valid_settings):
         """Test async context manager functionality."""
-        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch(
+            "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
+        ) as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
@@ -350,7 +365,9 @@ class TestOpenAIAdapter:
     @pytest.mark.asyncio
     async def test_context_manager_with_exception(self, valid_settings):
         """Test context manager handles exceptions properly."""
-        with patch("self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient") as mock_client:
+        with patch(
+            "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
+        ) as mock_client:
             mock_instance = AsyncMock()
             mock_client.return_value = mock_instance
             mock_instance.aclose_session = AsyncMock()
