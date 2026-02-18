@@ -655,6 +655,42 @@ def reset_environment_vars():
             os.environ[key] = value
 
 
+@pytest.fixture(scope="session", autouse=True)
+def isolate_prometheus_registry():
+    """Isolate Prometheus registry to prevent duplicate metric registration.
+    
+    This fixture runs once per test session and:
+    1. Clears all collectors from REGISTRY before tests start
+    2. Clears all collectors from REGISTRY after tests complete
+    
+    This prevents duplicate registration errors when metrics are defined
+    at module import time across multiple test modules.
+    """
+    try:
+        from prometheus_client import REGISTRY
+        
+        # Clear registry before tests
+        collectors = list(REGISTRY._collector_to_names.keys())
+        for collector in collectors:
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass  # Ignore errors during cleanup
+        
+        yield
+        
+        # Clear registry after tests
+        collectors = list(REGISTRY._collector_to_names.keys())
+        for collector in collectors:
+            try:
+                REGISTRY.unregister(collector)
+            except Exception:
+                pass  # Ignore errors during cleanup
+    except ImportError:
+        # Prometheus client not installed, skip
+        yield
+
+
 @pytest.fixture(autouse=True)
 def reset_logging_for_tests():
     """Reset logging configuration to allow caplog to capture records.

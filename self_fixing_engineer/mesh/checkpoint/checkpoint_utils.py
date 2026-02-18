@@ -211,7 +211,10 @@ SecurityConfig.validate()
 
 
 # ---- Metrics ----
-if PROMETHEUS_AVAILABLE:
+# Guard against duplicate registration during module reloads or pytest runs
+_METRICS_INITIALIZED = False
+
+if PROMETHEUS_AVAILABLE and not _METRICS_INITIALIZED:
     CRYPTO_OPERATIONS = Counter(
         "checkpoint_crypto_operations_total",
         "Cryptographic operations",
@@ -232,6 +235,8 @@ if PROMETHEUS_AVAILABLE:
     DATA_INTEGRITY_CHECKS = Counter(
         "checkpoint_integrity_checks_total", "Data integrity verifications", ["result"]
     )
+    
+    _METRICS_INITIALIZED = True
 
 
 # ---- Tracing ----
