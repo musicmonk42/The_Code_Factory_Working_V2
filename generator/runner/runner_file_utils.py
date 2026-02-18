@@ -143,6 +143,7 @@ FRONTEND_INDICATORS = {
     # UI component indicators
     'html': 0.8,
     'css': 0.8,
+    'index.html': 0.9,
     'template': 0.7,
     'templates': 0.7,
     'form': 0.6,

@@ -405,6 +405,7 @@ FRONTEND_INDICATORS = {
     'ui': 0.8,
     'html': 0.8,
     'css': 0.8,
+    'index.html': 0.9,
     'client-side': 0.8,
     'front_readme': 0.8,
     'item creation': 0.8,
@@ -429,7 +430,7 @@ FRONTEND_INDICATORS = {
 }
 
 # Minimum confidence threshold for frontend detection
-FRONTEND_DETECTION_THRESHOLD = 0.8
+FRONTEND_DETECTION_THRESHOLD = 0.65
 FRONTEND_HIGH_CONFIDENCE_THRESHOLD = 0.9
 
 
@@ -1027,6 +1028,16 @@ class IntentParser:
                 detected_keywords.append(keyword)
                 total_score += weight
                 max_score = max(max_score, weight)
+        
+        # Cross-reference: check for frontend files in the spec content
+        frontend_file_patterns = ['index.html', '.html', '.css', '.jsx', '.tsx', '.vue', 
+                                  'templates/', 'static/', 'frontend/', 'public/']
+        for pattern in frontend_file_patterns:
+            if pattern in content_lower:
+                if not any(kw == pattern for kw in detected_keywords):
+                    detected_keywords.append(f"file:{pattern}")
+                    total_score += 0.9
+                    max_score = max(max_score, 0.9)
         
         # Determine if frontend is needed using module-level thresholds
         include_frontend = (

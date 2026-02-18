@@ -189,6 +189,7 @@ def detect_language_from_content(readme_content: str) -> Union[str, Dict[str, An
         r'\bui\b', r'\buser\s+interface\b', r'\buser interface\b',
         r'\bdashboard\b',
         r'\bhtml\b', r'\bcss\b',
+        r'\bindex\.html\b',
         r'\breact\b', r'\bvue\b', r'\bangular\b',
         r'\btemplate\b', r'\btemplates\b', r'\bjinja\b',
         r'\bform\b', r'\bforms\b',
