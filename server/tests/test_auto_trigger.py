@@ -334,7 +334,12 @@ class TestLanguageDetection:
         from server.routers.generator import detect_language_from_content
         
         readme = "# Java Backend\n\nJava REST API that serves a JavaScript frontend."
-        assert detect_language_from_content(readme) == "java"
+        result = detect_language_from_content(readme)
+        # The word "frontend" triggers full-stack detection, returning a dict
+        if isinstance(result, dict):
+            assert result["backend_language"] == "java"
+        else:
+            assert result == "java"
     
     def test_go_not_false_positive(self):
         """Test that 'go' in common English words doesn't trigger Go detection."""

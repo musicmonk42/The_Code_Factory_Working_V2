@@ -72,8 +72,8 @@ class TestAgentLoadingRaceCondition:
         
         # First call returns retry error, second call succeeds
         omnicore_service.route_job = AsyncMock(side_effect=[
-            {"data": {"status": "error", "retry": True, "message": "Agents still loading"}},
-            {"data": {"status": "success", "job_id": "test-job", "stages_completed": ["codegen"]}}
+            {"routed": True, "data": {"status": "error", "retry": True, "message": "Agents still loading"}},
+            {"routed": True, "data": {"status": "success", "job_id": "test-job", "stages_completed": ["codegen"]}}
         ])
         
         with patch('asyncio.sleep', new_callable=AsyncMock):  # Speed up test
