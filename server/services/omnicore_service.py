@@ -6437,10 +6437,102 @@ class OmniCoreService:
                 detected_language = "python"
                 logger.warning(f"[PIPELINE] Job {job_id} no output path for language detection, defaulting to python")
             
+            # 2f. Post-codegen spec completeness check
+            # Check spec-derived required files against generated files to ensure completeness
+            if _PROVENANCE_AVAILABLE and _extract_required_files_from_md and md_content and output_path:
+                try:
+                    spec_required = set(_extract_required_files_from_md(md_content, target_language=detected_language))
+                    code_path = Path(output_path)
+                    
+                    # Get all generated files recursively
+                    generated_files = set()
+                    if code_path.exists():
+                        for file_path in code_path.rglob("*"):
+                            if file_path.is_file():
+                                # Get relative path from output_path
+                                rel_path = str(file_path.relative_to(code_path))
+                                generated_files.add(rel_path)
+                                # Also add just the filename for matching
+                                generated_files.add(file_path.name)
+                    
+                    missing_from_spec = spec_required - generated_files
+                    
+                    if missing_from_spec:
+                        # Categorize missing files
+                        DEPLOYMENT_FILE_PATTERNS = {
+                            'Dockerfile', 'docker-compose.yml', 'compose.yml', 
+                            'Chart.yaml', 'deployment.yaml', 'service.yaml',
+                            'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
+                        }
+                        FRONTEND_FILE_PATTERNS = {
+                            'index.html', 'style.css', 'app.js', 'bundle.js',
+                            'main.tsx', 'App.tsx', 'index.jsx', 'App.jsx'
+                        }
+                        CONFIG_FILE_PATTERNS = {'conf.py', 'config.yaml', 'settings.py'}
+                        
+                        missing_deploy_files = missing_from_spec & DEPLOYMENT_FILE_PATTERNS
+                        missing_frontend_files = missing_from_spec & FRONTEND_FILE_PATTERNS
+                        missing_config_files = missing_from_spec & CONFIG_FILE_PATTERNS
+                        
+                        if missing_deploy_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires deployment files not yet generated: "
+                                f"{missing_deploy_files}. Ensuring deploy step is enabled."
+                            )
+                            # Override include_deployment to ensure it runs
+                            if not payload.get("include_deployment", True):
+                                payload["include_deployment"] = True
+                                logger.info(f"[PIPELINE] Job {job_id} enabled deployment due to spec-derived requirements")
+                        
+                        if missing_frontend_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires frontend files not yet generated: "
+                                f"{missing_frontend_files}. Frontend generation should be enabled."
+                            )
+                            # Note: Frontend detection happens in codegen, so we can only log this
+                            # For future enhancement: could trigger frontend generation here
+                        
+                        if missing_config_files:
+                            logger.info(
+                                f"[PIPELINE] Job {job_id} spec requires config files not yet generated: "
+                                f"{missing_config_files}."
+                            )
+                        
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} spec completeness check: "
+                            f"{len(missing_from_spec)} files from spec not yet generated. "
+                            f"Deploy/docgen steps will attempt to generate these."
+                        )
+                    else:
+                        logger.info(
+                            f"[PIPELINE] Job {job_id} spec completeness check: "
+                            f"All {len(spec_required)} spec-derived files generated successfully"
+                        )
+                except Exception as spec_check_err:
+                    logger.warning(
+                        f"[PIPELINE] Job {job_id} spec completeness check error: {spec_check_err}",
+                        exc_info=True
+                    )
+            
             # PARALLELIZATION: Start deploy task early since it only depends on codegen output
             # Deploy will run in parallel with testgen/critique/SFE to reduce total pipeline time
             deploy_task = None
             include_deployment = payload.get("include_deployment", True)
+            
+            # Collect spec-derived deployment requirements if available
+            spec_derived_deploy_files = []
+            if _PROVENANCE_AVAILABLE and _extract_required_files_from_md and md_content:
+                try:
+                    spec_files = set(_extract_required_files_from_md(md_content, target_language=detected_language))
+                    DEPLOYMENT_FILE_PATTERNS = {
+                        'Dockerfile', 'docker-compose.yml', 'compose.yml', 
+                        'Chart.yaml', 'deployment.yaml', 'service.yaml',
+                        'Jenkinsfile', 'Makefile', '.gitlab-ci.yml'
+                    }
+                    spec_derived_deploy_files = list(spec_files & DEPLOYMENT_FILE_PATTERNS)
+                except Exception:
+                    pass
+            
             if include_deployment:
                 async def run_deploy_parallel():
                     """Run deploy stage in parallel with other stages."""
@@ -6451,10 +6543,12 @@ class OmniCoreService:
                             "output_dir": payload.get("output_dir", ""),
                             "generated_files": codegen_result.get("file_names", []),
                             "language": detected_language,
+                            "spec_required_files": spec_derived_deploy_files,  # Pass spec-derived requirements
                         }
                         logger.info(
                             f"[PIPELINE] Job {job_id} starting deploy in parallel with testgen "
                             f"with {len(deploy_payload.get('generated_files', []))} files"
+                            + (f" (spec requires: {spec_derived_deploy_files})" if spec_derived_deploy_files else "")
                         )
                         result = await self._run_deploy_all(job_id, deploy_payload)
                         logger.info(f"[PIPELINE] Job {job_id} parallel deploy completed with status: {result.get('status')}")
