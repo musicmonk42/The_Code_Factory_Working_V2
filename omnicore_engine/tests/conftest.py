@@ -43,24 +43,12 @@ def cleanup_event_loops():
     gc.collect()
 
 
-@pytest.fixture(scope="class", autouse=True)
-def class_level_isolation():
-    """Provide isolation at the class level for test classes."""
-    # Setup
-    modules_before = set(sys.modules.keys())
-    
-    yield
-    
-    # Teardown - clean up any test-specific module imports
-    modules_after = set(sys.modules.keys())
-    new_modules = modules_after - modules_before
-    
-    for mod_name in new_modules:
-        # Only clean up test-related modules
-        if 'test_' in mod_name or '_mock' in mod_name:
-            sys.modules.pop(mod_name, None)
-    
-    gc.collect()
+# NOTE: The class_level_isolation fixture was removed because it caused race conditions
+# when running tests in parallel with pytest-xdist. The fixture manipulated sys.modules
+# at class scope, which created teardown conflicts between workers, resulting in errors
+# like "previous item was not torn down properly". The existing function-level fixtures
+# (reset_test_state and cleanup_event_loops) along with pytest_runtest_teardown hook
+# provide sufficient test isolation for both serial and parallel execution.
 
 
 def pytest_runtest_teardown(item, nextitem):
