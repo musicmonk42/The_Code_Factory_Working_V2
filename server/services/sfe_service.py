@@ -899,18 +899,19 @@ class SFEService:
                 original_code = source_context["full_source"]
                 fixed_code = result["fixed_code"]
                 
-                # Find the difference (new import lines)
+                # Find the difference (new import lines) using a simpler approach
                 original_lines = original_code.splitlines()
                 fixed_lines = fixed_code.splitlines()
                 
-                # Find where imports were added
+                # Find new imports by comparing line-by-line
                 import_line = 1
                 new_imports = []
-                for i, line in enumerate(fixed_lines, 1):
-                    if i > len(original_lines) or line != original_lines[i - 1]:
-                        if "import" in line:
-                            new_imports.append(line)
-                            import_line = i
+                
+                # Simple diff: look for lines in fixed that aren't in original
+                for i, line in enumerate(fixed_lines):
+                    if "import" in line and (i >= len(original_lines) or line not in original_lines):
+                        new_imports.append(line)
+                        import_line = i + 1  # Convert to 1-indexed
                 
                 if new_imports:
                     return {
@@ -1385,11 +1386,16 @@ class SFEService:
                             # If content has multiple lines, replace with all of them
                             content_lines = content.split("\n")
                             if len(content_lines) == 1:
-                                # Single line replacement
+                                # Single line replacement - preserve newline
                                 lines[line - 1] = content + "\n"
                             else:
                                 # Multi-line replacement - replace one line with multiple
-                                lines[line - 1:line] = [l + "\n" for l in content_lines]
+                                # Ensure all lines except the last have newlines
+                                new_lines = []
+                                for i, l in enumerate(content_lines):
+                                    if i < len(content_lines) - 1 or l:  # Add newline unless it's the last empty line
+                                        new_lines.append(l + "\n")
+                                lines[line - 1:line] = new_lines
 
                             with open(file_path, "w", encoding="utf-8") as f:
                                 f.writelines(lines)
