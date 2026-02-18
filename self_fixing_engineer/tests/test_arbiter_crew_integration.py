@@ -27,7 +27,7 @@ def mock_sandbox_runner():
     async def fake_runner(*args, **kwargs):
         mock_sandbox = MagicMock()
         mock_sandbox.id = "sandbox_id"
-        # Create a future that never completes to simulate a running process
+        # Mock sandbox that raises CancelledError when waited upon (simulates interrupted process)
         mock_sandbox.wait = AsyncMock(side_effect=asyncio.CancelledError())
         mock_sandbox.stop = Mock()
         mock_sandbox.kill = Mock()

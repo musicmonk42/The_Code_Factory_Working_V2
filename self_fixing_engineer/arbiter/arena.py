@@ -317,7 +317,7 @@ class ArbiterArena:
 
         # NEW: Storing the intent capture engine for later use
         self.intent_capture_engine = intent_capture_engine
-        
+
         # NEW: Store crew_manager for arbiter lifecycle tracking
         self.crew_manager = crew_manager
 
@@ -655,7 +655,7 @@ class ArbiterArena:
 
         # Register arbiters with CrewManager if available
         if self.crew_manager:
-            async def register_arbiters_with_crew():
+            async def register_arbiters():
                 """Register all arbiters with CrewManager for unified lifecycle tracking."""
                 for arbiter in self.arbiters:
                     try:
@@ -670,11 +670,11 @@ class ArbiterArena:
                         logger.info(f"Registered arbiter '{arbiter.name}' with CrewManager")
                     except Exception as e:
                         logger.warning(f"Could not register arbiter '{arbiter.name}' with CrewManager: {e}")
-            
+
             # Schedule the registration as a task
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(register_arbiters_with_crew())
+                loop.create_task(register_arbiters())
             except RuntimeError:
                 # No event loop running, we'll register later when the arena starts
                 logger.info("No event loop available yet, arbiters will be registered with CrewManager on arena start")
