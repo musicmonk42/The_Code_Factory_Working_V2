@@ -435,12 +435,12 @@ class SpecBlock(BaseModel):
         
         # DOUBLE-NESTING PREVENTION: Check for and remove "generated/generated/" patterns
         # This prevents issues where output_dir might be incorrectly joined with another "generated/" prefix
-        # Use a loop to handle multiple consecutive occurrences
-        while "generated/generated/" in v:
-            v = v.replace("generated/generated/", "generated/", 1)
+        # Replace all occurrences in one pass for efficiency
+        if "generated/generated/" in v:
+            original_v = v
+            v = v.replace("generated/generated/", "generated/")
             logger.warning(
-                f"Corrected double-nested output_dir: removed duplicate 'generated/' prefix. "
-                f"Result: '{v}'"
+                f"Corrected double-nested output_dir: '{original_v}' -> '{v}'"
             )
         
         # Warn about suspicious patterns
