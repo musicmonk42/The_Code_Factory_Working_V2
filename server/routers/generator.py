@@ -908,10 +908,11 @@ async def upload_files(
     test_files = []
     other_files = []
     readme_content = ""
-    include_frontend = False  # Track if FRONT_README detected
+    include_frontend = False  # Track if frontend detected from content
     frontend_type = None
     
     # Frontend detection keywords (expanded list)
+    # Content-based detection is PRIMARY - filename doesn't matter
     FRONTEND_KEYWORDS = [
         'react', 'vue', 'angular', 'svelte', 'next.js', 'nuxt',
         'vite', 'webpack', 'typescript', 'tsx', 'jsx',
@@ -925,12 +926,6 @@ async def upload_files(
         
         # Categorize file
         filename_lower = file.filename.lower()
-        
-        # Check for FRONT_README filename - strong frontend indicator
-        if 'front_readme' in filename_lower or 'front-readme' in filename_lower:
-            logger.info(f"FRONT_README file detected: {file.filename} - enabling frontend generation")
-            include_frontend = True
-            frontend_type = DEFAULT_FRONTEND_TYPE
         
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
@@ -947,22 +942,26 @@ async def upload_files(
                     else:
                         logger.info(f"Using {file.filename} as specification content (no explicit README.md found)")
                     
-                    # Content-based frontend detection (safety net)
-                    if not include_frontend and readme_content:
+                    # Content-based frontend detection (PRIMARY METHOD - filename doesn't matter)
+                    if readme_content:
                         readme_lower = readme_content.lower()
                         for keyword in FRONTEND_KEYWORDS:
                             if keyword in readme_lower:
-                                logger.info(f"Frontend keyword '{keyword}' detected in README content - enabling frontend generation")
+                                logger.info(f"Frontend keyword '{keyword}' detected in {file.filename} content - enabling frontend generation")
                                 include_frontend = True
-                                # Try to detect specific framework
+                                # Try to detect specific framework from content
                                 if 'react' in readme_lower:
                                     frontend_type = FRONTEND_TYPE_REACT
+                                    logger.info(f"Detected React frontend from content")
                                 elif 'vue' in readme_lower:
                                     frontend_type = FRONTEND_TYPE_VUE
+                                    logger.info(f"Detected Vue frontend from content")
                                 elif 'angular' in readme_lower:
                                     frontend_type = FRONTEND_TYPE_ANGULAR
+                                    logger.info(f"Detected Angular frontend from content")
                                 else:
                                     frontend_type = DEFAULT_FRONTEND_TYPE
+                                    logger.info(f"Detected generic frontend from content")
                                 break
                 except UnicodeDecodeError:
                     logger.warning(f"Could not decode {file.filename} as UTF-8")
