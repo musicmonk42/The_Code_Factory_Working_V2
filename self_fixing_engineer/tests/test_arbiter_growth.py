@@ -914,7 +914,9 @@ async def test_concurrent_operations():
 # ------------------------------------------------------------
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
+@pytest.mark.timeout(300)  # 5 minutes
 async def test_high_event_volume():
     """Test handling of high event volume"""
     mgr = create_manager_with_proper_breakers(

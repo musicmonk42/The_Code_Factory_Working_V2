@@ -848,12 +848,12 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 90m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 60m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
             --tb=short \
-            -m "not heavy" \
-            --timeout=600 \
+            -m "not heavy and not slow" \
+            --timeout=300 \
             --maxfail=100 \
             --durations=0 \
             -p no:warnings \

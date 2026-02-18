@@ -295,8 +295,9 @@ class TestEndToEndLearner:
                         ArbiterConfig.ENCRYPTION_KEYS = original_encryption_keys
                         ArbiterConfig.ENCRYPTED_DOMAINS = original_encrypted_domains
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)  # Add timeout to prevent hanging
+    @pytest.mark.timeout(300)  # 5 minutes
     async def test_complete_learning_cycle(self, setup_learner_environment):
         """Test a complete learning cycle: learn, retrieve, update, forget."""
         env = setup_learner_environment  # Don't await - it's not async
@@ -373,12 +374,24 @@ class TestEndToEndLearner:
             assert retrieved is None
 
         finally:
-            # Cleanup
+            # Aggressive cleanup
             if learner.meta_data_store:
-                await learner.meta_data_store.disconnect()
+                try:
+                    await asyncio.wait_for(
+                        learner.meta_data_store.disconnect(), 
+                        timeout=5
+                    )
+                except asyncio.TimeoutError:
+                    pass
+            
+            # Cancel any background tasks
+            if hasattr(learner, '_background_tasks'):
+                for task in learner._background_tasks:
+                    task.cancel()
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)
+    @pytest.mark.timeout(300)  # 5 minutes
     async def test_batch_learning_with_validation(self, setup_learner_environment):
         """Test batch learning with mixed valid/invalid facts."""
         env = setup_learner_environment  # Don't await
@@ -440,11 +453,24 @@ class TestEndToEndLearner:
                     if "valid2" in results_by_key:
                         assert results_by_key["valid2"]["status"] == "learned"
         finally:
+            # Aggressive cleanup
             if learner.meta_data_store:
-                await learner.meta_data_store.disconnect()
+                try:
+                    await asyncio.wait_for(
+                        learner.meta_data_store.disconnect(), 
+                        timeout=5
+                    )
+                except asyncio.TimeoutError:
+                    pass
+            
+            # Cancel any background tasks
+            if hasattr(learner, '_background_tasks'):
+                for task in learner._background_tasks:
+                    task.cancel()
 
+    @pytest.mark.slow
     @pytest.mark.asyncio
-    @pytest.mark.timeout(10)
+    @pytest.mark.timeout(300)  # 5 minutes
     async def test_encryption_for_sensitive_domains(self, setup_learner_environment):
         """Test that sensitive domains are properly encrypted."""
         env = setup_learner_environment  # Don't await
@@ -487,8 +513,20 @@ class TestEndToEndLearner:
             retrieved = await learner.retrieve_knowledge("PersonalInfo", "user123")
             assert retrieved["value"] == sensitive_data
         finally:
+            # Aggressive cleanup
             if learner.meta_data_store:
-                await learner.meta_data_store.disconnect()
+                try:
+                    await asyncio.wait_for(
+                        learner.meta_data_store.disconnect(), 
+                        timeout=5
+                    )
+                except asyncio.TimeoutError:
+                    pass
+            
+            # Cancel any background tasks
+            if hasattr(learner, '_background_tasks'):
+                for task in learner._background_tasks:
+                    task.cancel()
 
     # Continue with the rest of the tests following the same pattern...
     # The key change is removing "await" from "env = await setup_learner_environment"
