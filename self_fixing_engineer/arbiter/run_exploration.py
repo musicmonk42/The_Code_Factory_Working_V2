@@ -38,9 +38,25 @@ except ImportError:
 
     class Settings:
         def __init__(self):
+            import secrets
+            import warnings
+            logger = logging.getLogger(__name__)
+            
             self.REDIS_URL = "redis://localhost:6379"
             self.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-            self.ENCRYPTION_KEY_BYTES = b""
+            
+            # SECURITY: Generate random fallback encryption key instead of empty bytes
+            self.ENCRYPTION_KEY_BYTES = secrets.token_bytes(32)
+            
+            logger.critical(
+                "SECURITY WARNING: Using randomly generated encryption key in fallback Settings. "
+                "This key will not persist across restarts. Set proper encryption key in production."
+            )
+            warnings.warn(
+                "Settings fallback: Using randomly generated encryption key (not persistent)",
+                RuntimeWarning,
+                stacklevel=2
+            )
 
     class ArbiterArena:
         def __init__(self, *args, **kwargs):
@@ -103,6 +119,7 @@ except ImportError:
             In production mode, this will raise an exception.
             In dev/test mode, it returns a mock success.
             """
+            import warnings
             logger = logging.getLogger(__name__)
 
             if self._production_mode:
@@ -117,6 +134,11 @@ except ImportError:
                 f"Fallback Arbiter.run_task() called for task: {task}. "
                 "This is a mock implementation for dev/test only."
             )
+            warnings.warn(
+                f"Arbiter fallback: run_task() returning mock success",
+                UserWarning,
+                stacklevel=2
+            )
 
             if task.get("fail"):
                 raise Exception("Mock failure (requested by test)")
@@ -129,6 +151,7 @@ except ImportError:
             In production mode, this will raise an exception.
             In dev/test mode, it returns a mock success.
             """
+            import warnings
             logger = logging.getLogger(__name__)
 
             if self._production_mode:
@@ -142,6 +165,11 @@ except ImportError:
             logger.warning(
                 f"Fallback Arbiter.explore_and_fix() called for paths: {paths}. "
                 "This is a mock implementation for dev/test only."
+            )
+            warnings.warn(
+                f"Arbiter fallback: explore_and_fix() returning mock success",
+                UserWarning,
+                stacklevel=2
             )
 
             if paths and "fail" in paths:
@@ -453,6 +481,30 @@ async def run_agent_task(
         workflow_errors_total.labels(operation="run_agent_task").inc()
 
 
+async def run_agent_task_with_semaphore(
+    arbiter: Arbiter,
+    agent_task: Dict[str, Any],
+    output_dir: str,
+    arbiter_id: int,
+    results: List[Dict],
+    semaphore: asyncio.Semaphore,
+):
+    """
+    Wrapper for run_agent_task that uses a semaphore to limit concurrency.
+    
+    Args:
+        arbiter: The agent instance
+        agent_task: Dictionary describing the task
+        output_dir: Output directory for results
+        arbiter_id: Unique identifier for the arbiter
+        results: Shared list to append result summary
+        semaphore: Semaphore to limit concurrent executions
+    """
+    async with semaphore:
+        logger.debug(f"Arbiter {arbiter_id} acquired semaphore slot")
+        await run_agent_task(arbiter, agent_task, output_dir, arbiter_id, results)
+
+
 # ---- Orchestrator ----
 async def run_agentic_workflow(config: Dict[str, Any]):
     """
@@ -498,10 +550,6 @@ async def run_agentic_workflow(config: Dict[str, Any]):
             os.makedirs(config["output_dir"], exist_ok=True)
             logger.info(f"Output directory '{config['output_dir']}' is ready.")
 
-            # --- Load and apply plugins here if desired ---
-            # plugins = load_plugins()
-            # ... plugin integration logic ...
-
             # Assign tasks to agents. If agent_tasks is empty, run a default no-op.
             tasks = []
             agent_tasks = config.get("agent_tasks", [])
@@ -521,7 +569,7 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 )
 
             # Use a semaphore to limit concurrent Arbiter executions
-            asyncio.Semaphore(config.get("max_concurrent_arbiters", 5))
+            concurrency_semaphore = asyncio.Semaphore(config.get("max_concurrent_arbiters", 5))
 
             for i, arbiter in enumerate(arena.arbiters):
                 if shutdown_event.is_set():
@@ -532,8 +580,8 @@ async def run_agentic_workflow(config: Dict[str, Any]):
                 task_def = agent_tasks[i]
                 tasks.append(
                     asyncio.create_task(
-                        run_agent_task(
-                            arbiter, task_def, config["output_dir"], i + 1, results
+                        run_agent_task_with_semaphore(
+                            arbiter, task_def, config["output_dir"], i + 1, results, concurrency_semaphore
                         ),
                         name=f"Arbiter-Task-{i+1}",
                     )
