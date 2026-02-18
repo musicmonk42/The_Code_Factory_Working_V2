@@ -6,7 +6,6 @@ Provides fixtures and hooks to ensure proper test isolation.
 """
 
 import gc
-import sys
 import asyncio
 import pytest
 
