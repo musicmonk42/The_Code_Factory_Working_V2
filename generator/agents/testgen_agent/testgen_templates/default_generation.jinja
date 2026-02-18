@@ -22,21 +22,47 @@ Generate comprehensive unit tests for the following code.
 {% if language == "python" %}
 ## Pydantic Validation Testing (CRITICAL for Python)
 When testing Pydantic models (v2.x):
-- Pydantic v2 error messages use format: "String should have at least X characters" (NOT v1 format "ensure this value has at least X characters")
-- Custom validator errors with `raise ValueError("msg")` appear as: "Value error, msg" (Pydantic v2 adds "Value error, " prefix)
-- Use case-insensitive substring matching: `assert "string should have" in str(exc.value).lower()` or `assert "value error" in str(exc.value).lower()`
-- DO NOT use exact string matching like `assert exc.value == "exact message"` as Pydantic versions differ
-- Test error type/category rather than exact message text where possible
+- **max_length constraint**: Pydantic v2 uses `"String should have at most N characters"` (NOT v1 `"ensure this value has at most N characters"`)
+- **min_length constraint**: Pydantic v2 uses `"String should have at least N characters"` (NOT v1 `"ensure this value has at least N characters"`)
+- **Custom @field_validator errors**: Custom `raise ValueError("msg")` appears as `"Value error, msg"` (Pydantic v2 adds `"Value error, "` prefix)
+- **ALWAYS use case-insensitive substring matching** with `in` operator - NEVER exact string equality
+- **For API endpoint tests**: When testing `response.json()['detail'][0]['msg']`, use substring matching on the msg field
+- **Best practice**: Check error type/category via `exc_info.value.errors()[0]["type"]` instead of message text when possible
 
-Example test pattern:
+Example test patterns (MANDATORY):
 ```python
-def test_validation_error():
+# Test 1: max_length constraint (string_too_long error)
+def test_max_length_validation():
     with pytest.raises(ValidationError) as exc_info:
-        MyModel(field="invalid")
-    # CORRECT: Case-insensitive substring matching
-    assert "string should have" in str(exc_info.value).lower()
-    # WRONG: Exact match fails across Pydantic versions
-    # assert "String should have at least 1 character" == str(exc_info.value)
+        MyModel(message="x" * 501)  # exceeds max_length=500
+    # CORRECT: Substring match for Pydantic v2 format
+    assert "string should have at most" in str(exc_info.value).lower()
+    # OR check error type
+    errors = exc_info.value.errors()
+    assert errors[0]["type"] == "string_too_long"
+
+# Test 2: Custom validator with ValueError (value_error type)
+def test_custom_validator_empty():
+    with pytest.raises(ValidationError) as exc_info:
+        MyModel(message="   ")  # whitespace-only
+    # CORRECT: Match the "Value error, " prefix + your message
+    assert "value error" in str(exc_info.value).lower()
+    assert "cannot be empty" in str(exc_info.value).lower()
+
+# Test 3: API endpoint validation error response
+def test_api_validation_error():
+    response = client.post("/endpoint", json={"message": "x" * 501})
+    assert response.status_code == 422
+    detail = response.json()['detail'][0]
+    # CORRECT: Substring match on msg field
+    assert "string should have at most" in detail['msg'].lower()
+    # OR check error type
+    assert detail['type'] == "string_too_long"
+
+# WRONG PATTERNS (DO NOT USE):
+# assert exc_info.value == "exact message"  # FAILS: Exact match
+# assert detail['msg'] == "ensure this value has at most 500 characters"  # FAILS: V1 format
+# assert "should have at least 1 character" in str(exc_info.value).lower()  # FAILS: Missing "string"
 ```
 {% endif %}
 
