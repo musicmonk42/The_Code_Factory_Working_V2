@@ -17,6 +17,9 @@ from self_fixing_engineer.arbiter.plugins.llm_client import (
     LoadBalancedLLMClient,
 )
 
+# Add timeout to all tests in this module to prevent hangs
+pytestmark = pytest.mark.timeout(60)
+
 
 class TestLLMClient:
     """Test suite for LLMClient."""

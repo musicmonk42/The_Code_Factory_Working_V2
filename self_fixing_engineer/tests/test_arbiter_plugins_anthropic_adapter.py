@@ -20,6 +20,9 @@ from self_fixing_engineer.arbiter.plugins.llm_client import (
 )
 from tenacity import RetryError
 
+# Add timeout to all tests in this module to prevent hangs
+pytestmark = pytest.mark.timeout(60)
+
 
 class TestAnthropicAdapter:
     """Test suite for AnthropicAdapter."""
