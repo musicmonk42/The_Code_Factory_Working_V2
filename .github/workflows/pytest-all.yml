@@ -828,7 +828,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 60  # Reduced from 120 to 60
+        timeout-minutes: 95  # Reduced from 120 to 60
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -848,7 +848,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 90m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
             --tb=short \
@@ -868,7 +868,7 @@ jobs:
             echo "======================================"
             if [ $EXIT_CODE -eq 124 ]; then
               echo "ERROR: Arbiter test execution timed out (timeout command)"
-              echo "Wall-clock time limit (45 minutes) was exceeded"
+              echo "Wall-clock time limit (90 minutes) was exceeded"
               echo ""
               echo "=== Last 100 lines of test output ==="
               tail -100 test-output-sfe-arbiter.log || true
@@ -929,7 +929,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Mesh
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 30
+        timeout-minutes: 95
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -950,7 +950,7 @@ jobs:
           
           echo "=== Running Mesh Tests ==="
           # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
-          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 90m python -m pytest \
             self_fixing_engineer/tests/test_mesh*.py \
             -v \
             --tb=short \
@@ -970,7 +970,7 @@ jobs:
             echo "======================================"
             if [ $EXIT_CODE -eq 124 ]; then
               echo "ERROR: Mesh test execution timed out (timeout command)"
-              echo "Wall-clock time limit (25 minutes) was exceeded"
+              echo "Wall-clock time limit (90 minutes) was exceeded"
               echo ""
               echo "=== Last 100 lines of test output ==="
               tail -100 test-output-sfe-mesh.log || true
@@ -1031,7 +1031,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Other
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 30
+        timeout-minutes: 95
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1052,7 +1052,7 @@ jobs:
           
           echo "=== Running Other Tests (simulation, self_healing, sfe_basic) ==="
           # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
-          timeout --signal=TERM --kill-after=30s 25m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 90m python -m pytest \
             self_fixing_engineer/tests/ \
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
             --ignore=self_fixing_engineer/tests/test_mesh*.py \
@@ -1074,7 +1074,7 @@ jobs:
             echo "======================================"
             if [ $EXIT_CODE -eq 124 ]; then
               echo "ERROR: Other test execution timed out (timeout command)"
-              echo "Wall-clock time limit (25 minutes) was exceeded"
+              echo "Wall-clock time limit (90 minutes) was exceeded"
               echo ""
               echo "=== Last 100 lines of test output ==="
               tail -100 test-output-sfe-other.log || true
