@@ -97,7 +97,8 @@ def test_generate_questions_missing_project_type():
     assert any(q.field_name == "project_type" for q in questions)
     
     project_type_q = next(q for q in questions if q.field_name == "project_type")
-    assert project_type_q.default_value is not None
+    # After changes: default_value is None unless inferred from README
+    assert project_type_q.default_value is None  # No default unless inferred
     assert len(project_type_q.examples) > 0
 
 
@@ -205,17 +206,15 @@ def test_run_question_loop_complete_spec():
 
 
 def test_run_question_loop_non_interactive_with_defaults():
-    """Test non-interactive mode uses defaults."""
+    """Test non-interactive mode raises error when project_type is missing."""
     spec = SpecBlock(
         package_name="my_app"
     )
     
-    lock = run_question_loop(spec, interactive=False)
-    
-    # Should use defaults
-    assert lock.project_type is not None  # Should have a default
-    assert lock.package_name == "my_app"
-    assert lock.output_dir is not None
+    # After changes: should raise ValueError in non-interactive mode
+    # when project_type is missing and no default is available
+    with pytest.raises(ValueError, match="No default available for required field"):
+        lock = run_question_loop(spec, interactive=False)
 
 
 def test_run_question_loop_saves_to_file():
@@ -286,6 +285,51 @@ def test_generate_questions_fastapi_interface():
     # Should ask about HTTP endpoints for FastAPI project
     has_interface_q = any("interfaces.http" in q.field_name for q in questions)
     assert has_interface_q
+
+
+def test_spec_lock_requires_clarification_flag():
+    """Test that requires_clarification flag is set when project_type is missing."""
+    spec = SpecBlock(
+        package_name="my_app"
+    )
+    
+    # Create spec_lock without project_type - should fail in non-interactive
+    with pytest.raises(ValueError):
+        lock = run_question_loop(spec, interactive=False)
+
+
+def test_spec_lock_no_clarification_when_project_type_present():
+    """Test that requires_clarification is False when project_type is provided."""
+    spec = SpecBlock(
+        project_type="cli_tool",
+        package_name="my_cli",
+        output_dir="generated/my_cli"
+    )
+    
+    lock = run_question_loop(spec, interactive=False)
+    
+    assert lock.project_type == "cli_tool"
+    assert lock.requires_clarification is False
+
+
+def test_inferred_project_type_from_readme():
+    """Test that project_type can be inferred from README content."""
+    spec = SpecBlock(
+        package_name="my_app"
+    )
+    
+    readme_with_fastapi = """
+    # My API Service
+    
+    This is a REST API built with FastAPI.
+    """
+    
+    questions = generate_questions(spec, readme_with_fastapi)
+    
+    # Should have project_type question with inferred default
+    project_type_q = next((q for q in questions if q.field_name == "project_type"), None)
+    assert project_type_q is not None
+    assert project_type_q.default_value == "fastapi_service"
 
 
 if __name__ == "__main__":
