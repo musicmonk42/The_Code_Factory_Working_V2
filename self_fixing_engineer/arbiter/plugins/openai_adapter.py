@@ -49,6 +49,8 @@ class OpenAIAdapter:
         """Initialize Prometheus metrics once at class level."""
         if not cls._metrics_initialized:
             try:
+                from prometheus_client import REGISTRY
+
                 cls._requests_total = Counter(
                     "openai_requests_total",
                     "Total OpenAI requests",
@@ -65,9 +67,21 @@ class OpenAIAdapter:
                     "Circuit breaker state (0=closed, 1=half-open, 2=open)",
                 )
                 cls._metrics_initialized = True
-            except ValueError as e:
-                # Metrics already registered (e.g., in tests with custom registry)
-                logger.debug(f"Metrics already registered: {e}")
+            except ValueError:
+                # Metrics already registered - retrieve existing ones from registry
+                from prometheus_client import REGISTRY
+
+                for collector in REGISTRY._collector_to_names:
+                    if hasattr(collector, "_name"):
+                        if collector._name == "openai_requests_total":
+                            cls._requests_total = collector
+                        elif collector._name == "openai_processing_latency_seconds":
+                            cls._processing_latency_seconds = collector
+                        elif collector._name == "openai_circuit_breaker_state":
+                            cls._circuit_breaker_state_gauge = collector
+
+                cls._metrics_initialized = True
+                logger.debug("Metrics already registered, using existing instances")
 
     def __init__(self, settings: Dict[str, Any]):
         """

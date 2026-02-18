@@ -49,10 +49,13 @@ class TestOpenAIAdapter:
     @pytest.fixture
     def adapter(self, valid_settings):
         """Creates an OpenAIAdapter instance with mocked LLMClient."""
-        from prometheus_client import CollectorRegistry
+        # Reset class-level metrics to prevent collisions between tests
+        from self_fixing_engineer.arbiter.plugins.openai_adapter import OpenAIAdapter
 
-        # Use isolated registry to prevent metric collisions
-        test_registry = CollectorRegistry()
+        OpenAIAdapter._metrics_initialized = False
+        OpenAIAdapter._requests_total = None
+        OpenAIAdapter._processing_latency_seconds = None
+        OpenAIAdapter._circuit_breaker_state_gauge = None
 
         with patch(
             "self_fixing_engineer.arbiter.plugins.openai_adapter.LLMClient"
@@ -61,31 +64,25 @@ class TestOpenAIAdapter:
             mock_client.return_value = mock_instance
             mock_instance.model = "gpt-4o-mini"
 
-            # Patch the registry BEFORE creating the adapter
-            with patch(
-                "self_fixing_engineer.arbiter.plugins.openai_adapter.REGISTRY",
-                test_registry,
-            ):
-                adapter = OpenAIAdapter(valid_settings)
-                adapter.client = mock_instance
+            adapter = OpenAIAdapter(valid_settings)
+            adapter.client = mock_instance
 
-                # Fix the gauge mock
-                mock_gauge = Mock()
-                mock_gauge.set = Mock()
-                adapter.circuit_breaker_state_gauge = mock_gauge
+            # Mock the metrics to avoid actual prometheus registration
+            mock_gauge = Mock()
+            mock_gauge.set = Mock()
+            adapter.circuit_breaker_state_gauge = mock_gauge
 
-                # Fix the other metrics too
-                mock_counter = Mock()
-                mock_counter.labels = Mock(return_value=mock_counter)
-                mock_counter.inc = Mock()
-                adapter.requests_total = mock_counter
+            mock_counter = Mock()
+            mock_counter.labels = Mock(return_value=mock_counter)
+            mock_counter.inc = Mock()
+            adapter.requests_total = mock_counter
 
-                mock_histogram = Mock()
-                mock_histogram.labels = Mock(return_value=mock_histogram)
-                mock_histogram.observe = Mock()
-                adapter.processing_latency_seconds = mock_histogram
+            mock_histogram = Mock()
+            mock_histogram.labels = Mock(return_value=mock_histogram)
+            mock_histogram.observe = Mock()
+            adapter.processing_latency_seconds = mock_histogram
 
-                yield adapter
+            yield adapter
 
     # --- Initialization Tests ---
 
