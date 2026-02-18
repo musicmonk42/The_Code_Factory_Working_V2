@@ -303,6 +303,30 @@ class SFEService:
         )
         return default_path
 
+    def _populate_errors_cache(self, issues: List[Dict[str, Any]], job_id: str) -> None:
+        """
+        Populate the errors cache with issue data for fix proposals.
+        
+        This helper method is used by analyze_code(), detect_errors(), and detect_bugs()
+        to ensure error data is available when users propose fixes.
+        
+        Args:
+            issues: List of issue dictionaries with error_id, type, severity, etc.
+            job_id: Job identifier to associate with errors
+        """
+        for issue in issues:
+            error_id = issue.get("error_id")
+            if error_id:
+                self._errors_cache[error_id] = {
+                    "error_id": error_id,
+                    "job_id": issue.get("job_id", job_id),
+                    "type": issue.get("type", "unknown"),
+                    "severity": issue.get("severity", "medium"),
+                    "message": issue.get("message", ""),
+                    "file": issue.get("file", "unknown"),
+                    "line": issue.get("line", 0),
+                }
+
     async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
         """
         Analyze code for potential issues via OmniCore or direct SFE integration.
@@ -378,18 +402,7 @@ class SFEService:
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # This ensures that if user clicks "Analyze Code" first, then "Propose Fix",
                     # the error data is available in cache for generating the fix
-                    for issue in issues:
-                        error_id = issue.get("error_id")
-                        if error_id:
-                            self._errors_cache[error_id] = {
-                                "error_id": error_id,
-                                "job_id": issue.get("job_id", job_id),
-                                "type": issue.get("type", "unknown"),
-                                "severity": issue.get("severity", "medium"),
-                                "message": issue.get("message", ""),
-                                "file": issue.get("file", "unknown"),
-                                "line": issue.get("line", 0),
-                            }
+                    self._populate_errors_cache(issues, job_id)
                     
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
@@ -425,18 +438,7 @@ class SFEService:
                 # BUG FIX 2: Populate errors cache for fix proposals
                 # Extract issues from OmniCore response and populate cache
                 issues = data.get("issues", [])
-                for issue in issues:
-                    error_id = issue.get("error_id")
-                    if error_id:
-                        self._errors_cache[error_id] = {
-                            "error_id": error_id,
-                            "job_id": issue.get("job_id", job_id),
-                            "type": issue.get("type", "unknown"),
-                            "severity": issue.get("severity", "medium"),
-                            "message": issue.get("message", ""),
-                            "file": issue.get("file", "unknown"),
-                            "line": issue.get("line", 0),
-                        }
+                self._populate_errors_cache(issues, job_id)
                 
                 return data
             logger.info(
@@ -476,24 +478,13 @@ class SFEService:
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # Transform issues to frontend format if needed
                     if issues and isinstance(issues, list):
-                        # Check if issues need transformation
-                        if issues and not issues[0].get("error_id"):
+                        # Check if issues need transformation (safely check first element)
+                        if len(issues) > 0 and not issues[0].get("error_id"):
                             # Transform to frontend format
                             issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
                         
-                        # Populate cache
-                        for issue in issues:
-                            error_id = issue.get("error_id")
-                            if error_id:
-                                self._errors_cache[error_id] = {
-                                    "error_id": error_id,
-                                    "job_id": issue.get("job_id", job_id),
-                                    "type": issue.get("type", "unknown"),
-                                    "severity": issue.get("severity", "medium"),
-                                    "message": issue.get("message", ""),
-                                    "file": issue.get("file", "unknown"),
-                                    "line": issue.get("line", 0),
-                                }
+                        # Populate cache using helper method
+                        self._populate_errors_cache(issues, job_id)
 
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
@@ -558,24 +549,13 @@ class SFEService:
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # Transform issues to frontend format if needed and populate cache
                     if issues and isinstance(issues, list):
-                        # Check if issues need transformation
-                        if issues and not issues[0].get("error_id"):
+                        # Check if issues need transformation (safely check first element)
+                        if len(issues) > 0 and not issues[0].get("error_id"):
                             # Transform to frontend format
                             issues = transform_pipeline_issues_to_frontend_errors(issues, job_id)
                         
-                        # Populate cache
-                        for issue in issues:
-                            error_id = issue.get("error_id")
-                            if error_id:
-                                self._errors_cache[error_id] = {
-                                    "error_id": error_id,
-                                    "job_id": issue.get("job_id", job_id),
-                                    "type": issue.get("type", "unknown"),
-                                    "severity": issue.get("severity", "medium"),
-                                    "message": issue.get("message", ""),
-                                    "file": issue.get("file", "unknown"),
-                                    "line": issue.get("line", 0),
-                                }
+                        # Populate cache using helper method
+                        self._populate_errors_cache(issues, job_id)
 
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
