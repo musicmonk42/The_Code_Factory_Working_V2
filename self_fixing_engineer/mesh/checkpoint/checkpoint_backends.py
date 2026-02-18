@@ -321,24 +321,27 @@ class Config:
 
 # ---- Metrics Setup ----
 if PROMETHEUS_AVAILABLE:
-    BACKEND_OPERATIONS = Counter(
-        "checkpoint_backend_operations_total",
-        "Total backend operations",
-        ["backend", "operation", "status", "tenant"],
-    )
+    # Guard against duplicate registration during module reloads
+    if 'BACKEND_OPERATIONS' not in globals():
+        # Only create metrics if they don't exist
+        BACKEND_OPERATIONS = Counter(
+            "checkpoint_backend_operations_total",
+            "Total backend operations",
+            ["backend", "operation", "status", "tenant"],
+        )
 
-    BACKEND_LATENCY = Histogram(
-        "checkpoint_backend_latency_seconds",
-        "Backend operation latency",
-        ["backend", "operation", "tenant"],
-        buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
-    )
+        BACKEND_LATENCY = Histogram(
+            "checkpoint_backend_latency_seconds",
+            "Backend operation latency",
+            ["backend", "operation", "tenant"],
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+        )
 
-    BACKEND_ERRORS = Counter(
-        "checkpoint_backend_errors_total",
-        "Backend operation errors",
-        ["backend", "operation", "error_type", "tenant"],
-    )
+        BACKEND_ERRORS = Counter(
+            "checkpoint_backend_errors_total",
+            "Backend operation errors",
+            ["backend", "operation", "error_type", "tenant"],
+        )
 
 
 # ---- Tracing Setup ----

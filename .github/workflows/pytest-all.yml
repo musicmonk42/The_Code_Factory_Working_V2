@@ -770,7 +770,7 @@ jobs:
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
           echo "=== Aggressive memory cleanup ==="
-          sleep 5  # Longer delay for kernel to reclaim memory
+          sleep 15  # Increased from 5 to 15 seconds for better memory reclamation
           python -c "
           import gc
           import sys
@@ -799,9 +799,31 @@ jobs:
           done) &
           echo $! > /tmp/memory_monitor.pid
 
+      - name: Clean up processes and memory before Arbiter tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Killing orphan Python processes ==="
+          # Try graceful shutdown first (SIGTERM)
+          pkill -15 python3 || true
+          pkill -15 pytest || true
+          sleep 3
+          # Force kill any remaining processes (SIGKILL)
+          pkill -9 python3 || true
+          pkill -9 pytest || true
+          sleep 2
+          
+          echo "=== Clearing system caches ==="
+          # Clear user caches only (avoid permission issues)
+          rm -rf ~/.cache/* || true
+          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
+          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
+          
+          echo "=== Memory status after cleanup ==="
+          free -h
+
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 120  # Increased - arbiter tests need more time
+        timeout-minutes: 60  # Reduced from 120 to 60
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -814,9 +836,9 @@ jobs:
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
           # Set consistent resource limits
-          # Remove address space limit entirely - let kernel manage memory flexibly
-          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
-          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
+          # Limit address space to 6GiB (6442450944 bytes) to prevent OOM killer
+          # Using binary units (6G = 6 * 1024^3 bytes)
+          prlimit --cpu=unlimited --as=6G --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
@@ -848,7 +870,7 @@ jobs:
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
           echo "=== Aggressive memory cleanup ==="
-          sleep 5  # Longer delay for kernel to reclaim memory
+          sleep 15  # Increased from 5 to 15 seconds for better memory reclamation
           python -c "
           import gc
           import sys
@@ -917,7 +939,7 @@ jobs:
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
           echo "=== Aggressive memory cleanup ==="
-          sleep 5  # Longer delay for kernel to reclaim memory
+          sleep 15  # Increased from 5 to 15 seconds for better memory reclamation
           python -c "
           import gc
           import sys
