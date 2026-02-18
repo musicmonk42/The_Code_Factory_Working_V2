@@ -70,9 +70,18 @@ meter = metrics.get_meter(__name__)
 try:
     from self_fixing_engineer.arbiter.audit_log import AuditLogger, audit_log, verify_audit_chain
 except ImportError:
+    import json
+    import warnings
+    from pathlib import Path
+    
     logger.warning(
         "Failed to import 'self_fixing_engineer.arbiter.audit_log'. Using dummy fallbacks. "
         "Ensure the module is installed/available in production."
+    )
+    warnings.warn(
+        "audit_log module not available - using DummyAuditLog with file persistence",
+        UserWarning,
+        stacklevel=2
     )
 
     class AuditLogger:
@@ -83,7 +92,27 @@ except ImportError:
             return DummyAuditLog()
 
     class DummyAuditLog:
-        """A dummy audit log class that does nothing."""
+        """
+        Dummy audit log with file-based persistence.
+        
+        Persists audit events to a JSON file for basic audit trail.
+        Not suitable for production - use proper audit system.
+        """
+        
+        def __init__(self):
+            import warnings
+            self._audit_file = Path(os.getenv("DUMMY_AUDIT_FILE", "/tmp/arbiter_audit.jsonl"))
+            self._audit_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            logger.warning(
+                f"DummyAuditLog: Persisting audit events to {self._audit_file}. "
+                "This is NOT a production-grade audit system."
+            )
+            warnings.warn(
+                f"DummyAuditLog: File-based audit logging to {self._audit_file} (not production-ready)",
+                UserWarning,
+                stacklevel=3
+            )
 
         async def log_event(
             self,
@@ -92,9 +121,27 @@ except ImportError:
             details: Dict[str, Any],
             user_id: str = "system",
         ):
+            import time
+            
+            audit_entry = {
+                "timestamp": time.time(),
+                "component": component,
+                "event": event,
+                "details": details,
+                "user_id": user_id
+            }
+            
             logger.info(
-                f"DummyAuditLog: Event '{event}' in component '{component}' logged."
+                f"DummyAuditLog: Event '{event}' in component '{component}' logged to {self._audit_file}"
             )
+            
+            # Append to JSONL file
+            try:
+                with open(self._audit_file, "a") as f:
+                    f.write(json.dumps(audit_entry, default=str) + "\n")
+            except Exception as e:
+                logger.error(f"Failed to write audit event to {self._audit_file}: {e}")
+            
             await asyncio.sleep(0)  # Make it properly async
 
         async def add_entry(
@@ -109,12 +156,24 @@ except ImportError:
 
     async def audit_log(*args, **kwargs):
         """A dummy async function for logging audit events as a no-op."""
+        import warnings
         logger.debug("Dummy audit_log called (no-op).")
+        warnings.warn(
+            "audit_log() called with no-op implementation",
+            UserWarning,
+            stacklevel=2
+        )
         await asyncio.sleep(0)  # Keep it async
 
     def verify_audit_chain(log_path: str) -> bool:
         """A dummy function that always returns True."""
+        import warnings
         logger.debug("Dummy verify_audit_chain called. Returning True.")
+        warnings.warn(
+            "verify_audit_chain() using dummy implementation - always returns True",
+            UserWarning,
+            stacklevel=2
+        )
         return True
 
 

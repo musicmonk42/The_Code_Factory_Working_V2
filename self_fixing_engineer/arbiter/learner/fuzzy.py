@@ -415,3 +415,113 @@ async def register_fuzzy_parser_hook_async(
             )
         except Exception as e:
             logger.error("Failed to audit parser registration", error=str(e))
+
+
+# =============================================================================
+# BASIC FUZZY PARSER IMPLEMENTATION
+# =============================================================================
+
+
+class BasicFuzzyParser:
+    """
+    Basic implementation of FuzzyParser Protocol using regex-based text parsing.
+    
+    This is a simple fallback parser that extracts structured data from
+    unstructured text using basic regex patterns. It's suitable for
+    development/testing but should be replaced with more sophisticated
+    parsers (NLP-based, LLM-based) in production.
+    
+    Features:
+    - Extracts key-value pairs from text
+    - Identifies dates, numbers, and entities
+    - Provides basic structure to unstructured data
+    
+    Usage:
+        parser = BasicFuzzyParser()
+        facts = await parser.parse("The bug was reported on 2025-01-15", {})
+    """
+    
+    def __init__(self):
+        import warnings
+        logger.info("BasicFuzzyParser initialized")
+        warnings.warn(
+            "BasicFuzzyParser: Using basic regex-based parser (limited capabilities)",
+            UserWarning,
+            stacklevel=2
+        )
+    
+    async def parse(self, text: str, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Parse unstructured text into structured facts using regex patterns.
+        
+        Args:
+            text: Unstructured text to parse
+            context: Additional context (domain hints, etc.)
+        
+        Returns:
+            List of extracted facts as dictionaries
+        """
+        import re
+        
+        facts = []
+        
+        # Extract dates (YYYY-MM-DD format)
+        date_pattern = r'\b(\d{4}-\d{2}-\d{2})\b'
+        for match in re.finditer(date_pattern, text):
+            facts.append({
+                "type": "date",
+                "value": match.group(1),
+                "position": match.start(),
+                "confidence": 0.8
+            })
+        
+        # Extract numbers
+        number_pattern = r'\b(\d+\.?\d*)\b'
+        for match in re.finditer(number_pattern, text):
+            # Skip if part of a date
+            if not any(match.start() >= f['position'] - 10 and match.end() <= f['position'] + 20 
+                      for f in facts if f['type'] == 'date'):
+                facts.append({
+                    "type": "number",
+                    "value": float(match.group(1)),
+                    "position": match.start(),
+                    "confidence": 0.7
+                })
+        
+        # Extract key-value pairs (key: value or key=value)
+        kv_pattern = r'(\w+)\s*[:=]\s*([^\n,;]+)'
+        for match in re.finditer(kv_pattern, text):
+            key = match.group(1).strip()
+            value = match.group(2).strip()
+            facts.append({
+                "type": "key_value",
+                "key": key,
+                "value": value,
+                "position": match.start(),
+                "confidence": 0.6
+            })
+        
+        # Extract quoted strings (potential entity names or important phrases)
+        quote_pattern = r'"([^"]+)"|\'([^\']+)\''
+        for match in re.finditer(quote_pattern, text):
+            quoted_text = match.group(1) or match.group(2)
+            facts.append({
+                "type": "quoted_text",
+                "value": quoted_text,
+                "position": match.start(),
+                "confidence": 0.5
+            })
+        
+        # Add source text and context
+        for fact in facts:
+            fact["source"] = "BasicFuzzyParser"
+            fact["context"] = context
+            fact["timestamp"] = time.time()
+        
+        logger.debug(
+            f"BasicFuzzyParser: Extracted {len(facts)} facts from text",
+            text_length=len(text),
+            facts_count=len(facts)
+        )
+        
+        return facts
