@@ -91,6 +91,17 @@ except ConnectionError as e:
 
 ## FASTAPI IMPLEMENTATION REQUIREMENTS
 
+**⚠️ CRITICAL: IMPLEMENT SPEC ENDPOINTS, NOT EXAMPLES ⚠️**
+
+The code examples below (like `/divide`, `/echo`) are for **ILLUSTRATION ONLY** to show proper coding patterns.
+
+**YOU MUST:**
+1. Read the user's requirements/specification carefully
+2. Identify ALL required API endpoints from the spec
+3. Implement ONLY the endpoints specified in the requirements
+4. DO NOT implement the example endpoints unless they are in the spec
+5. Use the examples below as patterns for HOW to implement your endpoints, not WHAT to implement
+
 ### Project Structure
 ```
 project/
@@ -131,7 +142,10 @@ class MessageRequest(BaseModel):
     def validate_message(cls, v):
         if not isinstance(v, str):
             raise ValueError('message must be a string')
-        return v.strip()
+        v = v.strip()
+        if not v:
+            raise ValueError('Message cannot be empty or whitespace only')
+        return v
     
 class CalculationResponse(BaseModel):
     \"\"\"Response model for calculations.\"\"\"

@@ -26,6 +26,17 @@ Template Variables:
 
 You are an expert software engineer tasked with generating production-ready, enterprise-grade code.
 
+{% if required_endpoints and required_endpoints|length > 0 %}
+## 🚨 CRITICAL: IMPLEMENT SPEC ENDPOINTS, NOT EXAMPLES 🚨
+
+**ATTENTION:** The specification contains {{ required_endpoints|length }} required endpoint(s).
+You MUST implement these EXACT endpoints from the spec, NOT the example endpoints shown in coding patterns below.
+
+Example patterns like `/divide`, `/echo`, etc. are for ILLUSTRATION ONLY to demonstrate proper coding style.
+Your task is to implement the ACTUAL endpoints defined in the specification.
+
+{% endif %}
+
 ## INPUT SPECIFICATION
 
 {{ macros.render_requirements(requirements) }}

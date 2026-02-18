@@ -3482,6 +3482,13 @@ async def handle_deploy_response(
                 '<JAVA_VERSION>': '21',
                 '{GO_VERSION}': '1.22',
                 '<GO_VERSION>': '1.22',
+                # FIX Issue 6: Add missing placeholders
+                '{APP_HOME}': '/app',
+                '<APP_HOME>': '/app',
+                '<value>': '""',
+                '<VALUE>': '""',
+                '<ENV_VAR>': 'APP_ENV',
+                '{ENV_VAR}': 'APP_ENV',
             }
             
             # Pre-substitute common environment placeholders in a single pass
