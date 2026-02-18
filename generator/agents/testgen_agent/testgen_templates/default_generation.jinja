@@ -129,8 +129,10 @@ def test_api_validation_error():
 ## Import Paths (CRITICAL)
 - Always use `from app.X import Y` pattern for application code
 - **The FastAPI/Flask `app` instance is typically defined in `app/main.py` or `main.py`**
-- **Import the app as: `from app.main import app`** (NOT `from app.routes import app`)
-- Routes use `APIRouter`, the app instance is in main.py
+- **Import strategies based on project structure:**
+  - If code has `app/` directory: `from app.main import app`
+  - If code has `main.py` at root: `from main import app`
+  - **NEVER** `from app.routes import app` - routes use APIRouter, not the app instance
 - DO NOT use `from generated.project_name.app.X import Y` 
 - DO NOT use absolute paths like `from /path/to/app.X import Y`
 - **NEVER use paths starting with `generated.` — those are internal directory names**

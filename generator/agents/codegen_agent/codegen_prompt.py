@@ -449,7 +449,7 @@ The following are MANDATORY checks:
    - **CRITICAL**: The model MUST use Field() with constraints (min_length, gt, ge, etc.)
    - **CRITICAL**: FastAPI will automatically return 422 for invalid input when using typed Pydantic parameters
    
-   **WRONG**: `async def create_item(data: dict): ...`  # No validation! Returns 200 for invalid data!
+   **WRONG**: `async def create_item(data: dict): ...`  # Bypasses automatic Pydantic validation - accepts any data!
    **CORRECT**: `async def create_item(item: Item): ...`  # Pydantic validates automatically, returns 422 for invalid data
    
    CORRECT Pattern (Use This):

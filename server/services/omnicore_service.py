@@ -3361,6 +3361,16 @@ class OmniCoreService:
                     )
                     
                     if not frontend_files_found:
+                        # Simplify file paths for logging (helper to avoid complex inline logic)
+                        def get_relative_path(file_path_str, base_path):
+                            try:
+                                file_path = Path(file_path_str)
+                                return str(file_path.relative_to(base_path)) if file_path.is_relative_to(base_path) else file_path.name
+                            except (ValueError, OSError):
+                                return Path(file_path_str).name
+                        
+                        sample_files = [get_relative_path(f, output_path) for f in generated_files[:10]]
+                        
                         logger.warning(
                             f"[CODEGEN] Frontend generation was requested but no frontend files (templates/, static/, etc.) were found. "
                             f"include_frontend={include_frontend}, frontend_type={frontend_type}",
@@ -3368,7 +3378,7 @@ class OmniCoreService:
                                 "job_id": job_id,
                                 "include_frontend": include_frontend,
                                 "frontend_type": frontend_type,
-                                "generated_files": [str(Path(f).relative_to(output_path)) if Path(f).is_relative_to(output_path) else f for f in generated_files[:10]],
+                                "generated_files": sample_files,
                                 "files_count": len(generated_files)
                             }
                         )
