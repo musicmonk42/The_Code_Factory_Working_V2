@@ -15,7 +15,7 @@ import types
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 try:
     import asyncpg
@@ -108,21 +108,43 @@ except ImportError:
     asyncpg_exceptions.TooManyConnectionsError = TooManyConnectionsError
     asyncpg_exceptions.PostgresConnectionError = PostgresConnectionError
 
+    class _NoOpConnection:
+        async def execute(self, *args, **kwargs):
+            return None
+
+        async def fetch(self, *args, **kwargs):
+            return []
+
+        async def fetchrow(self, *args, **kwargs):
+            return None
+
+        async def fetchval(self, *args, **kwargs):
+            return None
+
+        async def close(self):
+            return None
+
     class _NoOpAcquire:
         async def __aenter__(self):
-            return MagicMock()
+            return _NoOpConnection()
 
         async def __aexit__(self, *args):
             return None
 
     class Pool:
+        def __init__(self):
+            self.acquire = MagicMock(return_value=_NoOpAcquire())
+
         def acquire(self):
             return _NoOpAcquire()
 
-        def close(self):
+        async def close(self):
             return None
 
         def get_size(self):
+            return 0
+
+        def get_idle_count(self):
             return 0
 
         def is_closed(self):
@@ -130,7 +152,7 @@ except ImportError:
 
     async def create_pool_fallback(*args, **kwargs):
         """Fallback no-op pool creator when asyncpg is unavailable."""
-        return MagicMock()
+        return Pool()
 
     class Record(dict):
         """Fallback for asyncpg.Record with attribute-style access."""
@@ -579,10 +601,7 @@ class PostgresClient:
 
             if not ASYNCPG_AVAILABLE:
                 if self._pool is None:
-                    self._pool = MagicMock()
-                    self._pool.is_closed.return_value = False
-                    self._pool.get_size.return_value = 0
-                    self._pool.get_idle_count.return_value = 0
+                    self._pool = Pool()
                 self._is_closed = False
                 logger.warning(
                     "asyncpg not available. PostgresClient running in no-op mode."

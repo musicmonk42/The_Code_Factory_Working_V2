@@ -214,15 +214,14 @@ logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
 
 
-_TRUTHY_ENV_VALUES = {"1", "true", "yes"}
-_TEST_MODE = (
-    os.getenv("TESTING", "").lower() in _TRUTHY_ENV_VALUES
-    or os.getenv("SKIP_AUDIT_INIT", "").lower() in _TRUTHY_ENV_VALUES
-)
+_TRUTHY_STRING_VALUES = {"1", "true", "yes"}
 
 
 def _in_test_mode() -> bool:
-    return _TEST_MODE
+    return (
+        os.getenv("TESTING", "").lower() in _TRUTHY_STRING_VALUES
+        or os.getenv("SKIP_AUDIT_INIT", "").lower() in _TRUTHY_STRING_VALUES
+    )
 
 
 # Helper function to get or create a metric (idempotent)

@@ -373,7 +373,19 @@ else:
             async def execute(self, *args, **kwargs):
                 return None
 
+            async def fetch(self, *args, **kwargs):
+                return []
+
+            async def fetchrow(self, *args, **kwargs):
+                return None
+
+            async def fetchval(self, *args, **kwargs):
+                return None
+
             async def commit(self):
+                return None
+
+            async def rollback(self):
                 return None
 
         class PostgresClient:
