@@ -453,7 +453,7 @@ async def process_event(
     poison_key = f"{POISON_MESSAGE_KEY_PREFIX}{event_type}:{message_id}"
 
     current_retries = 0
-    if SFE_CORE_AVAILABLE and getattr(mq_service, "redis_client", None):
+    if getattr(mq_service, "redis_client", None):
         try:
             val = await mq_service.redis_client.get(poison_key)
             if val:
@@ -490,11 +490,11 @@ async def process_event(
     try:
         delivered = await send_to_external_notifier(event_type, redact_sensitive(data))
         if delivered:
-            if SFE_CORE_AVAILABLE and getattr(mq_service, "redis_client", None):
+            if getattr(mq_service, "redis_client", None):
                 await mq_service.redis_client.delete(poison_key)
             CONSUMER_MESSAGES_PROCESSED_TOTAL.labels(event_type, "success").inc()
         else:
-            if SFE_CORE_AVAILABLE and getattr(mq_service, "redis_client", None):
+            if getattr(mq_service, "redis_client", None):
                 await mq_service.redis_client.incr(poison_key)
                 # Set a TTL for the poison key
                 await mq_service.redis_client.expire(poison_key, 86400)  # 24 hours
