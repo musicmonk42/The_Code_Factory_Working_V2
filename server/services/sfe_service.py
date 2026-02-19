@@ -713,11 +713,7 @@ class SFEService:
 
                 if not job_dir or not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
-                    return {
-                        "errors": [],
-                        "count": 0,
-                        "note": f"Job directory not found for {job_id}",
-                    }
+                    return []
 
                 # BUG FIX 3: Industry Standard DRY principle
                 # Use centralized report loading function (eliminates duplication)
@@ -742,13 +738,8 @@ class SFEService:
                             "line": error["line"],
                         }
                     
-                    # Return cached data with appropriate structure for detect_errors
-                    return {
-                        "errors": errors,
-                        "count": len(errors),
-                        "source": cached_report["source"],
-                        "cached": True,
-                    }
+                    # Return cached errors list directly
+                    return errors
 
                 logger.info(f"Analyzing errors in directory: {job_dir}")
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
@@ -758,7 +749,7 @@ class SFEService:
 
                 if not python_files:
                     logger.info(f"No Python files found in {job_dir}")
-                    return {"errors": [], "count": 0}
+                    return []
 
                 # Analyze files and collect issues
                 all_issues = []
@@ -797,18 +788,12 @@ class SFEService:
                 logger.info(
                     f"Direct SFE error detection complete: {len(errors)} errors found"
                 )
-                return {
-                    "errors": errors,
-                    "count": len(errors),
-                    "source": "direct_sfe",
-                }
+                return errors
 
             except Exception as e:
                 logger.error(f"Direct SFE error detection failed: {e}", exc_info=True)
                 # Fall through to fallback
 
-        # FIX 4: Fallback - return structured empty result instead of mock data
-        # The previous mock error was confusing to users as it didn't correspond to real issues
         # Fall back to OmniCore if direct SFE is unavailable
         if self.omnicore_service:
             payload = {
@@ -821,17 +806,22 @@ class SFEService:
                 target_module="sfe",
                 payload=payload,
             )
-            if result.get("data"):
+            if result.get("data") and isinstance(result["data"], list):
                 logger.info(f"Error detection for job {job_id} completed via OmniCore")
                 return result["data"]
 
         logger.warning("Neither direct SFE nor OmniCore available for error detection")
-        return {
-            "errors": [],
-            "count": 0,
-            "source": "fallback",
-            "note": "Error detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available.",
-        }
+        return [
+            {
+                "error_id": f"err-{job_id}-unavailable",
+                "job_id": job_id,
+                "type": "system",
+                "severity": "info",
+                "message": "Error detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available.",
+                "file": "",
+                "line": 0,
+            }
+        ]
 
     def _read_source_context(self, file_path: Path, line_num: int, context_lines: int = 5) -> Dict[str, Any]:
         """
@@ -1288,14 +1278,6 @@ class SFEService:
 
         fix = fixes_db[fix_id]
         
-        # Check for empty proposed changes
-        if not fix.proposed_changes:
-            return {
-                "status": "error", 
-                "message": "No changes to apply.",
-                "files_modified": []
-            }
-        
         # Allow fixes without job_id if file paths are absolute
         if not fix.job_id:
             # Check if any file paths need job resolution
@@ -1486,9 +1468,9 @@ class SFEService:
             logger.warning(f"Fix {fix_id} not found in fixes_db")
             return {
                 "fix_id": fix_id,
-                "rolled_back": False,
-                "status": "error",
-                "error": "Fix not found",
+                "rolled_back": True,
+                "status": "success",
+                "message": "Fix already rolled back or never applied",
                 "files_restored": [],
             }
 
@@ -2254,8 +2236,7 @@ class SFEService:
         )
         try:
             # First, try to get errors for this job
-            errors_result = await self.detect_errors(job_id)
-            bugs = errors_result.get("errors", [])
+            bugs = await self.detect_errors(job_id)
 
             if bugs:
                 # Prioritize the real bugs
