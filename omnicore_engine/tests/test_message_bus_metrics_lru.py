@@ -91,6 +91,30 @@ def mock_prometheus():
     importlib.reload(metrics)
 
 
+@pytest.fixture(autouse=True)
+def reset_registry_state():
+    """Reset registry state after each test to ensure proper teardown."""
+    # Run test
+    yield
+
+    # After test: reset metrics to clean state
+    if reset_metrics is not None:
+        try:
+            reset_metrics()
+        except Exception:
+            pass  # Ignore errors during cleanup
+
+    # Also clear the REGISTRY if it exists
+    try:
+        from omnicore_engine.message_bus.metrics import REGISTRY
+        if hasattr(REGISTRY, 'collectors'):
+            REGISTRY.collectors.clear()
+        if hasattr(REGISTRY, '_warned_at_threshold'):
+            REGISTRY._warned_at_threshold = False
+    except Exception:
+        pass  # Ignore errors during cleanup
+
+
 class TestThreadSafeDictLRU:
     """Test LRU eviction in _ThreadSafeDict."""
 
