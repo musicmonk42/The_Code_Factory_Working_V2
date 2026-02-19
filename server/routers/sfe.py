@@ -862,6 +862,38 @@ async def analyze_bug(
     return result
 
 
+@router.post("/bugs/prioritize")
+async def prioritize_bugs_by_body(
+    request: BugPrioritizationRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Prioritize bugs for a job (job_id in request body).
+
+    Orders bugs by importance based on severity, impact, and effort.
+
+    **Request Body:**
+    - job_id: Job identifier
+    - criteria: Prioritization criteria
+
+    **Returns:**
+    - Prioritized bug list
+
+    **Errors:**
+    - 404: Job not found
+    """
+    if request.job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {request.job_id} not found")
+
+    result = await sfe_service.prioritize_bugs(
+        job_id=request.job_id,
+        criteria=request.criteria,
+    )
+
+    logger.info(f"Bugs prioritized for job {request.job_id}")
+    return result
+
+
 @router.post("/{job_id}/bugs/prioritize")
 async def prioritize_bugs(
     job_id: str,
