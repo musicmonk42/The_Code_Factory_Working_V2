@@ -37,8 +37,18 @@ except (ImportError, ModuleNotFoundError):
     BatchSpanProcessor = None  # type: ignore
     ConsoleSpanExporter = None  # type: ignore
     OTLPSpanExporter = None  # type: ignore
-    Status = None  # type: ignore
-    StatusCode = None  # type: ignore
+
+    class _NoOpStatusCode:
+        OK = "OK"
+        ERROR = "ERROR"
+
+    class _NoOpStatus:
+        def __init__(self, code, description=None):
+            self.status_code = code
+            self.description = description
+
+    Status = _NoOpStatus  # type: ignore
+    StatusCode = _NoOpStatusCode  # type: ignore
 
 # Import the no-op tracer for fallback
 try:

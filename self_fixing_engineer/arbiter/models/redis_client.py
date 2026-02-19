@@ -162,6 +162,7 @@ class RedisClient:
             logger.error(f"Invalid Redis URL: {e}")
             raise ValueError(f"Invalid Redis URL: {e}") from e
         self.client: Optional[Redis] = None
+        self._pool: Optional[Redis] = None
         # Determine if SSL should be used based on URL scheme or environment variable
         self.use_ssl = (
             self.redis_url.startswith("rediss://")
@@ -222,6 +223,7 @@ class RedisClient:
                     ssl=self.use_ssl,
                     max_connections=max_connections,
                 )
+                self._pool = self.client
                 await self.client.ping()
                 REDIS_CONNECTIONS_CURRENT.inc()  # Increment gauge on successful connection
                 self._health_check_task = asyncio.create_task(
@@ -347,6 +349,7 @@ class RedisClient:
             try:
                 await self.client.close()
                 self.client = None
+                self._pool = None
                 REDIS_CONNECTIONS_CURRENT.dec()
                 REDIS_CALLS_TOTAL.labels(operation="disconnect", status="success").inc()
                 span.set_status(trace.Status(trace.StatusCode.OK))

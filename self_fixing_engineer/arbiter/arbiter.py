@@ -362,7 +362,32 @@ else:
         from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
     except ImportError as e:
         logging.debug(f"Optional dependency missing: {e} (PostgresClient)")
-    
+
+        class _PostgresNoOpSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+            async def execute(self, *args, **kwargs):
+                return None
+
+            async def fetch(self, *args, **kwargs):
+                return []
+
+            async def fetchrow(self, *args, **kwargs):
+                return None
+
+            async def fetchval(self, *args, **kwargs):
+                return None
+
+            async def commit(self):
+                return None
+
+            async def rollback(self):
+                return None
+
         class PostgresClient:
             """
             Fallback stub for PostgresClient when asyncpg is not installed.
@@ -375,15 +400,17 @@ else:
             """
     
             def __init__(self, *args, **kwargs):
-                logging.error(
-                    "PostgresClient initialization failed. Required dependencies: asyncpg. "
-                    "Install with: pip install asyncpg"
+                logging.warning(
+                    "PostgresClient running in no-op mode. Required dependencies: asyncpg. "
+                    "Install with: pip install asyncpg for database support."
                 )
-                raise NotImplementedError(
-                    "PostgresClient requires asyncpg module. "
-                    "Install with: pip install asyncpg. "
-                    "This is an optional dependency for advanced database features."
-                )
+                self._available = False
+
+            def get_session(self):
+                return _PostgresNoOpSession()
+
+            async def check_health(self):
+                return {"status": "unavailable", "reason": "asyncpg not installed"}
     
     
     try:
