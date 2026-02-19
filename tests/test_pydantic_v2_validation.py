@@ -231,6 +231,7 @@ class TestParseLLMResponsePydanticV2Validation:
         parsed = self._parse(files_payload)
         assert "config.py" in parsed
         assert "from pydantic_settings import BaseSettings" in parsed["config.py"]
+        assert "class Settings(BaseSettings):" in parsed["config.py"]
         assert "requirements.txt" in parsed
         assert "pydantic-settings>=2.0.0" in parsed["requirements.txt"]
 

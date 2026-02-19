@@ -1787,15 +1787,49 @@ def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
                 f"Use 'from pydantic_settings import BaseSettings' instead (Pydantic v2)."
             )
 
+        has_deprecated_validators = False
+        has_deprecated_class_config = False
+        try:
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    for decorator in node.decorator_list:
+                        decorator_node = decorator.func if isinstance(decorator, ast.Call) else decorator
+                        decorator_name = None
+                        if isinstance(decorator_node, ast.Name):
+                            decorator_name = decorator_node.id
+                        elif isinstance(decorator_node, ast.Attribute):
+                            decorator_name = decorator_node.attr
+                        if decorator_name in {"validator", "root_validator"}:
+                            has_deprecated_validators = True
+                            break
+
+                if isinstance(node, ast.ClassDef):
+                    base_names = [
+                        base.id if isinstance(base, ast.Name)
+                        else base.attr if isinstance(base, ast.Attribute)
+                        else None
+                        for base in node.bases
+                    ]
+                    if "BaseModel" in base_names and any(
+                        isinstance(child, ast.ClassDef) and child.name == "Config"
+                        for child in node.body
+                    ):
+                        has_deprecated_class_config = True
+        except SyntaxError:
+            # If parsing fails, fall back to string checks.
+            has_deprecated_validators = "@validator(" in content or "@root_validator(" in content
+            has_deprecated_class_config = "class Config:" in content and "BaseModel" in content
+
         # Check for deprecated Pydantic v1 validators
-        if "@validator(" in content or "@root_validator(" in content:
+        if has_deprecated_validators:
             errors.append(
                 f"{filename}: Uses deprecated Pydantic v1 validator decorators. "
                 f"Use '@field_validator' or '@model_validator' (Pydantic v2)."
             )
 
         # Check for deprecated Pydantic v1 config style
-        if "class Config:" in content and "BaseModel" in content:
+        if has_deprecated_class_config:
             errors.append(
                 f"{filename}: Uses deprecated 'class Config:' on a Pydantic model. "
                 f"Use 'model_config = {{...}}' instead (Pydantic v2)."
