@@ -103,6 +103,10 @@ except (ImportError, AttributeError):
             self._label_values = {}
             self._value = 0.0
             self._is_counter = False
+            # Register this metric in the registry's _names_to_collectors
+            registry = self._get_registry()
+            if registry and self._name:
+                registry._names_to_collectors[self._name] = self
 
         def _get_registry(self):
             global _MOCK_REGISTRY_INSTANCE

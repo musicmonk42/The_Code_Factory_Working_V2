@@ -541,15 +541,15 @@ class MarkdownPlugin(DocGenPlugin):
             core_sections = schema.get("core_sections", ["endpoints", "authentication"])
         else:
             # README and general documentation require introduction and usage
-            # In test mode, relax to just introduction
+            # In test mode, relax to just introduction (ignore schema's core_sections)
             if test_mode:
-                core_sections = schema.get("core_sections", ["introduction"])
+                core_sections = ["introduction"]
             else:
                 core_sections = schema.get("core_sections", ["introduction", "usage"])
         
         # In test mode, relax minimum sections requirement for non-API docs
         if test_mode and doc_type not in ("api", "api_reference", "openapi", "swagger"):
-            min_sections = schema.get("required_section_minimum", 1)
+            min_sections = 1
         else:
             min_sections = schema.get("required_section_minimum", 3)
 

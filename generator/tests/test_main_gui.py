@@ -697,10 +697,21 @@ class TestConfigReload:
             await asyncio.sleep(0.01)  # Allow on_mount to complete
             yield app
 
-    @pytest.mark.asyncio
-    async def test_reload_runner_config(self, app_instance):
-        """Test reloading runner configuration."""
+    @pytest.fixture
+    async def app_and_pilot(self, mock_dependencies):
+        """Create MainApp instance with pilot for tests that need it."""
+        from generator.main.gui import MainApp
 
+        app = MainApp()
+        async with app.run_test() as pilot:
+            await asyncio.sleep(0.01)  # Allow on_mount to complete
+            yield app, pilot
+
+    @pytest.mark.asyncio
+    async def test_reload_runner_config(self, app_and_pilot):
+        """Test reloading runner configuration."""
+        app_instance, pilot = app_and_pilot
+        
         app_instance.config_watcher = MagicMock()
         app_instance.config_watcher._reload = MagicMock()
 
@@ -709,7 +720,7 @@ class TestConfigReload:
             patch.object(app_instance, "_set_success_message", new_callable=AsyncMock),
         ):
 
-            app_instance.query_one("#reload-runner-config").press()
+            await pilot.click("#reload-runner-config")
             await asyncio.sleep(0.01)  # Allow events to process
 
             app_instance.config_watcher._reload.assert_called_once_with(force=True)
