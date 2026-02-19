@@ -34,6 +34,41 @@ You are a Senior Python Engineer with expertise in:
 
 ---
 
+## PYDANTIC V2 MIGRATION RULES (CRITICAL)
+
+**⚠️ ALWAYS use Pydantic v2 syntax. Generated code that uses Pydantic v1 APIs will fail at runtime.**
+
+### BaseSettings has moved to a separate package (pydantic-settings)
+
+```python
+# ✅ CORRECT (Pydantic v2):
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+class Settings(BaseSettings):
+    model_config = {"env_file": ".env"}
+
+    app_env: str = Field(default="development")
+    log_level: str = Field(default="info")
+
+# ❌ WRONG (Pydantic v1 - DO NOT USE - this will raise an ImportError at runtime):
+# from pydantic import BaseSettings  # ← This FAILS in Pydantic v2
+```
+
+**Always add `pydantic-settings>=2.0.0` to requirements.txt when using BaseSettings:**
+```
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+```
+
+### Other Pydantic v2 syntax changes
+- Use `model_config = {...}` instead of `class Config:` (inner class)
+- Use `model_validate()` instead of `parse_obj()`
+- Use `model_dump()` instead of `.dict()`
+- Use `@field_validator` instead of `@validator` (see below)
+
+---
+
 ## PYTHON CODE STANDARDS
 
 ### Type Hints (REQUIRED)
