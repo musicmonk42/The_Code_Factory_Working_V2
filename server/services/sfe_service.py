@@ -474,35 +474,7 @@ class SFEService:
                         **executive_summary,  # Include summary statistics
                     }
 
-        # Try routing through OmniCore first
-        if self.omnicore_service:
-            payload = {
-                "action": "analyze_code",
-                "job_id": job_id,
-                "code_path": code_path,
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=job_id,
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data"):
-                logger.info(f"Analysis for job {job_id} completed via OmniCore")
-                data = result["data"]
-                
-                # BUG FIX 2: Populate errors cache for fix proposals
-                # Extract issues from OmniCore response and populate cache
-                issues = data.get("issues", [])
-                self._populate_errors_cache(issues, job_id)
-                
-                return data
-            logger.info(
-                "OmniCore routing returned no data, falling through to direct SFE"
-            )
-
-        # Try direct SFE integration if analyzer available
+        # Try direct SFE integration first (avoids OmniCore routing overhead)
         if self._sfe_available["codebase_analyzer"]:
             try:
                 logger.info(f"Using direct SFE CodebaseAnalyzer for job {job_id}")
@@ -636,8 +608,28 @@ class SFEService:
                 logger.error(f"Direct SFE analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
 
+        # Fall back to OmniCore if direct SFE is unavailable
+        if self.omnicore_service:
+            payload = {
+                "action": "analyze_code",
+                "job_id": job_id,
+                "code_path": code_path,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            if result.get("data"):
+                logger.info(f"Analysis for job {job_id} completed via OmniCore")
+                data = result["data"]
+                issues = data.get("issues", [])
+                self._populate_errors_cache(issues, job_id)
+                return data
+
         # Fallback - return empty results instead of fake issues
-        logger.warning("Neither OmniCore nor direct SFE available, code analysis unavailable")
+        logger.warning("Neither direct SFE nor OmniCore available, code analysis unavailable")
         return {
             "job_id": job_id,
             "code_path": code_path,
@@ -650,7 +642,7 @@ class SFEService:
 
     async def detect_errors(self, job_id: str) -> Dict[str, Any]:
         """
-        Detect errors in generated code via OmniCore or direct SFE integration.
+        Detect errors in generated code via direct SFE integration or OmniCore fallback.
 
         Args:
             job_id: Unique job identifier
@@ -664,27 +656,7 @@ class SFEService:
         """
         logger.info(f"Detecting errors for job {job_id}")
 
-        # Try routing through OmniCore first
-        if self.omnicore_service:
-            payload = {
-                "action": "detect_errors",
-                "job_id": job_id,
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=job_id,
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data"):
-                logger.info(f"Error detection for job {job_id} completed via OmniCore")
-                return result["data"]
-            logger.info(
-                "OmniCore routing returned no data, falling through to direct SFE"
-            )
-
-        # Try direct SFE integration if analyzer available
+        # Try direct SFE integration first (avoids OmniCore routing overhead)
         if self._sfe_available["codebase_analyzer"]:
             try:
                 logger.info(
@@ -837,7 +809,23 @@ class SFEService:
 
         # FIX 4: Fallback - return structured empty result instead of mock data
         # The previous mock error was confusing to users as it didn't correspond to real issues
-        logger.warning("Neither OmniCore nor direct SFE available, using fallback")
+        # Fall back to OmniCore if direct SFE is unavailable
+        if self.omnicore_service:
+            payload = {
+                "action": "detect_errors",
+                "job_id": job_id,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            if result.get("data"):
+                logger.info(f"Error detection for job {job_id} completed via OmniCore")
+                return result["data"]
+
+        logger.warning("Neither direct SFE nor OmniCore available for error detection")
         return {
             "errors": [],
             "count": 0,
@@ -1933,34 +1921,7 @@ class SFEService:
         resolved_path = self._resolve_job_code_path(job_id, code_path)
         logger.info(f"Detecting bugs in {resolved_path}")
 
-        # Try routing through OmniCore first
-        if self.omnicore_service:
-            payload = {
-                "action": "detect_bugs",
-                "code_path": resolved_path,
-                "scan_depth": scan_depth,
-                "include_potential": include_potential,
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=f"bug_scan_{abs(hash(resolved_path)) % 10000}",
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data") and isinstance(result["data"], dict):
-                data = result["data"]
-                # Ensure bugs array exists
-                if "bugs" not in data:
-                    data["bugs"] = []
-                logger.info("Bug detection completed via OmniCore")
-                return data
-            logger.info(
-                "OmniCore routing returned no data, falling through to direct SFE"
-            )
-
-        # FIX 2: Check for cached SFE analysis report before running direct SFE
-        # This resolves the issue where "Detect Bugs" re-runs analysis from scratch
+        # Check for cached SFE analysis report first (before any live analysis)
         if job_id:
             # Resolve job directory using same logic as detect_errors()
             from server.storage import jobs_db
@@ -2155,8 +2116,29 @@ class SFEService:
                 logger.error(f"Direct SFE bug detection failed: {e}", exc_info=True)
                 # Fall through to fallback
 
+        # Fall back to OmniCore if direct SFE is unavailable
+        if self.omnicore_service:
+            payload = {
+                "action": "detect_bugs",
+                "code_path": resolved_path,
+                "scan_depth": scan_depth,
+                "include_potential": include_potential,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=f"bug_scan_{abs(hash(resolved_path)) % 10000}",
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            if result.get("data") and isinstance(result["data"], dict):
+                data = result["data"]
+                if "bugs" not in data:
+                    data["bugs"] = []
+                logger.info("Bug detection completed via OmniCore")
+                return data
+
         # Fallback - return empty results instead of fake bugs
-        logger.warning("Neither OmniCore nor direct SFE available, bug detection unavailable")
+        logger.warning("Neither direct SFE nor OmniCore available, bug detection unavailable")
         return {
             "bugs_found": 0,
             "bugs": [],
@@ -2229,7 +2211,7 @@ class SFEService:
         self, job_id: str, criteria: Optional[List[str]]
     ) -> Dict[str, Any]:
         """
-        Prioritize bugs for a job via OmniCore or direct SFE integration.
+        Prioritize bugs for a job via direct SFE integration or OmniCore fallback.
 
         Args:
             job_id: Job identifier
@@ -2240,32 +2222,10 @@ class SFEService:
         """
         logger.info(f"Prioritizing bugs for job {job_id}")
 
-        # Try routing through OmniCore first
-        if self.omnicore_service:
-            payload = {
-                "action": "prioritize_bugs",
-                "job_id": job_id,
-                "criteria": criteria or ["severity", "impact", "effort"],
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=job_id,
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data"):
-                logger.info("Bug prioritization completed via OmniCore")
-                return result["data"]
-            logger.info(
-                "OmniCore routing returned no data, falling through to fallback"
-            )
-
-        # Fallback: try to load real bugs from analysis or detect_errors
-        logger.warning(
-            "OmniCore not available, attempting to load real bugs from job analysis"
+        # Try to load real bugs from job analysis first (direct execution)
+        logger.info(
+            "Attempting to load real bugs from job analysis for prioritization"
         )
-
         try:
             # First, try to get errors for this job
             errors_result = await self.detect_errors(job_id)
@@ -2358,34 +2318,35 @@ class SFEService:
         except Exception as e:
             logger.warning(f"Failed to load real bugs for prioritization: {e}")
 
-        # Final fallback with mock data
-        logger.warning("Using mock fallback data for bug prioritization")
+        # Fall back to OmniCore if direct bug data is unavailable
+        if self.omnicore_service:
+            payload = {
+                "action": "prioritize_bugs",
+                "job_id": job_id,
+                "criteria": criteria or ["severity", "impact", "effort"],
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=job_id,
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            if result.get("data"):
+                logger.info("Bug prioritization completed via OmniCore")
+                return result["data"]
+
+        # Return empty result - no mock data fallback
+        logger.warning("Bug prioritization unavailable: no real bug data found for job %s", job_id)
         return {
             "job_id": job_id,
-            "prioritized_bugs": [
-                {
-                    "bug_id": "bug_1",
-                    "priority": 1,
-                    "severity": "critical",
-                    "impact": "high",
-                    "effort": "medium",
-                },
-                {
-                    "bug_id": "bug_2",
-                    "priority": 2,
-                    "severity": "high",
-                    "impact": "high",
-                    "effort": "low",
-                },
-                {
-                    "bug_id": "bug_3",
-                    "priority": 3,
-                    "severity": "medium",
-                    "impact": "medium",
-                    "effort": "low",
-                },
-            ],
+            "prioritized_bugs": [],
+            "total_bugs": 0,
             "criteria": criteria or ["severity", "impact", "effort"],
+            "high_priority_count": 0,
+            "medium_priority_count": 0,
+            "low_priority_count": 0,
+            "source": "fallback",
+            "note": "No bug data found for this job. Ensure 'Detect Bugs' or 'Analyze Code' has completed successfully before prioritizing.",
         }
 
     async def deep_analyze_codebase(
@@ -2396,7 +2357,7 @@ class SFEService:
         job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Perform deep codebase analysis via OmniCore or direct SFE integration.
+        Perform deep codebase analysis via direct SFE or OmniCore fallback.
 
         Args:
             code_path: Path to codebase (can be relative, resolved via job_id if provided)
@@ -2411,29 +2372,7 @@ class SFEService:
         resolved_path = self._resolve_job_code_path(job_id, code_path)
         logger.info(f"Deep analyzing codebase at {resolved_path}")
 
-        # Try routing through OmniCore first
-        if self.omnicore_service:
-            payload = {
-                "action": "deep_analyze",
-                "code_path": resolved_path,
-                "analysis_types": analysis_types,
-                "generate_report": generate_report,
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=f"analysis_{abs(hash(resolved_path)) % 10000}",
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data"):
-                logger.info("Deep analysis completed via OmniCore")
-                return result["data"]
-            logger.info(
-                "OmniCore routing returned no data, falling through to direct SFE"
-            )
-
-        # Try direct SFE integration if analyzer available
+        # Try direct SFE integration first (avoids OmniCore routing overhead)
         if self._sfe_available["codebase_analyzer"]:
             try:
                 logger.info("Using direct SFE CodebaseAnalyzer for deep analysis")
@@ -2504,8 +2443,26 @@ class SFEService:
                 logger.error(f"Direct SFE deep analysis failed: {e}", exc_info=True)
                 # Fall through to fallback
 
+        # Fall back to OmniCore if direct SFE is unavailable
+        if self.omnicore_service:
+            payload = {
+                "action": "deep_analyze",
+                "code_path": resolved_path,
+                "analysis_types": analysis_types,
+                "generate_report": generate_report,
+            }
+            result = await self.omnicore_service.route_job(
+                job_id=f"analysis_{abs(hash(resolved_path)) % 10000}",
+                source_module="api",
+                target_module="sfe",
+                payload=payload,
+            )
+            if result.get("data"):
+                logger.info("Deep analysis completed via OmniCore")
+                return result["data"]
+
         # Fallback - return minimal data with note
-        logger.warning("Neither OmniCore nor direct SFE available, deep codebase analysis unavailable")
+        logger.warning("Neither direct SFE nor OmniCore available, deep codebase analysis unavailable")
         return {
             "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
             "total_files": 0,

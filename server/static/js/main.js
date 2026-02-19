@@ -1255,15 +1255,25 @@ async function loadInsights() {
     
     try {
         const response = await fetchWithRetry(`${API_BASE}/sfe/insights`);
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
         const data = await response.json();
         
+        const totalFixes = data.total_fixes != null ? data.total_fixes : 'N/A';
+        const successRate = data.success_rate != null ? (data.success_rate * 100).toFixed(1) + '%' : 'N/A';
+        const patterns = Array.isArray(data.common_patterns) && data.common_patterns.length > 0
+            ? data.common_patterns.map(p => escapeHtml(String(p))).join(', ')
+            : 'None recorded';
+        
         container.innerHTML = `
-            <p>Total Fixes: ${data.total_fixes}</p>
-            <p>Success Rate: ${(data.success_rate * 100).toFixed(1)}%</p>
-            <p>Common Patterns: ${data.common_patterns.join(', ')}</p>
+            <p>Total Fixes: ${escapeHtml(String(totalFixes))}</p>
+            <p>Success Rate: ${escapeHtml(successRate)}</p>
+            <p>Common Patterns: ${patterns}</p>
         `;
     } catch (error) {
-        container.innerHTML = '<p class="error">Failed to load insights</p>';
+        container.innerHTML = `<p class="error">Failed to load insights: ${escapeHtml(error.message)}</p>`;
     }
 }
 
@@ -2945,6 +2955,12 @@ async function fixImports() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', auto_install: false, fix_style: true, job_id: jobId})
         });
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || `HTTP ${response.status}`);
+        }
+        
         const data = await response.json();
         
         // Check for errors

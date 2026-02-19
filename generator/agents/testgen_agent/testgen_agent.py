@@ -1036,6 +1036,11 @@ Agent --> Dev : Deliver Report
                     # Parse the Python file to extract functions and classes
                     tree = ast.parse(content, filename=file_path)
                     
+                    # SCHEMA INTROSPECTION: Extract Pydantic model constraints before
+                    # generating validation tests, so we only emit tests for constraints
+                    # that actually exist in the model (gt=0, min_length, etc.).
+                    pydantic_constraints = self._extract_pydantic_model_constraints(content)
+                    
                     # Check if this is a FastAPI app (detect FastAPI patterns)
                     is_fastapi_app = self._detect_fastapi_app(content)
                     
@@ -1129,6 +1134,12 @@ Agent --> Dev : Deliver Report
                     
                     # Generate test cases for each class
                     for class_name in classes:
+                        # Check if this is a Pydantic BaseModel (schema introspection)
+                        model_constraints = pydantic_constraints.get(class_name, {})
+                        is_pydantic_model = bool(model_constraints) or (
+                            "BaseModel" in content and class_name in content
+                        )
+                        
                         test_lines.append(f'class Test{class_name}:')
                         test_lines.append(f'    """Test cases for {class_name} class."""')
                         test_lines.append('')
@@ -1137,6 +1148,60 @@ Agent --> Dev : Deliver Report
                         test_lines.append(f'        instance = {class_name}()')
                         test_lines.append(f'        assert instance is not None')
                         test_lines.append('')
+                        
+                        # POST-GENERATION VALIDATION: Only generate validation tests for
+                        # constraints that actually exist in the model's Field declarations.
+                        # This prevents test failures like:
+                        #   FAILED test_item_with_negative_price - DID NOT RAISE ValidationError
+                        # when the model lacks a `gt=0` constraint.
+                        if is_pydantic_model and model_constraints:
+                            test_lines.append(f'    def test_{class_name.lower()}_valid_data(self):')
+                            test_lines.append(f'        """Test {class_name} with valid data."""')
+                            # Build minimal valid constructor args from known constraints.
+                            # Only include fields where the constraint value is a real number
+                            # (ast.literal_eval may fall back to True for complex expressions).
+                            valid_args = []
+                            for field_name, field_cons in model_constraints.items():
+                                if "gt" in field_cons and isinstance(field_cons["gt"], (int, float)):
+                                    valid_args.append(f'{field_name}={field_cons["gt"] + 1}')
+                                elif "ge" in field_cons and isinstance(field_cons["ge"], (int, float)):
+                                    valid_args.append(f'{field_name}={field_cons["ge"]}')
+                                elif "min_length" in field_cons and isinstance(field_cons["min_length"], int):
+                                    min_len = field_cons["min_length"]
+                                    valid_args.append(f'{field_name}="{"a" * max(min_len, 1)}"')
+                            args_str = ", ".join(valid_args)
+                            test_lines.append(f'        from pydantic import ValidationError')
+                            test_lines.append(f'        instance = {class_name}({args_str})')
+                            test_lines.append(f'        assert instance is not None')
+                            test_lines.append('')
+
+                            # Generate negative tests only for confirmed numeric constraints
+                            for field_name, field_cons in model_constraints.items():
+                                if "gt" in field_cons and isinstance(field_cons["gt"], (int, float)):
+                                    test_lines.append(f'    def test_{class_name.lower()}_{field_name}_negative_rejected(self):')
+                                    test_lines.append(f'        """Test that {class_name}.{field_name} rejects values <= {field_cons["gt"]} (gt={field_cons["gt"]})."""')
+                                    test_lines.append(f'        from pydantic import ValidationError')
+                                    test_lines.append(f'        import pytest')
+                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append(f'            {class_name}({field_name}={field_cons["gt"] - 1})')
+                                    test_lines.append('')
+                                elif "ge" in field_cons and isinstance(field_cons["ge"], (int, float)):
+                                    test_lines.append(f'    def test_{class_name.lower()}_{field_name}_below_min_rejected(self):')
+                                    test_lines.append(f'        """Test that {class_name}.{field_name} rejects values < {field_cons["ge"]} (ge={field_cons["ge"]})."""')
+                                    test_lines.append(f'        from pydantic import ValidationError')
+                                    test_lines.append(f'        import pytest')
+                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append(f'            {class_name}({field_name}={field_cons["ge"] - 1})')
+                                    test_lines.append('')
+                                if "min_length" in field_cons and isinstance(field_cons["min_length"], int) and field_cons["min_length"] > 0:
+                                    test_lines.append(f'    def test_{class_name.lower()}_{field_name}_empty_rejected(self):')
+                                    test_lines.append(f'        """Test that {class_name}.{field_name} rejects empty string (min_length={field_cons["min_length"]})."""')
+                                    test_lines.append(f'        from pydantic import ValidationError')
+                                    test_lines.append(f'        import pytest')
+                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append(f'            {class_name}({field_name}="")')
+                                    test_lines.append('')
+                        
                         test_lines.append('')
                     
                     # If no functions or classes found, create a basic test
@@ -1377,6 +1442,93 @@ def test_{file_stem}_syntax_error_documentation():
         )
         
         return basic_tests
+
+    def _extract_pydantic_model_constraints(self, content: str) -> Dict[str, Dict[str, Any]]:
+        """
+        Extract Pydantic model field constraints from Python source code using AST.
+
+        Performs schema introspection to discover which validators actually exist
+        (e.g., gt=0, min_length, max_length) so that validation tests are only
+        generated when the corresponding constraints are present in the model.
+
+        Args:
+            content: Python source code to introspect
+
+        Returns:
+            Mapping of model_name -> {field_name -> {constraint_name -> value}}
+            e.g. {"Item": {"price": {"gt": 0}, "name": {"min_length": 1}}}
+        """
+        constraints: Dict[str, Dict[str, Any]] = {}
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            return constraints
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+
+            # Check if the class inherits from BaseModel (Pydantic)
+            base_names = []
+            for base in node.bases:
+                if isinstance(base, ast.Name):
+                    base_names.append(base.id)
+                elif isinstance(base, ast.Attribute):
+                    base_names.append(base.attr)
+
+            if "BaseModel" not in base_names:
+                continue
+
+            model_constraints: Dict[str, Any] = {}
+
+            for stmt in ast.walk(node):
+                # Look for annotated assignments: field_name: type = Field(...)
+                if not isinstance(stmt, ast.AnnAssign):
+                    continue
+                if not isinstance(stmt.target, ast.Name):
+                    continue
+
+                field_name = stmt.target.id
+                field_constraints: Dict[str, Any] = {}
+
+                # Check if the default value is a Field(...) call
+                if stmt.value is None:
+                    continue
+
+                call = stmt.value
+                if not isinstance(call, ast.Call):
+                    continue
+
+                func = call.func
+                func_name = (
+                    func.id
+                    if isinstance(func, ast.Name)
+                    else (func.attr if isinstance(func, ast.Attribute) else "")
+                )
+                if func_name != "Field":
+                    continue
+
+                # Extract keyword arguments from Field(...)
+                for kw in call.keywords:
+                    if kw.arg is None:
+                        continue
+                    try:
+                        value = ast.literal_eval(kw.value)
+                    except (ValueError, TypeError):
+                        # Skip constraints whose value can't be statically evaluated
+                        # (e.g. references to variables). Only concrete literals are
+                        # safe to use in generated arithmetic expressions.
+                        continue
+
+                    field_constraints[kw.arg] = value
+
+                if field_constraints:
+                    model_constraints[field_name] = field_constraints
+
+            if model_constraints:
+                constraints[node.name] = model_constraints
+
+        return constraints
 
     def _detect_fastapi_app(self, content: str) -> bool:
         """

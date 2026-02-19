@@ -1005,6 +1005,12 @@ async def upload_files(
     # Update job status
     job.status = JobStatus.RUNNING
     job.updated_at = datetime.now(timezone.utc)
+
+    # Always store the freshly-uploaded spec content in job metadata so that any
+    # pipeline resume (e.g. after clarification) or re-run uses the LATEST spec,
+    # not a stale version cached from a previous upload.
+    if readme_content:
+        job.metadata["readme_content"] = readme_content
     
     # Auto-trigger pipeline if README content is available
     if readme_content:
