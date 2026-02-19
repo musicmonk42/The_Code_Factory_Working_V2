@@ -254,7 +254,105 @@ def test_config_validation_invalid_log_level(mock_env):
         Config(LOG_LEVEL="INVALID")
 
 
-# --- Tests for PluginManager ---
+# --- Tests for env-var fallbacks ---
+def test_llm_api_key_falls_back_to_openai(monkeypatch):
+    """INTENT_AGENT_LLM_API_KEY absent → falls back to OPENAI_API_KEY."""
+    monkeypatch.delenv("INTENT_AGENT_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key-value")
+    monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "A" * 32 + "=" * 12)
+
+    config = Config()
+    assert config.LLM_API_KEY.get_secret_value() == "openai-key-value"
+
+
+def test_llm_api_key_falls_back_to_gemini_when_no_openai(monkeypatch):
+    """INTENT_AGENT_LLM_API_KEY and OPENAI_API_KEY absent → falls back to GEMINI_API_KEY."""
+    monkeypatch.delenv("INTENT_AGENT_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key-value")
+    monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "A" * 32 + "=" * 12)
+
+    config = Config()
+    assert config.LLM_API_KEY.get_secret_value() == "gemini-key-value"
+
+
+def test_llm_api_key_openai_preferred_over_gemini(monkeypatch):
+    """When both OPENAI_API_KEY and GEMINI_API_KEY are present, OPENAI_API_KEY wins."""
+    monkeypatch.delenv("INTENT_AGENT_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key-value")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-key-value")
+    monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "A" * 32 + "=" * 12)
+
+    config = Config()
+    assert config.LLM_API_KEY.get_secret_value() == "openai-key-value"
+
+
+def test_llm_api_key_no_fallbacks_raises(monkeypatch):
+    """When no LLM key is available at all, ValidationError is raised."""
+    monkeypatch.delenv("INTENT_AGENT_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "A" * 32 + "=" * 12)
+
+    with pytest.raises(ValidationError):
+        Config()
+
+
+def test_encryption_key_falls_back_to_encryption_key_var(monkeypatch):
+    """INTENT_AGENT_ENCRYPTION_KEY absent → falls back to ENCRYPTION_KEY."""
+    monkeypatch.delenv("INTENT_AGENT_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("ENCRYPTION_KEY", "enc-key-value")
+    monkeypatch.setenv("INTENT_AGENT_LLM_API_KEY", "mock_api_key")
+
+    config = Config()
+    assert config.ENCRYPTION_KEY.get_secret_value() == "enc-key-value"
+
+
+def test_encryption_key_falls_back_to_fernet_key(monkeypatch):
+    """INTENT_AGENT_ENCRYPTION_KEY and ENCRYPTION_KEY absent → falls back to FERNET_KEY."""
+    monkeypatch.delenv("INTENT_AGENT_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("FERNET_KEY", "fernet-key-value")
+    monkeypatch.setenv("INTENT_AGENT_LLM_API_KEY", "mock_api_key")
+
+    config = Config()
+    assert config.ENCRYPTION_KEY.get_secret_value() == "fernet-key-value"
+
+
+def test_encryption_key_encryption_key_preferred_over_fernet(monkeypatch):
+    """When both ENCRYPTION_KEY and FERNET_KEY are present, ENCRYPTION_KEY wins."""
+    monkeypatch.delenv("INTENT_AGENT_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setenv("ENCRYPTION_KEY", "enc-key-value")
+    monkeypatch.setenv("FERNET_KEY", "fernet-key-value")
+    monkeypatch.setenv("INTENT_AGENT_LLM_API_KEY", "mock_api_key")
+
+    config = Config()
+    assert config.ENCRYPTION_KEY.get_secret_value() == "enc-key-value"
+
+
+def test_encryption_key_no_fallbacks_raises(monkeypatch):
+    """When no encryption key is available at all, ValidationError is raised."""
+    monkeypatch.delenv("INTENT_AGENT_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("FERNET_KEY", raising=False)
+    monkeypatch.setenv("INTENT_AGENT_LLM_API_KEY", "mock_api_key")
+
+    with pytest.raises(ValidationError):
+        Config()
+
+
+def test_intent_agent_vars_take_priority_over_fallbacks(monkeypatch):
+    """Explicitly set INTENT_AGENT_* vars are used instead of fallbacks."""
+    monkeypatch.setenv("INTENT_AGENT_LLM_API_KEY", "direct-llm-key")
+    monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "direct-enc-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-should-be-ignored")
+    monkeypatch.setenv("ENCRYPTION_KEY", "enc-should-be-ignored")
+
+    config = Config()
+    assert config.LLM_API_KEY.get_secret_value() == "direct-llm-key"
+    assert config.ENCRYPTION_KEY.get_secret_value() == "direct-enc-key"
+
+
 def test_plugin_manager_discover_and_apply_plugins(temp_plugin_dir, monkeypatch):
     """Test PluginManager discovers plugins."""
     monkeypatch.setattr("os.path.isdir", lambda x: True if "plugins" in x else False)

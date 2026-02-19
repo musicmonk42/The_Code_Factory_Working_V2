@@ -44,7 +44,7 @@ from typing import Any, Dict, Optional
 # --- Production-Grade Library Imports ---
 import requests
 from dotenv import load_dotenv
-from pydantic import Field, SecretStr, ValidationError, field_validator
+from pydantic import Field, SecretStr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # --- Security, Reliability & Performance Libraries ---
@@ -376,6 +376,29 @@ class Config(BaseSettings):
     CONFIG_SERVICE_URL: Optional[str] = Field(default=None)
     CONFIG_TOKEN: Optional[SecretStr] = Field(default=None)
     # Add other fields as needed
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_env_fallbacks(cls, values):
+        """
+        Apply environment-variable fallbacks so Railway deployments succeed
+        when INTENT_AGENT_* vars are absent but common alternatives are present.
+
+        Resolution order:
+          LLM_API_KEY      : INTENT_AGENT_LLM_API_KEY → OPENAI_API_KEY → GEMINI_API_KEY
+          ENCRYPTION_KEY   : INTENT_AGENT_ENCRYPTION_KEY → ENCRYPTION_KEY → FERNET_KEY
+        """
+        if not values.get("LLM_API_KEY") and (
+            fallback := os.getenv("OPENAI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        ):
+            values["LLM_API_KEY"] = fallback
+
+        if not values.get("ENCRYPTION_KEY") and (
+            fallback := os.getenv("ENCRYPTION_KEY") or os.getenv("FERNET_KEY")
+        ):
+            values["ENCRYPTION_KEY"] = fallback
+
+        return values
 
     @field_validator("REDIS_URL")
     @classmethod
