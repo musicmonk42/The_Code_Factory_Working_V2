@@ -484,6 +484,56 @@ class TestAgentValidation:
         assert OPTIONAL_AGENTS == expected_optional
 
     @pytest.mark.asyncio
+    @pytest.mark.timeout(30)
+    async def test_docgen_stage_uses_sphinx_doc_type(
+        self, test_repository, mock_plugin_registry, mock_metrics, mock_opentelemetry
+    ):
+        """Test that the docgen stage uses doc_type='sphinx' to produce Sphinx HTML output."""
+        docgen_calls = []
+
+        async def capturing_docgen(**kwargs):
+            docgen_calls.append(kwargs)
+            return {"documentation": "Generated sphinx docs."}
+
+        mock_plugin_registry.get.side_effect = {
+            "clarifier": None,
+            "codegen_agent": AsyncMock(return_value={"code_files": {"main.py": "def hello(): pass"}}),
+            "critique_agent": AsyncMock(return_value={"issues": []}),
+            "testgen_agent": AsyncMock(return_value={"test_files": {}}),
+            "deploy_agent": AsyncMock(return_value={"deployment_artifacts": {}}),
+            "docgen_agent": capturing_docgen,
+        }.get
+
+        requirements = {"description": "A simple Flask web service."}
+        config = {"language": "python", "framework": "flask"}
+        repo_path = str(test_repository)
+        ambiguities = []
+
+        # Mock ArbiterBridge so that policy check allows the workflow to proceed
+        mock_bridge = MagicMock()
+        mock_bridge.check_policy = AsyncMock(return_value=(True, "allowed"))
+        mock_bridge.publish_event = AsyncMock(return_value=None)
+        mock_bridge.update_knowledge = AsyncMock(return_value=None)
+
+        with patch("generator.arbiter_bridge.ArbiterBridge", return_value=mock_bridge):
+            result = await run_generator_workflow(
+                requirements=requirements,
+                config=config,
+                repo_path=repo_path,
+                ambiguities=ambiguities,
+            )
+
+        output = WorkflowOutput(**result)
+        assert output.status == "success"
+
+        # Verify docgen was called with doc_type="sphinx" to trigger Sphinx HTML output
+        assert len(docgen_calls) == 1
+        assert docgen_calls[0].get("doc_type") == "sphinx", (
+            "docgen must be invoked with doc_type='sphinx' so that Sphinx HTML output "
+            "is written to docs/_build/html"
+        )
+
+    @pytest.mark.asyncio
     async def test_workflow_raises_configuration_error_on_missing_agents(
         self, test_repository, mock_metrics
     ):

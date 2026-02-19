@@ -671,7 +671,7 @@ async def run_generator_workflow(
                 docs_result = await docgen(
                     repo_path=workflow_state["repo_path"],
                     target_files=list(workflow_state["code_files"].keys()),
-                    doc_type="README",
+                    doc_type="sphinx",
                 )
                 workflow_state["documentation"] = docs_result
                 logger.info(
