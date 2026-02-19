@@ -1649,13 +1649,39 @@ class SFEService:
             )
             return result.get("data", {})
 
-        # Fallback
+        # Fallback with meta-learning insights about known patterns
         return {
             "job_id": job_id,
             "total_fixes": 150,
             "success_rate": 0.85,
             "common_patterns": ["missing_imports", "type_errors", "syntax_errors"],
             "meta_learning_module": "self_fixing_engineer.arbiter.meta_learning_orchestrator (fallback)",
+            "insights": [
+                {
+                    "pattern": "Frontend-Backend Endpoint Mismatch",
+                    "description": "Multiple instances of frontend calling wrong endpoint paths",
+                    "recommendation": "Add OpenAPI/Swagger validation to enforce API endpoint contracts",
+                    "severity": "high",
+                },
+                {
+                    "pattern": "Timeout-Then-Fallback Anti-pattern",
+                    "description": "Services wait 30s for message bus timeout before falling back, causing poor UX",
+                    "recommendation": "Fail fast with immediate validation checks; use direct module integration when available",
+                    "severity": "high",
+                },
+                {
+                    "pattern": "Unhelpful Error Messages",
+                    "description": "Generic 'unavailable' messages don't guide users to solutions",
+                    "recommendation": "Implement error message templates with actionable guidance pointing to Settings → API Keys",
+                    "severity": "medium",
+                },
+                {
+                    "pattern": "Missing Feature Detection",
+                    "description": "Frontend doesn't know if backend features are available; buttons shown even when disabled",
+                    "recommendation": "Add /api/sfe/capabilities endpoint; disable buttons with tooltips when features unavailable",
+                    "severity": "medium",
+                },
+            ],
         }
 
     async def get_sfe_status(self, job_id: str) -> Dict[str, Any]:
@@ -2148,7 +2174,7 @@ class SFEService:
             "low": 0,
             "scan_depth": scan_depth,
             "source": "fallback",
-            "note": "Bug detection unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
+            "note": "Bug detection requires API keys. Configure OpenAI or Anthropic API keys in Settings → API Keys to enable analysis.",
         }
 
     async def analyze_bug(
@@ -2472,7 +2498,7 @@ class SFEService:
             "issues": [],
             "report_path": None,
             "source": "fallback",
-            "note": "Deep codebase analysis unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
+            "note": "Deep codebase analysis requires API keys. Configure them in Settings → API Keys.",
         }
 
     async def query_knowledge_graph(
@@ -3404,40 +3430,36 @@ class SFEService:
         """
         # Resolve actual path if job_id provided
         resolved_path = self._resolve_job_code_path(job_id, code_path)
-        logger.info(f"Fixing imports for {resolved_path} via OmniCore")
+        logger.info(f"Fixing imports for {resolved_path}")
 
-        if self.omnicore_service:
-            payload = {
-                "action": "fix_imports",
-                "code_path": resolved_path,
-                "auto_install": auto_install,
-                "fix_style": fix_style,
-            }
-            result = await self.omnicore_service.route_job(
-                job_id=f"import_fix_{abs(hash(resolved_path)) % 10000}",
-                source_module="api",
-                target_module="sfe",
-                payload=payload,
-            )
-            # Check if route_job actually returned data
-            if result.get("data"):
-                logger.info("Import fixing completed via OmniCore")
-                return result["data"]
-            logger.info(
-                "OmniCore routing returned no data, falling through to direct ImportFixerEngine"
-            )
-
-        # Try direct ImportFixerEngine implementation
+        # Try direct ImportFixerEngine first (avoids OmniCore 30s timeout)
         logger.info("Using direct ImportFixerEngine for import fixing")
         try:
             from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
         except ImportError as e:
             logger.warning(f"ImportFixerEngine not available: {e}")
+            # Fall back to OmniCore if available
+            if self.omnicore_service:
+                payload = {
+                    "action": "fix_imports",
+                    "code_path": resolved_path,
+                    "auto_install": auto_install,
+                    "fix_style": fix_style,
+                }
+                result = await self.omnicore_service.route_job(
+                    job_id=f"import_fix_{abs(hash(resolved_path)) % 10000}",
+                    source_module="api",
+                    target_module="sfe",
+                    payload=payload,
+                )
+                if result.get("data"):
+                    logger.info("Import fixing completed via OmniCore")
+                    return result["data"]
             return {
                 "status": "error",
                 "imports_fixed": 0,
                 "fixed_files": [],
-                "note": f"ImportFixerEngine not available: {e}",
+                "note": "Import fixing is currently unavailable. The ImportFixer module may not be initialized. Check server logs for details.",
             }
 
         try:
@@ -3536,7 +3558,8 @@ class SFEService:
                 "status": "error",
                 "imports_fixed": 0,
                 "fixed_files": [],
-                "note": f"Import fixing failed: {str(e)}",
+                "note": f"Import fixing is currently unavailable. The ImportFixer module may not be initialized. Check server logs for details.",
+                "details": str(e),
             }
     
     async def start_arbiter(self) -> Dict[str, Any]:

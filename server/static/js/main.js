@@ -2867,10 +2867,10 @@ async function prioritizeBugs() {
     
     try {
         showSuccess('Prioritizing bugs... Analyzing bug data.');
-        const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/prioritize`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({criteria: ['severity', 'impact', 'effort']})
+            body: JSON.stringify({job_id: jobId, criteria: ['severity', 'impact', 'effort']})
         });
         const data = await response.json();
         
