@@ -7402,8 +7402,8 @@ class OmniCoreService:
                 try:
                     docgen_payload = {
                         "code_path": codegen_result.get("output_path"),
-                        "doc_type": "readme",  # FIX Issue 3: Generate README instead of API docs
-                        "format": "markdown",
+                        "doc_type": payload.get("doc_type", "readme"),  # Honour job-requested doc_type; defaults to README
+                        "format": payload.get("doc_format", "markdown"),  # Honour job-requested format; defaults to markdown
                         "output_dir": payload.get("output_dir", ""),  # FIX: Propagate output_dir for consistency
                         "language": detected_language,  # FIX Issue A: Propagate detected language
                     }

@@ -2161,21 +2161,9 @@ class WorkflowEngine:
                         codegen_files=codegen_files
                     )
                 
-                # Validate deployment artifacts
-                if HAS_PROVENANCE and validate_deployment_artifacts:
-                    validation = validate_deployment_artifacts(deploy_files, output_path)
-                    if not validation["valid"]:
-                        deploy_result["status"] = "validation_failed"
-                        deploy_result["validation_errors"] = validation["errors"]
-                        if provenance:
-                            provenance.record_error(
-                                ProvenanceTracker.STAGE_DEPLOY_GEN,
-                                "validation_failed",
-                                f"Deployment validation failed: {validation['errors']}"
-                            )
-                        return deploy_result
-                
-                # Write deployment files to output directory
+                # Write deployment files to output directory before validation so that
+                # valid Kubernetes and Helm manifests are always persisted even when
+                # Dockerfile-level validation fails.
                 if output_path:
                     output_dir = Path(output_path)
                     output_dir.mkdir(parents=True, exist_ok=True)
@@ -2188,6 +2176,20 @@ class WorkflowEngine:
                             f.write(content)
                         deploy_result["files_written"].append(filename)
                         logger.debug(f"[STAGE:DEPLOY_GEN] Wrote {filename}")
+                
+                # Validate deployment artifacts (after writing so manifests are preserved)
+                if HAS_PROVENANCE and validate_deployment_artifacts:
+                    validation = validate_deployment_artifacts(deploy_files, output_path)
+                    if not validation["valid"]:
+                        deploy_result["status"] = "validation_failed"
+                        deploy_result["validation_errors"] = validation["errors"]
+                        if provenance:
+                            provenance.record_error(
+                                ProvenanceTracker.STAGE_DEPLOY_GEN,
+                                "validation_failed",
+                                f"Deployment validation failed: {validation['errors']}"
+                            )
+                        return deploy_result
                 
                 # Record provenance
                 if provenance:

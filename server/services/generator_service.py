@@ -807,6 +807,8 @@ class GeneratorService:
         run_critique: bool,
         skip_clarification: bool = False,
         output_dir: Optional[str] = None,
+        doc_type: Optional[str] = None,
+        doc_format: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Run the full generation pipeline via OmniCore.
@@ -820,6 +822,9 @@ class GeneratorService:
             include_docs: Whether to generate documentation
             run_critique: Whether to run security/quality checks
             skip_clarification: Whether to skip the clarification step (used when resuming after clarification)
+            doc_type: Documentation type to generate (e.g. "readme", "sphinx"). When "sphinx",
+                      the docgen stage will trigger a full Sphinx HTML build under docs/_build/html.
+            doc_format: Output format for documentation (e.g. "markdown", "html").
 
         Returns:
             Full pipeline execution results
@@ -841,6 +846,12 @@ class GeneratorService:
             # Add output_dir if specified
             if output_dir:
                 payload["output_dir"] = output_dir
+            # Pass doc_type/doc_format only when explicitly set so the pipeline
+            # can honour them without overriding its own defaults otherwise.
+            if doc_type:
+                payload["doc_type"] = doc_type
+            if doc_format:
+                payload["doc_format"] = doc_format
 
             result = await self.omnicore_service.route_job(
                 job_id=job_id,
