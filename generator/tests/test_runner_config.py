@@ -242,7 +242,12 @@ instance_id: test-remote-loaded
         self.assertEqual(config.secrets["api_key"], "sk-abc123")
 
     def test_vault_integration(self):
-        # Clear config cache to ensure fresh load
+        # Set vault environment variables FIRST
+        os.environ["RUNNER_VAULT_URL"] = "http://vault:8200"
+        os.environ["RUNNER_VAULT_TOKEN"] = "test-token"
+        os.environ["RUNNER_SECRETS_FROM_VAULT"] = "true"
+        
+        # Clear config cache to ensure fresh load with vault integration
         clear_config_cache()
         _load_config_module._cached_config = None
         _load_config_module._cached_config_file = None
@@ -252,9 +257,6 @@ instance_id: test-remote-loaded
         self.mock_hvac.Client.return_value.secrets.kv.v2.read_secret_version.return_value = {
             "data": {"data": {"api_key": "vault-sk-123"}}
         }
-        os.environ["RUNNER_VAULT_URL"] = "http://vault:8200"
-        os.environ["RUNNER_VAULT_TOKEN"] = "test-token"
-        os.environ["RUNNER_SECRETS_FROM_VAULT"] = "true"
 
         config = load_config(str(self.config_file))
 

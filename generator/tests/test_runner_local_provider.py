@@ -350,14 +350,11 @@ def mock_cfg(key: str | None = None) -> MagicMock:
 
 @patch("generator.runner.providers.local_provider.load_config")
 def test_get_provider_cfg_key(mock_load: MagicMock) -> None:
-    # Clear config cache to ensure mock is used
-    from generator.runner.runner_config import clear_config_cache
-    clear_config_cache()
-    
-    # Also clear the module-level cache directly
-    import generator.runner.runner_config as rc_mod
-    rc_mod._cached_config = None
-    rc_mod._cached_config_file = None
+    # Clear all config caches BEFORE mocking to ensure clean state
+    from generator.runner import runner_config
+    runner_config._cached_config = None
+    runner_config._cached_config_file = None
+    runner_config.clear_config_cache()
     
     mock_load.return_value = mock_cfg("cfg")
     p = get_provider()
