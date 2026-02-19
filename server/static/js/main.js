@@ -1096,12 +1096,13 @@ function displayExecutiveSummary(data) {
             <div style="margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.2); border-radius: 5px;">
                 <strong>🎯 Top Affected Files:</strong>
                 <ul style="margin: 10px 0 0 0; padding-left: 20px;">
-                    ${data.top_affected_files.map(f => `<li>${escapeHtml(f.file)} (${f.count} issues)</li>`).join('')}
+                    ${data.top_affected_files.map(f => `<li>${escapeHtml(f.file)} (${escapeHtml(String(f.count))} issues)</li>`).join('')}
                 </ul>
             </div>
         ` : ''}
     `;
     
+    // Clear container for fresh analysis results (called once per analyze action)
     container.innerHTML = '';
     container.appendChild(summaryCard);
 }
