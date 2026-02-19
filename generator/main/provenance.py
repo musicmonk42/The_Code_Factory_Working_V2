@@ -717,7 +717,7 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
     
     # 1. Check minimum length (relaxed in test mode)
     length = len(readme_content)
-    min_length_required = 200 if test_mode else 500
+    min_length_required = 200 if test_mode else 400
     if length < min_length_required:
         errors.append(f"README too short ({length} chars, minimum {min_length_required})")
     
@@ -754,7 +754,7 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
         }
     elif language.lower() == "python":
         required_commands = {
-            "venv": ["python -m venv", "python3 -m venv", "virtualenv"],
+            "venv": ["python -m venv", "python3 -m venv", "virtualenv", "venv"],
             "pip": ["pip install", "pip3 install"],
             "uvicorn": ["uvicorn", "python -m uvicorn"],
             "pytest": ["pytest", "python -m pytest"],

@@ -354,11 +354,11 @@ Support multiple users.
                     <button id="analyze-btn" class="btn btn-primary">Analyze Code</button>
                 </div>
                 <div class="analysis-buttons">
-                    <button class="btn btn-secondary" onclick="analyzeServerModule()">🔍 Analyze Server Module</button>
-                    <button class="btn btn-secondary" onclick="detectBugs()">🐛 Detect Bugs</button>
-                    <button class="btn btn-secondary" onclick="analyzeCodebase()">📊 Deep Codebase Analysis</button>
-                    <button class="btn btn-secondary" onclick="prioritizeBugs()">⚖️ Prioritize Bugs</button>
-                    <button class="btn btn-secondary" onclick="fixImports()">📦 Auto-Fix Imports</button>
+                    <button class="btn btn-secondary" onclick="analyzeServerModule(this)">🔍 Analyze Server Module</button>
+                    <button class="btn btn-secondary" onclick="detectBugs(this)">🐛 Detect Bugs</button>
+                    <button class="btn btn-secondary" onclick="analyzeCodebase(this)">📊 Deep Codebase Analysis</button>
+                    <button class="btn btn-secondary" onclick="prioritizeBugs(this)">⚖️ Prioritize Bugs</button>
+                    <button class="btn btn-secondary" onclick="fixImports(this)">📦 Auto-Fix Imports</button>
                 </div>
             </div>
 
@@ -902,6 +902,22 @@ Support multiple users.
             <div class="modal-footer">
                 <button class="btn btn-secondary modal-cancel">Cancel</button>
                 <button class="btn btn-primary" onclick="executeSandbox()">Execute</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analysis Results Modal -->
+    <div id="analysis-results-modal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3>Analysis Results</h3>
+                <button class="modal-close" onclick="closeModal('analysis-results-modal')">&times;</button>
+            </div>
+            <div class="modal-body" id="analysis-results-body">
+            </div>
+            <div class="modal-footer">
+                <button id="download-report-btn" class="btn btn-secondary" style="display:none;">⬇ Download Report</button>
+                <button class="btn btn-secondary modal-cancel" onclick="closeModal('analysis-results-modal')">Close</button>
             </div>
         </div>
     </div>
