@@ -1047,6 +1047,8 @@ function initSFE() {
 
 function displayExecutiveSummary(data) {
     const container = document.getElementById('errors-list');
+    // Clear container for fresh analysis results (called once per analyze action)
+    container.innerHTML = '';
     
     // Create executive summary card with gradient background
     const summaryCard = document.createElement('div');
@@ -1111,8 +1113,6 @@ function displayExecutiveSummary(data) {
         ` : ''}
     `;
     
-    // Clear container for fresh analysis results (called once per analyze action)
-    container.innerHTML = '';
     container.appendChild(summaryCard);
 }
 
