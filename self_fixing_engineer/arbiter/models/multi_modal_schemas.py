@@ -101,6 +101,7 @@ class BaseConfig(BaseModel):
         return v
 
     def model_dump(self, *args, **kwargs):
+        """Default to JSON-serializable dumps unless a mode is explicitly provided."""
         if "mode" not in kwargs:
             kwargs["mode"] = "json"
         return super().model_dump(*args, **kwargs)

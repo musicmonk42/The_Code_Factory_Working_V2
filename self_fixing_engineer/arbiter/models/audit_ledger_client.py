@@ -215,7 +215,11 @@ tracer = get_tracer(__name__)
 
 
 def _in_test_mode() -> bool:
-    return os.getenv("TESTING") == "1" or os.getenv("SKIP_AUDIT_INIT") == "1"
+    truthy = {"1", "true", "yes"}
+    return (
+        os.getenv("TESTING", "").lower() in truthy
+        or os.getenv("SKIP_AUDIT_INIT", "").lower() in truthy
+    )
 
 
 # Helper function to get or create a metric (idempotent)

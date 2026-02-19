@@ -108,9 +108,16 @@ except ImportError:
     asyncpg_exceptions.TooManyConnectionsError = TooManyConnectionsError
     asyncpg_exceptions.PostgresConnectionError = PostgresConnectionError
 
+    class _NoOpAcquire:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *args):
+            return None
+
     class Pool:
         def acquire(self):
-            raise NotImplementedError
+            return _NoOpAcquire()
 
         def close(self):
             return None
@@ -121,11 +128,11 @@ except ImportError:
         def is_closed(self):
             return False
 
-    async def _create_pool(*args, **kwargs):
+    async def create_pool_fallback(*args, **kwargs):
         return MagicMock()
 
     asyncpg = types.ModuleType("asyncpg")
-    asyncpg.create_pool = _create_pool
+    asyncpg.create_pool = create_pool_fallback
     asyncpg.exceptions = asyncpg_exceptions
     asyncpg.pool = types.SimpleNamespace(Pool=Pool)
     asyncpg.Record = dict
