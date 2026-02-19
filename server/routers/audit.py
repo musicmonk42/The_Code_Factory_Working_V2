@@ -347,40 +347,49 @@ async def _query_arbiter_audit_logs(
             for line in f:
                 try:
                     entry = json.loads(line.strip())
-                    
+
+                    # Decrypt details/extra fields if they were encrypted by TamperEvidentLogger
+                    try:
+                        entry = audit_logger._decrypt_entry(entry)
+                    except Exception as decrypt_err:
+                        logger.warning(f"Arbiter log decryption failed for entry: {decrypt_err}")
+
+                    # Resolve details safely (may be a dict or a decryption-error dict)
+                    details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
+
                     # Apply filters
                     if event_type and entry.get("event_type") != event_type:
                         continue
-                    if job_id and job_id not in entry.get("details", {}).get("job_id", ""):
+                    if job_id and job_id not in str(details.get("job_id", "")):
                         continue
-                    
+
                     # Parse timestamp for range filtering
                     entry_time = entry.get("timestamp")
                     if start_time and entry_time and entry_time < start_time:
                         continue
                     if end_time and entry_time and entry_time > end_time:
                         continue
-                    
+
                     logs.append({
                         "timestamp": entry.get("timestamp"),
                         "event_type": entry.get("event_type"),
-                        "job_id": entry.get("details", {}).get("job_id"),
+                        "job_id": details.get("job_id"),
                         "action": entry.get("event_type"),
                         "user": entry.get("user_id", "system"),
                         "status": "success",  # Arbiter doesn't track status explicitly
-                        "details": entry.get("details", {}),
+                        "details": details,
                         "hash": entry.get("current_hash"),
                         "signature": entry.get("signature"),
                     })
-                    
+
                     if len(logs) >= limit:
                         break
-                        
+
                 except json.JSONDecodeError:
                     continue
-        
+
         return logs
-        
+
     except ImportError:
         logger.warning("Arbiter audit logger not available")
         return []
@@ -468,7 +477,8 @@ async def _query_simulation_audit_logs(
     try:
         # Simulation uses guardrails audit logger, try both locations
         log_paths = [
-            Path("agentic_audit.log"),  # Old/direct location
+            Path("agentic_audit.jsonl"),  # Default written by agentic/simulation logger
+            Path("agentic_audit.log"),  # Legacy location
             Path("simulation/results/audit_trail.log"),  # From guardrails default
         ]
         
