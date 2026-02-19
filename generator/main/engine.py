@@ -262,6 +262,11 @@ logger = logging.getLogger(__name__)
 # ENUMS AND CONSTANTS
 # =============================================================================
 
+# Maximum number of issues (errors/warnings) to include in provenance reports
+# to prevent overly large provenance files
+MAX_REPORTED_ISSUES = 5
+
+
 class WorkflowStatus(str, Enum):
     """Enumeration of possible workflow execution statuses."""
     PENDING = "pending"
@@ -1450,8 +1455,8 @@ class WorkflowEngine:
                                             "checks_run": len(validation_report.checks_run),
                                             "checks_passed": len(validation_report.checks_passed),
                                             "checks_failed": len(validation_report.checks_failed),
-                                            "errors": validation_report.errors[:5],  # Limit to first 5 errors
-                                            "warnings": validation_report.warnings[:5],
+                                            "errors": validation_report.errors[:MAX_REPORTED_ISSUES],  # Limit to prevent large files
+                                            "warnings": validation_report.warnings[:MAX_REPORTED_ISSUES],
                                         }
                                     )
                                 
@@ -1526,10 +1531,6 @@ class WorkflowEngine:
                                         f"Validation execution failed: {e}"
                                     )
                                 break  # Exit iteration loop
-                        
-                        # Skip testgen and deploy if validation failed
-                        if not validation_passed:
-                            continue
                         
                         # [STAGE:TESTGEN & DEPLOY_GEN] Execute in parallel for faster pipeline
                         # Deploy only depends on codegen output, so it can run alongside testgen

@@ -3379,32 +3379,13 @@ class OmniCoreService:
                                 
                                 # FIX Issue 1: Enforce output layout after materialization
                                 # Ensure all generated files are under the project subdirectory
-                                # Extract project name from spec_block package_name, output_dir, or requirements
-                                project_name = None
-                                
-                                # Priority 1: Try to get package_name from parsed spec or requirements
-                                if requirements_dict:
-                                    # Check for package_name or package field in requirements_dict
-                                    project_name = requirements_dict.get("package_name") or requirements_dict.get("package")
-                                
-                                # Priority 2: Extract from custom_output_dir (take last path component)
-                                if not project_name and custom_output_dir:
-                                    # Extract last component from path (e.g., "my_app" from "generated/my_app")
-                                    # Handle both forward and backward slashes
-                                    path_parts = custom_output_dir.replace("\\", "/").strip("/").split("/")
-                                    if path_parts:
-                                        project_name = path_parts[-1]
-                                
-                                # Priority 3: Use default only if nothing else available
-                                if not project_name:
-                                    # Try to infer from README or use truly generic default
-                                    # Don't use "hello_generator" as it creates confusion
-                                    project_name = "generated_project"
-                                    logger.warning(
-                                        f"[CODEGEN] Could not determine project name from spec or output_dir. "
-                                        f"Using default: {project_name}",
-                                        extra={"job_id": job_id}
-                                    )
+                                # Build payload dict for helper function
+                                helper_payload = {
+                                    "package_name": requirements_dict.get("package_name") if requirements_dict else None,
+                                    "package": requirements_dict.get("package") if requirements_dict else None,
+                                    "output_dir": custom_output_dir
+                                }
+                                project_name = _extract_project_name_from_path_or_payload(helper_payload)
                                 
                                 logger.info(
                                     f"[CODEGEN] Using project name: {project_name}",

@@ -89,8 +89,29 @@ secrets_manager = SecretsManager()
 load_dotenv()
 # Get module logger - follows Python logging best practices.
 # Do NOT call basicConfig() at module level to avoid duplicate logs.
+
+# =============================================================================
+# MODULE-LEVEL CONSTANTS
+# =============================================================================
+
 # Constants for frontend type defaults
 DEFAULT_FRONTEND_TYPE = "jinja_templates"
+
+# Project types with proper templates/scaffolding support
+# These types have tested, production-ready code generation
+SUPPORTED_PROJECT_TYPES = {
+    "fastapi_service", "flask_service", "django_service",
+    "cli_tool", "library", "batch_job", "lambda_function",
+    "microservice", "api_gateway", "data_pipeline",
+}
+
+# Project types that are recognized but NOT supported
+# These require specialized scaffolding not yet implemented
+# Pipeline will fail early with clear message for these types
+UNSUPPORTED_PROJECT_TYPES = {
+    "mesh_adapter", "mesh_service", "event_mesh", "service_mesh",
+    "mesh_policy", "mesh_checkpoint", "adapter_service",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -1260,19 +1281,7 @@ async def build_code_generation_prompt(
             )
             
             # ARCHITECTURE-AWARE GENERATION: Check for unsupported project types
-            # Define project types that have proper templates/scaffolding support
-            SUPPORTED_PROJECT_TYPES = {
-                "fastapi_service", "flask_service", "django_service",
-                "cli_tool", "library", "batch_job", "lambda_function",
-                "microservice", "api_gateway", "data_pipeline",
-            }
-            
-            # Define project types that are recognized but NOT supported (fail early with clear message)
-            UNSUPPORTED_PROJECT_TYPES = {
-                "mesh_adapter", "mesh_service", "event_mesh", "service_mesh",
-                "mesh_policy", "mesh_checkpoint", "adapter_service",
-            }
-            
+            # Uses module-level constants SUPPORTED_PROJECT_TYPES and UNSUPPORTED_PROJECT_TYPES
             project_type_lower = project_type.lower().strip()
             
             # Check if explicitly unsupported (mesh/adapter types without templates)
