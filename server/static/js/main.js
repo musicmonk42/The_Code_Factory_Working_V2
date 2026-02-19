@@ -1045,6 +1045,77 @@ function initSFE() {
     document.getElementById('load-insights-btn').addEventListener('click', () => loadInsights());
 }
 
+function displayExecutiveSummary(data) {
+    const container = document.getElementById('errors-list');
+    // Clear container for fresh analysis results (called once per analyze action)
+    container.innerHTML = '';
+    
+    // Create executive summary card with gradient background
+    const summaryCard = document.createElement('div');
+    summaryCard.className = 'executive-summary-card';
+    summaryCard.style.marginBottom = '20px';
+    summaryCard.style.padding = '20px';
+    summaryCard.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+    summaryCard.style.borderRadius = '8px';
+    summaryCard.style.color = 'white';
+    
+    const severity = data.severity_breakdown || {};
+    const filesAffected = Number(data.files_affected) || 0;
+    const summary = escapeHtml(data.summary || 'Analysis complete');
+    
+    // Validate severity counts as numbers
+    const criticalCount = Number(severity.critical) || 0;
+    const highCount = Number(severity.high) || 0;
+    const mediumCount = Number(severity.medium) || 0;
+    const lowCount = Number(severity.low) || 0;
+    
+    summaryCard.innerHTML = `
+        <h3 style="margin-top: 0;">📊 Executive Summary</h3>
+        <p style="font-size: 1.1em; margin: 10px 0;">${summary}</p>
+        
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
+            <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
+                <div style="font-size: 2em;">🔴</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${criticalCount}</div>
+                <div>Critical</div>
+            </div>
+            <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
+                <div style="font-size: 2em;">🟠</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${highCount}</div>
+                <div>High</div>
+            </div>
+            <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
+                <div style="font-size: 2em;">🟡</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${mediumCount}</div>
+                <div>Medium</div>
+            </div>
+            <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
+                <div style="font-size: 2em;">🔵</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${lowCount}</div>
+                <div>Low</div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.2); border-radius: 5px;">
+            <strong>📁 Files Affected:</strong> ${filesAffected}
+        </div>
+        
+        ${data.top_affected_files && data.top_affected_files.length > 0 ? `
+            <div style="margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.2); border-radius: 5px;">
+                <strong>🎯 Top Affected Files:</strong>
+                <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                    ${data.top_affected_files.map(f => {
+                        const count = Number(f.count) || 0;
+                        return `<li>${escapeHtml(f.file)} (${count} issues)</li>`;
+                    }).join('')}
+                </ul>
+            </div>
+        ` : ''}
+    `;
+    
+    container.appendChild(summaryCard);
+}
+
 async function analyzeCode() {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) {
@@ -1071,6 +1142,9 @@ async function analyzeCode() {
             return;
         }
         
+        // Display executive summary BEFORE errors
+        displayExecutiveSummary(data);
+        
         showSuccess(`Analysis complete: ${data.issues_found} issues found`);
         loadErrors(jobId);
     } catch (error) {
@@ -1086,11 +1160,21 @@ async function loadErrors(jobId) {
         const data = await response.json();
         
         if (data.errors.length === 0) {
-            container.innerHTML = '<p class="no-data">No errors detected</p>';
+            // Don't replace executive summary, just add message
+            const noErrors = document.createElement('p');
+            noErrors.className = 'no-data';
+            noErrors.textContent = 'No errors detected';
+            container.appendChild(noErrors);
             return;
         }
         
-        container.innerHTML = '';
+        // Add errors header
+        const header = document.createElement('h3');
+        header.textContent = 'Detected Errors';
+        header.style.marginTop = '20px';
+        container.appendChild(header);
+        
+        // Add each error card
         data.errors.forEach(error => {
             const card = document.createElement('div');
             card.className = 'error-card';
@@ -1122,7 +1206,10 @@ async function loadErrors(jobId) {
     } catch (error) {
         console.error('Failed to load errors:', error);
         // Show user-visible error message
-        container.innerHTML = `<div class="error-message"><strong>Error loading detected issues:</strong> ${escapeHtml(error.message)}</div>`;
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message';
+        errorDiv.innerHTML = `<strong>Error loading detected issues:</strong> ${escapeHtml(error.message)}`;
+        container.appendChild(errorDiv);
         showError('Failed to load detected issues: ' + error.message);
     }
 }
