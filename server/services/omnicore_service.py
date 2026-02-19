@@ -440,7 +440,57 @@ def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
     return None
 
 
-def _generate_fallback_readme(project_name: str = "hello_generator", 
+def _extract_project_name_from_path_or_payload(
+    payload: Dict[str, Any],
+    default: str = "generated_project"
+) -> str:
+    """
+    Extract project name from payload in a consistent way.
+    
+    This function implements the correct logic to determine project name:
+    1. Try package_name or package field from payload
+    2. Extract last component from output_dir path
+    3. Fall back to default (NOT "hello_generator")
+    
+    Args:
+        payload: Job payload containing output_dir, package_name, etc.
+        default: Default name to use if extraction fails
+        
+    Returns:
+        Project name as a string (just the name, not a path)
+        
+    Example:
+        >>> _extract_project_name_from_path_or_payload({"output_dir": "generated/my_app"})
+        'my_app'
+        >>> _extract_project_name_from_path_or_payload({"package_name": "user_service"})
+        'user_service'
+        >>> _extract_project_name_from_path_or_payload({})
+        'generated_project'
+    """
+    project_name = None
+    
+    # Priority 1: Check for package_name or package field
+    project_name = payload.get("package_name") or payload.get("package")
+    
+    # Priority 2: Extract from output_dir (take last path component)
+    if not project_name:
+        output_dir = payload.get("output_dir", "").strip()
+        if output_dir:
+            # Handle both forward and backward slashes, remove leading/trailing slashes
+            path_parts = output_dir.replace("\\", "/").strip("/").split("/")
+            # Filter out empty parts and take the last non-empty one
+            path_parts = [p for p in path_parts if p]
+            if path_parts:
+                project_name = path_parts[-1]
+    
+    # Priority 3: Use default
+    if not project_name:
+        project_name = default
+    
+    return project_name
+
+
+def _generate_fallback_readme(project_name: str = "generated_project", 
                                 language: str = "python",
                                 output_path: Optional[str] = None) -> str:
     """
@@ -3329,8 +3379,23 @@ class OmniCoreService:
                                 
                                 # FIX Issue 1: Enforce output layout after materialization
                                 # Ensure all generated files are under the project subdirectory
-                                # Extract project name from custom_output_dir or use default
-                                project_name = custom_output_dir if custom_output_dir else "hello_generator"
+                                # Build payload dict for helper function
+                                helper_payload = {
+                                    "package_name": requirements_dict.get("package_name") if requirements_dict else None,
+                                    "package": requirements_dict.get("package") if requirements_dict else None,
+                                    "output_dir": custom_output_dir
+                                }
+                                project_name = _extract_project_name_from_path_or_payload(helper_payload)
+                                
+                                logger.info(
+                                    f"[CODEGEN] Using project name: {project_name}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "project_name": project_name,
+                                        "custom_output_dir": custom_output_dir or "none"
+                                    }
+                                )
+                                
                                 # If output_path already ends with the project name, use parent
                                 if output_path.name == project_name:
                                     # Files are already in the right place
@@ -3942,10 +4007,21 @@ class OmniCoreService:
                 
                 # Write generated tests to files
                 # FIX Issue 3: Write tests into project subdirectory, not repo root
-                # Extract project_name from payload or default to "hello_generator"
-                project_name = payload.get("output_dir", "hello_generator")
+                # Extract project_name from payload - extract only the last path component
+                project_name = payload.get("output_dir", "").strip()
+                if project_name:
+                    # Extract last component from path (e.g., "my_app" from "generated/my_app")
+                    path_parts = project_name.replace("\\", "/").strip("/").split("/")
+                    if path_parts:
+                        project_name = path_parts[-1]
+                
                 if not project_name:
-                    project_name = "hello_generator"
+                    # Fallback: try to get from package_name if available
+                    project_name = payload.get("package_name") or payload.get("package") or "generated_project"
+                    logger.warning(
+                        f"[TESTGEN] Could not determine project name from output_dir. Using: {project_name}",
+                        extra={"job_id": job_id}
+                    )
                 
                 # Tests should go into generated/<project_name>/tests, not generated/tests
                 project_dir = repo_path / "generated" / project_name
@@ -6651,9 +6727,7 @@ class OmniCoreService:
                     
                     if should_regenerate:
                         # Generate comprehensive README
-                        project_name = payload.get("output_dir", "hello_generator")
-                        if not project_name:
-                            project_name = "hello_generator"
+                        project_name = _extract_project_name_from_path_or_payload(payload)
                         
                         comprehensive_readme = _generate_fallback_readme(
                             project_name=project_name,
@@ -7365,7 +7439,7 @@ class OmniCoreService:
                             output_path = codegen_result.get("output_path")
                             if output_path:
                                 output_path_obj = Path(output_path)
-                                project_name = payload.get("output_dir", "hello_generator")
+                                project_name = _extract_project_name_from_path_or_payload(payload)
                                 
                                 # Generate fallback README content
                                 fallback_readme = _generate_fallback_readme(
@@ -7410,7 +7484,7 @@ class OmniCoreService:
                         output_path = codegen_result.get("output_path")
                         if output_path:
                             output_path_obj = Path(output_path)
-                            project_name = payload.get("output_dir", "hello_generator")
+                            project_name = _extract_project_name_from_path_or_payload(payload)
                             
                             # Generate fallback README content
                             fallback_readme = _generate_fallback_readme(
@@ -7689,10 +7763,12 @@ class OmniCoreService:
                 if output_dir.exists():
                     # FIX Issue 3: Final enforcement of output layout after all stages complete
                     # This catches any stray files written outside the project subdirectory
-                    # Extract project name from job metadata or use default
-                    project_name = job.metadata.get("output_dir", "hello_generator")
+                    # Extract project name from job metadata
+                    project_name = None
+                    if job and job.metadata:
+                        project_name = _extract_project_name_from_path_or_payload(job.metadata)
                     if not project_name:
-                        project_name = "hello_generator"
+                        project_name = "generated_project"
                     
                     try:
                         if _MATERIALIZER_AVAILABLE:
