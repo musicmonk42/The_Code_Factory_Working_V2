@@ -96,6 +96,35 @@ class TestValidatePydanticV2Compatibility:
         errors = self._validate(files)
         assert errors == []
 
+    def test_detect_deprecated_validator_decorators(self):
+        """Deprecated @validator / @root_validator should be flagged."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, validator\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    @validator('name')\n"
+                "    def validate_name(cls, v):\n"
+                "        return v\n"
+            )
+        }
+        errors = self._validate(files)
+        assert any("validator decorators" in err for err in errors)
+
+    def test_detect_deprecated_class_config(self):
+        """Deprecated class Config in BaseModel should be flagged."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        extra = 'forbid'\n"
+            )
+        }
+        errors = self._validate(files)
+        assert any("class Config" in err for err in errors)
+
 
 # ---------------------------------------------------------------------------
 # auto_fix_pydantic_v1_imports
@@ -155,6 +184,15 @@ class TestAutoFixPydanticV1Imports:
         fixed = self._fix(files)
         assert "pydantic-settings" not in fixed["requirements.txt"]
 
+    def test_creates_requirements_when_missing_for_basesettings(self):
+        """requirements.txt should be created when BaseSettings is used and requirements is absent."""
+        files = {
+            "config.py": "from pydantic_settings import BaseSettings\n\nclass Settings(BaseSettings):\n    env: str = 'dev'\n",
+        }
+        fixed = self._fix(files)
+        assert "requirements.txt" in fixed
+        assert "pydantic-settings>=2.0.0" in fixed["requirements.txt"]
+
     def test_fix_and_validate_roundtrip(self):
         """After auto-fix, re-running the validator should return no errors."""
         files = {
@@ -171,3 +209,44 @@ class TestAutoFixPydanticV1Imports:
         files = {"config.py": original_content, "requirements.txt": "pydantic>=2.0.0\n"}
         _ = self._fix(files)
         assert files["config.py"] == original_content, "Input dict should not be mutated"
+
+
+class TestParseLLMResponsePydanticV2Validation:
+    """Integration tests: pydantic validation runs before files are materialized."""
+
+    def _parse(self, response, lang="python"):
+        from generator.agents.codegen_agent.codegen_response_handler import parse_llm_response
+        return parse_llm_response(response, lang)
+
+    def test_parse_auto_fixes_and_adds_requirements(self):
+        files_payload = {
+            "files": {
+                "config.py": (
+                    "from pydantic import BaseSettings\n\n"
+                    "class Settings(BaseSettings):\n"
+                    "    app_env: str = 'dev'\n"
+                )
+            }
+        }
+        parsed = self._parse(files_payload)
+        assert "config.py" in parsed
+        assert "from pydantic_settings import BaseSettings" in parsed["config.py"]
+        assert "requirements.txt" in parsed
+        assert "pydantic-settings>=2.0.0" in parsed["requirements.txt"]
+
+    def test_parse_blocks_deprecated_v1_patterns_with_error_file(self):
+        files_payload = {
+            "files": {
+                "schemas.py": (
+                    "from pydantic import BaseModel, validator\n\n"
+                    "class User(BaseModel):\n"
+                    "    name: str\n\n"
+                    "    @validator('name')\n"
+                    "    def validate_name(cls, v):\n"
+                    "        return v\n"
+                )
+            }
+        }
+        parsed = self._parse(files_payload)
+        assert list(parsed.keys()) == ["error.txt"]
+        assert "Pydantic v2 compatibility validation failed" in parsed["error.txt"]

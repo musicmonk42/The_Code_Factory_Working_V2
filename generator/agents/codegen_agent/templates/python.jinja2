@@ -164,14 +164,14 @@ class CalculationRequest(BaseModel):
     \"\"\"Request model for calculations.\"\"\"
     operand1: float = Field(..., description="First operand")
     operand2: float = Field(..., description="Second operand")
-    
-    class Config:
-        json_schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "operand1": 10.5,
                 "operand2": 5.2
             }
         }
+    }
 
 class MessageRequest(BaseModel):
     \"\"\"Request model with string validation constraints.\"\"\"
@@ -985,4 +985,3 @@ Verify your implementation includes:
 7. ✓ Following PEP 8 and modern Python practices?
 
 **Generate the complete JSON response now.**
-

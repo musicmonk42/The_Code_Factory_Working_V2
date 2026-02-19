@@ -444,6 +444,20 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     Returns:
         Dictionary mapping filenames to code content
     """
+    def _finalize_with_pydantic_v2_validation(code_files: Dict[str, str]) -> Dict[str, str]:
+        """Auto-fix common Pydantic v1 patterns, then block materialization if issues remain."""
+        fixed_files = auto_fix_pydantic_v1_imports(code_files)
+        pydantic_errors = validate_pydantic_v2_compatibility(fixed_files)
+        if pydantic_errors:
+            logger.warning("Pydantic v2 compatibility validation failed: %s", pydantic_errors)
+            return {
+                ERROR_FILENAME: (
+                    "Pydantic v2 compatibility validation failed.\n\n"
+                    + "\n".join(f"- {error}" for error in pydantic_errors)
+                )
+            }
+        return fixed_files
+
     # Handle dict response from OpenAI API
     if isinstance(response, dict):
         # Check if this is already a file map ({"files": {...}} or {"app/main.py": "..."})
@@ -562,7 +576,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 else:
                     logger.info("Production-ready validation passed for %d files", len(code_files))
 
-                return code_files
+                return _finalize_with_pydantic_v2_validation(code_files)
     except json.JSONDecodeError:
         # Not valid JSON, continue with cleaning approach
         logger.debug("Raw JSON parsing failed, trying with code block cleaning")
@@ -649,7 +663,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                             "auto_repairs": repair_logs if repair_logs else None,
                         },
                     )
-                    return code_files
+                    return _finalize_with_pydantic_v2_validation(code_files)
                 # If nothing usable, fall through to single-file handling.
 
         except json.JSONDecodeError:
@@ -684,7 +698,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                             "Guard: recovered %d files from JSON bundle in single-file fallback",
                             len(valid_files)
                         )
-                        return valid_files
+                        return _finalize_with_pydantic_v2_validation(valid_files)
             except (json.JSONDecodeError, TypeError):
                 pass
     
@@ -736,7 +750,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             "Parsed Single-File Response (Raw Fallback)",
             {"file": DEFAULT_FILENAME, "language": lang, "production_ready": False},
         )
-        return {DEFAULT_FILENAME: raw}
+        return _finalize_with_pydantic_v2_validation({DEFAULT_FILENAME: raw})
     
     # Use validate_and_repair_syntax with inferred language for single file
     file_lang = _infer_language_from_filename(DEFAULT_FILENAME, default_lang=lang)
@@ -752,10 +766,10 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         
         if not is_production_ready:
             logger.warning("Production-ready validation failed for single-file response")
-            return {
+            return _finalize_with_pydantic_v2_validation({
                 DEFAULT_FILENAME: final_code,
                 ERROR_FILENAME: prod_error
-            }
+            })
         
         log_action(
             "Parsed Single-File Response",
@@ -767,7 +781,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 "repairs_applied": validation_result['repairs_applied'] if validation_result['auto_repaired'] else None,
             },
         )
-        return {DEFAULT_FILENAME: final_code}
+        return _finalize_with_pydantic_v2_validation({DEFAULT_FILENAME: final_code})
 
     logger.error(
         "Syntax validation failed for single-file response (%s). Details: %s",
@@ -1773,6 +1787,20 @@ def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
                 f"Use 'from pydantic_settings import BaseSettings' instead (Pydantic v2)."
             )
 
+        # Check for deprecated Pydantic v1 validators
+        if "@validator(" in content or "@root_validator(" in content:
+            errors.append(
+                f"{filename}: Uses deprecated Pydantic v1 validator decorators. "
+                f"Use '@field_validator' or '@model_validator' (Pydantic v2)."
+            )
+
+        # Check for deprecated Pydantic v1 config style
+        if "class Config:" in content and "BaseModel" in content:
+            errors.append(
+                f"{filename}: Uses deprecated 'class Config:' on a Pydantic model. "
+                f"Use 'model_config = {{...}}' instead (Pydantic v2)."
+            )
+
         # Check that pydantic-settings is declared when BaseSettings is used
         if "BaseSettings" in content and "pydantic-settings" not in requirements_content:
             errors.append(
@@ -1827,6 +1855,12 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     "auto_fix_pydantic_v1_imports: added pydantic-settings to requirements.txt"
                 )
             fixed_files[filename] = content
+
+    if uses_base_settings and "requirements.txt" not in fixed_files:
+        fixed_files["requirements.txt"] = "pydantic-settings>=2.0.0\n"
+        logger.info(
+            "auto_fix_pydantic_v1_imports: created requirements.txt with pydantic-settings"
+        )
 
     return fixed_files
 
