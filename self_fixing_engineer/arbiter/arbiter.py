@@ -362,7 +362,20 @@ else:
         from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
     except ImportError as e:
         logging.debug(f"Optional dependency missing: {e} (PostgresClient)")
-    
+
+        class _PostgresNoOpSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                return None
+
+            async def execute(self, *args, **kwargs):
+                return None
+
+            async def commit(self):
+                return None
+
         class PostgresClient:
             """
             Fallback stub for PostgresClient when asyncpg is not installed.
@@ -374,19 +387,6 @@ else:
             3. Ensure arbiter.models.postgres_client module is available
             """
     
-            class _NoOpSession:
-                async def __aenter__(self):
-                    return self
-
-                async def __aexit__(self, exc_type, exc_val, exc_tb):
-                    return None
-
-                async def execute(self, *args, **kwargs):
-                    return None
-
-                async def commit(self):
-                    return None
-
             def __init__(self, *args, **kwargs):
                 logging.warning(
                     "PostgresClient running in no-op mode. Required dependencies: asyncpg. "
@@ -395,7 +395,7 @@ else:
                 self._available = False
 
             def get_session(self):
-                return self._NoOpSession()
+                return _PostgresNoOpSession()
 
             async def check_health(self):
                 return {"status": "unavailable", "reason": "asyncpg not installed"}
