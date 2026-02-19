@@ -738,8 +738,8 @@ This is a minimal README with just basic content but no structured sections like
             section_errors = [err for err in result["errors"] if "Missing required section" in err]
             assert len(section_errors) == 0, f"Should not fail on missing sections in test mode. Errors: {result['errors']}"
         
-        # Test without README_TEST_MODE (strict mode)
-        with patch.dict('os.environ', {}):
+        # Test without README_TEST_MODE (strict mode) - explicitly set to '0' to ensure it's not '1'
+        with patch.dict('os.environ', {'README_TEST_MODE': '0'}, clear=False):
             result = validate_readme_completeness(minimal_readme)
             
             # Should fail on missing sections in strict mode
