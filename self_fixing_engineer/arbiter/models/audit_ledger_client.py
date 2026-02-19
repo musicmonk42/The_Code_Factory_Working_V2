@@ -169,7 +169,7 @@ except ImportError:
         def __enter__(self):
             return self
 
-        def __exit__(self, *args):
+        def __exit__(self, exc_type, exc_val, exc_tb):
             return False
 
         def set_tag(self, *args, **kwargs):
@@ -214,12 +214,15 @@ logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
 
 
+_TRUTHY_VALUES = {"1", "true", "yes"}
+_TEST_MODE = (
+    os.getenv("TESTING", "").lower() in _TRUTHY_VALUES
+    or os.getenv("SKIP_AUDIT_INIT", "").lower() in _TRUTHY_VALUES
+)
+
+
 def _in_test_mode() -> bool:
-    truthy = {"1", "true", "yes"}
-    return (
-        os.getenv("TESTING", "").lower() in truthy
-        or os.getenv("SKIP_AUDIT_INIT", "").lower() in truthy
-    )
+    return _TEST_MODE
 
 
 # Helper function to get or create a metric (idempotent)

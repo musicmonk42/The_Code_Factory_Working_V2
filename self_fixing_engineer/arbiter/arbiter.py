@@ -378,7 +378,7 @@ else:
                 async def __aenter__(self):
                     return self
 
-                async def __aexit__(self, *exc):
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
                     return None
 
                 async def execute(self, *args, **kwargs):
@@ -395,7 +395,7 @@ else:
                 self._available = False
 
             def get_session(self):
-                return self._NoOpSession()
+                return self.__class__._NoOpSession()
 
             async def check_health(self):
                 return {"status": "unavailable", "reason": "asyncpg not installed"}
