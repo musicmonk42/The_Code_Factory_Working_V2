@@ -1411,6 +1411,126 @@ class WorkflowEngine:
                                         metadata={"output_path": output_path, "files_count": len(codegen_files)}
                                     )
                         
+                        # [STAGE:CONTRACT_VALIDATE] Run contract validation after materialization
+                        # This is a BLOCKING gate - pipeline fails if validation fails
+                        if output_path and validation_passed:
+                            from generator.main.validation import validate_generated_code
+                            from generator.main.spec_integration import SpecDrivenPipeline
+                            
+                            logger.info(
+                                f"[STAGE:CONTRACT_VALIDATE] Running contract validation on {output_path}",
+                                extra={"workflow_id": workflow_id, "output_path": output_path}
+                            )
+                            
+                            try:
+                                # Build spec_block dict for validation
+                                spec_dict = None
+                                if requirements:
+                                    spec_dict = {
+                                        "project_type": requirements.get("project_type"),
+                                        "package_name": requirements.get("package_name") or requirements.get("package"),
+                                        "output_dir": requirements.get("output_dir", output_path),
+                                        "interfaces": requirements.get("interfaces", {}),
+                                        "dependencies": requirements.get("dependencies", []),
+                                    }
+                                
+                                validation_report = validate_generated_code(
+                                    output_dir=Path(output_path),
+                                    language=language,
+                                    spec_block=spec_dict,
+                                    readme_content=md_content
+                                )
+                                
+                                # Record validation result in provenance
+                                if provenance:
+                                    provenance.record_stage(
+                                        "CONTRACT_VALIDATE",
+                                        metadata={
+                                            "valid": validation_report.is_valid(),
+                                            "checks_run": len(validation_report.checks_run),
+                                            "checks_passed": len(validation_report.checks_passed),
+                                            "checks_failed": len(validation_report.checks_failed),
+                                            "errors": validation_report.errors[:5],  # Limit to first 5 errors
+                                            "warnings": validation_report.warnings[:5],
+                                        }
+                                    )
+                                
+                                # HARD FAIL: Contract validation failure blocks pipeline
+                                if not validation_report.is_valid():
+                                    validation_passed = False
+                                    logger.error(
+                                        f"[STAGE:CONTRACT_VALIDATE] HARD FAIL - Contract validation failed. "
+                                        f"{len(validation_report.errors)} error(s) found.",
+                                        extra={
+                                            "workflow_id": workflow_id,
+                                            "errors": validation_report.errors,
+                                            "failed_checks": validation_report.checks_failed,
+                                        }
+                                    )
+                                    
+                                    if provenance:
+                                        provenance.record_error(
+                                            "CONTRACT_VALIDATE",
+                                            "validation_failed",
+                                            f"Contract validation failed: {validation_report.errors}"
+                                        )
+                                    
+                                    # Set failure status and exit iteration loop
+                                    result["status"] = WorkflowStatus.FAILED.value
+                                    result["errors"].append({
+                                        "error_type": "ContractValidationError",
+                                        "message": f"Contract validation failed with {len(validation_report.errors)} error(s)",
+                                        "errors": validation_report.errors,
+                                        "failed_checks": validation_report.checks_failed,
+                                        "stage": "CONTRACT_VALIDATE",
+                                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                                        "validation_report": validation_report.to_text()
+                                    })
+                                    
+                                    # Write validation report to output directory
+                                    try:
+                                        reports_dir = Path(output_path) / "reports"
+                                        reports_dir.mkdir(parents=True, exist_ok=True)
+                                        validation_report_path = reports_dir / "validation_report.txt"
+                                        validation_report_path.write_text(validation_report.to_text(), encoding="utf-8")
+                                        logger.info(f"Validation report written to {validation_report_path}")
+                                    except Exception as e:
+                                        logger.warning(f"Failed to write validation report: {e}")
+                                    
+                                    break  # Exit iteration loop - do not proceed to testgen/deploy
+                                else:
+                                    logger.info(
+                                        f"[STAGE:CONTRACT_VALIDATE] PASS - All {len(validation_report.checks_passed)} validation checks passed",
+                                        extra={"workflow_id": workflow_id}
+                                    )
+                            
+                            except Exception as e:
+                                logger.error(
+                                    f"[STAGE:CONTRACT_VALIDATE] Validation execution failed: {e}",
+                                    exc_info=True,
+                                    extra={"workflow_id": workflow_id}
+                                )
+                                # Treat validation failure as critical error
+                                validation_passed = False
+                                result["status"] = WorkflowStatus.FAILED.value
+                                result["errors"].append({
+                                    "error_type": "ContractValidationError",
+                                    "message": f"Contract validation execution failed: {str(e)}",
+                                    "stage": "CONTRACT_VALIDATE",
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                })
+                                if provenance:
+                                    provenance.record_error(
+                                        "CONTRACT_VALIDATE",
+                                        "validation_exception",
+                                        f"Validation execution failed: {e}"
+                                    )
+                                break  # Exit iteration loop
+                        
+                        # Skip testgen and deploy if validation failed
+                        if not validation_passed:
+                            continue
+                        
                         # [STAGE:TESTGEN & DEPLOY_GEN] Execute in parallel for faster pipeline
                         # Deploy only depends on codegen output, so it can run alongside testgen
                         testgen_task = None

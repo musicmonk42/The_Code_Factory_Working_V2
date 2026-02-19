@@ -1258,6 +1258,53 @@ async def build_code_generation_prompt(
                 f"Code generation proceeding with project_type='{project_type}'",
                 extra={"project_type": project_type, "target_language": target_language}
             )
+            
+            # ARCHITECTURE-AWARE GENERATION: Check for unsupported project types
+            # Define project types that have proper templates/scaffolding support
+            SUPPORTED_PROJECT_TYPES = {
+                "fastapi_service", "flask_service", "django_service",
+                "cli_tool", "library", "batch_job", "lambda_function",
+                "microservice", "api_gateway", "data_pipeline",
+            }
+            
+            # Define project types that are recognized but NOT supported (fail early with clear message)
+            UNSUPPORTED_PROJECT_TYPES = {
+                "mesh_adapter", "mesh_service", "event_mesh", "service_mesh",
+                "mesh_policy", "mesh_checkpoint", "adapter_service",
+            }
+            
+            project_type_lower = project_type.lower().strip()
+            
+            # Check if explicitly unsupported (mesh/adapter types without templates)
+            if project_type_lower in UNSUPPORTED_PROJECT_TYPES:
+                PROMPT_ERRORS.labels("UnsupportedProjectType").inc()
+                logger.error(
+                    f"Cannot proceed with code generation: project_type '{project_type}' is not supported. "
+                    f"This type requires specialized scaffolding that is not yet implemented.",
+                    extra={
+                        "project_type": project_type,
+                        "unsupported_types": list(UNSUPPORTED_PROJECT_TYPES),
+                        "supported_types": list(SUPPORTED_PROJECT_TYPES)
+                    }
+                )
+                raise ValueError(
+                    f"Cannot proceed with code generation: project_type '{project_type}' is not supported. "
+                    f"The system does not have templates for this architecture type. "
+                    f"Supported types: {', '.join(sorted(SUPPORTED_PROJECT_TYPES))}. "
+                    f"Please choose a supported project type or contact support for custom scaffolding."
+                )
+            
+            # Warn if project type is unknown (not in either list) but allow to proceed
+            # This allows forward compatibility with new types added to templates
+            if project_type_lower not in SUPPORTED_PROJECT_TYPES:
+                logger.warning(
+                    f"project_type '{project_type}' is not in the known supported list. "
+                    f"Proceeding with generation but scaffolding may not be optimal.",
+                    extra={
+                        "project_type": project_type,
+                        "supported_types": list(SUPPORTED_PROJECT_TYPES)
+                    }
+                )
 
             # 2. Internationalization
             requirements = await translate_requirements_if_needed(requirements)
