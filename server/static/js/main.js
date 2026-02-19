@@ -1058,8 +1058,14 @@ function displayExecutiveSummary(data) {
     summaryCard.style.color = 'white';
     
     const severity = data.severity_breakdown || {};
-    const filesAffected = data.files_affected || 0;
+    const filesAffected = Number(data.files_affected) || 0;
     const summary = escapeHtml(data.summary || 'Analysis complete');
+    
+    // Validate severity counts as numbers
+    const criticalCount = Number(severity.critical) || 0;
+    const highCount = Number(severity.high) || 0;
+    const mediumCount = Number(severity.medium) || 0;
+    const lowCount = Number(severity.low) || 0;
     
     summaryCard.innerHTML = `
         <h3 style="margin-top: 0;">📊 Executive Summary</h3>
@@ -1068,22 +1074,22 @@ function displayExecutiveSummary(data) {
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px;">
             <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
                 <div style="font-size: 2em;">🔴</div>
-                <div style="font-size: 1.5em; font-weight: bold;">${severity.critical || 0}</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${criticalCount}</div>
                 <div>Critical</div>
             </div>
             <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
                 <div style="font-size: 2em;">🟠</div>
-                <div style="font-size: 1.5em; font-weight: bold;">${severity.high || 0}</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${highCount}</div>
                 <div>High</div>
             </div>
             <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
                 <div style="font-size: 2em;">🟡</div>
-                <div style="font-size: 1.5em; font-weight: bold;">${severity.medium || 0}</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${mediumCount}</div>
                 <div>Medium</div>
             </div>
             <div class="severity-card" style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 5px; text-align: center;">
                 <div style="font-size: 2em;">🔵</div>
-                <div style="font-size: 1.5em; font-weight: bold;">${severity.low || 0}</div>
+                <div style="font-size: 1.5em; font-weight: bold;">${lowCount}</div>
                 <div>Low</div>
             </div>
         </div>
@@ -1096,7 +1102,10 @@ function displayExecutiveSummary(data) {
             <div style="margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.2); border-radius: 5px;">
                 <strong>🎯 Top Affected Files:</strong>
                 <ul style="margin: 10px 0 0 0; padding-left: 20px;">
-                    ${data.top_affected_files.map(f => `<li>${escapeHtml(f.file)} (${escapeHtml(String(f.count))} issues)</li>`).join('')}
+                    ${data.top_affected_files.map(f => {
+                        const count = Number(f.count) || 0;
+                        return `<li>${escapeHtml(f.file)} (${count} issues)</li>`;
+                    }).join('')}
                 </ul>
             </div>
         ` : ''}
