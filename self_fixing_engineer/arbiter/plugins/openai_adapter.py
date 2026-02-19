@@ -260,7 +260,10 @@ class OpenAIAdapter:
         # Mask PII in prompt before processing
         masked_prompt = prompt
         if self.security_config.get("mask_pii_in_logs", False):
-            for pattern in self.security_config.get("pii_patterns", {}).values():
+            pii_patterns = self.security_config.get("pii_patterns", {})
+            # Handle both list and dict formats for pii_patterns
+            patterns = pii_patterns.values() if isinstance(pii_patterns, dict) else pii_patterns
+            for pattern in patterns:
                 masked_prompt = re.sub(pattern, "[PII_MASKED]", masked_prompt)
             self.logger.debug("PII masking applied to prompt.")
 

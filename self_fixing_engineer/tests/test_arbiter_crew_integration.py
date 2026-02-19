@@ -90,11 +90,31 @@ async def crew_manager(
 @pytest.fixture
 def mock_arbiter_settings():
     """Create mock settings for Arbiter."""
+    from cryptography.fernet import Fernet
+    from pydantic import SecretStr
+    
     settings = MagicMock()
     settings.REPORTS_DIRECTORY = "/tmp/test_reports"
     settings.PROMETHEUS_GATEWAY = None
     settings.ALERT_WEBHOOK_URL = None
     settings.REDIS_URL = "redis://localhost:6379"
+    settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
+    settings.OMNICORE_URL = "http://localhost:8000"
+    settings.EMAIL_SMTP_SERVER = None
+    settings.EMAIL_SMTP_PORT = None
+    settings.EMAIL_SMTP_USERNAME = None
+    settings.EMAIL_SMTP_PASSWORD = None
+    settings.EMAIL_SENDER = None
+    settings.EMAIL_USE_TLS = False
+    settings.EMAIL_RECIPIENTS = {}
+    settings.SLACK_WEBHOOK_URL = None
+    settings.MEMORY_LIMIT = 40
+    settings.ENABLE_CRITICAL_FAILURES = False
+    settings.AI_API_TIMEOUT = 30
+    settings.REDIS_MAX_CONNECTIONS = 10
+    settings.RL_MODEL_PATH = "./models/ppo_model.zip"
+    # Generate a valid Fernet key for encryption
+    settings.ENCRYPTION_KEY = SecretStr(Fernet.generate_key().decode())
     return settings
 
 

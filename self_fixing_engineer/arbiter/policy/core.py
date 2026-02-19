@@ -18,8 +18,8 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 # Import the centralized tracer configuration
 from self_fixing_engineer.arbiter.otel_config import get_tracer
-from guardrails.audit_log import audit_log_event_async as audit_log
-from guardrails.compliance_mapper import load_compliance_map
+from self_fixing_engineer.guardrails.audit_log import audit_log_event_async as audit_log
+from self_fixing_engineer.guardrails.compliance_mapper import load_compliance_map
 from tenacity import (
     retry,
     retry_if_exception_type,

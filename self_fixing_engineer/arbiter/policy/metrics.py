@@ -383,7 +383,7 @@ METRIC_REFRESH_LATENCY = get_or_create_metric(
 
 # Enhanced fallback for compliance_mapper import
 try:
-    from guardrails.compliance_mapper import load_compliance_map
+    from self_fixing_engineer.guardrails.compliance_mapper import load_compliance_map
 except ImportError:
     logger.critical(
         "Failed to import compliance_mapper. Using fallback compliance map."
