@@ -395,7 +395,7 @@ else:
                 self._available = False
 
             def get_session(self):
-                return self.__class__._NoOpSession()
+                return self._NoOpSession()
 
             async def check_health(self):
                 return {"status": "unavailable", "reason": "asyncpg not installed"}

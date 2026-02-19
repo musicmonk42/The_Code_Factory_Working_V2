@@ -132,10 +132,6 @@ except ImportError:
         """Fallback no-op pool creator when asyncpg is unavailable."""
         return MagicMock()
 
-    asyncpg = types.ModuleType("asyncpg")
-    asyncpg.create_pool = create_pool_fallback
-    asyncpg.exceptions = asyncpg_exceptions
-    asyncpg.pool = types.SimpleNamespace(Pool=Pool)
     class Record(dict):
         """Fallback for asyncpg.Record with attribute-style access."""
 
@@ -145,6 +141,10 @@ except ImportError:
             except KeyError as exc:
                 raise AttributeError(item) from exc
 
+    asyncpg = types.ModuleType("asyncpg")
+    asyncpg.create_pool = create_pool_fallback
+    asyncpg.exceptions = asyncpg_exceptions
+    asyncpg.pool = types.SimpleNamespace(Pool=Pool)
     asyncpg.Record = Record
     sys.modules.setdefault("asyncpg", asyncpg)
     sys.modules.setdefault("asyncpg.exceptions", asyncpg_exceptions)

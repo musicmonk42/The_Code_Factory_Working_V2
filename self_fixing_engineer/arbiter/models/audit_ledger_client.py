@@ -214,10 +214,10 @@ logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
 
 
-_TRUTHY_VALUES = {"1", "true", "yes"}
+_TRUTHY_ENV_VALUES = {"1", "true", "yes"}
 _TEST_MODE = (
-    os.getenv("TESTING", "").lower() in _TRUTHY_VALUES
-    or os.getenv("SKIP_AUDIT_INIT", "").lower() in _TRUTHY_VALUES
+    os.getenv("TESTING", "").lower() in _TRUTHY_ENV_VALUES
+    or os.getenv("SKIP_AUDIT_INIT", "").lower() in _TRUTHY_ENV_VALUES
 )
 
 
