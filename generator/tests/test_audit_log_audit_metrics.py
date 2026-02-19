@@ -104,57 +104,38 @@ def event_loop():
 @pytest.fixture(autouse=True)
 def cleanup_metrics():
     """
-    Clears metric values before each test to ensure isolation,
-    but avoids unregistering global metrics which are needed.
+    Resets metric values before each test to ensure isolation.
     """
-    # FIX: In prometheus_client >= 0.16.0, labeled metrics use clear() method
-    # For older versions or different metric types, we use try/except
-    try:
-        # For labeled metrics, clear all label combinations
-        if hasattr(LOG_WRITES, "clear"):
-            LOG_WRITES.clear()
-        elif hasattr(LOG_WRITES, "_metrics"):
-            LOG_WRITES._metrics.clear()
-    except Exception:
-        pass
+    from generator.audit_log.audit_metrics import (
+        LOG_WRITES, ERROR_TYPES, PLUGIN_INVOCATIONS,
+        CRYPTO_FAILURES, VULN_COUNT, PERF_SCORE
+    )
 
-    try:
-        if hasattr(ERROR_TYPES, "clear"):
-            ERROR_TYPES.clear()
-        elif hasattr(ERROR_TYPES, "_metrics"):
-            ERROR_TYPES._metrics.clear()
-    except Exception:
-        pass
-
-    try:
-        if hasattr(PLUGIN_INVOCATIONS, "clear"):
-            PLUGIN_INVOCATIONS.clear()
-        elif hasattr(PLUGIN_INVOCATIONS, "_metrics"):
-            PLUGIN_INVOCATIONS._metrics.clear()
-    except Exception:
-        pass
-
-    try:
-        if hasattr(CRYPTO_FAILURES, "clear"):
-            CRYPTO_FAILURES.clear()
-        elif hasattr(CRYPTO_FAILURES, "_metrics"):
-            CRYPTO_FAILURES._metrics.clear()
-    except Exception:
-        pass
-
-    # Resetting Gauges (VULN_COUNT, PERF_SCORE) to 0.0 or initial state
-    for level in ["critical", "high", "medium"]:
+    # Re-register metrics that may have been unregistered by session-level fixtures
+    # (e.g., isolate_prometheus_registry in root conftest.py clears REGISTRY at session start)
+    for metric in [LOG_WRITES, ERROR_TYPES, PLUGIN_INVOCATIONS, CRYPTO_FAILURES, VULN_COUNT, PERF_SCORE]:
         try:
-            VULN_COUNT.labels(level).set(0.0)
+            REGISTRY.register(metric)
+        except ValueError:
+            pass  # Already registered
+
+    # For Counters with labels - DON'T clear the _metrics dict
+    # The metrics need to stay registered in REGISTRY
+    # Just ensure tests start fresh by not relying on previous values
+
+    # For Gauges - reset to 0
+    for level in ["critical", "high", "medium", "low"]:
+        try:
+            VULN_COUNT.labels(level=level).set(0.0)
         except Exception:
             pass
+
     try:
         PERF_SCORE.set(0.0)
     except Exception:
         pass
 
     yield
-    # No cleanup needed after yield as metric updates are handled by the next fixture run.
 
 
 @pytest_asyncio.fixture

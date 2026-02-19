@@ -724,11 +724,16 @@ This is a minimal README with basic information about the project that is long e
         from unittest.mock import patch
         from generator.main.provenance import validate_readme_completeness
         
-        # README with no sections (just title and content)
-        minimal_readme = """# Test Project
+        # README with no sections (just title and content) - deliberately avoids
+        # any keywords that match section patterns (setup, run, test, examples, etc.)
+        minimal_readme = """# My Application
 
-This is a minimal README with just basic content but no structured sections like Setup, Run, Test, or Examples sections that would normally be required.
-""" * 3  # Repeat to meet minimum length
+This is a brief description of the application. The project provides various features for processing and analyzing data according to business requirements.
+
+The codebase is organized into modules that handle specific concerns. Each component is designed to work independently and can be integrated with other parts of the system.
+
+Further information about configuration and deployment can be found in the team's internal documentation and knowledge base.
+""" * 2  # Repeat to meet minimum length
         
         # Test with README_TEST_MODE enabled
         with patch.dict('os.environ', {'README_TEST_MODE': '1'}):
@@ -738,13 +743,17 @@ This is a minimal README with just basic content but no structured sections like
             section_errors = [err for err in result["errors"] if "Missing required section" in err]
             assert len(section_errors) == 0, f"Should not fail on missing sections in test mode. Errors: {result['errors']}"
         
-        # Test without README_TEST_MODE (strict mode) - explicitly set to '0' to ensure it's not '1'
-        with patch.dict('os.environ', {'README_TEST_MODE': '0'}, clear=False):
+        # Test without README_TEST_MODE (strict mode) - explicitly remove the key
+        import os
+        env_copy = os.environ.copy()
+        env_copy.pop('README_TEST_MODE', None)  # Remove the key entirely
+        
+        with patch.dict('os.environ', env_copy, clear=True):
             result = validate_readme_completeness(minimal_readme)
             
             # Should fail on missing sections in strict mode
             section_errors = [err for err in result["errors"] if "Missing required section" in err]
-            assert len(section_errors) > 0, "Should fail on missing sections in strict mode"
+            assert len(section_errors) > 0, f"Should fail on missing sections in strict mode. Got {len(section_errors)} errors"
 
     def test_readme_test_mode_relaxed_commands(self):
         """Test that README_TEST_MODE makes commands optional."""

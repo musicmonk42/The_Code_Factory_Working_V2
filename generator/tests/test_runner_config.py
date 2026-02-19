@@ -242,29 +242,29 @@ instance_id: test-remote-loaded
         self.assertEqual(config.secrets["api_key"], "sk-abc123")
 
     def test_vault_integration(self):
-        # Set vault environment variables FIRST
-        os.environ["RUNNER_VAULT_URL"] = "http://vault:8200"
-        os.environ["RUNNER_VAULT_TOKEN"] = "test-token"
-        os.environ["RUNNER_SECRETS_FROM_VAULT"] = "true"
-        
-        # Clear config cache to ensure fresh load with vault integration
+        # Clear all caches first
         clear_config_cache()
         _load_config_module._cached_config = None
         _load_config_module._cached_config_file = None
-        
-        # This test relies on the hook (1.3) added to load_config
-        self.mock_hvac.Client.return_value.is_authenticated.return_value = True
-        self.mock_hvac.Client.return_value.secrets.kv.v2.read_secret_version.return_value = {
+
+        # Configure hvac mock BEFORE setting env vars
+        mock_client = MagicMock()
+        mock_client.is_authenticated.return_value = True
+        mock_client.secrets.kv.v2.read_secret_version.return_value = {
             "data": {"data": {"api_key": "vault-sk-123"}}
         }
+        self.mock_hvac.Client.return_value = mock_client
 
-        config = load_config(str(self.config_file))
+        # Now set environment variables and load config
+        with patch.dict(os.environ, {
+            "RUNNER_VAULT_URL": "http://vault:8200",
+            "RUNNER_VAULT_TOKEN": "test-token",
+            "RUNNER_SECRETS_FROM_VAULT": "true",
+        }, clear=False):
+            config = load_config(str(self.config_file))
 
-        self.assertEqual(config.secrets["api_key"], "vault-sk-123")
-
-        del os.environ["RUNNER_VAULT_URL"]
-        del os.environ["RUNNER_VAULT_TOKEN"]
-        del os.environ["RUNNER_SECRETS_FROM_VAULT"]
+            # Should get vault value, not file value
+            self.assertEqual(config.secrets["api_key"], "vault-sk-123")
 
     async def test_config_watcher_file(self):
         # FIX: Align test with ConfigWatcher's TESTING mode logic

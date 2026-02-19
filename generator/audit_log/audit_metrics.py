@@ -203,9 +203,25 @@ if not PROMETHEUS_AVAILABLE:
 def safe_counter(name, description, labelnames=()):
     """Return existing Counter if already registered, otherwise create a new one."""
     try:
-        return REGISTRY._names_to_collectors[name]
-    except KeyError:
-        return Counter(name, description, labelnames)
+        names_to_collectors = REGISTRY._names_to_collectors
+        if name in names_to_collectors:
+            return names_to_collectors[name]
+    except (KeyError, AttributeError):
+        pass
+
+    # Create new counter explicitly registered to REGISTRY
+    try:
+        return Counter(name, description, labelnames, registry=REGISTRY)
+    except ValueError:
+        # Metric already exists but couldn't be retrieved - try to get it again
+        try:
+            existing = REGISTRY._names_to_collectors.get(name)
+            if existing:
+                return existing
+        except AttributeError:
+            pass
+        # If still fails, re-raise
+        raise
 
 
 # --- END: ADDED SAFE_COUNTER HELPER ---
