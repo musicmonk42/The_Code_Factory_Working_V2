@@ -279,6 +279,22 @@ pytest_report.xml
 # Uploads directory - temporary job files
 uploads/
 
+# Pipeline output directories - generated code from local runs (CLI mode)
+# These are runtime artifacts, not platform code
+/generated/
+/output/
+
+# User pipeline input specs - MD files uploaded via the web UI to drive the pipeline.
+# These are user data (not platform code) and change with every test run.
+# The server saves them under uploads/ (already excluded above), but also protect
+# common locations a developer might use locally:
+/spec.md
+/spec_*.md
+/*_spec.md
+/input.md
+/input_*.md
+/*_input.md
+
 # Prevent test files in repository root - tests should be in module-specific tests/ directories
 # This prevents temporary fix validation files from being committed
 /test_*.py

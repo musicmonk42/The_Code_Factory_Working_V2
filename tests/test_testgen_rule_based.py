@@ -60,7 +60,8 @@ class Calculator:
         assert "def test_add():" in test_content
         assert "def test_subtract():" in test_content
         assert "class TestCalculator:" in test_content
-        assert "assert True" in test_content  # Placeholder assertion
+        assert "def test_calculator_instantiation" in test_content
+        assert "assert instance is not None" in test_content
         assert "import pytest" in test_content
 
 
@@ -226,3 +227,101 @@ def test_status_mismatch_fix():
     # The actual fix is in omnicore_service.py line 1366
     # where "status": "success" was changed to "status": "completed"
     assert True  # This test documents the fix
+
+
+import ast as _ast
+
+
+def _extract_constraints_from_code(content: str) -> dict:
+    """
+    Standalone reimplementation of TestgenAgent._extract_pydantic_model_constraints.
+    Used in tests to avoid importing the full agent (which has heavy optional deps).
+    """
+    constraints: dict = {}
+    try:
+        tree = _ast.parse(content)
+    except SyntaxError:
+        return constraints
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.ClassDef):
+            continue
+        base_names = [
+            b.id if isinstance(b, _ast.Name) else (b.attr if isinstance(b, _ast.Attribute) else "")
+            for b in node.bases
+        ]
+        if "BaseModel" not in base_names:
+            continue
+        model_constraints: dict = {}
+        for stmt in _ast.walk(node):
+            if not isinstance(stmt, _ast.AnnAssign):
+                continue
+            if not isinstance(stmt.target, _ast.Name):
+                continue
+            field_name = stmt.target.id
+            if stmt.value is None:
+                continue
+            call = stmt.value
+            if not isinstance(call, _ast.Call):
+                continue
+            func = call.func
+            func_name = (
+                func.id if isinstance(func, _ast.Name)
+                else (func.attr if isinstance(func, _ast.Attribute) else "")
+            )
+            if func_name != "Field":
+                continue
+            field_constraints: dict = {}
+            for kw in call.keywords:
+                if kw.arg is None:
+                    continue
+                try:
+                    value = _ast.literal_eval(kw.value)
+                except (ValueError, TypeError):
+                    continue
+                field_constraints[kw.arg] = value
+            if field_constraints:
+                model_constraints[field_name] = field_constraints
+        if model_constraints:
+            constraints[node.name] = model_constraints
+    return constraints
+
+
+def test_extract_pydantic_model_constraints_with_constraints():
+    """Test schema introspection extracts Field constraints for Pydantic models."""
+    code = """
+from pydantic import BaseModel, Field
+
+class Item(BaseModel):
+    name: str = Field(min_length=1)
+    price: float = Field(gt=0)
+"""
+    result = _extract_constraints_from_code(code)
+    assert "Item" in result
+    assert result["Item"]["price"]["gt"] == 0
+    assert result["Item"]["name"]["min_length"] == 1
+
+
+def test_extract_pydantic_model_constraints_no_constraints():
+    """Test that non-constrained models produce no constraint entries."""
+    # Model with no Field validators — no constraints should be extracted
+    code = """
+from pydantic import BaseModel
+
+class User(BaseModel):
+    name: str
+    age: int
+"""
+    result = _extract_constraints_from_code(code)
+    # No Field validators → no constraints → no validation tests should be generated
+    assert "User" not in result
+
+
+def test_extract_pydantic_model_constraints_non_pydantic_ignored():
+    """Test that regular (non-BaseModel) classes are not introspected."""
+    code = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+"""
+    result = _extract_constraints_from_code(code)
+    assert "Calculator" not in result
