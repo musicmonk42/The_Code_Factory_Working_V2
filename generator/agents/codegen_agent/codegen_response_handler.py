@@ -1788,8 +1788,8 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
     Automatically fix common Pydantic v1 → v2 migration issues in generated files.
 
     Fixes applied:
-    - ``from pydantic import BaseSettings`` → ``from pydantic_settings import BaseSettings``
-    - Adds ``pydantic-settings>=2.0.0`` to requirements.txt when BaseSettings is used.
+    - `from pydantic import BaseSettings` → `from pydantic_settings import BaseSettings`
+    - Adds `pydantic-settings>=2.0.0` to requirements.txt when BaseSettings is used.
 
     Args:
         files: Dictionary mapping filenames to file contents.

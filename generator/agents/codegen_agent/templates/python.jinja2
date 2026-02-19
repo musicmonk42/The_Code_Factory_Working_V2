@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development")
     log_level: str = Field(default="info")
 
-# ❌ WRONG (Pydantic v1 - DO NOT USE - this will raise PydanticImportError):
+# ❌ WRONG (Pydantic v1 - DO NOT USE - this will raise an ImportError at runtime):
 # from pydantic import BaseSettings  # ← This FAILS in Pydantic v2
 ```
 
