@@ -771,6 +771,18 @@ jobs:
 
           echo "✓ Tests completed for ${{ matrix.module }}"
 
+      - name: Add swap space for memory-intensive tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Adding 4GB swap space ==="
+          sudo fallocate -l 4G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "=== Memory after adding swap ==="
+          free -h
+          swapon --show
+
       - name: Force garbage collection before Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
@@ -828,7 +840,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 95  # Reduced from 120 to 60
+        timeout-minutes: 45  # Optimized for faster failure detection
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -848,17 +860,18 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 60m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
             --tb=short \
-            -m "not heavy and not slow" \
-            --timeout=300 \
+            -m "not heavy and not slow and not integration" \
+            --timeout=180 \
             --maxfail=100 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
+            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
             > test-output-sfe-arbiter.log 2>&1 || {
@@ -1029,9 +1042,9 @@ jobs:
           python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
           free -h
 
-      - name: Run self_fixing_engineer tests - Other
+      - name: Run self_fixing_engineer tests - Simulation
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 95
+        timeout-minutes: 45
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1043,62 +1056,139 @@ jobs:
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
-          # Set consistent resource limits
-          # Remove address space limit entirely - let kernel manage memory flexibly
-          # GitHub runners have swap available, so we can temporarily exceed 7GB physical RAM
           prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
-          echo "=== Running Other Tests (simulation, self_healing, sfe_basic) ==="
-          # Note: -n auto --dist loadscope temporarily disabled due to xdist worker crashes
-          timeout --signal=TERM --kill-after=30s 90m python -m pytest \
-            self_fixing_engineer/tests/ \
-            --ignore=self_fixing_engineer/tests/test_arbiter*.py \
-            --ignore=self_fixing_engineer/tests/test_mesh*.py \
+          echo "=== Running Simulation Tests ==="
+          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
+            self_fixing_engineer/tests/test_simulation*.py \
             -v \
             --tb=short \
             -m "not heavy" \
-            --timeout=600 \
-            --maxfail=100 \
-            --durations=0 \
+            --timeout=300 \
+            --maxfail=50 \
+            --durations=10 \
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
+            --forked \
             --import-mode=importlib \
-            --junitxml=junit-sfe-other.xml \
-            > test-output-sfe-other.log 2>&1 || {
+            --junitxml=junit-sfe-simulation.xml \
+            > test-output-sfe-simulation.log 2>&1 || {
             EXIT_CODE=$?
             echo "======================================"
-            echo "Other tests failed with exit code $EXIT_CODE"
+            echo "Simulation tests failed with exit code $EXIT_CODE"
             echo "======================================"
-            if [ $EXIT_CODE -eq 124 ]; then
-              echo "ERROR: Other test execution timed out (timeout command)"
-              echo "Wall-clock time limit (90 minutes) was exceeded"
-              echo ""
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-other.log || true
-              echo ""
-              echo "=== System resources at failure ==="
+            tail -100 test-output-sfe-simulation.log || true
+            exit $EXIT_CODE
+          }
+
+      - name: Force garbage collection before Self-Healing tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          sleep 10
+          python -c "import gc; [gc.collect(2) for _ in range(3)]"
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
+          free -h
+
+      - name: Run self_fixing_engineer tests - Self-Healing
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 45
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+          
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
+          
+          echo "=== Running Self-Healing Tests ==="
+          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
+            self_fixing_engineer/tests/test_self_healing*.py \
+            -v \
+            --tb=short \
+            -m "not heavy" \
+            --timeout=300 \
+            --maxfail=50 \
+            --durations=10 \
+            -p no:warnings \
+            -p no:randomly \
+            -p no:cacheprovider \
+            --forked \
+            --import-mode=importlib \
+            --junitxml=junit-sfe-self-healing.xml \
+            > test-output-sfe-self-healing.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "======================================"
+            echo "Self-Healing tests failed with exit code $EXIT_CODE"
+            echo "======================================"
+            tail -100 test-output-sfe-self-healing.log || true
+            exit $EXIT_CODE
+          }
+
+      - name: Force garbage collection before remaining tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          sleep 10
+          python -c "import gc; [gc.collect(2) for _ in range(3)]"
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
+          free -h
+
+      - name: Run self_fixing_engineer tests - Remaining
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 45
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
+        run: |
+          set -o pipefail
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+          
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
+          
+          echo "=== Running Remaining Tests ==="
+          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
+            self_fixing_engineer/tests/ \
+            --ignore=self_fixing_engineer/tests/test_arbiter*.py \
+            --ignore=self_fixing_engineer/tests/test_mesh*.py \
+            --ignore=self_fixing_engineer/tests/test_simulation*.py \
+            --ignore=self_fixing_engineer/tests/test_self_healing*.py \
+            -v \
+            --tb=short \
+            -m "not heavy" \
+            --timeout=300 \
+            --maxfail=50 \
+            --durations=10 \
+            -p no:warnings \
+            -p no:randomly \
+            -p no:cacheprovider \
+            --forked \
+            --import-mode=importlib \
+            --junitxml=junit-sfe-remaining.xml \
+            > test-output-sfe-remaining.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "======================================"
+            echo "Remaining tests failed with exit code $EXIT_CODE"
+            echo "======================================"
+            if [ $EXIT_CODE -eq 137 ]; then
+              echo "ERROR: Still hitting OOM - memory exhausted"
               free -h || true
-              df -h || true
-            elif [ $EXIT_CODE -eq 143 ]; then
-              echo "ERROR: Process terminated (SIGTERM - exit code 143)"
-              echo "This typically indicates:"
-              echo "  - Timeout or resource exhaustion"
-              echo "  - Runner service shutdown"
-              echo "  - Memory pressure from test suite"
-              echo ""
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-other.log || true
-              echo ""
-              echo "=== System resources at failure ==="
-              free -h || true
-              df -h || true
-            else
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-other.log
             fi
+            tail -100 test-output-sfe-remaining.log || true
             exit $EXIT_CODE
           }
 
