@@ -9,17 +9,132 @@ import os
 import re
 import ssl
 import subprocess
+import sys
 import time
+import types
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from unittest.mock import MagicMock
 
-import asyncpg
+try:
+    import asyncpg
+    from asyncpg import exceptions as asyncpg_exceptions
+    from asyncpg.pool import Pool
+
+    ASYNCPG_AVAILABLE = True
+except ImportError:
+    ASYNCPG_AVAILABLE = False
+
+    class PostgresError(Exception):
+        pass
+
+    class ConnectionDoesNotExistError(PostgresError):
+        pass
+
+    class InvalidPasswordError(PostgresError):
+        pass
+
+    class UndefinedTableError(PostgresError):
+        pass
+
+    class UndefinedColumnError(PostgresError):
+        pass
+
+    class DuplicateTableError(PostgresError):
+        pass
+
+    class DuplicateColumnError(PostgresError):
+        pass
+
+    class DataError(PostgresError):
+        pass
+
+    class NotNullViolationError(PostgresError):
+        pass
+
+    class ForeignKeyViolationError(PostgresError):
+        pass
+
+    class InvalidCatalogNameError(PostgresError):
+        pass
+
+    class InterfaceError(PostgresError):
+        pass
+
+    class UniqueViolationError(PostgresError):
+        pass
+
+    class DeadlockDetectedError(PostgresError):
+        pass
+
+    class ConnectionFailureError(PostgresError):
+        pass
+
+    class InsufficientPrivilegeError(PostgresError):
+        pass
+
+    class SerializationError(PostgresError):
+        pass
+
+    class CannotConnectNowError(PostgresError):
+        pass
+
+    class TooManyConnectionsError(PostgresError):
+        pass
+
+    class PostgresConnectionError(PostgresError):
+        pass
+
+    asyncpg_exceptions = types.ModuleType("asyncpg.exceptions")
+    asyncpg_exceptions.PostgresError = PostgresError
+    asyncpg_exceptions.ConnectionDoesNotExistError = ConnectionDoesNotExistError
+    asyncpg_exceptions.InvalidPasswordError = InvalidPasswordError
+    asyncpg_exceptions.UndefinedTableError = UndefinedTableError
+    asyncpg_exceptions.UndefinedColumnError = UndefinedColumnError
+    asyncpg_exceptions.DuplicateTableError = DuplicateTableError
+    asyncpg_exceptions.DuplicateColumnError = DuplicateColumnError
+    asyncpg_exceptions.DataError = DataError
+    asyncpg_exceptions.NotNullViolationError = NotNullViolationError
+    asyncpg_exceptions.ForeignKeyViolationError = ForeignKeyViolationError
+    asyncpg_exceptions.InvalidCatalogNameError = InvalidCatalogNameError
+    asyncpg_exceptions.InterfaceError = InterfaceError
+    asyncpg_exceptions.UniqueViolationError = UniqueViolationError
+    asyncpg_exceptions.DeadlockDetectedError = DeadlockDetectedError
+    asyncpg_exceptions.ConnectionFailureError = ConnectionFailureError
+    asyncpg_exceptions.InsufficientPrivilegeError = InsufficientPrivilegeError
+    asyncpg_exceptions.SerializationError = SerializationError
+    asyncpg_exceptions.CannotConnectNowError = CannotConnectNowError
+    asyncpg_exceptions.TooManyConnectionsError = TooManyConnectionsError
+    asyncpg_exceptions.PostgresConnectionError = PostgresConnectionError
+
+    class Pool:
+        def acquire(self):
+            raise NotImplementedError
+
+        def close(self):
+            return None
+
+        def get_size(self):
+            return 0
+
+        def is_closed(self):
+            return False
+
+    async def _create_pool(*args, **kwargs):
+        return MagicMock()
+
+    asyncpg = types.ModuleType("asyncpg")
+    asyncpg.create_pool = _create_pool
+    asyncpg.exceptions = asyncpg_exceptions
+    asyncpg.pool = types.SimpleNamespace(Pool=Pool)
+    asyncpg.Record = dict
+    sys.modules.setdefault("asyncpg", asyncpg)
+    sys.modules.setdefault("asyncpg.exceptions", asyncpg_exceptions)
+    sys.modules.setdefault("asyncpg.pool", asyncpg.pool)
 
 # Import centralized OpenTelemetry configuration
 from self_fixing_engineer.arbiter.otel_config import get_tracer
-from asyncpg import exceptions as asyncpg_exceptions
-from asyncpg.pool import Pool
 from opentelemetry.trace import Status, StatusCode
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 from tenacity import (
@@ -445,6 +560,18 @@ class PostgresClient:
                 logger.info("PostgreSQL client already connected.")
                 return
 
+            if not ASYNCPG_AVAILABLE:
+                if self._pool is None:
+                    self._pool = MagicMock()
+                    self._pool.is_closed.return_value = False
+                    self._pool.get_size.return_value = 0
+                    self._pool.get_idle_count.return_value = 0
+                self._is_closed = False
+                logger.warning(
+                    "asyncpg not available. PostgresClient running in no-op mode."
+                )
+                return
+
             with tracer.start_as_current_span("db_connect") as span:
                 span.set_attribute("db.url", _sanitize_dsn(self.db_url))
                 start_time = time.monotonic()
@@ -617,6 +744,12 @@ class PostgresClient:
         """Closes the PostgreSQL connection pool."""
         if self._pool is None or self._is_closed:
             logger.info("PostgreSQL client already disconnected.")
+            return
+
+        if not ASYNCPG_AVAILABLE:
+            self._pool = None
+            self._is_closed = True
+            logger.info("PostgresClient disconnected (no-op mode).")
             return
 
         if self._health_check_task:

@@ -100,6 +100,11 @@ class BaseConfig(BaseModel):
                 return escape(v, quote=True)
         return v
 
+    def model_dump(self, *args, **kwargs):
+        if "mode" not in kwargs:
+            kwargs["mode"] = "json"
+        return super().model_dump(*args, **kwargs)
+
     @field_validator('timestamp_utc', mode='before', check_fields=False)
     @classmethod
     def ensure_utc_timezone_before(cls, v):
