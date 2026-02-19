@@ -705,7 +705,15 @@ class PluginService:
                 command = message.payload.get("command", "status")
                 config = message.payload.get("config", {})
                 result = await sfe_service.control_arbiter(command, job_id, config)
-                
+
+            elif action == "deep_analyze":
+                code_path = message.payload.get("code_path", ".")
+                analysis_types = message.payload.get("analysis_types", [])
+                generate_report = message.payload.get("generate_report", False)
+                result = await sfe_service.deep_analyze_codebase(
+                    code_path, analysis_types, generate_report, job_id
+                )
+
             else:
                 self.logger.warning(f"Unknown SFE action: {action}")
                 result = {
