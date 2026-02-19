@@ -1742,6 +1742,96 @@ def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
 
 
 # ==============================================================================
+# --- Pydantic v2 Compatibility Validation & Auto-Fix ---
+# ==============================================================================
+
+
+def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
+    """
+    Validate that generated code uses Pydantic v2 syntax.
+
+    Checks for deprecated Pydantic v1 imports and patterns that will fail
+    in a Pydantic v2 environment.
+
+    Args:
+        files: Dictionary mapping filenames to file contents.
+
+    Returns:
+        List of validation error messages (empty if all files are valid).
+    """
+    errors: List[str] = []
+    requirements_content = files.get("requirements.txt", "")
+
+    for filename, content in files.items():
+        if not filename.endswith(".py"):
+            continue
+
+        # Check for deprecated BaseSettings import location
+        if "from pydantic import BaseSettings" in content:
+            errors.append(
+                f"{filename}: Uses deprecated 'from pydantic import BaseSettings'. "
+                f"Use 'from pydantic_settings import BaseSettings' instead (Pydantic v2)."
+            )
+
+        # Check that pydantic-settings is declared when BaseSettings is used
+        if "BaseSettings" in content and "pydantic-settings" not in requirements_content:
+            errors.append(
+                f"{filename}: Uses BaseSettings but 'pydantic-settings' is not listed "
+                f"in requirements.txt. Add 'pydantic-settings>=2.0.0'."
+            )
+
+    return errors
+
+
+def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
+    """
+    Automatically fix common Pydantic v1 → v2 migration issues in generated files.
+
+    Fixes applied:
+    - ``from pydantic import BaseSettings`` → ``from pydantic_settings import BaseSettings``
+    - Adds ``pydantic-settings>=2.0.0`` to requirements.txt when BaseSettings is used.
+
+    Args:
+        files: Dictionary mapping filenames to file contents.
+
+    Returns:
+        Updated files dictionary with fixes applied.
+    """
+    fixed_files = dict(files)
+
+    # Determine whether any Python file uses BaseSettings
+    uses_base_settings = any(
+        "BaseSettings" in content
+        for fname, content in fixed_files.items()
+        if fname.endswith(".py")
+    )
+
+    for filename in list(fixed_files.keys()):
+        content = fixed_files[filename]
+
+        if filename.endswith(".py"):
+            # Fix: from pydantic import BaseSettings → from pydantic_settings import BaseSettings
+            if "from pydantic import BaseSettings" in content:
+                content = content.replace(
+                    "from pydantic import BaseSettings",
+                    "from pydantic_settings import BaseSettings",
+                )
+                logger.info("auto_fix_pydantic_v1_imports: fixed BaseSettings import in %s", filename)
+
+            fixed_files[filename] = content
+
+        elif filename == "requirements.txt":
+            if uses_base_settings and "pydantic-settings" not in content:
+                content = content.rstrip("\n") + "\npydantic-settings>=2.0.0\n"
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: added pydantic-settings to requirements.txt"
+                )
+            fixed_files[filename] = content
+
+    return fixed_files
+
+
+# ==============================================================================
 # --- Traceability Annotations ---
 # ==============================================================================
 

@@ -312,13 +312,31 @@ async def call_llm_for_critique(
     prompt: str,
     step_name: str,
     config: CritiqueConfig,
+    extra_context: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
     Wrapper to call the unified LLM client for critique/semantic steps.
 
     Expects the underlying LLM (via call_llm_api) to return JSON (or markdown-wrapped JSON),
     but degrades gracefully when it doesn't.
+
+    Args:
+        prompt: The prompt to send to the LLM.
+        step_name: Name of the critique step (for logging).
+        config: CritiqueConfig instance with provider and settings.
+        extra_context: Optional additional context (e.g. self-heal feedback from a
+            prior low-scoring attempt).  When provided, it is appended to the
+            prompt so the LLM can incorporate prior feedback.
     """
+    # Append extra_context to prompt when provided (e.g. self-heal feedback)
+    if extra_context:
+        context_str = (
+            extra_context
+            if isinstance(extra_context, str)
+            else json.dumps(extra_context, default=str)
+        )
+        prompt = f"{prompt}\n\n[Self-Heal Context]\n{context_str}"
+
     # Fix: Use proper LLM provider instead of target_language
     # target_language is for code generation, not LLM provider selection
     provider = os.getenv("DEFAULT_LLM_PROVIDER", "openai")
