@@ -133,9 +133,13 @@ class SFEService:
             self._sfe_available["codebase_analyzer"] = True
             logger.info("✓ SFE codebase analyzer loaded")
         except ImportError as e:
-            logger.warning(f"SFE codebase analyzer unavailable: {e}")
+            logger.warning(
+                f"SFE codebase analyzer unavailable ({type(e).__name__}: {e}). "
+                "Ensure all dependencies for self_fixing_engineer.arbiter.codebase_analyzer "
+                "are installed (e.g. check requirements.txt or optional dependencies)."
+            )
         except Exception as e:
-            logger.warning(f"Error loading codebase analyzer: {e}")
+            logger.warning(f"Error loading codebase analyzer ({type(e).__name__}: {e})")
 
         # Try to load bug manager
         try:

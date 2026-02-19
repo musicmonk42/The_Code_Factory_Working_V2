@@ -435,5 +435,121 @@ class TestSFETabFixes:
         del jobs_db[test_job_id]
 
 
+class TestDeepAnalyzeHandler:
+    """Tests for the deep_analyze OmniCore handler."""
+
+    @pytest.fixture
+    def mock_dependencies(self):
+        """Create mock dependencies for PluginService."""
+        mock_registry = MagicMock()
+        mock_bus_instance = MagicMock()
+        mock_bus_instance.subscribe = AsyncMock()
+        mock_bus_instance.publish = AsyncMock()
+        return {"registry": mock_registry, "bus": mock_bus_instance}
+
+    @pytest.mark.asyncio
+    async def test_handle_sfe_request_deep_analyze(self, mock_dependencies):
+        """Test that handle_sfe_request routes deep_analyze to SFEService.deep_analyze_codebase."""
+        from omnicore_engine.engines import PluginService
+
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"],
+        )
+        await service.start_subscriptions()
+
+        expected_result = {
+            "analysis_id": "analysis_1234",
+            "total_files": 5,
+            "total_loc": 200,
+            "source": "direct_sfe",
+        }
+
+        mock_sfe_service = AsyncMock()
+        mock_sfe_service.deep_analyze_codebase = AsyncMock(return_value=expected_result)
+
+        message = Mock()
+        message.payload = {
+            "action": "deep_analyze",
+            "job_id": "job-deep-001",
+            "code_path": "/some/code",
+            "analysis_types": ["complexity", "security"],
+            "generate_report": True,
+        }
+
+        with patch("server.services.SFEService", return_value=mock_sfe_service):
+            await service.handle_sfe_request(message)
+
+        mock_sfe_service.deep_analyze_codebase.assert_awaited_once_with(
+            "/some/code",
+            ["complexity", "security"],
+            True,
+            "job-deep-001",
+        )
+
+    @pytest.mark.asyncio
+    async def test_handle_sfe_request_deep_analyze_defaults(self, mock_dependencies):
+        """Test that deep_analyze handler uses sensible defaults for missing payload fields."""
+        from omnicore_engine.engines import PluginService
+
+        service = PluginService(
+            mock_dependencies["registry"],
+            message_bus=mock_dependencies["bus"],
+        )
+        await service.start_subscriptions()
+
+        mock_sfe_service = AsyncMock()
+        mock_sfe_service.deep_analyze_codebase = AsyncMock(return_value={"source": "fallback"})
+
+        message = Mock()
+        message.payload = {
+            "action": "deep_analyze",
+            "job_id": "job-deep-002",
+            # code_path, analysis_types, generate_report omitted → use defaults
+        }
+
+        with patch("server.services.SFEService", return_value=mock_sfe_service):
+            await service.handle_sfe_request(message)
+
+        mock_sfe_service.deep_analyze_codebase.assert_awaited_once_with(
+            ".",
+            [],
+            False,
+            "job-deep-002",
+        )
+
+    def test_init_sfe_components_import_error_log(self):
+        """Test _init_sfe_components logs exception type and missing dependency hint on ImportError."""
+        import builtins
+
+        service = SFEService(omnicore_service=None)
+
+        original_import = builtins.__import__
+
+        def patched_import(name, *args, **kwargs):
+            if name == "self_fixing_engineer.arbiter.codebase_analyzer":
+                raise ImportError("No module named 'self_fixing_engineer'")
+            return original_import(name, *args, **kwargs)
+
+        with patch("server.services.sfe_service.logger") as mock_logger:
+            with patch("builtins.__import__", side_effect=patched_import):
+                service._init_sfe_components()
+
+            # Check that the warning contains exception type and dependency hint
+            # Extract the first positional argument of each warning call
+            warning_messages = [
+                call.args[0] for call in mock_logger.warning.call_args_list
+                if call.args
+            ]
+            analyzer_warnings = [
+                m for m in warning_messages
+                if "codebase analyzer" in m.lower() or "codebase_analyzer" in m
+            ]
+            assert any(
+                "ImportError" in w and "requirements" in w
+                for w in analyzer_warnings
+            ), f"Expected detailed ImportError log with dependency hint, got: {analyzer_warnings}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
