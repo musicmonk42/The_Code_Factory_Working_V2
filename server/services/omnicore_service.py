@@ -215,6 +215,8 @@ DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
 DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
 DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "600"))
+# Maximum number of files to analyze in depth during SFE analysis (prevents timeout)
+MAX_SFE_FILES_TO_ANALYZE = int(os.getenv("MAX_SFE_FILES_TO_ANALYZE", "50"))
 
 # ============================================================================
 # INDUSTRY STANDARD: Named Constants for Configuration and Limits
@@ -5656,20 +5658,60 @@ class OmniCoreService:
                     root_dir=str(code_path_obj),
                     ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
                 ) as analyzer:
+                    # First, do a quick scan to get overall summary
                     summary = await analyzer.scan_codebase(str(code_path_obj))
                     
+                    # Then, perform deeper analysis by discovering and analyzing each Python file
+                    logger.info(f"[SFE_ANALYSIS] Discovering Python files for deeper analysis in {code_path}")
+                    py_files = await analyzer.discover_files_async()
+                    logger.info(f"[SFE_ANALYSIS] Found {len(py_files)} Python files to analyze")
+                    
+                    # Collect issues from both scan and deeper analysis
+                    all_issues = []
+                    
+                    # Get defects from initial scan
                     defects = summary.get("defects", [])
-                    # Filter out defects for non-existent files
+                    all_issues.extend(defects)
+                    
+                    # Perform deeper analysis on each file (limit to avoid timeout)
+                    max_files_to_analyze = MAX_SFE_FILES_TO_ANALYZE
+                    files_analyzed = 0
+                    for py_file in py_files[:max_files_to_analyze]:
+                        try:
+                            file_issues = await analyzer.analyze_and_propose(py_file)
+                            if file_issues:
+                                all_issues.extend(file_issues)
+                                files_analyzed += 1
+                        except Exception as e:
+                            logger.warning(f"[SFE_ANALYSIS] Error analyzing {py_file}: {e}")
+                            continue
+                    
+                    logger.info(
+                        f"[SFE_ANALYSIS] Completed deeper analysis on {files_analyzed}/{len(py_files)} files"
+                    )
+                    
+                    # Filter out defects for non-existent files and deduplicate
                     valid_defects = []
-                    for defect in defects:
+                    seen_issues = set()
+                    for defect in all_issues:
                         defect_file = defect.get("file", "")
                         if defect_file:
                             defect_path = Path(defect_file)
                             if not defect_path.is_absolute():
                                 defect_path = code_path_obj / defect_path
-                            if defect_path.exists():
+                            
+                            # Create unique key for deduplication
+                            issue_key = (
+                                str(defect_path),
+                                defect.get("line", 0),
+                                defect.get("type", ""),
+                                defect.get("message", "")
+                            )
+                            
+                            if defect_path.exists() and issue_key not in seen_issues:
                                 valid_defects.append(defect)
-                            else:
+                                seen_issues.add(issue_key)
+                            elif not defect_path.exists():
                                 logger.debug(f"[SFE_ANALYSIS] Skipping defect for non-existent file: {defect_file}")
                     
                     issues_found = len(valid_defects)
@@ -5748,6 +5790,8 @@ class OmniCoreService:
                         "job_id": job_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "code_path": str(code_path_obj),
+                        "files_analyzed": files_analyzed,
+                        "total_python_files": len(py_files),
                         "issues_found": issues_found,
                         "issues_fixed": issues_fixed,
                         "critical_high_count": len(critical_high_issues),
@@ -5755,6 +5799,7 @@ class OmniCoreService:
                         "critical_high_defects": critical_high_issues,
                         "remediation_results": remediation_results,
                         "summary": summary,
+                        "source": "CodebaseAnalyzer",
                     }
                     
                     async with aiofiles.open(report_path, "w", encoding="utf-8") as f:
@@ -5772,10 +5817,12 @@ class OmniCoreService:
                     # Structured logging
                     logger.info(
                         f"[PIPELINE] Job {job_id} completed step: sfe_analysis - "
-                        f"found {issues_found} issues, fixed {issues_fixed}",
+                        f"analyzed {files_analyzed} files, found {issues_found} issues, fixed {issues_fixed}",
                         extra={
                             "job_id": job_id,
                             "stage": "sfe_analysis",
+                            "files_analyzed": files_analyzed,
+                            "total_python_files": len(py_files),
                             "issues_found": issues_found,
                             "issues_fixed": issues_fixed,
                             "critical_high_count": len(critical_high_issues)
@@ -5786,6 +5833,8 @@ class OmniCoreService:
                         "status": "completed",
                         "job_id": job_id,
                         "code_path": str(code_path_obj),
+                        "files_analyzed": files_analyzed,
+                        "total_python_files": len(py_files),
                         "issues_found": issues_found,
                         "issues_fixed": issues_fixed,
                         "critical_high_count": len(critical_high_issues),

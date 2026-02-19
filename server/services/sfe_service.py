@@ -39,6 +39,15 @@ SEVERITY_SCORES = {
     "low": 25,
 }
 
+# Priority scoring adjustments based on criteria
+PRIORITY_IMPACT_CORE_FILE_BONUS = 20  # Extra priority for bugs in core files (main.py, app.py)
+PRIORITY_IMPACT_TEST_FILE_PENALTY = 10  # Lower priority for bugs in test files
+PRIORITY_EFFORT_IMPORT_ERROR_BONUS = 10  # Import errors are easier to fix, higher priority
+
+# Priority level thresholds
+PRIORITY_LEVEL_HIGH_THRESHOLD = 70
+PRIORITY_LEVEL_MEDIUM_THRESHOLD = 40
+
 
 class SFEService:
     """
@@ -2248,11 +2257,34 @@ class SFEService:
                     severity = bug.get("severity", "medium")
                     priority_score = SEVERITY_SCORES.get(severity, 50)
 
+                    # Adjust score based on additional criteria
+                    if "impact" in criteria:
+                        # Bugs in core modules get higher priority
+                        bug_file = bug.get("file", "")
+                        if "main.py" in bug_file or "app.py" in bug_file:
+                            priority_score += PRIORITY_IMPACT_CORE_FILE_BONUS
+                        elif "test" in bug_file.lower():
+                            priority_score -= PRIORITY_IMPACT_TEST_FILE_PENALTY  # Tests are lower priority
+
+                    if "effort" in criteria:
+                        # Simple import errors are easier to fix - give them higher priority
+                        bug_type = bug.get("type", "")
+                        if "import" in bug_type.lower():
+                            priority_score += PRIORITY_EFFORT_IMPORT_ERROR_BONUS
+
                     # Generate unique bug_id if not present
                     bug_id = bug.get("error_id") or bug.get("bug_id")
                     if not bug_id:
                         # Use uuid for truly unique IDs
                         bug_id = f"bug-{uuid4().hex[:8]}"
+                    
+                    # Calculate priority level based on score
+                    if priority_score >= PRIORITY_LEVEL_HIGH_THRESHOLD:
+                        priority_level = "high"
+                    elif priority_score >= PRIORITY_LEVEL_MEDIUM_THRESHOLD:
+                        priority_level = "medium"
+                    else:
+                        priority_level = "low"
 
                     prioritized.append(
                         {
@@ -2265,10 +2297,11 @@ class SFEService:
                             "priority": len(prioritized)
                             + 1,  # Will be recalculated after sorting
                             "priority_score": priority_score,
+                            "priority_level": priority_level,
                             "impact": (
                                 "high" if severity in ["critical", "high"] else "medium"
                             ),
-                            "effort": "medium",
+                            "effort": "low" if "import" in bug.get("type", "").lower() else "medium",
                         }
                     )
 
@@ -2282,10 +2315,20 @@ class SFEService:
                 logger.info(
                     f"Prioritized {len(prioritized)} real bugs from job {job_id}"
                 )
+                
+                # Count bugs by priority level
+                high_priority_count = sum(1 for b in prioritized if b["priority_score"] >= PRIORITY_LEVEL_HIGH_THRESHOLD)
+                medium_priority_count = sum(1 for b in prioritized if PRIORITY_LEVEL_MEDIUM_THRESHOLD <= b["priority_score"] < PRIORITY_LEVEL_HIGH_THRESHOLD)
+                low_priority_count = sum(1 for b in prioritized if b["priority_score"] < PRIORITY_LEVEL_MEDIUM_THRESHOLD)
+                
                 return {
                     "job_id": job_id,
                     "prioritized_bugs": prioritized,
+                    "total_bugs": len(prioritized),
                     "criteria": criteria,
+                    "high_priority_count": high_priority_count,
+                    "medium_priority_count": medium_priority_count,
+                    "low_priority_count": low_priority_count,
                     "source": "real_analysis",
                 }
         except Exception as e:
@@ -2736,7 +2779,7 @@ class SFEService:
         job_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Fix import issues via OmniCore.
+        Fix import issues using ImportFixerEngine.
 
         Args:
             code_path: Path to code (can be relative, resolved via job_id if provided)
@@ -2764,11 +2807,122 @@ class SFEService:
                 target_module="sfe",
                 payload=payload,
             )
-            return result.get("data", {})
+            # Check if route_job actually returned data
+            if result.get("data"):
+                logger.info("Import fixing completed via OmniCore")
+                return result["data"]
+            logger.info(
+                "OmniCore routing returned no data, falling through to direct ImportFixerEngine"
+            )
 
-        return {
-            "status": "fixed",
-            "imports_fixed": 5,
-            "packages_installed": 2 if auto_install else 0,
-            "style_fixes": 3 if fix_style else 0,
-        }
+        # Try direct ImportFixerEngine implementation
+        logger.info("Using direct ImportFixerEngine for import fixing")
+        try:
+            from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+        except ImportError as e:
+            logger.warning(f"ImportFixerEngine not available: {e}")
+            return {
+                "status": "error",
+                "imports_fixed": 0,
+                "fixed_files": [],
+                "note": f"ImportFixerEngine not available: {e}",
+            }
+
+        try:
+            code_path_obj = Path(resolved_path)
+            
+            if not code_path_obj.exists():
+                return {
+                    "status": "error",
+                    "imports_fixed": 0,
+                    "fixed_files": [],
+                    "note": f"Path does not exist: {resolved_path}",
+                }
+
+            fixed_files = []
+            total_fixes = 0
+
+            # Discover Python files
+            py_files = list(code_path_obj.rglob("*.py"))
+            logger.info(f"Found {len(py_files)} Python files to check for import issues")
+
+            fixer = ImportFixerEngine()
+
+            for py_file in py_files:
+                try:
+                    # Read original code with explicit error handling
+                    try:
+                        original_code = py_file.read_text(encoding='utf-8')
+                    except UnicodeDecodeError:
+                        logger.warning(f"Could not decode {py_file} as UTF-8, trying latin-1")
+                        original_code = py_file.read_text(encoding='latin-1')
+                    except Exception as read_error:
+                        logger.warning(f"Error reading {py_file}: {read_error}")
+                        continue
+
+                    # Apply import fixer
+                    result = fixer.fix_code(
+                        code=original_code,
+                        file_path=str(py_file),
+                        project_root=str(code_path_obj),
+                        dry_run=False,
+                    )
+
+                    if result.get("status") == "success" and result.get("fixes_applied"):
+                        # Create backup before overwriting
+                        backup_path = py_file.with_suffix('.py.bak')
+                        try:
+                            backup_path.write_text(original_code, encoding='utf-8')
+                        except Exception as backup_error:
+                            logger.warning(f"Could not create backup for {py_file}: {backup_error}")
+                        
+                        # Write fixed code
+                        fixed_code = result.get("fixed_code", original_code)
+                        try:
+                            py_file.write_text(fixed_code, encoding='utf-8')
+                            
+                            # Clean up backup if write succeeded
+                            if backup_path.exists():
+                                backup_path.unlink()
+                        except Exception as write_error:
+                            logger.error(f"Error writing fixed code to {py_file}: {write_error}")
+                            # Restore from backup if available
+                            if backup_path.exists():
+                                try:
+                                    py_file.write_text(backup_path.read_text(encoding='utf-8'), encoding='utf-8')
+                                    logger.info(f"Restored {py_file} from backup")
+                                except Exception as restore_error:
+                                    logger.error(f"Could not restore backup for {py_file}: {restore_error}")
+                            continue
+
+                        fixed_files.append({
+                            "file": str(py_file.relative_to(code_path_obj)),
+                            "fixes": result["fixes_applied"],
+                        })
+                        total_fixes += len(result["fixes_applied"])
+
+                        logger.info(f"Fixed {len(result['fixes_applied'])} imports in {py_file.name}")
+
+                except Exception as e:
+                    logger.warning(f"Error fixing imports in {py_file}: {e}")
+                    continue
+
+            logger.info(f"Import fixing complete: {total_fixes} fixes in {len(fixed_files)} files")
+            return {
+                "status": "completed",
+                "imports_fixed": total_fixes,
+                "files_fixed": len(fixed_files),
+                "fixed_files": fixed_files,
+                "auto_install": auto_install,
+                "fix_style": fix_style,
+                "source": "direct_import_fixer",
+            }
+
+        except Exception as e:
+            logger.error(f"Direct ImportFixerEngine failed: {e}", exc_info=True)
+            return {
+                "status": "error",
+                "imports_fixed": 0,
+                "fixed_files": [],
+                "note": f"Import fixing failed: {str(e)}",
+            }
