@@ -2686,15 +2686,16 @@ async function detectBugs() {
 
 async function analyzeCodebase() {
     const jobIdInput = document.getElementById('analyze-job-id').value;
-    if (!jobIdInput) return showError('Please enter a job ID');
+    if (!jobIdInput) return showError('Please enter a job ID or "repo" for repository-level analysis');
     
-    const jobId = sanitizeJobId(jobIdInput);
-    if (!jobId) {
+    // Allow "repo" as a special keyword for repository-level analysis
+    const jobId = jobIdInput.toLowerCase() === 'repo' ? null : sanitizeJobId(jobIdInput);
+    if (jobIdInput.toLowerCase() !== 'repo' && !jobId) {
         return; // Error already shown by sanitizeJobId
     }
     
     try {
-        showSuccess('Analyzing codebase...');
+        showSuccess('Performing deep codebase analysis... This may take a minute.');
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -2708,8 +2709,8 @@ async function analyzeCodebase() {
         const data = await response.json();
         
         // Check if analysis is unavailable
-        if (data.note) {
-            showError(`Codebase analysis unavailable: ${data.note}`);
+        if (data.error || data.note) {
+            showError(`Codebase analysis unavailable: ${data.error || data.note}`);
             return;
         }
         
@@ -2717,7 +2718,9 @@ async function analyzeCodebase() {
         const resultMessage = `Codebase Analysis Complete:\n\n` +
             `Files: ${data.total_files || 'N/A'}\n` +
             `Lines of Code: ${data.total_loc || 'N/A'}\n` +
-            `Average Complexity: ${data.avg_complexity || 'N/A'}\n` +
+            `Average Complexity: ${data.avg_complexity?.toFixed(2) || 'N/A'}\n` +
+            `Issues Found: ${data.issues?.length || 0}\n` +
+            `${data.report_path ? `\nReport saved to: ${data.report_path}` : ''}\n` +
             `${data.analysis_summary ? '\n' + data.analysis_summary : ''}`;
         
         showSuccess('Codebase analysis complete');
@@ -2726,7 +2729,7 @@ async function analyzeCodebase() {
         // If there are issues/bugs found, populate the errors list
         if (data.issues && data.issues.length > 0) {
             const container = document.getElementById('errors-list');
-            container.innerHTML = '';
+            container.innerHTML = '<h4>Analysis Issues Found</h4>';
             data.issues.forEach(issue => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
@@ -2761,19 +2764,30 @@ async function prioritizeBugs() {
     }
     
     try {
-        showSuccess('Prioritizing bugs...');
+        showSuccess('Prioritizing bugs... Analyzing bug data.');
         const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/bugs/prioritize`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({criteria: ['severity', 'impact']})
+            body: JSON.stringify({criteria: ['severity', 'impact', 'effort']})
         });
         const data = await response.json();
-        showSuccess('Bugs prioritized successfully');
+        
+        // Show summary message
+        const summaryMsg = data.total_bugs 
+            ? `Found ${data.total_bugs} bugs: ${data.high_priority_count || 0} high, ${data.medium_priority_count || 0} medium, ${data.low_priority_count || 0} low priority`
+            : 'No bugs found';
+        showSuccess(summaryMsg);
         
         // Display prioritized bugs in the errors list
         if (data.prioritized_bugs && data.prioritized_bugs.length > 0) {
             const container = document.getElementById('errors-list');
-            container.innerHTML = '<h4>Prioritized Bugs (High to Low)</h4>';
+            container.innerHTML = `
+                <h4>Prioritized Bugs (High to Low)</h4>
+                <p style="margin-bottom: 10px;">Total: ${data.total_bugs || 0} | 
+                   High: ${data.high_priority_count || 0} | 
+                   Medium: ${data.medium_priority_count || 0} | 
+                   Low: ${data.low_priority_count || 0}</p>
+            `;
             data.prioritized_bugs.forEach((bug, index) => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
@@ -2785,13 +2799,19 @@ async function prioritizeBugs() {
                 const bugLine = escapeHtml(String(bug.line || 'N/A'));
                 const bugSeverity = escapeHtml(bug.severity || 'medium');
                 const priorityScore = escapeHtml(String(bug.priority_score || 'N/A'));
+                const priorityLevel = escapeHtml(bug.priority_level || 'medium');
                 
                 card.innerHTML = `
-                    <div style="font-weight: bold; color: #007bff;">Priority #${index + 1}</div>
+                    <div style="font-weight: bold; color: #007bff;">
+                        Priority #${index + 1} 
+                        <span style="background: ${priorityLevel === 'high' ? '#dc3545' : priorityLevel === 'medium' ? '#ffc107' : '#6c757d'}; 
+                                     color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">
+                            ${priorityLevel.toUpperCase()}
+                        </span>
+                    </div>
                     <h4>${bugType}: ${bugMessage}</h4>
                     <p>File: ${bugFile}, Line: ${bugLine}</p>
-                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span></p>
-                    <p>Priority Score: ${priorityScore}</p>
+                    <p>Severity: <span class="severity-${bugSeverity}">${bugSeverity}</span> | Priority Score: ${priorityScore}</p>
                 `;
                 
                 // Add button using safe method if bug_id exists
@@ -2805,9 +2825,12 @@ async function prioritizeBugs() {
                 
                 container.appendChild(card);
             });
-        } else if (data.message) {
+        } else if (data.message || data.note) {
             const container = document.getElementById('errors-list');
-            container.innerHTML = `<p class="no-data">${escapeHtml(data.message)}</p>`;
+            container.innerHTML = `<p class="no-data">${escapeHtml(data.message || data.note)}</p>`;
+        } else {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<p class="no-data">No bugs found for this job.</p>`;
         }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
@@ -2824,23 +2847,38 @@ async function fixImports() {
     }
     
     try {
-        showSuccess('Fixing imports...');
+        showSuccess('Fixing imports... This may take a moment.');
         const response = await fetchWithRetry(`${API_BASE}/sfe/imports/fix`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({code_path: '.', auto_install: false, fix_style: true, job_id: jobId})
         });
         const data = await response.json();
-        showSuccess(`Fixed ${data.imports_fixed || 0} imports`);
+        
+        // Check for errors
+        if (data.status === 'error' || data.error) {
+            showError(`Import fixing failed: ${data.note || data.error || 'Unknown error'}`);
+            return;
+        }
+        
+        const fixCount = data.imports_fixed || 0;
+        const fileCount = data.files_fixed || 0;
+        showSuccess(`Fixed ${fixCount} imports in ${fileCount} files`);
         
         // Display import fix results
         if (data.fixed_files && data.fixed_files.length > 0) {
             const resultMessage = `Import Fixes Applied:\n\n` +
-                data.fixed_files.map(file => `✓ ${file}`).join('\n') +
-                `\n\nTotal: ${data.imports_fixed} imports fixed`;
+                data.fixed_files.map(file => {
+                    const fileName = typeof file === 'string' ? file : file.file;
+                    const fixCount = typeof file === 'object' && file.fixes ? file.fixes.length : '';
+                    return `✓ ${fileName}${fixCount ? ` (${fixCount} fixes)` : ''}`;
+                }).join('\n') +
+                `\n\nTotal: ${fixCount} imports fixed in ${fileCount} files`;
             alert(resultMessage);
-        } else if (data.message) {
-            alert(data.message);
+        } else if (fixCount === 0) {
+            alert('No import issues found to fix.');
+        } else if (data.message || data.note) {
+            alert(data.message || data.note);
         }
     } catch (error) {
         showError('Import fix failed: ' + error.message);
