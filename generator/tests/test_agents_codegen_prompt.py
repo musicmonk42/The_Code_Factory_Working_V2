@@ -161,7 +161,10 @@ async def test_build_prompt_valid_minimal(monkeypatch):
         codegen_prompt, "log_audit_event", fake_log_audit_event, raising=False
     )
 
-    requirements = {"features": ["feature one", "feature two"]}
+    requirements = {
+        "project_type": "fastapi_service",
+        "features": ["feature one", "feature two"]
+    }
     state_summary = "System is green."
 
     prompt = await codegen_prompt.build_code_generation_prompt(
@@ -389,7 +392,10 @@ async def test_build_prompt_with_meta_llm_critique(monkeypatch):
         codegen_prompt, "redact_secrets", fake_redact_secrets, raising=False
     )
 
-    requirements = {"features": ["do something safe"]}
+    requirements = {
+        "project_type": "fastapi_service",
+        "features": ["do something safe"]
+    }
 
     prompt = await codegen_prompt.build_code_generation_prompt(
         requirements=requirements,

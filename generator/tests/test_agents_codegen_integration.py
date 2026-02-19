@@ -145,6 +145,7 @@ async def test_end_to_end_prompt_parse_trace_scan(monkeypatch):
 
     # 1. Build prompt via codegen_prompt
     requirements = {
+        "project_type": "fastapi_service",
         "features": [
             "create a simple greeter",
             "log each greeting to stdout",
