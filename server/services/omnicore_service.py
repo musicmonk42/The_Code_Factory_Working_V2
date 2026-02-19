@@ -1967,112 +1967,53 @@ class OmniCoreService:
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
                 
-                # Use request-response pattern for SFE to get results back
-                if target_module == "sfe":
-                    try:
-                        priority = payload.get("priority", 5)
-                        timeout = payload.get("timeout", 30.0)  # 30 second timeout for SFE operations
-                        
-                        logger.info(f"Using request-response for SFE job {job_id} on topic: {topic}")
-                        response = await self._message_bus.request(
-                            topic=topic,
-                            payload=enriched_payload,
-                            timeout=timeout,
-                            priority=priority,
-                        )
-                        
-                        logger.info(f"SFE job {job_id} completed via message bus")
-                        
-                        # Log to audit if available
-                        if self._audit_client and self._omnicore_components_available["audit"]:
-                            try:
-                                await self._audit_client.add_entry_async(
-                                    kind="job_routed",
-                                    name=f"job_{job_id}",
-                                    detail={
-                                        "source": source_module,
-                                        "target": target_module,
-                                        "topic": topic,
-                                        "priority": priority,
-                                        "response_status": response.get("status", "unknown"),
-                                    },
-                                    sim_id=None,
-                                    agent_id=None,
-                                    error=None,
-                                    context=None,
-                                    custom_attributes=None,
-                                    rationale=f"Routing job {job_id} from {source_module} to {target_module}",
-                                    simulation_outcomes=None,
-                                    tenant_id=None,
-                                    explanation_id=None,
-                                )
-                            except Exception as audit_error:
-                                logger.warning(f"Audit logging failed: {audit_error}")
-                        
-                        return {
-                            "job_id": job_id,
-                            "routed": True,
-                            "source": source_module,
-                            "target": target_module,
-                            "topic": topic,
-                            "message_bus": "ShardedMessageBus",
-                            "transport": "message_bus",
-                            "data": response.get("data"),
-                        }
-                    except TimeoutError:
-                        logger.warning(f"SFE job {job_id} timed out waiting for response")
-                        # Fall through to fallback
-                    except Exception as e:
-                        logger.error(f"SFE request-response error: {e}", exc_info=True)
-                        # Fall through to fallback
-                else:
-                    # For other modules, use publish without waiting for response
-                    priority = payload.get("priority", 5)
-                    success = await self._message_bus.publish(
-                        topic=topic,
-                        payload=enriched_payload,
-                        priority=priority,
-                    )
+                # Use publish for all non-generator targets (fire-and-forget via message bus)
+                priority = payload.get("priority", 5)
+                success = await self._message_bus.publish(
+                    topic=topic,
+                    payload=enriched_payload,
+                    priority=priority,
+                )
+                
+                if success:
+                    logger.info(f"Job {job_id} published to message bus topic: {topic}")
                     
-                    if success:
-                        logger.info(f"Job {job_id} published to message bus topic: {topic}")
-                        
-                        # Log to audit if available
-                        if self._audit_client and self._omnicore_components_available["audit"]:
-                            try:
-                                await self._audit_client.add_entry_async(
-                                    kind="job_routed",
-                                    name=f"job_{job_id}",
-                                    detail={
-                                        "source": source_module,
-                                        "target": target_module,
-                                        "topic": topic,
-                                        "priority": priority,
-                                    },
-                                    sim_id=None,
-                                    agent_id=None,
-                                    error=None,
-                                    context=None,
-                                    custom_attributes=None,
-                                    rationale=f"Routing job {job_id} from {source_module} to {target_module}",
-                                    simulation_outcomes=None,
-                                    tenant_id=None,
-                                    explanation_id=None,
-                                )
-                            except Exception as audit_error:
-                                logger.warning(f"Audit logging failed: {audit_error}")
-                        
-                        return {
-                            "job_id": job_id,
-                            "routed": True,
-                            "source": source_module,
-                            "target": target_module,
-                            "topic": topic,
-                            "message_bus": "ShardedMessageBus",
-                            "transport": "message_bus",
-                        }
-                    else:
-                        logger.warning(f"Failed to publish job {job_id} to message bus")
+                    # Log to audit if available
+                    if self._audit_client and self._omnicore_components_available["audit"]:
+                        try:
+                            await self._audit_client.add_entry_async(
+                                kind="job_routed",
+                                name=f"job_{job_id}",
+                                detail={
+                                    "source": source_module,
+                                    "target": target_module,
+                                    "topic": topic,
+                                    "priority": priority,
+                                },
+                                sim_id=None,
+                                agent_id=None,
+                                error=None,
+                                context=None,
+                                custom_attributes=None,
+                                rationale=f"Routing job {job_id} from {source_module} to {target_module}",
+                                simulation_outcomes=None,
+                                tenant_id=None,
+                                explanation_id=None,
+                            )
+                        except Exception as audit_error:
+                            logger.warning(f"Audit logging failed: {audit_error}")
+                    
+                    return {
+                        "job_id": job_id,
+                        "routed": True,
+                        "source": source_module,
+                        "target": target_module,
+                        "topic": topic,
+                        "message_bus": "ShardedMessageBus",
+                        "transport": "message_bus",
+                    }
+                else:
+                    logger.warning(f"Failed to publish job {job_id} to message bus")
                     
             except Exception as e:
                 logger.error(f"Message bus routing error: {e}", exc_info=True)

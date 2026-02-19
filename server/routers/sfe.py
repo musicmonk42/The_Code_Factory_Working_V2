@@ -215,8 +215,7 @@ async def get_errors(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    errors_result = await sfe_service.detect_errors(job_id)
-    errors_list = errors_result.get("errors", [])
+    errors_list = await sfe_service.detect_errors(job_id)
     return {"job_id": job_id, "errors": errors_list, "count": len(errors_list)}
 
 
