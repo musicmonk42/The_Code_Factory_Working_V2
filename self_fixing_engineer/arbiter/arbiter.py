@@ -375,15 +375,30 @@ else:
             """
     
             def __init__(self, *args, **kwargs):
-                logging.error(
-                    "PostgresClient initialization failed. Required dependencies: asyncpg. "
-                    "Install with: pip install asyncpg"
+                logging.warning(
+                    "PostgresClient running in no-op mode. Required dependencies: asyncpg. "
+                    "Install with: pip install asyncpg for database support."
                 )
-                raise NotImplementedError(
-                    "PostgresClient requires asyncpg module. "
-                    "Install with: pip install asyncpg. "
-                    "This is an optional dependency for advanced database features."
-                )
+                self._available = False
+
+            def get_session(self):
+                class _NoOpSession:
+                    async def __aenter__(self):
+                        return self
+
+                    async def __aexit__(self, *exc):
+                        return None
+
+                    async def execute(self, *args, **kwargs):
+                        return None
+
+                    async def commit(self):
+                        return None
+
+                return _NoOpSession()
+
+            async def check_health(self):
+                return {"status": "unavailable", "reason": "asyncpg not installed"}
     
     
     try:
