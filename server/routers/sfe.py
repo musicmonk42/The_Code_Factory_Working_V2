@@ -929,6 +929,32 @@ async def deep_analyze_codebase(
     return result
 
 
+@router.post("/server/analyze")
+async def analyze_server_module(
+    target: str = Query(default="server", description="Analysis target: server, sfe, or all"),
+    sfe_service: SFEService = Depends(get_sfe_service),
+):
+    """
+    Analyze the server module source code.
+
+    This endpoint analyzes the actual server/SFE source code rather than
+    generated output, addressing the issue where "Analyze Code" only analyzed
+    generated code.
+
+    **Query Parameters:**
+    - target: Analysis target (server, sfe, or all)
+
+    **Returns:**
+    - Analysis results with detected issues
+    """
+    result = await sfe_service.analyze_server_module(target=target)
+    
+    logger.info(
+        f"Server module analysis completed for target={target}: {result.get('issues_found', 0)} issues"
+    )
+    return result
+
+
 @router.post("/knowledge-graph/query")
 async def query_knowledge_graph(
     request: KnowledgeGraphQuery,

@@ -2616,6 +2616,98 @@ async function listDeadLetterQueue() {
 
 // ===== SFE ADVANCED FUNCTIONS =====
 
+// ==================== SFE Analysis Functions ====================
+
+async function analyzeServerModule() {
+    const target = prompt('Analyze which module?\n\nOptions:\n- server (server code only)\n- sfe (Self-Fixing Engineer code only)\n- all (entire codebase)\n\nEnter your choice:', 'server');
+    
+    if (!target) return; // User cancelled
+    
+    const validTargets = ['server', 'sfe', 'all'];
+    const targetLower = target.toLowerCase().trim();
+    
+    if (!validTargets.includes(targetLower)) {
+        return showError('Invalid target. Please choose: server, sfe, or all');
+    }
+    
+    try {
+        showSuccess(`Analyzing ${targetLower} module... This may take a moment.`);
+        
+        const response = await fetchWithRetry(`${API_BASE}/sfe/server/analyze?target=${targetLower}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+        });
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(`Analysis error: ${data.error}`);
+            return;
+        }
+        
+        // Show summary
+        const issueCount = data.issues_found || 0;
+        const summary = data.summary || `Found ${issueCount} issues in ${targetLower} module`;
+        showSuccess(summary);
+        
+        // Display issues in the errors list
+        if (data.issues && data.issues.length > 0) {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `
+                <h4>Server Module Analysis Results</h4>
+                <p style="margin-bottom: 10px;">Target: ${escapeHtml(data.target || targetLower)} | Issues: ${issueCount}</p>
+            `;
+            
+            // Show executive summary if available
+            if (data.severity_breakdown) {
+                const breakdown = data.severity_breakdown;
+                const breakdownHtml = `
+                    <div style="background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 4px;">
+                        <strong>Severity Breakdown:</strong>
+                        ${breakdown.critical ? `Critical: ${breakdown.critical} | ` : ''}
+                        ${breakdown.high ? `High: ${breakdown.high} | ` : ''}
+                        ${breakdown.medium ? `Medium: ${breakdown.medium} | ` : ''}
+                        ${breakdown.low ? `Low: ${breakdown.low}` : ''}
+                    </div>
+                `;
+                container.innerHTML += breakdownHtml;
+            }
+            
+            data.issues.forEach((issue, index) => {
+                const card = document.createElement('div');
+                card.className = 'error-card';
+                
+                const issueType = escapeHtml(issue.type || 'Issue');
+                const issueMessage = escapeHtml(issue.message || '');
+                const issueFile = escapeHtml(issue.file || 'N/A');
+                const issueLine = escapeHtml(String(issue.line || 'N/A'));
+                const issueSeverity = escapeHtml(issue.severity || 'medium');
+                
+                card.innerHTML = `
+                    <h4>${issueType}: ${issueMessage}</h4>
+                    <p>File: ${issueFile}, Line: ${issueLine}</p>
+                    <p>Severity: <span class="severity-${issueSeverity}">${issueSeverity}</span></p>
+                `;
+                
+                // Add propose fix button if error_id exists
+                if (issue.error_id) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.addEventListener('click', () => proposeFix(issue.error_id));
+                    card.appendChild(button);
+                }
+                
+                container.appendChild(card);
+            });
+        } else {
+            const container = document.getElementById('errors-list');
+            container.innerHTML = `<p class="no-data">✅ No issues found in ${targetLower} module</p>`;
+        }
+    } catch (error) {
+        showError('Server module analysis failed: ' + error.message);
+    }
+}
+
 async function detectBugs() {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID');
