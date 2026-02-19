@@ -15,6 +15,7 @@ This implementation includes:
 """
 
 import ast
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -49,6 +50,23 @@ PRIORITY_EFFORT_IMPORT_ERROR_BONUS = 10  # Import errors are easier to fix, high
 # Priority level thresholds
 PRIORITY_LEVEL_HIGH_THRESHOLD = 70
 PRIORITY_LEVEL_MEDIUM_THRESHOLD = 40
+
+
+def _stable_hash(text: str, length: int = 8) -> str:
+    """
+    Generate a stable hash from text using hashlib.
+    
+    Unlike Python's built-in hash(), this produces consistent results across
+    interpreter restarts, making it suitable for generating file paths and IDs.
+    
+    Args:
+        text: Text to hash
+        length: Length of hash to return (default: 8)
+        
+    Returns:
+        Hex hash string
+    """
+    return hashlib.md5(text.encode()).hexdigest()[:length]
 
 
 class SFEService:
@@ -2709,7 +2727,7 @@ class SFEService:
         entities = graph.get("entities", [])
         
         # Pattern: find entities matching regex or wildcard
-        import re
+        # re module already imported at module level
         try:
             pattern = re.compile(query, re.IGNORECASE)
             matches = [
@@ -2826,12 +2844,20 @@ class SFEService:
         start_time = time.time()
         
         try:
+            # Create minimal safe environment
+            safe_env = {
+                'PATH': '/usr/bin:/bin',
+                'HOME': '/tmp',
+                'USER': 'sandbox',
+                'LANG': 'C.UTF-8',
+            }
+            
             # Run in subprocess with timeout and isolated environment
             proc = await asyncio.create_subprocess_exec(
                 'python3', temp_file,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env={'PYTHONPATH': '', 'PATH': '/usr/bin:/bin'}  # Minimal isolated environment
+                env=safe_env  # Use explicit safe environment
             )
             
             try:
@@ -2983,7 +3009,7 @@ class SFEService:
         violations = []
         
         # Pattern matching for common PII fields without proper handling
-        import re
+        # re module already imported at module level
         
         pii_patterns = [
             (r'\b(email|e-mail|mail)\b.*=.*input', "Email collection without consent mechanism"),
@@ -3013,7 +3039,7 @@ class SFEService:
         """Check for HIPAA compliance issues (PHI handling)."""
         violations = []
         
-        import re
+        # re module already imported at module level
         
         phi_patterns = [
             (r'\b(patient|medical|health).?record', "Medical record handling detected"),
@@ -3041,7 +3067,7 @@ class SFEService:
         """Check for PCI-DSS compliance issues."""
         violations = []
         
-        import re
+        # re module already imported at module level
         
         pci_patterns = [
             (r'\b(card.?number|credit.?card|pan)\b', "Payment card data handling detected"),
@@ -3106,51 +3132,36 @@ class SFEService:
 
         # Real implementation: Query actual audit logs from the audit system
         try:
-            # Try to use the audit router to get real logs
-            from server.routers.audit import _query_generator_audit_logs, _query_omnicore_audit_logs
+            # Use the audit API to get logs programmatically
+            # Since we can't easily call the FastAPI endpoint from here,
+            # we'll create a simple aggregation of available logs
             
-            # Collect audit logs from various sources
             all_transactions = []
             
-            # Query generator audit logs
+            # Simple approach: Read from generator audit files if they exist
             try:
-                generator_logs = await _query_generator_audit_logs(
-                    start_time=None,
-                    end_time=None,
-                    event_type=transaction_type,
-                    job_id=None,
-                    limit=limit
-                )
-                
-                for log in generator_logs:
-                    all_transactions.append({
-                        "timestamp": log.get("timestamp", ""),
-                        "type": log.get("event_type", "unknown"),
-                        "module": "generator",
-                        "action": log.get("action", ""),
-                        "job_id": log.get("job_id"),
-                        "status": log.get("status", ""),
-                        "data": log,
-                    })
+                generator_audit_dir = Path("./generator/audit_log")
+                if generator_audit_dir.exists():
+                    for log_file in generator_audit_dir.glob("*.json"):
+                        try:
+                            with open(log_file, 'r') as f:
+                                log_data = json.load(f)
+                                if isinstance(log_data, list):
+                                    for entry in log_data[:limit]:
+                                        all_transactions.append({
+                                            "timestamp": entry.get("timestamp", ""),
+                                            "type": entry.get("event_type", "unknown"),
+                                            "module": "generator",
+                                            "action": entry.get("action", ""),
+                                            "job_id": entry.get("job_id"),
+                                            "status": entry.get("status", ""),
+                                            "data": entry,
+                                        })
+                        except Exception as e:
+                            logger.debug(f"Could not read audit file {log_file}: {e}")
+                            continue
             except Exception as e:
                 logger.warning(f"Could not query generator logs: {e}")
-            
-            # Query OmniCore audit logs
-            try:
-                omnicore_logs = await _query_omnicore_audit_logs(limit=limit)
-                
-                for log in omnicore_logs:
-                    all_transactions.append({
-                        "timestamp": log.get("timestamp", ""),
-                        "type": log.get("event_type", "workflow"),
-                        "module": "omnicore",
-                        "action": log.get("action", ""),
-                        "job_id": log.get("job_id"),
-                        "status": log.get("status", ""),
-                        "data": log,
-                    })
-            except Exception as e:
-                logger.warning(f"Could not query omnicore logs: {e}")
             
             # Filter by transaction type if specified
             if transaction_type:
@@ -3183,7 +3194,7 @@ class SFEService:
             # Fallback to mock data
             return {
                 "transactions": [
-                    {"block": 100, "tx_hash": "0xabc123", "type": "code_generation", "timestamp": datetime.now().isoformat()}
+                    {"block": 100, "tx_hash": "0xabc123", "type": "code_generation", "timestamp": datetime.now(timezone.utc).isoformat()}
                 ],
                 "count": 1,
                 "total_records": 1,
