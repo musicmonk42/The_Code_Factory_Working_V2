@@ -344,6 +344,12 @@ class ArbiterConfig(BaseSettings):
             start_time = time.monotonic()
             is_production = os.getenv("APP_ENV", "development") == "production"
             
+            # Handle case where pydantic-settings passes entire env dict as ENCRYPTION_KEY value
+            # This can happen in mode="before" validators
+            encryption_key_raw = values.get("ENCRYPTION_KEY")
+            if isinstance(encryption_key_raw, dict) and "ENCRYPTION_KEY" in encryption_key_raw:
+                values["ENCRYPTION_KEY"] = encryption_key_raw.get("ENCRYPTION_KEY")
+            
             # Validate ENCRYPTION_KEY and REDIS_URL in production
             if is_production:
                 if not values.get("ENCRYPTION_KEY"):
@@ -370,6 +376,11 @@ class ArbiterConfig(BaseSettings):
                         # Handle different types that pydantic-settings might pass
                         if isinstance(encryption_key_raw, SecretStr):
                             key_str = encryption_key_raw.get_secret_value()
+                        elif isinstance(encryption_key_raw, dict):
+                            # Handle case where pydantic-settings passes entire env dict
+                            key_str = encryption_key_raw.get("ENCRYPTION_KEY")
+                            if key_str:
+                                values["ENCRYPTION_KEY"] = key_str
                         elif isinstance(encryption_key_raw, str):
                             key_str = encryption_key_raw
                         else:
