@@ -39,6 +39,15 @@ SEVERITY_SCORES = {
     "low": 25,
 }
 
+# Priority scoring adjustments based on criteria
+PRIORITY_IMPACT_CORE_FILE_BONUS = 20  # Extra priority for bugs in core files (main.py, app.py)
+PRIORITY_IMPACT_TEST_FILE_PENALTY = 10  # Lower priority for bugs in test files
+PRIORITY_EFFORT_IMPORT_ERROR_BONUS = 10  # Import errors are easier to fix, higher priority
+
+# Priority level thresholds
+PRIORITY_LEVEL_HIGH_THRESHOLD = 70
+PRIORITY_LEVEL_MEDIUM_THRESHOLD = 40
+
 
 class SFEService:
     """
@@ -2253,15 +2262,15 @@ class SFEService:
                         # Bugs in core modules get higher priority
                         bug_file = bug.get("file", "")
                         if "main.py" in bug_file or "app.py" in bug_file:
-                            priority_score += 20
+                            priority_score += PRIORITY_IMPACT_CORE_FILE_BONUS
                         elif "test" in bug_file.lower():
-                            priority_score -= 10  # Tests are lower priority
+                            priority_score -= PRIORITY_IMPACT_TEST_FILE_PENALTY  # Tests are lower priority
 
                     if "effort" in criteria:
                         # Simple import errors are easier to fix - give them higher priority
                         bug_type = bug.get("type", "")
                         if "import" in bug_type.lower():
-                            priority_score += 10
+                            priority_score += PRIORITY_EFFORT_IMPORT_ERROR_BONUS
 
                     # Generate unique bug_id if not present
                     bug_id = bug.get("error_id") or bug.get("bug_id")
@@ -2270,9 +2279,9 @@ class SFEService:
                         bug_id = f"bug-{uuid4().hex[:8]}"
                     
                     # Calculate priority level based on score
-                    if priority_score >= 70:
+                    if priority_score >= PRIORITY_LEVEL_HIGH_THRESHOLD:
                         priority_level = "high"
-                    elif priority_score >= 40:
+                    elif priority_score >= PRIORITY_LEVEL_MEDIUM_THRESHOLD:
                         priority_level = "medium"
                     else:
                         priority_level = "low"
@@ -2308,9 +2317,9 @@ class SFEService:
                 )
                 
                 # Count bugs by priority level
-                high_priority_count = sum(1 for b in prioritized if b["priority_score"] >= 70)
-                medium_priority_count = sum(1 for b in prioritized if 40 <= b["priority_score"] < 70)
-                low_priority_count = sum(1 for b in prioritized if b["priority_score"] < 40)
+                high_priority_count = sum(1 for b in prioritized if b["priority_score"] >= PRIORITY_LEVEL_HIGH_THRESHOLD)
+                medium_priority_count = sum(1 for b in prioritized if PRIORITY_LEVEL_MEDIUM_THRESHOLD <= b["priority_score"] < PRIORITY_LEVEL_HIGH_THRESHOLD)
+                low_priority_count = sum(1 for b in prioritized if b["priority_score"] < PRIORITY_LEVEL_MEDIUM_THRESHOLD)
                 
                 return {
                     "job_id": job_id,
@@ -2841,8 +2850,15 @@ class SFEService:
 
             for py_file in py_files:
                 try:
-                    # Read original code
-                    original_code = py_file.read_text(encoding='utf-8')
+                    # Read original code with explicit error handling
+                    try:
+                        original_code = py_file.read_text(encoding='utf-8')
+                    except UnicodeDecodeError:
+                        logger.warning(f"Could not decode {py_file} as UTF-8, trying latin-1")
+                        original_code = py_file.read_text(encoding='latin-1')
+                    except Exception as read_error:
+                        logger.warning(f"Error reading {py_file}: {read_error}")
+                        continue
 
                     # Apply import fixer
                     result = fixer.fix_code(
@@ -2853,9 +2869,31 @@ class SFEService:
                     )
 
                     if result.get("status") == "success" and result.get("fixes_applied"):
+                        # Create backup before overwriting
+                        backup_path = py_file.with_suffix('.py.bak')
+                        try:
+                            backup_path.write_text(original_code, encoding='utf-8')
+                        except Exception as backup_error:
+                            logger.warning(f"Could not create backup for {py_file}: {backup_error}")
+                        
                         # Write fixed code
                         fixed_code = result.get("fixed_code", original_code)
-                        py_file.write_text(fixed_code, encoding='utf-8')
+                        try:
+                            py_file.write_text(fixed_code, encoding='utf-8')
+                            
+                            # Clean up backup if write succeeded
+                            if backup_path.exists():
+                                backup_path.unlink()
+                        except Exception as write_error:
+                            logger.error(f"Error writing fixed code to {py_file}: {write_error}")
+                            # Restore from backup if available
+                            if backup_path.exists():
+                                try:
+                                    py_file.write_text(backup_path.read_text(encoding='utf-8'), encoding='utf-8')
+                                    logger.info(f"Restored {py_file} from backup")
+                                except Exception as restore_error:
+                                    logger.error(f"Could not restore backup for {py_file}: {restore_error}")
+                            continue
 
                         fixed_files.append({
                             "file": str(py_file.relative_to(code_path_obj)),

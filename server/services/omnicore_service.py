@@ -215,6 +215,8 @@ DEFAULT_DEPLOY_TIMEOUT = int(os.getenv("DEPLOY_TIMEOUT_SECONDS", "90"))
 DEFAULT_DOCGEN_TIMEOUT = int(os.getenv("DOCGEN_TIMEOUT_SECONDS", "300"))
 DEFAULT_CRITIQUE_TIMEOUT = int(os.getenv("CRITIQUE_TIMEOUT_SECONDS", "90"))
 DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "600"))
+# Maximum number of files to analyze in depth during SFE analysis (prevents timeout)
+MAX_SFE_FILES_TO_ANALYZE = int(os.getenv("MAX_SFE_FILES_TO_ANALYZE", "50"))
 
 # ============================================================================
 # INDUSTRY STANDARD: Named Constants for Configuration and Limits
@@ -5672,7 +5674,7 @@ class OmniCoreService:
                     all_issues.extend(defects)
                     
                     # Perform deeper analysis on each file (limit to avoid timeout)
-                    max_files_to_analyze = 50  # Limit to prevent timeout
+                    max_files_to_analyze = MAX_SFE_FILES_TO_ANALYZE
                     files_analyzed = 0
                     for py_file in py_files[:max_files_to_analyze]:
                         try:
