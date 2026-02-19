@@ -827,6 +827,41 @@ h3 {
     overflow-y: auto;
 }
 
+.modal-content.large {
+    max-width: 900px;
+}
+
+.analysis-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.analysis-type-badge.cached {
+    background: #28a745;
+    color: #fff;
+}
+
+.analysis-type-badge.live {
+    background: #007bff;
+    color: #fff;
+}
+
+.analysis-type-badge.simulation {
+    background: #6c757d;
+    color: #fff;
+}
+
+.btn-loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .modal-header {
     padding: var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);

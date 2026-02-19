@@ -134,6 +134,65 @@ async def analyze_code(
     return result
 
 
+@router.get("/{job_id}/analysis-report")
+async def get_analysis_report(
+    job_id: str,
+):
+    """
+    Fetch the cached SFE analysis report for a job.
+
+    Returns the structured analysis report stored in
+    ``reports/sfe_analysis_report.json`` under the job's output directory.
+
+    **Path Parameters:**
+    - job_id: Unique job identifier
+
+    **Returns:**
+    - Cached analysis report with issues, severity breakdown, and metadata
+
+    **Errors:**
+    - 404: Job or analysis report not found
+    """
+    if job_id not in jobs_db:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    job = jobs_db[job_id]
+
+    # Determine the code path for this job
+    code_path = None
+    if job.metadata and "output_path" in job.metadata:
+        code_path = job.metadata["output_path"]
+    elif job.metadata and "code_path" in job.metadata:
+        code_path = job.metadata["code_path"]
+    else:
+        code_path = f"./uploads/{job_id}/generated"
+
+    report_path = Path(code_path) / "reports" / "sfe_analysis_report.json"
+    if not report_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Analysis report not found for job {job_id}. Run analysis first.",
+        )
+
+    try:
+        import json
+
+        report_data = json.loads(report_path.read_text(encoding="utf-8"))
+        return {
+            "job_id": job_id,
+            "report": report_data,
+            "cached": True,
+            "report_path": str(report_path),
+            "generated_at": report_path.stat().st_mtime,
+        }
+    except Exception as exc:
+        logger.error(f"Failed to read analysis report for job {job_id}: {exc}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to read analysis report: {exc}",
+        )
+
+
 @router.get("/{job_id}/errors")
 async def get_errors(
     job_id: str,

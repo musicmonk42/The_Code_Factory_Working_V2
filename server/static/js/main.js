@@ -1128,6 +1128,11 @@ async function analyzeCode() {
         return; // Error already shown by sanitizeJobId
     }
     
+    const btn = document.getElementById('analyze-btn');
+    const originalText = btn.textContent;
+    btn.innerHTML = '<span class="loading-spinner"></span> Analyzing...';
+    btn.classList.add('btn-loading');
+    
     try {
         const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/analyze`, {
             method: 'POST'
@@ -1147,10 +1152,120 @@ async function analyzeCode() {
         
         showSuccess(`Analysis complete: ${data.issues_found} issues found`);
         loadErrors(jobId);
+
+        // Try to fetch and display the cached analysis report in modal
+        fetchAndShowAnalysisReport(jobId, data);
     } catch (error) {
         showError('Analysis failed: ' + error.message);
+    } finally {
+        btn.textContent = originalText;
+        btn.classList.remove('btn-loading');
     }
 }
+
+/**
+ * Fetch the cached analysis report for a job and display it in a modal.
+ * Falls back to showing the inline analysis data if no cached report exists.
+ */
+async function fetchAndShowAnalysisReport(jobId, inlineData) {
+    try {
+        const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/analysis-report`);
+        const result = await response.json();
+        displayAnalysisResults(result.report, jobId, 'cached', result.generated_at);
+    } catch (_err) {
+        // Cached report not available – show the inline data instead
+        displayAnalysisResults(inlineData, jobId, 'live', null);
+    }
+}
+
+/**
+ * Display analysis results in the analysis-results modal.
+ *
+ * @param {Object} data    - Analysis data (issues, severity_breakdown, etc.)
+ * @param {string} jobId   - Job identifier
+ * @param {string} source  - 'cached' | 'live' | 'simulation'
+ * @param {number|null} ts - Unix timestamp (seconds) of the report, or null
+ */
+function displayAnalysisResults(data, jobId, source, ts) {
+    const body = document.getElementById('analysis-results-body');
+    if (!body) return;
+
+    const badgeClass = source === 'cached' ? 'cached' : source === 'live' ? 'live' : 'simulation';
+    const badgeLabel = source.charAt(0).toUpperCase() + source.slice(1);
+    const timestamp = ts
+        ? `<small style="color:var(--text-secondary);">Report generated: ${new Date(ts * 1000).toLocaleString()}</small>`
+        : `<small style="color:var(--text-secondary);">Generated: ${new Date().toLocaleString()}</small>`;
+
+    const severity = (data && data.severity_breakdown) || {};
+    const issuesFound = (data && data.issues_found) || (data && Array.isArray(data.issues) ? data.issues.length : 0);
+    const summary = escapeHtml((data && data.summary) || `${issuesFound} issue(s) detected`);
+
+    body.innerHTML = `
+        <div style="margin-bottom:12px;">
+            <span class="analysis-type-badge ${badgeClass}">${escapeHtml(badgeLabel)}</span>
+            ${timestamp}
+        </div>
+        <p style="font-size:1.05em;">${summary}</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:12px 0;">
+            <div style="background:rgba(220,53,69,0.15);padding:10px;border-radius:6px;text-align:center;">
+                <div style="font-size:1.6em;font-weight:bold;">${Number(severity.critical) || 0}</div>
+                <div>Critical</div>
+            </div>
+            <div style="background:rgba(255,123,0,0.15);padding:10px;border-radius:6px;text-align:center;">
+                <div style="font-size:1.6em;font-weight:bold;">${Number(severity.high) || 0}</div>
+                <div>High</div>
+            </div>
+            <div style="background:rgba(255,193,7,0.15);padding:10px;border-radius:6px;text-align:center;">
+                <div style="font-size:1.6em;font-weight:bold;">${Number(severity.medium) || 0}</div>
+                <div>Medium</div>
+            </div>
+            <div style="background:rgba(23,162,184,0.15);padding:10px;border-radius:6px;text-align:center;">
+                <div style="font-size:1.6em;font-weight:bold;">${Number(severity.low) || 0}</div>
+                <div>Low</div>
+            </div>
+        </div>
+    `;
+
+    // Render issue list if present
+    const issues = (data && data.issues) || [];
+    if (issues.length > 0) {
+        const listEl = document.createElement('div');
+        listEl.innerHTML = '<h4 style="margin-top:12px;">Issues</h4>';
+        issues.slice(0, 50).forEach(issue => {
+            const card = document.createElement('div');
+            card.className = 'error-card';
+            card.innerHTML = `
+                <strong>${escapeHtml(issue.type || issue.category || 'Issue')}</strong>: ${escapeHtml(issue.message || issue.description || '')}
+                <br><small>File: ${escapeHtml(issue.file || 'N/A')} | Severity: ${escapeHtml(issue.severity || 'medium')}</small>
+            `;
+            listEl.appendChild(card);
+        });
+        if (issues.length > 50) {
+            const more = document.createElement('p');
+            more.textContent = `… and ${issues.length - 50} more issues. Download the full report.`;
+            listEl.appendChild(more);
+        }
+        body.appendChild(listEl);
+    }
+
+    // Set up the Download Report button
+    const dlBtn = document.getElementById('download-report-btn');
+    if (dlBtn) {
+        dlBtn.style.display = 'inline-block';
+        dlBtn.onclick = () => {
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sfe_analysis_${escapeHtml(jobId)}_${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+    }
+
+    openModal('analysis-results-modal');
+}
+
 
 async function loadErrors(jobId) {
     const container = document.getElementById('errors-list');
@@ -2628,7 +2743,7 @@ async function listDeadLetterQueue() {
 
 // ==================== SFE Analysis Functions ====================
 
-async function analyzeServerModule() {
+async function analyzeServerModule(btn) {
     const target = prompt('Analyze which module?\n\nOptions:\n- server (server code only)\n- sfe (Self-Fixing Engineer code only)\n- all (entire codebase)\n\nEnter your choice:', 'server');
     
     if (!target) return; // User cancelled
@@ -2639,6 +2754,9 @@ async function analyzeServerModule() {
     if (!validTargets.includes(targetLower)) {
         return showError('Invalid target. Please choose: server, sfe, or all');
     }
+
+    const originalText = btn ? btn.textContent : null;
+    if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Analyzing...'; btn.classList.add('btn-loading'); }
     
     try {
         showSuccess(`Analyzing ${targetLower} module... This may take a moment.`);
@@ -2658,6 +2776,7 @@ async function analyzeServerModule() {
         const issueCount = data.issues_found || 0;
         const summary = data.summary || `Found ${issueCount} issues in ${targetLower} module`;
         showSuccess(summary);
+        displayAnalysisResults(data, targetLower, data.source || 'live', null);
         
         // Display issues in the errors list
         if (data.issues && data.issues.length > 0) {
@@ -2715,10 +2834,12 @@ async function analyzeServerModule() {
         }
     } catch (error) {
         showError('Server module analysis failed: ' + error.message);
+    } finally {
+        if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
 }
 
-async function detectBugs() {
+async function detectBugs(btn) {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID');
     
@@ -2726,6 +2847,9 @@ async function detectBugs() {
     if (!jobId) {
         return; // Error already shown by sanitizeJobId
     }
+
+    const originalText = btn ? btn.textContent : null;
+    if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Detecting...'; btn.classList.add('btn-loading'); }
     
     try {
         showSuccess('Detecting bugs...');
@@ -2783,10 +2907,12 @@ async function detectBugs() {
         }
     } catch (error) {
         showError('Bug detection failed: ' + error.message);
+    } finally {
+        if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
 }
 
-async function analyzeCodebase() {
+async function analyzeCodebase(btn) {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID or "repo" for repository-level analysis');
     
@@ -2795,6 +2921,9 @@ async function analyzeCodebase() {
     if (jobIdInput.toLowerCase() !== 'repo' && !jobId) {
         return; // Error already shown by sanitizeJobId
     }
+
+    const originalText = btn ? btn.textContent : null;
+    if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Analyzing...'; btn.classList.add('btn-loading'); }
     
     try {
         showSuccess('Performing deep codebase analysis... This may take a minute.');
@@ -2853,10 +2982,12 @@ async function analyzeCodebase() {
         }
     } catch (error) {
         showError('Analysis failed: ' + error.message);
+    } finally {
+        if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
 }
 
-async function prioritizeBugs() {
+async function prioritizeBugs(btn) {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID');
     
@@ -2864,6 +2995,9 @@ async function prioritizeBugs() {
     if (!jobId) {
         return; // Error already shown by sanitizeJobId
     }
+
+    const originalText = btn ? btn.textContent : null;
+    if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Prioritizing...'; btn.classList.add('btn-loading'); }
     
     try {
         showSuccess('Prioritizing bugs... Analyzing bug data.');
@@ -2936,10 +3070,12 @@ async function prioritizeBugs() {
         }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
+    } finally {
+        if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
 }
 
-async function fixImports() {
+async function fixImports(btn) {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID');
     
@@ -2947,6 +3083,9 @@ async function fixImports() {
     if (!jobId) {
         return; // Error already shown by sanitizeJobId
     }
+
+    const originalText = btn ? btn.textContent : null;
+    if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Fixing...'; btn.classList.add('btn-loading'); }
     
     try {
         showSuccess('Fixing imports... This may take a moment.');
@@ -2990,10 +3129,10 @@ async function fixImports() {
         }
     } catch (error) {
         showError('Import fix failed: ' + error.message);
+    } finally {
+        if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
-}
-
-function showKnowledgeGraph() {
+} {
     openModal('knowledge-graph-modal');
 }
 
