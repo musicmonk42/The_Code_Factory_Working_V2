@@ -9,6 +9,7 @@ from pathlib import Path
 import psutil
 import pytest
 from prometheus_client import REGISTRY
+from self_fixing_engineer.arbiter.policy import metrics as policy_metrics
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -78,6 +79,28 @@ def cleanup_prometheus_registry():
             REGISTRY.unregister(collector)
         except Exception:
             pass
+    # Re-register core policy metrics so global handles remain usable after cleanup
+    core_policy_metrics = [
+        "policy_decision_total",
+        "policy_file_reload_count",
+        "policy_last_reload_timestamp",
+        "feedback_processing_time",
+        "LLM_CALL_LATENCY",
+        "COMPLIANCE_CONTROL_ACTIONS_TOTAL",
+        "COMPLIANCE_CONTROL_STATUS",
+        "COMPLIANCE_VIOLATIONS_TOTAL",
+        "COMPLIANCE_METRIC_INIT_ERRORS",
+        "COMPLIANCE_CONTROL_ACTIVE",
+        "METRIC_REFRESH_STATE_TRANSITIONS",
+        "METRIC_REFRESH_LATENCY",
+    ]
+    for name in core_policy_metrics:
+        metric = getattr(policy_metrics, name, None)
+        if metric:
+            try:
+                REGISTRY.register(metric)
+            except ValueError:
+                pass
     yield
 
 
