@@ -4,13 +4,27 @@ import logging
 import os
 from typing import Any, Dict, Optional, Tuple
 
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram, multiprocess
+from prometheus_client import (
+    REGISTRY as PROMETHEUS_REGISTRY,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+    multiprocess,
+)
+
+REGISTRY = (
+    generate_latest.__defaults__[0]
+    if getattr(generate_latest, "__defaults__", None)
+    else PROMETHEUS_REGISTRY
+)
 
 logger = logging.getLogger(__name__)
 
 # Initialize multiprocess support if the environment variable is set
 multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR")
-if multiproc_dir:
+is_test_env = os.getenv("TESTING") == "1" or bool(os.getenv("PYTEST_CURRENT_TEST"))
+if multiproc_dir and not is_test_env:
     if os.path.exists(multiproc_dir):
         for f in os.listdir(multiproc_dir):
             os.remove(os.path.join(multiproc_dir, f))
@@ -19,6 +33,13 @@ if multiproc_dir:
     multiprocess.MultiProcessCollector(REGISTRY)
     logger.info(
         f"Initialized Prometheus REGISTRY with multiprocess support using dir: {multiproc_dir}"
+    )
+elif multiproc_dir and is_test_env:
+    for collector in list(getattr(REGISTRY, "_collector_to_names", {}).keys()):
+        if isinstance(collector, multiprocess.MultiProcessCollector):
+            REGISTRY.unregister(collector)
+    logger.info(
+        "PROMETHEUS_MULTIPROC_DIR ignored in test mode; using single-process registry."
     )
 else:
     logger.warning(
@@ -53,6 +74,20 @@ class LabeledMetricWrapper:
 
     def labels(self, **kwargs):
         """Apply labels, automatically including global labels."""
+        if self._name not in getattr(REGISTRY, "_names_to_collectors", {}):
+            buckets = None
+            if isinstance(self._metric, Histogram) and hasattr(self._metric, "_upper_bounds"):
+                buckets = tuple(
+                    b for b in self._metric._upper_bounds if b != float("inf")
+                )
+            refreshed = _get_or_create_metric_internal(
+                type(self._metric),
+                self._name,
+                self._documentation,
+                tuple(self._labelnames),
+                buckets,
+            )
+            self._metric = refreshed._metric
         # Merge global labels with provided labels
         all_labels = {**self._global_labels, **kwargs}
         return self._metric.labels(**all_labels)

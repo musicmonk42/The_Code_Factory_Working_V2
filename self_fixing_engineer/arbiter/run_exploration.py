@@ -400,21 +400,25 @@ def load_plugins(plugin_folder: str = "plugins") -> Dict[str, Any]:
         Dict[str, Any]: A dictionary of loaded plugins, where keys are module names.
     """
     plugins = {}
-    if not os.path.exists(plugin_folder):
+    folder_exists = os.path.exists(plugin_folder)
+    if not folder_exists:
         logger.info(f"Plugin folder '{plugin_folder}' not found. Skipping plugin load.")
-        return plugins
 
-    sys.path.insert(0, plugin_folder)
-    for _, name, _ in pkgutil.iter_modules([plugin_folder]):
-        try:
-            module = importlib.import_module(name)
-            if hasattr(module, "Plugin"):
-                plugins[name] = module.Plugin
-                logger.info(f"Loaded plugin: {name}")
-        except Exception as e:
-            logger.error(f"Error loading plugin '{name}': {e}", exc_info=True)
-            workflow_errors_total.labels(operation="load_plugins").inc()
-    sys.path.pop(0)
+    if folder_exists:
+        sys.path.insert(0, plugin_folder)
+    try:
+        for _, name, _ in pkgutil.iter_modules([plugin_folder]):
+            try:
+                module = importlib.import_module(name)
+                if hasattr(module, "Plugin"):
+                    plugins[name] = module.Plugin
+                    logger.info(f"Loaded plugin: {name}")
+            except Exception as e:
+                logger.error(f"Error loading plugin '{name}': {e}", exc_info=True)
+                workflow_errors_total.labels(operation="load_plugins").inc()
+    finally:
+        if folder_exists and sys.path and sys.path[0] == plugin_folder:
+            sys.path.pop(0)
     return plugins
 
 
@@ -666,7 +670,10 @@ async def main():
             loop.add_signal_handler(sig, shutdown_event.set)
 
         workflow_task = asyncio.create_task(run_agentic_workflow(config))
-        await shutdown_event.wait()
+        try:
+            await shutdown_event.wait()
+        except asyncio.CancelledError:
+            logger.info("Shutdown wait cancelled; proceeding with graceful shutdown.")
 
         workflow_task.cancel()
         try:
