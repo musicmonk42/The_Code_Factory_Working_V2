@@ -2036,6 +2036,60 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                         v1_type, v2_type, filename,
                     )
 
+            # Fix: @root_validator → @model_validator(mode='before')
+            # Must run before @validator fix to avoid partial matches
+            if "@root_validator" in content:
+                # Fix import: standalone 'root_validator' token → 'model_validator'
+                # Use word boundaries to avoid matching 'custom_root_validator' etc.
+                content = _re.sub(
+                    r'(from\s+pydantic\s+import\s+[^\n]*)\broot_validator\b',
+                    lambda m: m.group(1) + "model_validator",
+                    content,
+                )
+                # Replace @root_validator(pre=True) or @root_validator(pre=False) → @model_validator(mode='before')
+                content = _re.sub(
+                    r'@root_validator\([^)]*\)',
+                    "@model_validator(mode='before')",
+                    content,
+                )
+                # Replace bare @root_validator → @model_validator(mode='before')
+                content = _re.sub(
+                    r'@root_validator\b(?!\s*\()',
+                    "@model_validator(mode='before')",
+                    content,
+                )
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: replaced @root_validator with @model_validator in %s",
+                    filename,
+                )
+
+            # Fix: @validator(...) → @field_validator(..., mode='before')
+            if _re.search(r'@validator\s*\(', content):
+                # Fix import: standalone 'validator' token → 'field_validator'
+                # Use word boundary to avoid matching 'root_validator', 'field_validator' etc.
+                content = _re.sub(
+                    r'(from\s+pydantic\s+import\s+[^\n]*)\bvalidator\b(?!_)',
+                    lambda m: m.group(1) + "field_validator",
+                    content,
+                )
+                # Replace @validator(...) → @field_validator(..., mode='before')
+                def _upgrade_validator(m: "re.Match[str]") -> str:
+                    inner = m.group(1)
+                    # If pre=True is already present, remove it and add mode='before'
+                    if "pre=True" in inner:
+                        inner = _re.sub(r',\s*pre=True|pre=True,?\s*', "", inner)
+                        inner = inner.strip().rstrip(",")
+                        return f"@field_validator({inner}, mode='before')"
+                    elif "mode=" not in inner:
+                        return f"@field_validator({inner}, mode='before')"
+                    return f"@field_validator({inner})"
+
+                content = _re.sub(r'@validator\s*\(([^)]*)\)', _upgrade_validator, content)
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: replaced @validator with @field_validator in %s",
+                    filename,
+                )
+
             fixed_files[filename] = content
 
         elif filename == "requirements.txt":

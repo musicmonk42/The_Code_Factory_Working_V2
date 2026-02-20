@@ -1183,6 +1183,7 @@ if PLUGIN_AVAILABLE:
                             requirements=requirements,
                             state_summary=state_summary,
                             previous_feedback=previous_feedback,
+                            previous_error=requirements.get("previous_error"),
                             target_language=requirements.get(
                                 "target_language", "python"
                             ),
@@ -1501,6 +1502,7 @@ else:
                             requirements=requirements,
                             state_summary=state_summary,
                             previous_feedback=previous_feedback,
+                            previous_error=requirements.get("previous_error"),
                             target_language=requirements.get(
                                 "target_language", "python"
                             ),
