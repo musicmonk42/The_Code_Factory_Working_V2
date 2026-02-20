@@ -2289,11 +2289,19 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                 coverage_report: Optional[CoverageReportSchema] = None
                 coverage_parser = self.framework_info.get("coverage_parser")
                 try:
-                    # --- FIX: Find actual coverage file, not the directory ---
-                    cov_file = (
-                        temp_dir_path / "coverage.xml"
-                    )  # or glob: next(temp_dir_path.glob("coverage*"), None)
-                    if cov_file.exists():
+                    # Search for coverage file using multiple candidate names.
+                    # pytest --cov writes 'cov.xml' by default; some configs use 'coverage.xml'.
+                    _cov_candidates = [
+                        temp_dir_path / "cov.xml",
+                        temp_dir_path / "coverage.xml",
+                    ]
+                    # Also glob for any XML file that looks like a coverage report
+                    _cov_candidates.extend(
+                        p for p in temp_dir_path.glob("*.xml")
+                        if p.name not in ("cov.xml", "coverage.xml")
+                    )
+                    cov_file = next((p for p in _cov_candidates if p.exists()), None)
+                    if cov_file:
                         coverage_report = await coverage_parser(cov_file)
                     else:
                         logger.debug(
