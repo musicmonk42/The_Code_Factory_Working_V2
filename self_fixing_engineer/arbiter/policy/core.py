@@ -1094,6 +1094,12 @@ class PolicyEngine:
             "enforce_compliance",
             attributes={"action_name": action_name, "control_tag": control_tag},
         ) as span:
+            if not self._compliance_controls:
+                span.set_attribute("compliance_status", "disabled")
+                return (
+                    True,
+                    "Compliance enforcement disabled (no compliance controls configured).",
+                )
             # Check if action has a mapped compliance control
             if not control_tag:
                 span.set_attribute("compliance_status", "undefined")
