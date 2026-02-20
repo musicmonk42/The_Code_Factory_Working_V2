@@ -753,27 +753,109 @@ class SandboxPolicy:
     timeout: float = 2.0
 
 
+try:  # Bridge to real sandbox implementation
+    from self_fixing_engineer.simulation.sandbox import (
+        run_in_sandbox as _real_run_in_sandbox,
+    )
+    _REAL_SANDBOX_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _REAL_SANDBOX_AVAILABLE = False
+
+
 def run_in_sandbox(
     code: str, inputs: Dict[str, Any], policy: SandboxPolicy
-) -> Dict[str, Any]:  # pragma: no cover
-    _ = (code, inputs, policy)
-    return {"status": "success", "result": {}}
+) -> Dict[str, Any]:
+    if not _REAL_SANDBOX_AVAILABLE:
+        logger.warning(
+            "Real sandbox not available, using stub (results may be unreliable)"
+        )
+        return {"status": "success", "result": {}, "stub": True}
+
+    import os
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", delete=False
+    ) as f:
+        f.write(code)
+        code_path = f.name
+
+    try:
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(
+            _real_run_in_sandbox(
+                backend="native",
+                command=["python", code_path],
+                workdir=os.path.dirname(code_path),
+                policy={
+                    "network_disabled": getattr(policy, "network_disabled", False),
+                    "allow_write": getattr(policy, "allow_write", False),
+                },
+                resource_limits={
+                    "max_memory_mb": getattr(policy, "max_memory_mb", 256),
+                    "max_cpu_percent": getattr(policy, "max_cpu_percent", 80),
+                },
+            )
+        )
+        loop.close()
+        return result
+    finally:
+        try:
+            os.unlink(code_path)
+        except OSError:
+            pass
 
 
-async def run_agent(_config: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover
-    return {"status": "success"}
+async def run_agent(config: Dict[str, Any]) -> Dict[str, Any]:
+    if not _REAL_SANDBOX_AVAILABLE:
+        logger.warning(
+            "Real sandbox not available for run_agent, using stub"
+        )
+        return {"status": "success"}
+
+    command = config.get("command", [])
+    workdir = config.get("workdir", ".")
+    backend = config.get("backend", "native")
+    policy = config.get("policy", {})
+    resource_limits = config.get("resource_limits", {})
+    return await _real_run_in_sandbox(
+        backend=backend,
+        command=command,
+        workdir=workdir,
+        policy=policy,
+        resource_limits=resource_limits,
+    )
 
 
 async def run_simulation_swarm(
-    _config: Dict[str, Any],
-) -> Dict[str, Any]:  # pragma: no cover
-    return {"status": "success", "swarm_results": []}
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    if not _REAL_SANDBOX_AVAILABLE:
+        logger.warning(
+            "Real sandbox not available for run_simulation_swarm, using stub"
+        )
+        return {"status": "success", "swarm_results": []}
+
+    tasks = config.get("tasks", [])
+    results = []
+    for task in tasks:
+        result = await run_agent(task)
+        results.append(result)
+    return {"status": "success", "swarm_results": results}
 
 
 async def run_parallel_simulations(
-    _func: Callable[[Dict[str, Any]], Any], _tasks: List[Dict[str, Any]]
-) -> Dict[str, Any]:  # pragma: no cover
-    return {"status": "success", "results": []}
+    func: Callable[[Dict[str, Any]], Any], tasks: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    if not _REAL_SANDBOX_AVAILABLE:
+        logger.warning(
+            "Real sandbox not available for run_parallel_simulations, using stub"
+        )
+        return {"status": "success", "results": []}
+
+    coros = [func(task) for task in tasks]
+    results = await asyncio.gather(*coros, return_exceptions=True)
+    return {"status": "success", "results": list(results)}
 
 
 class AgentConfig(dict):  # pragma: no cover

@@ -501,7 +501,7 @@ class Explorer:
 
     def __init__(
         self,
-        sandbox_env: Any,
+        sandbox_env: Any = None,
         log_db: Optional[LogDB] = None,
         config: Optional[ArbiterConfig] = None,
     ):
@@ -510,10 +510,21 @@ class Explorer:
 
         Args:
             sandbox_env (Any): The environment where agents will be tested.
+                               If None, defaults to RealSandboxAdapter when available,
+                               otherwise falls back to MySandboxEnv mock.
             log_db (Optional[LogDB]): An optional instance of a log database.
                                           If None, a LogDB is used.
             config (Optional[ArbiterConfig]): An optional configuration object.
         """
+        if sandbox_env is None:
+            try:
+                sandbox_env = RealSandboxAdapter(backend="native")
+                logger.info("Explorer: using RealSandboxAdapter")
+            except Exception as e:
+                logger.warning(
+                    f"RealSandboxAdapter not available: {e}. Falling back to MySandboxEnv mock."
+                )
+                sandbox_env = MySandboxEnv()
         self.sandbox_env = sandbox_env
         self.config = config or ArbiterConfig()
         self.log_db = log_db if log_db is not None else LogDB(self.config)
@@ -1183,6 +1194,15 @@ class ArbiterExplorer:
             sandbox_env: The environment where agents will be tested
             log_db: An optional instance of a log database (LogDB or MockLogDB)
         """
+        if sandbox_env is None:
+            try:
+                sandbox_env = RealSandboxAdapter(backend="native")
+                logger.info("ArbiterExplorer: using RealSandboxAdapter")
+            except Exception as e:
+                logger.warning(
+                    f"RealSandboxAdapter not available: {e}. Falling back to MySandboxEnv mock."
+                )
+                sandbox_env = MySandboxEnv()
         self.sandbox_env = sandbox_env
         self.log_db = log_db if log_db is not None else MockLogDB()
         self.experiment_count = 0

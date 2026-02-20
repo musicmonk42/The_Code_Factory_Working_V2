@@ -388,7 +388,153 @@ class SFEService:
                     "line": issue.get("line", 0),
                 }
 
-    async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
+    def _invalidate_analysis_cache(self, job_id: str) -> None:
+        """Delete cached SFE analysis report so the next detection re-analyzes."""
+        import os as _os
+        job_path = self._resolve_job_code_path(job_id, ".")
+        report_path = Path(job_path) / "reports" / "sfe_analysis_report.json"
+        if report_path.exists():
+            try:
+                _os.remove(report_path)
+                logger.info(f"[SFE] Invalidated cached analysis report for job {job_id}")
+            except OSError as e:
+                logger.warning(
+                    f"[SFE] Could not delete cached analysis report for job {job_id}: {e}"
+                )
+
+    def _classify_fix_target(
+        self, error_info: Dict[str, Any], job_path: str
+    ) -> str:
+        """Determine whether to fix source code or test code.
+
+        Returns:
+            "source" if the error is caused by missing source functionality.
+            "test"   if the error is in the test assertions themselves.
+        """
+        file_path = error_info.get("file", "")
+        error_detail = error_info.get("message", "") + " " + error_info.get("detail", "")
+
+        if "404" in error_detail or "Not Found" in error_detail:
+            return "source"
+
+        if "DID NOT RAISE" in error_detail:
+            return "source"
+
+        if "tests/" in file_path and "assert" in error_detail.lower():
+            source_candidate = file_path.replace("tests/test_", "app/")
+            if Path(job_path, source_candidate).exists():
+                return "source"
+
+        return "test"
+
+    async def validate_fix_in_sandbox(
+        self, fix_id: str, job_id: str
+    ) -> Dict[str, Any]:
+        """Validate a proposed fix by running tests in a sandbox before approval.
+
+        Copies the job codebase to a temp directory, applies the fix, runs pytest,
+        and returns whether the fix improved test results.
+        """
+        import shutil
+        import subprocess
+
+        from server.storage import fixes_db
+
+        fix = fixes_db.get(fix_id)
+        if not fix:
+            raise ValueError(f"Fix {fix_id} not found")
+
+        job_path = self._resolve_job_code_path(job_id, ".")
+        sandbox_dir = tempfile.mkdtemp(prefix=f"sfe_validate_{fix_id}_")
+        try:
+            sandbox_code_dir = Path(sandbox_dir) / "code"
+            shutil.copytree(job_path, str(sandbox_code_dir), dirs_exist_ok=True)
+
+            # Apply proposed changes to the sandbox copy
+            for change in fix.proposed_changes:
+                action = change.get("action", "insert")
+                if action == "info":
+                    continue
+                change_file = change.get("file", "")
+                file_path = sandbox_code_dir / change_file
+                if not file_path.exists():
+                    file_path = sandbox_code_dir / Path(change_file).name
+                if not file_path.parent.exists():
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                content = change.get("content", "")
+                line = change.get("line", 1)
+                if action == "replace" and file_path.exists():
+                    lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                    if 0 < line <= len(lines):
+                        lines[line - 1] = content + "\n"
+                    file_path.write_text("".join(lines), encoding="utf-8")
+                elif action == "insert":
+                    if file_path.exists():
+                        lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                        lines.insert(max(0, line - 1), content + "\n")
+                        file_path.write_text("".join(lines), encoding="utf-8")
+                    else:
+                        file_path.write_text(content + "\n", encoding="utf-8")
+                elif action == "delete" and file_path.exists():
+                    lines = file_path.read_text(encoding="utf-8").splitlines(keepends=True)
+                    if 0 < line <= len(lines):
+                        del lines[line - 1]
+                    file_path.write_text("".join(lines), encoding="utf-8")
+
+            # Run pytest in sandbox directory
+            proc = subprocess.run(
+                ["python", "-m", "pytest", "--tb=no", "-q"],
+                cwd=str(sandbox_code_dir),
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            passed = 0
+            failed = 0
+            for ln in proc.stdout.splitlines():
+                if " passed" in ln:
+                    import re as _re
+                    m = _re.search(r"(\d+) passed", ln)
+                    if m:
+                        passed = int(m.group(1))
+                    m2 = _re.search(r"(\d+) failed", ln)
+                    if m2:
+                        failed = int(m2.group(1))
+            validation_result = {
+                "tests_passed": passed,
+                "tests_failed": failed,
+                "returncode": proc.returncode,
+                "stdout": proc.stdout[-2000:],
+            }
+
+            if proc.returncode == 0 or passed > 0:
+                fix.validation_status = "validated"
+                fix.validation_result = validation_result
+                logger.info(f"[SFE] Fix {fix_id} validated: {passed} tests passed")
+                return {"status": "validated", "result": validation_result}
+            else:
+                fix.validation_status = "rejected"
+                fix.validation_result = validation_result
+                logger.warning(
+                    f"[SFE] Fix {fix_id} rejected: did not improve test results"
+                )
+                return {
+                    "status": "rejected",
+                    "reason": "Fix did not improve test results",
+                    "result": validation_result,
+                }
+        except subprocess.TimeoutExpired:
+            logger.error(f"[SFE] Sandbox validation timed out for fix {fix_id}")
+            return {"status": "error", "reason": "Sandbox validation timed out"}
+        except Exception as e:
+            logger.error(
+                f"[SFE] Sandbox validation failed for fix {fix_id}: {e}", exc_info=True
+            )
+            return {"status": "error", "reason": str(e)}
+        finally:
+            shutil.rmtree(sandbox_dir, ignore_errors=True)
+
+
         """
         Analyze code for potential issues via OmniCore or direct SFE integration.
 
@@ -1136,14 +1282,25 @@ class SFEService:
             file_path_str = error_data.get("file", "main.py")
             line = error_data.get("line", 1)
             job_id = error_data.get("job_id")
-            
+
+            # Resolve job base path for fix-target classification
+            resolved_base = self._resolve_job_code_path(job_id, ".") if job_id else "."
+
+            # Classify whether the fix should target source or test file
+            fix_target = self._classify_fix_target(error_data, resolved_base)
+            if fix_target == "source" and file_path_str.startswith("tests/"):
+                # Redirect to corresponding source file
+                source_candidate = file_path_str.replace("tests/test_", "app/")
+                if Path(resolved_base, source_candidate).exists():
+                    logger.info(
+                        f"[SFE] Redirecting fix from test file {file_path_str} "
+                        f"to source file {source_candidate}"
+                    )
+                    file_path_str = source_candidate
+
             # Resolve file path - convert relative to absolute if needed
-            if job_id:
-                resolved_base = self._resolve_job_code_path(job_id, ".")
-                file_path = Path(resolved_base) / file_path_str
-            else:
-                file_path = Path(file_path_str)
-            
+            file_path = Path(resolved_base) / file_path_str if job_id else Path(file_path_str)
+
             # Ensure file_path is absolute
             if not file_path.is_absolute():
                 file_path = file_path.resolve()
@@ -1429,6 +1586,11 @@ class SFEService:
                             logger.warning(f"Line {line} out of range for {file_path}")
                     else:
                         logger.warning(f"File {file_path} does not exist for delete action")
+
+            # After successful application, invalidate the analysis cache so the
+            # next detect_errors call re-analyzes the actual state of the codebase.
+            if not dry_run and fix.job_id:
+                self._invalidate_analysis_cache(fix.job_id)
 
             return {
                 "fix_id": fix_id,

@@ -1620,7 +1620,19 @@ else:
                 self.code_health_env.name = name
     
             if GYM_AVAILABLE and ENVS_AVAILABLE:
-                self.sandbox_env = MySandboxEnv()
+                # Prefer RealSandboxAdapter over MySandboxEnv mock for the Explorer
+                try:
+                    from self_fixing_engineer.arbiter.explorer import RealSandboxAdapter
+                    self.sandbox_env = RealSandboxAdapter(backend="native")
+                    logging.getLogger(__name__).info(
+                        f"[{name}] Using RealSandboxAdapter for Explorer"
+                    )
+                except Exception as _rsa_err:
+                    logging.getLogger(__name__).warning(
+                        f"[{name}] RealSandboxAdapter not available ({_rsa_err}), "
+                        "falling back to MySandboxEnv"
+                    )
+                    self.sandbox_env = MySandboxEnv()
                 self.explorer = explorer or Explorer(self.sandbox_env)
                 self.experiment_explorer = Explorer(self.sandbox_env)
             else:
@@ -3834,7 +3846,11 @@ else:
                     
                     # Prioritize tasks using decision optimizer
                     try:
-                        prioritized_tasks = await self.decision_optimizer.prioritize(tasks)
+                        # prioritize_tasks(agent_pool, task_queue) — pass empty agent pool
+                        # when no agents are available; the optimizer will sort by priority
+                        prioritized_tasks = await self.decision_optimizer.prioritize_tasks(
+                            [], tasks
+                        )
                         logging.getLogger(__name__).info(
                             f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
                         )
@@ -3998,12 +4014,27 @@ else:
     
         async def run_agent_simulation():
             db_client_instance = PostgresClient(main_settings.DATABASE_URL)
-    
-            # A mock DecisionOptimizer since it's not defined in the file
-            class DecisionOptimizer:
-                def __init__(self, settings):
-                    pass
-    
+
+            # Use real DecisionOptimizer from decision_optimizer module
+            try:
+                from self_fixing_engineer.arbiter.decision_optimizer import (
+                    DecisionOptimizer as _RealDecisionOptimizer,
+                )
+                _decision_optimizer_instance = _RealDecisionOptimizer(
+                    logger=logging.getLogger(__name__),
+                )
+            except Exception as _do_err:
+                logging.getLogger(__name__).warning(
+                    f"Could not instantiate real DecisionOptimizer: {_do_err}. "
+                    "Falling back to no-op."
+                )
+
+                class _RealDecisionOptimizer:  # type: ignore[no-redef]
+                    def __init__(self, *args, **kwargs):
+                        pass
+
+                _decision_optimizer_instance = _RealDecisionOptimizer()
+
             mock_engines = {
                 "simulation": SimulationEngine(),
                 "code_health_env": BaseCodeHealthEnv() if ENVS_AVAILABLE else None,
@@ -4017,7 +4048,7 @@ else:
                 world_size=100,
                 settings=main_settings,
                 analyzer=CodeAnalyzer(),
-                decision_optimizer=DecisionOptimizer(main_settings),
+                decision_optimizer=_decision_optimizer_instance,
                 engines=mock_engines,
             )
     

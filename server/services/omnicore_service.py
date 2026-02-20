@@ -1296,6 +1296,25 @@ def _load_sfe_analysis_report(
     return None
 
 
+def _invalidate_sfe_analysis_cache(job_path: Path, job_id: str) -> None:
+    """Delete the cached SFE analysis report so the next detect_errors re-analyzes."""
+    import os as _os
+
+    report_path = job_path / "reports" / "sfe_analysis_report.json"
+    if report_path.exists():
+        try:
+            _os.remove(report_path)
+            logger.info(
+                f"[SFE] Invalidated cached analysis report for job {job_id}",
+                extra={"job_id": job_id, "report_path": str(report_path)},
+            )
+        except OSError as e:
+            logger.warning(
+                f"[SFE] Could not delete cached analysis report for job {job_id}: {e}",
+                extra={"job_id": job_id},
+            )
+
+
 class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
@@ -5507,7 +5526,10 @@ class OmniCoreService:
                                 f"[CRITIQUE] Job {job_id} failed to write fixed file {file_path}: {write_err}",
                                 exc_info=True
                             )
-                
+
+                # Invalidate cached SFE analysis report so next detect_errors re-analyzes
+                _invalidate_sfe_analysis_cache(repo_path, job_id)
+
                 # Write critique report
                 output_dir = repo_path / "reports"
                 output_dir.mkdir(parents=True, exist_ok=True)
