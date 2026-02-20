@@ -253,18 +253,21 @@ instance_id: test-remote-loaded
         mock_client.secrets.kv.v2.read_secret_version.return_value = {
             "data": {"data": {"api_key": "vault-sk-123"}}
         }
-        self.mock_hvac.Client.return_value = mock_client
 
-        # Now set environment variables and load config
-        with patch.dict(os.environ, {
-            "RUNNER_VAULT_URL": "http://vault:8200",
-            "RUNNER_VAULT_TOKEN": "test-token",
-            "RUNNER_SECRETS_FROM_VAULT": "true",
-        }, clear=False):
-            config = load_config(str(self.config_file))
+        # Patch hvac.Client to return our mock_client within the test context
+        with patch(f"{_load_config_module.__name__}.hvac") as mock_hvac_local:
+            mock_hvac_local.Client.return_value = mock_client
 
-            # Should get vault value, not file value
-            self.assertEqual(config.secrets["api_key"], "vault-sk-123")
+            # Now set environment variables and load config
+            with patch.dict(os.environ, {
+                "RUNNER_VAULT_URL": "http://vault:8200",
+                "RUNNER_VAULT_TOKEN": "test-token",
+                "RUNNER_SECRETS_FROM_VAULT": "true",
+            }, clear=False):
+                config = load_config(str(self.config_file))
+
+                # Should get vault value, not file value
+                self.assertEqual(config.secrets["api_key"], "vault-sk-123")
 
     async def test_config_watcher_file(self):
         # FIX: Align test with ConfigWatcher's TESTING mode logic
