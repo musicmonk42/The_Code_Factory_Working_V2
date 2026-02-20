@@ -1373,7 +1373,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
         logger.info(f"[DEPLOY_AGENT] Generating fallback template for target: {target}")
         
         if target == "docker":
-            # Fallback Dockerfile template for Python FastAPI apps
+            # Fallback Dockerfile template for Python FastAPI apps (app/ layout)
             return f"""FROM python:3.11-slim
 
 WORKDIR /app
@@ -1388,8 +1388,8 @@ COPY . .
 # Expose the application port
 EXPOSE 8000
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the application (app/ package layout)
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 """
         
         elif target == "kubernetes":

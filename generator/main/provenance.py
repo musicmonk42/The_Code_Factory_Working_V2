@@ -1194,8 +1194,9 @@ def run_fail_fast_validation(
             lang = target_language.lower()
             
             if lang in ("python", "py"):
-                # Python: main.py + requirements.txt
-                if "main.py" not in generated_files:
+                # Python: main.py OR app/main.py + requirements.txt
+                has_python_entry = "main.py" in generated_files or "app/main.py" in generated_files
+                if not has_python_entry:
                     results["valid"] = False
                     results["errors"].append("main.py not found")
                 if "requirements.txt" not in generated_files:
@@ -1242,8 +1243,9 @@ def run_fail_fast_validation(
                     results["errors"].append("go.mod not found")
         else:
             # Default behavior when no target language specified (backward compatibility)
-            # Only check for Python entry points
-            if "main.py" not in generated_files:
+            # Only check for Python entry points (accept app/main.py too)
+            has_python_entry = "main.py" in generated_files or "app/main.py" in generated_files
+            if not has_python_entry:
                 results["valid"] = False
                 results["errors"].append("main.py not found")
             if "requirements.txt" not in generated_files:

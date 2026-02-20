@@ -1192,13 +1192,13 @@ class DockerfileHandler(FormatHandler):
         # Only strip leading whitespace before FROM/ARG, not other content
         sanitized = re.sub(r'^\s+', '', sanitized)
         
-        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
-        # IMPORTANT: Validate BEFORE stripping LLM preamble to catch invalid content
-        validate_dockerfile(sanitized)
-        
         # ✅ STRIP LLM PREAMBLE: Remove conversational text before Dockerfile content
         # This handles cases where LLM generates text like "Certainly! Here's a Dockerfile..."
+        # Must happen BEFORE validate_dockerfile so the validator sees clean content.
         sanitized = _strip_llm_preamble(sanitized)
+        
+        # ✅ VALIDATE: Ensure Dockerfile starts with valid instruction (FROM or ARG)
+        validate_dockerfile(sanitized)
         
         # ✅ INDUSTRY STANDARD: Comprehensive line filtering with categorization
         lines = []
