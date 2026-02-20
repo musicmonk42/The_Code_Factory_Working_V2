@@ -10,6 +10,7 @@ import random
 import secrets
 import signal
 import threading
+import weakref
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
@@ -652,6 +653,9 @@ class ArbiterArena:
                 crew_manager=self.crew_manager,  # Pass crew_manager to Arbiter
             )
             self.arbiters.append(arbiter)
+            # Use a weak reference so the arena → arbiter → arena cycle cannot
+            # prevent garbage collection of either object.
+            arbiter._arena_ref = weakref.ref(self)
 
         # Register arbiters with CrewManager if available
         if self.crew_manager:
@@ -715,6 +719,10 @@ class ArbiterArena:
         async with self._lock:
             if arbiter not in self.arbiters:
                 self.arbiters.append(arbiter)
+                # Inject back-reference so the arbiter's event handlers can
+                # reach the arena's SFE fix pipeline.  Use a weak reference to
+                # avoid a reference cycle that would prevent GC.
+                arbiter._arena_ref = weakref.ref(self)
                 active_arbiters.set(len(self.arbiters))
                 logger.info(
                     f"Registered arbiter: {arbiter.name} (Total: {len(self.arbiters)})"
@@ -853,10 +861,17 @@ class ArbiterArena:
             request: Request,
             settings: ArbiterConfig = Depends(ArbiterConfig.initialize),
         ):
-            """Dispatches a task to an arbiter to attempt a repair on a specific module."""
+            """Dispatches a task to an arbiter to attempt a repair on a specific module.
+
+            After the arbiter's ``evolve()`` cycle the endpoint additionally
+            runs any returned high-severity defects through the full SFE fix
+            pipeline (propose → sandbox validate → apply) so fixes are
+            validated before being written to disk.
+            """
             with tracer.start_as_current_span("arena_manual_repair"):
                 data = await request.json()
                 target_module = data.get("module")
+                job_id = data.get("job_id", "")
                 if not target_module:
                     raise HTTPException(
                         status_code=400,
@@ -874,10 +889,36 @@ class ArbiterArena:
                     )
                     await self._update_and_persist_map({}, "manual_repair")
 
+                # Run the SFE fix pipeline for high-severity defects found by evolve
+                sfe_fix_results: list = []
+                if isinstance(repair_result, dict):
+                    high_sev = [
+                        d for d in repair_result.get("defects", [])
+                        if d.get("severity") in ("high", "critical")
+                    ]
+                    if high_sev:
+                        logger.info(
+                            f"[Arena /repair] Running SFE fix pipeline for "
+                            f"{len(high_sev)} high-severity defect(s) "
+                            f"in module '{target_module}'"
+                        )
+                        sfe_fix_results = await self._run_sfe_fix_pipeline(
+                            high_sev, job_id=job_id
+                        )
+                        if sfe_fix_results:
+                            self.codebase_map.setdefault(
+                                "repair_history", []
+                            ).extend(sfe_fix_results)
+                            await self._update_and_persist_map({}, "sfe_fix_pipeline")
+
                 arena_ops_total.labels(operation="manual_repair").inc()
                 return {
-                    "message": f"Repair task for '{target_module}' dispatched to {random_arbiter.name}.",
+                    "message": (
+                        f"Repair task for '{target_module}' dispatched to "
+                        f"{random_arbiter.name}."
+                    ),
                     "result": repair_result,
+                    "sfe_fix_results": sfe_fix_results,
                 }
 
         @self.router.get(
@@ -1145,6 +1186,8 @@ class ArbiterArena:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         repair_outcomes = []
+        high_severity_defects: list = []
+
         for i, res in enumerate(results):
             arbiter_name = (
                 self.arbiters[i].name if i < len(self.arbiters) else "unknown"
@@ -1165,12 +1208,128 @@ class ArbiterArena:
                 arena_errors_total.labels(error_type="arbiter_evolution_fail").inc()
             elif isinstance(res, dict):
                 repair_outcomes.append(res)
+                # Collect high/critical defects discovered during this evolve cycle
+                for defect in res.get("defects", []):
+                    if defect.get("severity") in ("high", "critical"):
+                        high_severity_defects.append(defect)
 
         if repair_outcomes:
             self.codebase_map.setdefault("repair_history", []).extend(repair_outcomes)
             await self._update_and_persist_map({}, "run_arena_rounds")
 
+        # Run the SFE fix pipeline for any high/critical defects found this round
+        if high_severity_defects:
+            logger.info(
+                f"[Arena] Running SFE fix pipeline for "
+                f"{len(high_severity_defects)} high-severity defect(s)"
+            )
+            fix_results = await self._run_sfe_fix_pipeline(high_severity_defects)
+            if fix_results:
+                self.codebase_map.setdefault("repair_history", []).extend(fix_results)
+                await self._update_and_persist_map({}, "sfe_fix_pipeline")
+
         logger.info("All arbiter evolution tasks completed for this round.")
+
+    async def _run_sfe_fix_pipeline(
+        self, defects: list, job_id: str = ""
+    ) -> list:
+        """Run the full SFE fix pipeline for a list of defects.
+
+        For each defect this method:
+        1. Calls ``sfe_service.propose_fix()`` to generate a candidate fix.
+        2. Calls ``sfe_service.validate_fix_in_sandbox()`` to test it in a
+           sandboxed copy of the codebase before touching any real files.
+        3. Only calls ``sfe_service.apply_fix()`` when sandbox validation
+           confirms the fix improves test outcomes.
+
+        Args:
+            defects: List of defect/issue dicts from the codebase analyzer.
+            job_id:  Job identifier used by the SFE service to locate the
+                     codebase on disk.
+
+        Returns:
+            List of result dicts (one per defect) with keys
+            ``defect``, ``status``, and ``details``.
+        """
+        try:
+            from server.services.sfe_service import SFEService
+            from server.storage import fixes_db
+            from server.schemas import Fix, FixStatus
+        except ImportError as exc:
+            logger.warning(
+                f"[Arena] SFE service not available, skipping fix pipeline: {exc}"
+            )
+            return []
+
+        results = []
+        for defect in defects:
+            # Prefer an explicit id; fall back to a stable hash of defect content
+            # so the same defect always maps to the same error_id across runs.
+            error_id = (
+                defect.get("id")
+                or defect.get("error_id")
+                or __import__("hashlib").sha256(
+                    json.dumps(defect, sort_keys=True, default=str).encode()
+                ).hexdigest()[:16]
+            )
+            defect_type = defect.get("type", "unknown")
+            try:
+                sfe = SFEService()
+
+                # 1. Propose fix
+                proposal = await sfe.propose_fix(error_id)
+                fix_id = proposal.get("fix_id")
+                if not fix_id:
+                    results.append({
+                        "defect": defect_type,
+                        "status": "no_fix_proposed",
+                        "details": proposal,
+                    })
+                    continue
+
+                logger.info(
+                    f"[Arena] Proposed fix {fix_id} for defect '{defect_type}'"
+                )
+
+                # 2. Validate in sandbox before touching real files
+                validation = await sfe.validate_fix_in_sandbox(fix_id, job_id)
+                if validation.get("status") != "validated":
+                    logger.warning(
+                        f"[Arena] Fix {fix_id} failed sandbox validation "
+                        f"({validation.get('reason', 'no improvement')}); skipping apply"
+                    )
+                    results.append({
+                        "defect": defect_type,
+                        "fix_id": fix_id,
+                        "status": "validation_failed",
+                        "details": validation,
+                    })
+                    continue
+
+                # 3. Apply only after successful sandbox validation
+                apply_result = await sfe.apply_fix(fix_id, dry_run=False)
+                logger.info(
+                    f"[Arena] Applied fix {fix_id} for defect '{defect_type}'"
+                )
+                results.append({
+                    "defect": defect_type,
+                    "fix_id": fix_id,
+                    "status": "applied",
+                    "details": apply_result,
+                })
+
+            except Exception as exc:
+                logger.error(
+                    f"[Arena] Fix pipeline error for defect '{defect_type}': {exc}",
+                    exc_info=True,
+                )
+                results.append({
+                    "defect": defect_type,
+                    "status": "error",
+                    "details": str(exc),
+                })
+
+        return results
 
     async def stop_all(self):
         """Stops all arbiters in the arena and clears the list."""

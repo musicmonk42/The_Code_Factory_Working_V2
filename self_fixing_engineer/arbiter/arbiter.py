@@ -38,6 +38,7 @@ else:
     import random
     import sys
     import time
+    import weakref
     from collections import deque
     from datetime import datetime, timezone
     from functools import wraps
@@ -1620,7 +1621,19 @@ else:
                 self.code_health_env.name = name
     
             if GYM_AVAILABLE and ENVS_AVAILABLE:
-                self.sandbox_env = MySandboxEnv()
+                # Prefer RealSandboxAdapter over MySandboxEnv mock for the Explorer
+                try:
+                    from self_fixing_engineer.arbiter.explorer import RealSandboxAdapter
+                    self.sandbox_env = RealSandboxAdapter(backend="native")
+                    logging.getLogger(__name__).info(
+                        f"[{name}] Using RealSandboxAdapter for Explorer"
+                    )
+                except Exception as _rsa_err:
+                    logging.getLogger(__name__).warning(
+                        f"[{name}] RealSandboxAdapter not available ({_rsa_err}), "
+                        "falling back to MySandboxEnv"
+                    )
+                    self.sandbox_env = MySandboxEnv()
                 self.explorer = explorer or Explorer(self.sandbox_env)
                 self.experiment_explorer = Explorer(self.sandbox_env)
             else:
@@ -1673,7 +1686,13 @@ else:
                 logging.getLogger(__name__).warning(
                     f"[{self.name}] No CrewManager provided. Agent orchestration features will be limited."
                 )
-    
+
+            # Back-reference to the ArbiterArena this Arbiter belongs to.
+            # Set to a weakref.ref by the arena during registration so event
+            # handlers (e.g. _on_analysis_complete) can reach _run_sfe_fix_pipeline.
+            # Initialised to None so None-checks are not needed anywhere.
+            self._arena_ref: Optional[weakref.ref] = None
+
             os.makedirs(
                 os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True
             )
@@ -3669,24 +3688,53 @@ else:
             )
             try:
                 issues = data.get("issues", [])
-                data.get("analysis_id")
-    
+                job_id = data.get("job_id", "")
+
                 # Log completion
                 self.log_event(
                     f"Analysis complete: {len(issues)} issues found", "analysis_complete"
                 )
-    
-                # Trigger fix workflows for detected issues
-                for issue in issues:
-                    if issue.get("severity") in ["high", "critical"]:
-                        logging.getLogger(__name__).info(
-                            f"[{self.name}] Triggering fix workflow for {issue.get('type')}"
+
+                # Collect high/critical issues and run them through the SFE fix pipeline
+                high_sev = [
+                    issue for issue in issues
+                    if issue.get("severity") in ("high", "critical")
+                ]
+
+                # Resolve the weak reference to the arena (may be None if arena was GC'd)
+                arena = self._arena_ref() if self._arena_ref is not None else None
+
+                if high_sev and arena is not None:
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Routing {len(high_sev)} high-severity issue(s) "
+                        "through SFE fix pipeline via arena"
+                    )
+                    try:
+                        fix_results = await arena._run_sfe_fix_pipeline(
+                            high_sev, job_id=job_id
                         )
-                        # Coordinate with decision optimizer if available
-                        if self.decision_optimizer:
-                            logging.getLogger(__name__).info(
-                                f"[{self.name}] DecisionOptimizer available for fix coordination"
-                            )
+                        logging.getLogger(__name__).info(
+                            f"[{self.name}] SFE fix pipeline completed for "
+                            f"{len(fix_results)} issue(s)"
+                        )
+                    except Exception as pipeline_err:
+                        logging.getLogger(__name__).error(
+                            f"[{self.name}] SFE fix pipeline error: {pipeline_err}",
+                            exc_info=True,
+                        )
+                elif high_sev:
+                    # Arena reference not injected yet — log clearly for diagnostics
+                    logging.getLogger(__name__).warning(
+                        f"[{self.name}] {len(high_sev)} high-severity issue(s) found but "
+                        "no arena reference available; fix pipeline not run. "
+                        "Ensure the Arbiter is registered with an ArbiterArena."
+                    )
+
+                # Coordinate with decision optimizer for task creation
+                if high_sev and self.decision_optimizer:
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] DecisionOptimizer available for fix coordination"
+                    )
             except Exception as e:
                 logging.getLogger(__name__).error(
                     f"[{self.name}] Error handling analysis_complete event: {e}",
@@ -3834,7 +3882,11 @@ else:
                     
                     # Prioritize tasks using decision optimizer
                     try:
-                        prioritized_tasks = await self.decision_optimizer.prioritize(tasks)
+                        # prioritize_tasks(agent_pool, task_queue) — pass empty agent pool
+                        # when no agents are available; the optimizer will sort by priority
+                        prioritized_tasks = await self.decision_optimizer.prioritize_tasks(
+                            [], tasks
+                        )
                         logging.getLogger(__name__).info(
                             f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
                         )
@@ -3998,12 +4050,27 @@ else:
     
         async def run_agent_simulation():
             db_client_instance = PostgresClient(main_settings.DATABASE_URL)
-    
-            # A mock DecisionOptimizer since it's not defined in the file
-            class DecisionOptimizer:
-                def __init__(self, settings):
-                    pass
-    
+
+            # Use real DecisionOptimizer from decision_optimizer module
+            try:
+                from self_fixing_engineer.arbiter.decision_optimizer import (
+                    DecisionOptimizer as _RealDecisionOptimizer,
+                )
+                _decision_optimizer_instance = _RealDecisionOptimizer(
+                    logger=logging.getLogger(__name__),
+                )
+            except Exception as _do_err:
+                logging.getLogger(__name__).warning(
+                    f"Could not instantiate real DecisionOptimizer: {_do_err}. "
+                    "Falling back to no-op."
+                )
+
+                class _NoOpDecisionOptimizer:  # type: ignore[no-redef]
+                    def __init__(self, *args, **kwargs):
+                        pass
+
+                _decision_optimizer_instance = _NoOpDecisionOptimizer()
+
             mock_engines = {
                 "simulation": SimulationEngine(),
                 "code_health_env": BaseCodeHealthEnv() if ENVS_AVAILABLE else None,
@@ -4017,7 +4084,7 @@ else:
                 world_size=100,
                 settings=main_settings,
                 analyzer=CodeAnalyzer(),
-                decision_optimizer=DecisionOptimizer(main_settings),
+                decision_optimizer=_decision_optimizer_instance,
                 engines=mock_engines,
             )
     

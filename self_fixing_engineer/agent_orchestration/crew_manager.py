@@ -93,12 +93,30 @@ except ImportError:
     _TENACITY_AVAILABLE = False
     print("Warning: tenacity not installed. Automatic retries will be disabled.")
 
+    # Provide fallback so bare `except RetryError` clauses never raise NameError.
+    # This stub will never actually be raised; it exists only to prevent
+    # NameError in exception handlers that reference RetryError when tenacity
+    # is not installed.
+    class RetryError(Exception):  # type: ignore[no-redef]
+        """Stub exception class used when tenacity is unavailable.
+
+        This will never be raised; it exists only to prevent NameError in
+        ``except RetryError`` handlers when the tenacity package is absent.
+        """
+
 try:
     from opentelemetry import trace
 
     tracer = trace.get_tracer(__name__)
 except ImportError:
     tracer = None
+
+try:
+    from self_fixing_engineer.simulation.sandbox import run_in_sandbox as _sandbox_run_in_sandbox
+
+    _REAL_SANDBOX_RUNNER_AVAILABLE = True
+except ImportError:
+    _REAL_SANDBOX_RUNNER_AVAILABLE = False
 
 logger = logging.getLogger("simulation.crew_manager")
 logger.setLevel(logging.INFO)
@@ -211,6 +229,27 @@ class AgentError(Exception):
     pass
 
 
+async def _real_sandbox_runner(
+    agent_class_name: str,
+    config: Dict[str, Any],
+    tags: List[str],
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Default sandbox runner that delegates to the real sandbox implementation."""
+    command = config.get("command") or ["python", "-c", f"print('agent:{agent_class_name}')"]
+    workdir = config.get("workdir", ".")
+    backend = config.get("backend", "native")
+    policy = config.get("policy", {})
+    resource_limits = config.get("resource_limits", {})
+    return await _sandbox_run_in_sandbox(
+        backend=backend,
+        command=command,
+        workdir=workdir,
+        policy=policy,
+        resource_limits=resource_limits,
+    )
+
+
 class CrewManager:
     """
     Pinnacle orchestrator of async agents. Full lifecycle, health, scaling, policies, tags, hooks, and metrics.
@@ -295,7 +334,16 @@ class CrewManager:
             "on_agent_heartbeat_missed": [],
         }
         self._heartbeat_monitor_task: Optional[asyncio.Task] = None
-        self._sandbox_runner = sandbox_runner
+        if sandbox_runner is not None:
+            self._sandbox_runner = sandbox_runner
+        elif _REAL_SANDBOX_RUNNER_AVAILABLE:
+            self._sandbox_runner = _real_sandbox_runner
+            logger.info("CrewManager: using real sandbox runner from simulation/sandbox.py")
+        else:
+            self._sandbox_runner = None
+            logger.warning(
+                "Real sandbox not available. Agents will not be launched in isolation."
+            )
         self._agent_health_poller = agent_health_poller
         self._agent_stop_commander = agent_stop_commander
         self.redis_pool: Optional[redis.Redis] = None
@@ -303,7 +351,7 @@ class CrewManager:
 
         if not self._sandbox_runner:
             logger.warning(
-                "No sandbox_runner provided. Agents will not be launched in isolation."
+                "No sandbox_runner configured. Agents will not be launched in isolation."
             )
         if not self._agent_health_poller:
             logger.warning(

@@ -62,6 +62,12 @@ class Fix(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
     applied_at: Optional[datetime] = Field(None, description="Application timestamp")
     rolled_back_at: Optional[datetime] = Field(None, description="Rollback timestamp")
+    validation_status: Optional[str] = Field(
+        None, description="Sandbox validation result: 'validated', 'rejected', or 'error'"
+    )
+    validation_result: Optional[Dict[str, Any]] = Field(
+        None, description="Detailed sandbox validation outcome (test counts, logs)"
+    )
 
 
 class FixReviewRequest(BaseModel):
