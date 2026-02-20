@@ -446,7 +446,41 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     """
     def _finalize_with_pydantic_v2_validation(code_files: Dict[str, str]) -> Dict[str, str]:
         """Auto-fix common Pydantic v1 patterns, then block materialization if issues remain."""
-        fixed_files = auto_fix_pydantic_v1_imports(code_files)
+        # Fix Pydantic V1 → V2 error type strings in test assertions
+        _v1_to_v2: Dict[str, str] = {
+            '"value_error.missing"': '"missing"',
+            "'value_error.missing'": "'missing'",
+            '"type_error.str"': '"string_type"',
+            "'type_error.str'": "'string_type'",
+            '"type_error.integer"': '"int_parsing"',
+            "'type_error.integer'": "'int_parsing'",
+            '"type_error.float"': '"float_parsing"',
+            "'type_error.float'": "'float_parsing'",
+            '"type_error.bool"': '"bool_parsing"',
+            "'type_error.bool'": "'bool_parsing'",
+            '"value_error.any_str.min_length"': '"string_too_short"',
+            "'value_error.any_str.min_length'": "'string_too_short'",
+            '"value_error.any_str.max_length"': '"string_too_long"',
+            "'value_error.any_str.max_length'": "'string_too_long'",
+            '"value_error.number.not_gt"': '"greater_than"',
+            "'value_error.number.not_gt'": "'greater_than'",
+            '"value_error.number.not_ge"': '"greater_than_equal"',
+            "'value_error.number.not_ge'": "'greater_than_equal'",
+            '"value_error.number.not_lt"': '"less_than"',
+            "'value_error.number.not_lt'": "'less_than'",
+            '"value_error.number.not_le"': '"less_than_equal"',
+            "'value_error.number.not_le'": "'less_than_equal'",
+        }
+
+        patched: Dict[str, str] = {}
+        for fname, content in code_files.items():
+            for old, new in _v1_to_v2.items():
+                content = content.replace(old, new)
+            # Fix hallucinated validate_item_data() calls → Item(**data)
+            content = re.sub(r'validate_item_data\(([^)]+)\)', r'Item(**\1)', content)
+            patched[fname] = content
+
+        fixed_files = auto_fix_pydantic_v1_imports(patched)
         pydantic_errors = validate_pydantic_v2_compatibility(fixed_files)
         if pydantic_errors:
             logger.warning("Pydantic v2 compatibility validation failed: %s", pydantic_errors)
@@ -1073,12 +1107,33 @@ _EXTENSION_TO_LANGUAGE: Dict[str, str] = {
     "xml": "xml",
     "html": "html",
     "css": "css",
+    # Dockerfile (when extension is present)
+    "dockerfile": "dockerfile",
+}
+
+# Well-known filenames that don't rely on extension-based detection.
+# Checked before the extension map to handle extensionless / dotfiles.
+_FILENAME_TO_LANGUAGE: Dict[str, str] = {
+    "Dockerfile": "dockerfile",
+    "dockerfile": "dockerfile",
+    ".gitignore": "gitignore",
+    ".dockerignore": "dockerignore",
+    ".env": "env",
+    ".env.example": "env",
+    ".env.local": "env",
+    ".env.production": "env",
+    ".editorconfig": "config",
+    "Makefile": "makefile",
+    "makefile": "makefile",
+    "Procfile": "procfile",
 }
 
 # Non-code languages that should skip syntax validation (performance: frozenset)
 _NON_CODE_LANGUAGES: frozenset = frozenset({
     "markdown", "text", "restructuredtext",
-    "json", "yaml", "toml", "xml", "html", "css"
+    "json", "yaml", "toml", "xml", "html", "css",
+    "dockerfile", "gitignore", "dockerignore", "env",
+    "config", "makefile", "procfile", "shell",
 })
 
 
@@ -1125,10 +1180,19 @@ def _infer_language_from_filename(filename: str, default_lang: str = "python") -
     
     # Security: use basename only to avoid path traversal influencing detection
     basename = os.path.basename(filename)
-    
+
+    # Check well-known filenames first (handles extensionless files and dotfiles)
+    if basename in _FILENAME_TO_LANGUAGE:
+        return _FILENAME_TO_LANGUAGE[basename]
+
+    # Files starting with '.' that aren't in the lookup above should also skip
+    # validation (e.g. .prettierrc, .babelrc, .eslintrc, .env.staging).
+    if basename.startswith("."):
+        return "config"
+
     # Extract extension (case-insensitive)
     ext = os.path.splitext(basename)[1].lstrip(".").lower()
-    
+
     # Return detected language or default
     return _EXTENSION_TO_LANGUAGE.get(ext, default_lang)
 
