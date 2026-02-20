@@ -2959,6 +2959,18 @@ class OmniCoreService:
                 if project_type:
                     requirements_dict["project_type"] = project_type
                     logger.info(f"[CODEGEN] Injecting project_type={project_type!r} into requirements for job {job_id}")
+
+                # Inject previous_error from payload so build_code_generation_prompt can
+                # include it in the prompt, giving the LLM context about what failed.
+                # This also changes the prompt content and therefore the LLM cache key,
+                # busting any cached bad response from prior attempts.
+                previous_error_from_payload = payload.get("previous_error")
+                if previous_error_from_payload:
+                    requirements_dict["previous_error"] = previous_error_from_payload
+                    logger.info(
+                        f"[CODEGEN] Injecting previous_error into requirements for job {job_id}: "
+                        f"error_type={previous_error_from_payload.get('error_type')}"
+                    )
                 
                 # Parse requirements to extract structured features for the prompt builder
                 fallback_features = [requirements] if requirements else ["No specific features provided"]
@@ -6388,9 +6400,13 @@ class OmniCoreService:
 
                 logger.info(f"[PIPELINE] Job {job_id} starting step: codegen ({attempt_label})")
 
-                # Add previous_error to payload if retrying
+                # Add previous_error and retry_attempt to payload if retrying.
+                # Including these in the payload changes the prompt content, which changes
+                # the LLM cache key (sha256(prompt+model+provider)), busting any cached
+                # bad response from prior attempts.
                 if previous_error:
                     codegen_payload["previous_error"] = previous_error
+                    codegen_payload["retry_attempt"] = codegen_attempt
                     logger.info(
                         f"[PIPELINE] Job {job_id} retrying codegen with error feedback: {previous_error.get('error_type')}",
                         extra={"job_id": job_id, "attempt": codegen_attempt, "previous_error": previous_error}
@@ -6531,7 +6547,17 @@ class OmniCoreService:
                             "last_error": error_msg,
                         }
 
-                    # Continue to next attempt (previous_error will be set from validation if available)
+                    # Set previous_error so the next attempt gets error context in the prompt
+                    # (this also changes the prompt content, busting the LLM cache key)
+                    previous_error = {
+                        "error_type": codegen_result.get("error_type", "CodegenError"),
+                        "details": error_msg,
+                        "attempt": codegen_attempt,
+                        "instruction": (
+                            "The previous code generation attempt failed. "
+                            "Please fix the following error and regenerate the code:\n"
+                        ),
+                    }
 
             # 2b. Post-codegen validation stages with retry on syntax errors
             output_path_for_validation = codegen_result.get("output_path")

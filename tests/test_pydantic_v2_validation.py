@@ -210,6 +210,92 @@ class TestAutoFixPydanticV1Imports:
         _ = self._fix(files)
         assert files["config.py"] == original_content, "Input dict should not be mutated"
 
+    def test_fix_validator_decorator_to_field_validator(self):
+        """@validator should be rewritten to @field_validator with mode='before'."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, validator\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    @validator('name')\n"
+                "    def validate_name(cls, v):\n"
+                "        return v\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "@field_validator('name'" in content, f"Expected @field_validator in:\n{content}"
+        assert "@validator(" not in content, f"Unexpected @validator in:\n{content}"
+        assert "field_validator" in content  # import also updated
+
+    def test_fix_validator_import_updated(self):
+        """'validator' in pydantic import should be replaced with 'field_validator'."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, validator, Field\n\n"
+                "class Item(BaseModel):\n"
+                "    price: float\n\n"
+                "    @validator('price')\n"
+                "    def check_price(cls, v):\n"
+                "        return v\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        # Original standalone 'validator' import token should be replaced
+        assert "from pydantic import BaseModel, field_validator, Field" in content
+
+    def test_fix_validator_and_validate_roundtrip(self):
+        """After fixing @validator, the validator should report no errors."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, validator\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    @validator('name')\n"
+                "    def validate_name(cls, v):\n"
+                "        return v\n"
+            )
+        }
+        fixed = self._fix(files)
+        errors = self._validate(fixed)
+        assert errors == [], f"Expected no errors after fixing @validator, got: {errors}"
+
+    def test_fix_root_validator_to_model_validator(self):
+        """@root_validator should be rewritten to @model_validator(mode='before')."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, root_validator\n\n"
+                "class Config(BaseModel):\n"
+                "    a: int\n"
+                "    b: int\n\n"
+                "    @root_validator\n"
+                "    def check_values(cls, values):\n"
+                "        return values\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "@model_validator(mode='before')" in content, f"Expected @model_validator in:\n{content}"
+        assert "@root_validator" not in content, f"Unexpected @root_validator in:\n{content}"
+
+    def test_fix_root_validator_with_args(self):
+        """@root_validator(pre=True) should also be replaced."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, root_validator\n\n"
+                "class Config(BaseModel):\n"
+                "    x: int\n\n"
+                "    @root_validator(pre=True)\n"
+                "    def check_x(cls, values):\n"
+                "        return values\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "@model_validator(mode='before')" in content
+        assert "@root_validator" not in content
+
 
 class TestParseLLMResponsePydanticV2Validation:
     """Integration tests: pydantic validation runs before files are materialized."""
@@ -235,7 +321,8 @@ class TestParseLLMResponsePydanticV2Validation:
         assert "requirements.txt" in parsed
         assert "pydantic-settings>=2.0.0" in parsed["requirements.txt"]
 
-    def test_parse_blocks_deprecated_v1_patterns_with_error_file(self):
+    def test_parse_auto_fixes_deprecated_validator_decorator(self):
+        """@validator decorators should be auto-fixed to @field_validator (not blocked)."""
         files_payload = {
             "files": {
                 "schemas.py": (
@@ -249,5 +336,10 @@ class TestParseLLMResponsePydanticV2Validation:
             }
         }
         parsed = self._parse(files_payload)
-        assert list(parsed.keys()) == ["error.txt"]
-        assert "Pydantic v2 compatibility validation failed" in parsed["error.txt"]
+        # The file should be auto-fixed, not blocked with an error
+        assert "error.txt" not in parsed, (
+            f"Expected auto-fix, not error.txt. Got: {parsed.get('error.txt', '')}"
+        )
+        assert "schemas.py" in parsed
+        assert "@field_validator" in parsed["schemas.py"]
+        assert "@validator(" not in parsed["schemas.py"]
