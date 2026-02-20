@@ -771,17 +771,22 @@ jobs:
 
           echo "✓ Tests completed for ${{ matrix.module }}"
 
-      - name: Add swap space for memory-intensive tests
+      - name: Add 4GB swap
         if: always() && matrix.module == 'self_fixing_engineer'
+        shell: bash
         run: |
-          echo "=== Adding 4GB swap space ==="
-          sudo fallocate -l 4G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "=== Memory after adding swap ==="
-          free -h
+          set -euxo pipefail
+
+          SWAPFILE=/mnt/swapfile
+          sudo swapoff "$SWAPFILE" 2>/dev/null || true
+          sudo rm -f "$SWAPFILE"
+
+          sudo dd if=/dev/zero of="$SWAPFILE" bs=1M count=4096 status=progress
+          sudo chmod 600 "$SWAPFILE"
+          sudo mkswap "$SWAPFILE"
+          sudo swapon "$SWAPFILE"
           swapon --show
+          free -h
 
       - name: Force garbage collection before Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
