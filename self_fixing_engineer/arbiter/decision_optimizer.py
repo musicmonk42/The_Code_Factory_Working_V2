@@ -703,16 +703,97 @@ class DecisionOptimizer:
 
     async def _execute_fix(self, proposal: Dict[str, Any]):
         fixer_name = proposal.get("suggested_fixer")
+        target_file = proposal.get("details", {}).get("file") or proposal.get("file")
+        file_code = proposal.get("details", {}).get("code") or proposal.get("code")
 
         result = None
         if fixer_name == "self_healing_import_fixer":
             self.logger.info(
-                f"Simulating execution of fixer '{fixer_name}' for proposal type '{proposal.get('type')}'."
+                f"Executing fixer '{fixer_name}' for proposal type '{proposal.get('type')}'."
             )
-            result = {
-                "status": "success",
-                "details": "Simulated fix applied successfully.",
-            }
+            try:
+                from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import (
+                    ImportFixerEngine,
+                )
+
+                engine = ImportFixerEngine()
+
+                # Read file content if not provided in proposal
+                code_to_fix = file_code
+                if not code_to_fix and target_file:
+                    try:
+                        with open(target_file, "r", encoding="utf-8") as fh:
+                            code_to_fix = fh.read()
+                    except OSError as read_err:
+                        self.logger.warning(
+                            f"Could not read target file '{target_file}': {read_err}"
+                        )
+
+                if not code_to_fix:
+                    result = {
+                        "status": "failure",
+                        "details": "No code available to fix (file not found or empty).",
+                    }
+                else:
+                    fix_result = engine.fix_code(
+                        code_to_fix,
+                        file_path=target_file,
+                        dry_run=False,
+                    )
+
+                    fixed_code = fix_result.get("fixed_code", code_to_fix)
+                    fixes_applied = fix_result.get("fixes_applied", [])
+
+                    # Simulation step: syntax-validate the fixed code
+                    simulation_passed = False
+                    simulation_error = None
+                    if fixed_code and target_file and str(target_file).endswith(".py"):
+                        try:
+                            compile(fixed_code, str(target_file), "exec")
+                            simulation_passed = True
+                        except SyntaxError as se:
+                            simulation_error = str(se)
+                            self.logger.warning(
+                                f"Fix simulation failed syntax check for '{target_file}': {se}"
+                            )
+                    else:
+                        # For non-Python or no target file, accept the fixer result
+                        simulation_passed = fix_result.get("status") == "success"
+
+                    if simulation_passed:
+                        # Apply the fix to the real file if path is available
+                        if target_file and not file_code:
+                            try:
+                                with open(target_file, "w", encoding="utf-8") as fh:
+                                    fh.write(fixed_code)
+                                self.logger.info(
+                                    f"Fix applied to '{target_file}': {fixes_applied}"
+                                )
+                            except OSError as write_err:
+                                self.logger.warning(
+                                    f"Could not write fix to '{target_file}': {write_err}"
+                                )
+                        result = {
+                            "status": "success",
+                            "details": f"Fix applied successfully. Changes: {fixes_applied}",
+                            "simulation_passed": True,
+                            "fixes_applied": fixes_applied,
+                        }
+                    else:
+                        # Roll back (no write occurred) and report failure
+                        result = {
+                            "status": "failure",
+                            "details": (
+                                f"Fix simulation failed: {simulation_error or 'unknown error'}. "
+                                "Fix was NOT applied."
+                            ),
+                            "simulation_passed": False,
+                        }
+            except Exception as exc:
+                self.logger.error(
+                    f"Error executing fixer '{fixer_name}': {exc}", exc_info=True
+                )
+                result = {"status": "failure", "details": f"Fixer raised an exception: {exc}"}
         else:
             self.logger.error(
                 f"Execution failed: Unknown fixer '{fixer_name}' for proposal type '{proposal.get('type')}'."

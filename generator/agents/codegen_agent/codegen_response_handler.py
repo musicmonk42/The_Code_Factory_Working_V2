@@ -1075,10 +1075,52 @@ _EXTENSION_TO_LANGUAGE: Dict[str, str] = {
     "css": "css",
 }
 
+# Mapping of well-known extensionless filenames (or dot-files) to their language types.
+# Checked BEFORE extension-based detection to handle files like Dockerfile, .gitignore, etc.
+_FILENAME_TO_LANGUAGE: Dict[str, str] = {
+    # Docker
+    "dockerfile": "dockerfile",
+    "dockerfile.dev": "dockerfile",
+    "dockerfile.prod": "dockerfile",
+    "dockerfile.test": "dockerfile",
+    ".dockerignore": "ignore",
+    # Git / version control
+    ".gitignore": "ignore",
+    ".gitattributes": "ignore",
+    ".gitmodules": "ignore",
+    # Environment / config
+    ".env": "env",
+    ".env.example": "env",
+    ".env.local": "env",
+    ".env.production": "env",
+    ".env.development": "env",
+    ".env.test": "env",
+    # Build / project tooling
+    "makefile": "makefile",
+    "gnumakefile": "makefile",
+    "procfile": "procfile",
+    "gemfile": "ruby",
+    "rakefile": "ruby",
+    # Editor / misc
+    ".editorconfig": "editorconfig",
+    ".npmignore": "ignore",
+    ".dockerignore": "ignore",
+    "license": "text",
+    "licence": "text",
+    "copying": "text",
+    "authors": "text",
+    "changelog": "text",
+    "notice": "text",
+    "readme": "markdown",
+}
+
 # Non-code languages that should skip syntax validation (performance: frozenset)
 _NON_CODE_LANGUAGES: frozenset = frozenset({
     "markdown", "text", "restructuredtext",
-    "json", "yaml", "toml", "xml", "html", "css"
+    "json", "yaml", "toml", "xml", "html", "css",
+    # Extensionless / config file types
+    "dockerfile", "ignore", "env", "makefile", "procfile",
+    "editorconfig",
 })
 
 
@@ -1125,10 +1167,16 @@ def _infer_language_from_filename(filename: str, default_lang: str = "python") -
     
     # Security: use basename only to avoid path traversal influencing detection
     basename = os.path.basename(filename)
-    
+
+    # Check full basename against well-known extensionless filenames FIRST
+    # This handles Dockerfile, .gitignore, .env, .env.example, Makefile, etc.
+    basename_lower = basename.lower()
+    if basename_lower in _FILENAME_TO_LANGUAGE:
+        return _FILENAME_TO_LANGUAGE[basename_lower]
+
     # Extract extension (case-insensitive)
     ext = os.path.splitext(basename)[1].lstrip(".").lower()
-    
+
     # Return detected language or default
     return _EXTENSION_TO_LANGUAGE.get(ext, default_lang)
 
@@ -1851,6 +1899,10 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
 
     Fixes applied:
     - `from pydantic import BaseSettings` → `from pydantic_settings import BaseSettings`
+    - `.dict()` method calls → `.model_dump()` (Pydantic v2)
+    - `Field(..., example=...)` → `Field(..., json_schema_extra={"example": ...})` (Pydantic v2)
+    - V1 error type strings in test assertions → V2 equivalents
+    - `pydantic==1.x` pin in requirements.txt → `pydantic>=2.0`
     - Adds `pydantic-settings>=2.0.0` to requirements.txt when BaseSettings is used.
 
     Args:
@@ -1859,6 +1911,27 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
     Returns:
         Updated files dictionary with fixes applied.
     """
+    import re as _re
+
+    # V1 → V2 error type string mappings used in test assertions
+    _V1_TO_V2_ERROR_TYPES: Dict[str, str] = {
+        "value_error.number.not_gt": "greater_than",
+        "value_error.number.not_ge": "greater_than_equal",
+        "value_error.number.not_lt": "less_than",
+        "value_error.number.not_le": "less_than_equal",
+        "value_error.missing": "missing",
+        "value_error.str.regex": "string_pattern_mismatch",
+        "value_error.any_str.min_length": "string_too_short",
+        "value_error.any_str.max_length": "string_too_long",
+        "value_error.list.min_items": "too_short",
+        "value_error.list.max_items": "too_long",
+        "type_error.integer": "int_type",
+        "type_error.float": "float_type",
+        "type_error.str": "string_type",
+        "type_error.bool": "bool_type",
+        "type_error.none.not_allowed": "none_required",
+    }
+
     fixed_files = dict(files)
 
     # Determine whether any Python file uses BaseSettings
@@ -1880,9 +1953,53 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                 )
                 logger.info("auto_fix_pydantic_v1_imports: fixed BaseSettings import in %s", filename)
 
+            # Fix: .dict() → .model_dump() (Pydantic v2 rename)
+            # Only replace .dict() call patterns, not method definitions or unrelated uses
+            if ".dict(" in content:
+                content = _re.sub(r'\.dict\(', '.model_dump(', content)
+                logger.info("auto_fix_pydantic_v1_imports: replaced .dict() with .model_dump() in %s", filename)
+
+            # Fix: Field(..., example=...) → Field(..., json_schema_extra={"example": ...})
+            # Match Field calls with an 'example' keyword argument not already inside json_schema_extra
+            def _fix_field_example(m: "re.Match[str]") -> str:
+                full_match = m.group(0)
+                # Skip if already using json_schema_extra
+                if "json_schema_extra" in full_match:
+                    return full_match
+                example_val = m.group(1)
+                replacement = full_match.replace(
+                    f", example={example_val}",
+                    f', json_schema_extra={{"example": {example_val}}}',
+                )
+                return replacement
+
+            if "example=" in content and "Field(" in content:
+                content = _re.sub(
+                    r'Field\([^)]*,\s*example=([^,)]+)[^)]*\)',
+                    _fix_field_example,
+                    content,
+                )
+                logger.info("auto_fix_pydantic_v1_imports: replaced Field(example=) in %s", filename)
+
+            # Fix: V1 error type strings in test assertions → V2 equivalents
+            for v1_type, v2_type in _V1_TO_V2_ERROR_TYPES.items():
+                if v1_type in content:
+                    content = content.replace(v1_type, v2_type)
+                    logger.info(
+                        "auto_fix_pydantic_v1_imports: replaced error type '%s' → '%s' in %s",
+                        v1_type, v2_type, filename,
+                    )
+
             fixed_files[filename] = content
 
         elif filename == "requirements.txt":
+            # Upgrade pydantic==1.x pin to pydantic>=2.0
+            if _re.search(r'pydantic\s*==\s*1\.', content):
+                content = _re.sub(r'pydantic\s*==\s*1\.[^\s\n]*', 'pydantic>=2.0', content)
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: upgraded pydantic v1 pin to pydantic>=2.0 in requirements.txt"
+                )
+
             if uses_base_settings and "pydantic-settings" not in content:
                 content = content.rstrip("\n") + "\npydantic-settings>=2.0.0\n"
                 logger.info(

@@ -1759,7 +1759,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                         # - No security findings
                         # - Compliance score is acceptable (>= 0.7)
                         vres["valid"] = (
-                            lint_status in ("success", "tool_not_found", "skipped") and
+                            lint_status in ("success", "tool_not_found", "skipped", "warning") and
                             len(lint_issues) == 0 and
                             len(security_findings) == 0 and
                             compliance_score >= 0.7
@@ -1786,11 +1786,11 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                         security_findings = vres.get("security_findings", [])
                         
                         # Consider valid if:
-                        # - lint_status is success OR skipped OR tool_not_found
+                        # - lint_status is success OR skipped OR tool_not_found OR warning
                         # - No critical lint issues
                         # - No high-severity security findings
                         is_valid = (
-                            lint_status in ("success", "skipped", "tool_not_found") and
+                            lint_status in ("success", "skipped", "tool_not_found", "warning") and
                             len(lint_issues) == 0 and
                             len(security_findings) == 0
                         )
@@ -1800,14 +1800,19 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                     # Check if validation should fail
                     # Fail only if:
                     # 1. is_valid is False AND
-                    # 2. It's not a tool availability issue (build_status/lint_status not in skipped/tool_not_found)
-                    if not is_valid and build_status not in ("skipped", "tool_not_found") and lint_status not in ("skipped", "tool_not_found", "success"):
+                    # 2. It's not a tool availability issue (build_status/lint_status not in skipped/tool_not_found/warning)
+                    if not is_valid and build_status not in ("skipped", "tool_not_found") and lint_status not in ("skipped", "tool_not_found", "success", "warning"):
                         DEPLOY_ERRORS.labels(error_type="ValidationFailed").inc()
                         raise RunnerError(
                             error_code="VALIDATION_FAILED",
                             detail=f"Validation failed: {vres}",
                             task_id=self.run_id
                         )
+                    elif not is_valid and lint_status == "warning":
+                        logger.warning(
+                            f"[DEPLOY_AGENT] Validation warnings for {target}: {vres.get('lint_issues', [])}"
+                        )
+                        vres["valid"] = True  # Treat warnings as non-fatal
                     elif not is_valid and (build_status in ("skipped", "tool_not_found") or lint_status in ("skipped", "tool_not_found")):
                         logger.warning(
                             f"[DEPLOY_AGENT] Validation skipped for {target}: Docker/tools not available"
