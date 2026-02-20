@@ -601,7 +601,7 @@ class PostgresClient:
 
             if not ASYNCPG_AVAILABLE:
                 if self._pool is None:
-                    self._pool = Pool()
+                    self._pool = await asyncpg.create_pool(self.db_url)
                 self._is_closed = False
                 logger.warning(
                     "asyncpg not available. PostgresClient running in no-op mode."
@@ -963,9 +963,11 @@ class PostgresClient:
 
                 async with self._pool.acquire() as conn:
                     size = self._pool.get_size()
+                    if not isinstance(size, (int, float)):
+                        size = 0
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
-                    if idle is not None:
+                    if isinstance(idle, (int, float)):
                         DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
                             max(0, size - idle)
                         )
@@ -1116,9 +1118,11 @@ class PostgresClient:
             finally:
                 if self._pool and not self._is_closed:
                     size = self._pool.get_size()
+                    if not isinstance(size, (int, float)):
+                        size = 0
                     get_idle = getattr(self._pool, "get_idle_count", None)
                     idle = get_idle() if callable(get_idle) else None
-                    if idle is not None:
+                    if isinstance(idle, (int, float)):
                         DB_CONNECTIONS_IN_USE.labels(db_type=self.db_type).set(
                             max(0, size - idle)
                         )

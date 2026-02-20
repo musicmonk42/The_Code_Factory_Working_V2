@@ -65,7 +65,13 @@ else:
     
     import aiohttp
     import httpx
-    import numpy as np
+    try:
+        import numpy as np
+    except ImportError:
+        class _NumpyStub:
+            ndarray = object
+
+        np = _NumpyStub()
     from aiohttp import ClientSession
     from aiolimiter import AsyncLimiter
     from self_fixing_engineer.arbiter.metrics import (
