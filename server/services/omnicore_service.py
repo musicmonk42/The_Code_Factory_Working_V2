@@ -1298,12 +1298,10 @@ def _load_sfe_analysis_report(
 
 def _invalidate_sfe_analysis_cache(job_path: Path, job_id: str) -> None:
     """Delete the cached SFE analysis report so the next detect_errors re-analyzes."""
-    import os as _os
-
     report_path = job_path / "reports" / "sfe_analysis_report.json"
     if report_path.exists():
         try:
-            _os.remove(report_path)
+            os.remove(report_path)
             logger.info(
                 f"[SFE] Invalidated cached analysis report for job {job_id}",
                 extra={"job_id": job_id, "report_path": str(report_path)},

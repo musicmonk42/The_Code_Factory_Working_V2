@@ -18,6 +18,7 @@ import ast
 import hashlib
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 import re
@@ -390,12 +391,11 @@ class SFEService:
 
     def _invalidate_analysis_cache(self, job_id: str) -> None:
         """Delete cached SFE analysis report so the next detection re-analyzes."""
-        import os as _os
         job_path = self._resolve_job_code_path(job_id, ".")
         report_path = Path(job_path) / "reports" / "sfe_analysis_report.json"
         if report_path.exists():
             try:
-                _os.remove(report_path)
+                os.remove(report_path)
                 logger.info(f"[SFE] Invalidated cached analysis report for job {job_id}")
             except OSError as e:
                 logger.warning(
@@ -492,12 +492,11 @@ class SFEService:
             passed = 0
             failed = 0
             for ln in proc.stdout.splitlines():
-                if " passed" in ln:
-                    import re as _re
-                    m = _re.search(r"(\d+) passed", ln)
+                if " passed" in ln or " failed" in ln:
+                    m = re.search(r"(\d+) passed", ln)
                     if m:
                         passed = int(m.group(1))
-                    m2 = _re.search(r"(\d+) failed", ln)
+                    m2 = re.search(r"(\d+) failed", ln)
                     if m2:
                         failed = int(m2.group(1))
             validation_result = {
@@ -534,7 +533,7 @@ class SFEService:
         finally:
             shutil.rmtree(sandbox_dir, ignore_errors=True)
 
-
+    async def analyze_code(self, job_id: str, code_path: str) -> Dict[str, Any]:
         """
         Analyze code for potential issues via OmniCore or direct SFE integration.
 

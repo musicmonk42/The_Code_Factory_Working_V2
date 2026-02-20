@@ -781,23 +781,30 @@ def run_in_sandbox(
         code_path = f.name
 
     try:
-        loop = asyncio.new_event_loop()
-        result = loop.run_until_complete(
-            _real_run_in_sandbox(
-                backend="native",
-                command=["python", code_path],
-                workdir=os.path.dirname(code_path),
-                policy={
-                    "network_disabled": getattr(policy, "network_disabled", False),
-                    "allow_write": getattr(policy, "allow_write", False),
-                },
-                resource_limits={
-                    "max_memory_mb": getattr(policy, "max_memory_mb", 256),
-                    "max_cpu_percent": getattr(policy, "max_cpu_percent", 80),
-                },
-            )
+        coro_kwargs = dict(
+            backend="native",
+            command=["python", code_path],
+            workdir=os.path.dirname(code_path),
+            policy={
+                "network_disabled": getattr(policy, "network_disabled", False),
+                "allow_write": getattr(policy, "allow_write", False),
+            },
+            resource_limits={
+                "max_memory_mb": getattr(policy, "max_memory_mb", 256),
+                "max_cpu_percent": getattr(policy, "max_cpu_percent", 80),
+            },
         )
-        loop.close()
+        try:
+            loop = asyncio.get_running_loop()
+            # A loop is already running (e.g. called from async context).
+            # Schedule the coroutine on that loop from this thread and wait.
+            future = asyncio.run_coroutine_threadsafe(
+                _real_run_in_sandbox(**coro_kwargs), loop
+            )
+            result = future.result()
+        except RuntimeError:
+            # No running loop — safe to use asyncio.run()
+            result = asyncio.run(_real_run_in_sandbox(**coro_kwargs))
         return result
     finally:
         try:

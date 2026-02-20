@@ -4029,11 +4029,11 @@ else:
                     "Falling back to no-op."
                 )
 
-                class _RealDecisionOptimizer:  # type: ignore[no-redef]
+                class _NoOpDecisionOptimizer:  # type: ignore[no-redef]
                     def __init__(self, *args, **kwargs):
                         pass
 
-                _decision_optimizer_instance = _RealDecisionOptimizer()
+                _decision_optimizer_instance = _NoOpDecisionOptimizer()
 
             mock_engines = {
                 "simulation": SimulationEngine(),
