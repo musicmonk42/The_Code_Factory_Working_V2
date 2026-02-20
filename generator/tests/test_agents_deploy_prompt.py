@@ -978,6 +978,7 @@ class TestProjectFewShotExamples:
         # Parse the embedded YAML
         doc = next(yaml.safe_load_all(data["example"]))
 
+        pod_spec = doc["spec"]["template"]["spec"]
         container = pod_spec["containers"][0]
         assert "resources" in container, "Resource limits/requests must be set"
         assert "readinessProbe" in container, "readinessProbe must be configured"
