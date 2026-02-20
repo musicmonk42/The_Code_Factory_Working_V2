@@ -3132,7 +3132,9 @@ async function fixImports(btn) {
     } finally {
         if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
-} {
+}
+
+function showKnowledgeGraph() {
     openModal('knowledge-graph-modal');
 }
 
