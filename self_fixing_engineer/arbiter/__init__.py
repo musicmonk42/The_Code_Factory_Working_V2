@@ -64,26 +64,29 @@ def _load_components():
             _arbiter = sys.modules.get('self_fixing_engineer.arbiter.arbiter')
             from .arbiter import Arbiter as _Arbiter
             arbiter = _arbiter
-            Arbiter = _Arbiter
-        except (ImportError, NameError) as e:
+            if isinstance(_Arbiter, type):
+                Arbiter = _Arbiter
+            else:
+                globals().pop("Arbiter", None)
+        except Exception as e:
             print(f"WARNING: Failed to import arbiter.arbiter module: {e}", file=sys.stderr)
 
         try:
             from .arena import ArbiterArena as _ArbiterArena
             ArbiterArena = _ArbiterArena
-        except ImportError as e:
+        except Exception as e:
             print(f"WARNING: Failed to import arbiter.arena module: {e}", file=sys.stderr)
 
         try:
             from .feedback import FeedbackManager as _FeedbackManager
             FeedbackManager = _FeedbackManager
-        except ImportError as e:
+        except Exception as e:
             print(f"WARNING: Failed to import arbiter.feedback module: {e}", file=sys.stderr)
 
         try:
             from .config import ArbiterConfig as _ArbiterConfig
             ArbiterConfig = _ArbiterConfig
-        except ImportError as e:
+        except Exception as e:
             print(f"WARNING: Failed to import arbiter.config module: {e}", file=sys.stderr)
         
         _components_loaded = True
