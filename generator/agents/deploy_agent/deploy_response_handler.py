@@ -1028,19 +1028,35 @@ def _strip_llm_preamble(content: str) -> str:
         'ONBUILD', 'STOPSIGNAL', 'HEALTHCHECK', 'SHELL'
     }
     
-    start_idx = 0
+    start_idx = None
     for i, line in enumerate(lines):
         stripped = line.strip()
         # Skip empty lines and comments
         if not stripped or stripped.startswith('#'):
             continue
-        # Check if this line starts with a Dockerfile instruction
+        # If the line starts with a leading '!' (common LLM token), strip it for detection
         words = stripped.split()
-        first_word = words[0].upper() if words else ''
+        first_word = words[0].lstrip('!').upper() if words else ''
+
+        # If the first non-comment line looks like natural language (not clearly a preamble phrase),
+        # stop stripping to let validate_dockerfile catch the error (e.g., "! Invalid start").
+        preamble_markers = ("HERE", "SURE", "CERTAINLY", "CREATE", "GENERATE", "PROVIDE")
+        if first_word not in dockerfile_instructions and not any(
+            stripped.upper().startswith(marker) or "DOCKERFILE" in stripped.upper()
+            for marker in preamble_markers
+        ):
+            start_idx = 0
+            break
+
+        # Check if this line starts with a Dockerfile instruction
         if first_word in dockerfile_instructions:
             start_idx = i
             break
     
+    # If no valid instruction was found, return the original content
+    if start_idx is None:
+        return '\n'.join(lines).strip()
+
     return '\n'.join(lines[start_idx:]).strip()
 
 

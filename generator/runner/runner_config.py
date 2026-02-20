@@ -860,8 +860,15 @@ def load_config(
     # Normalize config_file path for cache comparison
     normalized_config_file = os.path.abspath(config_file)
     
-    # Return cached config if same file and no overrides
-    if _cached_config is not None and _cached_config_file == normalized_config_file and overrides is None:
+    vault_fetch_enabled = os.getenv("RUNNER_SECRETS_FROM_VAULT", "").lower() in ("1", "true", "yes")
+
+    # Return cached config if same file and no overrides, unless vault fetching is requested
+    if (
+        _cached_config is not None
+        and _cached_config_file == normalized_config_file
+        and overrides is None
+        and not vault_fetch_enabled
+    ):
         return _cached_config
     
     # Try to find the config file using smart path resolution
@@ -1431,4 +1438,3 @@ class ConfigWatcher:
                 f"Unexpected error fetching remote config from {fetch_url}: {e}",
                 exc_info=True,
             )
-
