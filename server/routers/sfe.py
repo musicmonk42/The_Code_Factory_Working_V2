@@ -378,7 +378,7 @@ async def review_fix(
 
     if request.approved:
         # Run sandbox validation unless the fix was already explicitly validated
-        already_validated = getattr(fix, "validation_status", None) == "validated"
+        already_validated = fix.validation_status == "validated"
         force_override = "force" in (request.comments or "").lower()
 
         if not already_validated and not force_override:
@@ -388,7 +388,7 @@ async def review_fix(
                 fix.validation_status = validation.get("status")
                 fix.validation_result = validation.get("result")
 
-                if validation.get("status") != "validated":
+                if fix.validation_status != "validated":
                     # Validation says fix doesn't improve things — reject it
                     fix.status = FixStatus.REJECTED
                     fix.updated_at = datetime.now(timezone.utc)

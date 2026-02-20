@@ -38,6 +38,7 @@ else:
     import random
     import sys
     import time
+    import weakref
     from collections import deque
     from datetime import datetime, timezone
     from functools import wraps
@@ -1689,8 +1690,8 @@ else:
             # Back-reference to the ArbiterArena this Arbiter belongs to.
             # Set to a weakref.ref by the arena during registration so event
             # handlers (e.g. _on_analysis_complete) can reach _run_sfe_fix_pipeline.
-            # Initialised to None so hasattr() checks are not needed.
-            self._arena_ref: Any = None
+            # Initialised to None so None-checks are not needed anywhere.
+            self._arena_ref: Optional[weakref.ref] = None
 
             os.makedirs(
                 os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True
@@ -3701,7 +3702,7 @@ else:
                 ]
 
                 # Resolve the weak reference to the arena (may be None if arena was GC'd)
-                arena = self._arena_ref() if callable(self._arena_ref) else None
+                arena = self._arena_ref() if self._arena_ref is not None else None
 
                 if high_sev and arena is not None:
                     logging.getLogger(__name__).info(

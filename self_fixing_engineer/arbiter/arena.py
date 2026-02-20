@@ -1263,7 +1263,15 @@ class ArbiterArena:
 
         results = []
         for defect in defects:
-            error_id = defect.get("id") or defect.get("error_id") or str(id(defect))
+            # Prefer an explicit id; fall back to a stable hash of defect content
+            # so the same defect always maps to the same error_id across runs.
+            error_id = (
+                defect.get("id")
+                or defect.get("error_id")
+                or __import__("hashlib").sha256(
+                    json.dumps(defect, sort_keys=True, default=str).encode()
+                ).hexdigest()[:16]
+            )
             defect_type = defect.get("type", "unknown")
             try:
                 sfe = SFEService()

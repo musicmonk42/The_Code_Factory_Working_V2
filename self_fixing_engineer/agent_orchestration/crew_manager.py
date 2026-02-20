@@ -93,9 +93,16 @@ except ImportError:
     _TENACITY_AVAILABLE = False
     print("Warning: tenacity not installed. Automatic retries will be disabled.")
 
-    # Provide fallback so bare `except RetryError` clauses never raise NameError
+    # Provide fallback so bare `except RetryError` clauses never raise NameError.
+    # This stub will never actually be raised; it exists only to prevent
+    # NameError in exception handlers that reference RetryError when tenacity
+    # is not installed.
     class RetryError(Exception):  # type: ignore[no-redef]
-        """Fallback when tenacity is not installed."""
+        """Stub exception class used when tenacity is unavailable.
+
+        This will never be raised; it exists only to prevent NameError in
+        ``except RetryError`` handlers when the tenacity package is absent.
+        """
 
 try:
     from opentelemetry import trace
