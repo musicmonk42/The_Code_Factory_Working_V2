@@ -59,6 +59,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -265,6 +266,8 @@ logger = logging.getLogger(__name__)
 # Maximum number of issues (errors/warnings) to include in provenance reports
 # to prevent overly large provenance files
 MAX_REPORTED_ISSUES = 5
+# Maximum characters from README to include in docs HTML page
+MAX_README_CHARS_FOR_DOCS = 4096
 
 
 class WorkflowStatus(str, Enum):
@@ -1437,9 +1440,10 @@ class WorkflowEngine:
                                                 "from pydantic import BaseModel, field_validator\n\n\n"
                                                 "class BaseRequest(BaseModel):\n"
                                                 '    """Base request model with common validators."""\n\n'
-                                                "    @field_validator('*', mode='before', check_fields=False)\n"
+                                                "    message: str = ''\n\n"
+                                                "    @field_validator('message', mode='before')\n"
                                                 "    @classmethod\n"
-                                                "    def strip_strings(cls, v):\n"
+                                                "    def strip_message(cls, v):\n"
                                                 "        if isinstance(v, str):\n"
                                                 "            return v.strip()\n"
                                                 "        return v\n",
@@ -1518,7 +1522,7 @@ class WorkflowEngine:
                                         project_title = output_dir.name.replace("_", " ").title()
                                         readme_for_docs = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
                                         import html as _html
-                                        readme_html = _html.escape(readme_for_docs[:4096]).replace("\n", "<br>\n")
+                                        readme_html = _html.escape(readme_for_docs[:MAX_README_CHARS_FOR_DOCS]).replace("\n", "<br>\n")
                                         docs_html_index.write_text(
                                             f"""<!DOCTYPE html>
 <html lang="en">
@@ -2476,7 +2480,10 @@ class WorkflowEngine:
         additions: list[str] = []
 
         def _has(section: str) -> bool:
-            return section.lower() in content.lower()
+            """Check if the README contains a Markdown heading matching *section* exactly."""
+            # Use line-start anchors to avoid matching substrings of longer headings.
+            # e.g. "## Setup" should NOT match "## Setup Instructions" (or vice-versa)
+            return bool(re.search(rf'^{re.escape(section)}(\s|$)', content, re.MULTILINE | re.IGNORECASE))
 
         if not _has("## Setup"):
             additions.append(
@@ -2525,8 +2532,8 @@ class WorkflowEngine:
                 "```\n"
             )
 
-        # Ensure at least one curl example anywhere in the document
-        if "curl" not in content and not additions:
+        # Ensure at least one curl example is present anywhere in the document
+        if "curl" not in content:
             additions.append(
                 "\n## Usage\n\n"
                 "```bash\ncurl http://localhost:8000/health\n```\n"
@@ -2565,15 +2572,14 @@ class WorkflowEngine:
 
         result: Dict[str, str] = {}
         # Split on YAML document markers
-        import re as _re
-        docs = _re.split(r'\n---\s*\n|^---\s*\n', combined_yaml, flags=_re.MULTILINE)
+        docs = re.split(r'\n---\s*\n|^---\s*\n', combined_yaml, flags=re.MULTILINE)
         unnamed_idx = 0
         for doc in docs:
             doc = doc.strip()
             if not doc:
                 continue
             # Try to detect kind
-            kind_match = _re.search(r'^\s*kind\s*:\s*(\S+)', doc, _re.MULTILINE | _re.IGNORECASE)
+            kind_match = re.search(r'^\s*kind\s*:\s*(\S+)', doc, re.MULTILINE | re.IGNORECASE)
             if kind_match:
                 kind = kind_match.group(1).lower()
                 filename = kind_to_file.get(kind, f"k8s/{kind}.yaml")
@@ -2586,8 +2592,16 @@ class WorkflowEngine:
             result[filename] = doc + "\n"
 
         # Guarantee required files exist even if they weren't in the combined YAML
-        if "k8s/deployment.yaml" not in result and combined_yaml.strip():
-            result["k8s/deployment.yaml"] = combined_yaml.strip() + "\n"
+        if "k8s/deployment.yaml" not in result:
+            # Generate a minimal valid deployment manifest
+            result["k8s/deployment.yaml"] = (
+                "---\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n"
+                "  name: app\n  labels:\n    app: app\nspec:\n"
+                "  replicas: 1\n  selector:\n    matchLabels:\n      app: app\n"
+                "  template:\n    metadata:\n      labels:\n        app: app\n"
+                "    spec:\n      containers:\n      - name: app\n        image: app:latest\n"
+                "        ports:\n        - containerPort: 8000\n"
+            )
         if "k8s/service.yaml" not in result:
             # Generate a minimal service placeholder so validators pass
             project_name = "app"
@@ -2634,6 +2648,9 @@ class WorkflowEngine:
         
         # Get requirements if available
         requirements = codegen_files.get("requirements.txt", "")
+        
+        # Convert file path to Python module notation (e.g. "app/main.py" -> "app.main")
+        entry_module = Path(entry_point).with_suffix("").as_posix().replace("/", ".")
         
         # Generate Dockerfile with production best practices
         if framework == "fastapi":
@@ -2689,7 +2706,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \\
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application with proper signal handling
-CMD ["uvicorn", "{entry_point.replace('.py', '').replace('/', '.')}:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["uvicorn", "{entry_module}:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 '''
         else:
             dockerfile = f'''# Dockerfile for {language} application
