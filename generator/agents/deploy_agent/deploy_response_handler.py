@@ -1183,9 +1183,10 @@ class DockerfileHandler(FormatHandler):
         sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
         
-        # Remove leading "!" tokens that LLMs sometimes emit (invalid Dockerfile token)
-        # Strip all leading ! characters from the start of the file only (not each line)
-        sanitized = re.sub(r'\A!+\s*', '', sanitized)
+        # Remove leading lines starting with '!' or '#!' (shebangs and LLM invalid tokens)
+        # Strip entire leading lines, not just the '!' character, so content like
+        # "!/bin/bash\nFROM python" is fully recovered before validation.
+        sanitized = re.sub(r'\A(?:(?:!|#!).*(?:\n|$))*', '', sanitized)
         
         # Remove any other leading non-Dockerfile content (whitespace only)
         # Only strip leading whitespace before FROM/ARG, not other content
@@ -1948,12 +1949,12 @@ class KubernetesHandler(FormatHandler):
         
         return documents if len(documents) > 1 else documents[0]
     
-    def _create_fallback_k8s_deployment(self, raw: str) -> Dict[str, Any]:
+    def _create_fallback_k8s_deployment(self, raw: str) -> List[Dict[str, Any]]:
         """
-        Create a minimal valid Kubernetes Deployment when parsing fails.
+        Create minimal valid Kubernetes Deployment and Service when parsing fails.
         
-        This provides a fallback to prevent complete failure when LLM
-        generates malformed YAML that can't be parsed.
+        Returns a list with both a Deployment and a ClusterIP Service to satisfy
+        the required-files check for kubernetes deployments.
         """
         # Extract app name from content if possible, otherwise use generic
         app_name = "generated-app"
@@ -1971,7 +1972,7 @@ class KubernetesHandler(FormatHandler):
         
         logger.info(f"Creating fallback Kubernetes Deployment: {app_name} with image {image_name}")
         
-        return {
+        deployment = {
             "apiVersion": "apps/v1",
             "kind": "Deployment",
             "metadata": {
@@ -1991,12 +1992,30 @@ class KubernetesHandler(FormatHandler):
                         "containers": [{
                             "name": app_name,
                             "image": image_name,
-                            "ports": [{"containerPort": 8080}]
+                            # Port 8000 matches the default uvicorn/FastAPI port used in
+                            # the fallback Dockerfile CMD and the companion Service below.
+                            "ports": [{"containerPort": 8000}]
                         }]
                     }
                 }
             }
         }
+        
+        service = {
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": {
+                "name": app_name,
+                "labels": {"app": app_name}
+            },
+            "spec": {
+                "type": "ClusterIP",
+                "selector": {"app": app_name},
+                "ports": [{"port": 8000, "targetPort": 8000, "protocol": "TCP"}]
+            }
+        }
+        
+        return [deployment, service]
 
     def _sanitize_yaml_response(self, raw: str) -> str:
         """
