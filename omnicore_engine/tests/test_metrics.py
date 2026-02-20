@@ -5,6 +5,7 @@ Test suite for omnicore_engine/metrics.py
 Tests Prometheus metrics collection, InfluxDB fallback, and metric utilities.
 """
 
+import gc
 import json
 import os
 import sys
@@ -117,13 +118,20 @@ class TestMetricCreation:
 class TestMockInfluxDB:
     """Test mock InfluxDB fallback classes"""
 
+    def teardown_method(self):
+        """Cleanup after each test"""
+        gc.collect()
+
     def test_mock_influx_write_api(self):
         """Test MockInfluxWriteApi writes to file"""
+        # Create temporary file and immediately close it so it can be reopened
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
             temp_file = f.name
+        # File is now closed and can be opened by MockInfluxWriteApi
 
+        api = None
         try:
-            with patch.dict(os.environ, {"INFLUXDB_FALLBACK_LOG": temp_file}):
+            with patch.dict(os.environ, {"INFLUXDB_FALLBACK_LOG": temp_file}, clear=False):
                 api = MockInfluxWriteApi()
 
                 # Create mock point
@@ -135,14 +143,27 @@ class TestMockInfluxDB:
 
                 api.write("test_bucket", "test_org", point)
 
-                # Read and verify log file
-                with open(temp_file, "r") as f:
-                    log_entry = json.loads(f.read())
-                    assert log_entry["measurement"] == "test_measurement"
-                    assert log_entry["tags"]["tag1"] == "value1"
-                    assert log_entry["fields"]["field1"] == 42
+            # Read and verify log file (after context manager exits)
+            with open(temp_file, "r") as f:
+                log_entry = json.loads(f.read())
+                assert log_entry["measurement"] == "test_measurement"
+                assert log_entry["tags"]["tag1"] == "value1"
+                assert log_entry["fields"]["field1"] == 42
         finally:
-            os.unlink(temp_file)
+            # Ensure API cleanup
+            if api is not None and hasattr(api, 'close'):
+                try:
+                    api.close()
+                except Exception:
+                    pass
+
+            # Clean up temp file
+            try:
+                if os.path.exists(temp_file):
+                    os.unlink(temp_file)
+            except PermissionError:
+                # File may still be in use on Windows
+                pass
 
     def test_mock_influx_client(self):
         """Test MockInfluxDBClient initialization"""
