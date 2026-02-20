@@ -3541,6 +3541,10 @@ async def handle_deploy_response(
                 '{MEMORY_REQUEST}': '256Mi',
                 '<APPLICATION_PORT>': '8000',
                 '{APPLICATION_PORT}': '8000',
+                '<APPLICATION_NAME>': 'myapp',
+                '{APPLICATION_NAME}': 'myapp',
+                '<ORGANIZATION_CONTACT>': 'admin@example.com',
+                '{ORGANIZATION_CONTACT}': 'admin@example.com',
             }
             
             # Pre-substitute common environment placeholders in a single pass

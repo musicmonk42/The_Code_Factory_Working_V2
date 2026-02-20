@@ -277,7 +277,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NLTK_DATA="/opt/nltk_data" \
     HF_HOME="/opt/huggingface_cache" \
     CHROMA_CACHE_DIR="/opt/chroma_cache" \
-    MPLCONFIGDIR="/tmp/matplotlib"
+    MPLCONFIGDIR="/tmp/matplotlib" \
+    TLDEXTRACT_CACHE="/tmp/tldextract_cache"
     # SENTRY_DSN: Set at deployment time for error tracking
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 

@@ -182,6 +182,11 @@ def _get_presidio_instances():
     global _analyzer, _anonymizer
     if _analyzer is None:
         _analyzer = AnalyzerEngine(supported_languages=["en"])
+        try:
+            from runner.runner_security_utils import _add_custom_recognizers
+            _add_custom_recognizers(_analyzer)
+        except Exception:
+            pass
     if _anonymizer is None:
         _anonymizer = AnonymizerEngine()
     return _analyzer, _anonymizer

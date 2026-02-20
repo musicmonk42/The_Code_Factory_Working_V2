@@ -456,6 +456,7 @@ LINTER_CONFIG: Dict[str, List[Dict[str, Any]]] = {
             "use_container": True,
             "container_image": "pylint/pylint:latest",
             "timeout": 90,
+            "optional": True,
         },
     ],
     "javascript": [
@@ -1044,6 +1045,21 @@ async def run_single_lint(
 
     with tracer.start_as_current_span(f"lint.{tool_cfg['tool']}"):
         start = time.time()
+        # Skip optional tools when Docker is unavailable and tool is not installed locally
+        if tool_cfg.get("optional") and tool_cfg.get("use_container"):
+            import shutil
+            cmd_list = tool_cfg.get("cmd") or []
+            tool_binary = cmd_list[0] if cmd_list else ""
+            if not shutil.which("docker") and (not tool_binary or not shutil.which(tool_binary)):
+                logger.debug(
+                    f"Optional tool '{tool_cfg['tool']}' not available (no Docker, no local binary). Skipping."
+                )
+                return {
+                    tool_cfg["tool"]: {
+                        "raw": {"success": True, "stdout": "", "stderr": "skipped (optional, not available)", "returncode": 0, "status": "skipped"},
+                        "parsed": [],
+                    }
+                }
         # project_dir is passed down to run_linter to handle project-context configuration
         raw_result = await plugin.run_linter(tool_cfg, file_path, project_dir)
 

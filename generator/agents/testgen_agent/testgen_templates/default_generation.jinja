@@ -22,6 +22,7 @@ Generate comprehensive unit tests for the following code.
 {% if language == "python" %}
 ## Pydantic Validation Testing (CRITICAL for Python)
 When testing Pydantic models (v2.x):
+- **NEVER use `pytest.raises(TypeError)` when testing Pydantic model validation. Pydantic v2 catches type errors and raises `ValidationError`, not `TypeError`. Always use `pytest.raises(ValidationError)` for ANY invalid input to a Pydantic model.**
 - **Pydantic V2 error types are DIFFERENT from V1** - refer to the mapping table below
 - **max_length constraint**: Pydantic v2 uses `"String should have at most N characters"` (NOT v1 `"ensure this value has at most N characters"`)
 - **min_length constraint**: Pydantic v2 uses `"String should have at least N characters"` (NOT v1 `"ensure this value has at least N characters"`)
@@ -143,6 +144,16 @@ def test_api_validation_error():
 # assert errors[0]["type"] == "type_error.integer"  # FAILS: V1 type
 # assert "value is not a valid float" in str(exc_info.value)  # FAILS: V1 message format
 # assert "value is not a valid integer" in str(exc_info.value)  # FAILS: V1 message format
+
+# WRONG - Pydantic v2 does NOT raise TypeError for type mismatches
+# def test_invalid_type():
+#     with pytest.raises(TypeError):  # WRONG! Pydantic v2 raises ValidationError, not TypeError
+#         MyModel(name=["not", "a", "string"])
+
+# CORRECT - Pydantic v2 raises ValidationError for type mismatches
+def test_invalid_type():
+    with pytest.raises(ValidationError):  # CORRECT! Always use ValidationError for Pydantic models
+        MyModel(name=["not", "a", "string"])
 ```
 {% endif %}
 
