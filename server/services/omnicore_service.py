@@ -444,36 +444,39 @@ def _load_readme_from_disk(job_dir: Path) -> Optional[str]:
 
 def _extract_project_name_from_path_or_payload(
     payload: Dict[str, Any],
-    default: str = "generated_project"
-) -> str:
+    default: Optional[str] = None
+) -> Optional[str]:
     """
     Extract project name from payload in a consistent way.
-    
+
     This function implements the correct logic to determine project name:
     1. Try package_name or package field from payload
     2. Extract last component from output_dir path
-    3. Fall back to default (NOT "hello_generator")
-    
+    3. Return default (None by default — callers must decide the fallback)
+
     Args:
         payload: Job payload containing output_dir, package_name, etc.
-        default: Default name to use if extraction fails
-        
+        default: Value to return when no name can be determined (default: None).
+                 Callers that previously relied on the old "generated_project"
+                 fallback should pass that value explicitly; new callers should
+                 handle None and avoid creating a spurious subdirectory.
+
     Returns:
-        Project name as a string (just the name, not a path)
-        
+        Project name as a string (just the name, not a path), or ``default``
+
     Example:
         >>> _extract_project_name_from_path_or_payload({"output_dir": "generated/my_app"})
         'my_app'
         >>> _extract_project_name_from_path_or_payload({"package_name": "user_service"})
         'user_service'
-        >>> _extract_project_name_from_path_or_payload({})
-        'generated_project'
+        >>> _extract_project_name_from_path_or_payload({}) is None
+        True
     """
     project_name = None
-    
+
     # Priority 1: Check for package_name or package field
     project_name = payload.get("package_name") or payload.get("package")
-    
+
     # Priority 2: Extract from output_dir (take last path component)
     if not project_name:
         output_dir = payload.get("output_dir", "").strip()
@@ -484,11 +487,11 @@ def _extract_project_name_from_path_or_payload(
             path_parts = [p for p in path_parts if p]
             if path_parts:
                 project_name = path_parts[-1]
-    
-    # Priority 3: Use default
+
+    # Priority 3: Use caller-supplied default (may be None)
     if not project_name:
         project_name = default
-    
+
     return project_name
 
 
@@ -3364,7 +3367,7 @@ class OmniCoreService:
                                     "package": requirements_dict.get("package") if requirements_dict else None,
                                     "output_dir": custom_output_dir
                                 }
-                                project_name = _extract_project_name_from_path_or_payload(helper_payload)
+                                project_name = _extract_project_name_from_path_or_payload(helper_payload) or "generated_project"
                                 
                                 logger.info(
                                     f"[CODEGEN] Using project name: {project_name}",
@@ -3986,8 +3989,12 @@ class OmniCoreService:
                 
                 # Write generated tests to files
                 # FIX Issue 3: Write tests into project subdirectory, not repo root
-                # Extract project_name from payload - extract only the last path component
-                project_name = payload.get("output_dir", "").strip()
+                # Extract project_name from payload - extract only the last path component.
+                # The testgen payload uses "code_path" (not "output_dir"), so check both.
+                # Strip each candidate individually before the fallback chain to avoid a
+                # whitespace-only string (e.g. "   ") being treated as truthy.
+                _raw_path = (payload.get("output_dir") or payload.get("code_path") or "").strip()
+                project_name = _raw_path
                 if project_name:
                     # Extract last component from path (e.g., "my_app" from "generated/my_app")
                     path_parts = project_name.replace("\\", "/").strip("/").split("/")
@@ -3996,24 +4003,33 @@ class OmniCoreService:
                 
                 if not project_name:
                     # Fallback: try to get from package_name if available
-                    project_name = payload.get("package_name") or payload.get("package") or "generated_project"
-                    logger.warning(
-                        f"[TESTGEN] Could not determine project name from output_dir. Using: {project_name}",
-                        extra={"job_id": job_id}
-                    )
+                    project_name = payload.get("package_name") or payload.get("package")
+                    if not project_name:
+                        logger.warning(
+                            "[TESTGEN] Could not determine project name from payload; "
+                            "tests will be written alongside the generated code root.",
+                            extra={"job_id": job_id}
+                        )
                 
-                # Tests should go into generated/<project_name>/tests, not generated/tests
-                project_dir = repo_path / "generated" / project_name
-                if not project_dir.exists():
-                    # Fallback: if project_dir doesn't exist, try to find it
-                    # This handles cases where code was generated directly in repo_path/generated
-                    alt_project_dir = repo_path / project_name
-                    if alt_project_dir.exists():
-                        project_dir = alt_project_dir
-                    else:
-                        # Create the expected structure
-                        project_dir.mkdir(parents=True, exist_ok=True)
-                        logger.info(f"[TESTGEN] Created project directory: {project_dir}")
+                # Tests should go into generated/<project_name>/tests, not generated/tests.
+                # When project_name is None (couldn't be determined) fall back to the
+                # code_path directory itself so tests land next to the generated source.
+                if project_name:
+                    project_dir = repo_path / "generated" / project_name
+                    if not project_dir.exists():
+                        # Fallback: if project_dir doesn't exist, try to find it
+                        # This handles cases where code was generated directly in repo_path/generated
+                        alt_project_dir = repo_path / project_name
+                        if alt_project_dir.exists():
+                            project_dir = alt_project_dir
+                        else:
+                            # Create the expected structure
+                            project_dir.mkdir(parents=True, exist_ok=True)
+                            logger.info(f"[TESTGEN] Created project directory: {project_dir}")
+                else:
+                    # No project name determined — write tests into the code_path root
+                    project_dir = Path(code_path).resolve()
+                    project_dir.mkdir(parents=True, exist_ok=True)
                 
                 generated_files = []
                 tests_dir = project_dir / "tests"
@@ -6811,7 +6827,7 @@ class OmniCoreService:
                     
                     if should_regenerate:
                         # Generate comprehensive README
-                        project_name = _extract_project_name_from_path_or_payload(payload)
+                        project_name = _extract_project_name_from_path_or_payload(payload) or "generated_project"
                         
                         comprehensive_readme = _generate_fallback_readme(
                             project_name=project_name,
@@ -7523,7 +7539,7 @@ class OmniCoreService:
                             output_path = codegen_result.get("output_path")
                             if output_path:
                                 output_path_obj = Path(output_path)
-                                project_name = _extract_project_name_from_path_or_payload(payload)
+                                project_name = _extract_project_name_from_path_or_payload(payload) or "generated_project"
                                 
                                 # Generate fallback README content
                                 fallback_readme = _generate_fallback_readme(
@@ -7568,7 +7584,7 @@ class OmniCoreService:
                         output_path = codegen_result.get("output_path")
                         if output_path:
                             output_path_obj = Path(output_path)
-                            project_name = _extract_project_name_from_path_or_payload(payload)
+                            project_name = _extract_project_name_from_path_or_payload(payload) or "generated_project"
                             
                             # Generate fallback README content
                             fallback_readme = _generate_fallback_readme(
@@ -7850,22 +7866,25 @@ class OmniCoreService:
                     # Extract project name from job metadata
                     project_name = None
                     if job and job.metadata:
-                        project_name = _extract_project_name_from_path_or_payload(job.metadata)
-                    if not project_name:
-                        project_name = "generated_project"
+                        project_name = _extract_project_name_from_path_or_payload(
+                            job.metadata, default=None
+                        )
                     
                     try:
                         if _MATERIALIZER_AVAILABLE:
-                            logger.info(f"[FINALIZE] Running final layout enforcement for job {job_id}")
                             from generator.runner.runner_file_utils import _enforce_output_layout
-                            # Only enforce layout when output_dir is the bare "generated/" root.
-                            # If output_dir already ends with the project name (e.g.
-                            # "generated/my_app"), files are already at the correct level and
-                            # calling _enforce_output_layout would create a redundant
-                            # "generated/my_app/generated_project/" sub-directory, which is the
-                            # root cause of the "Double-nesting detected" spec-validation failure.
+                            # Only enforce layout when we have an explicit project name AND
+                            # the output directory is not already that project subdirectory.
+                            # Skipping when project_name is None prevents a spurious
+                            # "generated_project/" subdirectory from being created inside an
+                            # already-correctly-named directory (e.g. "my_app/generated_project/").
                             layout_result = None
-                            if output_dir.name == project_name:
+                            if not project_name:
+                                logger.debug(
+                                    f"[FINALIZE] Could not determine project name for job {job_id}; "
+                                    "skipping layout enforcement to avoid creating a spurious subdirectory"
+                                )
+                            elif output_dir.name == project_name:
                                 logger.debug(
                                     f"[FINALIZE] Output path already ends with project name '{project_name}'; "
                                     "skipping layout enforcement to avoid double-nesting"
