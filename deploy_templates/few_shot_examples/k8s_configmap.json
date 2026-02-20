@@ -1,0 +1,4 @@
+{
+  "query": "Generate a Kubernetes configmap.yaml for environment configuration",
+  "example": "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n  labels:\n    app.kubernetes.io/name: app\n    app.kubernetes.io/instance: app-production\n    app.kubernetes.io/component: config\n    app.kubernetes.io/part-of: platform\n    app.kubernetes.io/managed-by: the-code-factory\ndata:\n  ENVIRONMENT: \"production\"\n  LOG_LEVEL: \"info\"\n  PORT: \"8000\"\n  WORKERS: \"4\"\n  TIMEOUT: \"30\"\n  CORS_ORIGINS: \"https://app.example.com\"\n  METRICS_ENABLED: \"true\""
+}

@@ -214,6 +214,7 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
 #   - generator/runner/runner_config.yaml (documentation/reference format)
 #   - self_fixing_engineer/crew_config.yaml
 #   - deploy_templates/ (Jinja2 templates for deployment generation)
+#   - deploy_templates/few_shot_examples/ (pre-seeded K8s/Docker/Helm few-shot JSON examples)
 #   - audit configurations
 # Use RUNNER_CONFIG_PATH environment variable at runtime to specify custom config location
 COPY . /app

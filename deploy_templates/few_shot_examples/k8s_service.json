@@ -1,0 +1,4 @@
+{
+  "query": "Generate a Kubernetes service.yaml for a Python web application",
+  "example": "---\napiVersion: v1\nkind: Service\nmetadata:\n  name: app\n  labels:\n    app.kubernetes.io/name: app\n    app.kubernetes.io/instance: app-production\n    app.kubernetes.io/component: server\n    app.kubernetes.io/part-of: platform\n    app.kubernetes.io/managed-by: the-code-factory\n  annotations:\n    prometheus.io/scrape: \"true\"\n    prometheus.io/port: \"8000\"\nspec:\n  type: ClusterIP\n  sessionAffinity: None\n  selector:\n    app.kubernetes.io/name: app\n    app.kubernetes.io/instance: app-production\n  ports:\n  - name: http\n    protocol: TCP\n    port: 80\n    targetPort: http"
+}

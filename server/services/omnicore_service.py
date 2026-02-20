@@ -7858,9 +7858,22 @@ class OmniCoreService:
                         if _MATERIALIZER_AVAILABLE:
                             logger.info(f"[FINALIZE] Running final layout enforcement for job {job_id}")
                             from generator.runner.runner_file_utils import _enforce_output_layout
-                            layout_result = _enforce_output_layout(output_dir, project_name)
+                            # Only enforce layout when output_dir is the bare "generated/" root.
+                            # If output_dir already ends with the project name (e.g.
+                            # "generated/my_app"), files are already at the correct level and
+                            # calling _enforce_output_layout would create a redundant
+                            # "generated/my_app/generated_project/" sub-directory, which is the
+                            # root cause of the "Double-nesting detected" spec-validation failure.
+                            layout_result = None
+                            if output_dir.name == project_name:
+                                logger.debug(
+                                    f"[FINALIZE] Output path already ends with project name '{project_name}'; "
+                                    "skipping layout enforcement to avoid double-nesting"
+                                )
+                            else:
+                                layout_result = _enforce_output_layout(output_dir, project_name)
                             
-                            if layout_result.get("success"):
+                            if layout_result is not None and layout_result.get("success"):
                                 if layout_result.get("files_moved"):
                                     logger.info(
                                         f"[FINALIZE] Layout enforcement moved {len(layout_result['files_moved'])} items "
@@ -7872,7 +7885,7 @@ class OmniCoreService:
                                     )
                                 else:
                                     logger.debug(f"[FINALIZE] Layout already correct for job {job_id}")
-                            else:
+                            elif layout_result is not None:
                                 logger.warning(
                                     f"[FINALIZE] Layout enforcement had errors for job {job_id}: "
                                     f"{layout_result.get('errors', [])}",

@@ -1114,10 +1114,27 @@ EXCLUDED_BUILD_DIRS = {'__pycache__', '.pytest_cache', '.git', 'node_modules', '
 DANGEROUS_EXTENSIONS = {'.exe', '.dll', '.so', '.dylib', '.bat', '.cmd', '.sh', '.ps1'}
 ALLOWED_EXTENSIONS = {'.py', '.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.html', '.css', '.js', '.ts', '.jsx', '.tsx'}
 
-# Pre-compiled pattern for stripping markdown fences during materialization
+# Pre-compiled pattern for stripping markdown fences during materialization.
+# Matches any language identifier (or none) after the opening fence so that
+# LLM responses such as ```python, ```yaml, ```Dockerfile, or plain ``` are
+# all stripped before the content is written to disk.
 _MATERIALIZE_FENCE_PATTERN = re.compile(
-    r"^```(?:python|py|json|dockerfile|yaml|toml|bash|sh|text)?\s*\n(.*?)```\s*$",
+    r"^```[a-zA-Z0-9_+#.\-]*\s*\n(.*?)```\s*$",
     re.DOTALL | re.IGNORECASE,
+)
+
+# Pre-compiled pattern for stripping LLM-injected filename headers that
+# sometimes appear as the very first line of a file (e.g. "test_schemas.py"
+# or "# test_schemas.py") before the actual code content.
+_FILENAME_HEADER_PATTERN = re.compile(
+    # Matches an LLM-injected filename header at the very start of the file content.
+    # Handles two forms:
+    #   1. Files with an extension:  (# )? name.ext  (e.g. "test_schemas.py\n")
+    #   2. Well-known extension-less files: Dockerfile, Makefile, Procfile, etc.
+    # Note: [\w\-]+(?:\.[\w\-]+)* prevents ambiguous consecutive-dot filenames.
+    r"^\s*#?\s*(?:[\w\-]+(?:\.[\w\-]+)*\.(?:py|yaml|yml|json|toml|txt|cfg|ini|js|ts|jsx|tsx|html|css|md|sh)"
+    r"|(?:Dockerfile|Makefile|Procfile|Vagrantfile))\s*\n",
+    re.IGNORECASE,
 )
 
 
@@ -1416,6 +1433,10 @@ async def materialize_file_map(
         _m = _MATERIALIZE_FENCE_PATTERN.match(content.strip())
         if _m:
             content = _m.group(1)
+        
+        # Strip LLM-injected filename headers at line 1 (e.g. "test_schemas.py\n"
+        # or "# Dockerfile\n") that bleed into the actual file content.
+        content = _FILENAME_HEADER_PATTERN.sub("", content, count=1)
         
         # Compute full path (already validated to be within output_dir)
         file_path = (output_dir / relative_path).resolve()

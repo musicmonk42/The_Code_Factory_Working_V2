@@ -110,8 +110,22 @@ except ImportError:
     class PostgresClient:
         def __init__(self, db_url):
             import warnings
+            from urllib.parse import urlparse, urlunparse
             logger = logging.getLogger(__name__)
-            logger.warning(f"PostgresClient fallback: No actual database connection to {db_url}")
+            # Mask password in the DSN to avoid leaking credentials to logs.
+            # Use urllib.parse for robust handling of special characters in passwords.
+            try:
+                parsed = urlparse(db_url)
+                if parsed.password:
+                    masked = parsed._replace(netloc=parsed.netloc.replace(
+                        f":{parsed.password}@", ":***@", 1
+                    ))
+                    _safe_url = urlunparse(masked)
+                else:
+                    _safe_url = db_url
+            except Exception:
+                _safe_url = "<masked>"
+            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}")
             warnings.warn(
                 f"PostgresClient fallback used - no actual database connection",
                 UserWarning,

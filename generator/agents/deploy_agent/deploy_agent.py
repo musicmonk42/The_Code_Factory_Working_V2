@@ -68,6 +68,11 @@ except ImportError:
     # Fallback if path_setup is not available
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
+# Project-level pre-seeded few-shot examples directory.
+# This directory contains K8s deployment/service YAML pairs that give the
+# DeployPromptAgent context even for fresh jobs with no job-specific examples.
+_PROJECT_FEW_SHOT_DIR = PROJECT_ROOT / "deploy_templates" / "few_shot_examples"
+
 # Safe tracer import: works even if runner.tracer is not available
 try:
     from runner import tracer as _runner_tracer  # type: ignore[attr-defined]
@@ -633,6 +638,14 @@ class DeployAgent:
         
         few_shot_dir = self.repo_path / "few_shot_examples"
         few_shot_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Use project-level pre-seeded few-shot examples as the primary source so
+        # the DeployPromptAgent always has K8s deployment/service context available,
+        # even for a fresh job that hasn't generated any custom examples yet.
+        project_few_shot_dir = _PROJECT_FEW_SHOT_DIR
+        if project_few_shot_dir.exists() and any(project_few_shot_dir.glob("*.json")):
+            few_shot_dir = project_few_shot_dir
+            logger.info(f"DeployAgent: Using project-level few-shot examples at {few_shot_dir}")
         
         try:
             self.prompt_agent_instance = DeployPromptAgent(

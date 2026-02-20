@@ -6,7 +6,8 @@
 .PHONY: help install install-dev test lint format clean docker-build docker-up docker-down deploy-staging deploy-production \
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
-	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate
+	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
+	validate-few-shot
 
 # Default target
 .DEFAULT_GOAL := help
@@ -264,6 +265,24 @@ deployment-validate: ## Validate generated deployment files (Docker, K8s, Helm)
 		echo "$(YELLOW)No uploads directory found. Run code generation first.$(NC)"; \
 	fi
 	@echo "$(GREEN)Deployment validation complete!$(NC)"
+
+validate-few-shot: ## Validate project-level few-shot examples for deploy agent
+	@echo "$(BLUE)Validating project-level few-shot examples...$(NC)"
+	@python3 -c "\
+import glob, json, sys; \
+errors = []; \
+files = glob.glob('deploy_templates/few_shot_examples/*.json'); \
+[errors.append(f'MISSING deploy_templates/few_shot_examples/') or sys.exit(1)] if not files else None; \
+[errors.extend([ \
+    (f'{f}: missing key' + k) \
+    for f in files \
+    for k in ('query', 'example') \
+    if k not in (d := json.load(open(f))) \
+]) for f in files for d in [json.load(open(f))]]; \
+[print(f'ERROR: {e}') for e in errors]; \
+print(f'✓ {len(files)} few-shot examples validated') if not errors else sys.exit(1)"
+	@export TESTING=1 && pytest generator/tests/test_agents_deploy_prompt.py::TestProjectFewShotExamples -v --tb=short
+	@echo "$(GREEN)Few-shot validation complete!$(NC)"
 
 # =============================================================================
 # Development
