@@ -150,15 +150,31 @@ output_dir: generated/service_b
 
 
 def test_spec_block_validation_output_dir():
-    """Test output_dir normalization."""
+    """Test output_dir normalization strips trailing slashes from relative paths."""
     spec = SpecBlock(
         project_type="library",
         package_name="mylib",
-        output_dir="/generated/mylib/"
+        output_dir="generated/mylib/"
     )
-    
+
     # Should strip trailing slash
     assert not spec.output_dir.endswith("/")
+
+
+def test_spec_block_validation_output_dir_rejects_absolute():
+    """Test that absolute output_dir paths are rejected for security."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError) as exc_info:
+        SpecBlock(
+            project_type="library",
+            package_name="mylib",
+            output_dir="/generated/mylib/",
+        )
+    errors = exc_info.value.errors()
+    assert any(e["loc"] == ("output_dir",) for e in errors), (
+        f"Expected 'output_dir' in error locations; got: {errors}"
+    )
 
 
 def test_spec_block_to_dict():

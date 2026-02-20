@@ -78,5 +78,21 @@ Review the tests and identify:
 3. Edge cases not tested
 4. Potential improvements
 5. **Pydantic V2 error type mismatches** (if language is Python)
+6. **Brittle validation message/type assertions** – flag any of these patterns as CRITICAL issues:
+   - Exact equality check on `detail[*]["msg"]`: `assert detail[0]["msg"] == "..."` → MUST use `.lower()` + `in`
+   - Pydantic v1 type strings: `"type_error.integer"`, `"type_error.float"`, `"value_error.any_str.min_length"`, etc. → replace with v2 types
+   - V1-style message fragments in `in str(...)` checks: `"value is not a valid integer"`, `"string should have at least"`, `"must be greater than"`, `"ensure this value"` → use v2 fragments or `.lower()` case-insensitive match
+   - Hardcoded exact Pydantic message strings that may differ across pydantic-core patch versions
+
+   **Preferred pattern for FastAPI 422 validation tests**:
+   ```python
+   assert response.status_code == 422
+   detail = response.json()["detail"]
+   assert isinstance(detail, list) and len(detail) > 0
+   # Assert the correct field is flagged:
+   assert any("field_name" in err.get("loc", []) for err in detail)
+   # If checking msg: always use case-insensitive substring match:
+   assert any("key concept" in err.get("msg", "").lower() for err in detail)
+   ```
 
 Provide specific, actionable feedback.
