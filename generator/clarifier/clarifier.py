@@ -1182,6 +1182,11 @@ class Clarifier:
     or pass dependencies directly to __init__ for testing/custom configurations.
     """
 
+    # Class-level flag so all instances share the same Prometheus server guard.
+    # Using an instance attribute would cause a port collision when a second
+    # Clarifier instance is created while the first still owns the port.
+    _metrics_server_started: bool = False
+
     def __init__(
         self,
         llm: Optional[LLMProvider] = None,
@@ -1468,9 +1473,7 @@ class Clarifier:
             )
 
     async def _monitor_metrics(self):
-        if self.config.is_production_env and not hasattr(
-            self, "_metrics_server_started"
-        ):
+        if self.config.is_production_env and not Clarifier._metrics_server_started:
             try:
                 from prometheus_client import start_http_server
                 # Use shared worker utilities for consistent port allocation
@@ -1481,7 +1484,7 @@ class Clarifier:
                 port = calculate_worker_port(base_port)
                 start_http_server(port)
                 self.logger.info(f"Prometheus metrics server started on port {port}.")
-                setattr(self, "_metrics_server_started", True)
+                Clarifier._metrics_server_started = True
             except Exception as e:
                 self.logger.error(
                     f"Failed to start Prometheus metrics server: {e}", exc_info=True

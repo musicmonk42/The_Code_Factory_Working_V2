@@ -6173,6 +6173,10 @@ class OmniCoreService:
         # Initialize detected_language before try/finally so the finally block
         # always has a valid value even if codegen fails before assignment.
         detected_language: str = payload.get("language", "python") or "python"
+        # Initialize codegen_result before try/finally so the finally block
+        # always has a valid reference even if the pipeline pauses for clarification
+        # before the codegen step is reached.
+        codegen_result = None
         
         try:
             # Ensure agents are loaded before use
@@ -6234,6 +6238,13 @@ class OmniCoreService:
                             "package_name": spec_lock.package_name,
                         }
                     )
+                    
+                    # Inject spec-resolved fields into payload so codegen agent
+                    # receives project_type and package_name from the prompt builder.
+                    if spec_lock.project_type:
+                        payload["project_type"] = spec_lock.project_type
+                    if spec_lock.package_name or spec_lock.module_name:
+                        payload["package_name"] = spec_lock.package_name or spec_lock.module_name
             except ImportError:
                 logger.debug(f"[PIPELINE] Spec integration not available, using legacy flow")
             except Exception as e:

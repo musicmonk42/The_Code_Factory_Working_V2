@@ -429,12 +429,23 @@ async def delete_job_from_database(job_id: str) -> bool:
         agent_name = f"job_{job_id}"
         
         async with _database.AsyncSessionLocal() as session:
-            # Delete the record permanently
-            result = await session.execute(
-                delete(GeneratorAgentState).filter_by(name=agent_name)
+            # Use a subquery to find the primary key via the parent table first,
+            # then delete by primary key.  Deleting by name (a parent-table column)
+            # directly in a joined-inheritance DELETE produces a cartesian product
+            # between the parent and child tables.
+            stmt = select(GeneratorAgentState.id).where(
+                GeneratorAgentState.name == agent_name
             )
+            result = await session.execute(stmt)
+            row_id = result.scalar_one_or_none()
             
-            rows_deleted = result.rowcount
+            if row_id is not None:
+                await session.execute(
+                    delete(GeneratorAgentState).where(GeneratorAgentState.id == row_id)
+                )
+                rows_deleted = 1
+            else:
+                rows_deleted = 0
             
             # Flush to ensure immediate visibility to other sessions
             await session.flush()
