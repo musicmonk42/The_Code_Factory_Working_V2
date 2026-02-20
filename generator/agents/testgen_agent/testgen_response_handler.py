@@ -43,7 +43,7 @@ import tempfile
 import time  # For LLM latency
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Security fix: Use defusedxml to prevent XXE attacks
 import defusedxml.ElementTree as ET
@@ -182,6 +182,123 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
         
         fixed_files[filename] = fixed_content
     
+    return fixed_files
+
+
+def fix_brittle_pydantic_assertions(test_files: Dict[str, str], language: str = "python") -> Dict[str, str]:
+    """
+    Post-process generated Python tests to replace brittle Pydantic v1-style
+    error message/type assertions with resilient Pydantic v2-compatible patterns.
+
+    Specifically:
+    - Replaces Pydantic v1 error ``type`` strings (e.g. ``"type_error.integer"``)
+      with their Pydantic v2 equivalents (e.g. ``"int_parsing"``).
+    - Converts exact equality checks on ``detail[*]["msg"]`` into case-insensitive
+      substring assertions so that minor phrasing changes between pydantic-core
+      releases do not break the test suite.
+    - Replaces hard-coded Pydantic v1 message fragments (e.g.
+      ``"value is not a valid integer"``) with the v2 equivalent fragments so
+      that ``in str(exc_info.value)`` checks remain green across versions.
+
+    Args:
+        test_files: Mapping of filename → source code for generated test files.
+        language: Source language of the test files. Only ``"python"`` files are
+            processed; all other languages are returned unchanged.
+
+    Returns:
+        A new mapping with the same keys; Python test files have brittle
+        Pydantic v1 assertion patterns replaced with resilient v2 equivalents.
+
+    Note:
+        The string-literal fragment replacements operate on all occurrences in
+        a file, including those inside docstrings or comments.  This is
+        intentional: even documentation containing stale v1 fragments benefits
+        from being updated, and the risk of unintended changes is low in
+        generated test files.
+    """
+    if language != "python":
+        return test_files
+
+    # --- Pydantic v1 → v2 error TYPE replacements (inside string literals) ---
+    _type_replacements: List[Tuple[str, str]] = [
+        ('"type_error.integer"', '"int_parsing"'),
+        ("'type_error.integer'", "'int_parsing'"),
+        ('"type_error.float"', '"float_parsing"'),
+        ("'type_error.float'", "'float_parsing'"),
+        ('"type_error.bool"', '"bool_parsing"'),
+        ("'type_error.bool'", "'bool_parsing'"),
+        ('"type_error.str"', '"string_type"'),
+        ("'type_error.str'", "'string_type'"),
+        ('"value_error.missing"', '"missing"'),
+        ("'value_error.missing'", "'missing'"),
+        ('"value_error.any_str.min_length"', '"string_too_short"'),
+        ("'value_error.any_str.min_length'", "'string_too_short'"),
+        ('"value_error.any_str.max_length"', '"string_too_long"'),
+        ("'value_error.any_str.max_length'", "'string_too_long'"),
+        ('"value_error.number.not_gt"', '"greater_than"'),
+        ("'value_error.number.not_gt'", "'greater_than'"),
+        ('"value_error.number.not_ge"', '"greater_than_equal"'),
+        ("'value_error.number.not_ge'", "'greater_than_equal'"),
+        ('"value_error.number.not_lt"', '"less_than"'),
+        ("'value_error.number.not_lt'", "'less_than'"),
+        ('"value_error.number.not_le"', '"less_than_equal"'),
+        ("'value_error.number.not_le'", "'less_than_equal'"),
+    ]
+
+    # --- Pydantic v1 message FRAGMENTS → v2 fragments (for ``in str(...)`` checks) ---
+    # Only replace when the fragment appears inside a string being tested with ``in``.
+    _msg_fragment_replacements: List[Tuple[str, str]] = [
+        # v1 fragment → v2 fragment (both lowercase; we also replace title-case below)
+        ("value is not a valid integer", "valid integer"),
+        ("value is not a valid float", "valid number"),
+        ("value is not a valid boolean", "valid boolean"),
+        # v1 min/max messages
+        ("ensure this value has at least", "at least"),
+        ("ensure this value has at most", "at most"),
+        ("string should have at least", "at least"),   # already partial-match friendly
+        ("ensure this value is greater than", "greater than"),
+        ("ensure this value is less than", "less than"),
+        ("must be greater than", "greater than"),
+        ("must be less than", "less than"),
+    ]
+
+    # Regex: replace exact-equality checks on detail/errors msg keys with .lower() in-checks.
+    # Matches: assert detail["msg"] == "..."  or  assert errors[0]["msg"] == "..."
+    # Replaces with: assert "..." in detail["msg"].lower()
+    _exact_msg_eq_pattern = re.compile(
+        r'assert\s+(\w[\w\[\]"\'\.]+\[(?:"msg"|\'msg\')\])\s*==\s*(["\'])(.+?)\2',
+        re.DOTALL,
+    )
+
+    fixed_files: Dict[str, str] = {}
+    for filename, content in test_files.items():
+        if not filename.endswith(".py"):
+            fixed_files[filename] = content
+            continue
+
+        # 1. Replace v1 error type strings
+        for old_type, new_type in _type_replacements:
+            content = content.replace(old_type, new_type)
+
+        # 2. Replace v1 message fragments in string literals used with ``in``
+        for old_frag, new_frag in _msg_fragment_replacements:
+            # Replace both lowercase and title-case variants
+            for variant in (old_frag, old_frag.capitalize()):
+                # Only replace inside string literals followed by ``in`` (or preceded by ``in``)
+                # Pattern: "...variant..." or '...variant...' used in `in` comparisons
+                content = content.replace(f'"{variant}"', f'"{new_frag}"')
+                content = content.replace(f"'{variant}'", f"'{new_frag}'")
+
+        # 3. Convert exact msg equality checks to case-insensitive in-checks
+        def _replace_exact_msg(m: re.Match) -> str:
+            accessor = m.group(1)
+            msg_text = m.group(3).lower()
+            return f'assert "{msg_text}" in {accessor}.lower()'
+
+        content = _exact_msg_eq_pattern.sub(_replace_exact_msg, content)
+
+        fixed_files[filename] = content
+
     return fixed_files
 
 
@@ -1342,7 +1459,10 @@ async def parse_llm_response(
         
         # FIX #3: Fix import paths after parsing but before validation
         test_files = fix_import_paths(test_files, code_files, language)
-        
+
+        # Fix brittle Pydantic v1-style assertions before validation
+        test_files = fix_brittle_pydantic_assertions(test_files, language)
+
         # FIX #3: Validate and fix monkeypatch targets
         test_files = validate_monkeypatch_targets(test_files, code_files, language)
         
@@ -1366,7 +1486,10 @@ async def parse_llm_response(
         if healed_files:
             # FIX #3: Also fix import paths in healed files
             healed_files = fix_import_paths(healed_files, code_files, language)
-            
+
+            # Fix brittle Pydantic v1-style assertions in healed files
+            healed_files = fix_brittle_pydantic_assertions(healed_files, language)
+
             # FIX #3: Also validate monkeypatch targets in healed files
             healed_files = validate_monkeypatch_targets(healed_files, code_files, language)
             

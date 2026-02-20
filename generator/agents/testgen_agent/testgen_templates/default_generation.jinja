@@ -125,25 +125,32 @@ def test_integer_parsing_validation():
     # OR use substring match on error message
     assert "valid integer" in str(exc_info.value).lower()  # NOT "value is not a valid integer" (v1)
 
-# Test 7: API endpoint validation error response
+# Test 7: API endpoint validation error response – prefer loc/field over msg/type
 def test_api_validation_error():
     response = client.post("/endpoint", json={"message": "x" * 501})
     assert response.status_code == 422
-    detail = response.json()['detail'][0]
-    # CORRECT: Substring match on msg field
-    assert "string should have at most" in detail['msg'].lower()
-    # OR check error type (PREFERRED)
-    assert detail['type'] == "string_too_long"  # V2 type
+    detail = response.json()["detail"]
+    assert isinstance(detail, list) and len(detail) > 0
+    # PREFERRED: assert the correct field is flagged via loc
+    assert any("message" in err.get("loc", []) for err in detail), (
+        f"Expected 'message' in error loc; got: {detail}"
+    )
+    # OPTIONAL: case-insensitive substring match on msg (never exact equality)
+    assert any("at most" in err.get("msg", "").lower() for err in detail)
+    # AVOID asserting exact 'type' strings – they vary across pydantic-core versions
 
 # WRONG PATTERNS (DO NOT USE):
 # assert exc_info.value == "exact message"  # FAILS: Exact match
-# assert detail['msg'] == "ensure this value has at most 500 characters"  # FAILS: V1 format
+# assert detail[0]['msg'] == "ensure this value has at most 500 characters"  # FAILS: V1 format
+# assert detail[0]['msg'] == "String should have at most 500 characters"  # FRAGILE: exact V2 text
 # assert errors[0]["type"] == "value_error.any_str.min_length"  # FAILS: V1 type
 # assert errors[0]["type"] == "value_error.number.not_gt"  # FAILS: V1 type
 # assert errors[0]["type"] == "type_error.float"  # FAILS: V1 type
 # assert errors[0]["type"] == "type_error.integer"  # FAILS: V1 type
 # assert "value is not a valid float" in str(exc_info.value)  # FAILS: V1 message format
 # assert "value is not a valid integer" in str(exc_info.value)  # FAILS: V1 message format
+# assert "string should have at least" in str(exc_info.value)  # FRAGILE: case-sensitive
+# assert "must be greater than" in str(exc_info.value)  # FRAGILE: V1/mixed phrasing
 
 # WRONG - Pydantic v2 does NOT raise TypeError for type mismatches
 # def test_invalid_type():

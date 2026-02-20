@@ -81,6 +81,13 @@ if "aiohttp" not in sys.modules:
     sys.modules["aiohttp"] = create_mock_package("aiohttp")
     sys.modules["aiohttp.web"] = create_mock_package("aiohttp.web")
 
+if "defusedxml" not in sys.modules:
+    _saved_modules_trh.setdefault("defusedxml", sys.modules.get("defusedxml"))
+    _saved_modules_trh.setdefault("defusedxml.ElementTree", sys.modules.get("defusedxml.ElementTree"))
+    _modules_to_mock_trh.extend(["defusedxml", "defusedxml.ElementTree"])
+    sys.modules["defusedxml"] = create_mock_package("defusedxml")
+    sys.modules["defusedxml.ElementTree"] = create_mock_package("defusedxml.ElementTree")
+
 # Special handling for watchdog.events - it needs to be inheritable
 watchdog_events_mock = create_mock_package("watchdog.events")
 # Add a base class that can be inherited
@@ -157,6 +164,7 @@ from agents.testgen_agent.testgen_response_handler import (
     DefaultResponseParser,
     ResponseParser,
     _local_regex_sanitize,
+    fix_brittle_pydantic_assertions,
     parse_llm_response,
 )
 
@@ -707,9 +715,138 @@ class TestFilenameNormalization:
     def test_normalize_multiple_pascal_case_words(self):
         """Test normalizing 'TestUserAccountValidator.py'."""
         from generator.agents.testgen_agent.testgen_response_handler import normalize_test_filename
-        
+
         result = normalize_test_filename("TestUserAccountValidator.py", "python")
         assert result == "test_user_account_validator.py"
+
+
+class TestFixBrittlePydanticAssertions:
+    """Tests for fix_brittle_pydantic_assertions – ensures generated tests are
+    resilient across Pydantic versions."""
+
+    def _fix(self, files):
+        # Use the module-level import already performed at collection time
+        return fix_brittle_pydantic_assertions(files)
+
+    # ------------------------------------------------------------------
+    # Error-type replacements
+    # ------------------------------------------------------------------
+
+    def test_replaces_type_error_integer_with_int_parsing(self):
+        files = {
+            "test_api.py": (
+                'errors = exc_info.value.errors()\n'
+                'assert errors[0]["type"] == "type_error.integer"\n'
+            )
+        }
+        result = self._fix(files)
+        assert '"int_parsing"' in result["test_api.py"]
+        assert '"type_error.integer"' not in result["test_api.py"]
+
+    def test_replaces_type_error_float_with_float_parsing(self):
+        files = {"test_m.py": 'assert errors[0]["type"] == "type_error.float"\n'}
+        result = self._fix(files)
+        assert '"float_parsing"' in result["test_m.py"]
+        assert '"type_error.float"' not in result["test_m.py"]
+
+    def test_replaces_value_error_any_str_min_length_with_string_too_short(self):
+        files = {
+            "test_m.py": 'assert errors[0]["type"] == "value_error.any_str.min_length"\n'
+        }
+        result = self._fix(files)
+        assert '"string_too_short"' in result["test_m.py"]
+
+    def test_replaces_value_error_number_not_gt_with_greater_than(self):
+        files = {
+            "test_m.py": "assert errors[0]['type'] == 'value_error.number.not_gt'\n"
+        }
+        result = self._fix(files)
+        assert "'greater_than'" in result["test_m.py"]
+        assert "'value_error.number.not_gt'" not in result["test_m.py"]
+
+    # ------------------------------------------------------------------
+    # Message-fragment replacements
+    # ------------------------------------------------------------------
+
+    def test_replaces_v1_integer_fragment_in_string_literal(self):
+        files = {
+            "test_m.py": 'assert "value is not a valid integer" in str(exc_info.value)\n'
+        }
+        result = self._fix(files)
+        assert '"valid integer"' in result["test_m.py"]
+        assert '"value is not a valid integer"' not in result["test_m.py"]
+
+    def test_replaces_v1_must_be_greater_than_fragment(self):
+        files = {"test_m.py": 'assert "must be greater than" in str(exc_info.value)\n'}
+        result = self._fix(files)
+        assert '"greater than"' in result["test_m.py"]
+        assert '"must be greater than"' not in result["test_m.py"]
+
+    def test_replaces_v1_string_should_have_at_least_fragment(self):
+        files = {
+            "test_m.py": (
+                'assert "string should have at least" in str(exc_info.value)\n'
+            )
+        }
+        result = self._fix(files)
+        assert '"at least"' in result["test_m.py"]
+
+    def test_replaces_ensure_this_value_fragment(self):
+        files = {
+            "test_m.py": (
+                'assert "ensure this value has at least" in str(exc_info.value)\n'
+            )
+        }
+        result = self._fix(files)
+        assert '"at least"' in result["test_m.py"]
+
+    # ------------------------------------------------------------------
+    # Exact-equality → case-insensitive in-check
+    # ------------------------------------------------------------------
+
+    def test_converts_exact_msg_equality_to_lower_in_check(self):
+        files = {
+            "test_m.py": (
+                'assert detail[0]["msg"] == "String should have at least 1 character"\n'
+            )
+        }
+        result = self._fix(files)
+        content = result["test_m.py"]
+        # The exact equality should be converted to a .lower() in-check
+        assert ".lower()" in content
+        assert "in " in content
+        # The converted line should not still use == against a msg value
+        assert 'detail[0]["msg"] ==' not in content
+
+    def test_converts_exact_msg_equality_for_greater_than(self):
+        files = {
+            "test_m.py": (
+                "assert detail[0]['msg'] == 'Input should be greater than 0'\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_m.py"]
+        assert ".lower()" in content
+        assert "detail[0]['msg'] ==" not in content
+
+    # ------------------------------------------------------------------
+    # Non-Python files are unchanged
+    # ------------------------------------------------------------------
+
+    def test_non_python_files_unchanged(self):
+        content = 'assert errors[0]["type"] == "type_error.integer"\n'
+        files = {"test_api.js": content}
+        result = self._fix(files)
+        assert result["test_api.js"] == content
+
+    def test_python_file_without_brittle_assertions_unchanged(self):
+        content = (
+            "def test_pass():\n"
+            "    assert 1 + 1 == 2\n"
+        )
+        files = {"test_math.py": content}
+        result = self._fix(files)
+        assert result["test_math.py"] == content
 
 
 if __name__ == "__main__":
