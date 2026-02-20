@@ -1111,23 +1111,6 @@ _EXTENSION_TO_LANGUAGE: Dict[str, str] = {
     "dockerfile": "dockerfile",
 }
 
-# Well-known filenames that don't rely on extension-based detection.
-# Checked before the extension map to handle extensionless / dotfiles.
-_FILENAME_TO_LANGUAGE: Dict[str, str] = {
-    "Dockerfile": "dockerfile",
-    "dockerfile": "dockerfile",
-    ".gitignore": "gitignore",
-    ".dockerignore": "dockerignore",
-    ".env": "env",
-    ".env.example": "env",
-    ".env.local": "env",
-    ".env.production": "env",
-    ".editorconfig": "config",
-    "Makefile": "makefile",
-    "makefile": "makefile",
-    "Procfile": "procfile",
-}
-
 # Mapping of well-known extensionless filenames (or dot-files) to their language types.
 # Checked BEFORE extension-based detection to handle files like Dockerfile, .gitignore, etc.
 _FILENAME_TO_LANGUAGE: Dict[str, str] = {
