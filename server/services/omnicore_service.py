@@ -4222,6 +4222,32 @@ class OmniCoreService:
                         for idx, doc in enumerate(yaml_docs):
                             doc = doc.strip()
                             
+                            # FIX Issue 4: Strip markdown code fences and non-YAML leading
+                            # content from each document. The enrichment pipeline wraps YAML
+                            # in markdown fences (```yaml ... ```) that would corrupt files.
+                            doc_lines = [
+                                line for line in doc.splitlines()
+                                if not re.match(r'^```', line.strip())
+                            ]
+                            # Discard leading non-YAML lines (markdown headers, prose) before
+                            # the first line that looks like YAML (apiVersion, kind, metadata, ---)
+                            yaml_start = 0
+                            for i, line in enumerate(doc_lines):
+                                if line.strip() == '---' or re.match(
+                                    r'^\s*(apiVersion|kind|metadata)\s*:', line
+                                ):
+                                    yaml_start = i
+                                    break
+                            else:
+                                # No YAML start marker found; the empty doc will be caught
+                                # by the length check below and skipped with a warning.
+                                logger.warning(
+                                    f"[DEPLOY] No YAML start marker found in K8s document {idx}; "
+                                    "likely non-YAML content (markdown preamble only) — skipping"
+                                )
+                                yaml_start = len(doc_lines)
+                            doc = '\n'.join(doc_lines[yaml_start:]).strip()
+                            
                             # FIX Bug 3: Handle edge cases in YAML splitting
                             # Skip empty documents or those that are too short to be valid
                             if not doc or len(doc) < MIN_YAML_DOC_LENGTH:
@@ -6143,6 +6169,10 @@ class OmniCoreService:
         # Add job to in-progress set
         self._jobs_in_pipeline.add(job_id)
         logger.info(f"[PIPELINE] Starting pipeline for job {job_id}")
+        
+        # Initialize detected_language before try/finally so the finally block
+        # always has a valid value even if codegen fails before assignment.
+        detected_language: str = payload.get("language", "python") or "python"
         
         try:
             # Ensure agents are loaded before use

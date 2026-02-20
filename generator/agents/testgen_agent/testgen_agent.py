@@ -1077,6 +1077,7 @@ Agent --> Dev : Deliver Report
                         '"""',
                         '',
                         'import pytest',
+                        'from pydantic import ValidationError',
                         '',
                     ]
                     
@@ -1623,6 +1624,7 @@ def test_{file_stem}_syntax_error_documentation():
             '',
             'import pytest',
             'from fastapi.testclient import TestClient',
+            'from pydantic import ValidationError',
             '',
             f'from {module_name} import app',
             '',
