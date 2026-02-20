@@ -389,6 +389,229 @@ class SFEService:
                     "line": issue.get("line", 0),
                 }
 
+    def _build_import_error_recommendations(
+        self, module_name: Optional[str], file_path: str
+    ) -> List[str]:
+        """
+        Build human-readable fix recommendations for an ImportError/ModuleNotFoundError.
+
+        Args:
+            module_name: Name of the missing module (may be None if not parseable).
+            file_path: File path where the import error occurred.
+
+        Returns:
+            List of recommendation strings.
+        """
+        if module_name:
+            return [
+                f"Adjust the import path: use a relative import such as "
+                f"`from .{module_name} import ...` or prefix with the package name "
+                f"`from your_package.{module_name} import ...`.",
+                f"Ensure a `{module_name}/` package (or `{module_name}.py` module) "
+                f"exists in the project root and contains an `__init__.py` file.",
+                f"If `{module_name}` is a third-party dependency, install it: "
+                f"`pip install {module_name}`.",
+                "Set PYTHONPATH to the project root before running pytest, or add a "
+                "`conftest.py` at the project root so pytest inserts the root into "
+                "`sys.path` automatically.",
+            ]
+        return [
+            "Verify all import statements reference modules that exist in the project.",
+            "Add a `conftest.py` at the project root or set PYTHONPATH so that pytest "
+            "can resolve module imports correctly.",
+        ]
+
+    def _parse_pytest_artifacts(self, job_dir: Path) -> List[Dict[str, Any]]:
+        """
+        Discover and parse pytest JUnit XML artifacts under a job directory.
+
+        Searches for ``results.xml`` files (written by pytest's ``--junitxml``
+        flag) in common locations relative to *job_dir* and converts every
+        ``<failure>`` or ``<error>`` element into a pipeline-format issue dict
+        that can be transformed by
+        :func:`~server.services.sfe_utils.transform_pipeline_issues_to_frontend_errors`.
+
+        ``ModuleNotFoundError`` / ``ImportError`` collection failures are given
+        severity ``"high"`` and include curated fix recommendations.
+
+        Args:
+            job_dir: Root directory to search (e.g. ``./uploads/<job_id>/generated``).
+
+        Returns:
+            List of pipeline-format issue dicts (``type``, ``risk_level``,
+            ``file``, ``details``).  Empty list when no artifacts are found or
+            no failures are present.
+        """
+        import xml.etree.ElementTree as ET
+
+        issues: List[Dict[str, Any]] = []
+
+        # Build candidate list: direct location, results/ sub-directory, then
+        # any results.xml found recursively (up to reasonable depth).
+        candidates: List[Path] = [
+            job_dir / "results.xml",
+            job_dir / "results" / "results.xml",
+        ]
+        try:
+            for found in job_dir.rglob("results.xml"):
+                if found not in candidates:
+                    candidates.append(found)
+        except Exception:
+            pass
+
+        xml_file: Optional[Path] = None
+        for candidate in candidates:
+            if candidate.is_file():
+                xml_file = candidate
+                logger.info(f"[SFE] Found pytest JUnit XML: {xml_file}")
+                break
+
+        if xml_file is None:
+            logger.debug(f"[SFE] No pytest JUnit XML found under {job_dir}")
+            return []
+
+        try:
+            tree = ET.parse(xml_file)  # noqa: S314 -- local file, not network input
+            root = tree.getroot()
+        except ET.ParseError as exc:
+            logger.warning(f"[SFE] Failed to parse JUnit XML {xml_file}: {exc}")
+            return []
+
+        # Support both <testsuite> root and <testsuites> wrapper root.
+        testsuites = root.findall(".//testsuite")
+        if not testsuites and root.tag == "testsuite":
+            testsuites = [root]
+
+        for testsuite in testsuites:
+            for testcase in testsuite.findall(".//testcase"):
+                for fail_tag in ("failure", "error"):
+                    elem = testcase.find(fail_tag)
+                    if elem is None:
+                        continue
+
+                    error_type = elem.get("type", "")
+                    message = elem.get("message", "")
+                    details_text = (elem.text or "").strip()
+
+                    # Derive a file hint from the pytest classname (e.g.
+                    # "tests.test_routes" → "tests/test_routes.py").
+                    classname = testcase.get("classname", "")
+                    test_name = testcase.get("name", "")
+                    file_hint = (
+                        classname.replace(".", "/") + ".py" if classname else "unknown"
+                    )
+
+                    # Try to extract a line number from the details text.
+                    line_num = 0
+                    line_match = re.search(r"line (\d+)", details_text)
+                    if line_match:
+                        line_num = int(line_match.group(1))
+
+                    combined = f"{error_type} {message} {details_text}"
+                    is_import_error = (
+                        "ModuleNotFoundError" in combined
+                        or "ImportError" in combined
+                        or "No module named" in combined
+                        or "cannot import name" in combined.lower()
+                    )
+
+                    if is_import_error:
+                        # Extract the missing module name.
+                        module_name: Optional[str] = None
+                        m = re.search(r"No module named '([^']+)'", combined)
+                        if m:
+                            module_name = m.group(1)
+                        else:
+                            m2 = re.search(
+                                r"cannot import name '([^']+)'",
+                                combined,
+                                re.IGNORECASE,
+                            )
+                            if m2:
+                                module_name = m2.group(1)
+
+                        issue_type = (
+                            "ModuleNotFoundError"
+                            if "No module named" in combined
+                            else "ImportError"
+                        )
+                        fix_recs = self._build_import_error_recommendations(
+                            module_name, file_hint
+                        )
+                        issue: Dict[str, Any] = {
+                            "type": issue_type,
+                            "risk_level": "high",
+                            "file": file_hint,
+                            "details": {
+                                "message": message
+                                or f"Import error in test '{test_name}'",
+                                "line": line_num,
+                                "file": file_hint,
+                                "fix_recommendations": fix_recs,
+                                "missing_module": module_name,
+                                "test_name": test_name,
+                                "classname": classname,
+                                "pytest_error_type": error_type,
+                            },
+                        }
+                    else:
+                        issue = {
+                            "type": error_type or f"{fail_tag.capitalize()}Error",
+                            "risk_level": "medium",
+                            "file": file_hint,
+                            "details": {
+                                "message": message
+                                or f"Test failure in '{test_name}'",
+                                "line": line_num,
+                                "file": file_hint,
+                                "test_name": test_name,
+                                "classname": classname,
+                                "pytest_error_type": error_type,
+                            },
+                        }
+
+                    issues.append(issue)
+
+        logger.info(
+            f"[SFE] Parsed {len(issues)} issue(s) from pytest artifact {xml_file}"
+        )
+        return issues
+
+    def _write_analysis_report(
+        self, report_path: Path, issues: List[Dict[str, Any]], job_id: str
+    ) -> None:
+        """
+        Persist pipeline-format issues to the SFE analysis report JSON file.
+
+        Creates parent directories as needed.  Failures are logged as warnings
+        and do not propagate; callers should treat this as best-effort.
+
+        Args:
+            report_path: Destination path (e.g. ``<job_dir>/reports/sfe_analysis_report.json``).
+            issues: Pipeline-format issue dicts to persist.
+            job_id: Job identifier (recorded in the report).
+        """
+        try:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_data = {
+                "job_id": job_id,
+                "issues": issues,
+                "all_defects": issues,
+                "count": len(issues),
+                "source": "pytest_artifacts",
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            report_path.write_text(
+                json.dumps(report_data, indent=2), encoding="utf-8"
+            )
+            logger.info(
+                f"[SFE] Wrote analysis report with {len(issues)} issue(s) to {report_path}"
+            )
+        except Exception as exc:
+            logger.warning(
+                f"[SFE] Could not write analysis report to {report_path}: {exc}"
+            )
+
     def _invalidate_analysis_cache(self, job_id: str) -> None:
         """Delete cached SFE analysis report so the next detection re-analyzes."""
         job_path = self._resolve_job_code_path(job_id, ".")
@@ -593,26 +816,47 @@ class SFEService:
                     if not job_dir:
                         job_dir = job_base
             
-            # Try to load cached report
+            # Try to load cached report and always check pytest artifacts.
             if job_dir and job_dir.exists():
                 report_path = job_dir / "reports" / "sfe_analysis_report.json"
                 cached_report = _load_sfe_analysis_report(report_path, job_id)
-                
+
+                # Always parse pytest artifacts so we can surface failures that
+                # are invisible to the static analysis (e.g. import collection
+                # errors that prevent any test from running).
+                artifact_issues = self._parse_pytest_artifacts(job_dir)
+
                 if cached_report:
                     logger.info(f"Using cached SFE analysis report for job {job_id}")
                     # Transform cached pipeline issues to frontend format
                     issues = transform_pipeline_issues_to_frontend_errors(
                         cached_report["issues"], job_id
                     )
-                    
+
+                    # If the cached report has 0 issues but pytest artifacts reveal
+                    # failures (e.g. ModuleNotFoundError during collection), augment
+                    # rather than silently returning an empty result.
+                    if not issues and artifact_issues:
+                        logger.info(
+                            f"[SFE] Cached report has 0 issues for job {job_id} but "
+                            f"pytest artifacts reveal {len(artifact_issues)} failure(s). "
+                            "Augmenting with artifact issues."
+                        )
+                        issues = transform_pipeline_issues_to_frontend_errors(
+                            artifact_issues, job_id
+                        )
+                        # Persist augmented results so future calls and the
+                        # GET /api/sfe/{job_id}/analysis-report endpoint see them.
+                        self._write_analysis_report(report_path, artifact_issues, job_id)
+
                     # BUG FIX 2: Populate errors cache for fix proposals
                     # This ensures that if user clicks "Analyze Code" first, then "Propose Fix",
                     # the error data is available in cache for generating the fix
                     self._populate_errors_cache(issues, job_id)
-                    
+
                     # Compute executive summary
                     executive_summary = self._compute_executive_summary(issues)
-                    
+
                     return {
                         "job_id": job_id,
                         "code_path": code_path,
@@ -621,6 +865,28 @@ class SFEService:
                         "source": cached_report["source"],
                         "cached": True,
                         **executive_summary,  # Include summary statistics
+                    }
+
+                # No cached report but pytest artifacts are available.
+                if artifact_issues:
+                    logger.info(
+                        f"[SFE] No cached report for job {job_id}, but "
+                        f"{len(artifact_issues)} pytest artifact issue(s) found."
+                    )
+                    issues = transform_pipeline_issues_to_frontend_errors(
+                        artifact_issues, job_id
+                    )
+                    self._populate_errors_cache(issues, job_id)
+                    self._write_analysis_report(report_path, artifact_issues, job_id)
+                    executive_summary = self._compute_executive_summary(issues)
+                    return {
+                        "job_id": job_id,
+                        "code_path": code_path,
+                        "issues_found": len(issues),
+                        "issues": issues,
+                        "source": "pytest_artifacts",
+                        "cached": False,
+                        **executive_summary,
                     }
 
         # Try direct SFE integration first (avoids OmniCore routing overhead)
