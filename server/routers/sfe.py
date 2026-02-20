@@ -287,13 +287,76 @@ async def get_fix(fix_id: str) -> Fix:
     return fixes_db[fix_id]
 
 
+@router.post("/fixes/{fix_id}/validate", response_model=Fix)
+async def validate_fix(
+    fix_id: str,
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Fix:
+    """
+    Run sandbox validation on a proposed fix without committing an approval decision.
+
+    Copies the job codebase to a temp directory, applies the proposed fix,
+    runs pytest, and records whether the fix improved test outcomes.  The
+    fix status transitions to ``under_review`` while the validation result
+    is stored on the Fix object (``validation_status`` attribute).  Callers
+    can subsequently call ``/review`` to formally approve or reject.
+
+    **Path Parameters:**
+    - fix_id: Fix identifier
+
+    **Returns:**
+    - Updated fix with ``validation_status`` and ``validation_result`` fields
+
+    **Errors:**
+    - 404: Fix not found
+    - 400: Fix is not in PROPOSED status
+    """
+    if fix_id not in fixes_db:
+        raise HTTPException(status_code=404, detail=f"Fix {fix_id} not found")
+
+    fix = fixes_db[fix_id]
+
+    if fix.status not in (FixStatus.PROPOSED, FixStatus.UNDER_REVIEW):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Fix {fix_id} cannot be validated in its current status "
+                f"({fix.status.value}). Only PROPOSED or UNDER_REVIEW fixes "
+                "can be validated."
+            ),
+        )
+
+    fix.status = FixStatus.UNDER_REVIEW
+    fix.updated_at = datetime.now(timezone.utc)
+
+    job_id = fix.job_id or ""
+    validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
+
+    # Persist validation outcome so the review endpoint can use it
+    fix.validation_status = validation.get("status")
+    fix.validation_result = validation.get("result")
+    fix.updated_at = datetime.now(timezone.utc)
+
+    logger.info(
+        f"Fix {fix_id} sandbox validation completed: {fix.validation_status}"
+    )
+    return fix
+
+
 @router.post("/fixes/{fix_id}/review", response_model=Fix)
 async def review_fix(
     fix_id: str,
     request: FixReviewRequest,
+    sfe_service: SFEService = Depends(get_sfe_service),
 ) -> Fix:
     """
     Review a proposed fix (approve or reject).
+
+    When ``approved=True`` the fix is automatically validated in a sandbox
+    first.  If sandbox validation fails (the fix did not improve test
+    outcomes) the fix is rejected rather than approved, even if the human
+    reviewer requested approval.  Pass ``force=True`` in the comments to
+    override sandbox rejection (not recommended for production).
 
     **Path Parameters:**
     - fix_id: Fix identifier
@@ -314,6 +377,32 @@ async def review_fix(
     fix = fixes_db[fix_id]
 
     if request.approved:
+        # Run sandbox validation unless the fix was already explicitly validated
+        already_validated = getattr(fix, "validation_status", None) == "validated"
+        force_override = "force" in (request.comments or "").lower()
+
+        if not already_validated and not force_override:
+            job_id = fix.job_id or ""
+            try:
+                validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
+                fix.validation_status = validation.get("status")
+                fix.validation_result = validation.get("result")
+
+                if validation.get("status") != "validated":
+                    # Validation says fix doesn't improve things — reject it
+                    fix.status = FixStatus.REJECTED
+                    fix.updated_at = datetime.now(timezone.utc)
+                    logger.warning(
+                        f"Fix {fix_id} rejected: sandbox validation failed "
+                        f"({validation.get('reason', 'no improvement')})"
+                    )
+                    return fix
+            except Exception as exc:
+                logger.warning(
+                    f"Fix {fix_id}: sandbox validation error ({exc}); "
+                    "proceeding with human-only approval"
+                )
+
         fix.status = FixStatus.APPROVED
     else:
         fix.status = FixStatus.REJECTED
