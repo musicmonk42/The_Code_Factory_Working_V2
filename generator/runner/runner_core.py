@@ -2363,8 +2363,10 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                     span.set_attribute("runner.coverage_parsing_error", str(e))
 
             # --- Mutation Testing Phase ---
-            # FIX: Use getattr
-            if getattr(self.config, "mutation", False) and HAS_MUTATION_MODULE:
+            # Gate: only run mutation testing when the baseline test suite passes
+            # (pytest exit code 0).  Running mutmut against a broken suite wastes
+            # compute and produces unhandled RunnerError stack traces.
+            if getattr(self.config, "mutation", False) and HAS_MUTATION_MODULE and returncode == 0:
                 span.add_event("Running mutation tests")
                 try:
                     mut_results: Dict[str, Any] = await _mutation_test_func(
@@ -2433,6 +2435,17 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                         Status(StatusCode.ERROR, f"Mutation testing failed: {e}")
                     )
                     span.record_exception(e)
+            elif getattr(self.config, "mutation", False) and returncode != 0:
+                logger.warning(
+                    json.dumps(
+                        {
+                            "event": "mutation_skipped",
+                            "task_id": task_id,
+                            "reason": f"baseline tests failed (exit code {returncode}); skipping mutation testing",
+                        }
+                    )
+                )
+                span.add_event(f"Mutation testing skipped: baseline tests failed (exit code {returncode})")
             elif getattr(self.config, "mutation", False):
                 logger.warning(
                     json.dumps(

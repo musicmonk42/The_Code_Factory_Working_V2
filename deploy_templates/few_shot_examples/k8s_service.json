@@ -1,0 +1,4 @@
+{
+  "query": "Generate a Kubernetes service.yaml for a Python web application",
+  "example": "apiVersion: v1\nkind: Service\nmetadata:\n  name: app\n  labels:\n    app: app\nspec:\n  type: ClusterIP\n  selector:\n    app: app\n  ports:\n  - protocol: TCP\n    port: 80\n    targetPort: 8000"
+}
