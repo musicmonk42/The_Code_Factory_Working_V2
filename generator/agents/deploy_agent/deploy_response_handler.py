@@ -234,6 +234,15 @@ except ValueError:
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"
 
+# Formats that represent technical deployment files and must NOT have markdown
+# decoration (badges, diagrams, links) prepended.  Adding "![...](...)" badges
+# to these formats produces files that start with "!" — an invalid token for
+# Dockerfile parsers (parse error: unexpected '!') and YAML parsers alike.
+TECHNICAL_DEPLOY_FORMATS: frozenset = frozenset({
+    "dockerfile", "docker", "yaml", "kubernetes", "helm",
+    "json", "hcl", "terraform",
+})
+
 
 def parse_llm_response(response: str, lang: str = "raw") -> Dict[str, str]:
     """
@@ -3140,7 +3149,6 @@ async def enrich_config_output(
     with all enrichments.
     """
 
-    enriched_content_parts = []
     # --- FIX: Use passed-in handler_registry ---
     handler = handler_registry.get_handler(
         output_format
@@ -3155,17 +3163,26 @@ async def enrich_config_output(
         )
         config_string = f"Error: Could not render configuration. {e}"
 
-    # 1. Add Compliance Badges (Simple logic based on security findings and linting - requires provenance data, which isn't available until handle_deploy_response is complete)
-    # We'll use a placeholder and rely on the provenance data in the final dict for the true status.
-    badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
+    # Technical file formats (Dockerfile, YAML, JSON, HCL) must not have markdown
+    # decoration prepended — adding badges like "![Compliance Status](...)" produces
+    # a file that starts with "!" which is an invalid Dockerfile/YAML token and
+    # causes downstream parse errors (e.g., "parse error at Dockerfile:1:1
+    # unexpected '!'").  Return the raw config content as-is for these formats.
+    if output_format.lower() in TECHNICAL_DEPLOY_FORMATS:
+        return config_string
 
+    # For documentation / human-readable formats, keep the enriched view.
+    enriched_content_parts = []
+
+    # 1. Add Compliance Badges
+    badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
     enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
 
-    # 2. Add Diagrams (Conceptual - would require a diagramming tool integration like PlantUML or Mermaid)
+    # 2. Add Diagrams (Conceptual)
     diagram_placeholder = f"```mermaid\n  graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]\n  ```"
     enriched_content_parts.append(f"## Configuration Diagram\n{diagram_placeholder}\n")
 
-    # 3. Add Documentation Links (e.g., to generated Readme, external docs)
+    # 3. Add Documentation Links
     enriched_content_parts.append(
         f"## Related Documentation\n- [Auto-generated README for this run](/docs/{run_id})\n- [Official {output_format.capitalize()} Documentation](https://docs.{output_format}.io)\n\n"
     )
