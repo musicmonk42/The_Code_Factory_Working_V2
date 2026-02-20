@@ -920,6 +920,122 @@ class TestAPIEndpoints:
 
 
 # ============================================================================
+# TESTS: Project-Level Few-Shot Examples Quality
+# ============================================================================
+
+
+class TestProjectFewShotExamples:
+    """
+    Validate that the project-level few-shot examples in
+    deploy_templates/few_shot_examples/ meet enterprise quality standards
+    and are correctly loaded by DeployPromptAgent.
+    """
+
+    @pytest.fixture
+    def project_few_shot_dir(self):
+        """Resolve path to project-level pre-seeded few-shot examples."""
+        # Walk up from this test file to find the project root
+        here = Path(__file__).resolve()
+        # generator/tests/ -> generator/ -> project root
+        project_root = here.parent.parent.parent
+        return project_root / "deploy_templates" / "few_shot_examples"
+
+    def test_few_shot_dir_exists(self, project_few_shot_dir):
+        """Pre-seeded few-shot directory must exist."""
+        assert project_few_shot_dir.exists(), (
+            f"deploy_templates/few_shot_examples/ not found at {project_few_shot_dir}"
+        )
+
+    def test_minimum_example_count(self, project_few_shot_dir):
+        """At least the core deployment targets must have examples."""
+        json_files = list(project_few_shot_dir.glob("*.json"))
+        assert len(json_files) >= 3, (
+            f"Expected ≥3 few-shot examples, found {len(json_files)}"
+        )
+
+    def test_all_files_have_required_keys(self, project_few_shot_dir):
+        """Every JSON file must contain non-empty 'query' and 'example' keys."""
+        for jf in project_few_shot_dir.glob("*.json"):
+            data = json.loads(jf.read_text(encoding="utf-8"))
+            assert "query" in data, f"{jf.name}: missing 'query' key"
+            assert "example" in data, f"{jf.name}: missing 'example' key"
+            assert isinstance(data["query"], str) and data["query"].strip(), (
+                f"{jf.name}: 'query' must be a non-empty string"
+            )
+            assert isinstance(data["example"], str) and data["example"].strip(), (
+                f"{jf.name}: 'example' must be a non-empty string"
+            )
+
+    def test_k8s_deployment_enterprise_standards(self, project_few_shot_dir):
+        """k8s_deployment.json must include enterprise security and operational fields."""
+        import yaml
+
+        jf = project_few_shot_dir / "k8s_deployment.json"
+        if not jf.exists():
+            pytest.skip("k8s_deployment.json not present")
+
+        data = json.loads(jf.read_text(encoding="utf-8"))
+        # Parse the embedded YAML
+        doc = next(yaml.safe_load_all(data["example"]))
+
+        container = pod_spec["containers"][0]
+        assert "resources" in container, "Resource limits/requests must be set"
+        assert "readinessProbe" in container, "readinessProbe must be configured"
+        assert "livenessProbe" in container, "livenessProbe must be configured"
+        c_sec = container.get("securityContext", {})
+        assert c_sec.get("allowPrivilegeEscalation") is False, (
+            "allowPrivilegeEscalation must be false"
+        )
+
+    def test_k8s_service_named_port(self, project_few_shot_dir):
+        """k8s_service.json must use a named port and app.kubernetes.io labels."""
+        import yaml
+
+        jf = project_few_shot_dir / "k8s_service.json"
+        if not jf.exists():
+            pytest.skip("k8s_service.json not present")
+
+        data = json.loads(jf.read_text(encoding="utf-8"))
+        doc = next(yaml.safe_load_all(data["example"]))
+
+        labels = doc["metadata"]["labels"]
+        assert "app.kubernetes.io/name" in labels, "Missing app.kubernetes.io/name label"
+
+        ports = doc["spec"]["ports"]
+        assert len(ports) >= 1, "Service must define at least one port"
+        assert "name" in ports[0], "Service port must have a name"
+
+    def test_docker_default_multi_stage(self, project_few_shot_dir):
+        """docker_default.json example must use a multi-stage build (FROM … AS …)."""
+        jf = project_few_shot_dir / "docker_default.json"
+        if not jf.exists():
+            pytest.skip("docker_default.json not present")
+
+        data = json.loads(jf.read_text(encoding="utf-8"))
+        example = data["example"]
+        assert " AS " in example, (
+            "Production Dockerfile must use multi-stage builds (FROM … AS …)"
+        )
+        assert "HEALTHCHECK" in example, "Production Dockerfile must include HEALTHCHECK"
+        assert "USER " in example, "Production Dockerfile must run as non-root (USER)"
+
+    def test_examples_load_via_deploy_prompt_agent(self, project_few_shot_dir):
+        """DeployPromptAgent._load_few_shot must load all examples from the project dir."""
+        with patch("watchdog.observers.Observer"):
+            agent = DeployPromptAgent(few_shot_dir=str(project_few_shot_dir))
+
+        loaded = agent.few_shot_examples
+        json_files = list(project_few_shot_dir.glob("*.json"))
+
+        assert len(loaded) == len(json_files), (
+            f"Expected {len(json_files)} examples to load, got {len(loaded)}"
+        )
+        assert all("query" in ex and "example" in ex for ex in loaded), (
+            "All loaded examples must have 'query' and 'example' keys"
+        )
+
+
+# ============================================================================
 # RUN TESTS
 # ============================================================================
 
