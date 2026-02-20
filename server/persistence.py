@@ -424,25 +424,24 @@ async def delete_job_from_database(job_id: str) -> bool:
         """
         # Query generator_agent_state table directly by name
         from omnicore_engine.database.models import GeneratorAgentState
-        from sqlalchemy import select, delete
+        from sqlalchemy import select
         
         agent_name = f"job_{job_id}"
         
         async with _database.AsyncSessionLocal() as session:
-            # Use a subquery to find the primary key via the parent table first,
-            # then delete by primary key.  Deleting by name (a parent-table column)
-            # directly in a joined-inheritance DELETE produces a cartesian product
-            # between the parent and child tables.
-            stmt = select(GeneratorAgentState.id).where(
+            # Load the ORM record first, then use session.delete() so the ORM
+            # handles joined-table inheritance correctly (child table first, then
+            # parent). A bulk DELETE on a polymorphic model can produce a
+            # cartesian product between the parent and child tables when the
+            # WHERE clause references a parent-table column.
+            stmt = select(GeneratorAgentState).where(
                 GeneratorAgentState.name == agent_name
             )
             result = await session.execute(stmt)
-            row_id = result.scalar_one_or_none()
+            record = result.scalars().first()
             
-            if row_id is not None:
-                await session.execute(
-                    delete(GeneratorAgentState).where(GeneratorAgentState.id == row_id)
-                )
+            if record is not None:
+                session.delete(record)  # synchronous – marks record for deletion
                 rows_deleted = 1
             else:
                 rows_deleted = 0

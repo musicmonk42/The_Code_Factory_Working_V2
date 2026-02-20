@@ -1480,7 +1480,7 @@ class Clarifier:
                 from omnicore_engine.worker_utils import calculate_worker_port
 
                 # Use dynamic port to avoid conflicts with FastAPI and other workers
-                base_port = int(os.getenv("CLARIFIER_METRICS_PORT", "8000"))
+                base_port = int(os.getenv("CLARIFIER_METRICS_PORT", "8001"))
                 port = calculate_worker_port(base_port)
                 start_http_server(port)
                 self.logger.info(f"Prometheus metrics server started on port {port}.")

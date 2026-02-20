@@ -2953,6 +2953,13 @@ class OmniCoreService:
                     "md_content": requirements,  # For codegen agent's content-based frontend detection safety net
                 }
                 
+                # Inject project_type from payload so the codegen prompt builder
+                # receives it (resolved by spec processing in _run_full_pipeline).
+                project_type = payload.get("project_type")
+                if project_type:
+                    requirements_dict["project_type"] = project_type
+                    logger.info(f"[CODEGEN] Injecting project_type={project_type!r} into requirements for job {job_id}")
+                
                 # Parse requirements to extract structured features for the prompt builder
                 fallback_features = [requirements] if requirements else ["No specific features provided"]
                 if _parse_requirements_flexible is not None:
