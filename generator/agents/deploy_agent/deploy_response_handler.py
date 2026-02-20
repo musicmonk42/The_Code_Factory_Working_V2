@@ -1183,10 +1183,13 @@ class DockerfileHandler(FormatHandler):
         sanitized = re.sub(r'^```(?:dockerfile|docker|Dockerfile)?\s*\n', '', sanitized, flags=re.IGNORECASE)
         sanitized = re.sub(r'\n```\s*$', '', sanitized)
         
-        # Remove leading lines starting with '!' or '#!' (shebangs and LLM invalid tokens)
-        # Strip entire leading lines, not just the '!' character, so content like
-        # "!/bin/bash\nFROM python" is fully recovered before validation.
-        sanitized = re.sub(r'\A(?:(?:!|#!).*(?:\n|$))*', '', sanitized)
+        # Remove shebang lines (#!) entirely from the start
+        sanitized = re.sub(r'\A(?:#!.*(?:\n|$))*', '', sanitized)
+        
+        # Strip a leading '!' character only (not the whole line), so "!FROM python"
+        # is recovered as "FROM python" while "! Invalid start" becomes "Invalid start"
+        # and is caught by validate_dockerfile below.
+        sanitized = re.sub(r'\A!', '', sanitized)
         
         # Remove any other leading non-Dockerfile content (whitespace only)
         # Only strip leading whitespace before FROM/ARG, not other content
