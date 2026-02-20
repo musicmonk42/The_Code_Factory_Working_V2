@@ -1,0 +1,267 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+name: Build & Publish Documentation
+
+# Builds Sphinx HTML documentation from docs/ on every relevant change and
+# uploads the output as a workflow artifact.  An optional second job publishes
+# to GitHub Pages when running on the default branch (disabled by default;
+# enable by setting the repository's Pages source to "GitHub Actions").
+#
+# Triggered on:
+#   • push  → main / develop  (when docs/ or requirements change)
+#   • PR    → main / develop  (build-only, no publish)
+#   • manual dispatch          (full build + optional publish)
+#   • schedule                 (nightly, to catch dependency drift)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/**'
+      - 'requirements.txt'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/**'
+      - 'requirements.txt'
+      - '.github/workflows/docs.yml'
+  schedule:
+    # Nightly rebuild at 03:30 UTC — exercises the full toolchain on the
+    # latest GitHub-hosted runner environment and catches issues such as
+    # OS-level package changes or broken intersphinx inventories early,
+    # before they surface on a developer push.
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+    inputs:
+      publish_pages:
+        description: 'Publish to GitHub Pages after build (true/false)'
+        required: false
+        default: 'false'
+
+env:
+  PYTHON_VERSION: '3.11'
+  # Pinned tool versions for reproducible builds
+  SPHINX_VERSION: '7.4.7'
+  RTD_THEME_VERSION: '2.0.0'
+  MYST_PARSER_VERSION: '3.0.1'
+  # Build output location — matches sphinx-build target in conf.py
+  BUILD_DIR: docs/_build/html
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build Sphinx HTML documentation
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Sphinx HTML
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Full history needed so Sphinx can read git metadata (last-modified dates)
+          fetch-depth: 0
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: requirements.txt
+
+      - name: Install Sphinx toolchain
+        run: |
+          echo "📦 Installing Sphinx ${{ env.SPHINX_VERSION }} and extensions..."
+          python -m pip install --upgrade pip
+          pip install \
+            "sphinx==${{ env.SPHINX_VERSION }}" \
+            "sphinx-rtd-theme==${{ env.RTD_THEME_VERSION }}" \
+            "myst-parser==${{ env.MYST_PARSER_VERSION }}"
+
+          echo "✓ Installed Sphinx toolchain:"
+          sphinx-build --version
+          python -c "import sphinx_rtd_theme; print(f'  sphinx-rtd-theme {sphinx_rtd_theme.__version__}')"
+          python -c "import myst_parser; print(f'  myst-parser {myst_parser.__version__}')"
+
+      - name: Verify documentation source
+        run: |
+          echo "🔍 Verifying Sphinx source files..."
+
+          # Confirm conf.py and index.rst are present
+          for required in docs/conf.py docs/index.rst; do
+            if [ -f "$required" ]; then
+              echo "  ✓ $required"
+            else
+              echo "  ❌ MISSING: $required"
+              exit 1
+            fi
+          done
+
+          # Report source inventory
+          echo ""
+          echo "📊 Documentation source inventory:"
+          echo "  .rst files : $(find docs -maxdepth 1 -name '*.rst' | wc -l)"
+          echo "  .md files  : $(find docs -maxdepth 1 -name '*.md'  | wc -l)"
+          echo "  Total size : $(du -sh docs/ | cut -f1)"
+          echo "✓ Source verification complete"
+
+      - name: Build HTML documentation
+        run: |
+          echo "🔨 Building Sphinx HTML documentation..."
+          echo "  Source  : docs/"
+          echo "  Output  : ${{ env.BUILD_DIR }}"
+          echo ""
+
+          # --keep-going  → report every problem before stopping
+          # Warnings from pre-existing .md content are suppressed in conf.py
+          # (suppress_warnings list); new warnings introduced by changes to
+          # docs/conf.py or docs/index.rst will still surface as build failures.
+          sphinx-build \
+            -b html \
+            --keep-going \
+            -D today_fmt="%Y-%m-%d" \
+            docs \
+            "${{ env.BUILD_DIR }}" 2>&1 | tee /tmp/sphinx-build.log
+
+          BUILD_EXIT=${PIPESTATUS[0]}
+
+          # Surface warning count even on success so regressions are visible
+          WARN_COUNT=$(grep -c "^.*WARNING:" /tmp/sphinx-build.log || true)
+          echo ""
+          echo "📊 Build diagnostics:"
+          echo "  Warnings : $WARN_COUNT"
+          echo "  Exit code: $BUILD_EXIT"
+
+          if [ "$BUILD_EXIT" -ne 0 ]; then
+            echo ""
+            echo "❌ Sphinx build failed — first 20 errors/warnings:"
+            grep -E "ERROR:|WARNING:" /tmp/sphinx-build.log | head -20
+            exit "$BUILD_EXIT"
+          fi
+
+          echo "✓ Sphinx build succeeded"
+
+      - name: Verify build output
+        run: |
+          echo "🔍 Verifying build output..."
+
+          BUILD_DIR="${{ env.BUILD_DIR }}"
+
+          # index.html must exist and be non-trivial
+          INDEX_HTML="$BUILD_DIR/index.html"
+          if [ ! -f "$INDEX_HTML" ]; then
+            echo "❌ ERROR: $INDEX_HTML not found"
+            exit 1
+          fi
+
+          INDEX_SIZE=$(wc -c < "$INDEX_HTML")
+          if [ "$INDEX_SIZE" -lt 1000 ]; then
+            echo "❌ ERROR: index.html is suspiciously small ($INDEX_SIZE bytes)"
+            exit 1
+          fi
+          echo "  ✓ index.html present ($INDEX_SIZE bytes)"
+
+          # Confirm search index was generated (indicates full build completed)
+          if [ ! -f "$BUILD_DIR/searchindex.js" ]; then
+            echo "❌ ERROR: searchindex.js not found — build may be incomplete"
+            exit 1
+          fi
+          echo "  ✓ searchindex.js present"
+
+          # Summary stats
+          echo ""
+          echo "📊 Build output summary:"
+          echo "  HTML files  : $(find "$BUILD_DIR" -name '*.html' | wc -l)"
+          echo "  Total size  : $(du -sh "$BUILD_DIR" | cut -f1)"
+          echo "✓ Build output verified"
+
+      - name: Upload HTML artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sphinx-html-docs-${{ github.run_number }}
+          path: ${{ env.BUILD_DIR }}
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## 📚 Documentation Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f "${{ env.BUILD_DIR }}/index.html" ]; then
+            echo "✅ **Status**: Build succeeded" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| HTML pages | $(find ${{ env.BUILD_DIR }} -name '*.html' | wc -l) |" >> $GITHUB_STEP_SUMMARY
+            echo "| Build size | $(du -sh ${{ env.BUILD_DIR }} | cut -f1) |" >> $GITHUB_STEP_SUMMARY
+            echo "| Artifact   | sphinx-html-docs-${{ github.run_number }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Retention  | 30 days |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Status**: Build failed — see logs above" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Publish to GitHub Pages (main branch + explicit opt-in only)
+  # ---------------------------------------------------------------------------
+  publish:
+    name: Publish to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: build
+    # Only run on main after a successful build, and only when opted-in.
+    # PR builds deliberately skip publishing to avoid overwriting live docs.
+    if: |
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event.inputs.publish_pages == 'true' || github.event_name == 'schedule')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Download HTML artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sphinx-html-docs-${{ github.run_number }}
+          path: docs-site/
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-site/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish summary
+        run: |
+          echo "## 🌐 Documentation Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Published to**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "📅 **Deployed at**: $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "🔖 **From commit**: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

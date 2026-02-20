@@ -58,6 +58,16 @@ htmlcov/
 LICENSE
 patent_doc.md
 
+# Sphinx documentation — build output, config, and scaffolding are not needed at runtime.
+# docs/_build/ in particular can be very large; exclude it explicitly so a local
+# sphinx-build run does not inflate the image.
+docs/conf.py
+docs/index.rst
+docs/_build/
+docs/_static/
+docs/_templates/
+docs/*.rst
+
 # Development and CI files
 .pre-commit-config.yaml
 .ruff.toml

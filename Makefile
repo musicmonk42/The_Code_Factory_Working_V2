@@ -7,6 +7,7 @@
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
+	docs docs-serve docs-clean \
 	validate-few-shot
 
 # Default target
@@ -511,7 +512,7 @@ clean: ## Clean up generated files and caches
 	rm -rf dist/ build/
 	@echo "$(GREEN)Cleanup complete!$(NC)"
 
-clean-all: clean docker-clean db-reset ## Deep clean (removes Docker resources and databases)
+clean-all: clean docker-clean db-reset docs-clean ## Deep clean (removes Docker resources, databases, and doc build output)
 	@echo "$(GREEN)Deep cleanup complete!$(NC)"
 
 clean-old-docs: ## Remove audit/test documents older than 2 days (interactive)
@@ -528,15 +529,29 @@ clean-old-docs-force: ## Remove audit/test documents older than 2 days (automati
 # Documentation
 # =============================================================================
 
-docs: ## Generate documentation
-	@echo "$(BLUE)Generating documentation...$(NC)"
-	# Add documentation generation commands here
-	@echo "$(GREEN)Documentation generated!$(NC)"
+docs: ## Build Sphinx HTML documentation (output: docs/_build/html/)
+	@echo "$(BLUE)Building Sphinx HTML documentation...$(NC)"
+	@command -v sphinx-build >/dev/null 2>&1 || { \
+		echo "$(YELLOW)sphinx-build not found — installing Sphinx toolchain...$(NC)"; \
+		pip install "sphinx>=7.0.0" "sphinx-rtd-theme>=2.0.0" "myst-parser>=3.0.0"; \
+	}
+	sphinx-build -b html --keep-going docs docs/_build/html
+	@echo "$(GREEN)Documentation built: docs/_build/html/index.html$(NC)"
 
-docs-serve: ## Serve documentation locally
-	@echo "$(BLUE)Serving documentation...$(NC)"
-	# Add documentation server commands here
-	@echo "$(YELLOW)Documentation available at http://localhost:8080$(NC)"
+docs-serve: ## Serve Sphinx documentation locally on http://localhost:8080
+	@echo "$(BLUE)Serving documentation at http://localhost:8080...$(NC)"
+	@if [ ! -f docs/_build/html/index.html ]; then \
+		echo "$(YELLOW)Documentation not built yet — running 'make docs' first...$(NC)"; \
+		$(MAKE) docs; \
+	fi
+	@command -v python3 >/dev/null 2>&1 && \
+		python3 -m http.server 8080 --directory docs/_build/html || \
+		python -m http.server 8080 --directory docs/_build/html
+
+docs-clean: ## Remove Sphinx build output
+	@echo "$(BLUE)Removing docs/_build/...$(NC)"
+	rm -rf docs/_build/
+	@echo "$(GREEN)Documentation build artifacts removed.$(NC)"
 
 # =============================================================================
 # Monitoring
