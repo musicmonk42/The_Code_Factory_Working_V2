@@ -25,6 +25,8 @@ Version: 1.0.0
 from typing import Dict, Any, Optional, List
 import logging
 import json
+import re
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -333,9 +335,35 @@ spec:
             "Generated Helm chart: name=%s, version=%s, templates=%d",
             chart_name, chart_version, len(chart_structure["templates"])
         )
-        
+
+        # Validate YAML syntax for all template values before returning
+        for tmpl_name, tmpl_content in chart_structure.get("templates", {}).items():
+            if isinstance(tmpl_content, str):
+                try:
+                    # Replace Helm template directives before parsing to avoid YAML errors
+                    sanitized = re.sub(r'\{\{.*?\}\}', '""', tmpl_content)
+                    yaml.safe_load(sanitized)
+                except yaml.YAMLError as exc:
+                    logger.warning(
+                        "Helm template '%s' has invalid YAML syntax: %s. Resetting to empty template.",
+                        tmpl_name, exc
+                    )
+                    chart_structure["templates"][tmpl_name] = f"# {tmpl_name}\n"
+
         # Return as JSON string (will be parsed by HelmHandler)
-        return json.dumps(chart_structure, indent=2)
+        try:
+            return json.dumps(chart_structure, indent=2)
+        except (TypeError, ValueError) as exc:
+            logger.error("Failed to serialize Helm chart structure: %s. Returning default chart.", exc)
+            default_chart = {
+                "Chart.yaml": f"apiVersion: v2\nname: {chart_name}\nversion: {chart_version}\n",
+                "values.yaml": "replicaCount: 1\n",
+                "templates": {
+                    "deployment.yaml": "# deployment\n",
+                    "service.yaml": "# service\n",
+                }
+            }
+            return json.dumps(default_chart, indent=2)
     
     async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """

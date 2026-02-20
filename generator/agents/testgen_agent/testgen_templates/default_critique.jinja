@@ -17,6 +17,7 @@
 ## Pydantic V2 Error Type Reference (CRITICAL for Python)
 
 When reviewing Pydantic validation tests, be aware that:
+- **NEVER use `pytest.raises(TypeError)` when testing Pydantic model validation. Pydantic v2 catches type errors and raises `ValidationError`, not `TypeError`. Flag `pytest.raises(TypeError)` as a CRITICAL issue when used with Pydantic models.**
 - **Pydantic V2 error types are DIFFERENT from V1**
 - **Validator execution order matters**: `@field_validator(mode='before')` runs BEFORE Field constraints
 - **Custom validators that raise ValueError produce "value_error" type**, NOT constraint-specific types like "string_too_short"

@@ -26,6 +26,7 @@ from typing import Dict, Any, Optional, List
 import logging
 import json
 import re
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,19 @@ spec:
         # Security checks
         if config.get("resource_count", 0) == 0:
             warnings.append("No resources generated")
+
+        # Validate YAML syntax and check for required resource kinds
+        manifest_str = config.get("manifest", "")
+        if manifest_str and isinstance(manifest_str, str):
+            try:
+                docs = list(yaml.safe_load_all(manifest_str))
+                kinds_found = {doc.get("kind") for doc in docs if doc and isinstance(doc, dict)}
+                if "Deployment" not in kinds_found:
+                    issues.append("Missing required Kubernetes resource: Deployment")
+                if "Service" not in kinds_found:
+                    issues.append("Missing required Kubernetes resource: Service")
+            except yaml.YAMLError as exc:
+                issues.append(f"YAML syntax error in Kubernetes manifests: {exc}")
         
         is_valid = len(issues) == 0
         
@@ -294,7 +308,9 @@ spec:
             "checks_performed": [
                 "namespace_check",
                 "app_name_check",
-                "resource_count_check"
+                "resource_count_check",
+                "yaml_syntax_check",
+                "required_kinds_check",
             ]
         }
         
