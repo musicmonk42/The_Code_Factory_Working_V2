@@ -73,6 +73,55 @@ except ImportError:
             return func
         return decorator
 
+class NoOpSpan:
+    """No-operation span implementation for when OpenTelemetry is disabled."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def set_attribute(self, key: str, value: Any):
+        pass
+
+    def add_event(self, name: str, attributes: Optional[Dict] = None):
+        pass
+
+    def set_status(self, status: Any):
+        pass
+
+    def record_exception(self, exception: Exception):
+        pass
+
+    def is_recording(self):
+        return False
+
+    def get_span_context(self):
+        """Return a valid but non-recording span context."""
+        try:
+            from opentelemetry.trace import SpanContext, TraceFlags
+            return SpanContext(
+                trace_id=0,
+                span_id=0,
+                is_remote=False,
+                trace_flags=TraceFlags.DEFAULT,
+                trace_state=None,
+            )
+        except ImportError:
+            return type(
+                "SpanContext",
+                (),
+                {
+                    "trace_id": 0,
+                    "span_id": 0,
+                    "is_remote": False,
+                    "trace_flags": 0,
+                    "trace_state": None,
+                },
+            )()
+
+
 # OpenTelemetry imports with comprehensive fallback
 try:
     from opentelemetry import baggage, context, metrics, trace
@@ -153,16 +202,14 @@ except ImportError:
 
     class _NoOpTracerStub:
         def start_as_current_span(self, name, **kwargs):
-            from contextlib import contextmanager
-
             @contextmanager
             def _noop():
-                yield None
+                yield NoOpSpan()
 
             return _noop()
 
         def start_span(self, name, **kwargs):
-            return None
+            return NoOpSpan()
 
     class trace:
         @staticmethod
@@ -198,17 +245,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-# Define a no-op tracer class that can be used as a fallback
 class NoOpTracer:
-    """A no-operation tracer that can be used when OpenTelemetry is unavailable."""
+    """No-operation tracer implementation."""
 
-    def start_as_current_span(self, name, **kwargs):
-        from contextlib import nullcontext
+    @contextmanager
+    def start_as_current_span(self, name: str, **kwargs):
+        yield NoOpSpan()
 
-        return nullcontext()
-
-    def start_span(self, name, **kwargs):
-        return None
+    def start_span(self, name: str, **kwargs):
+        return NoOpSpan()
 
 
 def get_tracer_safe(name: str, version: Optional[str] = None) -> Any:
@@ -857,69 +902,6 @@ class OpenTelemetryConfig:
 
         except Exception as e:
             logger.error(f"Error during OpenTelemetry shutdown: {e}")
-
-
-class NoOpSpan:
-    """No-operation span implementation for when OpenTelemetry is disabled."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        return False
-
-    def set_attribute(self, key: str, value: Any):
-        pass
-
-    def add_event(self, name: str, attributes: Optional[Dict] = None):
-        pass
-
-    def set_status(self, status: Any):
-        pass
-
-    def record_exception(self, exception: Exception):
-        pass
-
-    def is_recording(self):
-        return False
-
-    def get_span_context(self):
-        """Return a valid but non-recording span context."""
-        # Import here to avoid circular dependency
-        try:
-            from opentelemetry.trace import SpanContext, TraceFlags
-            return SpanContext(
-                trace_id=0,
-                span_id=0,
-                is_remote=False,
-                trace_flags=TraceFlags.DEFAULT,
-                trace_state=None,
-            )
-        except ImportError:
-            # Fallback if opentelemetry is not available
-            return type(
-                "SpanContext",
-                (),
-                {
-                    "trace_id": 0,
-                    "span_id": 0,
-                    "is_remote": False,
-                    "trace_flags": 0,
-                    "trace_state": None,
-                },
-            )()
-
-
-class NoOpTracer:
-    """No-operation tracer implementation."""
-
-    @contextmanager
-    def start_as_current_span(self, name: str, **kwargs):
-        yield NoOpSpan()
-
-    def start_span(self, name: str, **kwargs):
-        return NoOpSpan()
-
 
 # Module-level convenience functions
 _config: Optional[OpenTelemetryConfig] = None
