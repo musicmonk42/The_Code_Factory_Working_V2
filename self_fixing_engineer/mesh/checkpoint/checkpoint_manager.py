@@ -264,7 +264,17 @@ class AuditLogger:
         self.logger.propagate = (
             False  # <--- FIX: Prevent logs from bubbling up to root logger
         )
+        self.reconfigure(log_path)
 
+    def reconfigure(self, log_path: str) -> None:
+        """Reconfigure audit log output path.
+
+        Args:
+            log_path: Absolute or relative file path for the audit log file.
+        """
+        for handler in list(self.logger.handlers):
+            if isinstance(handler, (RotatingFileHandler, logging.NullHandler)):
+                self.logger.removeHandler(handler)
         try:
             # Ensure the parent directory for the log file exists before initializing the handler.
             log_dir = Path(log_path).parent
@@ -505,8 +515,8 @@ class CheckpointManager:
             **backend_configs: Backend-specific configuration
         """
         Environment.refresh()
-        global audit_logger
-        audit_logger = AuditLogger(Environment.AUDIT_LOG_PATH)
+        # Tests may update env vars between manager instances; keep paths in sync.
+        audit_logger.reconfigure(Environment.AUDIT_LOG_PATH)
 
         # Check cryptography availability BEFORE environment validation
         if Environment.PROD_MODE and not CRYPTOGRAPHY_AVAILABLE:
