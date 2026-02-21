@@ -1437,7 +1437,21 @@ class WorkflowEngine:
                                         if not schemas_py.exists():
                                             schemas_py.write_text(
                                                 '"""Auto-generated Pydantic schemas."""\n'
-                                                "from pydantic import BaseModel, field_validator\n\n\n"
+                                                "from pydantic import BaseModel, Field, field_validator\n\n"
+                                                "class Item(BaseModel):\n"
+                                                '    """Generic item model used by CRUD endpoints.\n\n'
+                                                "    Validation: name must be non-empty (min_length=1);\n"
+                                                "    price must be positive (gt=0).\n"
+                                                '    """\n\n'
+                                                "    name: str = Field(..., min_length=1)\n"
+                                                "    price: float = Field(..., gt=0)\n"
+                                                "    description: str = ''\n\n"
+                                                "    @field_validator('name', mode='before')\n"
+                                                "    @classmethod\n"
+                                                "    def strip_name(cls, v):\n"
+                                                "        if isinstance(v, str):\n"
+                                                "            return v.strip()\n"
+                                                "        return v\n\n\n"
                                                 "class BaseRequest(BaseModel):\n"
                                                 '    """Base request model with common validators."""\n\n'
                                                 "    message: str = ''\n\n"
@@ -2578,8 +2592,14 @@ class WorkflowEngine:
             doc = doc.strip()
             if not doc:
                 continue
-            # Try to detect kind
+            # Skip documents that are markdown/prose preambles (no apiVersion or kind).
+            # Such documents arise when the LLM response contains explanatory text
+            # before the first YAML document separator (---).
+            has_api_version = bool(re.search(r'^\s*apiVersion\s*:', doc, re.MULTILINE))
             kind_match = re.search(r'^\s*kind\s*:\s*(\S+)', doc, re.MULTILINE | re.IGNORECASE)
+            if not has_api_version and not kind_match:
+                # No YAML resource fields found — treat as preamble and skip
+                continue
             if kind_match:
                 kind = kind_match.group(1).lower()
                 filename = kind_to_file.get(kind, f"k8s/{kind}.yaml")

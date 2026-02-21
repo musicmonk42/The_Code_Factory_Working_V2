@@ -20,5 +20,46 @@ Ensure the output is valid {{ language }} code that can be parsed and executed.
 3. Use lowercase `test_` prefix for file names (e.g., `test_module.py`, NOT `Test.py`)
 4. Verify imports and function signatures are correct
 
+{% if language == "python" %}
+**Python-Specific Fixes:**
+
+5. **ImportError `cannot import name 'X' from 'app.schemas'`** — If a symbol like `Item`
+   is not exported from `app.schemas`, replace the import with the models that actually
+   exist in that module (e.g., `BaseRequest`).  Alternatively, add the missing class to
+   `app/schemas.py` with the fields expected by the endpoint.  For example, to add a
+   missing `Item` model:
+   ```python
+   # In app/schemas.py
+   from pydantic import BaseModel, Field
+   class Item(BaseModel):
+       name: str = Field(..., min_length=1)
+       price: float = Field(..., gt=0)
+       description: str = ''
+   ```
+   Do NOT leave an import that will always fail at collection time.
+
+6. **HTTP status code 422 vs 400** — FastAPI automatically returns **422** (Unprocessable
+   Entity) for Pydantic validation errors. Do NOT assert `response.status_code == 400`
+   for payload-validation failures; use `assert response.status_code == 422` instead.
+   Correct pattern:
+   ```python
+   response = client.post("/items", json={"price": -1})
+   assert response.status_code == 422
+   detail = response.json()["detail"]
+   assert isinstance(detail, list) and len(detail) > 0
+   assert any("price" in err.get("loc", []) for err in detail)
+   ```
+
+7. **Pydantic v2 error messages** — Do NOT assert exact error message strings or
+   Pydantic v1-style type strings (`"value_error.number.not_gt"`, etc.). Use
+   case-insensitive substring checks:
+   ```python
+   # CORRECT:
+   assert any("greater than" in err.get("msg", "").lower() for err in detail)
+   # WRONG (fragile, v1-specific):
+   assert detail[0]["msg"] == "value is not greater than 0"
+   ```
+{% endif %}
+
 ## Output Format
 Provide the corrected test code wrapped in code blocks.
