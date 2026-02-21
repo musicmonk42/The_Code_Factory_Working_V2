@@ -15,7 +15,7 @@ on:
         default: '0'
 
 env:
-  SKIP_HEAVY_DEPS: ${{ github.event.inputs.skip_heavy_deps || '0' }}
+  SKIP_HEAVY_DEPS: ${{ github.event_name == 'pull_request' && '1' || github.event.inputs.skip_heavy_deps || '0' }}
   IMAGE_TAG: code-factory-platform:ci-${{ github.run_number }}
 
 jobs:
