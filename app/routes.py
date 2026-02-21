@@ -12,7 +12,7 @@ class Item(BaseModel):
     @field_validator("name", mode="before")
     @classmethod
     def name_must_not_be_empty(cls, v: str) -> str:
-        if not isinstance(v, str) or not v.strip():
+        if not v.strip():
             raise ValueError("name must not be empty")
         return v
 
