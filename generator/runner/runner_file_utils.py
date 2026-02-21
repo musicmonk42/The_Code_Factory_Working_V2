@@ -1078,12 +1078,13 @@ async def save_files_to_output(
         List of paths to saved files
     """
     output_dir = Path(output_dir)
-    # Prevent double-nesting (e.g., .../generated/generated/)
+    # Prevent double-nesting (e.g., .../generated/generated/ or generated/generated/ relative)
     output_dir_str = str(output_dir)
-    while "/generated/generated/" in output_dir_str:
-        output_dir_str = output_dir_str.replace("/generated/generated/", "/generated/")
+    original_dir_str = output_dir_str
+    while "generated/generated/" in output_dir_str:
+        output_dir_str = output_dir_str.replace("generated/generated/", "generated/")
     output_dir = Path(output_dir_str)
-    if output_dir != Path(str(output_dir)):
+    if output_dir_str != original_dir_str:
         logger.warning(f"Corrected double-nested output directory: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
 

@@ -261,6 +261,124 @@ class TestIntegrationScenarios:
             # but the code should not raise any errors
 
 
+class TestIssue4PipelineValidationFixes2026:
+    """Tests for 2026-02-21 pipeline validation error fixes."""
+
+    def test_macros_template_forbids_empty_files(self):
+        """Verify _macros.jinja2 explicitly forbids empty string file values."""
+        macros_file = Path("generator/agents/codegen_agent/templates/_macros.jinja2")
+        assert macros_file.exists(), "_macros.jinja2 should exist"
+
+        content = macros_file.read_text()
+        assert "NO EMPTY FILES" in content, \
+            "Macro template must forbid empty file values"
+        assert "requirements.txt" in content and ".env.example" in content, \
+            "Macro template must mention requirements.txt and .env.example as non-empty"
+
+    def test_double_nesting_fix_handles_relative_path(self):
+        """Verify save_files_to_output fixes double-nesting with relative paths."""
+        file_utils = Path("generator/runner/runner_file_utils.py")
+        assert file_utils.exists(), "runner_file_utils.py should exist"
+
+        content = file_utils.read_text()
+        # The while-loop check must use 'generated/generated/' (no leading slash)
+        # so it catches both absolute paths (/abs/generated/generated/) and
+        # relative paths (generated/generated/project).
+        assert 'while "generated/generated/"' in content or \
+               "while 'generated/generated/'" in content, \
+            "Double-nesting while-loop must check for 'generated/generated/' without a leading slash"
+
+    def test_react_frontend_generates_files(self):
+        """Verify python.jinja2 instructs LLM to generate actual react files."""
+        template_file = Path(
+            "generator/agents/codegen_agent/templates/python.jinja2"
+        )
+        assert template_file.exists(), "python.jinja2 should exist"
+
+        content = template_file.read_text()
+        # The react/vue/angular section must now require actual frontend files
+        assert "frontend/package.json" in content, \
+            "python.jinja2 must require frontend/package.json for react builds"
+        assert "frontend/src/index.js" in content, \
+            "python.jinja2 must require frontend/src/index.js for react builds"
+        assert "frontend/src/App.js" in content, \
+            "python.jinja2 must require frontend/src/App.js for react builds"
+
+    def test_post_materialize_creates_provenance_report(self):
+        """Verify post_materialize creates reports/provenance.json when absent."""
+        import importlib.util
+        import json
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "pm_test_prov",
+            "generator/main/post_materialize.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["pm_test_prov"] = mod
+        try:
+            spec.loader.exec_module(mod)
+        except Exception:
+            sys.modules.pop("pm_test_prov", None)
+            raise
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp) / "my_project"
+            project_dir.mkdir()
+            mod.post_materialize(project_dir)
+
+            provenance_path = project_dir / "reports" / "provenance.json"
+            assert provenance_path.exists(), \
+                "post_materialize must create reports/provenance.json"
+
+            data = json.loads(provenance_path.read_text(encoding="utf-8"))
+            for field in ("job_id", "timestamp", "stages"):
+                assert field in data, \
+                    f"Fallback provenance.json must contain '{field}'"
+
+        sys.modules.pop("pm_test_prov", None)
+
+    def test_post_materialize_does_not_overwrite_existing_provenance(self):
+        """Verify post_materialize preserves an existing provenance.json."""
+        import importlib.util
+        import json
+        import sys
+
+        spec = importlib.util.spec_from_file_location(
+            "pm_test_prov2",
+            "generator/main/post_materialize.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["pm_test_prov2"] = mod
+        try:
+            spec.loader.exec_module(mod)
+        except Exception:
+            sys.modules.pop("pm_test_prov2", None)
+            raise
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project_dir = Path(tmp) / "my_project"
+            (project_dir / "reports").mkdir(parents=True)
+            existing = {
+                "job_id": "pre-existing",
+                "timestamp": "2025-01-01T00:00:00+00:00",
+                "stages": ["CODEGEN"],
+            }
+            (project_dir / "reports" / "provenance.json").write_text(
+                json.dumps(existing), encoding="utf-8"
+            )
+            mod.post_materialize(project_dir)
+
+            loaded = json.loads(
+                (project_dir / "reports" / "provenance.json").read_text(encoding="utf-8")
+            )
+            assert loaded["job_id"] == "pre-existing", \
+                "Existing provenance.json must not be overwritten by post_materialize"
+
+        sys.modules.pop("pm_test_prov2", None)
+
+
 if __name__ == "__main__":
     # Run tests with pytest
     pytest.main([__file__, "-v"])
+

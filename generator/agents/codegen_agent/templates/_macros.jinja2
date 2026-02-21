@@ -83,6 +83,7 @@ Your response MUST be valid JSON in this exact structure:
 4. **PROPER ESCAPING**: Escape all special characters (\\n for newlines, \\" for quotes, \\\\ for backslashes)
 5. **VALID SYNTAX**: All code must be syntactically correct and executable
 6. **ALL REQUIREMENTS**: Implement EVERY feature from the specification
+7. **NO EMPTY FILES**: The value for EVERY file key MUST be a non-empty string with real content. Configuration files such as `requirements.txt` and `.env.example` MUST contain actual content — returning `""` or a whitespace-only string for any file is STRICTLY FORBIDDEN.
 
 **NOTE on `pass` statements:** While `pass` is forbidden as stub implementation, it IS acceptable in:
 - Abstract base classes with `@abstractmethod` decorators

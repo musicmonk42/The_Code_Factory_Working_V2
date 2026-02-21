@@ -912,12 +912,58 @@ Include CORS configuration in backend to allow frontend access.
 {% elif frontend_type in ["react", "vue", "angular"] %}
 ### {{ frontend_type.upper() }} FRAMEWORK APPROACH
 
-For {{ frontend_type }}, provide:
-1. Clear instructions in README for setting up {{ frontend_type }} frontend separately
-2. Backend API endpoints with proper CORS configuration
-3. Example API calls from {{ frontend_type }}
+Generate a complete frontend integration with {{ frontend_type }}.
 
-Note: Full {{ frontend_type }} scaffold generation is complex. Focus on backend API with clear frontend integration docs.
+**Required Frontend Files (MUST be included in the JSON output):**
+
+1. **frontend/package.json** - Project manifest with {{ frontend_type }} dependencies
+2. **frontend/public/index.html** - Root HTML entry point
+3. **frontend/src/index.js** - Application bootstrap entry point
+4. **frontend/src/App.js** - Root component with routing and main UI
+5. **frontend/src/api.js** - API client module for backend communication
+6. **frontend/README.md** - Frontend setup and development instructions
+
+**Example frontend/package.json (use latest stable versions for {{ frontend_type }}):**
+```json
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-scripts": "^5.0.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}
+```
+
+**Example frontend/src/api.js:**
+```javascript
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+export const apiClient = {
+  get: async (path) => {
+    const response = await fetch(`${API_BASE_URL}${path}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  },
+  post: async (path, body) => {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+  }
+};
+```
+
+Include CORS configuration in the backend (`app/main.py`) allowing `http://localhost:3000`.
 
 {% endif %}
 
