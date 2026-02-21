@@ -332,7 +332,10 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         SUMMARY_MODEL = "gpt-4o"
 
         # 1. Build the summarization prompt
-        summary_prompt = f"Summarize the following text concisely for a deployment prompt. Focus on key file content, dependencies, and structure, aiming for a length reduction to fit within 4000 characters:\n\n{prompt_text}"
+        # IMPORTANT: Do NOT aggressively reduce context — preserve all spec requirements
+        # such as required manifest files (service.yaml, deployment.yaml, Chart.yaml), CI/CD
+        # pipeline steps, and deployment platform constraints. Only remove redundant boilerplate.
+        summary_prompt = f"Lightly condense the following deployment prompt by removing only redundant boilerplate. Preserve ALL specific requirements, file names, manifest types (service.yaml, deployment.yaml, etc.), platform constraints, and structural requirements. Do not reduce length by more than 25%:\n\n{prompt_text}"
 
         # 2. Call the LLM for summarization
         start_time_summary = time.time()
@@ -342,9 +345,10 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         optimized = summary_response.get("content", prompt_text)
         
         # Guard against over-aggressive compression
-        # If the optimized prompt loses more than 50% of the content, 
-        # the LLM likely stripped critical context
-        min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.5"))
+        # If the optimized prompt retains less than 75% of the original content,
+        # the LLM likely stripped critical spec requirements (e.g., required K8s manifests,
+        # service.yaml, Helm chart files). Return original to preserve full deployment context.
+        min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.75"))
         if len(optimized) < len(prompt_text) * min_length_ratio:
             logger.warning(
                 "Prompt optimization too aggressive: %d -> %d chars (%.0f%% reduction, threshold: %.0f%%). "

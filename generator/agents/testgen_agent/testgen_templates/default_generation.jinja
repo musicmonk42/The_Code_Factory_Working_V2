@@ -13,6 +13,25 @@ Generate comprehensive unit tests for the following code.
 ```
 {% endfor %}
 
+{% if ast_context %}
+## Semantic Contract (AST-Extracted – MANDATORY)
+
+The following is the **exact** public API surface extracted directly from the source
+files above. Use ONLY the class names, function names, imports, and response model
+names listed here.  Do **not** invent symbols that are not present in this contract.
+
+{{ ast_context }}
+
+**Critical rules derived from the contract:**
+- Import only modules/symbols that appear in the imports list above.
+- Use EXACT class names from "Classes / Models" — never invent variants like
+  `HealthCheckResponse` if the source defines `HealthCheckResult`.
+- For API endpoint tests, assert against the **concrete** values that the source
+  code returns (e.g., if a route returns `{"status": "ok"}`, assert `"ok"`, not `"healthy"`).
+- Do NOT mock response models or replace them with generic `dict` unless the source
+  code itself produces a plain dict.
+{% endif %}
+
 ## Requirements
 - Generate tests using {{ language }} testing framework
 - Aim for {{ quality_threshold }}% code coverage

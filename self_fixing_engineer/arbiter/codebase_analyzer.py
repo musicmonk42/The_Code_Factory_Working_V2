@@ -598,12 +598,29 @@ class CodebaseAnalyzer:
         self.executor = ProcessPoolExecutor(max_workers=self.max_workers)
         self.semaphore = asyncio.Semaphore(self.max_workers)
         try:
-            # Connect to a database if a URL is provided in the config
+            # Connect to a database if a URL is provided in the config.
+            # Apply a short timeout so that unresolvable hostnames (e.g.,
+            # `postgres.railway.internal` outside of Railway's internal network)
+            # do not block the analyzer indefinitely.
             db_url = os.getenv("DATABASE_URL")
             if db_url:
+                db_connect_timeout = float(os.getenv("DB_CONNECT_TIMEOUT", "5"))
                 self.db_client = PostgresClient(db_url)
-                await self.db_client.connect()
+                await asyncio.wait_for(
+                    self.db_client.connect(),
+                    timeout=db_connect_timeout,
+                )
                 logger.info("Database client for CodebaseAnalyzer initialized.")
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Database connection timed out (host may not be reachable in this environment). "
+                "Continuing without database support.",
+            )
+            self.db_client = None
+            try:
+                analyzer_errors_total.labels(error_type="db_connect_timeout").inc()
+            except AttributeError:
+                pass
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}", exc_info=True)
             self.db_client = None

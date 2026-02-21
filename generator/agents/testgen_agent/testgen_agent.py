@@ -33,6 +33,7 @@ import hashlib
 import importlib  # For CLI dependency checks
 import json
 import os
+import re
 import subprocess  # For running external commands like git
 import sys  # For sys.exit in CLI
 import time
@@ -373,6 +374,42 @@ def validate_policy(policy_dict: Dict[str, Any]) -> None:
         raise ValueError("All LLM model fields must be non-empty strings.")
 
 
+def _parse_source_patches(llm_content: str) -> Dict[str, str]:
+    """
+    Parse source-code patches from an LLM refinement response.
+
+    The refinement prompt may ask the LLM to fix discrepancies directly in the
+    source code (Issue 2: Auto-Healing Boundaries).  The convention used is:
+
+    .. code-block:: text
+
+        ## SOURCE PATCH: path/to/file.py
+        ```python
+        <full file content>
+        ```
+
+    Returns a dict mapping relative file paths to their patched content.
+    """
+    patches: Dict[str, str] = {}
+    # Match "## SOURCE PATCH: <path>" followed by a fenced code block
+    patch_pattern = re.compile(
+        r"##\s+SOURCE\s+PATCH:\s+(\S+)\s*\n+```[a-zA-Z]*\n(.*?)```",
+        re.DOTALL | re.IGNORECASE,
+    )
+    for match in patch_pattern.finditer(llm_content):
+        file_path = match.group(1).strip()
+        content = match.group(2)
+        # Basic path-traversal guard
+        if ".." in file_path or file_path.startswith("/"):
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "Ignoring suspicious source patch path: %s", file_path
+            )
+            continue
+        patches[file_path] = content
+    return patches
+
+
 class TestgenAgent:
     """
     An intelligent agent that orchestrates the test generation lifecycle.
@@ -530,6 +567,146 @@ class TestgenAgent:
             )
 
         return code_files_content
+
+    def _extract_ast_context(self, code_files: Dict[str, str]) -> str:
+        """
+        Extract a semantic contract from loaded Python source files using AST parsing.
+
+        Returns a structured text summary of all imports, classes, functions, and
+        Pydantic response models defined in the source. Passing this to the testgen
+        prompt prevents the LLM from hallucinating non-existent symbols (e.g.,
+        ``HealthCheckResponse``) and ensures the generated tests reference only
+        real exports and concrete response values.
+
+        Args:
+            code_files: Dict mapping file paths to their raw source content.
+
+        Returns:
+            A formatted string describing the public API surface of each file.
+        """
+        sections: List[str] = []
+        for filepath, content in code_files.items():
+            try:
+                tree = ast.parse(content)
+            except SyntaxError:
+                sections.append(f"### {filepath}\n*(syntax error – skipped)*\n")
+                continue
+
+            imports: List[str] = []
+            classes: List[str] = []
+            functions: List[str] = []
+            response_models: List[str] = []
+
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Import, ast.ImportFrom)):
+                    imports.append(ast.unparse(node))
+                elif isinstance(node, ast.ClassDef):
+                    # Capture class definition with its bases to detect Pydantic models
+                    bases = ", ".join(ast.unparse(b) for b in node.bases) if node.bases else ""
+                    class_sig = f"class {node.name}({bases})" if bases else f"class {node.name}"
+                    # Collect field annotations for Pydantic models
+                    fields: List[str] = []
+                    for item in node.body:
+                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                            annotation = ast.unparse(item.annotation)
+                            default = f" = {ast.unparse(item.value)}" if item.value else ""
+                            fields.append(f"  {item.target.id}: {annotation}{default}")
+                    if fields:
+                        class_sig += "\n" + "\n".join(fields)
+                    classes.append(class_sig)
+                    # Track response models (BaseModel subclasses typically used as API responses)
+                    if any("BaseModel" in ast.unparse(b) or "Response" in ast.unparse(b) for b in node.bases):
+                        response_models.append(node.name)
+                elif isinstance(node, ast.FunctionDef) and not isinstance(
+                    ast.walk(node).__next__(), ast.ClassDef
+                ):
+                    # Top-level and route functions only
+                    args = ", ".join(
+                        a.arg + (f": {ast.unparse(a.annotation)}" if a.annotation else "")
+                        for a in node.args.args
+                    )
+                    ret = f" -> {ast.unparse(node.returns)}" if node.returns else ""
+                    functions.append(f"def {node.name}({args}){ret}")
+
+            lines: List[str] = [f"### {filepath}"]
+            if imports:
+                lines.append("**Imports:**\n```python\n" + "\n".join(imports[:20]) + "\n```")
+            if classes:
+                lines.append("**Classes / Models:**\n```python\n" + "\n".join(classes) + "\n```")
+            if functions:
+                lines.append("**Functions:**\n```python\n" + "\n".join(functions[:30]) + "\n```")
+            if response_models:
+                lines.append(
+                    "**Response model names (use EXACT names in tests):** "
+                    + ", ".join(f"`{m}`" for m in response_models)
+                )
+            sections.append("\n".join(lines))
+
+        return "\n\n".join(sections) if sections else ""
+
+    async def _apply_source_patches(
+        self,
+        patches: Dict[str, str],
+        run_id: str,
+        log_extra: Dict[str, Any],
+    ) -> None:
+        """
+        Write LLM-supplied source-code patches to disk (Issue 2: Auto-Healing Boundaries).
+
+        Each entry in ``patches`` maps a repository-relative path to the full
+        replacement content of that file.  Only paths that are already tracked as
+        source files (i.e., they exist under ``self.repo_path``) are written to
+        prevent arbitrary file creation.
+
+        Args:
+            patches: Dict mapping relative paths to new file content.
+            run_id:  Current run identifier for provenance logging.
+            log_extra: Extra log fields forwarded to structured log calls.
+        """
+        for rel_path, new_content in patches.items():
+            full_path = (self.repo_path / rel_path.lstrip("/")).resolve()
+            # Security: only overwrite files that already exist inside repo_path
+            try:
+                if hasattr(full_path, "is_relative_to"):
+                    inside_repo = full_path.is_relative_to(self.repo_path.resolve())
+                else:
+                    inside_repo = str(full_path).startswith(str(self.repo_path.resolve()))
+            except Exception:
+                inside_repo = False
+
+            if not inside_repo or not full_path.is_file():
+                logger.warning(
+                    "Skipping source patch for non-existent or out-of-repo path: %s",
+                    rel_path,
+                    extra=log_extra,
+                )
+                continue
+
+            try:
+                async with aiofiles.open(full_path, "w", encoding="utf-8") as fh:
+                    await fh.write(new_content)
+                logger.info(
+                    "Applied source patch to %s (%d chars)",
+                    rel_path,
+                    len(new_content),
+                    extra=log_extra,
+                )
+                await add_provenance(
+                    "source_patch_applied",
+                    {
+                        "run_id": run_id,
+                        "file": rel_path,
+                        "content_length": len(new_content),
+                    },
+                    **log_extra,
+                )
+            except Exception as write_err:
+                logger.error(
+                    "Failed to write source patch for %s: %s",
+                    rel_path,
+                    write_err,
+                    extra=log_extra,
+                )
 
     async def _run_validation_suite(
         self,
@@ -1851,6 +2028,23 @@ def test_{file_stem}_syntax_error_documentation():
                 best_validation_report: Dict[str, Any] = {}
                 current_metric_value = 0.0
 
+                # Extract AST-level semantic contract from source files so the LLM
+                # generates tests that reference only real exports, response models,
+                # and concrete return values (Issue 1: LLM Context Disconnect).
+                ast_context = ""
+                if language == "python":
+                    try:
+                        ast_context = self._extract_ast_context(code_files)
+                        logger.info(
+                            f"Extracted AST context ({len(ast_context)} chars) for {len(code_files)} source files.",
+                            extra=log_extra,
+                        )
+                    except Exception as ast_err:
+                        logger.warning(
+                            f"AST context extraction failed (non-fatal): {ast_err}",
+                            extra=log_extra,
+                        )
+
                 for attempt in range(policy.max_refinements + 1):
                     span.set_attribute("agent.attempt", attempt)
                     logger.info(
@@ -1870,7 +2064,8 @@ def test_{file_stem}_syntax_error_documentation():
                     if attempt == 0:
                         span.add_event("Building initial generation prompt.")
                         generation_prompt = await build_agentic_prompt(
-                            "generation", language=language, code_files=code_files
+                            "generation", language=language, code_files=code_files,
+                            ast_context=ast_context,
                         )
                         logger.info(
                             "Calling LLM for initial test generation.", extra=log_extra
@@ -1937,6 +2132,7 @@ def test_{file_stem}_syntax_error_documentation():
                             validation_feedback=json.dumps(last_validation_report),
                             critique=last_critique_content,
                             execution_errors=execution_errors_str,  # FIX Problem 2B: Pass execution errors
+                            ast_context=ast_context,  # Issue 1: include schema for accurate imports
                         )
                         logger.info(
                             f"Calling LLM for refinement attempt {attempt}.",
@@ -1984,6 +2180,32 @@ def test_{file_stem}_syntax_error_documentation():
                             raise ValueError(
                                 "Parsed tests are empty after generation/refinement."
                             )
+                        
+                        # Issue 2: Auto-Healing Boundaries – apply any source code patches
+                        # the LLM produced so that discrepancies between source and tests are
+                        # fixed in the actual source files (not just in the test stubs).
+                        if attempt > 0:
+                            source_patches = _parse_source_patches(
+                                llm_response_from_generation.get("content", "")
+                            )
+                            if source_patches:
+                                await self._apply_source_patches(
+                                    source_patches, run_id, log_extra
+                                )
+                                # Reload affected files so subsequent validations see the
+                                # updated source, and update code_files in place.
+                                for patch_path in source_patches:
+                                    fp_cleaned = patch_path.lstrip("/")
+                                    full_path = (self.repo_path / fp_cleaned).resolve()
+                                    if full_path.is_file():
+                                        try:
+                                            async with aiofiles.open(full_path, "r", encoding="utf-8") as _f:
+                                                code_files[patch_path] = await _f.read()
+                                        except Exception as reload_err:
+                                            logger.warning(
+                                                f"Could not reload patched file {patch_path}: {reload_err}",
+                                                extra=log_extra,
+                                            )
                     except ValueError as e:
                         logger.warning(
                             f"Failed to parse LLM generated tests ({e}). Attempting self-healing.",
