@@ -68,14 +68,13 @@ Refine the tests based on the critique and validation results.
 Focus on addressing the specific issues identified.
 
 You may optionally fix source-code bugs that cause the tests to fail by appending
-one or more source patches **after** your refined test code, using this exact format:
+one or more source patches **after** your refined test code, using this exact format
+(replace the angle-bracket placeholders and use actual triple backticks):
 
-```
-## SOURCE PATCH: path/to/file.py
-\`\`\`python
-<complete new content of the file>
-\`\`\`
-```
+    ## SOURCE PATCH: path/to/file.py
+    ```python
+    <complete new content of the file>
+    ```
 
 Only provide source patches when the source code itself is incorrect (not merely
 when you need to adjust a test assertion).  Preserve all working logic when patching.

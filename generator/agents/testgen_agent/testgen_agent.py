@@ -399,10 +399,15 @@ def _parse_source_patches(llm_content: str) -> Dict[str, str]:
     for match in patch_pattern.finditer(llm_content):
         file_path = match.group(1).strip()
         content = match.group(2)
-        # Basic path-traversal guard
-        if ".." in file_path or file_path.startswith("/"):
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
+        # Robust path-traversal guard using pathlib resolution
+        try:
+            # Build a candidate path relative to a sentinel root and ensure it stays inside
+            _sentinel = Path("/sentinel_root")
+            resolved = (_sentinel / file_path).resolve()
+            if not str(resolved).startswith(str(_sentinel)):
+                raise ValueError("path escapes sentinel root")
+        except Exception:
+            logger.warning(
                 "Ignoring suspicious source patch path: %s", file_path
             )
             continue
@@ -597,10 +602,15 @@ class TestgenAgent:
             functions: List[str] = []
             response_models: List[str] = []
 
+            # Collect imports from any nesting level
             for node in ast.walk(tree):
                 if isinstance(node, (ast.Import, ast.ImportFrom)):
                     imports.append(ast.unparse(node))
-                elif isinstance(node, ast.ClassDef):
+
+            # Collect only top-level class and function definitions from tree.body
+            # so that class methods are not surfaced as standalone functions.
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
                     # Capture class definition with its bases to detect Pydantic models
                     bases = ", ".join(ast.unparse(b) for b in node.bases) if node.bases else ""
                     class_sig = f"class {node.name}({bases})" if bases else f"class {node.name}"
@@ -617,10 +627,8 @@ class TestgenAgent:
                     # Track response models (BaseModel subclasses typically used as API responses)
                     if any("BaseModel" in ast.unparse(b) or "Response" in ast.unparse(b) for b in node.bases):
                         response_models.append(node.name)
-                elif isinstance(node, ast.FunctionDef) and not isinstance(
-                    ast.walk(node).__next__(), ast.ClassDef
-                ):
-                    # Top-level and route functions only
+                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    # Top-level functions only (not class methods)
                     args = ", ".join(
                         a.arg + (f": {ast.unparse(a.annotation)}" if a.annotation else "")
                         for a in node.args.args
@@ -2194,13 +2202,22 @@ def test_{file_stem}_syntax_error_documentation():
                                 )
                                 # Reload affected files so subsequent validations see the
                                 # updated source, and update code_files in place.
+                                # Use the same key that was originally in code_files
+                                # (look up by the normalized path to ensure consistency).
                                 for patch_path in source_patches:
                                     fp_cleaned = patch_path.lstrip("/")
                                     full_path = (self.repo_path / fp_cleaned).resolve()
                                     if full_path.is_file():
                                         try:
                                             async with aiofiles.open(full_path, "r", encoding="utf-8") as _f:
-                                                code_files[patch_path] = await _f.read()
+                                                patched_content = await _f.read()
+                                            # Update under whichever key this file is tracked
+                                            # (prefer the original key, fall back to patch_path)
+                                            matching_key = next(
+                                                (k for k in code_files if k.lstrip("/") == fp_cleaned),
+                                                patch_path,
+                                            )
+                                            code_files[matching_key] = patched_content
                                         except Exception as reload_err:
                                             logger.warning(
                                                 f"Could not reload patched file {patch_path}: {reload_err}",
