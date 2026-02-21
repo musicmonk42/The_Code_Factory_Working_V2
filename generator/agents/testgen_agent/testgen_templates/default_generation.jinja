@@ -39,16 +39,17 @@ names listed here.  Do **not** invent symbols that are not present in this contr
 - Follow best practices for {{ language }} testing
 
 {% if language == "python" %}
-## Pydantic Validation Testing (CRITICAL for Python)
+## Pydantic V2 Validation Testing (CRITICAL for Python)
+**This project uses Pydantic V2. Always use V2 error structures and FastAPI's standard 422 detail array format.**
+
 When testing Pydantic models (v2.x):
 - **NEVER use `pytest.raises(TypeError)` when testing Pydantic model validation. Pydantic v2 catches type errors and raises `ValidationError`, not `TypeError`. Always use `pytest.raises(ValidationError)` for ANY invalid input to a Pydantic model.**
-- **Pydantic V2 error types are DIFFERENT from V1** - refer to the mapping table below
-- **max_length constraint**: Pydantic v2 uses `"String should have at most N characters"` (NOT v1 `"ensure this value has at most N characters"`)
-- **min_length constraint**: Pydantic v2 uses `"String should have at least N characters"` (NOT v1 `"ensure this value has at least N characters"`)
-- **Custom @field_validator errors**: Custom `raise ValueError("msg")` appears as `"Value error, msg"` (Pydantic v2 adds `"Value error, "` prefix)
-- **ALWAYS use case-insensitive substring matching** with `in` operator - NEVER exact string equality
-- **For API endpoint tests**: When testing `response.json()['detail'][0]['msg']`, use substring matching on the msg field
-- **Best practice**: Check error type/category via `exc_info.value.errors()[0]["type"]` instead of message text when possible
+- **Pydantic V2 error types are DIFFERENT from V1** - use ONLY the V2 type names from the mapping table below (e.g., `string_too_short`, `greater_than`, `float_parsing`)
+- **max_length constraint**: Pydantic v2 uses error type `string_too_long` (NOT v1 `value_error.any_str.max_length`)
+- **min_length constraint**: Pydantic v2 uses error type `string_too_short` (NOT v1 `value_error.any_str.min_length`)
+- **Custom @field_validator errors**: Custom `raise ValueError("msg")` produces error type `value_error` (NOT `value_error.any_str.min_length`)
+- **ALWAYS check error type via `exc_info.value.errors()[0]["type"]`** using V2 type names - this is PREFERRED over message-based assertions
+- **FastAPI 422 response format**: `response.json()["detail"]` is ALWAYS a list of dicts with keys `loc`, `msg`, and `type`. NEVER assume it is a plain string.
 
 ### Pydantic V1→V2 Error Type Mapping Table
 
@@ -155,19 +156,27 @@ def test_integer_parsing_validation():
     # OR use substring match on error message
     assert "valid integer" in str(exc_info.value).lower()  # NOT "value is not a valid integer" (v1)
 
-# Test 7: API endpoint validation error response – prefer loc/field over msg/type
+# Test 7: FastAPI 422 validation error response (Pydantic V2 format)
+# FastAPI ALWAYS returns {"detail": [{"loc": [...], "msg": "...", "type": "..."}]} for 422 errors.
+# NEVER assert response.json()["detail"] is a string – it is ALWAYS a list of error dicts.
 def test_api_validation_error():
-    response = client.post("/endpoint", json={"message": "x" * 501})
+    response = client.post("/endpoint", json={"message": "x" * 501})  # Assumes max_length=500
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert isinstance(detail, list) and len(detail) > 0
+    assert isinstance(detail, list) and len(detail) > 0, (
+        f"FastAPI 422 detail must be a list; got: {detail}"
+    )
+    # Each error dict has keys: loc (list), msg (str), type (str, Pydantic V2 type name)
     # PREFERRED: assert the correct field is flagged via loc
     assert any("message" in err.get("loc", []) for err in detail), (
         f"Expected 'message' in error loc; got: {detail}"
     )
-    # OPTIONAL: case-insensitive substring match on msg (never exact equality)
-    assert any("at most" in err.get("msg", "").lower() for err in detail)
-    # AVOID asserting exact 'type' strings – they vary across pydantic-core versions
+    # PREFERRED: check Pydantic V2 type name (string_too_long, string_too_short, greater_than, etc.)
+    assert any(err.get("type") == "string_too_long" for err in detail), (
+        f"Expected Pydantic V2 type 'string_too_long'; got types: {[e.get('type') for e in detail]}"
+    )
+    # FALLBACK: case-insensitive substring match on msg (use when type assertion is too strict)
+    # assert any("at most" in err.get("msg", "").lower() for err in detail)
 
 # WRONG PATTERNS (DO NOT USE):
 # assert exc_info.value == "exact message"  # FAILS: Exact match

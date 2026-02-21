@@ -537,7 +537,11 @@ class SphinxDocGenerator:
 
     async def _create_sphinx_config(self, conf_py_path: Path):
         """Create a basic Sphinx configuration file."""
-        config_content = """
+        import importlib.util
+        rtd_available = importlib.util.find_spec("sphinx_rtd_theme") is not None
+        html_theme = "sphinx_rtd_theme" if rtd_available else "alabaster"
+
+        config_content = f"""
 # Configuration file for the Sphinx documentation builder.
 
 import os
@@ -546,20 +550,22 @@ sys.path.insert(0, os.path.abspath('..'))
 from datetime import datetime
 
 project = 'Auto-Generated Documentation'
-copyright = f'{datetime.now().year}, Auto-Generated'
+copyright = f'{{datetime.now().year}}, Auto-Generated'
 author = 'DocGen Agent'
 
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages',
 ]
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-html_theme = 'sphinx_rtd_theme'
+# Use sphinx_rtd_theme when installed; fall back to the built-in alabaster theme
+# to avoid a hard dependency on sphinx-rtd-theme.
+html_theme = '{html_theme}'
+
 html_static_path = ['_static']
 """
         async with aiofiles.open(conf_py_path, "w") as f:
@@ -1177,12 +1183,19 @@ class DocgenAgent:
                 await self._gather_context(target_files)
 
                 # 2. Generate Prompt
+                # For README/user doc types, explicitly require the Setup/Installation section
+                # so the LLM always includes it rather than relying on post_materialize patching.
+                readme_doc_types = {"readme", "user"}
+                readme_required_sections = (
+                    ["Setup", "Installation"] if doc_type.lower() in readme_doc_types else None
+                )
                 prompt_agent = DocGenPromptAgent(repo_path=self.repo_path)
                 prompt = await prompt_agent.get_doc_prompt(
                     doc_type=doc_type,
                     target_files=target_files,
                     instructions=instructions,
                     llm_model=llm_model,
+                    required_sections=readme_required_sections,
                 )
 
                 # 3. Apply Pre-processing Hooks
