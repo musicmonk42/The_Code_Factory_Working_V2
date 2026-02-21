@@ -441,7 +441,7 @@ async def delete_job_from_database(job_id: str) -> bool:
             record = result.scalars().first()
             
             if record is not None:
-                session.delete(record)  # synchronous – marks record for deletion
+                await session.delete(record)
                 rows_deleted = 1
             else:
                 rows_deleted = 0

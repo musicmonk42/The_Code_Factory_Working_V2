@@ -13,8 +13,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
     volumes:
       - ..:/workspace:cached
-      # NOTE: Docker socket mount removed for security
-      # If Docker-in-Docker is needed, use a dedicated DinD container
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow linter/critique agent to run via Docker
     command: sleep infinity
     environment:
       # Development-only environment variables
