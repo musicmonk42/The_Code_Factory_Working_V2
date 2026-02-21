@@ -341,10 +341,19 @@ RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/s
     mv kubectl /usr/local/bin/ && \
     kubectl version --client
 
-# Note: Docker-in-Docker is NOT installed by default for security reasons
-# If deployment validation requires docker build testing inside containers,
-# use Docker socket mounting: docker run -v /var/run/docker.sock:/var/run/docker.sock
-# Or install docker.io package at runtime if needed (not recommended for production)
+# Install Docker CLI so Dockerfile validation tools can run `docker build` checks.
+# Only the CLI is installed (not the Docker daemon) for security reasons.
+# When `Dockerfile` validation requires running a full build, mount the host socket:
+#   docker run -v /var/run/docker.sock:/var/run/docker.sock ...
+# Add the official Docker APT repository for the latest stable CLI release.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gnupg lsb-release \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+ && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" \
+        > /etc/apt/sources.list.d/docker.list \
+ && apt-get update && apt-get install -y --no-install-recommends docker-ce-cli \
+ && docker --version \
+ && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with restricted shell for security
 # Using specific UID/GID to prevent privilege escalation attacks

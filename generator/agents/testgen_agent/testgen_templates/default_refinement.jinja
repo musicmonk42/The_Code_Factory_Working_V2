@@ -10,6 +10,15 @@
 ```
 {% endfor %}
 
+{% if ast_context %}
+## Semantic Contract (AST-Extracted – MANDATORY)
+
+The following is the **exact** public API surface of the source files.
+Align tests and any source-code fixes against these definitions only.
+
+{{ ast_context }}
+{% endif %}
+
 ## Current Tests
 {% for filename, content in generated_tests.items() %}
 ### {{ filename }}
@@ -43,11 +52,32 @@ This happens when:
 - If validator raises ValueError → expect "value_error"
 - If validator returns value and Field constraint catches it → expect "string_too_short", "string_type", etc.
 - If using deprecated @validator(pre=True, always=True) → expect "value_error" for ALL validation failures
+
+**AssertionError discrepancies (e.g., `assert 'Sample Item' == 'Item'`):**
+When a test assertion mismatches a hardcoded value in the source code, you may fix the
+discrepancy by either:
+1. Updating the test to match the actual source-code return value, OR
+2. Providing a source-code patch using the `## SOURCE PATCH` format below.
+
+Choose option 2 only when the source-code value is clearly wrong (e.g., a placeholder
+like `"Item"` that should be `"Sample Item"` as specified in requirements).
 {% endif %}
 
 ## Task
 Refine the tests based on the critique and validation results.
 Focus on addressing the specific issues identified.
+
+You may optionally fix source-code bugs that cause the tests to fail by appending
+one or more source patches **after** your refined test code, using this exact format
+(replace the angle-bracket placeholders and use actual triple backticks):
+
+    ## SOURCE PATCH: path/to/file.py
+    ```python
+    <complete new content of the file>
+    ```
+
+Only provide source patches when the source code itself is incorrect (not merely
+when you need to adjust a test assertion).  Preserve all working logic when patching.
 
 {% if language == "python" %}
 ## Pydantic Validation Testing (CRITICAL for Python)

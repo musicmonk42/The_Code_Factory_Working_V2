@@ -5368,6 +5368,55 @@ class OmniCoreService:
                     generated_docs.append(str(doc_path))
                 logger.info(f"Generated documentation file: {doc_path}")
                 
+                # Issue 5c: Run sphinx-build to create docs/_build/html/ so that
+                # final validation checks can locate the generated HTML documentation.
+                sphinx_html_dir = output_dir / "_build" / "html"
+                try:
+                    sphinx_result = await asyncio.create_subprocess_exec(
+                        "sphinx-build",
+                        "-b", "html",
+                        "-E",           # rebuild without cached environment
+                        "-q",           # quiet mode
+                        str(output_dir),
+                        str(sphinx_html_dir),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    sphinx_stdout, sphinx_stderr = await asyncio.wait_for(
+                        sphinx_result.communicate(), timeout=60
+                    )
+                    if sphinx_result.returncode == 0:
+                        logger.info(
+                            f"[DOCGEN] sphinx-build succeeded for job {job_id}. "
+                            f"HTML docs at: {sphinx_html_dir}",
+                            extra={"job_id": job_id}
+                        )
+                        # Record sphinx build output path
+                        if sphinx_html_dir.exists():
+                            generated_docs.append(str(sphinx_html_dir.relative_to(repo_path)))
+                    else:
+                        logger.warning(
+                            f"[DOCGEN] sphinx-build exited with code {sphinx_result.returncode} for job {job_id}. "
+                            f"stderr: {sphinx_stderr.decode('utf-8', errors='replace')[:500]}",
+                            extra={"job_id": job_id}
+                        )
+                except FileNotFoundError:
+                    logger.info(
+                        "[DOCGEN] sphinx-build not found in PATH — skipping Sphinx HTML build. "
+                        "Install sphinx (pip install sphinx) to enable HTML documentation generation.",
+                        extra={"job_id": job_id}
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "[DOCGEN] sphinx-build timed out after 60 seconds — skipping.",
+                        extra={"job_id": job_id}
+                    )
+                except Exception as sphinx_err:
+                    logger.warning(
+                        f"[DOCGEN] sphinx-build failed (non-fatal): {sphinx_err}",
+                        extra={"job_id": job_id}
+                    )
+
                 result = {
                     "status": "completed",
                     "generated_docs": generated_docs,
