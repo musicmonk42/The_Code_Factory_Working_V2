@@ -1381,11 +1381,34 @@ async function loadInsights() {
         const patterns = Array.isArray(data.common_patterns) && data.common_patterns.length > 0
             ? data.common_patterns.map(p => escapeHtml(String(p))).join(', ')
             : 'None recorded';
+        const source = data.source ? escapeHtml(String(data.source)) : 'unknown';
+        const mlModule = data.meta_learning_module ? escapeHtml(String(data.meta_learning_module)) : 'N/A';
+        const noteHtml = data.note ? `<p class="warning"><strong>Note:</strong> ${escapeHtml(String(data.note))}</p>` : '';
+        
+        let insightsHtml = '';
+        if (Array.isArray(data.insights) && data.insights.length > 0) {
+            const allowedSeverities = new Set(['info', 'low', 'medium', 'high', 'critical', 'warning', 'error']);
+            insightsHtml = '<h4>Detailed Insights</h4><ul>';
+            for (const insight of data.insights) {
+                const rawSeverity = String(insight.severity || 'info').toLowerCase();
+                const severity = allowedSeverities.has(rawSeverity) ? rawSeverity : 'info';
+                insightsHtml += `<li class="severity-${severity}">` +
+                    `<strong>${escapeHtml(String(insight.pattern || ''))}</strong>` +
+                    (insight.description ? ` — ${escapeHtml(String(insight.description))}` : '') +
+                    (insight.recommendation ? `<br><em>Recommendation:</em> ${escapeHtml(String(insight.recommendation))}` : '') +
+                    `<br><em>Severity:</em> ${escapeHtml(severity)}</li>`;
+            }
+            insightsHtml += '</ul>';
+        }
         
         container.innerHTML = `
+            ${noteHtml}
+            <p>Source: ${source}</p>
+            <p>Module: ${mlModule}</p>
             <p>Total Fixes: ${escapeHtml(String(totalFixes))}</p>
             <p>Success Rate: ${escapeHtml(successRate)}</p>
             <p>Common Patterns: ${patterns}</p>
+            ${insightsHtml}
         `;
     } catch (error) {
         container.innerHTML = `<p class="error">Failed to load insights: ${escapeHtml(error.message)}</p>`;
