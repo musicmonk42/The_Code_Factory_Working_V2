@@ -177,13 +177,14 @@ securityContext:
 
 2. **Manifest Structure**: Generate clean, production-ready manifests with:
    - YAML document separators (---) between resources
-   - Proper indentation (2 spaces)
+   - Proper 2-space indentation throughout ALL manifests
+   - List items under a key MUST be indented 2 spaces (e.g., `containers:` items use `  - name:`)
    - Comments explaining critical sections
    - Logical resource ordering
 
-3. **Required Manifests** (in order):
-   - Deployment
-   - Service
+3. **Required Manifests** (BOTH are MANDATORY — you MUST generate both):
+   - **Deployment** (`kind: Deployment`) — REQUIRED
+   - **Service** (`kind: Service`) — REQUIRED, MUST always be generated
 
 4. **Accuracy**: Use the EXACT configuration from the analyzed code:
    - EXACT port from application (do NOT default to 8080)
@@ -191,7 +192,7 @@ securityContext:
    - ACTUAL environment variables used
    - ACTUAL health check endpoints
 
-**Example Output Format:**
+**Example Output Format (use correct 2-space indentation):**
 
 Your response should start directly with YAML document separators and manifests:
 
@@ -211,10 +212,10 @@ spec:
         app: my-app
     spec:
       containers:
-      - name: my-app
-        image: my-app:1.0.0
-        ports:
-        - containerPort: 8000
+        - name: my-app
+          image: my-app:1.0.0
+          ports:
+            - containerPort: 8000
 ---
 apiVersion: v1
 kind: Service
@@ -224,16 +225,18 @@ spec:
   selector:
     app: my-app
   ports:
-  - port: 80
-    targetPort: 8000
+    - port: 80
+      targetPort: 8000
 
 **VALIDATION CHECKLIST:**
 - [ ] Output contains ONLY YAML (no markdown)
+- [ ] Both Deployment AND Service manifests are present
 - [ ] All ports match application code
 - [ ] Security context is configured
 - [ ] Resource limits are set
 - [ ] Health probes are configured
 - [ ] Labels follow app.kubernetes.io standard
 - [ ] Service selector matches Deployment labels
+- [ ] Indentation uses 2 spaces throughout (list items are indented under their parent key)
 
 BEGIN YOUR KUBERNETES MANIFESTS NOW:

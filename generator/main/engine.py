@@ -1389,6 +1389,16 @@ class WorkflowEngine:
                                 output_dir = Path(output_path)
                                 output_dir.mkdir(parents=True, exist_ok=True)
                                 
+                                # Strip "generated/" prefix from file keys to prevent double-nesting
+                                # when output_path already contains a "generated" directory component
+                                cleaned_codegen_files = {}
+                                for fname, content in codegen_files.items():
+                                    cleaned_fname = fname
+                                    while cleaned_fname.startswith("generated/"):
+                                        cleaned_fname = cleaned_fname[len("generated/"):]
+                                    cleaned_codegen_files[cleaned_fname] = content
+                                codegen_files = cleaned_codegen_files
+                                
                                 if HAS_MATERIALIZER:
                                     mat_result = await _materialize_file_map_cli(codegen_files, output_dir)
                                     if mat_result.get("success"):

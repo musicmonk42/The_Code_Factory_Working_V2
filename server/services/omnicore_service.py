@@ -3326,8 +3326,8 @@ class OmniCoreService:
                             for original_path, content in result.items():
                                 cleaned_path = original_path
                                 
-                                # Remove "generated/" prefix if present
-                                if cleaned_path.startswith("generated/"):
+                                # Remove "generated/" prefix if present (use while to handle multiple levels)
+                                while cleaned_path.startswith("generated/"):
                                     cleaned_path = cleaned_path[len("generated/"):]
                                     logger.debug(
                                         f"[CODEGEN] Stripped 'generated/' prefix: {original_path} -> {cleaned_path}",

@@ -106,6 +106,7 @@ services:
       - .:/app
       - platform-output:/app/output
       - platform-uploads:/app/uploads  # Persist uploaded files across restarts
+      - /var/run/docker.sock:/var/run/docker.sock  # Allow critique_agent to run pylint/ruff via Docker
     restart: unless-stopped
     # Resource limits for production deployment
     deploy:
