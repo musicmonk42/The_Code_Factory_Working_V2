@@ -553,21 +553,49 @@ class MarkdownPlugin(DocGenPlugin):
         else:
             min_sections = schema.get("required_section_minimum", 3)
 
+        # Alias mapping for core sections: each key is a canonical section name;
+        # the list contains heading substrings that count as a match (case-insensitive).
+        CORE_SECTION_ALIASES: Dict[str, List[str]] = {
+            "introduction": [
+                "introduction", "overview", "about", "description",
+                "project title", "project description",
+            ],
+            "usage": [
+                "usage", "quick start", "getting started", "how to use",
+                "examples", "quickstart",
+            ],
+            "endpoints": ["endpoints", "api endpoints", "routes", "api reference"],
+            "authentication": ["authentication", "auth", "authorization", "security"],
+        }
+
+        def _section_present(section: str) -> bool:
+            """Return True if *section* or any of its aliases appears as a heading."""
+            aliases = CORE_SECTION_ALIASES.get(section.lower(), [section.lower()])
+            for alias in aliases:
+                if re.search(
+                    rf"^\s*#{{1,6}}\s+.*{re.escape(alias)}.*$",
+                    content,
+                    re.IGNORECASE | re.MULTILINE,
+                ):
+                    return True
+            return False
+
         # Check for core sections (essential ones)
         missing_core = []
         for section in core_sections:
-            if not re.search(
-                rf"^\s*#{{1,6}}\s+{re.escape(section)}\s*$",
-                content,
-                re.IGNORECASE | re.MULTILINE,
-            ):
+            if not _section_present(section):
                 missing_core.append(section)
 
         if missing_core:
             issues.append(f"Missing core sections: {', '.join(missing_core)}")
 
-        # Check that we have at least minimum number of sections
-        found_sections = 0
+        # Count *any* markdown heading (lines that start with one or more '#')
+        # so that "Insufficient sections: found 0" never fires for a document that
+        # clearly has headings but uses LLM-generated heading names not in the schema.
+        found_sections = len(
+            re.findall(r"^\s*#{1,6}\s+\S", content, re.MULTILINE)
+        )
+        # Also count schema-listed sections for backwards-compatibility.
         for section in required_sections:
             if re.search(
                 rf"^\s*#{{1,6}}\s+{re.escape(section)}\s*$",

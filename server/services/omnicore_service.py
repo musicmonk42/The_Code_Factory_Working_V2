@@ -3571,6 +3571,28 @@ class OmniCoreService:
                                     f"[CODEGEN] Fallback: Failed to create __init__.py files: {init_err}",
                                     extra={"job_id": job_id}, exc_info=True
                                 )
+                    # Apply post-materialization fixups: required dirs, schemas.py,
+                    # README patching, Sphinx placeholder — mirrors the engine.py MATERIALIZE stage.
+                    try:
+                        from generator.main.post_materialize import post_materialize as _post_materialize
+                        pm_result = _post_materialize(output_path)
+                        if pm_result.files_created:
+                            logger.info(
+                                f"[CODEGEN] post_materialize created "
+                                f"{len(pm_result.files_created)} stub file(s): "
+                                f"{pm_result.files_created}",
+                                extra={"job_id": job_id, "files_created": pm_result.files_created}
+                            )
+                        for warn in pm_result.warnings:
+                            logger.warning(
+                                f"[CODEGEN] post_materialize warning: {warn}",
+                                extra={"job_id": job_id}
+                            )
+                    except Exception as pm_err:
+                        logger.warning(
+                            f"[CODEGEN] post_materialize failed: {pm_err}",
+                            extra={"job_id": job_id}
+                        )
                 else:
                     logger.warning(
                         f"Code generation returned non-dict result - type={type(result).__name__}",

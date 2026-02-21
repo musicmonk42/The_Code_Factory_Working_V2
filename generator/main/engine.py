@@ -1419,150 +1419,28 @@ class WorkflowEngine:
                                         metadata={"output_path": output_path, "files_count": len(codegen_files)}
                                     )
                                 
-                                # Ensure contract-required directories always exist
-                                for required_dir in ("app", "tests", "reports"):
-                                    req_dir_path = output_dir / required_dir
-                                    req_dir_path.mkdir(parents=True, exist_ok=True)
-                                    # Ensure app/ has __init__.py for Python imports
-                                    if required_dir == "app":
-                                        init_py = req_dir_path / "__init__.py"
-                                        if not init_py.exists():
-                                            init_py.write_text(
-                                                "# Auto-generated app package\n",
-                                                encoding="utf-8"
-                                            )
-                                        # Ensure app/schemas.py exists with a validator
-                                        # (required by contract validator check_schema_validation)
-                                        schemas_py = req_dir_path / "schemas.py"
-                                        if not schemas_py.exists():
-                                            schemas_py.write_text(
-                                                '"""Auto-generated Pydantic schemas."""\n'
-                                                "from pydantic import BaseModel, Field, field_validator\n\n"
-                                                "class Item(BaseModel):\n"
-                                                '    """Generic item model used by CRUD endpoints.\n\n'
-                                                "    Validation: name must be non-empty (min_length=1);\n"
-                                                "    price must be positive (gt=0).\n"
-                                                '    """\n\n'
-                                                "    name: str = Field(..., min_length=1)\n"
-                                                "    price: float = Field(..., gt=0)\n"
-                                                "    description: str = ''\n\n"
-                                                "    @field_validator('name', mode='before')\n"
-                                                "    @classmethod\n"
-                                                "    def strip_name(cls, v):\n"
-                                                "        if isinstance(v, str):\n"
-                                                "            return v.strip()\n"
-                                                "        return v\n\n\n"
-                                                "class BaseRequest(BaseModel):\n"
-                                                '    """Base request model with common validators."""\n\n'
-                                                "    message: str = ''\n\n"
-                                                "    @field_validator('message', mode='before')\n"
-                                                "    @classmethod\n"
-                                                "    def strip_message(cls, v):\n"
-                                                "        if isinstance(v, str):\n"
-                                                "            return v.strip()\n"
-                                                "        return v\n",
-                                                encoding="utf-8",
-                                            )
-                                        # Ensure app/routes.py exists
-                                        routes_py = req_dir_path / "routes.py"
-                                        if not routes_py.exists():
-                                            routes_py.write_text(
-                                                '"""Auto-generated routes placeholder."""\n'
-                                                "from fastapi import APIRouter\n\n"
-                                                "router = APIRouter()\n\n\n"
-                                                "@router.get('/health')\n"
-                                                "async def health():\n"
-                                                "    return {'status': 'ok'}\n",
-                                                encoding="utf-8",
-                                            )
-                                    # Ensure tests/ has __init__.py
-                                    if required_dir == "tests":
-                                        init_py = req_dir_path / "__init__.py"
-                                        if not init_py.exists():
-                                            init_py.write_text(
-                                                "# Auto-generated tests package\n",
-                                                encoding="utf-8"
-                                            )
-                                
-                                # Ensure app/main.py exists - if codegen produced root main.py,
-                                # create app/main.py that re-exports it so the app/ layout works.
-                                app_main = output_dir / "app" / "main.py"
-                                root_main = output_dir / "main.py"
-                                if not app_main.exists():
-                                    if root_main.exists():
-                                        # Copy root main.py content into app/main.py
-                                        try:
-                                            app_main.write_text(
-                                                root_main.read_text(encoding="utf-8"),
-                                                encoding="utf-8",
-                                            )
-                                            logger.debug("[STAGE:MATERIALIZE] Copied main.py → app/main.py")
-                                        except Exception as cp_err:
-                                            logger.warning(f"[STAGE:MATERIALIZE] Could not copy main.py: {cp_err}")
-                                    else:
-                                        # Create a minimal FastAPI main.py
-                                        app_main.write_text(
-                                            '"""Auto-generated FastAPI application entry point."""\n'
-                                            "from fastapi import FastAPI\n"
-                                            "from app.routes import router\n\n"
-                                            "app = FastAPI(title='Generated App')\n"
-                                            "app.include_router(router)\n\n\n"
-                                            "@app.get('/health')\n"
-                                            "async def health():\n"
-                                            "    return {'status': 'ok'}\n",
-                                            encoding="utf-8",
+                                # Apply shared post-materialization fixups:
+                                # required dirs, schemas.py, README patching, Sphinx placeholder.
+                                try:
+                                    from generator.main.post_materialize import post_materialize as _post_materialize
+                                    pm_result = _post_materialize(output_dir)
+                                    if pm_result.files_created:
+                                        logger.info(
+                                            f"[STAGE:MATERIALIZE] post_materialize created "
+                                            f"{len(pm_result.files_created)} stub file(s): "
+                                            f"{pm_result.files_created}",
+                                            extra={"workflow_id": workflow_id}
                                         )
-                                
-                                # Ensure README.md has all required sections
-                                readme_path = output_dir / "README.md"
-                                if readme_path.exists():
-                                    try:
-                                        readme_text = readme_path.read_text(encoding="utf-8")
-                                        ep = "app.main:app" if (output_dir / "app" / "main.py").exists() else "main:app"
-                                        updated_readme = self._ensure_readme_sections(readme_text, ep)
-                                        if updated_readme != readme_text:
-                                            readme_path.write_text(updated_readme, encoding="utf-8")
-                                            logger.debug("[STAGE:MATERIALIZE] Patched README.md with required sections")
-                                    except Exception as re_err:
-                                        logger.warning(f"[STAGE:MATERIALIZE] Could not patch README: {re_err}")
-                                
-                                # Generate Sphinx-compatible docs/_build/html/index.html
-                                # The contract validator requires this file to exist and have content.
-                                docs_html_dir = output_dir / "docs" / "_build" / "html"
-                                docs_html_index = docs_html_dir / "index.html"
-                                if not docs_html_index.exists():
-                                    try:
-                                        docs_html_dir.mkdir(parents=True, exist_ok=True)
-                                        project_title = output_dir.name.replace("_", " ").title()
-                                        readme_for_docs = readme_path.read_text(encoding="utf-8") if readme_path.exists() else ""
-                                        import html as _html
-                                        readme_html = _html.escape(readme_for_docs[:MAX_README_CHARS_FOR_DOCS]).replace("\n", "<br>\n")
-                                        docs_html_index.write_text(
-                                            f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{_html.escape(project_title)} — Documentation</title>
-</head>
-<body>
-<h1>{_html.escape(project_title)}</h1>
-<p>Auto-generated documentation for the <strong>{_html.escape(project_title)}</strong> project.</p>
-<h2>Setup</h2>
-<pre>pip install -r requirements.txt</pre>
-<h2>Run</h2>
-<pre>uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload</pre>
-<h2>Test</h2>
-<pre>pytest tests/ -v</pre>
-<div class="readme">{readme_html}</div>
-</body>
-</html>
-""",
-                                            encoding="utf-8",
+                                    for warn in pm_result.warnings:
+                                        logger.warning(
+                                            f"[STAGE:MATERIALIZE] post_materialize warning: {warn}",
+                                            extra={"workflow_id": workflow_id}
                                         )
-                                        logger.debug("[STAGE:MATERIALIZE] Created docs/_build/html/index.html")
-                                    except Exception as doc_err:
-                                        logger.warning(f"[STAGE:MATERIALIZE] Could not create Sphinx index: {doc_err}")
+                                except Exception as pm_err:
+                                    logger.warning(
+                                        f"[STAGE:MATERIALIZE] post_materialize failed: {pm_err}",
+                                        extra={"workflow_id": workflow_id}
+                                    )
                         
                         # [STAGE:CONTRACT_VALIDATE] Run contract validation after materialization
                         # This is a BLOCKING gate - pipeline fails if validation fails
