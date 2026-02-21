@@ -714,6 +714,9 @@ class PluginService:
                     code_path, analysis_types, generate_report, job_id
                 )
 
+            elif action == "get_learning_insights":
+                result = await sfe_service.get_learning_insights(job_id=job_id)
+
             else:
                 self.logger.warning(f"Unknown SFE action: {action}")
                 result = {
