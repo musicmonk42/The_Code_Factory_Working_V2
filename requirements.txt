@@ -212,11 +212,6 @@ MarkupSafe==2.1.5
 marshmallow==3.26.1
 matplotlib==3.10.6
 mccabe==0.7.0
-mdformat>=1.0.0
-mdformat_deflist>=0.1.0
-mdformat_frontmatter>=2.0.0
-mdformat_myst>=0.3.0
-mdformat_tables>=0.4.0
 mdit-py-plugins>=0.4.0
 mdurl==0.1.2
 merklelib==1.0
