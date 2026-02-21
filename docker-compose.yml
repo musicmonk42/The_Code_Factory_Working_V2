@@ -1,48 +1,8 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+# Redis and Postgres are provided by Railway — set REDIS_URL and DATABASE_URL
+# in your environment (Railway injects these automatically).
 
 services:
-  # Redis for message bus and caching
-  # SECURITY: Password authentication enabled even for development
-  redis:
-    image: redis:7.4-alpine
-    container_name: codefactory-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
-    healthcheck:
-      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD:-devpassword}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # PostgreSQL database with Citus extension for production scale-out
-  # Using citusdata/citus image provides the Citus extension for distributed SQL
-  postgres:
-    image: citusdata/citus:12.1
-    container_name: codefactory-postgres
-    environment:
-      POSTGRES_DB: codefactory
-      POSTGRES_USER: codefactory
-      # SECURITY WARNING: Default password is for DEVELOPMENT ONLY
-      # In production, ALWAYS set POSTGRES_PASSWORD via environment variable or secrets manager
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codefactory"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - default
-
   # Unified Code Factory Platform
   # Note: All three modules (generator, omnicore_engine, self_fixing_engineer)
   # are part of a single unified platform and are built together.
@@ -95,10 +55,10 @@ services:
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
 
-      # Infrastructure
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-devpassword}@redis:6379
-      - DB_PATH=${DB_PATH:-postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/codefactory}
+      # Infrastructure — provided by Railway
+      - REDIS_URL=${REDIS_URL}
+      - DB_PATH=${DB_PATH}
+      - DATABASE_URL=${DATABASE_URL}
 
       # Citus Extension Configuration
       # Set to 1 to enable Citus distributed SQL features
@@ -146,11 +106,6 @@ services:
       - .:/app
       - platform-output:/app/output
       - platform-uploads:/app/uploads  # Persist uploaded files across restarts
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
     restart: unless-stopped
     # Resource limits for production deployment
     deploy:
@@ -205,8 +160,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  redis-data:
-  postgres-data:
   platform-output:
   platform-uploads:  # Persist uploaded job files
   prometheus-data:

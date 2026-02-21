@@ -1,76 +1,30 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 # Production Docker Compose Configuration
-# This file provides production-ready settings with security best practices
+# Redis and Postgres are provided by Railway — set REDIS_URL and DATABASE_URL
+# from your Railway service "Connect" tabs. No local DB containers needed.
 #
 # ============================================================================
 # CRITICAL SECURITY WARNING
 # ============================================================================
-# 1. NEVER use default passwords in production
-# 2. Store ALL secrets in external secrets manager (AWS Secrets Manager, Vault, etc.)
-# 3. Generate strong random passwords (see instructions below)
-# 4. Rotate secrets regularly (every 90 days minimum)
-# 5. Use proper SSL/TLS certificates
-# 6. Enable all monitoring and security features
-# 7. Review and follow DOCKER_SECURITY.md guidelines
+# 1. Store ALL secrets in Railway's environment variable settings or a secrets manager
+# 2. Generate strong random keys (see instructions below)
+# 3. Rotate secrets regularly (every 90 days minimum)
+# 4. Use proper SSL/TLS certificates
+# 5. Enable all monitoring and security features
 #
 # Generate Strong Secrets:
-#   REDIS_PASSWORD: openssl rand -base64 32
-#   POSTGRES_PASSWORD: openssl rand -base64 32
 #   AGENTIC_AUDIT_HMAC_KEY: openssl rand -hex 32
 #   ENCRYPTION_KEY: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 #
 # Security Checklist:
-#   [ ] All secrets generated and stored in secrets manager
-#   [ ] Different passwords per environment (dev/staging/prod)
-#   [ ] SSL/TLS certificates obtained and configured
-#   [ ] Firewall rules applied
-#   [ ] Monitoring and alerting enabled
-#   [ ] Regular security scans scheduled
-#   [ ] Backup and disaster recovery tested
+#   [ ] All secrets stored in Railway env vars (not committed to repo)
+#   [ ] Different keys per environment (dev/staging/prod)
+#   [ ] SSL/TLS enabled via Railway's built-in TLS
+#   [ ] Monitoring and alerting configured
 # ============================================================================
 
 services:
-  # Redis for message bus and caching
-  redis:
-    image: redis:7.4-alpine
-    container_name: codefactory-redis-prod
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    healthcheck:
-      test: ["CMD", "redis-cli", "--pass", "${REDIS_PASSWORD}", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
-    networks:
-      - codefactory-network
-
-  # PostgreSQL database with Citus extension for production scale-out
-  # Using citusdata/citus image provides the Citus extension for distributed SQL
-  postgres:
-    image: citusdata/citus:12.1
-    container_name: codefactory-postgres-prod
-    environment:
-      POSTGRES_DB: codefactory
-      POSTGRES_USER: codefactory
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codefactory"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: always
-    networks:
-      - codefactory-network
-
   # Unified Code Factory Platform
   codefactory:
     build:
@@ -113,10 +67,10 @@ services:
       # - RUNNER_CONFIG_PATH=${RUNNER_CONFIG_PATH:-/app/generator/config.yaml}
 
       # ============================================
-      # Database Configuration
+      # Database and Cache — provided by Railway
       # ============================================
-      - DB_PATH=postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD}@postgres:5432/codefactory
-      - DATABASE_URL=postgresql+asyncpg://codefactory:${POSTGRES_PASSWORD}@postgres:5432/codefactory
+      - DB_PATH=${DB_PATH}
+      - DATABASE_URL=${DATABASE_URL}
       - DB_POOL_SIZE=50
       - DB_POOL_MAX_OVERFLOW=20
       - DB_CONNECT_TIMEOUT=30  # Connection timeout in seconds
@@ -148,9 +102,9 @@ services:
       - TESTGEN_LLM_TIMEOUT=${TESTGEN_LLM_TIMEOUT:-300}  # Testgen-specific timeout (5 minutes)
 
       # ============================================
-      # Infrastructure
+      # Infrastructure — provided by Railway
       # ============================================
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - REDIS_URL=${REDIS_URL}
       - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}  # Kafka broker addresses
 
       # ============================================
@@ -235,11 +189,6 @@ services:
       - platform-output:/app/output
       - platform-uploads:/app/uploads
       - platform-logs:/app/logs
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
     restart: always
     networks:
       - codefactory-network
@@ -311,10 +260,6 @@ services:
       - codefactory-network
 
 volumes:
-  redis-data:
-    driver: local
-  postgres-data:
-    driver: local
   platform-output:
     driver: local
   platform-uploads:
@@ -334,43 +279,25 @@ networks:
 # Production Deployment Instructions
 # ============================================
 #
-# 1. Create .env.production file with all required secrets:
-#    AGENTIC_AUDIT_HMAC_KEY=<64-char-hex-key>
-#    ENCRYPTION_KEY=<fernet-key>
-#    POSTGRES_PASSWORD=<strong-password>
-#    REDIS_PASSWORD=<strong-password>
+# Redis and Postgres are provided by Railway.
+# Railway automatically injects REDIS_URL and DATABASE_URL into
+# the service environment — no local containers needed.
+#
+# 1. Set required secrets in Railway (or your secrets manager):
+#    AGENTIC_AUDIT_HMAC_KEY=<64-char-hex-key>   openssl rand -hex 32
+#    ENCRYPTION_KEY=<fernet-key>                 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 #    OPENAI_API_KEY=<your-key>
 #    GRAFANA_PASSWORD=<strong-password>
 #
-# 2. Generate strong keys:
-#    # HMAC key (64 hex chars)
-#    openssl rand -hex 32
-#
-#    # Fernet encryption key
-#    python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-#
-# 3. Deploy:
+# 2. Deploy:
 #    docker-compose -f docker-compose.production.yml --env-file .env.production up -d
 #
-# 4. Verify:
+# 3. Verify:
 #    docker-compose -f docker-compose.production.yml ps
 #    curl http://localhost:8000/health
 #    curl http://localhost:8000/ready
 #
-# 5. Monitor:
+# 4. Monitor:
 #    Prometheus: http://localhost:9091
 #    Grafana: http://localhost:3000
 #    Metrics: http://localhost:9090/metrics
-#
-# 6. Backup:
-#    docker-compose -f docker-compose.production.yml exec postgres pg_dump -U codefactory codefactory > backup.sql
-#
-# 7. Security Checklist:
-#    [ ] All secrets stored in secrets manager (not .env files)
-#    [ ] Strong random keys generated
-#    [ ] Different keys per environment
-#    [ ] SSL/TLS enabled (use reverse proxy like nginx)
-#    [ ] Firewall rules configured
-#    [ ] Regular key rotation schedule
-#    [ ] Monitoring and alerting configured
-#    [ ] Backup and restore tested
