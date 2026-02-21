@@ -62,7 +62,7 @@ jobs:
 
           # Check if there are any changes
           if [[ -n $(git status -s) ]]; then
-            git add -A
+            git add -u   # stage only deletions of tracked files; never adds untracked output
             git commit -m "chore: automated cleanup of old audit/test documents"
             git push
             echo "✓ Changes committed and pushed"

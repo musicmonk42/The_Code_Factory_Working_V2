@@ -74,22 +74,22 @@ The Helm chart MUST include ALL of the following files:
    - Autoscaling configuration
    - Probe configurations
    - **CRITICAL**: `values.yaml` contains ONLY static YAML values (strings, numbers, booleans, lists).
-     NEVER put `{{ }}` Helm template expressions in `values.yaml`.
+     NEVER put `{% raw %}{{ }}{% endraw %}` Helm template expressions in `values.yaml`.
      Helm template expressions belong ONLY in files under `templates/`.
 
 3. **templates/deployment.yaml** - Kubernetes Deployment resource:
-   - Uses `{{ .Values.* }}` references to values from `values.yaml`
+   - Uses `{% raw %}{{ .Values.* }}{% endraw %}` references to values from `values.yaml`
    - Proper 2-space indentation throughout
    - Pod template with correct nesting under `spec.template.spec.containers`
    - Health probes, resource limits, security context
 
 4. **templates/service.yaml** - Kubernetes Service resource (REQUIRED, MUST be generated):
-   - Uses `{{ .Values.service.* }}` for type and port configuration
+   - Uses `{% raw %}{{ .Values.service.* }}{% endraw %}` for type and port configuration
    - Selector matching the Deployment pod labels
    - This file MUST always be created
 
 5. **Best Practices**
-   - Helm template expressions (`{{ }}`) ONLY in `templates/*.yaml` files
+   - Helm template expressions (`{% raw %}{{ }}{% endraw %}`) ONLY in `templates/*.yaml` files
    - `values.yaml` has ONLY plain YAML, never template syntax
    - Include `_helpers.tpl` definitions for reusable label blocks
    - Follow Kubernetes naming conventions

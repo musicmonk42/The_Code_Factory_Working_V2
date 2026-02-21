@@ -103,9 +103,10 @@ services:
       - "8001:8001"  # Metrics port
       - "9090:9090"  # Prometheus metrics HTTP server
     volumes:
-      - .:/app
       - platform-output:/app/output
       - platform-uploads:/app/uploads  # Persist uploaded files across restarts
+      - platform-logs:/app/logs        # Runtime log files isolated from repo
+      - platform-data:/app/data        # Runtime data/DB files isolated from repo
       - /var/run/docker.sock:/var/run/docker.sock  # Allow critique_agent to run pylint/ruff via Docker
     restart: unless-stopped
     # Resource limits for production deployment
@@ -163,6 +164,8 @@ services:
 volumes:
   platform-output:
   platform-uploads:  # Persist uploaded job files
+  platform-logs:     # Runtime log files (never in repo)
+  platform-data:     # Runtime data/DB files (never in repo)
   prometheus-data:
   grafana-data:
 

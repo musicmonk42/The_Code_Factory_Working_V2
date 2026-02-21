@@ -300,12 +300,10 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                 LLM_CALLS_TOTAL.labels(
                     provider="docgen_prompt",
                     model="gpt-3.5-turbo",
-                    task="summarize_context",
                 ).inc()
                 LLM_LATENCY_SECONDS.labels(
                     provider="docgen_prompt",
                     model="gpt-3.5-turbo",
-                    task="summarize_context",
                 ).observe(time.time() - start_time)
                 await add_provenance(
                     "summarize_prompt_context", {"action": "summarize_prompt_context", "model": "gpt-3.5-turbo"}
@@ -317,7 +315,6 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                 LLM_ERRORS_TOTAL.labels(
                     provider="docgen_prompt",
                     model="gpt-3.5-turbo",
-                    error_type=type(llm_e).__name__,
                 ).inc()
                 summary_of_content = f"Error summarizing content: {llm_e}"  # Continue with an error message
 
@@ -350,12 +347,10 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             LLM_CALLS_TOTAL.labels(
                 provider="docgen_prompt",
                 model="gpt-3.5-turbo",
-                task="summarize_context_global",
             ).inc()
             LLM_LATENCY_SECONDS.labels(
                 provider="docgen_prompt",
                 model="gpt-3.5-turbo",
-                task="summarize_context_global",
             ).observe(time.time() - start_time_global)
             await add_provenance(
                 "summarize_prompt_context_global", {"action": "summarize_prompt_context_global", "model": "gpt-3.5-turbo"}
@@ -368,7 +363,6 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             LLM_ERRORS_TOTAL.labels(
                 provider="docgen_prompt",
                 model="gpt-3.5-turbo",
-                error_type=type(llm_e).__name__,
             ).inc()
             # Fallback to hard truncation if global summary fails
             optimized_text = optimized_text[: max_tokens * 4]  # Approximate
@@ -942,10 +936,10 @@ class DocGenPromptAgent:
 
             # Add central runner metrics and provenance
             LLM_CALLS_TOTAL.labels(
-                provider="docgen_prompt", model=llm_model, task="enforce_sections"
+                provider="docgen_prompt", model=llm_model
             ).inc()
             LLM_LATENCY_SECONDS.labels(
-                provider="docgen_prompt", model=llm_model, task="enforce_sections"
+                provider="docgen_prompt", model=llm_model
             ).observe(time.time() - start_time)
             await add_provenance(
                 "enforce_prompt_sections",
@@ -960,7 +954,6 @@ class DocGenPromptAgent:
                 LLM_ERRORS_TOTAL.labels(
                     provider="docgen_prompt",
                     model=llm_model,
-                    error_type="EmptyLLMResponse",
                 ).inc()
                 raise ValueError(
                     "Meta-LLM returned empty content when enforcing sections."
@@ -974,7 +967,6 @@ class DocGenPromptAgent:
                 LLM_ERRORS_TOTAL.labels(
                     provider="docgen_prompt",
                     model=llm_model,
-                    error_type=type(e).__name__,
                 ).inc()
             logger.error(
                 f"Failed to enforce required sections using meta-LLM: {e}",
@@ -1045,10 +1037,10 @@ class DocGenPromptAgent:
 
                 # Add central runner metrics and provenance
                 LLM_CALLS_TOTAL.labels(
-                    provider="docgen_prompt", model=llm_model, task="optimize_feedback"
+                    provider="docgen_prompt", model=llm_model
                 ).inc()
                 LLM_LATENCY_SECONDS.labels(
-                    provider="docgen_prompt", model=llm_model, task="optimize_feedback"
+                    provider="docgen_prompt", model=llm_model
                 ).observe(time.time() - start_time)
                 await add_provenance(
                     "optimize_prompt_feedback",
@@ -1068,7 +1060,6 @@ class DocGenPromptAgent:
                     LLM_ERRORS_TOTAL.labels(
                         provider="docgen_prompt",
                         model=llm_model,
-                        error_type="EmptyLLMResponse",
                     ).inc()
                     logger.warning(
                         "Meta-LLM returned empty or malformed optimized prompt content. Using original."
@@ -1080,7 +1071,6 @@ class DocGenPromptAgent:
                     LLM_ERRORS_TOTAL.labels(
                         provider="docgen_prompt",
                         model=llm_model,
-                        error_type=type(e).__name__,
                     ).inc()
                 logger.error(
                     f"Meta-LLM prompt optimization failed for {feedback_key}: {e}. Returning original prompt.",
@@ -1385,7 +1375,6 @@ class DocGenPromptAgent:
                         LLM_CALLS_TOTAL.labels(
                             provider="docgen_prompt",
                             model=scoring_llm_model,
-                            task="ab_test_score",
                         ).inc()
                         await add_provenance(
                             "ab_test_prompt_score",

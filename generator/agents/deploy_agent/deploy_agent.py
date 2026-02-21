@@ -1412,32 +1412,32 @@ spec:
         app: {project_name}
     spec:
       containers:
-      - name: {project_name}
-        image: {project_name}:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: PORT
-          value: "8000"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
+        - name: {project_name}
+          image: {project_name}:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PORT
+              value: "8000"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
@@ -1447,9 +1447,9 @@ spec:
   selector:
     app: {project_name}
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8000
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
   type: LoadBalancer
 ---
 apiVersion: v1
@@ -1516,15 +1516,15 @@ spec:
         {{{{- include "{project_name}.selectorLabels" . | nindent 8 }}}}
     spec:
       containers:
-      - name: {{{{ .Chart.Name }}}}
-        image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
-        imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
-        ports:
-        - name: http
-          containerPort: {{{{ .Values.service.targetPort }}}}
-          protocol: TCP
-        resources:
-          {{{{- toYaml .Values.resources | nindent 10 }}}}
+        - name: {{{{ .Chart.Name }}}}
+          image: "{{{{ .Values.image.repository }}}}:{{{{ .Values.image.tag | default .Chart.AppVersion }}}}"
+          imagePullPolicy: {{{{ .Values.image.pullPolicy }}}}
+          ports:
+            - name: http
+              containerPort: {{{{ .Values.service.targetPort }}}}
+              protocol: TCP
+          resources:
+            {{{{- toYaml .Values.resources | nindent 12 }}}}
 """,
                     "service.yaml": f"""apiVersion: v1
 kind: Service
