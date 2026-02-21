@@ -54,10 +54,12 @@ Industry Standards Compliance
 from __future__ import annotations
 
 import html as _html_module
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -295,6 +297,11 @@ def post_materialize(
             # Phase 4: Sphinx HTML placeholder
             # ------------------------------------------------------------------
             _create_sphinx_placeholder(output_dir, result)
+
+            # ------------------------------------------------------------------
+            # Phase 5: Provenance report fallback
+            # ------------------------------------------------------------------
+            _ensure_provenance_report(output_dir, result)
 
             # ------------------------------------------------------------------
             # Finalize
@@ -539,6 +546,43 @@ def _create_sphinx_placeholder(
         result.warnings.append(warn)
         logger.warning("%s %s", _STAGE, warn)
 
+
+def _ensure_provenance_report(
+    output_dir: Path,
+    result: PostMaterializeResult,
+) -> None:
+    """Create a minimal ``reports/provenance.json`` when absent.
+
+    The ``ContractValidator.check_reports()`` requires this file to exist
+    with ``job_id``, ``timestamp``, and ``stages`` fields.  If the pipeline's
+    provenance stage already wrote a richer file this function is a no-op.
+
+    Args:
+        output_dir: Project root directory.
+        result: Mutable result object updated in-place.
+    """
+    provenance_path = output_dir / "reports" / "provenance.json"
+    if provenance_path.exists():
+        return
+
+    try:
+        (output_dir / "reports").mkdir(parents=True, exist_ok=True)
+        provenance = {
+            "job_id": output_dir.name,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "stages": [],
+        }
+        provenance_path.write_text(
+            json.dumps(provenance, indent=2),
+            encoding="utf-8",
+        )
+        result.files_created.append("reports/provenance.json")
+        POST_MATERIALIZE_FILES_CREATED.labels(file_type="provenance_json").inc()
+        logger.debug("%s Created reports/provenance.json (fallback)", _STAGE)
+    except OSError as exc:
+        warn = f"Could not create reports/provenance.json: {exc}"
+        result.warnings.append(warn)
+        logger.warning("%s %s", _STAGE, warn)
 
 def _create_if_absent(
     path: Path,

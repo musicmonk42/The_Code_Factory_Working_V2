@@ -300,6 +300,36 @@ class TestPostMaterialize:
         assert (html_dir / "index.html").read_text(encoding="utf-8") == existing_html
 
     # ------------------------------------------------------------------
+    # Provenance report fallback
+    # ------------------------------------------------------------------
+
+    def test_provenance_json_created(self, pm_module, project_dir):
+        pm_module.post_materialize(project_dir)
+        assert (project_dir / "reports" / "provenance.json").exists(), \
+            "reports/provenance.json must be created as a fallback"
+
+    def test_provenance_json_has_required_fields(self, pm_module, project_dir):
+        import json
+        pm_module.post_materialize(project_dir)
+        content = (project_dir / "reports" / "provenance.json").read_text(encoding="utf-8")
+        data = json.loads(content)
+        for field in ("job_id", "timestamp", "stages"):
+            assert field in data, f"provenance.json must have '{field}' field"
+
+    def test_provenance_json_not_overwritten_when_exists(self, pm_module, project_dir):
+        import json
+        (project_dir / "reports").mkdir(parents=True, exist_ok=True)
+        existing = {"job_id": "custom", "timestamp": "2025-01-01T00:00:00Z", "stages": ["a"]}
+        (project_dir / "reports" / "provenance.json").write_text(
+            json.dumps(existing), encoding="utf-8"
+        )
+        pm_module.post_materialize(project_dir)
+        loaded = json.loads(
+            (project_dir / "reports" / "provenance.json").read_text(encoding="utf-8")
+        )
+        assert loaded["stages"] == ["a"], "Existing provenance.json must not be overwritten"
+
+    # ------------------------------------------------------------------
     # Idempotency & edge cases
     # ------------------------------------------------------------------
 
