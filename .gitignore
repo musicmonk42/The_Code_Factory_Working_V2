@@ -294,6 +294,7 @@ uploads/
 # These are runtime artifacts, not platform code
 /generated/
 /output/
+/app/
 
 # User pipeline input specs - MD files uploaded via the web UI to drive the pipeline.
 # These are user data (not platform code) and change with every test run.
