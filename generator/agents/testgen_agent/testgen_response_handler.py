@@ -120,8 +120,18 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
             # e.g., "app/main.py" -> "app.main", "app/utils/helpers.py" -> "app.utils.helpers"
             if filepath.endswith('.py'):
                 import_path = filepath[:-3].replace('/', '.')
+                import_parts = import_path.split('.')
                 # Extract just the module name (last component)
-                module_name = import_path.split('.')[-1]
+                module_name = import_parts[-1]
+                # Skip entries that would create a doubled-package import path.
+                # e.g., "app/app.py" -> import_path "app.app" -> module_name "app"
+                # Mapping "app" -> "app.app" would incorrectly convert
+                # "from app import X" to "from app.app import X".
+                if len(import_parts) >= 2 and import_parts[-1] == import_parts[-2]:
+                    logger.debug(
+                        f"Skipping doubled-package module_map entry for '{module_name}' -> '{import_path}'"
+                    )
+                    continue
                 module_map[module_name] = import_path
                 logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
     
@@ -163,6 +173,24 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
                 logger.info(f"Fixed routes import in {filename}: 'app.routes' -> 'app.main'")
                 return f"{indent}{from_keyword}app.main{import_rest}"
             
+            # Fix doubled package-name import paths like "from app.app import X"
+            # The LLM sometimes generates "from app.app import X" instead of
+            # "from app.main import X" when the project has an app/ directory.
+            # Detect when consecutive path components are identical (e.g., "app.app").
+            old_parts = old_path.split('.')
+            if len(old_parts) >= 2 and old_parts[-1] == old_parts[-2]:
+                parent_pkg = '.'.join(old_parts[:-1])
+                main_path = f"{parent_pkg}.main"
+                if code_files and any(
+                    fp.endswith('.py') and fp[:-3].replace('/', '.') == main_path
+                    for fp in code_files.keys()
+                ):
+                    imports_fixed += 1
+                    logger.info(
+                        f"Fixed doubled-package import in {filename}: '{old_path}' -> '{main_path}'"
+                    )
+                    return f"{indent}{from_keyword}{main_path}{import_rest}"
+
             # Check if this is a simple module name that needs fixing
             # e.g., "from main import" should become "from app.main import"
             if '.' not in old_path and old_path in module_map:
