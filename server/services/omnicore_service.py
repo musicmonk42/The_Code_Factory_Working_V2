@@ -5701,9 +5701,9 @@ class OmniCoreService:
                     for py_file in py_files[:max_files_to_analyze]:
                         try:
                             file_issues = await analyzer.analyze_and_propose(py_file)
+                            files_analyzed += 1
                             if file_issues:
                                 all_issues.extend(file_issues)
-                                files_analyzed += 1
                         except Exception as e:
                             logger.warning(f"[SFE_ANALYSIS] Error analyzing {py_file}: {e}")
                             continue
