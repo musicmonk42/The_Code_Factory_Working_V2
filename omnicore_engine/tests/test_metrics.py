@@ -122,6 +122,7 @@ class TestMockInfluxDB:
         """Cleanup after each test"""
         gc.collect()
 
+    @pytest.mark.forked
     def test_mock_influx_write_api(self):
         """Test MockInfluxWriteApi writes to file"""
         # Create temporary file and immediately close it so it can be reopened

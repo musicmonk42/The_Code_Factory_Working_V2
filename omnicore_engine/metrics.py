@@ -92,6 +92,10 @@ class MockInfluxWriteApi:
             f"InfluxDB not available; metric '{point._name}' logged to file: {self.log_file_path}"
         )
 
+    def close(self):
+        """No-op close method for resource cleanup compatibility."""
+        pass
+
 
 class MockInfluxDBClient:
     """A mock InfluxDB client that logs to a file as a fallback."""
