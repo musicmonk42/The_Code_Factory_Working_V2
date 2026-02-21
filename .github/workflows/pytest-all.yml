@@ -170,7 +170,7 @@ jobs:
 
           # Install unified platform requirements first
           if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt || echo "WARNING: Some requirements failed (may be optional)"
+            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
           fi
 
           # Install the unified Code Factory platform from project root
