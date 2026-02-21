@@ -193,6 +193,36 @@ class Environment:
     )
 
     @classmethod
+    def refresh(cls) -> None:
+        """Refresh environment-backed values at runtime."""
+        cls.PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
+        cls.ENV = os.environ.get("ENV", "development")
+        cls.TENANT = os.environ.get("TENANT", "default")
+        cls.REGION = os.environ.get("REGION", "us-east-1")
+        cls.CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", "/var/lib/checkpoints")
+        cls.AUDIT_LOG_PATH = os.environ.get(
+            "CHECKPOINT_AUDIT_LOG_PATH", "./logs/checkpoint/audit.log"
+        )
+        cls.DLQ_PATH = os.environ.get(
+            "CHECKPOINT_DLQ_PATH", "./logs/checkpoint/dlq.jsonl"
+        )
+        cls.ENCRYPTION_KEYS = os.environ.get("CHECKPOINT_ENCRYPTION_KEYS", "")
+        cls.HMAC_KEY = os.environ.get("CHECKPOINT_HMAC_KEY", "")
+        cls.REQUIRE_MFA = (
+            os.environ.get("CHECKPOINT_REQUIRE_MFA", "true").lower() == "true"
+        )
+        cls.MAX_RETRIES = int(os.environ.get("CHECKPOINT_MAX_RETRIES", "3"))
+        cls.RETRY_DELAY = float(os.environ.get("CHECKPOINT_RETRY_DELAY", "1.0"))
+        cls.CACHE_TTL = int(os.environ.get("CHECKPOINT_CACHE_TTL", "300"))
+        cls.CACHE_SIZE = int(os.environ.get("CHECKPOINT_CACHE_SIZE", "1000"))
+        cls.LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+        cls.LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", 10 * 1024 * 1024))
+        cls.LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", 10))
+        cls.ENABLE_PROFILING = (
+            os.environ.get("CHECKPOINT_ENABLE_PROFILING", "false").lower() == "true"
+        )
+
+    @classmethod
     def validate(cls) -> None:
         """Validates environment configuration for production readiness."""
         if cls.PROD_MODE:
@@ -234,7 +264,17 @@ class AuditLogger:
         self.logger.propagate = (
             False  # <--- FIX: Prevent logs from bubbling up to root logger
         )
+        self.reconfigure(log_path)
 
+    def reconfigure(self, log_path: str) -> None:
+        """Reconfigure audit log output path.
+
+        Args:
+            log_path: Absolute or relative file path for the audit log file.
+        """
+        for handler in list(self.logger.handlers):
+            if isinstance(handler, (RotatingFileHandler, logging.NullHandler)):
+                self.logger.removeHandler(handler)
         try:
             # Ensure the parent directory for the log file exists before initializing the handler.
             log_dir = Path(log_path).parent
@@ -474,6 +514,10 @@ class CheckpointManager:
             enable_dlq_rotation: Enable automatic DLQ rotation
             **backend_configs: Backend-specific configuration
         """
+        Environment.refresh()
+        # Tests may update env vars between manager instances; keep paths in sync.
+        audit_logger.reconfigure(Environment.AUDIT_LOG_PATH)
+
         # Check cryptography availability BEFORE environment validation
         if Environment.PROD_MODE and not CRYPTOGRAPHY_AVAILABLE:
             raise RuntimeError("Cryptography library required in production mode")
