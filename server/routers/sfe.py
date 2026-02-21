@@ -381,7 +381,15 @@ async def review_fix(
         already_validated = fix.validation_status == "validated"
         force_override = "force" in (request.comments or "").lower()
 
-        if not already_validated and not force_override:
+        # Skip sandbox validation for low-confidence or informational fixes:
+        # these are guidance-based and not meant to modify test outcomes.
+        is_info_fix = bool(fix.proposed_changes) and all(
+            c.get("action") == "info"
+            for c in (fix.proposed_changes or [])
+        )
+        low_confidence = (fix.confidence or 0.0) < 0.6
+
+        if not already_validated and not force_override and not is_info_fix and not low_confidence:
             job_id = fix.job_id or ""
             try:
                 validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)

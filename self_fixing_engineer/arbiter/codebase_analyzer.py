@@ -1120,6 +1120,38 @@ class CodebaseAnalyzer:
             with open(path, "r", encoding="utf-8") as f:
                 source = f.read()
 
+            # Always run basic AST syntax/structure analysis (stdlib, always available)
+            try:
+                tree = ast.parse(source, filename=path)
+                # Check for common patterns: bare except, undefined-ish issues
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ExceptHandler) and node.type is None:
+                        issues.append(
+                            {
+                                "type": "BARE_EXCEPT",
+                                "risk_level": "low",
+                                "details": {
+                                    "message": f"Bare except clause at line {node.lineno}",
+                                    "line": node.lineno,
+                                },
+                                "suggested_fixer": "refactor",
+                                "confidence": 0.7,
+                            }
+                        )
+            except SyntaxError as e:
+                issues.append(
+                    {
+                        "type": "SYNTAX_ERROR",
+                        "risk_level": "high",
+                        "details": {
+                            "message": str(e),
+                            "line": getattr(e, "lineno", 1),
+                        },
+                        "suggested_fixer": "manual_review",
+                        "confidence": 1.0,
+                    }
+                )
+
             # Add complexity issues from radon
             if RADON_AVAILABLE:
                 for block in cc_visit(source):

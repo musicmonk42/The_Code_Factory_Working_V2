@@ -53,7 +53,7 @@ class BugDetectionRequest(BaseModel):
 
     code_path: str = Field(..., description="Path to code to analyze")
     scan_depth: str = Field(
-        "standard", description="Scan depth (quick, standard, deep)"
+        "deep", description="Scan depth (quick, standard, deep)"
     )
     include_potential: bool = Field(False, description="Include potential issues")
     job_id: Optional[str] = Field(
