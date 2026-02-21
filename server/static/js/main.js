@@ -2427,8 +2427,8 @@ async function runDocgen() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 code_path: './uploads/' + jobId + '/generated',
-                doc_type: 'api',
-                format: 'markdown'
+                doc_type: 'sphinx',
+                format: 'html'
             })
         });
         const data = await response.json();

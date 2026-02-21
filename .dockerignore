@@ -53,20 +53,12 @@ htmlcov/
 .tox/
 
 # Documentation and audit files
-*.md
-!README.md
-LICENSE
-patent_doc.md
-
-# Sphinx documentation — build output, config, and scaffolding are not needed at runtime.
-# docs/_build/ in particular can be very large; exclude it explicitly so a local
-# sphinx-build run does not inflate the image.
-docs/conf.py
-docs/index.rst
+# Explicitly exclude large/generated markdown and the Sphinx build output.
+# All other markdown (deploy_templates, generator, server, docs source, etc.)
+# is kept so that Sphinx and runtime code that reads markdown templates work.
 docs/_build/
-docs/_static/
-docs/_templates/
-docs/*.rst
+patent_doc.md
+LICENSE
 
 # Development and CI files
 .pre-commit-config.yaml

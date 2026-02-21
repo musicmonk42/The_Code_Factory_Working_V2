@@ -923,6 +923,9 @@ async def upload_files(
         'web/', 'npm', 'node.js', 'yarn', 'pnpm'
     ]
 
+    # Collect decoded content for all .md files so we can merge them later.
+    md_file_contents: list[tuple[str, str]] = []  # (filename, decoded_content)
+
     for file in files:
         # Read file content
         content = await file.read()
@@ -932,45 +935,16 @@ async def upload_files(
         
         if filename_lower.endswith('.md'):
             readme_files.append(file.filename)
-            # Store README content for pipeline trigger
-            base_name, _ = os.path.splitext(filename_lower)
-            is_readme_file = 'readme' in base_name
-            
-            # Prioritize files with 'readme' in name, but accept any .md if none found yet
-            if not readme_content or is_readme_file:
-                try:
-                    readme_content = content.decode('utf-8')
-                    if is_readme_file:
-                        logger.info(f"Found explicit README file: {file.filename}")
-                    else:
-                        logger.info(f"Using {file.filename} as specification content (no explicit README.md found)")
-                    
-                    # Content-based frontend detection (PRIMARY METHOD - filename doesn't matter)
-                    if readme_content:
-                        readme_lower = readme_content.lower()
-                        for keyword in FRONTEND_KEYWORDS:
-                            # Use word boundary check to avoid partial matches (e.g., 'reaction' matching 'react')
-                            keyword_lower = keyword.lower()
-                            # Check if keyword exists as whole word or path component
-                            if f' {keyword_lower} ' in f' {readme_lower} ' or f'\n{keyword_lower}\n' in f'\n{readme_lower}\n' or f'/{keyword_lower}' in readme_lower:
-                                logger.info(f"Frontend keyword '{keyword}' detected in {file.filename} content - enabling frontend generation")
-                                include_frontend = True
-                                # Try to detect specific framework from content (with word boundary check)
-                                if ' react ' in f' {readme_lower} ' or '\nreact\n' in f'\n{readme_lower}\n':
-                                    frontend_type = FRONTEND_TYPE_REACT
-                                    logger.info(f"Detected React frontend from content")
-                                elif ' vue ' in f' {readme_lower} ' or '\nvue\n' in f'\n{readme_lower}\n':
-                                    frontend_type = FRONTEND_TYPE_VUE
-                                    logger.info(f"Detected Vue frontend from content")
-                                elif ' angular ' in f' {readme_lower} ' or '\nangular\n' in f'\n{readme_lower}\n':
-                                    frontend_type = FRONTEND_TYPE_ANGULAR
-                                    logger.info(f"Detected Angular frontend from content")
-                                else:
-                                    frontend_type = DEFAULT_FRONTEND_TYPE
-                                    logger.info(f"Detected generic frontend from content")
-                                break
-                except UnicodeDecodeError:
-                    logger.warning(f"Could not decode {file.filename} as UTF-8")
+            # Decode with UTF-8; fall back to replacement characters on error.
+            try:
+                decoded = content.decode('utf-8')
+                logger.info(f"Loaded markdown spec from {file.filename} ({len(decoded)} chars)")
+            except UnicodeDecodeError:
+                decoded = content.decode('utf-8', errors='replace')
+                logger.warning(
+                    f"Non-UTF-8 bytes in {file.filename}; decoded with replacement characters"
+                )
+            md_file_contents.append((file.filename, decoded))
         elif any(pattern in filename_lower for pattern in [
             'test', 'spec', '.test.', '_test.', '.spec.', '_spec.'
         ]):
@@ -987,6 +961,44 @@ async def upload_files(
 
         uploaded_files.append(result)
         job.input_files.append(file.filename)
+
+    # Build merged spec from ALL uploaded .md files in a deterministic order
+    # (sorted by filename).  Each file is prefixed with an HTML comment so
+    # downstream stages can trace the origin without interfering with the
+    # document's own heading structure.
+    if md_file_contents:
+        parts = []
+        for fname, text in sorted(md_file_contents, key=lambda t: t[0]):
+            parts.append(f"<!-- Source: {fname} -->\n\n{text}")
+        readme_content = "\n\n---\n\n".join(parts)
+
+        # Content-based frontend detection across the merged spec
+        readme_lower = readme_content.lower()
+        for keyword in FRONTEND_KEYWORDS:
+            keyword_lower = keyword.lower()
+            if (
+                f' {keyword_lower} ' in f' {readme_lower} '
+                or f'\n{keyword_lower}\n' in f'\n{readme_lower}\n'
+                or f'/{keyword_lower}' in readme_lower
+            ):
+                logger.info(
+                    f"Frontend keyword '{keyword}' detected in uploaded markdown - "
+                    "enabling frontend generation"
+                )
+                include_frontend = True
+                if ' react ' in f' {readme_lower} ' or '\nreact\n' in f'\n{readme_lower}\n':
+                    frontend_type = FRONTEND_TYPE_REACT
+                    logger.info("Detected React frontend from content")
+                elif ' vue ' in f' {readme_lower} ' or '\nvue\n' in f'\n{readme_lower}\n':
+                    frontend_type = FRONTEND_TYPE_VUE
+                    logger.info("Detected Vue frontend from content")
+                elif ' angular ' in f' {readme_lower} ' or '\nangular\n' in f'\n{readme_lower}\n':
+                    frontend_type = FRONTEND_TYPE_ANGULAR
+                    logger.info("Detected Angular frontend from content")
+                else:
+                    frontend_type = DEFAULT_FRONTEND_TYPE
+                    logger.info("Detected generic frontend from content")
+                break
 
     # Trigger generator job creation via OmniCore
     await generator_service.create_generation_job(
