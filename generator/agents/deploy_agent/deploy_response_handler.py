@@ -3581,6 +3581,13 @@ async def handle_deploy_response(
                 '{APPLICATION_NAME}': 'myapp',
                 '<ORGANIZATION_CONTACT>': 'admin@example.com',
                 '{ORGANIZATION_CONTACT}': 'admin@example.com',
+                # FIX: Add missing placeholders that LLM generates for helm/docker deployments
+                '<ORGANIZATION_NAME>': 'my-org',
+                '{ORGANIZATION_NAME}': 'my-org',
+                '<SECRET_REF>': 'app-secrets',
+                '{SECRET_REF}': 'app-secrets',
+                '<hash>': 'latest',
+                '{hash}': 'latest',
             }
             
             # Pre-substitute common environment placeholders in a single pass

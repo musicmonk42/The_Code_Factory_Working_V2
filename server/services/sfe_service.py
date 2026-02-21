@@ -1627,7 +1627,7 @@ class SFEService:
             
             # Determine confidence based on fix success
             if fix_result and fix_result.get("success"):
-                confidence = 0.85
+                confidence = fix_result.get("confidence", 0.70)
                 reasoning = fix_result.get("reasoning", "Automated fix generated successfully.")
             else:
                 confidence = 0.50
@@ -2085,11 +2085,12 @@ class SFEService:
             from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
             ml = get_meta_learning_instance()
             ml_insights = ml.get_insights()
-            if ml_insights:
+            if ml_insights is not None:
                 ml_insights["job_id"] = job_id
                 ml_insights["meta_learning_module"] = (
                     "self_fixing_engineer.simulation.agent_core.MetaLearning"
                 )
+                ml_insights["source"] = "direct_meta_learning"
                 return ml_insights
         except Exception as e:
             logger.debug(f"Direct MetaLearning integration unavailable: {e}")
@@ -2101,6 +2102,8 @@ class SFEService:
             "success_rate": 0.85,
             "common_patterns": ["missing_imports", "type_errors", "syntax_errors"],
             "meta_learning_module": "self_fixing_engineer.arbiter.meta_learning_orchestrator (fallback)",
+            "source": "fallback_static",
+            "note": "These are static fallback values, not real analysis data.",
             "insights": [
                 {
                     "pattern": "Frontend-Backend Endpoint Mismatch",

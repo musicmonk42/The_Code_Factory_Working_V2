@@ -50,6 +50,17 @@ When testing Pydantic models (v2.x):
 | `value_error.missing` | `missing` | Required field missing |
 | Custom `ValueError("msg")` | `value_error` | Custom field validator error |
 
+### CRITICAL: Parsing Error Types Use the Python TYPE Name, NOT the Field Name
+
+**WRONG**: `assert errors[0]["type"] == "price_parsing"` — field name `price` is NOT the type name
+**WRONG**: `assert errors[0]["type"] == "name_parsing"` — field name `name` is NOT the type name
+**CORRECT**: `assert errors[0]["type"] == "float_parsing"` — because `price: float`
+**CORRECT**: `assert errors[0]["type"] == "int_parsing"` — because `quantity: int`
+**CORRECT**: `assert errors[0]["type"] == "string_type"` — because `name: str` with NO custom validator
+
+The error type is ALWAYS determined by the **Python type of the field** (float, int, str, bool),
+never by the **field name** (price, quantity, name, etc.).
+
 ### CRITICAL: Validator vs Field Constraint Interaction
 
 **YOU MUST INSPECT THE SOURCE CODE BEFORE WRITING TESTS!**
