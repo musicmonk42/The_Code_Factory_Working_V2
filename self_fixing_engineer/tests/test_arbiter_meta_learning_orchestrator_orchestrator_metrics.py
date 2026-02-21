@@ -295,12 +295,19 @@ def test_histogram_buckets(metric_name):
 
 def test_metrics_with_no_env_vars(mocker: MockerFixture):
     """Test metrics with default global labels when env vars are missing."""
-    # Clear env vars
-    mocker.patch.dict(os.environ, {}, clear=True)
+    # Clear env vars, but preserve PROMETHEUS_MULTIPROC_DIR so that
+    # prometheus_client (which may have been initialized in multiprocess mode)
+    # can still resolve the metrics directory path when creating new metric values.
+    mocker.patch.dict(
+        os.environ,
+        {k: os.environ[k] for k in ("PROMETHEUS_MULTIPROC_DIR",) if k in os.environ},
+        clear=True,
+    )
 
-    # Force reload of the metrics module
-    if "self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics" in sys.modules:
-        del sys.modules["self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics"]
+    # Force reload of the metrics module to pick up cleared env vars
+    for key in list(sys.modules.keys()):
+        if "meta_learning_orchestrator.metrics" in key:
+            del sys.modules[key]
 
     import arbiter.meta_learning_orchestrator.metrics as metrics_module
 
