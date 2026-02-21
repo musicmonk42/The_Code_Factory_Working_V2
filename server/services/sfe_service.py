@@ -1857,6 +1857,22 @@ class SFEService:
             if not dry_run and fix.job_id:
                 self._invalidate_analysis_cache(fix.job_id)
 
+            # Feed fix outcome to MetaLearning so insights accumulate over time.
+            if not dry_run and files_modified:
+                try:
+                    from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
+                    ml = get_meta_learning_instance()
+                    experience = {
+                        "fix_id": fix_id,
+                        "job_id": fix.job_id,
+                        "files_modified": files_modified,
+                        "outcome": "success",
+                        "proposed_changes": fix.proposed_changes,
+                    }
+                    ml.learn([experience])
+                except Exception as _ml_err:
+                    logger.debug(f"MetaLearning feed skipped: {_ml_err}")
+
             return {
                 "fix_id": fix_id,
                 "applied": not dry_run,
@@ -2873,20 +2889,34 @@ class SFEService:
                         # Just scan without generating report
                         summary = await analyzer.scan_codebase(str(code_path_obj))
 
-                        # Extract information from summary
-                        total_files = (
-                            len(await analyzer.discover_files_async())
-                            if hasattr(analyzer, "discover_files_async")
-                            else 0
+                        # Extract information from the FileSummary dict returned by scan_codebase
+                        total_files = summary.get("files", 0)
+                        complexity_list = summary.get("complexity", [])
+                        avg_complexity = (
+                            sum(c.get("complexity", 0) for c in complexity_list) / len(complexity_list)
+                            if complexity_list else 0
                         )
+                        defects = summary.get("defects", [])
 
                         result = {
                             "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
                             "total_files": total_files,
-                            "total_loc": getattr(summary, "total_lines", 0),
-                            "avg_complexity": getattr(summary, "avg_complexity", 0),
-                            "analysis_summary": str(summary),
-                            "issues": [],
+                            "total_loc": 0,
+                            "avg_complexity": avg_complexity,
+                            "analysis_summary": (
+                                f"Scanned {total_files} file(s), "
+                                f"found {len(defects)} issue(s)"
+                            ),
+                            "issues": [
+                                {
+                                    "file": d.get("file", ""),
+                                    "line": d.get("line", 0),
+                                    "message": d.get("message", ""),
+                                    "severity": d.get("severity", "info"),
+                                }
+                                for d in defects
+                            ],
+                            "dependency_summary": summary.get("dependency_summary", {}),
                             "source": "direct_sfe",
                         }
 

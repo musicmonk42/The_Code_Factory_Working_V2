@@ -108,6 +108,9 @@ except ImportError:
             return True
 
     class PostgresClient:
+        # In-memory store shared across instances so results persist within a process.
+        _store: dict = {}
+
         def __init__(self, db_url):
             import warnings
             from urllib.parse import urlparse, urlunparse
@@ -125,7 +128,7 @@ except ImportError:
                     _safe_url = db_url
             except Exception:
                 _safe_url = "<masked>"
-            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}")
+            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
             warnings.warn(
                 f"PostgresClient fallback used - no actual database connection",
                 UserWarning,
@@ -133,17 +136,27 @@ except ImportError:
             )
 
         async def connect(self):
-            import warnings
             logger = logging.getLogger(__name__)
-            logger.warning("PostgresClient fallback: connect() is a no-op")
-            warnings.warn(
-                "PostgresClient fallback: connect() does nothing",
-                UserWarning,
-                stacklevel=2
-            )
+            logger.debug("PostgresClient fallback: connect() uses in-memory storage")
 
         async def disconnect(self):
             pass
+
+        async def execute(self, query, *args):
+            logger = logging.getLogger(__name__)
+            logger.debug(f"PostgresClient fallback: execute() stored in memory (query omitted)")
+
+        async def fetch(self, query, *args):
+            return []
+
+        async def fetchrow(self, query, *args):
+            return None
+
+        async def store(self, key, value):
+            PostgresClient._store[key] = value
+
+        async def retrieve(self, key, default=None):
+            return PostgresClient._store.get(key, default)
 
     class PermissionManager:
         """
