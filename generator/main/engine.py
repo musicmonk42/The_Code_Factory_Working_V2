@@ -1439,7 +1439,10 @@ class WorkflowEngine:
                                                 '"""Auto-generated Pydantic schemas."""\n'
                                                 "from pydantic import BaseModel, Field, field_validator\n\n"
                                                 "class Item(BaseModel):\n"
-                                                '    """Generic item model used by CRUD endpoints."""\n\n'
+                                                '    """Generic item model used by CRUD endpoints.\n\n'
+                                                "    Validation: name must be non-empty (min_length=1);\n"
+                                                "    price must be positive (gt=0).\n"
+                                                '    """\n\n'
                                                 "    name: str = Field(..., min_length=1)\n"
                                                 "    price: float = Field(..., gt=0)\n"
                                                 "    description: str = ''\n\n"
