@@ -259,6 +259,17 @@ generator/dlt_audit_integrity.json
 generator/plugins.json
 generator/intent_parser.yaml
 
+# Server job output directories - files created by the server for users to download
+atco_artifacts/
+simulation_results/
+self_fixing_engineer/simulation/results/
+
+# Runtime integrity/audit state files written during execution
+*audit_integrity.json
+*_audit.jsonl
+agentic_audit.jsonl
+syntax_errors.txt
+
 # Security - Private keys and certificates
 *.pem
 *.key
