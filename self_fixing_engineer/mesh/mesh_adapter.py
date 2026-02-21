@@ -517,12 +517,14 @@ class MeshPubSub:
         self._throttle = Throttler(RATE_LIMIT_RPS) if Throttler else None
 
         # Security: MultiFernet for key rotation and HMAC for integrity
+        encryption_key = os.environ.get("MESH_ENCRYPTION_KEY", ENCRYPTION_KEY)
+        hmac_key = os.environ.get("MESH_HMAC_KEY", HMAC_KEY)
         self.multi_fernet = (
-            MultiFernet([Fernet(k.encode()) for k in ENCRYPTION_KEY.split(",")])
-            if ENCRYPTION_KEY and MultiFernet
+            MultiFernet([Fernet(k.encode()) for k in encryption_key.split(",")])
+            if encryption_key and MultiFernet
             else None
         )
-        self.hmac_key = HMAC_KEY.encode() if HMAC_KEY else None
+        self.hmac_key = hmac_key.encode() if hmac_key else None
 
     @staticmethod
     def detect_backend(url: str) -> str:

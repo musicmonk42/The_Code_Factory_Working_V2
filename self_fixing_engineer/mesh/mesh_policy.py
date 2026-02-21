@@ -907,14 +907,15 @@ class MeshPolicyEnforcer:
 
         try:
             if user_token and jwt:
-                if not JWT_SECRET:
+                jwt_secret = os.environ.get("JWT_SECRET", JWT_SECRET)
+                if not jwt_secret:
                     logger.critical(
                         "Policy enforcement FAILED: JWT secret is not configured."
                     )
                     return False
                 try:
                     decoded_token = jwt.decode(
-                        user_token, JWT_SECRET, algorithms=["HS256"]
+                        user_token, jwt_secret, algorithms=["HS256"]
                     )
                     if not decoded_token.get("mfa_verified", False):
                         logger.warning(
