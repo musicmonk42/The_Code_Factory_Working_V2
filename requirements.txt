@@ -140,10 +140,10 @@ googletrans==4.0.2
 graphviz==0.21
 greenlet==3.1.1
 grpc-google-iam-v1==0.14.2
-grpcio==1.74.0
-grpcio-health-checking==1.74.0
-grpcio-status==1.74.0
-grpcio-tools==1.74.0
+grpcio==1.69.0
+grpcio-health-checking==1.69.0
+grpcio-status==1.69.0
+grpcio-tools==1.69.0
 gunicorn==23.0.0
 gymnasium==1.2.0
 h11==0.16.0
