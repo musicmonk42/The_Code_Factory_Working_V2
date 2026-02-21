@@ -259,7 +259,7 @@ generator/dlt_audit_integrity.json
 generator/plugins.json
 generator/intent_parser.yaml
 
-# Server job output directories - files created by the server for users to download
+# Internal runtime artifact directories - generated during execution, not for committing
 atco_artifacts/
 simulation_results/
 self_fixing_engineer/simulation/results/
@@ -287,7 +287,7 @@ pytest_report.xml
 /test_acceptance_criteria.py
 /test_audit_logger_fix.py
 
-# Uploads directory - temporary job files
+# Uploads directory - job output files created by the server for users to download
 uploads/
 
 # Pipeline output directories - generated code from local runs (CLI mode)
