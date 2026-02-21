@@ -885,7 +885,7 @@ class OpenTelemetryConfig:
         if not self._initialized:
             self._initialize()
 
-        if self.tracer and name and OTEL_AVAILABLE:
+        if self.tracer and name and OTEL_AVAILABLE and not isinstance(self.tracer, NoOpTracer):
             return trace.get_tracer(name, self.service_version)
 
         return self.tracer or NoOpTracer()
