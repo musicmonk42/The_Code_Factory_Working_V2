@@ -254,10 +254,18 @@ instance_id: test-remote-loaded
             "data": {"data": {"api_key": "vault-sk-123"}}
         }
 
-        # Patch hvac.Client to return our mock_client within the test context
-        with patch(f"{_load_config_module.__name__}.hvac") as mock_hvac_local:
-            mock_hvac_local.Client.return_value = mock_client
+        # Pre-build the fully configured mock before patching it in, so the
+        # mock is ready before load_config / fetch_vault_secrets inspects hvac.
+        mock_hvac_local = MagicMock()
+        mock_hvac_local.Client.return_value = mock_client
 
+        # Patch hvac directly on the module object that load_config uses.
+        # Using patch.object(_load_config_module, "hvac", ...) is more robust
+        # than a string-based patch path: it targets the exact module namespace
+        # where fetch_vault_secrets resolves the 'hvac' global, even when
+        # 'runner.runner_config' and 'generator.runner.runner_config' are
+        # separate module objects due to sys.path ordering.
+        with patch.object(_load_config_module, "hvac", mock_hvac_local):
             # Now set environment variables and load config
             with patch.dict(os.environ, {
                 "RUNNER_VAULT_URL": "http://vault:8200",
