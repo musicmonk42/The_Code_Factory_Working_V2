@@ -62,6 +62,7 @@ _saved_modules_trh = {}
 _modules_to_mock_trh = [
     "runner", "runner.tracer", "runner.runner_logging",
     "runner.runner_metrics", "runner.llm_client", "runner.runner_errors",
+    "runner.runner_audit",
     "watchdog.events", "watchdog.observers", "aiofiles",
 ]
 for _mod in _modules_to_mock_trh:
@@ -74,6 +75,7 @@ sys.modules["runner.runner_logging"] = create_mock_package("runner.runner_loggin
 sys.modules["runner.runner_metrics"] = create_mock_package("runner.runner_metrics")
 sys.modules["runner.llm_client"] = create_mock_package("runner.llm_client")
 sys.modules["runner.runner_errors"] = create_mock_package("runner.runner_errors")
+sys.modules["runner.runner_audit"] = create_mock_package("runner.runner_audit")
 if "aiohttp" not in sys.modules:
     _saved_modules_trh.setdefault("aiohttp", sys.modules.get("aiohttp"))
     _saved_modules_trh.setdefault("aiohttp.web", sys.modules.get("aiohttp.web"))
@@ -165,6 +167,7 @@ from agents.testgen_agent.testgen_response_handler import (
     ResponseParser,
     _local_regex_sanitize,
     fix_brittle_pydantic_assertions,
+    fix_import_paths,
     parse_llm_response,
 )
 
@@ -847,6 +850,94 @@ class TestFixBrittlePydanticAssertions:
         files = {"test_math.py": content}
         result = self._fix(files)
         assert result["test_math.py"] == content
+
+
+class TestFixImportPaths:
+    """Tests for fix_import_paths – ensures bad import paths are corrected."""
+
+    def _fix(self, test_files, code_files=None, language="python"):
+        return fix_import_paths(test_files, code_files=code_files, language=language)
+
+    # ------------------------------------------------------------------
+    # Doubled package-name detection (Bug: app.app -> app.main)
+    # ------------------------------------------------------------------
+
+    def test_fixes_doubled_package_import_to_main(self):
+        """'from app.app import app' should become 'from app.main import app'."""
+        test_files = {
+            "test_file_1.py": "from app.app import app\n\ndef test_dummy():\n    pass\n"
+        }
+        code_files = {"app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"}
+        result = self._fix(test_files, code_files=code_files)
+        assert "from app.main import app" in result["test_file_1.py"]
+        assert "from app.app import" not in result["test_file_1.py"]
+
+    def test_fixes_doubled_package_import_without_code_files(self):
+        """When code_files is None, doubled package imports are left unchanged.
+
+        Without code_files the function cannot determine which module is the
+        correct replacement, so it leaves the import as-is.
+        """
+        test_files = {
+            "test_file_1.py": "from app.app import app\n\ndef test_dummy():\n    pass\n"
+        }
+        result = self._fix(test_files, code_files=None)
+        # Without code_files we cannot determine the correct path, so leave it
+        assert "from app.app import app" in result["test_file_1.py"]
+
+    def test_does_not_fix_doubled_package_when_main_absent(self):
+        """Don't rewrite 'from app.app import X' if 'app/main.py' is not in code_files."""
+        test_files = {
+            "test_file.py": "from app.app import something\n"
+        }
+        # code_files has no app/main.py
+        code_files = {"app/utils.py": "def helper(): pass\n"}
+        result = self._fix(test_files, code_files=code_files)
+        assert "from app.app import something" in result["test_file.py"]
+
+    # ------------------------------------------------------------------
+    # module_map must not map "app" -> "app.app" (regression guard)
+    # ------------------------------------------------------------------
+
+    def test_module_map_skips_doubled_package_entry(self):
+        """'from app import app' must NOT be rewritten to 'from app.app import app'."""
+        test_files = {
+            "test_file.py": "from app import app\n\ndef test_dummy():\n    pass\n"
+        }
+        # code_files contains app/app.py which would previously poison the module_map
+        code_files = {
+            "app/app.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = self._fix(test_files, code_files=code_files)
+        # Must NOT produce "from app.app import app"
+        assert "from app.app import app" not in result["test_file.py"]
+
+    # ------------------------------------------------------------------
+    # Existing behaviours must still work
+    # ------------------------------------------------------------------
+
+    def test_normalizes_generated_prefix(self):
+        """'from generated.myproj.app.main import app' -> 'from app.main import app'."""
+        test_files = {
+            "test_x.py": "from generated.myproj.app.main import app\n"
+        }
+        result = self._fix(test_files)
+        assert "from app.main import app" in result["test_x.py"]
+
+    def test_fixes_routes_import_for_app_symbol(self):
+        """'from app.routes import app' -> 'from app.main import app'."""
+        test_files = {
+            "test_x.py": "from app.routes import app\n"
+        }
+        result = self._fix(test_files)
+        assert "from app.main import app" in result["test_x.py"]
+
+    def test_non_python_files_unchanged(self):
+        """Non-Python files should not be touched."""
+        content = "import { app } from 'app/app';\n"
+        result = self._fix({"test.js": content}, language="javascript")
+        assert result["test.js"] == content
 
 
 if __name__ == "__main__":
