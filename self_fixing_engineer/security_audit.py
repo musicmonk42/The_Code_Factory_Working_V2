@@ -63,13 +63,14 @@ class SecurityAuditor:
                     ),
                 ]
 
+                source_lines = content.splitlines()
                 for pattern, issue in secret_patterns:
                     # re.MULTILINE so ^ anchors work per-line
                     matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
                     for match in matches:
                         line_num = content[: match.start()].count("\n") + 1
                         # Skip lines that are comments (start with # after stripping)
-                        matched_line = content.splitlines()[line_num - 1] if content.splitlines() else ""
+                        matched_line = source_lines[line_num - 1] if source_lines else ""
                         if matched_line.strip().startswith("#"):
                             continue
                         findings.append(
