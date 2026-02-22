@@ -1714,6 +1714,11 @@ def detect_language(code_files: Union[Dict[str, str], str]) -> str:
     # Extract file extensions from the keys
     file_extensions = set(Path(f).suffix.lower() for f in code_files.keys())
 
+    # Filter out strings that don't look like real file extensions
+    # (e.g., ".json()" from response.json() or numeric-heavy strings from JSON payloads)
+    valid_extensions = {ext for ext in file_extensions if re.match(r'^\.[a-zA-Z0-9]{1,10}$', ext)}
+    file_extensions = valid_extensions if valid_extensions else file_extensions
+
     # Check for common language extensions
     if ".py" in file_extensions:
         logger.info(

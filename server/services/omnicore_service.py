@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import threading
 import time
 import yaml
@@ -1316,7 +1317,32 @@ def _invalidate_sfe_analysis_cache(job_path: Path, job_id: str) -> None:
             )
 
 
-class OmniCoreService:
+def _fix_double_nesting(output_dir: Path) -> None:
+    """Flatten a nested 'generated/' subdirectory inside output_dir.
+
+    After materialization the LLM-generated code may place files under
+    ``output_dir/generated/`` which causes a double-nesting pattern such as
+    ``<job>/generated/my_app/generated/…``.  This helper detects that situation
+    and moves the contents of the inner ``generated/`` directory up one level,
+    then removes the now-empty directory.
+    """
+    nested_generated = output_dir / "generated"
+    if nested_generated.is_dir():
+        logger.warning(
+            f"Double-nesting detected at {nested_generated}, flattening..."
+        )
+        for item in os.listdir(nested_generated):
+            src = nested_generated / item
+            dst = output_dir / item
+            if not dst.exists():
+                shutil.move(str(src), str(dst))
+        try:
+            if not os.listdir(nested_generated):
+                os.rmdir(nested_generated)
+        except OSError:
+            pass
+
+
     """
     Service for interacting with the OmniCore Engine.
 
@@ -3593,6 +3619,10 @@ class OmniCoreService:
                             f"[CODEGEN] post_materialize failed: {pm_err}",
                             extra={"job_id": job_id}
                         )
+
+                    # Fix any double-nesting that the LLM may have introduced
+                    # (e.g. output_path/generated/… → output_path/…)
+                    _fix_double_nesting(output_path)
                 else:
                     logger.warning(
                         f"Code generation returned non-dict result - type={type(result).__name__}",
@@ -4470,10 +4500,17 @@ class OmniCoreService:
                                 )
                                 
                                 try:
-                                    # Industry Standard: Use safe_load to prevent code execution
-                                    # yaml.safe_load() only constructs simple Python objects (dict, list, str, etc.)
-                                    parsed_yaml = yaml.safe_load(config_content)
-                                    
+                                    # Use safe_load_all to handle multi-document YAML (separated by ---)
+                                    # Take only the first valid dict document (e.g. Chart.yaml)
+                                    parsed_yaml = None
+                                    try:
+                                        for _doc in yaml.safe_load_all(config_content):
+                                            if isinstance(_doc, dict):
+                                                parsed_yaml = _doc
+                                                break
+                                    except yaml.YAMLError:
+                                        pass
+
                                     # Validate structure
                                     if not isinstance(parsed_yaml, dict):
                                         logger.warning(
@@ -4493,7 +4530,7 @@ class OmniCoreService:
                                         if has_required:
                                             # Content appears to be a valid Helm chart, write it
                                             async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
-                                                await f.write(config_content)
+                                                await f.write(yaml.dump(parsed_yaml, default_flow_style=False))
                                             generated_files.append(str(chart_file.relative_to(repo_path)))
                                             logger.info(
                                                 f"[DEPLOY] Generated helm Chart.yaml (validated)",

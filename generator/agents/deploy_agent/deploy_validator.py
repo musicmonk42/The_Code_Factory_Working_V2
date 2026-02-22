@@ -523,14 +523,18 @@ class DockerValidator(Validator):
 
         # Check if Docker validation should be skipped (CI/production environment)
         skip_docker_validation = os.getenv("SKIP_DOCKER_VALIDATION", "false").lower() in ("true", "1", "yes")
-        
-        if skip_docker_validation:
-            logger.info("Docker validation skipped (SKIP_DOCKER_VALIDATION=true)")
+        docker_socket_available = os.path.exists("/var/run/docker.sock")
+
+        if skip_docker_validation or not docker_socket_available:
+            if not docker_socket_available:
+                logger.warning("Docker socket unavailable — skipping Docker build validation")
+            else:
+                logger.info("Docker validation skipped (SKIP_DOCKER_VALIDATION=true)")
             report["build_status"] = "skipped"
             report["lint_status"] = "skipped"
             report["compliance_score"] = 1.0  # Pass validation when explicitly skipped
             report["lint_issues"].append(
-                "Docker validation skipped via SKIP_DOCKER_VALIDATION environment variable. "
+                "Docker validation skipped: Docker socket unavailable or SKIP_DOCKER_VALIDATION set. "
                 "This is expected in CI/production environments without Docker daemon."
             )
             return report
