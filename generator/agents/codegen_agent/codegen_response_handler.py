@@ -1663,7 +1663,8 @@ def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[
     code = _normalize_file_content(code)
     
     # For Python files, apply bare identifier fix before validation
-    if language.lower() in ("python", "py"):
+    # Skip for non-Python files (e.g. README.md) to avoid spurious syntax warnings
+    if language.lower() in ("python", "py") and not _should_skip_syntax_validation(filename):
         fixed_code = _validate_python_syntax(code, filename)
         if fixed_code != code:
             logger.info(f"Fixed bare identifiers in {filename} before validation")

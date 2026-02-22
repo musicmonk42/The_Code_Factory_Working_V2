@@ -959,6 +959,12 @@ class DefaultResponseParser(ResponseParser):
 
         if language == "python":
             for filename, content in test_files.items():
+                # Skip Python AST validation for non-Python files (e.g. README.md)
+                if not filename.endswith(".py"):
+                    logger.debug(
+                        "Skipping AST verification for non-Python file: %s", filename
+                    )
+                    continue
                 try:
                     # Parse the AST to verify syntax
                     tree = ast.parse(content)
@@ -1038,7 +1044,7 @@ class DefaultResponseParser(ResponseParser):
             # Language-specific AST validation
             LANGUAGE_CONFIG.get(language, {})
 
-            if language == "python":
+            if language == "python" and filename.endswith(".py"):
                 file_issues.extend(self._validate_python_content(filename, content))
             elif language in ["javascript", "typescript"]:
                 file_issues.extend(
