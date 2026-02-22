@@ -468,12 +468,6 @@ class MarkdownStrategy(ParserStrategy):
 
         for section in sections:
             sections[section] = re.sub(
-                r"```(?:\w+)?\n(.*?)\n```",
-                "[CODE_BLOCK]",
-                sections[section],
-                flags=re.DOTALL,
-            )
-            sections[section] = re.sub(
                 r"(\*\*|__|\*|_)(.*?)\1", r"\2", sections[section]
             )
             sections[section] = re.sub(r"\[.*?\]\(.*?\)", "", sections[section])

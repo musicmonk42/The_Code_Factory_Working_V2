@@ -914,12 +914,14 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
     md_section = ""
     if md_content:
         md_section = f"""
-## ORIGINAL SPECIFICATION:
+## AUTHORITATIVE SPECIFICATION (HIGHEST PRIORITY):
+The following is the COMPLETE, AUTHORITATIVE specification. You MUST implement EXACTLY what is described below.
+Do NOT simplify, omit features, or substitute generic implementations.
+The features and constraints lists that follow are supplementary summaries only — if they conflict with this specification, THIS specification takes precedence.
+
 ```markdown
 {md_content}
 ```
-
-IMPORTANT: Implement EXACTLY what the specification describes. Do not add or remove features.
 """
     
     # Extract and explicitly list required endpoints from MD content
@@ -957,10 +959,10 @@ IMPORTANT: Implement EXACTLY what the specification describes. Do not add or rem
     
     prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements from the specification.
 
-{features_text}
-{constraints_text}
 {md_section}
 {required_endpoints_section}
+{features_text}
+{constraints_text}
 
 Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
 

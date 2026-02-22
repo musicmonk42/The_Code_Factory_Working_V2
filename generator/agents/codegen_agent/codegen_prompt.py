@@ -1144,6 +1144,24 @@ def _parse_requirements_flexible(requirements: Any) -> Dict[str, Any]:
                 if match:
                     features.append(match.group(2).strip())
 
+        # Extract all section headers as feature categories
+        section_header_pattern = r"^(#{1,3})\s+(.+)$"
+        header_features = []
+        for line in requirements.split("\n"):
+            match = re.match(section_header_pattern, line.strip())
+            if match:
+                header_features.append(f"[Section] {match.group(2).strip()}")
+
+        # Extract code blocks as implementation examples/schemas
+        code_block_features = []
+        code_block_matches = re.findall(
+            r"```(?:\w+)?\n(.*?)\n```", requirements, flags=re.DOTALL
+        )
+        for i, block in enumerate(code_block_matches, 1):
+            lines = block.strip().splitlines()
+            first_line = lines[0] if lines else ""
+            code_block_features.append(f"[Code example {i}] {first_line}")
+
         # If no structured features found, split on sentences or use whole text
         if not features:
             # Split on periods for multiple requirements
@@ -1153,6 +1171,9 @@ def _parse_requirements_flexible(requirements: Any) -> Dict[str, Any]:
             else:
                 # Single requirement
                 features = [requirements.strip()]
+
+        # Append header and code-block summaries for richer context
+        features = features + header_features + code_block_features
 
         return {
             "features": features,

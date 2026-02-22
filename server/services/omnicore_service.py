@@ -6426,9 +6426,11 @@ class OmniCoreService:
             # 2. Codegen with retry logic
             # Transform payload for codegen - it needs 'requirements' not 'readme_content'
             # Preserve all original payload fields that might be needed
+            raw_md = payload.get("readme_content", payload.get("requirements", ""))
             codegen_payload = {
                 **payload,  # Preserve all original fields
-                "requirements": payload.get("readme_content", payload.get("requirements", "")),
+                "requirements": raw_md,
+                "md_content": raw_md,  # Ensure codegen agent always has raw spec under md_content
             }
             # Remove readme_content from codegen payload as it's now in requirements
             codegen_payload.pop("readme_content", None)
