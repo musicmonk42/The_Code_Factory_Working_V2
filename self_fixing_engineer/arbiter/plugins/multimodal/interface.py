@@ -981,6 +981,434 @@ class DummyMultiModalPlugin(MultiModalPluginInterface):
         await asyncio.sleep(0.001)  # Simulate async cleanup
 
 
+try:
+    import aiohttp as _aiohttp
+    _AIOHTTP_AVAILABLE = True
+except ImportError:
+    _aiohttp = None
+    _AIOHTTP_AVAILABLE = False
+
+import base64
+import tempfile
+
+
+class OpenAIMultiModalProvider(MultiModalPluginInterface):
+    """
+    Multimodal provider using OpenAI APIs (gpt-4o vision, whisper, gpt-4o-mini text).
+    Requires OPENAI_API_KEY environment variable or 'api_key' in config.
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config)
+        self.api_key = (config or {}).get("api_key") or os.getenv("OPENAI_API_KEY")
+        self._base_url = "https://api.openai.com/v1"
+
+    def _headers(self) -> Dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+    def _to_base64(self, image_data: Union[bytes, str]) -> str:
+        if isinstance(image_data, (bytes, bytearray)):
+            return base64.b64encode(image_data).decode("utf-8")
+        with open(image_data, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
+    def analyze_image(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self.analyze_image_async(image_data, **kwargs))
+                    return future.result(timeout=30)
+            return loop.run_until_complete(self.analyze_image_async(image_data, **kwargs))
+        except Exception as e:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message=str(e), result_type=AnalysisResultType.IMAGE, model_id="gpt-4o")
+
+    async def analyze_image_async(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
+        if not _AIOHTTP_AVAILABLE:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message="aiohttp not available", result_type=AnalysisResultType.IMAGE, model_id="gpt-4o")
+        try:
+            b64 = self._to_base64(image_data)
+            payload = {
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": "Analyze this image. Provide: 1) Top 3 classifications with confidence scores, 2) List of detected objects, 3) Any visible text (OCR). Respond as JSON: {\"classifications\": [{\"label\": ..., \"score\": ...}], \"objects\": [...], \"ocr_text\": \"...\"}"},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                ]}],
+                "max_tokens": 500,
+            }
+            async with _aiohttp.ClientSession() as session:
+                async with session.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload, timeout=_aiohttp.ClientTimeout(total=30)) as resp:
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        j_start = content.find("{")
+                        j_end = content.rfind("}") + 1
+                        parsed = json.loads(content[j_start:j_end]) if j_start >= 0 else {}
+                    except (json.JSONDecodeError, ValueError):
+                        parsed = {}
+                    return ImageAnalysisResult(
+                        raw_data=parsed,
+                        success=True,
+                        result_type=AnalysisResultType.IMAGE,
+                        model_id="gpt-4o",
+                        classifications=parsed.get("classifications"),
+                        objects=parsed.get("objects"),
+                        ocr_text=parsed.get("ocr_text"),
+                    )
+        except Exception as e:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message=str(e), result_type=AnalysisResultType.IMAGE, model_id="gpt-4o")
+
+    def analyze_audio(self, audio_data: Union[bytes, str, Any], **kwargs) -> AudioAnalysisResult:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self.analyze_audio_async(audio_data, **kwargs))
+                    return future.result(timeout=60)
+            return loop.run_until_complete(self.analyze_audio_async(audio_data, **kwargs))
+        except Exception as e:
+            return AudioAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.AUDIO, model_id="whisper-1")
+
+    async def analyze_audio_async(self, audio_data: Union[bytes, str, Any], **kwargs) -> AudioAnalysisResult:
+        if not _AIOHTTP_AVAILABLE:
+            return AudioAnalysisResult(raw_data="", success=False, error_message="aiohttp not available", result_type=AnalysisResultType.AUDIO, model_id="whisper-1")
+        try:
+            # Write audio to temp file
+            suffix = ".wav"
+            if isinstance(audio_data, str):
+                audio_path = audio_data
+            else:
+                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                    f.write(audio_data)
+                    audio_path = f.name
+
+            async with _aiohttp.ClientSession() as session:
+                with open(audio_path, "rb") as af:
+                    form = _aiohttp.FormData()
+                    form.add_field("file", af, filename="audio.wav", content_type="audio/wav")
+                    form.add_field("model", "whisper-1")
+                    form.add_field("response_format", "verbose_json")
+                    async with session.post(
+                        f"{self._base_url}/audio/transcriptions",
+                        headers={"Authorization": f"Bearer {self.api_key}"},
+                        data=form,
+                        timeout=_aiohttp.ClientTimeout(total=60),
+                    ) as resp:
+                        trans_data = await resp.json()
+
+                transcript = trans_data.get("text", "")
+                language = trans_data.get("language", "unknown")
+
+                # Second call to classify sentiment
+                sentiment = "neutral"
+                if transcript:
+                    payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": f"Classify the sentiment of this text as positive, negative, or neutral. Respond with just one word: {transcript}"}], "max_tokens": 10}
+                    async with session.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload, timeout=_aiohttp.ClientTimeout(total=15)) as resp2:
+                        sent_data = await resp2.json()
+                        sentiment = sent_data["choices"][0]["message"]["content"].strip().lower()
+
+                return AudioAnalysisResult(
+                    raw_data=transcript,
+                    success=True,
+                    result_type=AnalysisResultType.AUDIO,
+                    model_id="whisper-1",
+                    transcript=transcript,
+                    language=language,
+                    sentiment=sentiment,
+                )
+        except Exception as e:
+            return AudioAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.AUDIO, model_id="whisper-1")
+
+    def analyze_text(self, text_data: str, **kwargs) -> TextAnalysisResult:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self.analyze_text_async(text_data, **kwargs))
+                    return future.result(timeout=30)
+            return loop.run_until_complete(self.analyze_text_async(text_data, **kwargs))
+        except Exception as e:
+            return TextAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.TEXT, model_id="gpt-4o-mini")
+
+    async def analyze_text_async(self, text_data: str, **kwargs) -> TextAnalysisResult:
+        if not _AIOHTTP_AVAILABLE:
+            return TextAnalysisResult(raw_data="", success=False, error_message="aiohttp not available", result_type=AnalysisResultType.TEXT, model_id="gpt-4o-mini")
+        try:
+            prompt = (
+                f"Analyze this text and respond with JSON matching this schema:\n"
+                '{"classification": [{"label": "...", "score": 0.0}], "sentiment": "positive|negative|neutral", '
+                '"named_entities": [{"text": "...", "type": "...", "score": 0.0}], "summary": "...", "keywords": [...]}\n\n'
+                f"Text: {text_data[:2000]}"
+            )
+            payload = {"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500, "response_format": {"type": "json_object"}}
+            async with _aiohttp.ClientSession() as session:
+                async with session.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload, timeout=_aiohttp.ClientTimeout(total=30)) as resp:
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        parsed = json.loads(content)
+                    except (json.JSONDecodeError, ValueError):
+                        parsed = {}
+                    # Map LLM response to TextAnalysisResult field names
+                    raw_sentiment = parsed.get("sentiment")
+                    sentiment_dict = None
+                    if isinstance(raw_sentiment, dict):
+                        sentiment_dict = raw_sentiment
+                    elif isinstance(raw_sentiment, str):
+                        sentiment_dict = {raw_sentiment: 1.0}
+                    return TextAnalysisResult(
+                        raw_data=content,
+                        success=True,
+                        result_type=AnalysisResultType.TEXT,
+                        model_id="gpt-4o-mini",
+                        classification=parsed.get("classification"),
+                        sentiment=sentiment_dict,
+                        entities=parsed.get("named_entities") or parsed.get("entities"),
+                        summary_text=parsed.get("summary"),
+                    )
+        except Exception as e:
+            return TextAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.TEXT, model_id="gpt-4o-mini")
+
+    def analyze_video(self, video_data: Union[bytes, str, Any], **kwargs) -> VideoAnalysisResult:
+        """Analyze video by extracting frames at 1fps using cv2 and analyzing key frames."""
+        try:
+            import cv2 as _cv2
+            HAS_CV2 = True
+        except ImportError:
+            HAS_CV2 = False
+
+        try:
+            frames_results = []
+            if HAS_CV2 and isinstance(video_data, (str, bytes)):
+                import tempfile
+                if isinstance(video_data, bytes):
+                    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+                        f.write(video_data)
+                        video_path = f.name
+                else:
+                    video_path = video_data
+                cap = _cv2.VideoCapture(video_path)
+                fps = cap.get(_cv2.CAP_PROP_FPS) or 25.0
+                total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
+                # Extract first, middle, last frames
+                frame_indices = {0, total_frames // 2, max(0, total_frames - 1)}
+                for fi in sorted(frame_indices):
+                    cap.set(_cv2.CAP_PROP_POS_FRAMES, fi)
+                    ret, frame = cap.read()
+                    if ret:
+                        _, buf = _cv2.imencode(".jpg", frame)
+                        frame_result = self.analyze_image(buf.tobytes())
+                        frames_results.append(frame_result)
+                cap.release()
+
+            return VideoAnalysisResult(
+                raw_data={"frame_count": len(frames_results)},
+                success=True,
+                result_type=AnalysisResultType.VIDEO,
+                model_id="gpt-4o",
+                scene_changes=len(frames_results),
+                key_frames_analysis=frames_results if frames_results else None,
+            )
+        except Exception as e:
+            return VideoAnalysisResult(raw_data={}, success=False, error_message=str(e), result_type=AnalysisResultType.VIDEO, model_id="gpt-4o")
+
+    def supported_modalities(self) -> List[str]:
+        return ["image", "audio", "text", "video"]
+
+    def model_info(self) -> Dict[str, Any]:
+        return {
+            "provider": "openai",
+            "image_model": "gpt-4o",
+            "audio_model": "whisper-1",
+            "text_model": "gpt-4o-mini",
+            "api_version": "v1",
+            "capabilities": ["vision", "transcription", "sentiment", "ner", "classification"],
+        }
+
+
+class XAIMultiModalProvider(MultiModalPluginInterface):
+    """
+    Multimodal provider using xAI Grok APIs (grok-2-vision-1212 for images, grok-3 for text).
+    Requires XAI_API_KEY or GROK_API_KEY environment variable or 'api_key' in config.
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config)
+        self.api_key = (config or {}).get("api_key") or os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+        self._base_url = "https://api.x.ai/v1"
+
+    def _headers(self) -> Dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
+    def _to_base64(self, image_data: Union[bytes, str]) -> str:
+        if isinstance(image_data, (bytes, bytearray)):
+            return base64.b64encode(image_data).decode("utf-8")
+        with open(image_data, "rb") as f:
+            return base64.b64encode(f.read()).decode("utf-8")
+
+    def analyze_image(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self.analyze_image_async(image_data, **kwargs))
+                    return future.result(timeout=30)
+            return loop.run_until_complete(self.analyze_image_async(image_data, **kwargs))
+        except Exception as e:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message=str(e), result_type=AnalysisResultType.IMAGE, model_id="grok-2-vision-1212")
+
+    async def analyze_image_async(self, image_data: Union[bytes, str, Any], **kwargs) -> ImageAnalysisResult:
+        if not _AIOHTTP_AVAILABLE:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message="aiohttp not available", result_type=AnalysisResultType.IMAGE, model_id="grok-2-vision-1212")
+        try:
+            b64 = self._to_base64(image_data)
+            payload = {
+                "model": "grok-2-vision-1212",
+                "messages": [{"role": "user", "content": [
+                    {"type": "text", "text": 'Analyze this image. Respond as JSON: {"classifications": [{"label": ..., "score": ...}], "objects": [...], "ocr_text": "..."}'},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
+                ]}],
+                "max_tokens": 400,
+            }
+            async with _aiohttp.ClientSession() as session:
+                async with session.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload, timeout=_aiohttp.ClientTimeout(total=30)) as resp:
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        j_start = content.find("{")
+                        j_end = content.rfind("}") + 1
+                        parsed = json.loads(content[j_start:j_end]) if j_start >= 0 else {}
+                    except (json.JSONDecodeError, ValueError):
+                        parsed = {}
+                    return ImageAnalysisResult(
+                        raw_data=parsed,
+                        success=True,
+                        result_type=AnalysisResultType.IMAGE,
+                        model_id="grok-2-vision-1212",
+                        classifications=parsed.get("classifications"),
+                        objects=parsed.get("objects"),
+                        ocr_text=parsed.get("ocr_text"),
+                    )
+        except Exception as e:
+            return ImageAnalysisResult(raw_data={}, success=False, error_message=str(e), result_type=AnalysisResultType.IMAGE, model_id="grok-2-vision-1212")
+
+    def analyze_audio(self, audio_data: Union[bytes, str, Any], **kwargs) -> AudioAnalysisResult:
+        raise NotImplementedError("xAI Grok does not support audio analysis. Use OpenAIMultiModalProvider for audio.")
+
+    def analyze_video(self, video_data: Union[bytes, str, Any], **kwargs) -> VideoAnalysisResult:
+        raise NotImplementedError("xAI Grok does not support video analysis. Use OpenAIMultiModalProvider for video.")
+
+    def analyze_text(self, text_data: str, **kwargs) -> TextAnalysisResult:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(asyncio.run, self.analyze_text_async(text_data, **kwargs))
+                    return future.result(timeout=30)
+            return loop.run_until_complete(self.analyze_text_async(text_data, **kwargs))
+        except Exception as e:
+            return TextAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.TEXT, model_id="grok-3")
+
+    async def analyze_text_async(self, text_data: str, **kwargs) -> TextAnalysisResult:
+        if not _AIOHTTP_AVAILABLE:
+            return TextAnalysisResult(raw_data="", success=False, error_message="aiohttp not available", result_type=AnalysisResultType.TEXT, model_id="grok-3")
+        try:
+            prompt = (
+                f"Analyze this text and respond with JSON:\n"
+                '{"classification": [{"label": "...", "score": 0.0}], "sentiment": "positive|negative|neutral", '
+                '"named_entities": [{"text": "...", "type": "...", "score": 0.0}], "summary": "...", "keywords": [...]}\n\n'
+                f"Text: {text_data[:2000]}"
+            )
+            payload = {"model": "grok-3", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500}
+            async with _aiohttp.ClientSession() as session:
+                async with session.post(f"{self._base_url}/chat/completions", headers=self._headers(), json=payload, timeout=_aiohttp.ClientTimeout(total=30)) as resp:
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    try:
+                        j_start = content.find("{")
+                        j_end = content.rfind("}") + 1
+                        parsed = json.loads(content[j_start:j_end]) if j_start >= 0 else {}
+                    except (json.JSONDecodeError, ValueError):
+                        parsed = {}
+                    raw_sentiment = parsed.get("sentiment")
+                    sentiment_dict = None
+                    if isinstance(raw_sentiment, dict):
+                        sentiment_dict = raw_sentiment
+                    elif isinstance(raw_sentiment, str):
+                        sentiment_dict = {raw_sentiment: 1.0}
+                    return TextAnalysisResult(
+                        raw_data=content,
+                        success=True,
+                        result_type=AnalysisResultType.TEXT,
+                        model_id="grok-3",
+                        classification=parsed.get("classification"),
+                        sentiment=sentiment_dict,
+                        entities=parsed.get("named_entities") or parsed.get("entities"),
+                        summary_text=parsed.get("summary"),
+                    )
+        except Exception as e:
+            return TextAnalysisResult(raw_data="", success=False, error_message=str(e), result_type=AnalysisResultType.TEXT, model_id="grok-3")
+
+    def supported_modalities(self) -> List[str]:
+        return ["image", "text"]
+
+    def model_info(self) -> Dict[str, Any]:
+        return {
+            "provider": "xai",
+            "image_model": "grok-2-vision-1212",
+            "text_model": "grok-3",
+            "api_version": "v1",
+            "capabilities": ["vision", "text_analysis"],
+        }
+
+
+def get_multimodal_provider(provider: str = "auto") -> MultiModalPluginInterface:
+    """
+    Get a multimodal provider instance.
+
+    Args:
+        provider: "openai", "xai", "auto" (auto-detects from env vars)
+
+    Returns:
+        Configured MultiModalPluginInterface implementation
+
+    Raises:
+        ValueError: If no provider is available
+    """
+    if provider == "xai":
+        api_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+        if not api_key:
+            raise ValueError("XAI_API_KEY or GROK_API_KEY environment variable not set")
+        return XAIMultiModalProvider()
+    elif provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable not set")
+        return OpenAIMultiModalProvider()
+    elif provider == "auto":
+        xai_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+        if xai_key:
+            return XAIMultiModalProvider()
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            return OpenAIMultiModalProvider()
+        raise ValueError(
+            "No multimodal provider API key found. Set XAI_API_KEY, GROK_API_KEY, or OPENAI_API_KEY."
+        )
+    else:
+        raise ValueError(f"Unknown provider: {provider!r}. Use 'openai', 'xai', or 'auto'.")
+
+
 # Inline sanity test and usage examples
 if __name__ == "__main__":
     print("--- Testing DummyMultiModalPlugin (Synchronous) ---")

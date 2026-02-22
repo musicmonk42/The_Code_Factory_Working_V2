@@ -16,6 +16,10 @@
 # Build arguments:
 # - SKIP_HEAVY_DEPS: Set to 1 to skip installing heavy dependencies (useful for CI/testing)
 #   Example: docker build --build-arg SKIP_HEAVY_DEPS=1 -t code-factory:latest .
+# - INSTALL_AI_DEPS: Set to 1 to install optional Tier-1 AI capabilities (qiskit, nengo, opencv)
+#   Example: docker build --build-arg INSTALL_AI_DEPS=1 -t code-factory:ai-full .
+#   This installs requirements-ai.txt AFTER the main requirements.txt.
+#   Omit or set to 0 (default) to keep the base image lean.
 #
 # Security Scanning:
 #   trivy image code-factory:latest
@@ -69,7 +73,7 @@ RUN mkdir -p /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache
 WORKDIR /app
 
 # Copy only requirements first for better layer caching
-COPY requirements.txt* master_requirements.txt* ./
+COPY requirements.txt* master_requirements.txt* requirements-ai.txt* ./
 
 # Note: All three modules (generator, omnicore_engine, self_fixing_engineer) are part
 # of a single unified platform. Dependencies are installed from the root requirements.txt
@@ -102,6 +106,25 @@ RUN set -e; \
     find /opt/venv -type f -name '*.pyo' -delete 2>/dev/null || true; \
     # Enhanced cleanup to reduce size of files being copied to runtime stage
     find /opt/venv -type d \( -name 'tests' -o -name 'test' \) -prune -exec rm -rf {} + 2>/dev/null || true
+
+# Install optional Tier-1 AI capability dependencies (qiskit, nengo, opencv-python-headless).
+# These are disabled by default to keep the base image lean.
+# Enable at build time: docker build --build-arg INSTALL_AI_DEPS=1 ...
+ARG INSTALL_AI_DEPS=0
+RUN set -e; \
+    if [ "$INSTALL_AI_DEPS" = "1" ] && [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
+        if [ -f requirements-ai.txt ]; then \
+            echo "========================================"; \
+            echo "Installing optional AI dependencies (Tier-1 capabilities)..."; \
+            echo "========================================"; \
+            python -m pip install --no-cache-dir -r requirements-ai.txt; \
+            echo "✓ Optional AI dependencies installed successfully"; \
+        else \
+            echo "WARNING: requirements-ai.txt not found, skipping optional AI deps"; \
+        fi; \
+    else \
+        echo "Skipping optional AI dependencies (set INSTALL_AI_DEPS=1 to enable)"; \
+    fi
 
 # Verify critical dependencies are installed and importable
 # This ensures the container will actually start successfully

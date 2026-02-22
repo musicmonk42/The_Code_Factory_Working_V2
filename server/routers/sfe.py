@@ -43,6 +43,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
 
+# ---------------------------------------------------------------------------
+# RL action map — single source of truth lives in code_health_env.
+# We import it at module load; if the env module is unavailable (e.g. minimal
+# test environment) we fall back to a local copy that must stay in sync.
+# ---------------------------------------------------------------------------
+try:
+    from self_fixing_engineer.envs.code_health_env import ActionType as _ActionType  # noqa: F401
+
+    _RL_ACTION_MAP: Dict[str, int] = {
+        member.name.lower(): member.value
+        for member in _ActionType
+    }
+except Exception:
+    # Fallback — must match the ActionType enum values in code_health_env.py
+    _RL_ACTION_MAP = {
+        "noop": 0,
+        "restart": 1,
+        "rollback": 2,
+        "apply_patch": 3,
+        "run_linter": 4,
+        "run_tests": 5,
+        "run_formatter": 6,
+    }
+
 # Module-level singleton for SFEService
 _sfe_service_instance: Optional[SFEService] = None
 _sfe_service_lock = threading.Lock()
@@ -1367,3 +1391,246 @@ async def fix_imports(
 
     logger.info(f"Imports fixed for {request.code_path} (job_id: {request.job_id})")
     return result
+
+
+
+# ============================================================================
+# RL Code Health Optimizer — Status & Step Endpoints
+# Feature 6: Wire RL Code Health Optimizer to Real Metrics
+# ============================================================================
+
+try:
+    from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+    _rl_requests_total = get_or_create_counter(
+        "sfe_rl_requests_total",
+        "Total RL optimizer API requests",
+        ("endpoint", "status"),
+    )
+    _rl_reward_gauge = get_or_create_gauge(
+        "sfe_rl_last_reward",
+        "Reward returned by the last POST /rl/step call",
+        (),
+    )
+except Exception:
+    _rl_requests_total = None
+    _rl_reward_gauge = None
+
+_RL_METRICS_FIELDS = (
+    "pass_rate",
+    "code_coverage",
+    "complexity",
+    "generation_success_rate",
+    "critique_score",
+)
+# _RL_ACTION_MAP is defined at module top — imported from code_health_env or
+# initialised from the local fallback.  Do NOT redefine it here.
+
+
+def _extract_metrics_dict(code_health_env: Any) -> Dict[str, Any]:
+    """Extract current SystemMetrics as a plain dict from a CodeHealthEnv instance."""
+    if code_health_env is None or not hasattr(code_health_env, "get_current_metrics"):
+        return {}
+    try:
+        metrics = code_health_env.get_current_metrics()
+        return {k: getattr(metrics, k, None) for k in _RL_METRICS_FIELDS}
+    except Exception:
+        return {}
+
+
+@router.get(
+    "/v1/rl/status",
+    summary="RL Code Health Optimizer — Current Status",
+    response_description="Current RL session state, metrics, and last action",
+    tags=["RL Optimizer"],
+)
+async def get_rl_status(
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    **GET /api/sfe/v1/rl/status**
+
+    Returns the live state of the reinforcement-learning code-health optimizer.
+
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `session_id` | string | Unique optimizer session identifier |
+    | `current_state` | object | Current `SystemMetrics` values (pass_rate, coverage, etc.) |
+    | `steps` | int | Number of RL steps taken this session |
+    | `cumulative_reward` | float | Total reward accumulated since session start |
+    | `last_action` | string | Name of the most recently executed action |
+    | `metrics_summary` | object | Alias of `current_state` for convenience |
+    """
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
+        metrics_dict = _extract_metrics_dict(code_health_env)
+
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="status", status="ok").inc()
+        except Exception:
+            pass
+
+        return {
+            "session_id": str(getattr(code_health_env, "session_id", "default") if code_health_env else "default"),
+            "current_state": metrics_dict,
+            "steps": int(getattr(code_health_env, "current_step", 0) if code_health_env else 0),
+            "cumulative_reward": float(getattr(code_health_env, "cumulative_reward", 0.0) if code_health_env else 0.0),
+            "last_action": str(getattr(code_health_env, "last_action_name", "noop") if code_health_env else "noop"),
+            "metrics_summary": metrics_dict,
+        }
+    except Exception as exc:
+        logger.error("Error fetching RL status: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve RL status: {exc}") from exc
+
+
+@router.post(
+    "/v1/rl/step",
+    summary="RL Code Health Optimizer — Execute One Step",
+    response_description="Reward, new system state, and episode completion flag",
+    tags=["RL Optimizer"],
+)
+async def rl_step(
+    request: Dict[str, Any],
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    **POST /api/sfe/v1/rl/step**
+
+    Execute a single step in the RL code-health optimization loop.
+
+    ### Request Body
+    ```json
+    { "action": "run_tests" }
+    ```
+    Supported action names: `noop`, `restart`, `rollback`, `apply_patch`,
+    `run_linter`, `run_tests`, `run_formatter`.
+    If `action` is omitted the RL policy samples an action automatically.
+
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `reward` | float | Reward received for this step |
+    | `new_state` | object | Updated `SystemMetrics` after the action |
+    | `done` | bool | Whether the episode has reached a terminal state |
+    | `action_taken` | string | Name of the action that was executed |
+    """
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
+
+        if code_health_env is None:
+            raise HTTPException(
+                status_code=503,
+                detail="CodeHealthEnv is not available. Ensure the RL optimizer has been initialized.",
+            )
+
+        action_name: Optional[str] = request.get("action") if isinstance(request, dict) else None
+
+        # Determine action_id: prefer explicit action, fall back to policy sample, then noop
+        if action_name:
+            if action_name not in _RL_ACTION_MAP:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown action '{action_name}'. Valid actions: {sorted(_RL_ACTION_MAP)}",
+                )
+            action_id = _RL_ACTION_MAP[action_name]
+        elif hasattr(code_health_env, "action_space"):
+            try:
+                action_id = int(code_health_env.action_space.sample())
+                action_name = next(
+                    (k for k, v in _RL_ACTION_MAP.items() if v == action_id),
+                    f"action_{action_id}",
+                )
+            except Exception:
+                action_id = 0
+                action_name = "noop"
+        else:
+            action_id = 0
+            action_name = "noop"
+
+        reward = 0.0
+        done = False
+        try:
+            if hasattr(code_health_env, "step"):
+                _obs, reward, done, *_ = code_health_env.step(action_id)
+        except Exception as step_err:
+            logger.warning("RL step failed for action '%s': %s", action_name, step_err)
+
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="step", status="ok").inc()
+            if _rl_reward_gauge:
+                _rl_reward_gauge.set(float(reward))
+        except Exception:
+            pass
+
+        return {
+            "reward": float(reward),
+            "new_state": _extract_metrics_dict(code_health_env),
+            "done": bool(done),
+            "action_taken": str(action_name),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Unexpected error during RL step: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"RL step failed: {exc}") from exc
+
+
+@router.get(
+    "/v1/evolution/history",
+    summary="Genetic Evolution Engine — Per-generation History",
+    response_description="List of per-generation fitness statistics",
+    tags=["Evolution"],
+)
+async def get_evolution_history(
+    limit: int = Query(default=50, ge=1, le=500, description="Maximum number of generations to return"),
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    **GET /api/sfe/v1/evolution/history**
+
+    Returns the per-generation fitness statistics produced by the
+    `GeneticEvolutionEngine` running inside the Arbiter.
+
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `current_generation` | int | Current generation number |
+    | `population_size` | int | Genome population size |
+    | `history` | list | Per-generation stats (best_fitness, avg_fitness, best_genome_id) |
+    | `total_generations` | int | Total generations completed |
+    """
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        evolution_engine = getattr(arbiter, "evolution_engine", None) if arbiter else None
+
+        if evolution_engine is None:
+            return {
+                "current_generation": 0,
+                "population_size": 0,
+                "history": [],
+                "total_generations": 0,
+                "status": "evolution_engine_unavailable",
+            }
+
+        history = evolution_engine.get_evolution_history()
+        history_slice = history[-limit:] if len(history) > limit else history
+
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="evolution_history", status="ok").inc()
+        except Exception:
+            pass
+
+        return {
+            "current_generation": evolution_engine.generation,
+            "population_size": len(evolution_engine.population),
+            "history": history_slice,
+            "total_generations": len(history),
+        }
+    except Exception as exc:
+        logger.error("Error fetching evolution history: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve evolution history: {exc}") from exc

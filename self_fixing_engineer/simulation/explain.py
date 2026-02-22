@@ -21,6 +21,13 @@ from logging import Formatter
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+try:
+    import aiohttp
+    AIOHTTP_AVAILABLE = True
+except ImportError:
+    aiohttp = None
+    AIOHTTP_AVAILABLE = False
+
 # Prometheus client for metrics
 try:
     from prometheus_client import (
@@ -351,6 +358,23 @@ if not logger.handlers:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+# ---------------------------------------------------------------------------
+# Confidence Scoring Constants
+# ---------------------------------------------------------------------------
+#: Baseline confidence when no data points are available.
+_BASE_CONFIDENCE: float = 0.5
+#: Additive confidence per numeric data point in the result dict.
+_CONFIDENCE_PER_DATA_POINT: float = 0.05
+#: Confidence is capped at this value regardless of data richness (1.0 would
+#: imply perfect certainty which is never justified from data alone).
+_MAX_CONFIDENCE: float = 0.95
+#: Confidence below this threshold triggers an ``uncertainty_reason`` message.
+_UNCERTAINTY_THRESHOLD: float = 0.8
+#: Minimum numeric data points for "strong" evidence quality.
+_STRONG_EVIDENCE_MIN_POINTS: int = 5
+#: Minimum numeric data points for "moderate" evidence quality.
+_MODERATE_EVIDENCE_MIN_POINTS: int = 2
+
 # --- Async Executor (Robust, Process-Safe Pool) ---
 _executor: Optional[ThreadPoolExecutor] = None
 _executor_lock = asyncio.Lock()
@@ -560,6 +584,71 @@ def _rule_based_fallback(query: str, context: Dict[str, Any], mode: str) -> str:
     return random.choice(
         response_phrases.get(mode, [f"[Fallback] Could not process '{query}'."])
     )
+
+
+async def _call_llm_api(prompt: str, api_key: str, use_xai: bool = False, temperature: float = 0.3) -> Optional[str]:
+    """Call an LLM API (xAI Grok or OpenAI) and return the text response.
+
+    Args:
+        prompt: The user-facing prompt to send to the model.
+        api_key: Bearer token for the target API.
+        use_xai: When ``True``, target the xAI API (``grok-3``); otherwise
+            target OpenAI (``gpt-4o-mini``).
+        temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative).
+
+    Returns:
+        The model's response text on success, or ``None`` when:
+        - ``aiohttp`` is not installed (``AIOHTTP_AVAILABLE=False``).
+        - ``api_key`` is falsy.
+        - The network request fails for any reason.
+
+        Callers **must** implement a fallback when this returns ``None``.
+
+    Note:
+        The guard checks both ``aiohttp is None`` **and** ``AIOHTTP_AVAILABLE``
+        to satisfy type-checkers (which cannot see the import-time flag) and to
+        prevent an ``AttributeError`` on ``None.ClientSession``.
+    """
+    # Guard: aiohttp is set to None when the import failed (AIOHTTP_AVAILABLE=False).
+    # The explicit `aiohttp is None` check prevents AttributeError on None.ClientSession
+    # and satisfies type-checkers that cannot see the AIOHTTP_AVAILABLE flag.
+    if aiohttp is None or not AIOHTTP_AVAILABLE or not api_key:
+        return None
+    if use_xai:
+        url = "https://api.x.ai/v1/chat/completions"
+        model = "grok-3"
+    else:
+        url = "https://api.openai.com/v1/chat/completions"
+        model = "gpt-4o-mini"
+    try:
+        async with aiohttp.ClientSession() as session:
+            resp = await session.post(
+                url,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": temperature},
+                timeout=aiohttp.ClientTimeout(total=30),
+            )
+            data = await resp.json()
+            return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"LLM API call failed: {e}")
+        return None
+
+
+def _get_llm_credentials(config: Any = None) -> tuple:
+    """Return (api_key, use_xai) for the best available LLM provider."""
+    if config:
+        key = getattr(config, "llm_api_key", None) or getattr(config, "LLM_API_KEY", None)
+        if key:
+            xai_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+            return key, bool(xai_key and key == xai_key)
+    xai_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+    if xai_key:
+        return xai_key, True
+    openai_key = os.getenv("OPENAI_API_KEY")
+    if openai_key:
+        return openai_key, False
+    return None, False
 
 
 class HistoryManager:
@@ -1563,8 +1652,24 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
     async def initialize(self):
         await self.async_init()
 
-    async def explain_result(self, result: Dict[str, Any]) -> str:
-        correlation_id = result.get("id", str(uuid.uuid4()))
+    async def explain_result(self, result: Dict[str, Any], **kwargs) -> str:
+        """Generate a human-readable explanation string for the given simulation result.
+
+        This method returns a plain text string.  Callers that need a structured
+        response envelope (confidence, decision_factors, etc.) should use
+        ``execute(action="explain", result=result, ...)`` which wraps the string
+        returned here into the full ``ExplainResponse`` dict.
+
+        Args:
+            result: The simulation result to explain.
+            **kwargs:
+                explanation_level (str): One of ``"high"`` (1-2 sentences),
+                    ``"detailed"`` (paragraph, default), or ``"technical"``
+                    (chain-of-thought with confidence).
+
+        Returns:
+            Plain text explanation string.
+        """
 
         try:
             if PYDANTIC_AVAILABLE:
@@ -1642,7 +1747,36 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
             .time()
         ):
             try:
-                if not LANGCHAIN_OPENAI_AVAILABLE:
+                explanation_level = kwargs.get("explanation_level", "detailed") if kwargs else "detailed"
+                api_key, use_xai = _get_llm_credentials(getattr(self, "config", None))
+
+                if api_key and AIOHTTP_AVAILABLE:
+                    level_prompts = {
+                        "high": (
+                            f"In 1-2 sentences for a non-technical user, explain this result: "
+                            f"{json.dumps(validated_result.details, indent=2)}"
+                        ),
+                        "detailed": (
+                            f"In a clear paragraph highlighting key factors, explain this simulation result: "
+                            f"{json.dumps(validated_result.details, indent=2)}"
+                        ),
+                        "technical": (
+                            f"Provide a step-by-step chain-of-thought technical explanation with confidence "
+                            f"assessment for this result: {json.dumps(validated_result.details, indent=2)}\n"
+                            "Include: reasoning chain, confidence (0.0-1.0), and key uncertainty factors."
+                        ),
+                    }
+                    prompt = level_prompts.get(explanation_level, level_prompts["detailed"])
+                    llm_response = await _call_llm_api(prompt, api_key, use_xai)
+                    if llm_response:
+                        explanation_text = llm_response.strip()
+                    else:
+                        explanation_text = _rule_based_fallback(
+                            f"explain result {validated_result.result_id}",
+                            validated_result.details,
+                            "explain",
+                        )
+                elif not LANGCHAIN_OPENAI_AVAILABLE:
                     explanation_text = _rule_based_fallback(
                         f"explain result {validated_result.result_id}",
                         validated_result.details,
@@ -1709,10 +1843,110 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
                     code="EXPLANATION_GENERATION_FAILED",
                 )
 
+    async def explain_counterfactual(
+        self,
+        result: Dict[str, Any],
+        changed_inputs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Answers: "What would have happened if X had been different?"
+
+        Args:
+            result: The actual result that occurred
+            changed_inputs: Dict of what would have been different (e.g., {"pass_rate": 0.9})
+
+        Returns:
+            {
+                "actual_outcome": "...",
+                "counterfactual_outcome": "...",
+                "key_differences": [...],
+                "confidence": 0.0-1.0
+            }
+        """
+        api_key, use_xai = _get_llm_credentials(getattr(self, "config", None))
+
+        if api_key and AIOHTTP_AVAILABLE:
+            prompt = (
+                f"Actual scenario:\n{json.dumps(result, indent=2)}\n\n"
+                f"Counterfactual scenario (what if these inputs had been different):\n"
+                f"{json.dumps(changed_inputs, indent=2)}\n\n"
+                "Analyze: What would the outcome have been in the counterfactual scenario? "
+                "What are the key factors that drive the difference?\n"
+                'Respond with JSON: {"actual_outcome": "...", "counterfactual_outcome": "...", '
+                '"key_differences": [...], "confidence": 0.0}'
+            )
+            llm_response = await _call_llm_api(prompt, api_key, use_xai, temperature=0.2)
+            if llm_response:
+                try:
+                    json_start = llm_response.find("{")
+                    json_end = llm_response.rfind("}") + 1
+                    if json_start >= 0 and json_end > json_start:
+                        parsed = json.loads(llm_response[json_start:json_end])
+                        return {
+                            "actual_outcome": parsed.get("actual_outcome", str(result.get("status", "unknown"))),
+                            "counterfactual_outcome": parsed.get("counterfactual_outcome", "Unknown counterfactual outcome"),
+                            "key_differences": parsed.get("key_differences", list(changed_inputs.keys())),
+                            "confidence": float(parsed.get("confidence", 0.6)),
+                            "source": "llm",
+                        }
+                except (json.JSONDecodeError, KeyError, ValueError):
+                    pass
+
+        # Rule-based fallback
+        return {
+            "actual_outcome": str(result.get("status", "unknown outcome")),
+            "counterfactual_outcome": f"With changed inputs {list(changed_inputs.keys())}, the outcome would likely differ.",
+            "key_differences": [f"{k}: {v}" for k, v in changed_inputs.items()],
+            "confidence": 0.4,
+            "source": "rule_based",
+        }
+
     async def execute(self, action: str, **kwargs) -> Any:
         try:
             if action == "explain":
-                return await self.explain_result(kwargs.get("result"))
+                result = kwargs.get("result")
+                explanation_level = kwargs.get("explanation_level", "detailed")
+                # Build decision factors from result data
+                decision_factors = []
+                if isinstance(result, dict):
+                    for k, v in result.items():
+                        if isinstance(v, (int, float)):
+                            impact = "high" if abs(v) > 0.7 else ("medium" if abs(v) > 0.3 else "low")
+                            decision_factors.append({
+                                "factor": k,
+                                "value": v,
+                                "impact": impact,
+                                "direction": "positive" if v > 0 else "negative",
+                            })
+                    decision_factors.sort(key=lambda x: {"high": 3, "medium": 2, "low": 1}.get(x["impact"], 0), reverse=True)
+                # Estimate confidence and evidence quality from data richness
+                data_points = len([v for v in (result or {}).values() if isinstance(v, (int, float))]) if result else 0
+                confidence = min(_BASE_CONFIDENCE + data_points * _CONFIDENCE_PER_DATA_POINT, _MAX_CONFIDENCE)
+                if data_points >= _STRONG_EVIDENCE_MIN_POINTS:
+                    evidence_quality = "strong"
+                elif data_points >= _MODERATE_EVIDENCE_MIN_POINTS:
+                    evidence_quality = "moderate"
+                else:
+                    evidence_quality = "weak"
+                uncertainty_reason = (
+                    None if confidence >= _UNCERTAINTY_THRESHOLD
+                    else f"Only {data_points} numeric data points available"
+                )
+
+                explanation_text = await self.explain_result(result, explanation_level=explanation_level)
+                return {
+                    "explanation": explanation_text,
+                    "explanation_level": explanation_level,
+                    "decision_factors": decision_factors[:5],
+                    "confidence": confidence,
+                    "uncertainty_reason": uncertainty_reason,
+                    "evidence_quality": evidence_quality,
+                }
+            elif action == "counterfactual":
+                return await self.explain_counterfactual(
+                    result=kwargs.get("result", {}),
+                    changed_inputs=kwargs.get("changed_inputs", {}),
+                )
             elif action == "reason":
                 return await self.reason(kwargs.get("query"), kwargs.get("context"))
             elif action == "get_history":

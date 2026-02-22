@@ -98,6 +98,21 @@ services:
 
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
+
+      # -----------------------------------------------------------------------
+      # Tier-1 AI Capability Configuration
+      # -----------------------------------------------------------------------
+      # Feature 1: Quantum / Neuromorphic Array Backend
+      # Install qiskit+qiskit-aer / nengo first: make install-ai
+      - ARRAY_BACKEND_QUANTUM=${ARRAY_BACKEND_QUANTUM:-false}
+      - ARRAY_BACKEND_NEUROMORPHIC=${ARRAY_BACKEND_NEUROMORPHIC:-false}
+      # Feature 6: RL Metrics Collector — Prometheus URL (empty = skip latency metrics)
+      # Example: PROMETHEUS_URL=http://prometheus:9090
+      - PROMETHEUS_URL=${PROMETHEUS_URL:-}
+      # Feature 5: Genetic Evolution Engine
+      - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
+      # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
+      - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
     ports:
       - "8000:8000"  # Main API endpoint
       - "8001:8001"  # Metrics port
