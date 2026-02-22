@@ -1579,6 +1579,79 @@ async def rl_step(
         raise HTTPException(status_code=500, detail=f"RL step failed: {exc}") from exc
 
 
+# ---------------------------------------------------------------------------
+# PlatformMetricsCollector integration — /api/sfe/rl/metrics/collect
+# ---------------------------------------------------------------------------
+
+try:
+    from self_fixing_engineer.envs.metrics_collector import PlatformMetricsCollector
+    _PLATFORM_METRICS_AVAILABLE = True
+except ImportError:
+    _PLATFORM_METRICS_AVAILABLE = False
+
+# Lazily-initialised singleton
+_platform_collector: Optional["PlatformMetricsCollector"] = None
+
+
+def _get_platform_collector() -> "PlatformMetricsCollector":
+    """Return (and lazily create) the module-level PlatformMetricsCollector."""
+    global _platform_collector
+    if _platform_collector is None and _PLATFORM_METRICS_AVAILABLE:
+        _platform_collector = PlatformMetricsCollector()
+    return _platform_collector  # type: ignore[return-value]
+
+
+@router.get(
+    "/rl/metrics/collect",
+    summary="RL Metrics — Collect Real Platform Metrics",
+    response_description="Live metrics gathered from pytest, radon, bandit, and Prometheus",
+    tags=["RL Optimizer"],
+)
+async def collect_platform_metrics() -> Dict[str, Any]:
+    """
+    **GET /api/sfe/rl/metrics/collect**
+
+    Triggers a real-time collection of platform health metrics via the
+    ``PlatformMetricsCollector``.  The collector runs pytest, radon, and
+    bandit as sub-processes and optionally queries a Prometheus endpoint.
+
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `pass_rate` | float | Fraction of tests passing (0.0–1.0) |
+    | `code_coverage` | float | Line coverage fraction (0.0–1.0) |
+    | `complexity` | float | Normalised cyclomatic complexity (0.0–1.0) |
+    | `alert_ratio` | float | Security alerts per 100 LOC (0.0–1.0) |
+    | `latency` | float | Normalised p95 latency from Prometheus |
+    | `collector_available` | bool | Whether the collector is installed |
+    """
+    if not _PLATFORM_METRICS_AVAILABLE:
+        return {
+            "collector_available": False,
+            "error": "PlatformMetricsCollector not available (missing dependency)",
+        }
+
+    collector = _get_platform_collector()
+    try:
+        metrics = await collector.collect()
+        result = {
+            k: getattr(metrics, k, None)
+            for k in (
+                "pass_rate", "code_coverage", "complexity",
+                "generation_success_rate", "critique_score",
+                "alert_ratio", "latency",
+            )
+        }
+        result["collector_available"] = True
+        return result
+    except Exception as exc:
+        logger.error("Platform metrics collection failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Metrics collection failed: {exc}",
+        ) from exc
+
+
 @router.get(
     "/v1/evolution/history",
     summary="Genetic Evolution Engine — Per-generation History",

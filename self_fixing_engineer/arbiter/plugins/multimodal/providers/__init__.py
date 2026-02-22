@@ -13,10 +13,29 @@ from .default_multimodal_providers import (
     PluginRegistry,
 )
 
+# Import real multimodal providers from the interface module
+try:
+    from self_fixing_engineer.arbiter.plugins.multimodal.interface import (
+        OpenAIMultiModalProvider,
+        XAIMultiModalProvider,
+        get_multimodal_provider,
+    )
+
+    REAL_PROVIDERS_AVAILABLE = True
+except ImportError:
+    OpenAIMultiModalProvider = None  # type: ignore[assignment,misc]
+    XAIMultiModalProvider = None  # type: ignore[assignment,misc]
+    get_multimodal_provider = None  # type: ignore[assignment,misc]
+    REAL_PROVIDERS_AVAILABLE = False
+
 __all__ = [
     "PluginRegistry",
     "DefaultImageProcessor",
     "DefaultAudioProcessor",
     "DefaultVideoProcessor",
     "DefaultTextProcessor",
+    "OpenAIMultiModalProvider",
+    "XAIMultiModalProvider",
+    "get_multimodal_provider",
+    "REAL_PROVIDERS_AVAILABLE",
 ]
