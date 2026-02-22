@@ -3,7 +3,7 @@
 # Code Factory Platform Makefile
 # This file provides convenient commands for development, testing, and deployment
 
-.PHONY: help install install-dev test lint format clean docker-build docker-up docker-down deploy-staging deploy-production \
+.PHONY: help install install-dev install-ai test lint format clean docker-build docker-build-ai docker-up docker-down deploy-staging deploy-production \
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
@@ -41,6 +41,14 @@ install-dev: ## Install all dependencies including development tools
 	pip install -r requirements.txt
 	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit
 	@echo "$(GREEN)Development installation complete!$(NC)"
+
+install-ai: ## Install optional Tier-1 AI capability dependencies (qiskit, nengo, opencv)
+	@echo "$(BLUE)Installing optional AI dependencies (Tier-1 capabilities)...$(NC)"
+	@echo "$(YELLOW)Note: These are optional extras. Missing deps degrade gracefully to NumPy/rule-based fallbacks.$(NC)"
+	pip install --upgrade pip setuptools wheel
+	pip install -r requirements-ai.txt
+	@echo "$(GREEN)Optional AI dependencies installed!$(NC)"
+	@echo "$(YELLOW)Set INSTALL_AI_DEPS=1 when building Docker images to include these deps.$(NC)"
 
 # =============================================================================
 # Testing
@@ -222,6 +230,16 @@ docker-build: ## Build unified platform Docker image
 		-f Dockerfile .
 	@echo "$(GREEN)Docker image built successfully!$(NC)"
 	@echo "$(YELLOW)Note: The unified image includes Generator, OmniCore, and SFE modules$(NC)"
+
+docker-build-ai: ## Build Docker image with optional Tier-1 AI capabilities (qiskit, nengo, opencv)
+	@echo "$(BLUE)Building Code Factory AI-full image (includes quantum + neuromorphic backends)...$(NC)"
+	docker build \
+		--build-arg BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		--build-arg INSTALL_AI_DEPS=1 \
+		-t code-factory:ai-full \
+		-f Dockerfile .
+	@echo "$(GREEN)Docker AI-full image built successfully!$(NC)"
+	@echo "$(YELLOW)AI capabilities: quantum array backend, neuromorphic backend, OpenCV video analysis$(NC)"
 
 docker-up: ## Start all services with Docker Compose
 	@echo "$(BLUE)Starting Docker Compose services...$(NC)"

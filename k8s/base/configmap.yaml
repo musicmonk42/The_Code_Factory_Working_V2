@@ -163,3 +163,25 @@ data:
   # ============================================
   REDIS_HOST: "codefactory-redis"
   REDIS_PORT: "6379"
+
+  # ============================================
+  # Tier-1 AI Capabilities (Feature Flags)
+  # ============================================
+  # Feature 1: Quantum / Neuromorphic Array Backend
+  # These flags activate the respective backends inside ArrayBackend.
+  # Both fall back to NumPy when the optional libraries (qiskit, nengo) are not installed.
+  ARRAY_BACKEND_QUANTUM: "false"        # Set to "true" + install qiskit to enable
+  ARRAY_BACKEND_NEUROMORPHIC: "false"   # Set to "true" + install nengo  to enable
+
+  # Feature 6: RL Code Health Optimizer — Prometheus scrape URL
+  # Used by PlatformMetricsCollector to query latency metrics from Prometheus.
+  # Leave empty to skip Prometheus-based latency collection.
+  # Example (in-cluster): "http://prometheus-operated.monitoring.svc.cluster.local:9090"
+  PROMETHEUS_URL: ""
+
+  # Feature 5: Genetic Evolution Engine
+  # Number of genomes in the evolutionary population. Higher = more exploration, slower cycles.
+  EVOLUTION_POPULATION_SIZE: "10"
+
+  # Feature 2: LLM Feature Suggestion Cache TTL (seconds, default = 3600)
+  FEATURE_SUGGESTION_CACHE_TTL: "3600"

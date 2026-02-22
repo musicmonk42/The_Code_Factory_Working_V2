@@ -21,6 +21,16 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+#: Conservative default line-of-code estimate used when bandit metrics are
+#: unavailable.  1 000 LOC is a reasonable lower-bound for a non-trivial
+#: Python project and prevents division-by-zero without inflating the alert
+#: ratio on tiny codebases.  Override by ensuring Bandit's --metrics output
+#: is available (standard when scanning the whole project with -r .).
+_DEFAULT_LOC_ESTIMATE: int = 1_000
+
 
 class PlatformMetricsCollector:
     """
@@ -147,9 +157,18 @@ class PlatformMetricsCollector:
                 data = json.loads(output)
                 results = data.get("results", [])
                 metrics_data = data.get("metrics", {})
-                total_lines = sum(
-                    v.get("loc", 0) for v in metrics_data.values()
-                ) if metrics_data else 1000
+                total_lines = (
+                    sum(v.get("loc", 0) for v in metrics_data.values())
+                    if metrics_data
+                    else _DEFAULT_LOC_ESTIMATE
+                )
+                if not metrics_data:
+                    logger.debug(
+                        "Bandit metrics block absent; using _DEFAULT_LOC_ESTIMATE=%d "
+                        "to compute alert_ratio.  Run with a broader scan scope to "
+                        "obtain per-file LOC data.",
+                        _DEFAULT_LOC_ESTIMATE,
+                    )
                 issue_count = len(results)
                 alert_ratio = issue_count / max(total_lines / 100, 1)
                 alert_ratio = min(alert_ratio, 1.0)

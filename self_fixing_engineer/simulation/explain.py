@@ -358,6 +358,23 @@ if not logger.handlers:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
+# ---------------------------------------------------------------------------
+# Confidence Scoring Constants
+# ---------------------------------------------------------------------------
+#: Baseline confidence when no data points are available.
+_BASE_CONFIDENCE: float = 0.5
+#: Additive confidence per numeric data point in the result dict.
+_CONFIDENCE_PER_DATA_POINT: float = 0.05
+#: Confidence is capped at this value regardless of data richness (1.0 would
+#: imply perfect certainty which is never justified from data alone).
+_MAX_CONFIDENCE: float = 0.95
+#: Confidence below this threshold triggers an ``uncertainty_reason`` message.
+_UNCERTAINTY_THRESHOLD: float = 0.8
+#: Minimum numeric data points for "strong" evidence quality.
+_STRONG_EVIDENCE_MIN_POINTS: int = 5
+#: Minimum numeric data points for "moderate" evidence quality.
+_MODERATE_EVIDENCE_MIN_POINTS: int = 2
+
 # --- Async Executor (Robust, Process-Safe Pool) ---
 _executor: Optional[ThreadPoolExecutor] = None
 _executor_lock = asyncio.Lock()
@@ -1612,7 +1629,23 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
         await self.async_init()
 
     async def explain_result(self, result: Dict[str, Any], **kwargs) -> str:
-        correlation_id = result.get("id", str(uuid.uuid4()))
+        """Generate a human-readable explanation string for the given simulation result.
+
+        This method returns a plain text string.  Callers that need a structured
+        response envelope (confidence, decision_factors, etc.) should use
+        ``execute(action="explain", result=result, ...)`` which wraps the string
+        returned here into the full ``ExplainResponse`` dict.
+
+        Args:
+            result: The simulation result to explain.
+            **kwargs:
+                explanation_level (str): One of ``"high"`` (1-2 sentences),
+                    ``"detailed"`` (paragraph, default), or ``"technical"``
+                    (chain-of-thought with confidence).
+
+        Returns:
+            Plain text explanation string.
+        """
 
         try:
             if PYDANTIC_AVAILABLE:
@@ -1864,9 +1897,17 @@ class ExplainableReasonerPlugin(ExplainableReasoner):
                     decision_factors.sort(key=lambda x: {"high": 3, "medium": 2, "low": 1}.get(x["impact"], 0), reverse=True)
                 # Estimate confidence and evidence quality from data richness
                 data_points = len([v for v in (result or {}).values() if isinstance(v, (int, float))]) if result else 0
-                confidence = min(0.5 + data_points * 0.05, 0.95)
-                evidence_quality = "strong" if data_points >= 5 else ("moderate" if data_points >= 2 else "weak")
-                uncertainty_reason = None if confidence >= 0.8 else f"Only {data_points} numeric data points available"
+                confidence = min(_BASE_CONFIDENCE + data_points * _CONFIDENCE_PER_DATA_POINT, _MAX_CONFIDENCE)
+                if data_points >= _STRONG_EVIDENCE_MIN_POINTS:
+                    evidence_quality = "strong"
+                elif data_points >= _MODERATE_EVIDENCE_MIN_POINTS:
+                    evidence_quality = "moderate"
+                else:
+                    evidence_quality = "weak"
+                uncertainty_reason = (
+                    None if confidence >= _UNCERTAINTY_THRESHOLD
+                    else f"Only {data_points} numeric data points available"
+                )
 
                 explanation_text = await self.explain_result(result, explanation_level=explanation_level)
                 return {

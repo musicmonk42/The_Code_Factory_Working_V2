@@ -46,6 +46,13 @@ else:
     
     # Initialize logger early to avoid NameError when used before full setup
     logger = logging.getLogger(__name__)
+
+    # ---------------------------------------------------------------------------
+    # Module-level constants
+    # ---------------------------------------------------------------------------
+    #: Cache TTL for the LLM-powered feature suggestion result (seconds).
+    #: Avoids repeated LLM calls within the same hour.
+    FEATURE_SUGGESTION_CACHE_TTL: int = 3600  # 1 hour
     
     from typing import (
         TYPE_CHECKING,
@@ -354,7 +361,7 @@ else:
         ENVS_AVAILABLE = False
         logging.debug(f"Optional dependency missing: {e} (envs)")
         BaseCodeHealthEnv = object
-    
+
     try:
         from envs.evolution import evolve_configs
     except ImportError as e:
@@ -3035,7 +3042,7 @@ else:
             cached = self._feature_suggestion_cache.get("last")
             if cached:
                 cached_time = cached.get("_cached_at", 0)
-                if time.time() - cached_time < 3600:
+                if time.time() - cached_time < FEATURE_SUGGESTION_CACHE_TTL:
                     return {"status": "feature_suggested", "feature": cached}
 
             async with self._lock:

@@ -221,6 +221,27 @@ env:
   ENABLE_HSM: "0"
   ENABLE_FEATURE_STORE: "0"
   ENABLE_LIBVIRT: "0"
+
+  # ---------------------------------------------------------------------------
+  # Tier-1 AI Capability Feature Flags
+  # ---------------------------------------------------------------------------
+  # Feature 1: Quantum / Neuromorphic Array Backend
+  # Requires qiskit + qiskit-aer (quantum) or nengo (neuromorphic) to be installed.
+  # Both fall back silently to NumPy when the optional libraries are absent.
+  # Enable via: helm install --set env.ARRAY_BACKEND_QUANTUM=true ...
+  ARRAY_BACKEND_QUANTUM: "false"
+  ARRAY_BACKEND_NEUROMORPHIC: "false"
+
+  # Feature 6: RL Metrics Collector — Prometheus scrape URL
+  # Set to the in-cluster Prometheus endpoint to enable latency metric collection.
+  # Example: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
+  PROMETHEUS_URL: ""
+
+  # Feature 5: Genetic Evolution Engine population size
+  EVOLUTION_POPULATION_SIZE: "10"
+
+  # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
+  FEATURE_SUGGESTION_CACHE_TTL: "3600"
   
   # Kafka Configuration: Multiple variables for component compatibility
   # Different components check different variable names due to evolution of codebase:

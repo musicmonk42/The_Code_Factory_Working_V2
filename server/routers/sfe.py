@@ -1370,132 +1370,164 @@ async def fix_imports(
 
 
 
-# RL Status and Step endpoints (Feature 6: Wire RL Code Health Optimizer to Real Metrics)
+# ============================================================================
+# RL Code Health Optimizer — Status & Step Endpoints
+# Feature 6: Wire RL Code Health Optimizer to Real Metrics
+# ============================================================================
 
-@router.get("/v1/rl/status")
+_RL_METRICS_FIELDS = (
+    "pass_rate",
+    "code_coverage",
+    "complexity",
+    "generation_success_rate",
+    "critique_score",
+)
+
+_RL_ACTION_MAP: Dict[str, int] = {
+    "noop": 0,
+    "restart": 1,
+    "rollback": 2,
+    "apply_patch": 3,
+    "run_linter": 4,
+    "run_tests": 5,
+    "run_formatter": 6,
+}
+
+
+def _extract_metrics_dict(code_health_env: Any) -> Dict[str, Any]:
+    """Extract current SystemMetrics as a plain dict from a CodeHealthEnv instance."""
+    if code_health_env is None or not hasattr(code_health_env, "get_current_metrics"):
+        return {}
+    try:
+        metrics = code_health_env.get_current_metrics()
+        return {k: getattr(metrics, k, None) for k in _RL_METRICS_FIELDS}
+    except Exception:
+        return {}
+
+
+@router.get(
+    "/v1/rl/status",
+    summary="RL Code Health Optimizer — Current Status",
+    response_description="Current RL session state, metrics, and last action",
+    tags=["RL Optimizer"],
+)
 async def get_rl_status(
     sfe_service: SFEService = Depends(get_sfe_service),
 ) -> Dict[str, Any]:
     """
-    GET /api/sfe/v1/rl/status
+    **GET /api/sfe/v1/rl/status**
 
-    Returns the current state of the RL code health optimizer.
+    Returns the live state of the reinforcement-learning code-health optimizer.
 
-    **Returns:**
-    - session_id: Unique session identifier
-    - current_state: Current SystemMetrics as dict
-    - steps: Number of RL steps taken
-    - cumulative_reward: Total reward accumulated
-    - last_action: Name of the last action taken
-    - metrics_summary: Summary of current platform metrics
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `session_id` | string | Unique optimizer session identifier |
+    | `current_state` | object | Current `SystemMetrics` values (pass_rate, coverage, etc.) |
+    | `steps` | int | Number of RL steps taken this session |
+    | `cumulative_reward` | float | Total reward accumulated since session start |
+    | `last_action` | string | Name of the most recently executed action |
+    | `metrics_summary` | object | Alias of `current_state` for convenience |
     """
-    from typing import Optional
     try:
         arbiter = getattr(sfe_service, "arbiter", None)
         code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
-
-        if code_health_env and hasattr(code_health_env, "get_current_metrics"):
-            try:
-                metrics = code_health_env.get_current_metrics()
-                metrics_dict = {
-                    k: getattr(metrics, k, None)
-                    for k in ("pass_rate", "code_coverage", "complexity", "generation_success_rate", "critique_score")
-                }
-            except Exception:
-                metrics_dict = {}
-        else:
-            metrics_dict = {}
-
-        steps = getattr(code_health_env, "current_step", 0) if code_health_env else 0
-        cumulative_reward = getattr(code_health_env, "cumulative_reward", 0.0) if code_health_env else 0.0
-        last_action = getattr(code_health_env, "last_action_name", "noop") if code_health_env else "noop"
-        session_id = getattr(code_health_env, "session_id", "default") if code_health_env else "default"
+        metrics_dict = _extract_metrics_dict(code_health_env)
 
         return {
-            "session_id": str(session_id),
+            "session_id": str(getattr(code_health_env, "session_id", "default") if code_health_env else "default"),
             "current_state": metrics_dict,
-            "steps": steps,
-            "cumulative_reward": float(cumulative_reward),
-            "last_action": str(last_action),
+            "steps": int(getattr(code_health_env, "current_step", 0) if code_health_env else 0),
+            "cumulative_reward": float(getattr(code_health_env, "cumulative_reward", 0.0) if code_health_env else 0.0),
+            "last_action": str(getattr(code_health_env, "last_action_name", "noop") if code_health_env else "noop"),
             "metrics_summary": metrics_dict,
         }
-    except Exception as e:
-        logger.error(f"Error getting RL status: {e}", exc_info=True)
-        return {"session_id": "unknown", "current_state": {}, "steps": 0, "cumulative_reward": 0.0, "last_action": "noop", "metrics_summary": {}, "error": str(e)}
+    except Exception as exc:
+        logger.error("Error fetching RL status: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve RL status: {exc}") from exc
 
 
-class RLStepRequest(dict):
-    """Request body for RL step endpoint."""
-    pass
-
-
-@router.post("/v1/rl/step")
+@router.post(
+    "/v1/rl/step",
+    summary="RL Code Health Optimizer — Execute One Step",
+    response_description="Reward, new system state, and episode completion flag",
+    tags=["RL Optimizer"],
+)
 async def rl_step(
     request: Dict[str, Any],
     sfe_service: SFEService = Depends(get_sfe_service),
 ) -> Dict[str, Any]:
     """
-    POST /api/sfe/v1/rl/step
+    **POST /api/sfe/v1/rl/step**
 
-    Execute one RL step on the code health environment.
+    Execute a single step in the RL code-health optimization loop.
 
-    **Request Body:**
-    - action: Optional action name (e.g., "run_tests", "run_linter"). If omitted, uses RL policy.
+    ### Request Body
+    ```json
+    { "action": "run_tests" }
+    ```
+    Supported action names: `noop`, `restart`, `rollback`, `apply_patch`,
+    `run_linter`, `run_tests`, `run_formatter`.
+    If `action` is omitted the RL policy samples an action automatically.
 
-    **Returns:**
-    - reward: Reward received for the step
-    - new_state: Updated SystemMetrics as dict
-    - done: Whether the episode is complete
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `reward` | float | Reward received for this step |
+    | `new_state` | object | Updated `SystemMetrics` after the action |
+    | `done` | bool | Whether the episode has reached a terminal state |
+    | `action_taken` | string | Name of the action that was executed |
     """
     try:
         arbiter = getattr(sfe_service, "arbiter", None)
         code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
 
-        action_name = request.get("action") if isinstance(request, dict) else None
-
         if code_health_env is None:
-            return {"reward": 0.0, "new_state": {}, "done": False, "error": "CodeHealthEnv not available"}
+            raise HTTPException(
+                status_code=503,
+                detail="CodeHealthEnv is not available. Ensure the RL optimizer has been initialized.",
+            )
 
-        # Map action name to action ID
-        action_map = {
-            "noop": 0, "restart": 1, "rollback": 2, "apply_patch": 3,
-            "run_linter": 4, "run_tests": 5, "run_formatter": 6,
-        }
-        action_id = action_map.get(action_name, 0) if action_name else 0
+        action_name: Optional[str] = request.get("action") if isinstance(request, dict) else None
 
-        # Try to use RL policy if no action specified
-        if not action_name and hasattr(code_health_env, "action_space"):
+        # Determine action_id: prefer explicit action, fall back to policy sample, then noop
+        if action_name:
+            if action_name not in _RL_ACTION_MAP:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown action '{action_name}'. Valid actions: {sorted(_RL_ACTION_MAP)}",
+                )
+            action_id = _RL_ACTION_MAP[action_name]
+        elif hasattr(code_health_env, "action_space"):
             try:
                 action_id = int(code_health_env.action_space.sample())
+                action_name = next(
+                    (k for k, v in _RL_ACTION_MAP.items() if v == action_id),
+                    f"action_{action_id}",
+                )
             except Exception:
                 action_id = 0
+                action_name = "noop"
+        else:
+            action_id = 0
+            action_name = "noop"
 
-        obs = None
         reward = 0.0
         done = False
         try:
             if hasattr(code_health_env, "step"):
-                obs, reward, done, *_ = code_health_env.step(action_id)
+                _obs, reward, done, *_ = code_health_env.step(action_id)
         except Exception as step_err:
-            logger.warning(f"RL step failed: {step_err}")
-
-        metrics_dict = {}
-        if code_health_env and hasattr(code_health_env, "get_current_metrics"):
-            try:
-                metrics = code_health_env.get_current_metrics()
-                metrics_dict = {
-                    k: getattr(metrics, k, None)
-                    for k in ("pass_rate", "code_coverage", "complexity", "generation_success_rate", "critique_score")
-                }
-            except Exception:
-                pass
+            logger.warning("RL step failed for action '%s': %s", action_name, step_err)
 
         return {
             "reward": float(reward),
-            "new_state": metrics_dict,
+            "new_state": _extract_metrics_dict(code_health_env),
             "done": bool(done),
-            "action_taken": action_name or f"action_{action_id}",
+            "action_taken": str(action_name),
         }
-    except Exception as e:
-        logger.error(f"Error during RL step: {e}", exc_info=True)
-        return {"reward": 0.0, "new_state": {}, "done": False, "error": str(e)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Unexpected error during RL step: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"RL step failed: {exc}") from exc
