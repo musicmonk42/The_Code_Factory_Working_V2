@@ -587,8 +587,32 @@ def _rule_based_fallback(query: str, context: Dict[str, Any], mode: str) -> str:
 
 
 async def _call_llm_api(prompt: str, api_key: str, use_xai: bool = False, temperature: float = 0.3) -> Optional[str]:
-    """Call an LLM API (xAI Grok or OpenAI) and return the text response."""
-    if not AIOHTTP_AVAILABLE or not api_key:
+    """Call an LLM API (xAI Grok or OpenAI) and return the text response.
+
+    Args:
+        prompt: The user-facing prompt to send to the model.
+        api_key: Bearer token for the target API.
+        use_xai: When ``True``, target the xAI API (``grok-3``); otherwise
+            target OpenAI (``gpt-4o-mini``).
+        temperature: Sampling temperature (0.0 = deterministic, 1.0 = creative).
+
+    Returns:
+        The model's response text on success, or ``None`` when:
+        - ``aiohttp`` is not installed (``AIOHTTP_AVAILABLE=False``).
+        - ``api_key`` is falsy.
+        - The network request fails for any reason.
+
+        Callers **must** implement a fallback when this returns ``None``.
+
+    Note:
+        The guard checks both ``aiohttp is None`` **and** ``AIOHTTP_AVAILABLE``
+        to satisfy type-checkers (which cannot see the import-time flag) and to
+        prevent an ``AttributeError`` on ``None.ClientSession``.
+    """
+    # Guard: aiohttp is set to None when the import failed (AIOHTTP_AVAILABLE=False).
+    # The explicit `aiohttp is None` check prevents AttributeError on None.ClientSession
+    # and satisfies type-checkers that cannot see the AIOHTTP_AVAILABLE flag.
+    if aiohttp is None or not AIOHTTP_AVAILABLE or not api_key:
         return None
     if use_xai:
         url = "https://api.x.ai/v1/chat/completions"

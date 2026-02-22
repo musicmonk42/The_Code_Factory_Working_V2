@@ -125,16 +125,23 @@ class TestGeneticEvolutionEngine:
     def test_evaluate_fitness_known_metrics(self):
         """evaluate_fitness() produces expected score with known metrics."""
         genome = Genome()
-        metrics = make_metrics(
-            pass_rate=1.0,
-            code_coverage=1.0,
-            complexity=0.0,
-            generation_success_rate=1.0,
-            critique_score=1.0,
-        )
+        # Single source of truth: one dict used for both make_metrics() and expected calc
+        input_vals = {
+            "pass_rate": 1.0,
+            "code_coverage": 1.0,
+            "complexity": 0.0,
+            "generation_success_rate": 1.0,
+            "critique_score": 1.0,
+        }
+        metrics = make_metrics(**input_vals)
         fitness = self.engine.evaluate_fitness(genome, metrics)
-        # Expected: 1.0*2.0 + 1.0*1.5 - 0.0*0.5 + 1.0*2.5 + 1.0*1.0 = 7.0
-        assert abs(fitness - 7.0) < 0.01, f"Expected 7.0, got {fitness}"
+        # Expected value computed from GeneticEvolutionEngine.FITNESS_WEIGHTS so
+        # this test stays correct if the weights change.
+        expected = sum(
+            GeneticEvolutionEngine.FITNESS_WEIGHTS[k] * input_vals[k]
+            for k in GeneticEvolutionEngine.FITNESS_WEIGHTS
+        )
+        assert abs(fitness - expected) < 0.01, f"Expected {expected}, got {fitness}"
 
     def test_evaluate_fitness_zero_metrics(self):
         """evaluate_fitness() returns 0.0 for all-zero metrics."""

@@ -182,7 +182,18 @@ class PlatformMetricsCollector:
             return {}
 
     async def _collect_security_metrics(self) -> Dict[str, float]:
-        """Run bandit to get security issue ratio."""
+        """Run bandit to get security issue ratio.
+
+        Returns ``{"alert_ratio": float}`` in the range ``[0.0, 1.0]`` where
+        0.0 means no issues and 1.0 means ≥ 1 issue per 100 lines.
+
+        **LOC fallback:** When bandit's ``--metrics`` block is absent from the
+        JSON output (e.g. scanning a single file or a very small project),
+        ``_DEFAULT_LOC_ESTIMATE`` is used as the denominator.  This prevents
+        division-by-zero but will over- or under-estimate the ratio for
+        unusually small or large codebases.  To obtain accurate per-file LOC
+        data, run bandit with ``-r .`` (recursive scan of the whole project).
+        """
         try:
             output = await self._run_subprocess(
                 ["bandit", "-r", ".", "-f", "json", "-q"],
@@ -195,12 +206,10 @@ class PlatformMetricsCollector:
                 data = json.loads(output)
                 results = data.get("results", [])
                 metrics_data = data.get("metrics", {})
-                total_lines = (
-                    sum(v.get("loc", 0) for v in metrics_data.values())
-                    if metrics_data
-                    else _DEFAULT_LOC_ESTIMATE
-                )
-                if not metrics_data:
+                if metrics_data:
+                    total_lines = sum(v.get("loc", 0) for v in metrics_data.values())
+                else:
+                    total_lines = _DEFAULT_LOC_ESTIMATE
                     logger.debug(
                         "Bandit metrics block absent; using _DEFAULT_LOC_ESTIMATE=%d "
                         "to compute alert_ratio.  Run with a broader scan scope to "

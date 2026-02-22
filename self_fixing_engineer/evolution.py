@@ -117,6 +117,18 @@ class GeneticEvolutionEngine:
     Genetic algorithm engine that evolves platform configuration parameters.
     """
 
+    #: Weights used by :meth:`evaluate_fitness`.  Positive weights reward higher
+    #: values; negative weights penalise them (e.g. ``complexity``).
+    #: Exposed as a class constant so tests and callers can reference the same
+    #: formula without duplicating the numbers.
+    FITNESS_WEIGHTS: Dict[str, float] = {
+        "pass_rate": 2.0,
+        "code_coverage": 1.5,
+        "complexity": -0.5,
+        "generation_success_rate": 2.5,
+        "critique_score": 1.0,
+    }
+
     def __init__(
         self,
         population_size: int = 10,
@@ -167,24 +179,16 @@ class GeneticEvolutionEngine:
         return self.population
 
     def evaluate_fitness(self, genome: Genome, metrics: Any) -> float:
-        """
-        Compute fitness as weighted sum of SystemMetrics values.
+        """Compute fitness as a weighted sum of ``SystemMetrics`` values.
 
-        fitness = pass_rate * 2.0 + code_coverage * 1.5 - complexity * 0.5
-                  + generation_success_rate * 2.5 + critique_score * 1.0
-        """
-        pass_rate = getattr(metrics, "pass_rate", 0.0) or 0.0
-        code_coverage = getattr(metrics, "code_coverage", 0.0) or 0.0
-        complexity = getattr(metrics, "complexity", 0.0) or 0.0
-        generation_success_rate = getattr(metrics, "generation_success_rate", 0.0) or 0.0
-        critique_score = getattr(metrics, "critique_score", 0.0) or 0.0
+        The formula is driven by :attr:`FITNESS_WEIGHTS`.  Positive weights
+        reward higher metric values; negative weights penalise them.
 
-        fitness = (
-            pass_rate * 2.0
-            + code_coverage * 1.5
-            - complexity * 0.5
-            + generation_success_rate * 2.5
-            + critique_score * 1.0
+        ``fitness = Σ weight_i · metric_i``
+        """
+        fitness = sum(
+            self.FITNESS_WEIGHTS.get(key, 0.0) * (getattr(metrics, key, 0.0) or 0.0)
+            for key in self.FITNESS_WEIGHTS
         )
         genome.fitness = round(fitness, 6)
         return genome.fitness

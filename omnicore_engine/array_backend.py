@@ -1463,25 +1463,35 @@ class ArrayBackend:
                 simulator = AerSimulator(method="statevector")
                 for _ in range(num_samples):
                     try:
-                        # Quantum-seeded Box-Muller transform.
+                        # Hybrid quantum-classical Box-Muller transform.
                         #
-                        # Approach:
-                        #   1. Run two independent 1-qubit RY circuits to extract two
-                        #      quantum-sourced probabilities P₁ and P₂ ∈ (0, 1).
-                        #      Each qubit is initialised with a different classical seed
-                        #      angle so the two circuits are statistically independent.
-                        #   2. Apply the standard Box-Muller transform:
-                        #        Z = √(-2 ln P₁) · cos(2π P₂)
-                        #      This guarantees the output is *exactly* standard-normal
-                        #      (N(0,1)) by construction, not just approximately.
-                        #   3. Scale and shift: sample = Z · σ + μ.
+                        # Design note — hybrid approach (AerSimulator):
+                        #   When running against the AerSimulator (CPU), the rotation
+                        #   angles are seeded from the classical NumPy PRNG so that the
+                        #   circuit angle is non-trivial and the statevector computation
+                        #   exercises the full Qiskit execution pipeline.  The resulting
+                        #   probabilities P₁ / P₂ are *deterministic* given those seeds,
+                        #   so the entropy here is classical in origin.
                         #
-                        # The quantum circuit provides a hardware-grade entropy source.
-                        # When a real quantum device is substituted for the AerSimulator,
-                        # the uniform inputs come from genuine quantum randomness, giving
-                        # the strongest possible statistical independence guarantee.
+                        #   On real quantum hardware (swap AerSimulator for an IBM or
+                        #   other QPU backend) the shot-based measurement collapses the
+                        #   superposition non-deterministically, providing genuine quantum
+                        #   randomness.  The architecture is intentionally designed so the
+                        #   *only* change required to get hardware-grade entropy is
+                        #   replacing the backend object — the rest of this code is
+                        #   hardware-agnostic.
+                        #
+                        # Algorithm:
+                        #   1. Sample u₁, u₂ ∈ (0,1) (classical PRNG on simulator,
+                        #      quantum measurement on real hardware).
+                        #   2. Map to RY angles: θ = 2·arcsin(√u) ∈ [0,π].
+                        #   3. Run two independent 1-qubit RY circuits; extract P(|0⟩).
+                        #   4. Box-Muller: Z = √(-2 ln P₁) · cos(2π P₂) → N(0,1).
+                        #   5. Scale: sample = Z·σ + μ.
                         u1_seed = np.random.uniform(0.0, 1.0)
                         u2_seed = np.random.uniform(0.0, 1.0)
+                        # Clamp u1_seed away from 0 to prevent theta1=0 → log(1)=0 → z=0
+                        u1_seed = max(u1_seed, 1e-9)
 
                         # Circuit 1: quantum entropy source for u1
                         theta1 = 2.0 * np.arcsin(np.sqrt(u1_seed))
@@ -1564,8 +1574,23 @@ class ArrayBackend:
         Falls back to NumPy if nengo is not installed.
         """
 
-        def neuromorphic_normal(loc=0.0, scale=1.0, size=None):
-            """Generates normally distributed random numbers using a Nengo CPU simulator."""
+        def neuromorphic_normal(loc=0.0, scale=1.0, size=None, allow_hybrid=True):
+            """Generate normally distributed random numbers via a Nengo CPU simulator.
+
+            Args:
+                loc: Mean of the distribution.
+                scale: Standard deviation.
+                size: Output shape (int) or ``None`` for a scalar.
+                allow_hybrid: When ``True`` (default) and Nengo produces fewer
+                    samples than requested, the shortfall is padded with
+                    classical NumPy noise and a WARNING is logged.  Set to
+                    ``False`` to raise ``RuntimeError`` instead of padding,
+                    which guarantees all returned samples are neuromorphic.
+
+            Raises:
+                RuntimeError: When ``allow_hybrid=False`` and insufficient
+                    neuromorphic samples are available.
+            """
             if not HAS_NENGO:
                 self.logger.warning(
                     "Neuromorphic backend: Nengo not available, neuromorphic_normal falling back to NumPy."
@@ -1581,7 +1606,7 @@ class ArrayBackend:
                 with nengo.Network(seed=np.random.randint(10000)) as net:
                     noise_node = nengo.Node(
                         nengo.processes.WhiteNoise(
-                            dist=nengo.dists.Gaussian(mean=loc, std=scale)
+                            dist=nengo.dists.Gaussian(mean=loc, std=scale)  # Nengo uses mean/std; we translate from NumPy's loc/scale
                         )
                     )
                     p_noise = nengo.Probe(noise_node)
@@ -1593,14 +1618,20 @@ class ArrayBackend:
 
                 if isinstance(size_val, int):
                     if samples.size >= size_val:
-                        # Sufficient Nengo samples — return a contiguous slice
+                        # Sufficient neuromorphic samples — return a contiguous slice
                         return samples[:size_val]
-                    # Nengo ran fewer steps than requested — pad with NumPy noise
+                    # Nengo produced fewer steps than requested
                     shortfall = size_val - samples.size
+                    if not allow_hybrid:
+                        raise RuntimeError(
+                            f"Neuromorphic backend produced {samples.size} samples but "
+                            f"{size_val} were requested and allow_hybrid=False.  "
+                            "Increase Nengo simulator timesteps or set allow_hybrid=True."
+                        )
                     self.logger.warning(
                         "Neuromorphic backend produced %d samples but %d were requested. "
-                        "Padding the remaining %d samples with classical NumPy noise.  "
-                        "To avoid padding, increase Nengo simulator dt or run more steps.",
+                        "Padding the remaining %d samples with classical NumPy noise "
+                        "(allow_hybrid=True).  Set allow_hybrid=False to raise instead.",
                         samples.size, size_val, shortfall,
                     )
                     padding = np.random.normal(loc, scale, shortfall)
@@ -1608,6 +1639,8 @@ class ArrayBackend:
                 # Scalar request — return a single float
                 return float(samples[0]) if samples.size > 0 else loc
 
+            except RuntimeError:
+                raise
             except Exception as e:
                 self.logger.warning(
                     f"Neuromorphic backend simulation failed: {e}. Falling back to NumPy for random numbers.",

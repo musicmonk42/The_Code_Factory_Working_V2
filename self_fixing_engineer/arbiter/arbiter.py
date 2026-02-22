@@ -5,6 +5,17 @@
 import os
 import sys
 
+# ---------------------------------------------------------------------------
+# Module-level constants — defined before the PYTEST_COLLECTING guard so they
+# are always reachable regardless of which branch executes.
+# ---------------------------------------------------------------------------
+#: Cache TTL for the LLM-powered feature suggestion result (seconds).
+#: Configurable at runtime via the FEATURE_SUGGESTION_CACHE_TTL environment
+#: variable (documented in k8s/base/configmap.yaml).  Defaults to 3600 (1 h).
+FEATURE_SUGGESTION_CACHE_TTL: int = int(
+    os.getenv("FEATURE_SUGGESTION_CACHE_TTL", "3600")
+)
+
 if os.getenv("PYTEST_COLLECTING"):
     # During pytest collection, provide minimal stubs to avoid expensive imports
     # This prevents CPU time limit exceeded errors during test collection
@@ -47,13 +58,6 @@ else:
     # Initialize logger early to avoid NameError when used before full setup
     logger = logging.getLogger(__name__)
 
-    # ---------------------------------------------------------------------------
-    # Module-level constants
-    # ---------------------------------------------------------------------------
-    #: Cache TTL for the LLM-powered feature suggestion result (seconds).
-    #: Avoids repeated LLM calls within the same hour.
-    FEATURE_SUGGESTION_CACHE_TTL: int = 3600  # 1 hour
-    
     from typing import (
         TYPE_CHECKING,
         Any,
@@ -72,6 +76,7 @@ else:
     
     import aiohttp
     import httpx
+    _AIOHTTP_AVAILABLE = True
     try:
         import numpy as np
     except ImportError:
@@ -3100,7 +3105,7 @@ else:
                 openai_key = os.getenv("OPENAI_API_KEY")
                 llm_api_key = getattr(getattr(self, "settings", None), "llm_api_key", None) or xai_key or openai_key
 
-                if llm_api_key:
+                if llm_api_key and _AIOHTTP_AVAILABLE:
                     prompt_data = {
                         "event_summary": event_summary,
                         "metrics": metrics_dict,

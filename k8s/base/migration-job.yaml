@@ -87,8 +87,8 @@ spec:
             - name: LOG_LEVEL
               valueFrom:
                 configMapKeyRef:
-                name: codefactory-config
-                key: LOG_LEVEL
+                  name: codefactory-config
+                  key: LOG_LEVEL
 
           # Disable features not needed for migrations
             - name: ENABLE_REDIS

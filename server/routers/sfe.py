@@ -43,6 +43,30 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
 
+# ---------------------------------------------------------------------------
+# RL action map — single source of truth lives in code_health_env.
+# We import it at module load; if the env module is unavailable (e.g. minimal
+# test environment) we fall back to a local copy that must stay in sync.
+# ---------------------------------------------------------------------------
+try:
+    from self_fixing_engineer.envs.code_health_env import ActionType as _ActionType  # noqa: F401
+
+    _RL_ACTION_MAP: Dict[str, int] = {
+        member.name.lower(): member.value
+        for member in _ActionType
+    }
+except Exception:
+    # Fallback — must match the ActionType enum values in code_health_env.py
+    _RL_ACTION_MAP = {
+        "noop": 0,
+        "restart": 1,
+        "rollback": 2,
+        "apply_patch": 3,
+        "run_linter": 4,
+        "run_tests": 5,
+        "run_formatter": 6,
+    }
+
 # Module-level singleton for SFEService
 _sfe_service_instance: Optional[SFEService] = None
 _sfe_service_lock = threading.Lock()
@@ -1398,16 +1422,8 @@ _RL_METRICS_FIELDS = (
     "generation_success_rate",
     "critique_score",
 )
-
-_RL_ACTION_MAP: Dict[str, int] = {
-    "noop": 0,
-    "restart": 1,
-    "rollback": 2,
-    "apply_patch": 3,
-    "run_linter": 4,
-    "run_tests": 5,
-    "run_formatter": 6,
-}
+# _RL_ACTION_MAP is defined at module top — imported from code_health_env or
+# initialised from the local fallback.  Do NOT redefine it here.
 
 
 def _extract_metrics_dict(code_health_env: Any) -> Dict[str, Any]:
