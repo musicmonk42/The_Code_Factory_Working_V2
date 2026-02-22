@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -19,8 +20,33 @@ import pytest
 
 
 # ---------------------------------------------------------------------------
+# Shared fixture — clear all LLM key env-vars for the duration of a test
+# ---------------------------------------------------------------------------
+
+_LLM_KEY_ENVS = [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "XAI_API_KEY",
+    "GROK_API_KEY",
+    "GOOGLE_API_KEY",
+    "OLLAMA_HOST",
+]
+
+
+@contextlib.contextmanager
+def _no_llm_keys():
+    """Context manager that temporarily removes all known LLM key env-vars."""
+    saved = {k: os.environ.pop(k) for k in _LLM_KEY_ENVS if k in os.environ}
+    try:
+        yield
+    finally:
+        os.environ.update(saved)
+
+
+# ---------------------------------------------------------------------------
 # Helpers — build a minimal LLMConfig and LLMClient without heavy imports
 # ---------------------------------------------------------------------------
+
 
 def _make_client(provider: str = "openai", api_key_env_var: str = "OPENAI_API_KEY"):
     """Return an intent_parser.LLMClient with a minimal config."""
@@ -59,19 +85,9 @@ class TestLLMClientCallApi:
         config = LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY")
         client = LLMClient(config, cache_dir=str(tmp_path))
 
-        # Ensure none of the known key env-vars are set.
-        key_envs = [
-            "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY",
-            "GROK_API_KEY", "GOOGLE_API_KEY", "OLLAMA_HOST",
-        ]
-        with patch.dict(os.environ, {k: "" for k in key_envs}, clear=False):
-            # Temporarily unset them
-            saved = {k: os.environ.pop(k) for k in key_envs if k in os.environ}
-            try:
-                with pytest.raises(LLMUnavailableError):
-                    await client.call_api("hello")
-            finally:
-                os.environ.update(saved)
+        with _no_llm_keys():
+            with pytest.raises(LLMUnavailableError):
+                await client.call_api("hello")
 
     @pytest.mark.asyncio
     async def test_call_api_delegates_to_runner_llm_client(self, tmp_path):
@@ -80,8 +96,6 @@ class TestLLMClientCallApi:
 
         config = LLMConfig(provider="openai", model="gpt-4o", api_key_env_var="OPENAI_API_KEY")
         client = LLMClient(config, cache_dir=str(tmp_path))
-
-        mock_response = {"content": "mocked response"}
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-test-key"}):
             with patch(
@@ -126,13 +140,8 @@ class TestLLMClientCallApi:
 
         detector = LLMDetector(llm_config=config, feedback=feedback)
 
-        key_envs = ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY",
-                    "GROK_API_KEY", "GOOGLE_API_KEY", "OLLAMA_HOST"]
-        saved = {k: os.environ.pop(k) for k in key_envs if k in os.environ}
-        try:
+        with _no_llm_keys():
             result = await detector.detect("some text with ambiguity", dry_run=False)
-        finally:
-            os.environ.update(saved)
 
         # Rule-based fallback should return an empty list, not raise.
         assert isinstance(result, list)

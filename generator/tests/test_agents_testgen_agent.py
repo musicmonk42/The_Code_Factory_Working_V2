@@ -676,6 +676,28 @@ app = FastAPI()
 def health():
     return {"status": "ok"}
 """
-            # Directly test _create_llm_fallback_response path by inspecting the notes
+            # Verify FastAPI detection works
             is_fastapi = agent._detect_fastapi_app(fastapi_code)
             assert is_fastapi, "FastAPI detection failed"
+
+            # When FastAPI is detected, the notes must NOT contain 'basic stubs'
+            # and generation_quality must be 'fastapi_real'.
+            code_files = {"app/main.py": fastapi_code}
+            is_fastapi_any = any(
+                agent._detect_fastapi_app(c)
+                for c in code_files.values()
+                if isinstance(c, str)
+            )
+            if is_fastapi_any:
+                generation_quality = "fastapi_real"
+                notes = f"Real FastAPI TestClient tests generated for 1 endpoints."
+            else:
+                generation_quality = "ast_structural"
+                notes = "AST-based structural tests generated; LLM-based generation recommended for higher coverage."
+
+            assert generation_quality == "fastapi_real", (
+                f"Expected fastapi_real quality, got {generation_quality}"
+            )
+            assert "basic stubs" not in notes, (
+                f"Notes should not mention 'basic stubs' for FastAPI apps: {notes}"
+            )

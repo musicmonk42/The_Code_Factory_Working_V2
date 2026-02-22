@@ -994,7 +994,7 @@ class LLMClient:
             LLM_CLIENT_CALLS.labels(provider=provider, model=model, call_type="api").inc()
 
         try:
-            from runner.llm_client import call_llm_api  # lazy import to avoid cycles
+            from runner.llm_client import call_llm_api  # lazy import: avoids module-level cycle (intent_parser → runner.llm_client → runner_config; runner_config is not available during intent_parser's top-level import)
 
             response = await call_llm_api(
                 prompt=prompt,
