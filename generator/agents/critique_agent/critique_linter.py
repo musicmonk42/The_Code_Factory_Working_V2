@@ -445,7 +445,7 @@ LINTER_CONFIG: Dict[str, List[Dict[str, Any]]] = {
             "parser": ruff_json,
             "config_file": "pyproject.toml",
             "config_section": "tool.ruff",
-            "use_container": True,
+            "use_container": False,
             "container_image": "ghcr.io/astral-sh/ruff:latest",
             "timeout": 60,
         },
@@ -453,7 +453,7 @@ LINTER_CONFIG: Dict[str, List[Dict[str, Any]]] = {
             "tool": "pylint",
             "cmd": ["pylint", "--output-format=json", "--exit-zero"],
             "parser": pylint_json,
-            "use_container": True,
+            "use_container": False,
             "container_image": "pylint/pylint:latest",
             "timeout": 90,
             "optional": True,
@@ -568,7 +568,7 @@ class LintPlugin(ABC):
         fallback_to_local: bool = True,
     ) -> Dict[str, Any]:
         if use_container:
-            if not shutil.which("docker"):
+            if not shutil.which("docker") or not os.path.exists("/var/run/docker.sock"):
                 # Docker not available - try local fallback if enabled
                 if fallback_to_local and cmd:
                     tool_binary = cmd[0]

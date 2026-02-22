@@ -2090,6 +2090,24 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     filename,
                 )
 
+            # Fix: Remove always=True/False from @field_validator calls (Pydantic V1 arg, not valid in V2)
+            if _re.search(r'@field_validator\s*\([^)]*always\s*=\s*(?:True|False)', content):
+                def _strip_always(m: "re.Match[str]") -> str:
+                    # Remove ", always=True", "always=True," or "always=True" (standalone)
+                    result = _re.sub(r',\s*always\s*=\s*(?:True|False)', '', m.group(0))
+                    result = _re.sub(r'always\s*=\s*(?:True|False)\s*,\s*', '', result)
+                    result = _re.sub(r'always\s*=\s*(?:True|False)', '', result)
+                    # Clean up artifacts like "(," or ", )"
+                    result = _re.sub(r'\(\s*,\s*', '(', result)
+                    result = _re.sub(r',\s*\)', ')', result)
+                    return result
+
+                content = _re.sub(r'@field_validator\s*\([^)]*\)', _strip_always, content)
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: removed always=True/False from @field_validator in %s",
+                    filename,
+                )
+
             fixed_files[filename] = content
 
         elif filename == "requirements.txt":
