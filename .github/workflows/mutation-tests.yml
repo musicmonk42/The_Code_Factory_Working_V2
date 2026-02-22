@@ -1,0 +1,59 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+name: Mutation Tests
+
+# Run mutation tests on pushes to main only (not PRs, to keep CI fast).
+# See docs/MUTATION_TESTING.md for how to interpret results.
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.11'
+
+permissions:
+  contents: read
+
+jobs:
+  mutation-tests:
+    name: Mutation Tests (mutmut)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mutmut pytest pytest-asyncio pytest-timeout pytest-mock
+          # Install only the packages required for the mutation targets
+          pip install pydantic opentelemetry-api prometheus-client structlog || true
+
+      - name: Run mutation tests
+        env:
+          TESTING: "1"
+          AWS_REGION: ""
+          FALLBACK_ENCRYPTION_KEY: "dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ="
+        run: |
+          mutmut run --no-progress || true
+          mutmut results | tee mutmut-results.txt
+
+      - name: Upload mutation test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutmut-results
+          path: |
+            mutmut-results.txt
+            .mutmut-cache
+          retention-days: 30

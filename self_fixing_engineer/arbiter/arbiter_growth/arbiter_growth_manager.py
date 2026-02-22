@@ -35,10 +35,14 @@ from .metrics import (
     GROWTH_SNAPSHOTS,
 )
 from .models import ArbiterState, GrowthEvent
+from .pqc_signing import get_signer as _get_pqc_signer
 from .storage_backends import StorageBackend
 
 logger = logging.getLogger(__name__)
 tracer = get_tracer(__name__)
+
+# Gate PQC signing behind an explicit opt-in environment variable.
+_USE_PQC_SIGNING: bool = os.environ.get("USE_PQC_SIGNING", "false").lower() == "true"
 
 
 # --- Health Status Enum ---
@@ -607,9 +611,17 @@ class ArbiterGrowthManager:
         )
 
     def _generate_idempotency_key(self, event: GrowthEvent, service_name: str) -> str:
-        """Creates a secure, salted hash to be used as an idempotency key."""
+        """Creates a secure, salted hash to be used as an idempotency key.
+
+        When ``USE_PQC_SIGNING=true`` and a PQC library is available the
+        signature is generated via :func:`~.pqc_signing.get_signer`.  In all
+        other cases the original HMAC-SHA-256 implementation is used.
+        """
         details_json = json.dumps(event.details, sort_keys=True).encode()
         payload = f"{self._idempotency_salt}:{self.arbiter}:{event.type}:{event.timestamp}:{service_name}".encode()
+        if _USE_PQC_SIGNING:
+            combined = payload + b":" + details_json
+            return _get_pqc_signer().sign(combined).decode("ascii", errors="replace")
         return hmac.new(payload, details_json, hashlib.sha256).hexdigest()
 
     def register_hook(self, hook: PluginHook, stage: str = "after") -> None:

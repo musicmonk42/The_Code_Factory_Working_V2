@@ -115,6 +115,13 @@ services:
       - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
       # Clarifier WebSocket session timeout (seconds)
       - CLARIFIER_WS_TIMEOUT=${CLARIFIER_WS_TIMEOUT:-300}
+      # Job-status WebSocket heartbeat / idle-connection timeout (seconds)
+      - JOBS_WS_TIMEOUT=${JOBS_WS_TIMEOUT:-30}
+      # Post-Quantum Cryptography signing for audit logs (default: false = HMAC-SHA-256 fallback)
+      # Set to "true" only after installing pqcrypto>=0.1.3 or liboqs-python>=0.12.0 (see requirements-pqc.txt)
+      - USE_PQC_SIGNING=${USE_PQC_SIGNING:-false}
+      # Canonical shard count for the OmniCore message bus (overrides MESSAGE_BUS_SHARD_COUNT)
+      - MESSAGE_BUS_SHARDS=${MESSAGE_BUS_SHARDS:-4}
     ports:
       - "8000:8000"  # Main API endpoint
       - "8001:8001"  # Metrics port

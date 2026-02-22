@@ -321,6 +321,7 @@ files_router = None
 fixes_router = None
 generator_router = None
 jobs_router = None
+jobs_ws_router = None
 omnicore_router = None
 sfe_router = None
 v1_compat_router = None
@@ -362,6 +363,7 @@ def _load_routers():
                 fixes_router as _fixes_router,
                 generator_router as _generator_router,
                 jobs_router as _jobs_router,
+                jobs_ws_router as _jobs_ws_router,
                 omnicore_router as _omnicore_router,
                 sfe_router as _sfe_router,
             )
@@ -379,6 +381,7 @@ def _load_routers():
             fixes_router = _fixes_router
             generator_router = _generator_router
             jobs_router = _jobs_router
+            jobs_ws_router = _jobs_ws_router
             omnicore_router = _omnicore_router
             sfe_router = _sfe_router
             v1_compat_router = _v1_compat_router
@@ -549,6 +552,7 @@ def _include_routers(app_instance: FastAPI) -> bool:
         app_instance.include_router(fixes_router, prefix="/api")
         app_instance.include_router(generator_router, prefix="/api")
         app_instance.include_router(jobs_router, prefix="/api")
+        app_instance.include_router(jobs_ws_router, prefix="/api")
         app_instance.include_router(omnicore_router, prefix="/api")
         app_instance.include_router(sfe_router, prefix="/api")
         app_instance.include_router(v1_compat_router, prefix="/api")
