@@ -340,7 +340,7 @@ def _load_routers():
     """
     global _routers_loaded, _router_load_error
     global api_keys_router, audit_router, clarifier_ws_router, diagnostics_router, events_router, fixes_router
-    global files_router, generator_router, jobs_router, omnicore_router, sfe_router, v1_compat_router
+    global files_router, generator_router, jobs_router, jobs_ws_router, omnicore_router, sfe_router, v1_compat_router
     global AgentType, get_agent_loader
     
     # Fast path: already loaded
