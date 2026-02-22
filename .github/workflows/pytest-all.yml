@@ -29,6 +29,9 @@ permissions:
 
 concurrency:
   group: pytest-all-${{ github.ref }}
+  # On non-main branches, cancel in-progress runs when a new push arrives to save runner minutes.
+  # NOTE: Cancelled runs will show exit code 143 (SIGTERM) in logs — this is expected and not a
+  # test failure. On main, runs are never cancelled so all results are preserved.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
@@ -36,7 +39,7 @@ jobs:
   test-matrix:
     name: Tests - ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120  # Increased to accommodate longer test batches
+    timeout-minutes: 180  # Increased to accommodate setup overhead and longer test batches
     permissions:
       contents: read
     strategy:
@@ -80,6 +83,7 @@ jobs:
       # Memory management settings for malloc to reduce memory fragmentation
       MALLOC_TRIM_THRESHOLD_: "100000"
       MALLOC_MMAP_THRESHOLD_: "131072"
+      LLM_API_KEY: "test-placeholder-key-for-ci"  # Prevents pydantic Config validation errors at module load time
 
     steps:
       - name: Checkout code
@@ -158,10 +162,10 @@ jobs:
           python -m pip install --upgrade pip
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
-          pip install --no-cache-dir -c .github/constraints.txt protobuf
+          pip install -c .github/constraints.txt protobuf
 
           # Install critical dependencies first to prevent import errors
-          pip install --no-cache-dir -c .github/constraints.txt \
+          pip install -c .github/constraints.txt \
             cryptography \
             python-dotenv \
             presidio-analyzer \
@@ -170,14 +174,14 @@ jobs:
 
           # Install unified platform requirements first
           if [ -f requirements.txt ]; then
-            pip install --no-cache-dir -r requirements.txt -c .github/constraints.txt
+            pip install -r requirements.txt -c .github/constraints.txt
           fi
 
           # Install the unified Code Factory platform from project root
           # This installs all packages (generator, omnicore_engine, self_fixing_engineer, server)
           # in a single editable installation, which ensures proper package resolution
           echo "Installing unified Code Factory platform from project root..."
-          python -m pip install -v --no-cache-dir -c .github/constraints.txt -e . || {
+          python -m pip install -v -c .github/constraints.txt -e . || {
             echo "ERROR: Failed to install Code Factory platform from project root"
             exit 1
           }
@@ -237,12 +241,12 @@ jobs:
 
           echo "✓ All packages verified (installed and importable)"
           # Install common test/runtime extras that may be missing
-          pip install --no-cache-dir -c .github/constraints.txt PyYAML httpx PyJWT || true
-          pip install --no-cache-dir -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
+          pip install -c .github/constraints.txt PyYAML httpx PyJWT || true
+          pip install -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
           # Install optional dependencies that are commonly needed
-          pip install --no-cache-dir -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
+          pip install -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
           # Install pytest plugins
-          pip install --no-cache-dir -c .github/constraints.txt \
+          pip install -c .github/constraints.txt \
             pytest-cov \
             pytest-xdist \
             pytest-asyncio \
@@ -545,7 +549,7 @@ jobs:
 
           # Install core dependencies in correct dependency order
           # Version constraints come from .github/constraints.txt
-          pip install --no-cache-dir -c .github/constraints.txt \
+          pip install -c .github/constraints.txt \
             multidict \
             yarl \
             frozenlist \
@@ -553,10 +557,10 @@ jobs:
 
           # Install aiohttp with the version from requirements.txt
           # Explicitly pinned to ensure consistency with requirements.txt
-          pip install --no-cache-dir -c .github/constraints.txt aiohttp==3.13.3
+          pip install -c .github/constraints.txt aiohttp==3.13.3
 
           # Install aiohttp extensions
-          pip install --no-cache-dir -c .github/constraints.txt \
+          pip install -c .github/constraints.txt \
             aiohttp-client-cache==0.13.0 \
             aioresponses>=0.7.8
 
@@ -614,6 +618,7 @@ jobs:
           fi
 
       - name: Fix PyTorch memory issues
+        if: matrix.module == 'self_fixing_engineer' || matrix.module == 'generator'
         run: |
           # Enable memory overcommit
           echo 1 | sudo tee /proc/sys/vm/overcommit_memory
