@@ -27,6 +27,8 @@ from server.services.omnicore_service import OmniCoreService, get_omnicore_servi
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/audit", tags=["Audit Logs"])
 
+# Maximum number of recent job IDs to query when no specific job_id is provided
+_MAX_RECENT_JOBS = 10
 
 @router.get("/logs/all")
 async def query_all_audit_logs(
@@ -35,7 +37,7 @@ async def query_all_audit_logs(
     job_id: Optional[str] = Query(None, description="Filter by job ID"),
     start_time: Optional[str] = Query(None, description="ISO 8601 start timestamp"),
     end_time: Optional[str] = Query(None, description="ISO 8601 end timestamp"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum results per module"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum results per module; global cap is limit × number of modules queried"),
     generator_service: GeneratorService = Depends(get_generator_service),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> Dict[str, Any]:
@@ -166,8 +168,19 @@ async def query_all_audit_logs(
             if job_id:
                 job_ids = [job_id]
             else:
-                # Query recent jobs (limit to 10 for performance)
-                job_ids = ["system"]  # Placeholder - in production, query actual job IDs
+                # Discover recent job IDs from storage
+                try:
+                    from server.storage import jobs_db
+                    all_keys = list(jobs_db.keys())
+                    job_ids = all_keys[-_MAX_RECENT_JOBS:] if all_keys else []
+                except (ImportError, AttributeError):
+                    job_ids = []
+                if not job_ids:
+                    # Fallback: try listing recent jobs via omnicore_service
+                    try:
+                        job_ids = await omnicore_service.list_recent_jobs(limit=_MAX_RECENT_JOBS)
+                    except (AttributeError, Exception):
+                        job_ids = ["system"]
             
             for jid in job_ids:
                 omnicore_logs = await omnicore_service.get_audit_trail(job_id=jid, limit=limit)
@@ -206,8 +219,10 @@ async def query_all_audit_logs(
         reverse=True
     )
     
-    # Apply global limit
-    aggregated_logs = aggregated_logs[:limit]
+    # Apply global limit: scale by the number of modules queried so per-module
+    # results are not unexpectedly truncated when all modules are queried.
+    global_limit = limit * max(len(modules_queried), 1)
+    aggregated_logs = aggregated_logs[:global_limit]
     
     return {
         "aggregated_logs": aggregated_logs,
@@ -496,9 +511,18 @@ async def _query_simulation_audit_logs(
         with open(log_path, 'r') as f:
             for line in f:
                 try:
-                    signed_entry = json.loads(line.strip())
-                    entry = signed_entry.get("event", {})
-                    
+                    raw = json.loads(line.strip())
+
+                    # Tolerate both wrapped/signed format {"event": {...}, "signature": ...}
+                    # and flat format {"event_type": ..., "timestamp": ..., ...}
+                    if "event" in raw and isinstance(raw["event"], dict):
+                        signed_entry = raw
+                        entry = raw["event"]
+                    else:
+                        # Flat format — treat the whole record as the event
+                        signed_entry = raw
+                        entry = raw
+
                     # Apply filters
                     if event_type and entry.get("event_type") != event_type:
                         continue
@@ -565,8 +589,20 @@ async def _query_guardrails_audit_logs(
         with open(log_path, 'r') as f:
             for line in f:
                 try:
-                    entry = json.loads(line.strip())
-                    
+                    raw = json.loads(line.strip())
+
+                    # Tolerate both wrapped/signed format {"event": {...}, "signature": ...}
+                    # and flat format {"event_type": ..., "correlation_id": ..., "detail": ...}
+                    if "event" in raw and isinstance(raw["event"], dict):
+                        entry = raw["event"]
+                    else:
+                        entry = raw
+
+                    # Skip entries that don't look like guardrails events
+                    # (e.g. simulation-only entries without event_type at this level)
+                    if not entry.get("event_type") and not entry.get("name"):
+                        continue
+
                     # Apply filters
                     if event_type and entry.get("event_type") != event_type:
                         continue
@@ -583,9 +619,13 @@ async def _query_guardrails_audit_logs(
                         "job_id": entry.get("correlation_id"),
                         "action": entry.get("name", entry.get("event_type")),
                         "user": entry.get("agent_id", "compliance_system"),
-                        "status": entry.get("detail", {}).get("status", "success"),
+                        "status": (
+                            entry["detail"].get("status", "success")
+                            if isinstance(entry.get("detail"), dict)
+                            else "success"
+                        ),
                         "details": entry.get("detail", {}),
-                        "hash": entry.get("hash"),
+                        "hash": entry.get("hash") if entry.get("hash") is not None else raw.get("hash"),
                     })
                     
                     if len(logs) >= limit:

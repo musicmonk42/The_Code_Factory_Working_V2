@@ -424,11 +424,11 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
             return
         else:
             # DEV_MODE: Allow unsigned events but log prominently
-            logger.error(
-                f"log_audit_event: No audit signing key ID is configured. Audit event '{action}' will not be signed (DEV_MODE).",
+            logger.warning(
+                f"log_audit_event: No audit signing key ID is configured. Audit event '{action}' will be logged unsigned (DEV_MODE).",
                 extra={"action": action, "reason": "key_id_missing"},
             )
-            return
+            # Fall through to log the event unsigned
 
     logger.debug(f"Attempting to log audit event: {action}", extra={"action": action})
 
@@ -475,26 +475,42 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
 
             # 2. Call the V0 safe_sign function for cryptographic signature
             # This may involve network calls to KMS or hardware security modules
-            signature_b64 = await safe_sign(
-                entry=entry_to_sign,
-                key_id=_DEFAULT_AUDIT_KEY_ID,
-                prev_hash=current_prev_hash,
-            )
+            if _DEFAULT_AUDIT_KEY_ID:
+                signature_b64 = await safe_sign(
+                    entry=entry_to_sign,
+                    key_id=_DEFAULT_AUDIT_KEY_ID,
+                    prev_hash=current_prev_hash,
+                )
+            else:
+                # No key configured (DEV_MODE): log unsigned with warning marker
+                signature_b64 = None
 
             # 3. Create the final, complete log entry with signature and chain metadata
             final_audit_log = {
                 **entry_to_sign,
                 "prev_hash": current_prev_hash,
                 "signature": signature_b64,
-                "key_id": _DEFAULT_AUDIT_KEY_ID,
+                "key_id": _DEFAULT_AUDIT_KEY_ID or None,
             }
+            if signature_b64 is None:
+                final_audit_log["unsigned"] = True
 
             # 4. Log the complete, signed event to the dedicated 'runner.audit' logger
             # This logger should be configured with appropriate handlers (e.g., file, remote)
             audit_logger = logging.getLogger("runner.audit")
-            audit_logger.info(
-                json.dumps(final_audit_log, default=safe_json_default)
-            )
+            log_line = json.dumps(final_audit_log, default=safe_json_default)
+            audit_logger.info(log_line)
+
+            # Also persist to a well-known JSONL file so the server can read it
+            _GENERATOR_AUDIT_LOG_FILE = "logs/generator_audit.jsonl"
+            try:
+                os.makedirs(os.path.dirname(_GENERATOR_AUDIT_LOG_FILE), exist_ok=True)
+                with open(_GENERATOR_AUDIT_LOG_FILE, "a", encoding="utf-8") as _f:
+                    _f.write(log_line + "\n")
+            except (IOError, OSError) as _file_err:
+                logger.warning(
+                    f"Failed to write audit event to {_GENERATOR_AUDIT_LOG_FILE}: {_file_err}"
+                )
 
             # 5. Update the chain's state with the hash of the signed content
             # This creates the cryptographic link to the next event (blockchain-inspired)
