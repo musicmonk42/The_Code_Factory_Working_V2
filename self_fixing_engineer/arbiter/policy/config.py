@@ -340,6 +340,10 @@ class ArbiterConfig(BaseSettings):
     @classmethod
     def validate_secrets(cls, values: dict) -> dict:
         """Validates critical secrets, file paths, LLM settings, and circuit breaker settings."""
+        if not isinstance(values, dict):
+            # Assignment validation can pass model instances here; leave untouched.
+            return values
+
         with tracer.start_as_current_span("validate_secrets") as span:
             start_time = time.monotonic()
             ci_value = (os.getenv("CI") or "").lower()
@@ -363,7 +367,10 @@ class ArbiterConfig(BaseSettings):
             
             # Validate ENCRYPTION_KEY and REDIS_URL in production
             if is_production:
-                if not values.get("ENCRYPTION_KEY"):
+                encryption_key = values.get("ENCRYPTION_KEY")
+                if isinstance(encryption_key, SecretStr):
+                    encryption_key = encryption_key.get_secret_value()
+                if not encryption_key:
                     CONFIG_ERRORS.labels(error_type="missing_encryption_key").inc()
                     span.record_exception(
                         ValueError("ENCRYPTION_KEY must be set in production.")
@@ -430,7 +437,12 @@ class ArbiterConfig(BaseSettings):
                 "DECISION_OPTIMIZER_SETTINGS",
             ):
                 if path_key == "DECISION_OPTIMIZER_SETTINGS":
-                    path = values.get(path_key, {}).get("feedback_db_path", "")
+                    optimizer_settings = values.get(path_key, {})
+                    path = (
+                        optimizer_settings.get("feedback_db_path", "")
+                        if isinstance(optimizer_settings, dict)
+                        else ""
+                    )
                 else:
                     path = values.get(path_key, "")
                 if path and not os.path.isabs(path):
