@@ -541,16 +541,23 @@ class SphinxDocGenerator:
         rtd_available = importlib.util.find_spec("sphinx_rtd_theme") is not None
         html_theme = "sphinx_rtd_theme" if rtd_available else "alabaster"
 
+        # Create the _static directory alongside conf.py so Sphinx 9.x doesn't
+        # raise a ConfigError for a missing html_static_path directory.
+        static_dir = conf_py_path.parent / "_static"
+        try:
+            static_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+
         config_content = f"""
 # Configuration file for the Sphinx documentation builder.
 
 import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
-from datetime import datetime
 
 project = 'Auto-Generated Documentation'
-copyright = f'{{datetime.now().year}}, Auto-Generated'
+copyright = '2025, Auto-Generated'
 author = 'DocGen Agent'
 
 extensions = [

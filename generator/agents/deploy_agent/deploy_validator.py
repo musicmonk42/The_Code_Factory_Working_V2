@@ -523,7 +523,16 @@ class DockerValidator(Validator):
 
         # Check if Docker validation should be skipped (CI/production environment)
         skip_docker_validation = os.getenv("SKIP_DOCKER_VALIDATION", "false").lower() in ("true", "1", "yes")
-        docker_socket_available = os.path.exists("/var/run/docker.sock")
+        # Check if the Docker socket path is present and is a real Unix socket.
+        # On Railway and similar platforms the socket file may exist as a placeholder
+        # but not be connectable; stat.S_ISSOCK distinguishes a real socket from a plain file.
+        _docker_socket_path = os.environ.get("DOCKER_HOST", "/var/run/docker.sock").replace("unix://", "")
+        try:
+            import stat as _stat_mod
+            _sock_stat = os.stat(_docker_socket_path)
+            docker_socket_available = _stat_mod.S_ISSOCK(_sock_stat.st_mode)
+        except OSError:
+            docker_socket_available = False
 
         if skip_docker_validation or not docker_socket_available:
             if not docker_socket_available:
