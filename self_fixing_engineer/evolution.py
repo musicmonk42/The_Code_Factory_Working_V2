@@ -25,6 +25,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+try:
+    from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
+    def get_or_create_counter(*a, **kw): return None  # type: ignore[misc]
+    def get_or_create_gauge(*a, **kw): return None    # type: ignore[misc]
+
 # Parameter bounds for validity
 _REWARD_WEIGHT_RANGE = (-5.0, 5.0)
 _TEMPERATURE_RANGE = (0.0, 1.5)
@@ -123,6 +131,24 @@ class GeneticEvolutionEngine:
         self.population: List[Genome] = []
         self.generation = 0
         self._evolution_history: List[Dict[str, Any]] = []
+
+        # Prometheus metrics — lazily initialised to avoid registration races
+        self._prom_generations = get_or_create_counter(
+            "evolution_generations_total",
+            "Total genetic-algorithm generations completed",
+            ("engine",),
+        )
+        self._prom_best_fitness = get_or_create_gauge(
+            "evolution_best_fitness",
+            "Best genome fitness in the current population",
+            ("engine",),
+        )
+        self._prom_population_size = get_or_create_gauge(
+            "evolution_population_size",
+            "Current population size of the genetic algorithm",
+            ("engine",),
+        )
+        self._engine_label = "default"
 
     def initialize_population(self) -> List[Genome]:
         """Create a population of random genomes within valid parameter ranges."""
@@ -322,6 +348,18 @@ class GeneticEvolutionEngine:
 
         self.population = new_population
         self.generation += 1
+
+        # Emit Prometheus metrics
+        try:
+            if self._prom_generations:
+                self._prom_generations.labels(engine=self._engine_label).inc()
+            if self._prom_best_fitness:
+                self._prom_best_fitness.labels(engine=self._engine_label).set(best.fitness)
+            if self._prom_population_size:
+                self._prom_population_size.labels(engine=self._engine_label).set(len(self.population))
+        except Exception:
+            pass
+
         return best
 
     def apply_genome_to_config(self, genome: Genome, config: Any) -> None:
@@ -342,7 +380,8 @@ class GeneticEvolutionEngine:
             "population": [g.to_dict() for g in self.population],
             "history": self._evolution_history,
         }
-        os.makedirs(os.path.dirname(path), exist_ok=True) if os.path.dirname(path) else None
+        from pathlib import Path as _Path
+        _Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
             json.dump(data, f, indent=2)
         logger.info(f"GeneticEvolutionEngine: Saved population to {path}")

@@ -1606,6 +1606,21 @@ else:
             self.test_generation_engine = self.engines.get("test_generation")
             self.generator_engine = self.engines.get("generator")
             self.code_health_env = self.engines.get("code_health_env")
+
+            # Wire PlatformMetricsCollector → CodeHealthEnv so real metrics flow to
+            # the RL optimizer.  Only instantiate if no external env was provided.
+            if self.code_health_env is None and ENVS_AVAILABLE:
+                try:
+                    from self_fixing_engineer.envs.metrics_collector import PlatformMetricsCollector
+                    _metrics_collector = PlatformMetricsCollector(workspace_dir=os.getcwd())
+                    self.code_health_env = BaseCodeHealthEnv(
+                        get_metrics=_metrics_collector.collect,
+                        apply_action=None,
+                    )
+                    self.engines["code_health_env"] = self.code_health_env
+                    logger.info(f"[{name}] CodeHealthEnv wired to PlatformMetricsCollector")
+                except Exception as _env_err:
+                    logger.warning(f"[{name}] Could not wire CodeHealthEnv: {_env_err}")
             self.intent_capture_engine = self.engines.get("intent_capture")
             self.audit_log_manager = self.engines.get("audit_log_manager")
             self.engines["multi_modal"] = MultiModalPlugin(

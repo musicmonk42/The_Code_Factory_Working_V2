@@ -31,6 +31,33 @@ logger = logging.getLogger(__name__)
 #: is available (standard when scanning the whole project with -r .).
 _DEFAULT_LOC_ESTIMATE: int = 1_000
 
+try:
+    import aiohttp as _aiohttp
+    _AIOHTTP_AVAILABLE = True
+except ImportError:
+    _aiohttp = None  # type: ignore[assignment]
+    _AIOHTTP_AVAILABLE = False
+
+try:
+    from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+    _PROM_AVAILABLE = True
+except ImportError:
+    _PROM_AVAILABLE = False
+    def get_or_create_counter(*a, **kw): return None  # type: ignore[misc]
+    def get_or_create_gauge(*a, **kw): return None    # type: ignore[misc]
+
+# Prometheus metrics for the collector itself
+_prom_collection_total = get_or_create_counter(
+    "platform_metrics_collection_total",
+    "Total platform metrics collection runs",
+    ("source", "status"),
+)
+_prom_collection_duration = get_or_create_gauge(
+    "platform_metrics_collection_duration_seconds",
+    "Duration of last metrics collection run in seconds",
+    ("source",),
+)
+
 
 class PlatformMetricsCollector:
     """
@@ -49,6 +76,8 @@ class PlatformMetricsCollector:
 
     async def collect(self) -> Any:
         """Collect all metrics concurrently and return SystemMetrics."""
+        import time as _time
+        _start = _time.monotonic()
         results = await asyncio.gather(
             self._collect_test_metrics(),
             self._collect_complexity_metrics(),
@@ -56,7 +85,16 @@ class PlatformMetricsCollector:
             self._collect_prometheus_metrics(),
             return_exceptions=True,
         )
-        return self._merge_metrics(results)
+        merged = self._merge_metrics(results)
+        elapsed = _time.monotonic() - _start
+        try:
+            if _prom_collection_total:
+                _prom_collection_total.labels(source="platform", status="ok").inc()
+            if _prom_collection_duration:
+                _prom_collection_duration.labels(source="platform").set(elapsed)
+        except Exception:
+            pass
+        return merged
 
     async def _run_subprocess(self, cmd: List[str], cwd: Optional[str] = None, timeout: int = 60) -> str:
         """Run a subprocess command asynchronously and return stdout."""
@@ -185,13 +223,14 @@ class PlatformMetricsCollector:
         """Query Prometheus for latency metrics if available."""
         if not self.prometheus_url:
             return {}
+        if not _AIOHTTP_AVAILABLE:
+            return {}
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
+            async with _aiohttp.ClientSession() as session:
                 async with session.get(
                     f"{self.prometheus_url}/api/v1/query",
                     params={"query": "http_request_duration_seconds"},
-                    timeout=aiohttp.ClientTimeout(total=5),
+                    timeout=_aiohttp.ClientTimeout(total=5),
                 ) as resp:
                     if resp.status == 200:
                         data = await resp.json()

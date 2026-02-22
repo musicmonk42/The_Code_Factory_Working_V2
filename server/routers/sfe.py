@@ -1375,6 +1375,22 @@ async def fix_imports(
 # Feature 6: Wire RL Code Health Optimizer to Real Metrics
 # ============================================================================
 
+try:
+    from self_fixing_engineer.arbiter.metrics import get_or_create_counter, get_or_create_gauge
+    _rl_requests_total = get_or_create_counter(
+        "sfe_rl_requests_total",
+        "Total RL optimizer API requests",
+        ("endpoint", "status"),
+    )
+    _rl_reward_gauge = get_or_create_gauge(
+        "sfe_rl_last_reward",
+        "Reward returned by the last POST /rl/step call",
+        (),
+    )
+except Exception:
+    _rl_requests_total = None
+    _rl_reward_gauge = None
+
 _RL_METRICS_FIELDS = (
     "pass_rate",
     "code_coverage",
@@ -1433,6 +1449,12 @@ async def get_rl_status(
         arbiter = getattr(sfe_service, "arbiter", None)
         code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
         metrics_dict = _extract_metrics_dict(code_health_env)
+
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="status", status="ok").inc()
+        except Exception:
+            pass
 
         return {
             "session_id": str(getattr(code_health_env, "session_id", "default") if code_health_env else "default"),
@@ -1520,6 +1542,14 @@ async def rl_step(
         except Exception as step_err:
             logger.warning("RL step failed for action '%s': %s", action_name, step_err)
 
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="step", status="ok").inc()
+            if _rl_reward_gauge:
+                _rl_reward_gauge.set(float(reward))
+        except Exception:
+            pass
+
         return {
             "reward": float(reward),
             "new_state": _extract_metrics_dict(code_health_env),
@@ -1531,3 +1561,60 @@ async def rl_step(
     except Exception as exc:
         logger.error("Unexpected error during RL step: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"RL step failed: {exc}") from exc
+
+
+@router.get(
+    "/v1/evolution/history",
+    summary="Genetic Evolution Engine — Per-generation History",
+    response_description="List of per-generation fitness statistics",
+    tags=["Evolution"],
+)
+async def get_evolution_history(
+    limit: int = Query(default=50, ge=1, le=500, description="Maximum number of generations to return"),
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    **GET /api/sfe/v1/evolution/history**
+
+    Returns the per-generation fitness statistics produced by the
+    `GeneticEvolutionEngine` running inside the Arbiter.
+
+    ### Response Schema
+    | Field | Type | Description |
+    |---|---|---|
+    | `current_generation` | int | Current generation number |
+    | `population_size` | int | Genome population size |
+    | `history` | list | Per-generation stats (best_fitness, avg_fitness, best_genome_id) |
+    | `total_generations` | int | Total generations completed |
+    """
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        evolution_engine = getattr(arbiter, "evolution_engine", None) if arbiter else None
+
+        if evolution_engine is None:
+            return {
+                "current_generation": 0,
+                "population_size": 0,
+                "history": [],
+                "total_generations": 0,
+                "status": "evolution_engine_unavailable",
+            }
+
+        history = evolution_engine.get_evolution_history()
+        history_slice = history[-limit:] if len(history) > limit else history
+
+        try:
+            if _rl_requests_total:
+                _rl_requests_total.labels(endpoint="evolution_history", status="ok").inc()
+        except Exception:
+            pass
+
+        return {
+            "current_generation": evolution_engine.generation,
+            "population_size": len(evolution_engine.population),
+            "history": history_slice,
+            "total_generations": len(history),
+        }
+    except Exception as exc:
+        logger.error("Error fetching evolution history: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve evolution history: {exc}") from exc
