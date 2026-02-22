@@ -1622,6 +1622,16 @@ else:
             except Exception as e:
                 logger.error(f"[{name}] Error initializing ArbiterConstitution: {e}", exc_info=True)
                 self.constitution = None
+
+            # Initialize GeneticEvolutionEngine for platform parameter evolution
+            try:
+                from self_fixing_engineer.evolution import GeneticEvolutionEngine
+                self.evolution_engine = GeneticEvolutionEngine()
+                self.evolution_engine.initialize_population()
+                logger.info(f"[{name}] GeneticEvolutionEngine initialized")
+            except Exception as e:
+                logger.warning(f"[{name}] Could not initialize GeneticEvolutionEngine: {e}")
+                self.evolution_engine = None
     
             if self.code_health_env:
                 self.code_health_env.name = name
@@ -2043,6 +2053,33 @@ else:
                     await self.publish_to_omnicore(
                         "evolve_end", {"agent": self.name, "status": "success"}
                     )
+
+                    # GeneticEvolutionEngine: evolve platform parameters if available
+                    if hasattr(self, "evolution_engine") and self.evolution_engine:
+                        try:
+                            metrics = None
+                            if self.code_health_env and hasattr(self.code_health_env, "get_current_metrics"):
+                                metrics = self.code_health_env.get_current_metrics()
+                            if metrics is None:
+                                # Create minimal dummy metrics for evolution
+                                from types import SimpleNamespace
+                                metrics = SimpleNamespace(
+                                    pass_rate=0.0,
+                                    code_coverage=0.0,
+                                    complexity=0.5,
+                                    generation_success_rate=0.0,
+                                    critique_score=0.0,
+                                )
+                            best_genome = self.evolution_engine.evolve_generation(metrics)
+                            self.log_event(
+                                f"Genetic evolution: best genome {best_genome.genome_id} fitness={best_genome.fitness:.4f}",
+                                "genetic_evolution",
+                            )
+                            if self.code_health_env and hasattr(self.code_health_env, "config"):
+                                self.evolution_engine.apply_genome_to_config(best_genome, self.code_health_env.config)
+                        except Exception as _evo_err:
+                            logger.warning(f"[{self.name}] GeneticEvolution step failed: {_evo_err}")
+
                     return {
                         "status": "success",
                         "message": "Evolution and optimization complete.",
@@ -2987,26 +3024,141 @@ else:
                     return {"status": "debug_complete_ok", "details": "All checks passed."}
     
         async def suggest_feature(self) -> Dict[str, Any]:
-            """Analyzes memory and suggests a new feature based on identified gaps."""
+            """Analyzes runtime signals and suggests a new feature using LLM analysis."""
             logging.getLogger(__name__).info(
                 f"[{self.name}] Proposing new feature based on data analysis."
             )
+
+            # Check cache (1 hour TTL)
+            if not hasattr(self, "_feature_suggestion_cache"):
+                self._feature_suggestion_cache: Dict[str, Any] = {}
+            cached = self._feature_suggestion_cache.get("last")
+            if cached:
+                cached_time = cached.get("_cached_at", 0)
+                if time.time() - cached_time < 3600:
+                    return {"status": "feature_suggested", "feature": cached}
+
             async with self._lock:
-                exception_count = sum(
-                    1
-                    for event in self.monitor.get_recent_events(10)
-                    if event["type"] == "action_exception"
-                )
-    
-                if exception_count > 3:
-                    feature_name = "Enhanced Error Recovery Module"
-                    rationale = "Frequent action exceptions were observed. An enhanced module could retry with different parameters or perform deeper diagnostics automatically."
-                else:
-                    feature_name = "Adaptive Learning Rate Tuner"
-                    rationale = "Current learning process seems stable. An adaptive tuner could improve long-term performance."
-    
-                suggestion = {"feature_name": feature_name, "rationale": rationale}
-    
+                # Collect real runtime signals
+                recent_events = self.monitor.get_recent_events(50)
+                event_summary: Dict[str, int] = {}
+                for event in recent_events:
+                    etype = event.get("type", "unknown")
+                    event_summary[etype] = event_summary.get(etype, 0) + 1
+
+                metrics_dict: Dict[str, Any] = {}
+                if self.code_health_env and hasattr(self.code_health_env, "get_current_metrics"):
+                    try:
+                        m = self.code_health_env.get_current_metrics()
+                        metrics_dict = m if isinstance(m, dict) else {}
+                    except Exception:
+                        pass
+
+                bug_summary: list = []
+                if hasattr(self, "bug_manager") and self.bug_manager and hasattr(self.bug_manager, "get_recent_bugs"):
+                    try:
+                        bugs = self.bug_manager.get_recent_bugs(10)
+                        bug_summary = [
+                            {"id": str(b.get("id", "")), "severity": b.get("severity", ""), "description": str(b.get("description", ""))[:100]}
+                            for b in (bugs or [])
+                        ]
+                    except Exception:
+                        pass
+
+                kg_facts_count = 0
+                if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                    try:
+                        kg_facts_count = getattr(self.knowledge_graph, "facts_count", 0) or 0
+                    except Exception:
+                        pass
+
+                # Try LLM-powered analysis
+                suggestion = None
+                xai_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
+                openai_key = os.getenv("OPENAI_API_KEY")
+                llm_api_key = getattr(getattr(self, "settings", None), "llm_api_key", None) or xai_key or openai_key
+
+                if llm_api_key:
+                    prompt_data = {
+                        "event_summary": event_summary,
+                        "metrics": metrics_dict,
+                        "bug_summary": bug_summary,
+                        "knowledge_graph_facts": kg_facts_count,
+                    }
+                    prompt = (
+                        "Analyze this Code Factory platform runtime data and suggest the single most impactful "
+                        "new feature or improvement to implement:\n\n"
+                        f"Recent Events (last 50):\n{json.dumps(event_summary, indent=2)}\n\n"
+                        f"Current Code Health Metrics:\n{json.dumps(metrics_dict, indent=2)}\n\n"
+                        f"Recent Bug Reports:\n{json.dumps(bug_summary, indent=2)}\n\n"
+                        "Based on this data, suggest ONE specific, implementable feature. "
+                        'Respond with JSON: {"feature_name": "...", "rationale": "...", '
+                        '"implementation_hints": ["..."], "estimated_impact": "high|medium|low", '
+                        '"affected_modules": ["..."]}'
+                    )
+
+                    if xai_key or (llm_api_key == xai_key):
+                        api_url = "https://api.x.ai/v1/chat/completions"
+                        model = "grok-3"
+                        api_key_to_use = xai_key or llm_api_key
+                    else:
+                        api_url = "https://api.openai.com/v1/chat/completions"
+                        model = "gpt-4o-mini"
+                        api_key_to_use = openai_key or llm_api_key
+
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            resp = await session.post(
+                                api_url,
+                                headers={
+                                    "Authorization": f"Bearer {api_key_to_use}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "model": model,
+                                    "messages": [{"role": "user", "content": prompt}],
+                                    "temperature": 0.3,
+                                },
+                                timeout=aiohttp.ClientTimeout(total=30),
+                            )
+                            resp_data = await resp.json()
+                            content = resp_data["choices"][0]["message"]["content"]
+                            # Extract JSON from response
+                            json_start = content.find("{")
+                            json_end = content.rfind("}") + 1
+                            if json_start >= 0 and json_end > json_start:
+                                parsed = json.loads(content[json_start:json_end])
+                                suggestion = {
+                                    "feature_name": parsed.get("feature_name", "Unknown Feature"),
+                                    "rationale": parsed.get("rationale", ""),
+                                    "implementation_hints": parsed.get("implementation_hints", []),
+                                    "estimated_impact": parsed.get("estimated_impact", "medium"),
+                                    "affected_modules": parsed.get("affected_modules", []),
+                                    "source": "llm",
+                                }
+                    except Exception as e:
+                        logging.getLogger(__name__).warning(
+                            f"[{self.name}] LLM feature suggestion failed: {e}. Using rule-based fallback."
+                        )
+
+                if suggestion is None:
+                    # Rule-based fallback with same structure
+                    exception_count = event_summary.get("action_exception", 0)
+                    if exception_count > 3:
+                        feature_name = "Enhanced Error Recovery Module"
+                        rationale = "Frequent action exceptions were observed. An enhanced module could retry with different parameters or perform deeper diagnostics automatically."
+                    else:
+                        feature_name = "Adaptive Learning Rate Tuner"
+                        rationale = "Current learning process seems stable. An adaptive tuner could improve long-term performance."
+                    suggestion = {
+                        "feature_name": feature_name,
+                        "rationale": rationale,
+                        "implementation_hints": [],
+                        "estimated_impact": "medium",
+                        "affected_modules": [],
+                        "source": "rule_based",
+                    }
+
                 if self.explainable_reasoner:
                     try:
                         explanation_raw = await self.explainable_reasoner.execute(
@@ -3021,8 +3173,12 @@ else:
                             "Could not generate detailed rationale."
                         )
                         await self.db_client.log_error(e, {"agent_name": self.name})
-    
-            self.log_event(f"Suggested feature: {feature_name}", "feature_suggestion")
+
+                # Cache the result
+                suggestion["_cached_at"] = time.time()
+                self._feature_suggestion_cache["last"] = suggestion
+
+            self.log_event(f"Suggested feature: {suggestion['feature_name']}", "feature_suggestion")
             return {"status": "feature_suggested", "feature": suggestion}
     
         @require_permission("read")

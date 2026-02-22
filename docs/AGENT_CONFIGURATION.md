@@ -421,3 +421,116 @@ OPENAI_API_KEY=sk-...
 DEFAULT_LLM_PROVIDER=openai
 OPENAI_MODEL=gpt-4
 ```
+
+---
+
+## Tier 1 Aspirational AI Features
+
+The following features have been implemented as part of the Tier 1 AI capabilities upgrade.
+
+### Feature 1: Quantum + Neuromorphic Array Backend
+
+**File:** `omnicore_engine/array_backend.py`
+
+New environment variables / config:
+- No new env vars required — controlled via `ArrayBackend(mode="quantum", use_quantum=True)` or `mode="neuromorphic", use_neuromorphic=True`
+
+Optional dependencies (install via `requirements-ai.txt`):
+```bash
+pip install qiskit qiskit-aer    # For quantum backend
+pip install nengo                  # For neuromorphic backend (CPU-based)
+```
+
+Behavior:
+- `mode="quantum"`: Uses Qiskit AerSimulator with statevector method and RY rotation gates. Falls back to NumPy if Qiskit is unavailable.
+- `mode="neuromorphic"`: Uses Nengo CPU simulator. Falls back to NumPy if Nengo is unavailable.
+
+### Feature 2: LLM-Powered Feature Suggestion Engine
+
+**File:** `self_fixing_engineer/arbiter/arbiter.py` — `suggest_feature()`
+
+New environment variables:
+- `XAI_API_KEY` or `GROK_API_KEY` — Use xAI Grok API for suggestions (preferred)
+- `OPENAI_API_KEY` — Use OpenAI API as fallback
+
+Behavior:
+- Collects real runtime signals (event types, system metrics, bug reports, knowledge graph facts)
+- Calls LLM to suggest the most impactful new feature
+- Caches results for 1 hour to avoid repeated LLM calls
+- Falls back to rule-based logic if no API key is available
+- Returns structured JSON with `feature_name`, `rationale`, `implementation_hints`, `estimated_impact`, `affected_modules`, `source`
+
+### Feature 3: Explainable AI — Counterfactual + Multi-Level Reasoning
+
+**Files:** `self_fixing_engineer/simulation/explain.py`
+
+New environment variables:
+- `XAI_API_KEY` or `GROK_API_KEY` — Use xAI Grok API for explanations (preferred)
+- `OPENAI_API_KEY` — Use OpenAI API as fallback
+
+New capabilities:
+- Multi-level explanations: `explanation_level="high"` (1-2 sentences), `"detailed"` (paragraph), `"technical"` (chain-of-thought)
+- Counterfactual analysis: `execute(action="counterfactual", result=..., changed_inputs=...)`
+- Returns `confidence` (0.0-1.0), `uncertainty_reason`, `evidence_quality`, `decision_factors`
+
+### Feature 4: Multimodal AI Providers
+
+**File:** `self_fixing_engineer/arbiter/plugins/multimodal/interface.py`
+
+New environment variables:
+- `OPENAI_API_KEY` — Required for `OpenAIMultiModalProvider`
+- `XAI_API_KEY` or `GROK_API_KEY` — Required for `XAIMultiModalProvider`
+
+New classes:
+- `OpenAIMultiModalProvider`: Image (gpt-4o vision), Audio (whisper-1), Text (gpt-4o-mini), Video (frame extraction + image analysis)
+- `XAIMultiModalProvider`: Image (grok-2-vision-1212), Text (grok-3)
+- `get_multimodal_provider(provider="auto")`: Factory function that auto-detects available provider
+
+Usage:
+```python
+from self_fixing_engineer.arbiter.plugins.multimodal.interface import get_multimodal_provider
+provider = get_multimodal_provider("auto")  # or "openai" or "xai"
+result = provider.analyze_text("Hello world")
+```
+
+### Feature 5: Genetic Algorithm Platform Evolution
+
+**File:** `self_fixing_engineer/evolution.py`
+
+No new environment variables required.
+
+Key classes:
+- `Genome`: Dataclass representing platform configuration (reward weights, LLM params, cooldowns, thresholds)
+- `GeneticEvolutionEngine`: Implements genetic algorithm with tournament selection, crossover, mutation, and fitness evaluation
+
+The engine is automatically instantiated in `Arbiter.__init__()` and integrated into the `evolve()` method.
+
+Usage:
+```python
+from self_fixing_engineer.evolution import GeneticEvolutionEngine
+engine = GeneticEvolutionEngine(population_size=10)
+engine.initialize_population()
+best_genome = engine.evolve_generation(metrics)
+```
+
+### Feature 6: RL Code Health Optimizer — Real Metrics
+
+**File:** `self_fixing_engineer/envs/metrics_collector.py`
+
+New environment variables:
+- `PROMETHEUS_URL` — Optional Prometheus endpoint for latency metrics (e.g., `http://localhost:9090`)
+
+New API endpoints (via SFE router):
+- `GET /api/sfe/v1/rl/status` — Returns current RL state, steps, cumulative reward, last action
+- `POST /api/sfe/v1/rl/step` — Execute one RL step (body: `{"action": "run_tests"}` or omit for policy)
+
+The `PlatformMetricsCollector` runs the following tools asynchronously:
+- `pytest --tb=no -q` for test pass rate and coverage
+- `radon cc . -a -s` for cyclomatic complexity
+- `bandit -r . -f json -q` for security issues
+- Prometheus query for latency metrics (if `PROMETHEUS_URL` is set)
+
+Optional dependencies for full functionality:
+```bash
+pip install radon bandit  # For complexity and security metrics
+```

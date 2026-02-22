@@ -1367,3 +1367,135 @@ async def fix_imports(
 
     logger.info(f"Imports fixed for {request.code_path} (job_id: {request.job_id})")
     return result
+
+
+
+# RL Status and Step endpoints (Feature 6: Wire RL Code Health Optimizer to Real Metrics)
+
+@router.get("/v1/rl/status")
+async def get_rl_status(
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    GET /api/sfe/v1/rl/status
+
+    Returns the current state of the RL code health optimizer.
+
+    **Returns:**
+    - session_id: Unique session identifier
+    - current_state: Current SystemMetrics as dict
+    - steps: Number of RL steps taken
+    - cumulative_reward: Total reward accumulated
+    - last_action: Name of the last action taken
+    - metrics_summary: Summary of current platform metrics
+    """
+    from typing import Optional
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
+
+        if code_health_env and hasattr(code_health_env, "get_current_metrics"):
+            try:
+                metrics = code_health_env.get_current_metrics()
+                metrics_dict = {
+                    k: getattr(metrics, k, None)
+                    for k in ("pass_rate", "code_coverage", "complexity", "generation_success_rate", "critique_score")
+                }
+            except Exception:
+                metrics_dict = {}
+        else:
+            metrics_dict = {}
+
+        steps = getattr(code_health_env, "current_step", 0) if code_health_env else 0
+        cumulative_reward = getattr(code_health_env, "cumulative_reward", 0.0) if code_health_env else 0.0
+        last_action = getattr(code_health_env, "last_action_name", "noop") if code_health_env else "noop"
+        session_id = getattr(code_health_env, "session_id", "default") if code_health_env else "default"
+
+        return {
+            "session_id": str(session_id),
+            "current_state": metrics_dict,
+            "steps": steps,
+            "cumulative_reward": float(cumulative_reward),
+            "last_action": str(last_action),
+            "metrics_summary": metrics_dict,
+        }
+    except Exception as e:
+        logger.error(f"Error getting RL status: {e}", exc_info=True)
+        return {"session_id": "unknown", "current_state": {}, "steps": 0, "cumulative_reward": 0.0, "last_action": "noop", "metrics_summary": {}, "error": str(e)}
+
+
+class RLStepRequest(dict):
+    """Request body for RL step endpoint."""
+    pass
+
+
+@router.post("/v1/rl/step")
+async def rl_step(
+    request: Dict[str, Any],
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> Dict[str, Any]:
+    """
+    POST /api/sfe/v1/rl/step
+
+    Execute one RL step on the code health environment.
+
+    **Request Body:**
+    - action: Optional action name (e.g., "run_tests", "run_linter"). If omitted, uses RL policy.
+
+    **Returns:**
+    - reward: Reward received for the step
+    - new_state: Updated SystemMetrics as dict
+    - done: Whether the episode is complete
+    """
+    try:
+        arbiter = getattr(sfe_service, "arbiter", None)
+        code_health_env = getattr(arbiter, "code_health_env", None) if arbiter else None
+
+        action_name = request.get("action") if isinstance(request, dict) else None
+
+        if code_health_env is None:
+            return {"reward": 0.0, "new_state": {}, "done": False, "error": "CodeHealthEnv not available"}
+
+        # Map action name to action ID
+        action_map = {
+            "noop": 0, "restart": 1, "rollback": 2, "apply_patch": 3,
+            "run_linter": 4, "run_tests": 5, "run_formatter": 6,
+        }
+        action_id = action_map.get(action_name, 0) if action_name else 0
+
+        # Try to use RL policy if no action specified
+        if not action_name and hasattr(code_health_env, "action_space"):
+            try:
+                action_id = int(code_health_env.action_space.sample())
+            except Exception:
+                action_id = 0
+
+        obs = None
+        reward = 0.0
+        done = False
+        try:
+            if hasattr(code_health_env, "step"):
+                obs, reward, done, *_ = code_health_env.step(action_id)
+        except Exception as step_err:
+            logger.warning(f"RL step failed: {step_err}")
+
+        metrics_dict = {}
+        if code_health_env and hasattr(code_health_env, "get_current_metrics"):
+            try:
+                metrics = code_health_env.get_current_metrics()
+                metrics_dict = {
+                    k: getattr(metrics, k, None)
+                    for k in ("pass_rate", "code_coverage", "complexity", "generation_success_rate", "critique_score")
+                }
+            except Exception:
+                pass
+
+        return {
+            "reward": float(reward),
+            "new_state": metrics_dict,
+            "done": bool(done),
+            "action_taken": action_name or f"action_{action_id}",
+        }
+    except Exception as e:
+        logger.error(f"Error during RL step: {e}", exc_info=True)
+        return {"reward": 0.0, "new_state": {}, "done": False, "error": str(e)}

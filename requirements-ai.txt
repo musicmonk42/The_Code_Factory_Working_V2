@@ -1,0 +1,15 @@
+# Optional AI/ML dependencies for Tier 1 aspirational features
+# Install with: pip install -r requirements-ai.txt
+
+# Feature 1: Quantum Array Backend
+# pip install qiskit qiskit-aer
+qiskit>=1.0.0
+qiskit-aer>=0.14.0
+
+# Feature 1: Neuromorphic Array Backend (CPU-based, no hardware required)
+# pip install nengo
+nengo>=3.2.0
+
+# Feature 4: Video analysis in MultiModal Providers
+# pip install opencv-python-headless
+opencv-python-headless>=4.8.0
