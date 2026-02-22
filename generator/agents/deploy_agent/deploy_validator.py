@@ -822,8 +822,23 @@ class KubernetesValidator(Validator):
                     # 2. Validate basic K8s structure
                     for i, manifest in enumerate(manifests):
                         if not isinstance(manifest, dict):
-                            report["lint_issues"].append(f"Manifest {i+1} is not a valid dictionary")
-                            continue
+                            # Attempt to re-parse after stripping any residual markdown fences
+                            if isinstance(manifest, str):
+                                stripped = re.sub(r'^\s*```[a-z]*\s*\n?', '', manifest, flags=re.IGNORECASE)
+                                stripped = re.sub(r'\n?```\s*$', '', stripped)
+                                try:
+                                    reparsed = RuYAML().load(stripped.strip())
+                                    if isinstance(reparsed, dict):
+                                        manifest = reparsed
+                                    else:
+                                        logger.warning("Manifest %d could not be recovered after fence-stripping", i + 1)
+                                        continue
+                                except RuamelYAMLError:
+                                    logger.warning("Manifest %d could not be recovered after fence-stripping", i + 1)
+                                    continue
+                            else:
+                                report["lint_issues"].append(f"Manifest {i+1} is not a valid dictionary")
+                                continue
                         
                         # Check for required K8s fields
                         if "apiVersion" not in manifest:
