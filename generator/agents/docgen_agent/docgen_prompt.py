@@ -968,13 +968,11 @@ class DocGenPromptAgent:
                     provider="docgen_prompt",
                     model=llm_model,
                 ).inc()
-            logger.error(
-                f"Failed to enforce required sections using meta-LLM: {e}",
+            logger.warning(
+                f"Failed to enforce required sections using meta-LLM: {e}. Using original prompt.",
                 exc_info=True,
             )
-            raise RuntimeError(
-                f"Critical error during prompt section enforcement: {e}"
-            ) from e
+            return prompt_content
 
     # REFACTORED: Uses call_ensemble_api
     async def optimize_prompt_with_feedback(
