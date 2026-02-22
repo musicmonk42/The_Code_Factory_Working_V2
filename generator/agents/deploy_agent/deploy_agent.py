@@ -1286,7 +1286,7 @@ Respond in plain prose only (no JSON / no code fences).
                 # Save to history database using helper method
                 await self._save_to_history(self.run_id, result["timestamp"], result)
 
-                span.set_status(Status(StatusCode.OK, "Pipeline completed"))
+                span.set_status(Status(StatusCode.OK))
                 return result
 
             except Exception as e:

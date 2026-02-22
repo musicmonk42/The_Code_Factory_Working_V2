@@ -88,6 +88,17 @@ def test_basehttpmiddleware_import_instructions():
             "Warning about incorrect import not found in python.jinja2"
 
 
+def test_basehttpmiddleware_usage_instructions():
+    """Test that BaseHTTPMiddleware usage/constructor instructions are in codegen prompts."""
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_prompt.py'
+    with open(filepath, 'r') as f:
+        content = f.read()
+        assert 'app' in content and ('first positional argument' in content.lower() or 'first arg' in content.lower()), \
+            "BaseHTTPMiddleware constructor usage instructions not found in codegen_prompt.py"
+        assert 'TestClient' in content, \
+            "TestClient middleware testing instruction not found in codegen_prompt.py"
+
+
 def test_import_fixer_basehttpmiddleware():
     """Test that import fixer correctly rewrites fastapi.middleware.base imports."""
     from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine

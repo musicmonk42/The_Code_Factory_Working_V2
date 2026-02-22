@@ -346,6 +346,12 @@ The following are MANDATORY checks:
    - Check EVERY function signature and ensure all type hints have imports
    - Double-check middleware functions - they commonly use Request and time
    - ✓ CRITICAL: For BaseHTTPMiddleware, use: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
+   - ✓ CRITICAL: BaseHTTPMiddleware.__init__ requires 'app' as the first positional argument. NEVER instantiate it directly in tests.
+   - ✓ CORRECT middleware registration: app.add_middleware(TimingMiddleware) — pass the CLASS, not an instance
+   - ✓ WRONG: app.add_middleware(BaseHTTPMiddleware, dispatch=TimingMiddleware()) — this will crash
+   - ✓ CORRECT: app.add_middleware(TimingMiddleware) where TimingMiddleware subclasses BaseHTTPMiddleware
+   - ✓ In tests, test middleware behavior through TestClient(app).get("/endpoint"), NOT by instantiating middleware directly
+   - ✓ For middleware tests, only verify the middleware's effect on responses (e.g., check for X-Process-Time header), do NOT instantiate middleware classes in test fixtures
 
 5. ORGANIZE INTO FILES:
    Structure as a proper project with separate files using app/ directory:
@@ -1055,7 +1061,15 @@ async def translate_requirements_if_needed(
         # Redact API key from error message to prevent leaking in logs
         error_msg = str(e)
         error_msg = re.sub(r'key=[^&\s]+', 'key=REDACTED', error_msg)
-        logger.error(f"Language detection/translation failed: {error_msg}")
+        if "403" in error_msg or "Forbidden" in error_msg:
+            logger.warning(
+                "Google Cloud Language API returned 403 Forbidden. "
+                "Ensure the Cloud Natural Language API is enabled in your GCP project "
+                "and the API key has permission to access it. "
+                "Falling back to default language detection."
+            )
+        else:
+            logger.error(f"Language detection/translation failed: {error_msg}")
         PROMPT_ERRORS.labels("TranslationFailure").inc()
     return requirements
 

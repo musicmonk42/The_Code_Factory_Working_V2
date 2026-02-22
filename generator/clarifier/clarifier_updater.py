@@ -775,7 +775,7 @@ class RequirementsUpdater:
                     to_version=target_version,
                 )
                 if span:
-                    span.set_status(StatusCode.OK, "Schema migration successful")
+                    span.set_status(StatusCode.OK)
             except Exception as e:
                 logger.error(
                     f"Schema migration from v{original_version} to v{target_version} failed: {e}",
@@ -795,17 +795,14 @@ class RequirementsUpdater:
                 f"Requirements schema v{original_version} is newer than updater's v{target_version}. Ignoring new fields for backward compatibility."
             )
             if span:
-                span.set_status(
-                    StatusCode.OK,
-                    "Newer schema version detected, ignoring extra fields.",
-                )
+                span.set_status(StatusCode.OK)
         else:
             logger.debug(
                 f"Schema is already at current version v{target_version}. No migration needed."
             )
             if span:
                 span.set_attribute("schema.migration_performed", False)
-                span.set_status(StatusCode.OK, "No migration needed")
+                span.set_status(StatusCode.OK)
 
         return current
 
@@ -870,7 +867,7 @@ class RequirementsUpdater:
 
         if not answers:
             if span:
-                span.set_status(StatusCode.OK, "No answers provided for inference.")
+                span.set_status(StatusCode.OK)
                 span.set_attribute("inference.skipped", True)
             logger.info("No answers provided for inference. Skipping LLM inference.")
             return {"inferred_features": [], "inferred_constraints": []}
@@ -1082,7 +1079,7 @@ class RequirementsUpdater:
     ) -> Dict[str, Any]:
         if not conflicts:
             if span:
-                span.set_status(StatusCode.OK, "No conflicts to resolve.")
+                span.set_status(StatusCode.OK)
             return requirements
 
         try:

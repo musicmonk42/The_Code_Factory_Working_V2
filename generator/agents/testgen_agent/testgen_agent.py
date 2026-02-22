@@ -2016,7 +2016,7 @@ def test_{file_stem}_syntax_error_documentation():
 - LLM-based generation provides higher quality tests with meaningful coverage when credentials are available
 """
                     
-                    span.set_status(Status(StatusCode.OK, "Rule-based test generation completed"))
+                    span.set_status(Status(StatusCode.OK))
                     
                     return {
                         "status": "success",

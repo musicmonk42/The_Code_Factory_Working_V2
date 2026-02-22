@@ -474,13 +474,10 @@ class LanguageCritiquePlugin(ABC):
         """
         if use_container:
             if not shutil.which("docker"):
-                logger.error("Docker not installed.")
-                CRITIQUE_ERRORS.labels(
-                    "tool_execution",
-                    "docker_not_found",
-                    tool_name,
-                ).inc()
-                return False, {"error": "Docker not found."}
+                logger.warning(
+                    f"Docker not available for {tool_name}. Skipping containerized execution."
+                )
+                return False, {"error": f"Docker not available, skipping {tool_name}", "status": "skipped"}
             if not container_image:
                 logger.error(f"No container image for {tool_name}.")
                 CRITIQUE_ERRORS.labels(

@@ -1068,7 +1068,7 @@ async def perform_health_check(
 
         logger.info(f"Overall Health Check: {'PASSED' if overall_health else 'FAILED'}")
         if overall_health:
-            span.set_status(StatusCode.OK, "All health checks passed")
+            span.set_status(StatusCode.OK)
         else:
             span.set_status(StatusCode.ERROR, "Some health checks failed")
         return overall_health
@@ -1568,7 +1568,7 @@ def on_config_reload(
                 "New configuration validated successfully upon reload.",
                 extra={"config_path": str(config_path)},
             )
-            span.set_status(StatusCode.OK, "Config reloaded and validated")
+            span.set_status(StatusCode.OK)
 
             # Log successful reload for audit
             log_action(

@@ -341,7 +341,7 @@ class PromptClarifier:
             if span:
                 span.set_attribute("clarifier.status", "success")
                 span.set_status(
-                    self.Status(self.StatusCode.OK, "Prompt clarification completed")
+                    self.Status(self.StatusCode.OK)
                 )
             return updated_requirements
 
