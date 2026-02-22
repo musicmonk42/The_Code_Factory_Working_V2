@@ -342,7 +342,16 @@ class ArbiterConfig(BaseSettings):
         """Validates critical secrets, file paths, LLM settings, and circuit breaker settings."""
         with tracer.start_as_current_span("validate_secrets") as span:
             start_time = time.monotonic()
-            is_production = os.getenv("APP_ENV", "development") == "production"
+            is_test_or_ci = (
+                os.getenv("TESTING") == "1"
+                or os.getenv("ENVIRONMENT") == "test"
+                or os.getenv("CI") in ("1", "true", "True", "TRUE")
+                or os.getenv("GITHUB_ACTIONS") in ("1", "true", "True", "TRUE")
+            )
+            is_production = (
+                os.getenv("APP_ENV", "development") == "production"
+                and not is_test_or_ci
+            )
             
             # Handle case where pydantic-settings passes entire env dict as ENCRYPTION_KEY value
             # This can happen in mode="before" validators
