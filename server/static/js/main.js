@@ -482,7 +482,9 @@ function connectWebSocket() {
             addEvent('System', message, 'warning');
             
             // Attempt automatic reconnection for abnormal closures
-            if (!wasClean && !isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            // Also reconnect on code 1011 (internal error / keepalive timeout) even if wasClean is true,
+            // as this indicates a server-side timeout rather than an intentional disconnection
+            if ((!wasClean || closeCode === 1011) && !isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
                 attemptReconnect();
             }
         }
@@ -701,6 +703,11 @@ async function loadJobs() {
         const response = await fetchWithRetry(url);
         
         if (!response.ok) {
+            if (response.status === 503) {
+                // Server is still starting up - show loading state instead of error
+                container.innerHTML = '<p class="loading" role="status" aria-live="polite">Server is starting up, please wait...</p>';
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
@@ -1526,12 +1533,22 @@ function initSystem() {
 }
 
 async function refreshSystemStatus() {
-    await Promise.all([
+    // Use Promise.allSettled so a failure in one status check
+    // doesn't prevent the others from updating the UI
+    const results = await Promise.allSettled([
         loadSystemState(),
         loadAgentStatus(),
         loadLLMStatus(),
         loadOmniCoreStatus()
     ]);
+
+    // Log any rejected promises for debugging without breaking the UI
+    const names = ['SystemState', 'AgentStatus', 'LLMStatus', 'OmniCoreStatus'];
+    results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.warn(`${names[index]} check failed:`, result.reason?.message || result.reason);
+        }
+    });
 }
 
 async function loadSystemState() {
