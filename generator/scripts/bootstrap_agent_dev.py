@@ -55,28 +55,53 @@ def create_dummy_files():
     logger.info(f"Using mock directory: {mock_dir}")
 
     required_dummy_files = {
-        "audit_log.py": """
+        "audit_log.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+import logging
+_logger = logging.getLogger(__name__)
+
 def log_action(event: str, data: dict):
-    # DUMMY AUDIT LOG: For development and local testing ONLY.
-    # In production, this would securely log to a persistent, tamper-evident system (e.g., SIEM, ELK).
-    print(f"[AUDIT_LOG_DUMMY] Event: {event}, Data: {data}")
+    \"\"\"Thin wrapper that delegates to runner.runner_audit.log_audit_event_sync.\"\"\"
+    try:
+        from runner.runner_audit import log_audit_event_sync
+        log_audit_event_sync(event, data)
+    except Exception as exc:
+        _logger.warning(f"[audit_log wrapper] log_audit_event_sync unavailable: {exc}; event={event}")
 """,
-        "utils.py": """
+        "utils.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 import asyncio
+import logging
 from typing import Dict, Any, List, Optional
-# DUMMY UTILS: For development and local testing ONLY.
-# In production, this would provide real utility functions.
+_logger = logging.getLogger(__name__)
+
 async def summarize_text(text: str, max_length: int = 1000) -> str:
-    return text[:max_length] + ("..." if len(text) > max_length else "")
+    \"\"\"Thin wrapper that delegates to runner.runner_core summarization or falls back to a slice.\"\"\"
+    try:
+        from runner.runner_core import summarize_text as _real_summarize
+        return await _real_summarize(text, max_length=max_length)
+    except Exception as exc:
+        _logger.warning(f"[utils wrapper] runner_core.summarize_text unavailable: {exc}; using truncation fallback.")
+        return text[:max_length] + ("..." if len(text) > max_length else "")
 """,
-        "testgen_prompt.py": """
+        "testgen_prompt.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 import asyncio
+import logging
 from typing import Dict, Any, List, Optional
-# DUMMY PROMPT BUILDER: For development and local testing ONLY.
+_logger = logging.getLogger(__name__)
+
 async def build_agentic_prompt(purpose: str, language: str, code_files: Dict[str, str], **kwargs) -> str:
-    return f"DUMMY_PROMPT: Purpose={purpose}, Lang={language}, Files={list(code_files.keys())}, Kwargs={kwargs}"
+    \"\"\"Thin wrapper that delegates to the real prompt builder in testgen_agent.\"\"\"
+    try:
+        from generator.agents.testgen_agent.testgen_agent import build_agentic_prompt as _real_builder
+        return await _real_builder(purpose=purpose, language=language, code_files=code_files, **kwargs)
+    except Exception as exc:
+        _logger.warning(f"[testgen_prompt wrapper] real builder unavailable: {exc}; returning minimal prompt.")
+        return f"Purpose={purpose}, Lang={language}, Files={list(code_files.keys())}"
+
 async def initialize_codebase_for_rag(repo_path: str):
-    print(f"[RAG_DUMMY] Initializing RAG for {repo_path}")
+    _logger.warning("[testgen_prompt wrapper] initialize_codebase_for_rag not delegated; skipping.")
 """,
         "testgen_response_handler.py": """
 from typing import Dict, Any

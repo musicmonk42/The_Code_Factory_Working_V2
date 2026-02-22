@@ -533,3 +533,67 @@ else:
 # --- Export Aliases ---
 # Alias for backward compatibility with docgen_agent
 ensemble_summarizers = ensemble_summarize
+
+
+def check_owasp_compliance(code: str) -> List[Dict[str, Any]]:
+    """Run bandit static analysis on *code* and return OWASP-style findings.
+
+    Spawns ``bandit -r <tempfile> -f json -q`` in a subprocess, parses the
+    JSON output, and returns a list of dicts with keys ``issue``, ``severity``,
+    and ``line``.  Falls back to an empty list (with a logged warning) only
+    when ``bandit`` is not installed on PATH.
+
+    Args:
+        code: Source code string to analyse.
+
+    Returns:
+        List of ``{"issue": str, "severity": str, "line": int}`` dicts.
+    """
+    import json as _json
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("bandit"):
+        logger.warning(
+            "check_owasp_compliance: 'bandit' not found on PATH; OWASP scan skipped."
+        )
+        return []
+
+    findings: List[Dict[str, Any]] = []
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".py", delete=False, encoding="utf-8"
+        ) as tmp:
+            tmp.write(code)
+            tmp_path = tmp.name
+
+        result = subprocess.run(
+            ["bandit", "-r", tmp_path, "-f", "json", "-q"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.stdout:
+            report = _json.loads(result.stdout)
+            for issue in report.get("results", []):
+                findings.append(
+                    {
+                        "issue": issue.get("issue_text", ""),
+                        "severity": issue.get("issue_severity", "UNKNOWN"),
+                        "line": issue.get("line_number", 0),
+                    }
+                )
+    except subprocess.TimeoutExpired:
+        logger.warning("check_owasp_compliance: bandit timed out.")
+    except Exception as exc:
+        logger.warning(f"check_owasp_compliance: unexpected error: {exc}")
+    finally:
+        try:
+            import os as _os
+
+            _os.unlink(tmp_path)
+        except Exception:
+            pass
+
+    return findings

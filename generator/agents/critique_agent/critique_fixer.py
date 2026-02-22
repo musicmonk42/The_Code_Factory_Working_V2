@@ -52,10 +52,13 @@ try:
     # check_owasp_compliance may not exist yet - provide a stub if not available
     try:
         from runner.summarize_utils import check_owasp_compliance
-    except ImportError:
+    except ImportError as _owasp_err:
+        logger.warning(
+            f"check_owasp_compliance unavailable ({_owasp_err}); OWASP scan will be skipped."
+        )
 
-        def check_owasp_compliance(code: str) -> list:
-            """Stub for OWASP compliance check when not available."""
+        def check_owasp_compliance(code: str) -> list:  # type: ignore[misc]
+            """Stub used only when runner.summarize_utils cannot be imported."""
             return []
 
     # Placeholder for configuration and mock external tools (these should ideally be passed in or removed)

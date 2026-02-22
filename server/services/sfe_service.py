@@ -1456,10 +1456,9 @@ class SFEService:
         if not source_context.get("success"):
             return {
                 "success": False,
-                "content": "# TODO: Fix security vulnerability",
                 "action": "replace",
                 "line": line_num,
-                "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}",
+                "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}. Manual review required.",
             }
         
         target_line = source_context.get("target_line", "")
@@ -1468,23 +1467,29 @@ class SFEService:
         if "sql" in message.lower() or "B608" in message:
             # Look for string formatting in SQL
             if "%" in target_line or ".format(" in target_line or "f\"" in target_line:
-                # Extract the line and suggest parameterized version
                 return {
-                    "success": True,
-                    "content": f"# TODO: Replace with parameterized query. Original line:\n# {target_line.strip()}\n# Use: cursor.execute('SELECT * FROM table WHERE id = ?', (user_id,))",
+                    "success": False,
                     "action": "replace",
                     "line": line_num,
-                    "reasoning": "SQL injection vulnerability detected. Use parameterized queries instead of string formatting.",
+                    "reasoning": (
+                        "SQL injection vulnerability detected on this line. "
+                        "Replace string formatting with parameterized queries "
+                        "(e.g. cursor.execute('SELECT * FROM t WHERE id = ?', (val,))). "
+                        "Manual review required."
+                    ),
                 }
         
         # Hardcoded password/secret patterns (B105, B106)
         if "password" in message.lower() or "B105" in message or "B106" in message:
             return {
-                "success": True,
-                "content": f"# TODO: Replace hardcoded secret with environment variable.\n# Use: password = os.environ.get('DB_PASSWORD')\n# Original: {target_line.strip()}",
+                "success": False,
                 "action": "replace",
                 "line": line_num,
-                "reasoning": "Hardcoded password/secret detected. Use environment variables or secret management service.",
+                "reasoning": (
+                    "Hardcoded password/secret detected. "
+                    "Replace with an environment variable or secret management service "
+                    "(e.g. os.environ.get('DB_PASSWORD')). Manual review required."
+                ),
             }
         
         # Insecure random (B311)
@@ -1501,7 +1506,6 @@ class SFEService:
         # Generic security issue
         return {
             "success": False,
-            "content": f"# TODO: Fix security vulnerability: {message}\n# Original line: {target_line.strip()}",
             "action": "replace",
             "line": line_num,
             "reasoning": f"Security issue detected but no automatic fix available. Manual review required: {message}",
@@ -1614,14 +1618,14 @@ class SFEService:
                     }
                 description = f"Fix {error_type} in {file_path_str}"
             
-            # Build proposed changes
+            # Build proposed changes — only include when a real fix was generated
             proposed_changes = []
-            if fix_result:
+            if fix_result and fix_result.get("success"):
                 change = {
                     "file": file_path_str,  # Keep as relative path in the change
                     "line": fix_result.get("line", line),
                     "action": fix_result.get("action", "insert"),
-                    "content": fix_result.get("content", "# TODO: Manual fix required"),
+                    "content": fix_result.get("content", ""),
                 }
                 proposed_changes.append(change)
             

@@ -825,26 +825,9 @@ async def _get_core_llm() -> BaseChatModel:
                 )
 
             except (ImportError, ValueError) as e:
-                logger.warning(
-                    f"Failed to initialize LangChain LLM: {e}. Using mock LLM."
-                )
-
-                class FallbackMockLLM(BaseChatModel):
-                    """Mock LLM implementation for when no real LLM is available."""
-
-                    def __init__(self):
-                        self.model_name = "fallback_mock_llm"
-
-                    async def ainvoke(self, messages: List[Any], **kwargs: Any) -> Any:
-                        """Mock LLM invocation."""
-                        return type(
-                            "MockResponse",
-                            (object,),
-                            {"content": "Fallback mock LLM response."},
-                        )()
-
-                _core_llm_instance = FallbackMockLLM()
-                logger.debug("Using fallback mock LLM")
+                raise RuntimeError(
+                    f"No LLM backend available for self-evolution: {e}"
+                ) from e
 
             except Exception as e:
                 logger.error(f"Failed to initialize LLM: {e}", exc_info=True)
@@ -1852,6 +1835,21 @@ async def initiate_evolution_cycle(
             logger.warning(
                 f"Evolution cycle {evolution_id}: Strategy returned unexpected status: {adaptations_result['status']}"
             )
+    except RuntimeError as e:
+        if "No LLM backend available" in str(e):
+            logger.critical(
+                f"Evolution cycle {evolution_id} aborted: no LLM backend available. "
+                f"Reason: {e}"
+            )
+            result["status"] = "degraded"
+            result["reason"] = "no_llm"
+            result["error"] = str(e)
+            result["status_reason"] = "No LLM backend available; evolution cycle degraded."
+        else:
+            result["error"] = str(e)
+            logger.error(f"Error during evolution cycle {evolution_id}: {e}", exc_info=True)
+        if prometheus_available:
+            EVOLUTION_ERRORS.labels(error_type=type(e).__name__).inc()
     except Exception as e:
         result["error"] = str(e)
         logger.error(f"Error during evolution cycle {evolution_id}: {e}", exc_info=True)

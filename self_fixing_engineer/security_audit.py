@@ -29,6 +29,19 @@ class SecurityAuditor:
             "info": [],
         }
 
+    # Path fragments that indicate test/fixture files — skip secret scanning for these.
+    _TEST_PATH_FRAGMENTS = (
+        "/tests/",
+        "/test_",
+        "_test.py",
+        "/conftest.py",
+    )
+
+    def _is_test_file(self, filepath: Path) -> bool:
+        """Return True if *filepath* looks like a test/fixture file."""
+        path_str = filepath.as_posix()
+        return any(frag in path_str for frag in self._TEST_PATH_FRAGMENTS)
+
     def audit_file(self, filepath: Path) -> List[Dict]:
         """Audit a single Python file for security issues."""
         findings = []
@@ -37,31 +50,37 @@ class SecurityAuditor:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            # Check for hardcoded secrets
-            secret_patterns = [
-                (r'password\s*=\s*["\'][^"\']+["\']', "Hardcoded password"),
-                (r'api_key\s*=\s*["\'][^"\']+["\']', "Hardcoded API key"),
-                (r'secret\s*=\s*["\'][^"\']+["\']', "Hardcoded secret"),
-                (r'token\s*=\s*["\'][^"\']+["\']', "Hardcoded token"),
-                (
-                    r'AWS_SECRET_ACCESS_KEY\s*=\s*["\'][^"\']+["\']',
-                    "Hardcoded AWS secret",
-                ),
-            ]
+            # Check for hardcoded secrets — skip test/fixture files to avoid false positives
+            if not self._is_test_file(filepath):
+                secret_patterns = [
+                    (r'password\s*=\s*["\'][^"\']+["\']', "Hardcoded password"),
+                    (r'api_key\s*=\s*["\'][^"\']+["\']', "Hardcoded API key"),
+                    (r'secret\s*=\s*["\'][^"\']+["\']', "Hardcoded secret"),
+                    (r'token\s*=\s*["\'][^"\']+["\']', "Hardcoded token"),
+                    (
+                        r'AWS_SECRET_ACCESS_KEY\s*=\s*["\'][^"\']+["\']',
+                        "Hardcoded AWS secret",
+                    ),
+                ]
 
-            for pattern, issue in secret_patterns:
-                matches = re.finditer(pattern, content, re.IGNORECASE)
-                for match in matches:
-                    line_num = content[: match.start()].count("\n") + 1
-                    findings.append(
-                        {
-                            "severity": "critical",
-                            "issue": issue,
-                            "file": str(filepath.relative_to(self.base_path)),
-                            "line": line_num,
-                            "context": match.group(0)[:50],
-                        }
-                    )
+                for pattern, issue in secret_patterns:
+                    # re.MULTILINE so ^ anchors work per-line
+                    matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
+                    for match in matches:
+                        line_num = content[: match.start()].count("\n") + 1
+                        # Skip lines that are comments (start with # after stripping)
+                        matched_line = content.splitlines()[line_num - 1] if content.splitlines() else ""
+                        if matched_line.strip().startswith("#"):
+                            continue
+                        findings.append(
+                            {
+                                "severity": "critical",
+                                "issue": issue,
+                                "file": str(filepath.relative_to(self.base_path)),
+                                "line": line_num,
+                                "context": match.group(0)[:50],
+                            }
+                        )
 
             # Check for SQL injection vulnerabilities
             sql_patterns = [
