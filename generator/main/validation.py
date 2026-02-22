@@ -24,6 +24,7 @@ class ValidationReport:
         self.checks_run: List[str] = []
         self.checks_passed: List[str] = []
         self.checks_failed: List[str] = []
+        self.validation_skipped: bool = False
     
     def add_error(self, check_name: str, message: str):
         """Add a validation error."""
@@ -54,6 +55,7 @@ class ValidationReport:
             "total_checks": len(self.checks_run),
             "passed_count": len(self.checks_passed),
             "failed_count": len(self.checks_failed),
+            "validation_skipped": self.validation_skipped,
         }
     
     def to_text(self) -> str:
@@ -138,6 +140,7 @@ def validate_generated_code(
     except ImportError as e:
         logger.error(f"Failed to import ContractValidator: {e}")
         report.add_error("Import", f"Could not load validator: {e}")
+        report.validation_skipped = True
         return report
     
     # Create validator instance
@@ -146,6 +149,7 @@ def validate_generated_code(
     except Exception as e:
         logger.error(f"Failed to create ContractValidator: {e}")
         report.add_error("Initialization", f"Could not create validator: {e}")
+        report.validation_skipped = True
         return report
     
     # Run validation checks

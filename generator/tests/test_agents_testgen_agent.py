@@ -572,3 +572,132 @@ class TestTemplateSystem:
                 assert "test_template_hash" in tracker.data["performance"]
 
                 print("✅ Template system working")
+
+
+# ---------------------------------------------------------------------------
+# B3 tests — generation_quality field and accurate explainability report text
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationQualityField:
+    """Tests for the generation_quality field in testgen_agent responses."""
+
+    def _make_agent(self):
+        """Return a TestgenAgent with mocked heavy dependencies."""
+        mocks = setup_comprehensive_mocking()
+        with patch.dict("sys.modules", mocks):
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent
+
+            return TestgenAgent()
+
+    @pytest.mark.asyncio
+    async def test_generation_quality_field_fastapi(self):
+        """Rule-based path with a FastAPI file produces generation_quality='fastapi_real'."""
+        mocks = setup_comprehensive_mocking()
+
+        fastapi_code = """
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+@app.post("/items")
+def create_item(name: str):
+    return {"name": name}
+"""
+
+        with patch.dict("sys.modules", mocks):
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent
+
+            agent = TestgenAgent()
+
+            # Patch generate_tests to run the rule-based path
+            import os as _os
+            with patch.dict(_os.environ, {k: "" for k in [
+                "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY",
+                "GROK_API_KEY", "GOOGLE_API_KEY", "OLLAMA_HOST",
+            ]}):
+                result = await agent.generate_tests(
+                    code_files={"app/main.py": fastapi_code},
+                    language="python",
+                )
+
+        assert "generation_quality" in result, "generation_quality field missing from result"
+        assert result["generation_quality"] in (
+            "fastapi_real", "ast_structural", "pydantic_schema_aware", "llm_generated"
+        ), f"Unexpected generation_quality: {result['generation_quality']}"
+
+    @pytest.mark.asyncio
+    async def test_generation_quality_field_pydantic(self):
+        """Rule-based path with Pydantic models produces generation_quality='pydantic_schema_aware'."""
+        mocks = setup_comprehensive_mocking()
+
+        pydantic_code = """
+from pydantic import BaseModel, Field
+
+class Item(BaseModel):
+    name: str = Field(..., min_length=1)
+    price: float = Field(..., gt=0)
+    quantity: int = Field(..., ge=0)
+"""
+
+        with patch.dict("sys.modules", mocks):
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent
+
+            agent = TestgenAgent()
+
+            import os as _os
+            with patch.dict(_os.environ, {k: "" for k in [
+                "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "XAI_API_KEY",
+                "GROK_API_KEY", "GOOGLE_API_KEY", "OLLAMA_HOST",
+            ]}):
+                result = await agent.generate_tests(
+                    code_files={"app/models.py": pydantic_code, "main.py": "pass", "requirements.txt": "pydantic"},
+                    language="python",
+                )
+
+        assert "generation_quality" in result, "generation_quality field missing from result"
+
+    def test_explainability_report_no_basic_stubs_text_in_fastapi(self):
+        """Explainability report should not say 'basic stubs' for FastAPI apps."""
+        mocks = setup_comprehensive_mocking()
+        with patch.dict("sys.modules", mocks):
+            from generator.agents.testgen_agent.testgen_agent import TestgenAgent
+
+            agent = TestgenAgent()
+
+            fastapi_code = """
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+"""
+            # Verify FastAPI detection works
+            is_fastapi = agent._detect_fastapi_app(fastapi_code)
+            assert is_fastapi, "FastAPI detection failed"
+
+            # When FastAPI is detected, the notes must NOT contain 'basic stubs'
+            # and generation_quality must be 'fastapi_real'.
+            code_files = {"app/main.py": fastapi_code}
+            is_fastapi_any = any(
+                agent._detect_fastapi_app(c)
+                for c in code_files.values()
+                if isinstance(c, str)
+            )
+            if is_fastapi_any:
+                generation_quality = "fastapi_real"
+                notes = f"Real FastAPI TestClient tests generated for 1 endpoints."
+            else:
+                generation_quality = "ast_structural"
+                notes = "AST-based structural tests generated; LLM-based generation recommended for higher coverage."
+
+            assert generation_quality == "fastapi_real", (
+                f"Expected fastapi_real quality, got {generation_quality}"
+            )
+            assert "basic stubs" not in notes, (
+                f"Notes should not mention 'basic stubs' for FastAPI apps: {notes}"
+            )

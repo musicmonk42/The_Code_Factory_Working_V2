@@ -150,6 +150,9 @@ async def initialized_client(mock_config, mock_provider):
     """Returns an LLMClient instance ready for calls."""
     client = LLMClient(mock_config)
 
+    # Trigger lazy initialization explicitly so _is_initialized is set.
+    client._ensure_initialization()
+
     # Wait for initialization with timeout to prevent hanging
     try:
         await asyncio.wait_for(client._is_initialized.wait(), timeout=5.0)
@@ -212,13 +215,14 @@ class TestSecretsManager:
             sm.get_required("MISSING_KEY_REQUIRED")
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 class TestLLMClient:
     @pytest.mark.asyncio
     async def test_init(self, mock_config, mock_imports):
         # Ensure the mock_provider setup completes the _load_task
         client = LLMClient(mock_config)
-        await client._is_initialized.wait()
+        # Trigger lazy initialization so _is_initialized is set.
+        client._ensure_initialization()
+        await asyncio.wait_for(client._is_initialized.wait(), timeout=5.0)
 
         assert client._is_initialized.is_set()
         assert isinstance(client.secrets, SecretsManager)
@@ -398,7 +402,6 @@ class TestLLMClient:
         initialized_client.rate_limiter.redis.close.assert_awaited_once()
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_cache_hit(initialized_client, mock_provider):
     prompt = "cache_prompt"
@@ -419,7 +422,6 @@ async def test_call_llm_api_cache_hit(initialized_client, mock_provider):
     mock_provider.call.assert_not_awaited()  # Should skip provider call
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_rate_limit_exceeded(initialized_client):
     # Mock the async method directly to return False
@@ -433,7 +435,6 @@ async def test_call_llm_api_rate_limit_exceeded(initialized_client):
     # Note: record_failure is NOT called for rate limit - the request never reached the provider
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_circuit_open(initialized_client):
     # Mock the async method directly to return False
@@ -447,7 +448,6 @@ async def test_call_llm_api_circuit_open(initialized_client):
     # Note: record_failure is NOT called when circuit is open - the request was blocked before reaching the provider
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_no_provider_found(initialized_client, mock_provider):
     initialized_client.manager.get_provider.return_value = None
@@ -461,7 +461,6 @@ async def test_call_llm_api_no_provider_found(initialized_client, mock_provider)
     assert "openai" in str(initialized_client.circuit_breaker.record_failure.call_args)
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_provider_raises_llmerror(initialized_client, mock_provider):
     # The provider raises an LLMError (e.g., from error translation)
@@ -479,7 +478,6 @@ async def test_call_llm_api_provider_raises_llmerror(initialized_client, mock_pr
     )
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_provider_raises_generic_exception(
     initialized_client, mock_provider
@@ -499,7 +497,6 @@ async def test_call_llm_api_provider_raises_generic_exception(
     )
 
 
-@pytest.mark.skip(reason="Tests hang due to Redis connection in CacheManager/DistributedRateLimiter init - needs proper Redis mocking")
 @pytest.mark.asyncio
 async def test_call_llm_api_token_counting(initialized_client, mock_provider):
     # Mock the LLMClient's count_tokens method (not the provider's)
@@ -519,7 +516,6 @@ async def test_call_llm_api_token_counting(initialized_client, mock_provider):
     initialized_client.count_tokens.assert_any_call("response", "test_model")
 
 
-@pytest.mark.skip(reason="Tests hang due to mock_imports fixture issue - needs proper Redis mocking")
 class TestGlobalFunctions:
     @pytest.mark.asyncio
     @patch("generator.runner.llm_client.LLMClient", new_callable=MagicMock)

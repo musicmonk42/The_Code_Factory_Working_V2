@@ -54,6 +54,11 @@ from server.persistence import load_job_from_database, save_job_to_database
 from server.utils.agent_loader import get_agent_loader
 from server.services.omnicore_service import get_omnicore_service
 
+try:
+    from generator.clarifier.clarifier_llm import LLMUnavailableError as _ClarifierLLMUnavailableError
+except ImportError:
+    _ClarifierLLMUnavailableError = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/generator", tags=["Generator"])
@@ -1320,6 +1325,15 @@ async def clarify_requirements(
                 "message": "No ambiguities detected - requirements are clear",
             }
     except Exception as e:
+        # Return 503 when the LLM is unavailable rather than a generic 500.
+        if _ClarifierLLMUnavailableError is not None and isinstance(e, _ClarifierLLMUnavailableError):
+            logger.warning(
+                f"LLM unavailable during clarification for job {job_id}: {e}"
+            )
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "llm_unavailable", "detail": str(e)},
+            )
         logger.error(
             f"Error processing clarification for job {job_id}: {e}",
             exc_info=True

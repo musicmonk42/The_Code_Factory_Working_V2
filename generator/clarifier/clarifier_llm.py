@@ -129,6 +129,14 @@ class LLMResponseError(LLMProviderError):
         self.status_code = status_code
 
 
+class LLMUnavailableError(RuntimeError):
+    """Raised when no LLM API key is configured or the LLM service is unreachable.
+
+    Callers (e.g., the HTTP API layer) should catch this exception and respond
+    with HTTP 503 rather than surfacing placeholder content to users.
+    """
+
+
 # ============================================================================
 # Type Definitions
 # ============================================================================
@@ -538,25 +546,11 @@ class GrokLLM(LLMProvider):
 
         start_time = time.monotonic()
 
-        # If no API key, use fallback response generation
+        # If no API key, raise LLMUnavailableError so callers can fall back gracefully.
         if not self.has_api_key:
-            logger.info(
-                "Using fallback generation (no API key)",
-                extra={
-                    "provider": self.PROVIDER_NAME,
-                    "prompt_length": len(prompt),
-                },
-            )
-            content = self._generate_fallback_response(prompt)
-            latency_ms = (time.monotonic() - start_time) * 1000
-
-            return GenerationResult(
-                content=content,
-                model=self.model,
-                tokens_used=0,
-                latency_ms=latency_ms,
-                from_fallback=True,
-                metadata={"reason": "no_api_key"},
+            raise LLMUnavailableError(
+                f"GrokLLM: no API key configured. "
+                f"Set GROK_API_KEY or XAI_API_KEY to enable LLM-based generation."
             )
 
         # Prepare request parameters
@@ -1080,27 +1074,21 @@ class UnifiedLLMProvider(LLMProvider):
                 metadata={"provider": self.provider},
             )
         
+        except LLMUnavailableError:
+            raise
         except Exception as e:
-            # Use fallback on any error
+            # Re-raise as LLMUnavailableError so callers can handle it cleanly.
             logger.warning(
-                "Using fallback due to central LLM client error",
+                "Raising LLMUnavailableError due to central LLM client error",
                 extra={
                     "provider": self.provider,
                     "error_type": type(e).__name__,
                     "error": str(e),
                 },
             )
-            
-            content = self._generate_fallback_response(prompt)
-            latency_ms = (time.monotonic() - start_time) * 1000
-            
-            return GenerationResult(
-                content=content,
-                model=self.model,
-                latency_ms=latency_ms,
-                from_fallback=True,
-                metadata={"reason": "llm_client_error", "error": str(e)},
-            )
+            raise LLMUnavailableError(
+                f"LLM provider '{self.provider}' is unavailable: {e}"
+            ) from e
     
     def _generate_fallback_response(self, prompt: str) -> str:
         """
@@ -1265,4 +1253,5 @@ __all__ = [
     "LLMNetworkError",
     "LLMTimeoutError",
     "LLMResponseError",
+    "LLMUnavailableError",
 ]

@@ -200,3 +200,47 @@ def health():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# B1 tests — validation_skipped field
+# ---------------------------------------------------------------------------
+
+
+def test_validation_report_has_validation_skipped_field():
+    """ValidationReport has validation_skipped defaulting to False."""
+    report = ValidationReport()
+    assert hasattr(report, "validation_skipped")
+    assert report.validation_skipped is False
+
+
+def test_validation_report_validation_skipped_in_to_dict():
+    """to_dict() includes validation_skipped."""
+    report = ValidationReport()
+    d = report.to_dict()
+    assert "validation_skipped" in d
+    assert d["validation_skipped"] is False
+
+    report.validation_skipped = True
+    d = report.to_dict()
+    assert d["validation_skipped"] is True
+
+
+def test_validate_generated_code_sets_skipped_on_import_error(tmp_path):
+    """validate_generated_code sets validation_skipped=True when ContractValidator cannot be imported."""
+    from unittest.mock import patch
+
+    with patch.dict("sys.modules", {"validate_contract_compliance": None}):
+        # Remove the scripts directory from sys.path to force ImportError
+        import sys
+        scripts_path = str(Path(__file__).parent.parent / "scripts")
+        original_path = sys.path[:]
+        sys.path = [p for p in sys.path if p != scripts_path]
+        try:
+            report = validate_generated_code(tmp_path / "nonexistent_dir")
+        finally:
+            sys.path = original_path
+
+    assert report.validation_skipped is True, (
+        "validation_skipped should be True when ContractValidator cannot be imported"
+    )

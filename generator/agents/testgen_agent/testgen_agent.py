@@ -1168,6 +1168,34 @@ Agent --> Dev : Deliver Report
         
         # Create explainability report
         error_message = str(error)[:100]
+        
+        # Determine generation quality based on what the rule-based engine produced.
+        is_fastapi = any(
+            self._detect_fastapi_app(content)
+            for content in code_files.values()
+            if isinstance(content, str)
+        )
+        has_pydantic = any(
+            bool(self._extract_pydantic_model_constraints(content))
+            for content in code_files.values()
+            if isinstance(content, str)
+        )
+
+        if is_fastapi:
+            generation_quality = "fastapi_real"
+            notes = f"Real FastAPI TestClient tests generated for {len(basic_tests)} endpoints."
+        elif has_pydantic:
+            generation_quality = "pydantic_schema_aware"
+            pydantic_model_count = sum(
+                len(self._extract_pydantic_model_constraints(c))
+                for c in code_files.values()
+                if isinstance(c, str)
+            )
+            notes = f"Schema-aware Pydantic validation tests generated for {pydantic_model_count} models."
+        else:
+            generation_quality = "ast_structural"
+            notes = "AST-based structural tests generated; LLM-based generation recommended for higher coverage."
+
         explainability_report = f"""# Test Generation Report
 
 ## Summary
@@ -1180,7 +1208,7 @@ Agent --> Dev : Deliver Report
 {chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
 
 ## Notes
-- Tests are basic stubs that need to be implemented
+- {notes}
 - LLM-based generation failed, so rule-based fallback was used
 - To troubleshoot LLM issues, check API keys and model configurations
 """
@@ -1190,6 +1218,7 @@ Agent --> Dev : Deliver Report
             "generated_tests": basic_tests,
             "final_validation_report": validation_report,
             "explainability_report": explainability_report,
+            "generation_quality": generation_quality,
             "duration_seconds": time.time() - start_time,
             "run_id": run_id,
             "history_summary": [{
@@ -2008,6 +2037,32 @@ def test_{file_stem}_syntax_error_documentation():
                     }
                     
                     # Create explainability report
+                    is_fastapi = any(
+                        self._detect_fastapi_app(content)
+                        for content in code_files.values()
+                        if isinstance(content, str)
+                    )
+                    has_pydantic = any(
+                        bool(self._extract_pydantic_model_constraints(content))
+                        for content in code_files.values()
+                        if isinstance(content, str)
+                    )
+
+                    if is_fastapi:
+                        generation_quality = "fastapi_real"
+                        notes = f"Real FastAPI TestClient tests generated for {len(basic_tests)} endpoints."
+                    elif has_pydantic:
+                        generation_quality = "pydantic_schema_aware"
+                        pydantic_model_count = sum(
+                            len(self._extract_pydantic_model_constraints(c))
+                            for c in code_files.values()
+                            if isinstance(c, str)
+                        )
+                        notes = f"Schema-aware Pydantic validation tests generated for {pydantic_model_count} models."
+                    else:
+                        generation_quality = "ast_structural"
+                        notes = "AST-based structural tests generated; LLM-based generation recommended for higher coverage."
+
                     explainability_report = f"""# Test Generation Report
 
 ## Summary
@@ -2020,7 +2075,7 @@ def test_{file_stem}_syntax_error_documentation():
 {chr(10).join(f"- `{path}`" for path in basic_tests.keys())}
 
 ## Notes
-- Tests are basic stubs that need to be implemented
+- {notes}
 - To force rule-based generation even when LLM is available: `TESTGEN_FORCE_RULE_BASED=true`
 - LLM-based generation provides higher quality tests with meaningful coverage when credentials are available
 """
@@ -2032,6 +2087,7 @@ def test_{file_stem}_syntax_error_documentation():
                         "generated_tests": basic_tests,
                         "final_validation_report": validation_report,
                         "explainability_report": explainability_report,
+                        "generation_quality": generation_quality,
                         "duration_seconds": time.time() - start_time,
                         "run_id": run_id,
                         "history_summary": [{
@@ -2510,6 +2566,7 @@ def test_{file_stem}_syntax_error_documentation():
                     "generated_tests": best_tests,
                     "final_validation_report": best_validation_report,
                     "explainability_report": explainability_report,
+                    "generation_quality": "llm_generated",
                     "duration_seconds": time.time() - start_time,
                     "run_id": run_id,
                     "history_summary": history,
