@@ -6827,6 +6827,104 @@ class OmniCoreService:
                         if "codegen" not in stages_completed:
                             stages_completed.append("codegen")
                         logger.info(f"[PIPELINE] Job {job_id} completed step: codegen ({attempt_label})")
+                        
+                        # Run ImportFixerEngine on generated source files to fix missing imports
+                        # (e.g. 'field_validator' not imported from pydantic) before testgen/execution
+                        try:
+                            from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
+                            
+                            source_dir = Path(output_path_for_validation)
+                            if source_dir.exists():
+                                # Collect Python source files, excluding test directories/files
+                                _test_dir_names = {"test", "tests", "__tests__"}
+                                source_files = [
+                                    f for f in source_dir.rglob("*.py")
+                                    if not any(part in _test_dir_names for part in f.parts)
+                                    and not f.name.lower().startswith("test_")
+                                ]
+                                
+                                if source_files:
+                                    logger.info(
+                                        f"[CODEGEN] Running ImportFixerEngine on {len(source_files)} source files for job {job_id}"
+                                    )
+                                    
+                                    fixer = ImportFixerEngine()
+                                    fixed_count = 0
+                                    error_count = 0
+                                    total_fixes = 0
+                                    
+                                    for src_file in source_files:
+                                        try:
+                                            content = src_file.read_text(encoding="utf-8")
+                                            if not content.strip():
+                                                continue
+                                            
+                                            fix_result = fixer.fix_code(content, file_path=str(src_file))
+                                            
+                                            if fix_result["status"] == "error":
+                                                error_count += 1
+                                                logger.warning(
+                                                    f"[CODEGEN] Failed to auto-fix imports in source file {src_file.name}: {fix_result['message']}",
+                                                    extra={"job_id": job_id, "filename": str(src_file), "error": fix_result["message"]}
+                                                )
+                                                continue
+                                            
+                                            if fix_result["fixed_code"] != content and fix_result["fixes_applied"]:
+                                                src_file.write_text(fix_result["fixed_code"], encoding="utf-8")
+                                                fixed_count += 1
+                                                total_fixes += len(fix_result["fixes_applied"])
+                                                fixes_applied = fix_result["fixes_applied"]
+                                                
+                                                logger.info(
+                                                    f"[CODEGEN] Auto-fixed imports in source file {src_file.name}: {', '.join(fixes_applied)}",
+                                                    extra={
+                                                        "job_id": job_id,
+                                                        "filename": str(src_file),
+                                                        "fixes": fixes_applied,
+                                                        "fix_count": len(fixes_applied)
+                                                    }
+                                                )
+                                        except Exception as file_err:
+                                            error_count += 1
+                                            logger.warning(
+                                                f"[CODEGEN] Exception while fixing imports in source file {src_file.name}: {file_err}",
+                                                exc_info=True,
+                                                extra={"job_id": job_id, "filename": str(src_file), "error": str(file_err)}
+                                            )
+                                    
+                                    if fixed_count > 0:
+                                        logger.info(
+                                            f"[CODEGEN] Import auto-fix summary for source files: {fixed_count} file(s) fixed with {total_fixes} total fix(es)",
+                                            extra={
+                                                "job_id": job_id,
+                                                "files_fixed": fixed_count,
+                                                "total_fixes": total_fixes,
+                                                "errors": error_count
+                                            }
+                                        )
+                                    elif error_count > 0:
+                                        logger.warning(
+                                            f"[CODEGEN] Import auto-fix for source files completed with {error_count} error(s), no files fixed",
+                                            extra={"job_id": job_id, "error_count": error_count}
+                                        )
+                                    else:
+                                        logger.debug(
+                                            f"[CODEGEN] Import auto-fix for source files completed: no missing imports detected",
+                                            extra={"job_id": job_id}
+                                        )
+                        
+                        except ImportError as import_err:
+                            logger.warning(
+                                f"[CODEGEN] ImportFixerEngine unavailable for source files: {import_err}",
+                                extra={"job_id": job_id, "error": str(import_err)}
+                            )
+                        except Exception as fixer_err:
+                            logger.error(
+                                f"[CODEGEN] Import auto-fix system error for source files: {fixer_err}",
+                                exc_info=True,
+                                extra={"job_id": job_id, "error": str(fixer_err), "error_type": type(fixer_err).__name__}
+                            )
+                        
                         break  # Success, exit retry loop
                 else:
                     error_msg = codegen_result.get('message', 'Unknown error')

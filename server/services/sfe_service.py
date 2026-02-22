@@ -946,6 +946,14 @@ class SFEService:
                     logger.info(
                         f"Direct SFE analysis complete: {len(issues)} issues found"
                     )
+                    # Write analysis report to disk so the GET endpoint can serve it
+                    try:
+                        resolved_code_path = self._resolve_job_code_path(job_id, ".")
+                        report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
+                        report_path.parent.mkdir(parents=True, exist_ok=True)
+                        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                    except Exception as write_err:
+                        logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                     return result
 
                 elif code_path_obj.is_dir():
@@ -1017,6 +1025,14 @@ class SFEService:
                     logger.info(
                         f"Direct SFE analysis complete: {len(issues)} issues found"
                     )
+                    # Write analysis report to disk so the GET endpoint can serve it
+                    try:
+                        resolved_code_path = self._resolve_job_code_path(job_id, ".")
+                        report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
+                        report_path.parent.mkdir(parents=True, exist_ok=True)
+                        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                    except Exception as write_err:
+                        logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                     return result
 
             except Exception as e:
@@ -1041,6 +1057,14 @@ class SFEService:
                 data = result["data"]
                 issues = data.get("issues", [])
                 self._populate_errors_cache(issues, job_id)
+                # Write analysis report to disk so the GET endpoint can serve it
+                try:
+                    resolved_code_path = self._resolve_job_code_path(job_id, ".")
+                    report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
+                    report_path.parent.mkdir(parents=True, exist_ok=True)
+                    report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                except Exception as write_err:
+                    logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                 return data
 
         # Fallback - return empty results instead of fake issues
@@ -1307,6 +1331,7 @@ class SFEService:
                 "action": "insert",
                 "line": 1,
                 "reasoning": f"Could not read source file: {source_context.get('error', 'Unknown error')}",
+                "confidence": 0.30,
             }
         
         # Try to use ImportFixerEngine if available
@@ -1348,6 +1373,7 @@ class SFEService:
                         "line": import_line,
                         "reasoning": f"ImportFixerEngine analysis: {', '.join(result['fixes_applied'])}",
                         "full_fixed_code": fixed_code,
+                        "confidence": 0.95,
                     }
                     
         except ImportError:
@@ -1381,6 +1407,7 @@ class SFEService:
                     "action": "insert",
                     "line": 1,
                     "reasoning": f"Detected missing standard library import: {module_name}",
+                    "confidence": 0.85,
                 }
         
         # Ultimate fallback
@@ -1390,6 +1417,7 @@ class SFEService:
             "action": "insert",
             "line": 1,
             "reasoning": "Could not automatically determine the correct import. Manual review required.",
+            "confidence": 0.30,
         }
     
     def _generate_complexity_fix(self, file_path: Path, line_num: int, message: str, source_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1411,6 +1439,7 @@ class SFEService:
                 "content": "# TODO: Consider refactoring to reduce complexity",
                 "action": "info",
                 "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}",
+                "confidence": 0.60,
             }
         
         # Extract complexity score from message
@@ -1438,6 +1467,7 @@ class SFEService:
             "content": guidance,
             "action": "info",
             "reasoning": f"High complexity detected (score: {complexity}) in {function_name}. Refactoring recommended but requires careful analysis.",
+            "confidence": 0.60,
         }
     
     def _generate_security_fix(self, file_path: Path, line_num: int, message: str, source_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1459,6 +1489,7 @@ class SFEService:
                 "action": "replace",
                 "line": line_num,
                 "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}. Manual review required.",
+                "confidence": 0.40,
             }
         
         target_line = source_context.get("target_line", "")
@@ -1486,6 +1517,7 @@ class SFEService:
                     "action": "replace",
                     "line": line_num,
                     "reasoning": "SQL injection vulnerability: replaced f-string interpolation with parameterized placeholder (%s).",
+                    "confidence": 0.90,
                 }
             # %-format: "..." % (var,)
             pct_match = re.match(r'^(\s*)(.*?)\s*%\s*(\(.*\)|\w+)\s*$', stripped)
@@ -1498,6 +1530,7 @@ class SFEService:
                     "action": "replace",
                     "line": line_num,
                     "reasoning": "SQL injection vulnerability: removed %-format from SQL string. Pass params tuple separately to cursor.execute().",
+                    "confidence": 0.90,
                 }
             # .format() call
             format_match = re.match(r'^(\s*)(.*?)\.format\((.*)\)\s*$', stripped)
@@ -1512,6 +1545,7 @@ class SFEService:
                     "action": "replace",
                     "line": line_num,
                     "reasoning": "SQL injection vulnerability: replaced .format() with parameterized placeholder (%s).",
+                    "confidence": 0.90,
                 }
         
         # Hardcoded password/secret patterns (B105, B106)
@@ -1532,6 +1566,7 @@ class SFEService:
                         "Ensure the environment variable is set before running."
                     ),
                     "add_import": "import os",
+                    "confidence": 0.90,
                 }
         
         # Insecure random (B311)
@@ -1543,6 +1578,7 @@ class SFEService:
                     "action": "replace",
                     "line": line_num,
                     "reasoning": "Insecure random usage. Replaced 'random' module with 'secrets' module for cryptographic operations.",
+                    "confidence": 0.90,
                 }
         
         # Generic security issue
@@ -1551,6 +1587,7 @@ class SFEService:
             "action": "replace",
             "line": line_num,
             "reasoning": f"Security issue detected but no automatic fix available. Manual review required: {message}",
+            "confidence": 0.40,
         }
 
     async def propose_fix(self, error_id: str) -> Dict[str, Any]:
@@ -2724,7 +2761,7 @@ class SFEService:
                 else []
             ),
             "severity": "medium",
-            "confidence": 0.70,
+            "confidence": 0.30,
         }
 
     async def prioritize_bugs(

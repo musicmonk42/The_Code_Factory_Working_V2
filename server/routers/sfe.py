@@ -162,12 +162,14 @@ async def analyze_code(
 @router.get("/{job_id}/analysis-report")
 async def get_analysis_report(
     job_id: str,
+    sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
     Fetch the cached SFE analysis report for a job.
 
     Returns the structured analysis report stored in
     ``reports/sfe_analysis_report.json`` under the job's output directory.
+    If the report does not exist yet, analysis is triggered automatically.
 
     **Path Parameters:**
     - job_id: Unique job identifier
@@ -194,10 +196,17 @@ async def get_analysis_report(
 
     report_path = Path(code_path) / "reports" / "sfe_analysis_report.json"
     if not report_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail=f"Analysis report not found for job {job_id}. Run analysis first.",
-        )
+        # Report not yet generated — run analysis now so the file is created
+        try:
+            await sfe_service.analyze_code(job_id=job_id, code_path=code_path)
+        except Exception as exc:
+            logger.warning(f"On-demand analysis for job {job_id} failed: {type(exc).__name__}: {exc}", exc_info=True)
+        # Check again after analysis
+        if not report_path.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Analysis report not found for job {job_id}. Run analysis first.",
+            )
 
     try:
         import json
