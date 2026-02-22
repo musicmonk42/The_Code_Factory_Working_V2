@@ -10,6 +10,7 @@ for development environments.
 
 import logging
 import os
+import secrets
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -95,9 +96,15 @@ def validate_critical_configs() -> Tuple[bool, List[str]]:
 
     # Check for encryption keys in production
     if is_production:
-        if not os.getenv("SECRET_KEY") or os.getenv("SECRET_KEY") == "your-secret-key-here-change-in-production":
+        secret_key = os.getenv("SECRET_KEY", "")
+        _weak_placeholder = "your-secret-key-here-change-in-production"
+        if (
+            not secret_key
+            or secrets.compare_digest(secret_key, _weak_placeholder)
+            or len(secret_key) < 32
+        ):
             warnings.append(
-                "SECRET_KEY is not set or using default value. "
+                "SECRET_KEY is not set, uses the default placeholder, or is shorter than 32 characters. "
                 "Generate a secure key for production: python -c 'import secrets; print(secrets.token_hex(32))'"
             )
 

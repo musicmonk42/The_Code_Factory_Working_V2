@@ -884,32 +884,50 @@ def init_llm(provider: Optional[str] = None, model: Optional[str] = None) -> Any
 
     start_time = time.perf_counter()
     llm_instance = None
+    _attempted_providers: list[str] = []
+    _init_errors: list[str] = []
     try:
         provider = (provider or getattr(config, "llm_provider", "openai")).lower()
         model = model or getattr(config, "llm_model", "gpt-4o")
         _validate_llm_session_inputs(provider, model)
+        _attempted_providers.append(provider)
         llm_instance = _init_llm_with_retry(provider, model)
     except Exception as e:
+        _init_errors.append(str(e))
         logger.error(f"Failed to initialize LLM after retries: {e}", exc_info=True)
     if llm_instance is None:
+        # LLM_ALLOW_MOCK=true is an escape hatch for local developer testing ONLY.
+        # It must never be set in production or CI environments.
+        if os.getenv("LLM_ALLOW_MOCK", "").lower() == "true":
 
-        class _Mock:
-            async def ainvoke(self, *_a: Any, **_k: Any) -> Any:
-                class _R:
-                    content = "Mock LLM response. The real LLM client could not be initialized."
+            class _Mock:
+                async def ainvoke(self, *_a: Any, **_k: Any) -> Any:
+                    class _R:
+                        content = "Mock LLM response. The real LLM client could not be initialized."
 
-                return _R()
+                    return _R()
 
-            def invoke(self, *_a: Any, **_k: Any) -> Any:
-                class _R:
-                    content = "Mock LLM response. The real LLM client could not be initialized."
+                def invoke(self, *_a: Any, **_k: Any) -> Any:
+                    class _R:
+                        content = "Mock LLM response. The real LLM client could not be initialized."
 
-                return _R()
+                    return _R()
 
-        llm_instance = _Mock()
-        logger.warning(
-            "No LLM provider could be initialized. Falling back to a mock LLM."
-        )
+            llm_instance = _Mock()
+            logger.warning(
+                "LLM_ALLOW_MOCK=true: using mock LLM for local development only."
+            )
+        else:
+            logger.critical(
+                "No LLM provider could be initialized. "
+                f"Attempted providers: {_attempted_providers}. "
+                f"Errors: {_init_errors}. "
+                "Set LLM_ALLOW_MOCK=true to use a mock LLM for local development only."
+            )
+            raise RuntimeError(
+                f"No LLM provider could be initialized. "
+                f"Attempted: {_attempted_providers}. Errors: {_init_errors}"
+            )
     elapsed_time = time.perf_counter() - start_time
     logger.debug(f"LLM initialization took {elapsed_time:.4f} seconds.")
     return llm_instance

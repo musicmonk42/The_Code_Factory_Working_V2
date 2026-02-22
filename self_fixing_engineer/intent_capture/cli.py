@@ -573,14 +573,14 @@ def log_audit_event(event_type: str, data: Dict):
     try:
         log_data = {
             "timestamp": datetime.datetime.now().isoformat(),
-            "user": os.getlogin(),
+            "user": os.environ.get("USER", os.environ.get("USERNAME", "unknown")),
             "event_type": event_type,
             "data": json.dumps(data),
         }
         s3 = boto3.client(
             "s3",
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             region_name=os.getenv("AWS_REGION", "us-east-1"),
         )
         s3.put_object(
@@ -588,9 +588,11 @@ def log_audit_event(event_type: str, data: Dict):
             Key=f"{datetime.datetime.now().strftime('%Y/%m/%d')}/{uuid.uuid4().hex}.json",
             Body=json.dumps(log_data),
             ServerSideEncryption="AES256",
-            ACL="private",
+            # ACL omitted: bucket-level Block Public Access enforces private access.
+            # Adding ACL="private" raises AccessControlListNotSupported on
+            # BucketOwnerEnforced accounts (AWS default since April 2023).
         )
-        logger.info(f"Audit event for {os.getlogin()} sent to S3.")
+        logger.info(f"Audit event for {os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))} sent to S3.")
     except Exception as e:
         logger.error(f"Failed to log audit event: {e}", exc_info=True)
         if sentry_sdk and os.getenv("SENTRY_DSN"):
@@ -748,7 +750,7 @@ async def main_cli_loop():
                 safe_response = bleach.clean(
                     response.get("response", "No response text."), strip=True
                 )
-                TOKEN_USAGE.labels(user=os.getlogin(), provider="openai").inc(
+                TOKEN_USAGE.labels(user=os.environ.get("USER", os.environ.get("USERNAME", "unknown")), provider="openai").inc(
                     response.get("token_usage", 0)
                 )
                 # UPGRADE: Safety check

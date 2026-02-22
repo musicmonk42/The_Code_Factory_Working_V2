@@ -328,7 +328,7 @@ async def get_ai_suggestions(text: str, state: AutocompleteState) -> List[str]:
         response = await state.llm_instance.ainvoke(prompt)
         # UPGRADE: Token usage tracking - [Date: August 19, 2025]
         state.llm_token_count += getattr(response, "token_usage", 0)
-        TOKEN_USAGE.labels(user=os.getlogin(), provider=state.llm_provider).inc(
+        TOKEN_USAGE.labels(user=os.environ.get("USER", os.environ.get("USERNAME", "unknown")), provider=state.llm_provider).inc(
             getattr(response, "token_usage", 0)
         )
         return [
@@ -389,7 +389,7 @@ class CommandCompleter:
         with (
             tracer.start_as_current_span("cli_completion") as span,
             COMPLETION_LATENCY_SECONDS.labels(
-                user=os.getlogin(), operation="total"
+                user=os.environ.get("USER", os.environ.get("USERNAME", "unknown")), operation="total"
             ).time(),
             contextlib.suppress(Exception),
         ):
@@ -467,7 +467,7 @@ class CommandCompleter:
                 )
             self._last_ai_call_time = time.time()
             with COMPLETION_LATENCY_SECONDS.labels(
-                user=os.getlogin(), operation="ai_suggestion"
+                user=os.environ.get("USER", os.environ.get("USERNAME", "unknown")), operation="ai_suggestion"
             ).time():
                 suggestions = await get_ai_suggestions(
                     line.replace("ai: ", "").strip(), state
@@ -477,7 +477,7 @@ class CommandCompleter:
                 )
         # Default: fuzzy match commands
         with COMPLETION_LATENCY_SECONDS.labels(
-            user=os.getlogin(), operation="fuzzy_match"
+            user=os.environ.get("USER", os.environ.get("USERNAME", "unknown")), operation="fuzzy_match"
         ).time():
             matches = await fuzzy_matches(
                 text, state.command_registry.all_commands, state
@@ -510,14 +510,14 @@ def log_audit_event(line: str, result: str):
             return
         log_data = {
             "timestamp": time.time(),
-            "user": os.getlogin(),
+            "user": os.environ.get("USER", os.environ.get("USERNAME", "unknown")),
             "input": anonymize_pii(line),
             "result": anonymize_pii(result),
         }
         s3 = boto3.client(
             "s3",
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             region_name=region,
         )
         s3.put_object(
@@ -525,9 +525,11 @@ def log_audit_event(line: str, result: str):
             Key=f"{datetime.now().isoformat()}/{uuid.uuid4().hex}.json",
             Body=json.dumps(log_data),
             ServerSideEncryption="AES256",
-            ACL="private",
+            # ACL omitted: bucket-level Block Public Access enforces private access.
+            # Adding ACL="private" raises AccessControlListNotSupported on
+            # BucketOwnerEnforced accounts (AWS default since April 2023).
         )
-        logger.info(f"Audit event for {os.getlogin()} sent to S3.")
+        logger.info(f"Audit event for {os.environ.get('USER', os.environ.get('USERNAME', 'unknown'))} sent to S3.")
     except Exception as e:
         logger.error(f"Failed to log audit event: {e}")
         if os.getenv("SENTRY_DSN"):
