@@ -845,8 +845,36 @@ jobs:
           find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
           find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
           
+          echo "=== Clearing pytest cache ==="
+          rm -rf "${{ github.workspace }}/.pytest_cache" || true
+          
+          echo "=== Flushing Redis test database ==="
+          redis-cli -u "${REDIS_URL}" FLUSHDB 2>/dev/null || true
+          
+          echo "=== Cleaning Prometheus multiproc dir ==="
+          rm -rf "${{ runner.temp }}/prometheus_multiproc" || true
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+          
           echo "=== Memory status after cleanup ==="
           free -h
+
+      - name: Diagnostics before Arbiter tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Key Environment Variables ==="
+          echo "TESTING=${TESTING:-unset}"
+          echo "CI=${CI:-unset}"
+          echo "OTEL_SDK_DISABLED=${OTEL_SDK_DISABLED:-unset}"
+          echo "REDIS_URL=${REDIS_URL:-unset}"
+          echo "PROMETHEUS_MULTIPROC_DIR=${PROMETHEUS_MULTIPROC_DIR:-unset}"
+          echo "DISABLE_EXTERNAL_LLM_TESTS=${DISABLE_EXTERNAL_LLM_TESTS:-unset}"
+          echo "SKIP_BACKGROUND_TASKS=${SKIP_BACKGROUND_TASKS:-unset}"
+          echo "=== System Resources ==="
+          free -h
+          df -h
+          echo "=== CPU Info ==="
+          nproc
 
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
@@ -856,9 +884,18 @@ jobs:
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
           NLTK_DATA: "$HOME/nltk_data"
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
+          DISABLE_EXTERNAL_LLM_TESTS: "1"
+          OTEL_SDK_DISABLED: "1"
+          OTEL_TRACES_EXPORTER: "none"
+          OTEL_METRICS_EXPORTER: "none"
+          OTEL_LOGS_EXPORTER: "none"
         run: |
           set -o pipefail
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          # Unset LLM provider API keys to prevent any accidental external calls
+          unset OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY OLLAMA_BASE_URL LLM_API_KEY
+          # Clean and recreate Prometheus multiproc dir to avoid stale state from prior batches
+          rm -rf "${{ runner.temp }}/prometheus_multiproc"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
           
@@ -873,8 +910,8 @@ jobs:
           timeout --signal=TERM --kill-after=30s 120m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
-            --tb=short \
-            -m "not heavy and not slow and not integration" \
+            --tb=long \
+            -m "not heavy and not slow and not integration and not external" \
             --timeout=600 \
             --maxfail=100 \
             --durations=0 \
@@ -893,8 +930,8 @@ jobs:
               echo "ERROR: Arbiter test execution timed out (timeout command)"
               echo "Wall-clock time limit (120 minutes) was exceeded"
               echo ""
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-arbiter.log || true
+              echo "=== Last 200 lines of test output ==="
+              tail -200 test-output-sfe-arbiter.log || true
               echo ""
               echo "=== System resources at failure ==="
               free -h || true
@@ -906,18 +943,34 @@ jobs:
               echo "  - Runner service shutdown"
               echo "  - Memory pressure from test suite"
               echo ""
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-arbiter.log || true
+              echo "=== Last 200 lines of test output ==="
+              tail -200 test-output-sfe-arbiter.log || true
               echo ""
               echo "=== System resources at failure ==="
               free -h || true
               df -h || true
             else
-              echo "=== Last 100 lines of test output ==="
-              tail -100 test-output-sfe-arbiter.log
+              echo "=== Last 200 lines of test output ==="
+              tail -200 test-output-sfe-arbiter.log
             fi
             exit $EXIT_CODE
           }
+
+      - name: Dump Arbiter log on failure
+        if: failure() && matrix.module == 'self_fixing_engineer'
+        run: |
+          echo "=== Last 200 lines of Arbiter test log ==="
+          tail -200 test-output-sfe-arbiter.log || true
+
+      - name: Upload Arbiter test artifacts
+        if: failure() && matrix.module == 'self_fixing_engineer'
+        uses: actions/upload-artifact@v4
+        with:
+          name: arbiter-test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-output-sfe-arbiter.log
+            junit-sfe-arbiter.xml
+          retention-days: 7
 
       - name: Monitor memory after Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'

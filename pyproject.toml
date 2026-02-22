@@ -87,6 +87,7 @@ norecursedirs = ".* _* build dist venv env node_modules __pycache__"
 markers = [
     "unit: marks tests as unit tests (fast, no external dependencies)",
     "integration: marks tests as integration tests (requires external services)",
+    "external: marks tests that call external LLM/API providers (OpenAI, Anthropic, Gemini, Ollama)",
     "slow: marks tests as slow (execution time > 5 seconds)",
     "heavy: marks tests requiring heavy dependencies (numpy, pandas, torch, transformers)",
     "requires_redis: marks tests that require Redis connection",
