@@ -700,13 +700,24 @@ async def download_partial_results(
                 status_code=401,
                 detail="Bearer token is missing or empty.",
             )
-        # Validate token via JWT verification if available
+        # Validate token via JWT verification
         try:
             import jwt
 
             secret = os.getenv("JWT_SECRET_KEY", "")
-            if secret:
-                jwt.decode(token, secret, algorithms=["HS256"])
+            if not secret:
+                # No secret configured — deny all access in production to avoid
+                # accepting arbitrary tokens silently.
+                raise HTTPException(
+                    status_code=401,
+                    detail=(
+                        "Authorization cannot be verified: JWT_SECRET_KEY is not configured. "
+                        "Set JWT_SECRET_KEY or use DEVELOPMENT_MODE=true for development access."
+                    ),
+                )
+            jwt.decode(token, secret, algorithms=["HS256"])
+        except HTTPException:
+            raise
         except Exception as auth_exc:
             raise HTTPException(
                 status_code=401,

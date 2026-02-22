@@ -279,7 +279,15 @@ class ScalableProvenanceLogger:
                         "Falling back to local storage only."
                     )
 
-            asyncio.create_task(_send_kafka())
+            try:
+                asyncio.get_running_loop()
+                asyncio.create_task(_send_kafka())
+            except RuntimeError:
+                # No running event loop — Kafka send skipped; event stored locally.
+                utils_logger.warning(
+                    "ScalableProvenanceLogger: Kafka send skipped — no running event loop. "
+                    "Call log_event() from within an async context for Kafka delivery."
+                )
         elif self._kafka_bootstrap_servers:
             utils_logger.warning(
                 "ScalableProvenanceLogger: Kafka producer not started — "

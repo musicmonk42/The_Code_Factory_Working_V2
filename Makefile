@@ -216,7 +216,10 @@ run-server: ## Run the unified Code Factory server
 
 docker-build: ## Build unified platform Docker image
 	@echo "$(BLUE)Building unified Code Factory platform image...$(NC)"
-	docker build -t code-factory:latest -f Dockerfile .
+	docker build \
+		--build-arg BUILD_DATE="$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		-t code-factory:latest \
+		-f Dockerfile .
 	@echo "$(GREEN)Docker image built successfully!$(NC)"
 	@echo "$(YELLOW)Note: The unified image includes Generator, OmniCore, and SFE modules$(NC)"
 
@@ -568,7 +571,7 @@ logs-sfe: ## Show Self-Fixing Engineer logs
 
 metrics: ## Show current metrics
 	@echo "$(BLUE)Current Metrics:$(NC)"
-	curl -s http://localhost:8001/metrics | head -20
+	curl -s http://localhost:9090/metrics | head -20
 
 # =============================================================================
 # CI/CD Local Testing
