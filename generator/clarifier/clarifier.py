@@ -556,27 +556,53 @@ def initialize_encryption(kms_key_id: str, is_prod: bool) -> Fernet:
     3. This is a pragmatic fix for Railway; AWS deployments should use KMS
     
     For production AWS deployments, ensure AWS_REGION and KMS credentials are set.
-    For Railway or similar deployments without KMS, accept the logging warnings
-    and understand that encrypted history won't persist across restarts.
+    For Railway or similar deployments without KMS, set CLARIFIER_ENCRYPTION_KEY to
+    a stable Fernet key, or set SECRET_KEY for a deterministic derived key.
     """
+    # Priority 1: Explicit Fernet key provided via env var (e.g., Railway secret)
+    clarifier_key = os.getenv("CLARIFIER_ENCRYPTION_KEY")
+    if clarifier_key:
+        try:
+            f = Fernet(clarifier_key.encode() if isinstance(clarifier_key, str) else clarifier_key)
+            get_logger().info("Using CLARIFIER_ENCRYPTION_KEY for history encryption.")
+            return f
+        except Exception as key_err:
+            get_logger().warning(
+                f"CLARIFIER_ENCRYPTION_KEY is set but invalid: {key_err}. Falling back to other methods."
+            )
+
+    # Priority 2: Derive a stable key from SECRET_KEY env var (no KMS required)
+    secret_key = os.getenv("SECRET_KEY")
+    if secret_key:
+        import hashlib
+        import base64
+        derived = base64.urlsafe_b64encode(
+            hashlib.sha256(secret_key.encode()).digest()
+        )
+        f = Fernet(derived)
+        get_logger().info("Derived stable Fernet key from SECRET_KEY for history encryption.")
+        return f
+
     aws_region = os.getenv("AWS_REGION")
     
     # Validate AWS_REGION is set before attempting KMS call
     if not aws_region:
         if is_prod:
-            get_logger().critical(
-                "CRITICAL: AWS_REGION environment variable is not set. "
-                "Cannot initialize KMS client for production encryption."
+            get_logger().warning(
+                "AWS_REGION environment variable is not set. "
+                "Cannot initialize KMS client for production encryption. "
+                "Set CLARIFIER_ENCRYPTION_KEY or SECRET_KEY for stable encryption on Railway."
             )
-            # Fall back to local key with critical warning in prod
-            get_logger().critical(
-                "CRITICAL: In production mode, a valid KMS-provided history encryption key is REQUIRED. "
-                "Falling back to local encryption key. This is INSECURE for production use. "
+            # Fall back to local key with warning in prod (system already falls back gracefully)
+            get_logger().warning(
+                "In production mode, a valid KMS-provided history encryption key is RECOMMENDED. "
+                "Falling back to local encryption key. "
                 "WARNING: Encrypted history will be lost on restart due to ephemeral key generation."
             )
             f = Fernet(Fernet.generate_key())
             get_logger().warning(
-                "Using a locally generated Fernet key. History encryption is INSECURE. DO NOT USE IN PRODUCTION WITHOUT A REAL KMS KEY."
+                "Using a locally generated Fernet key. History encryption is INSECURE. "
+                "Set CLARIFIER_ENCRYPTION_KEY or SECRET_KEY in Railway for persistent encryption."
             )
             return f
         else:

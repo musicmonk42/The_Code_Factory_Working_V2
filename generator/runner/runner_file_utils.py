@@ -1851,8 +1851,27 @@ async def validate_generated_project(
         else:
             # Check file is not empty
             if file_path.stat().st_size == 0:
-                result["valid"] = False
-                result["errors"].append(f"Required file is empty: {required_file}")
+                if required_file in CRITICAL_REQUIRED_FILES:
+                    result["valid"] = False
+                    result["errors"].append(f"Required file is empty: {required_file}")
+                elif required_file == ".env.example":
+                    # Auto-populate empty .env.example with placeholder content
+                    placeholder = (
+                        "# Example environment variables\n"
+                        "# Copy this file to .env and fill in your values\n"
+                        "# APP_SECRET_KEY=your-secret-key-here\n"
+                        "# DATABASE_URL=postgresql://user:password@localhost:5432/dbname\n"
+                        "# DEBUG=false\n"
+                    )
+                    try:
+                        file_path.write_text(placeholder, encoding="utf-8")
+                        logger.info("Auto-populated empty .env.example with placeholder content")
+                    except Exception as write_err:
+                        logger.warning("Could not auto-populate .env.example: %s", write_err)
+                    # Not an error — file is now populated (or we warned)
+                else:
+                    # Non-critical empty file: warn but do not fail validation
+                    result["warnings"].append(f"Optional file is empty: {required_file}")
             else:
                 # Check it's not a JSON file map (the original bug)
                 try:

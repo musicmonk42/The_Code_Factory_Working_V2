@@ -114,24 +114,38 @@ The Helm chart MUST include ALL of the following files:
 
 ## STRICT OUTPUT FORMAT - CRITICAL
 
-Your response MUST:
-1. Start IMMEDIATELY with valid YAML (no preamble)
-2. Begin with `---` or a top-level key (e.g., `replicaCount:`, `image:`)
-3. Contain ONLY valid YAML configuration
-4. Have NO markdown code fences (```)
-5. Have NO explanations or commentary before or after the YAML
+Your response MUST be a single valid JSON object with these exact top-level keys:
 
-WRONG EXAMPLES:
-- "Here is the Helm values.yaml..."
-- "To create a Helm chart..."
-- "```yaml"
+```json
+{
+  "apiVersion": "v2",
+  "name": "<chart-name>",
+  "Chart.yaml": {
+    "apiVersion": "v2",
+    "name": "<chart-name>",
+    "description": "<description>",
+    "type": "application",
+    "version": "0.1.0",
+    "appVersion": "latest"
+  },
+  "values.yaml": {
+    "replicaCount": 2,
+    "image": {"repository": "<chart-name>", "pullPolicy": "IfNotPresent", "tag": "latest"},
+    "service": {"type": "ClusterIP", "port": 80, "targetPort": 8000}
+  },
+  "templates": {
+    "deployment.yaml": "# deployment YAML content here",
+    "service.yaml": "# service YAML content here",
+    "_helpers.tpl": "# helpers tpl content here"
+  }
+}
+```
 
-CORRECT: Your response starts directly with YAML:
-replicaCount: 2
-image:
-  repository: my-app
-  tag: "1.0.0"
+Rules:
+1. Output ONLY the JSON object — no markdown fences, no preamble, no explanation
+2. The top-level JSON MUST contain `"apiVersion"` and `"name"` fields
+3. All template content in `"templates"` must be plain strings (escaped YAML as JSON strings)
+4. Do NOT wrap the output in markdown code fences (```)
+5. Base ALL configuration on the actual generated code, not generic templates
 
-Base ALL configuration on the actual generated code, not generic templates.
-
-BEGIN YOUR HELM CONFIGURATION NOW:
+BEGIN YOUR JSON RESPONSE NOW:

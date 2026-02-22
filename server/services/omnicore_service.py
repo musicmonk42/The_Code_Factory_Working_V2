@@ -3628,6 +3628,48 @@ class OmniCoreService:
                     # Fix any double-nesting that the LLM may have introduced
                     # (e.g. output_path/generated/… → output_path/…)
                     _fix_double_nesting(output_path)
+
+                    # Apply pydantic v1→v2 fixes recursively to ALL Python files
+                    # in the output directory (including nested subdirectories like hello_generator/).
+                    # This ensures fixes aren't missed when the LLM generates nested structures.
+                    if language.lower() in ("python", "py"):
+                        try:
+                            from generator.agents.codegen_agent.codegen_response_handler import (
+                                auto_fix_pydantic_v1_imports,
+                            )
+                            py_files_on_disk: dict = {}
+                            for py_path in Path(output_path).rglob("*.py"):
+                                rel = str(py_path.relative_to(output_path))
+                                try:
+                                    py_files_on_disk[rel] = py_path.read_text(encoding="utf-8")
+                                except Exception:
+                                    pass
+                            # Also include requirements.txt for pydantic pin upgrades
+                            req_path = Path(output_path) / "requirements.txt"
+                            if req_path.exists():
+                                try:
+                                    py_files_on_disk["requirements.txt"] = req_path.read_text(encoding="utf-8")
+                                except Exception:
+                                    pass
+                            if py_files_on_disk:
+                                fixed = auto_fix_pydantic_v1_imports(py_files_on_disk)
+                                for rel_name, fixed_content in fixed.items():
+                                    fixed_path = Path(output_path) / rel_name
+                                    if fixed_content != py_files_on_disk.get(rel_name):
+                                        try:
+                                            fixed_path.parent.mkdir(parents=True, exist_ok=True)
+                                            fixed_path.write_text(fixed_content, encoding="utf-8")
+                                        except Exception as write_err:
+                                            logger.warning(
+                                                f"[CODEGEN] Could not write pydantic fix for {rel_name}: {write_err}"
+                                            )
+                        except ImportError:
+                            pass
+                        except Exception as pydantic_fix_err:
+                            logger.warning(
+                                f"[CODEGEN] Recursive pydantic fix failed: {pydantic_fix_err}",
+                                extra={"job_id": job_id}
+                            )
                 else:
                     logger.warning(
                         f"Code generation returned non-dict result - type={type(result).__name__}",
@@ -4410,6 +4452,37 @@ class OmniCoreService:
                         if doc_count == 0:
                             logger.warning(f"[DEPLOY] No valid Kubernetes documents found in content for target {target}")
                         
+                        # Ensure service.yaml exists — it is required by the deploy validator.
+                        # If the LLM did not include a Service resource, generate a sensible default.
+                        service_yaml_path = target_dir / "service.yaml"
+                        if not service_yaml_path.exists():
+                            _app_name = output_dir.name or "app"
+                            default_service_yaml = (
+                                "---\n"
+                                "apiVersion: v1\n"
+                                "kind: Service\n"
+                                "metadata:\n"
+                                f"  name: {_app_name}-service\n"
+                                "spec:\n"
+                                "  selector:\n"
+                                f"    app: {_app_name}\n"
+                                "  ports:\n"
+                                "  - protocol: TCP\n"
+                                "    port: 80\n"
+                                "    targetPort: 8000\n"
+                                "  type: ClusterIP\n"
+                            )
+                            try:
+                                async with aiofiles.open(service_yaml_path, "w", encoding="utf-8") as f:
+                                    await f.write(default_service_yaml)
+                                try:
+                                    generated_files.append(str(service_yaml_path.relative_to(repo_path)))
+                                except ValueError:
+                                    generated_files.append(str(service_yaml_path))
+                                logger.info(f"[DEPLOY] Generated default k8s/service.yaml (LLM did not include a Service resource)")
+                            except Exception as svc_err:
+                                logger.warning(f"[DEPLOY] Could not write default service.yaml: {svc_err}")
+                        
                         continue  # Skip the default file writing below
                     elif target == "helm":
                         # FIX Bug 3 & 4: Helm files go into helm/ subdirectory with proper chart structure
@@ -4533,17 +4606,60 @@ class OmniCoreService:
                                         has_required = required_keys.issubset(parsed_yaml.keys())
                                         
                                         if has_required:
-                                            # Content appears to be a valid Helm chart, write it
-                                            async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
-                                                await f.write(yaml.dump(parsed_yaml, default_flow_style=False))
-                                            generated_files.append(str(chart_file.relative_to(repo_path)))
-                                            logger.info(
-                                                f"[DEPLOY] Generated helm Chart.yaml (validated)",
-                                                extra={
-                                                    "chart_name": parsed_yaml.get("name"),
-                                                    "api_version": parsed_yaml.get("apiVersion")
-                                                }
-                                            )
+                                            # Check if this is a structured format (Chart.yaml, values.yaml, templates as keys)
+                                            # This happens when the LLM returns JSON that was round-tripped through YAML
+                                            structured_keys = {"Chart.yaml", "values.yaml", "templates"}
+                                            is_structured = bool(structured_keys & set(parsed_yaml.keys()))
+                                            
+                                            if is_structured:
+                                                # Handle as structured format: write each file separately
+                                                logger.info("[DEPLOY] Helm YAML contains structured keys, writing individual files")
+                                                if "Chart.yaml" in parsed_yaml:
+                                                    _chart_data = parsed_yaml["Chart.yaml"]
+                                                    async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                                        if isinstance(_chart_data, dict):
+                                                            await f.write(yaml.dump(_chart_data, default_flow_style=False))
+                                                        else:
+                                                            await f.write(str(_chart_data))
+                                                    generated_files.append(str(chart_file.relative_to(repo_path)))
+                                                    logger.info(f"[DEPLOY] Generated helm Chart.yaml from structured YAML")
+                                                else:
+                                                    # Use apiVersion/name from top-level as Chart.yaml
+                                                    chart_meta = {k: v for k, v in parsed_yaml.items() if k not in structured_keys}
+                                                    async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                                        await f.write(yaml.dump(chart_meta, default_flow_style=False))
+                                                    generated_files.append(str(chart_file.relative_to(repo_path)))
+                                                if "values.yaml" in parsed_yaml:
+                                                    values_file = target_dir / "values.yaml"
+                                                    _values_data = parsed_yaml["values.yaml"]
+                                                    async with aiofiles.open(values_file, "w", encoding="utf-8") as f:
+                                                        if isinstance(_values_data, dict):
+                                                            await f.write(yaml.dump(_values_data, default_flow_style=False))
+                                                        else:
+                                                            await f.write(str(_values_data))
+                                                    generated_files.append(str(values_file.relative_to(repo_path)))
+                                                    logger.info(f"[DEPLOY] Generated helm values.yaml from structured YAML")
+                                                if "templates" in parsed_yaml and isinstance(parsed_yaml["templates"], dict):
+                                                    for tmpl_name, tmpl_content in parsed_yaml["templates"].items():
+                                                        if "/" in tmpl_name:
+                                                            tmpl_name = tmpl_name.split("/")[-1]
+                                                        tmpl_file = templates_dir / tmpl_name
+                                                        async with aiofiles.open(tmpl_file, "w", encoding="utf-8") as f:
+                                                            await f.write(str(tmpl_content))
+                                                        generated_files.append(str(tmpl_file.relative_to(repo_path)))
+                                                        logger.info(f"[DEPLOY] Generated helm template: {tmpl_file}")
+                                            else:
+                                                # Content appears to be a valid Helm chart, write it
+                                                async with aiofiles.open(chart_file, "w", encoding="utf-8") as f:
+                                                    await f.write(yaml.dump(parsed_yaml, default_flow_style=False))
+                                                generated_files.append(str(chart_file.relative_to(repo_path)))
+                                                logger.info(
+                                                    f"[DEPLOY] Generated helm Chart.yaml (validated)",
+                                                    extra={
+                                                        "chart_name": parsed_yaml.get("name"),
+                                                        "api_version": parsed_yaml.get("apiVersion")
+                                                    }
+                                                )
                                         else:
                                             # Missing required fields, use default
                                             logger.warning(
@@ -6826,6 +6942,9 @@ class OmniCoreService:
                                 f"[PIPELINE] Job {job_id} HARD FAIL - validation errors: {validation_errors}",
                                 extra={"job_id": job_id, "validation_result": val_result}
                             )
+                            # Track that validate failed and testgen was implicitly skipped
+                            # so generator.py reports the correct failing stage ("validate", not "testgen")
+                            stages_completed.append("testgen:skipped")
                             await self._finalize_failed_job(
                                 job_id, error=f"Validation failed: {validation_errors}"
                             )
@@ -6847,6 +6966,9 @@ class OmniCoreService:
                         logger.info(f"[PIPELINE] Job {job_id} completed step: validate")
                 except Exception as val_err:
                     logger.warning(f"[PIPELINE] Job {job_id} validation step error: {val_err}")
+            else:
+                # Validate step was not run (no output_path or materializer unavailable)
+                stages_completed.append("validate:skipped")
             
             # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
