@@ -437,6 +437,8 @@ async def _query_testgen_audit_logs(
         
         if not log_path.exists():
             logger.warning(f"Test generation audit log not found: {log_path}")
+            # Ensure the directory exists for future writes
+            log_path.parent.mkdir(parents=True, exist_ok=True)
             return []
         
         logs = []

@@ -273,7 +273,7 @@ def _create_presidio_log_filter():
     """
     return lambda record: not any(
         entity in record.getMessage()
-        for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry"]
+        for entity in ["CARDINAL", "MONEY", "PERCENT", "WORK_OF_ART", "is not mapped", "not added to registry", "URL"]
     )
 
 

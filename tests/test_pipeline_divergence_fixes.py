@@ -226,6 +226,37 @@ class TestPostMaterialize:
         pm_module.post_materialize(project_dir)
         assert (project_dir / "app" / "schemas.py").read_text(encoding="utf-8") == custom
 
+    def test_schemas_py_copied_from_root_when_present(self, pm_module, project_dir):
+        """When root schemas.py exists with real content, it must be copied to app/schemas.py - not overwritten with stub."""
+        real_content = (
+            "from pydantic import BaseModel\n\n"
+            "class Health(BaseModel):\n"
+            "    ok: bool\n\n"
+            "class Version(BaseModel):\n"
+            "    name: str\n"
+            "    version: str\n"
+        )
+        (project_dir / "schemas.py").write_text(real_content, encoding="utf-8")
+        pm_module.post_materialize(project_dir)
+        result = (project_dir / "app" / "schemas.py").read_text(encoding="utf-8")
+        assert "Health" in result, "app/schemas.py must contain real LLM content, not stub"
+        assert "Version" in result
+
+    def test_routes_py_copied_from_root_when_present(self, pm_module, project_dir):
+        """When root routes.py exists with real content, it must be copied to app/routes.py - not overwritten with stub."""
+        real_content = (
+            "from fastapi import APIRouter\n"
+            "from app.schemas import Health, Version\n\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/health')\n"
+            "async def get_health():\n"
+            "    return Health(ok=True)\n"
+        )
+        (project_dir / "routes.py").write_text(real_content, encoding="utf-8")
+        pm_module.post_materialize(project_dir)
+        result = (project_dir / "app" / "routes.py").read_text(encoding="utf-8")
+        assert "get_health" in result, "app/routes.py must contain real LLM content, not stub"
+
     # ------------------------------------------------------------------
     # app/main.py
     # ------------------------------------------------------------------

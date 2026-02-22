@@ -333,7 +333,7 @@ else:
             # The _as_json_list() function handles parsing and validation instead
             Validator("ENCRYPTION_KEYS", must_exist=True),
             Validator(
-                "COMPRESSION_ALGO", must_exist=True, is_in=["zstd", "gzip", "none"]
+                "COMPRESSION_ALGO", default="zstd", is_in=["zstd", "gzip", "none"]
             ),
             Validator("COMPRESSION_LEVEL", default=9, gte=1, lte=22),
             Validator("BATCH_FLUSH_INTERVAL", must_exist=True, gte=1, lte=60),
@@ -499,7 +499,7 @@ def _safe_settings_get(name: str, default: Any) -> Any:
 
 # ---- Public module-level constants used elsewhere ----
 ENCRYPTION_KEYS = _as_json_list("ENCRYPTION_KEYS", [])
-COMPRESSION_ALGO = _safe_settings_get("COMPRESSION_ALGO", "gzip")
+COMPRESSION_ALGO = _safe_settings_get("COMPRESSION_ALGO", "zstd")
 COMPRESSION_LEVEL = _as_int("COMPRESSION_LEVEL", 9)
 BATCH_FLUSH_INTERVAL = _as_int("BATCH_FLUSH_INTERVAL", 10)
 BATCH_MAX_SIZE = _as_int("BATCH_MAX_SIZE", 100)
@@ -669,7 +669,7 @@ else:
 # These lines overwrite the constants defined in the new block above,
 # allowing for runtime checks (like the ENCRYPTER check).
 COMPRESSION_ALGO = (
-    _safe_settings_get("COMPRESSION_ALGO", "gzip") if ENCRYPTER else "none"
+    _safe_settings_get("COMPRESSION_ALGO", "zstd") if ENCRYPTER else "none"
 )  # Disable if crypto failed. settings.get() is safe.
 COMPRESSION_LEVEL = _as_int("COMPRESSION_LEVEL", 9)
 BATCH_FLUSH_INTERVAL = _as_int("BATCH_FLUSH_INTERVAL", 10)

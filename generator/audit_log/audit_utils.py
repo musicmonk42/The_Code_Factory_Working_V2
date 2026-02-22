@@ -380,14 +380,25 @@ def register_provenance_logic(
                 f"Registered provenance logic '{name}' must be a callable function."
             )
 
-        try:
-            # FIX (from prior step): Add 'key_id' to the test dictionary
-            test_result = func([], {"test": "data", "key_id": "test_key"}, False)
-            if not isinstance(test_result, str):
-                raise ValueError("Registered provenance function must return a string.")
-        except Exception as e:
-            raise ValueError(
-                f"Test for registered provenance logic '{name}' failed: {e}"
+        # Only run the self-test when a real signer is available OR we're not in production.
+        # In production before _set_sign_entry_func() has been called, skip the test
+        # to avoid a RuntimeError that makes the module unimportable.
+        if not (IS_PRODUCTION and not _is_real_signer_set):
+            try:
+                # FIX (from prior step): Add 'key_id' to the test dictionary
+                test_result = func([], {"test": "data", "key_id": "test_key"}, False)
+                if not isinstance(test_result, str):
+                    raise ValueError("Registered provenance function must return a string.")
+            except Exception as e:
+                raise ValueError(
+                    f"Test for registered provenance logic '{name}' failed: {e}"
+                )
+        else:
+            logger.warning(
+                "Skipping self-test for provenance logic '%s': "
+                "production mode with no real signer set yet. "
+                "Call _set_sign_entry_func() before using audit logging.",
+                name,
             )
 
         provenance_registry[name] = func

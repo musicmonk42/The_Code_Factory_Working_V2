@@ -349,6 +349,11 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         # the LLM likely stripped critical spec requirements (e.g., required K8s manifests,
         # service.yaml, Helm chart files). Return original to preserve full deployment context.
         min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.75"))
+        # Use a more conservative ratio for structured prompts (YAML, JSON, code blocks)
+        # to avoid stripping required deployment context like K8s manifests or Helm charts
+        _structured_markers = ("```yaml", "```json", "apiVersion:", "Chart.yaml", "values.yaml")
+        if any(marker in prompt_text for marker in _structured_markers):
+            min_length_ratio = max(min_length_ratio, 0.90)
         if len(optimized) < len(prompt_text) * min_length_ratio:
             logger.warning(
                 "Prompt optimization too aggressive: %d -> %d chars (%.0f%% reduction, threshold: %.0f%%). "

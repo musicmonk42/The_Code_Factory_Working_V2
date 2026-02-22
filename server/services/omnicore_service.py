@@ -4434,6 +4434,21 @@ class OmniCoreService:
                                 doc_filename = f"resource-{doc_count}.yaml"
                                 logger.warning(f"Could not determine kind for K8s document {idx}, using fallback filename")
                             
+                            # Validate document is a well-formed YAML dict before writing
+                            try:
+                                parsed_doc = yaml.safe_load(doc)
+                                if not isinstance(parsed_doc, dict):
+                                    logger.error(
+                                        f"[DEPLOY] K8s document {idx} is not a valid dictionary "
+                                        f"(got {type(parsed_doc).__name__}) — skipping"
+                                    )
+                                    continue
+                            except Exception as yaml_exc:
+                                logger.error(
+                                    f"[DEPLOY] K8s document {idx} has invalid YAML: {yaml_exc} — skipping"
+                                )
+                                continue
+
                             # Write the document to file
                             file_path = target_dir / doc_filename
                             async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
@@ -4600,8 +4615,13 @@ class OmniCoreService:
                                         )
                                         await self._write_default_helm_chart(chart_file, repo_path, generated_files)
                                     else:
-                                        # Industry Standard: Validate required Helm chart fields
-                                        # While not strictly required for all charts, this catches malformed content
+                                        # Provide defaults for missing required Helm chart fields
+                                        # so that valid raw YAML from the LLM is not discarded
+                                        helm_app_name = output_dir.name or "app"
+                                        if "apiVersion" not in parsed_yaml:
+                                            parsed_yaml["apiVersion"] = "v2"
+                                        if "name" not in parsed_yaml:
+                                            parsed_yaml["name"] = helm_app_name
                                         required_keys = {"apiVersion", "name"}
                                         has_required = required_keys.issubset(parsed_yaml.keys())
                                         
@@ -5551,6 +5571,20 @@ class OmniCoreService:
                 # Issue 5c: Run sphinx-build to create docs/_build/html/ so that
                 # final validation checks can locate the generated HTML documentation.
                 sphinx_html_dir = output_dir / "_build" / "html"
+                # Ensure a minimal conf.py exists so sphinx-build doesn't exit with code 2
+                conf_py = output_dir / "conf.py"
+                if not conf_py.exists():
+                    try:
+                        conf_py.write_text(
+                            "# Minimal Sphinx conf.py - auto-generated\n"
+                            "project = 'Generated Project'\n"
+                            "extensions = []\n"
+                            "html_theme = 'alabaster'\n",
+                            encoding="utf-8",
+                        )
+                        logger.info("[DOCGEN] Created minimal docs/conf.py for job %s", job_id)
+                    except OSError as conf_err:
+                        logger.warning("[DOCGEN] Could not create conf.py: %s", conf_err)
                 try:
                     sphinx_result = await asyncio.create_subprocess_exec(
                         "sphinx-build",

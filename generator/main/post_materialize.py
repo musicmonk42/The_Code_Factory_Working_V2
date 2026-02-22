@@ -384,20 +384,34 @@ def _scaffold_required_dirs(
                 output_dir=output_dir,
                 file_type="init_py",
             )
-            _create_if_absent(
-                dir_path / "schemas.py",
-                _APP_SCHEMAS_CONTENT,
-                result,
-                output_dir=output_dir,
-                file_type="schemas_py",
-            )
-            _create_if_absent(
-                dir_path / "routes.py",
-                _APP_ROUTES_CONTENT,
-                result,
-                output_dir=output_dir,
-                file_type="routes_py",
-            )
+            # Copy root-level schemas.py if present, else use stub
+            app_schemas = dir_path / "schemas.py"
+            if not app_schemas.exists():
+                root_schemas = output_dir / "schemas.py"
+                if root_schemas.exists():
+                    try:
+                        content = root_schemas.read_text(encoding="utf-8")
+                        _create_if_absent(app_schemas, content, result, output_dir=output_dir, file_type="schemas_py")
+                        logger.debug("%s Copied root schemas.py → app/schemas.py", _STAGE)
+                    except OSError as exc:
+                        result.warnings.append(f"Could not copy root schemas.py: {exc}")
+                        _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
+                else:
+                    _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
+            # Copy root-level routes.py if present, else use stub
+            app_routes = dir_path / "routes.py"
+            if not app_routes.exists():
+                root_routes = output_dir / "routes.py"
+                if root_routes.exists():
+                    try:
+                        content = root_routes.read_text(encoding="utf-8")
+                        _create_if_absent(app_routes, content, result, output_dir=output_dir, file_type="routes_py")
+                        logger.debug("%s Copied root routes.py → app/routes.py", _STAGE)
+                    except OSError as exc:
+                        result.warnings.append(f"Could not copy root routes.py: {exc}")
+                        _create_if_absent(app_routes, _APP_ROUTES_CONTENT, result, output_dir=output_dir, file_type="routes_py")
+                else:
+                    _create_if_absent(app_routes, _APP_ROUTES_CONTENT, result, output_dir=output_dir, file_type="routes_py")
 
         elif dir_name == "tests":
             _create_if_absent(
