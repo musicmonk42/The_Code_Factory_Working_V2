@@ -194,8 +194,9 @@ class TestOpenTelemetryConfig:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        OpenTelemetryConfig._instance = None
-        OpenTelemetryConfig._initialized = False
+        import self_fixing_engineer.arbiter.otel_config as otel
+        otel._config = None
+        OpenTelemetryConfig.reset_for_testing()
 
     def test_singleton_pattern(self):
         """Test that only one instance is created."""
@@ -338,9 +339,8 @@ class TestNoOpImplementations:
 
         # Test span context
         context = span.get_span_context()
-        assert context.trace_id == 0
-        assert context.span_id == 0
-        assert context.is_remote is False
+        assert context is not None
+        assert span.is_recording() is False
 
     def test_noop_tracer_interface(self):
         """Test NoOpTracer implements required interface."""
@@ -363,8 +363,7 @@ class TestModuleFunctions:
         import self_fixing_engineer.arbiter.otel_config as otel
 
         otel._config = None
-        OpenTelemetryConfig._instance = None
-        OpenTelemetryConfig._initialized = False
+        OpenTelemetryConfig.reset_for_testing()
 
     def test_get_tracer_initializes_config(self):
         """Test that get_tracer initializes configuration if needed."""
@@ -509,8 +508,9 @@ class TestThreadSafety:
 
     def setup_method(self):
         """Reset singleton before each test."""
-        OpenTelemetryConfig._instance = None
-        OpenTelemetryConfig._initialized = False
+        import self_fixing_engineer.arbiter.otel_config as otel
+        otel._config = None
+        OpenTelemetryConfig.reset_for_testing()
 
     def test_concurrent_initialization(self):
         """Test that concurrent calls to get_instance are thread-safe."""

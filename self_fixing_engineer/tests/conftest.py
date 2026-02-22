@@ -72,7 +72,9 @@ async def cleanup_async_resources():
 
 @pytest.fixture(autouse=True, scope="function")
 def cleanup_prometheus_registry():
-    """Clear Prometheus registry before each test."""
+    """Clear Prometheus registry AFTER each test to avoid duplicate registration errors."""
+    yield  # Run test first
+    # Clean up after the test
     collectors = list(REGISTRY._collector_to_names.keys())
     for collector in collectors:
         try:
@@ -101,7 +103,6 @@ def cleanup_prometheus_registry():
                 REGISTRY.register(metric)
             except ValueError:
                 pass
-    yield
 
 
 @pytest.fixture(autouse=True, scope="function")
