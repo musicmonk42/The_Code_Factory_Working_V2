@@ -2386,12 +2386,33 @@ def test_{file_stem}_syntax_error_documentation():
                         break
 
                     span.add_event(f"Building critique prompt for attempt {attempt+1}.")
+                    # When ImportErrors are present, include actual source file content
+                    # so the LLM understands what symbols exist in the referenced modules
+                    import_error_context = ""
+                    validation_feedback_str = json.dumps(validation_report)
+                    if "ImportError" in validation_feedback_str or "cannot import name" in validation_feedback_str:
+                        source_snippets = []
+                        for match in re.finditer(r"from ([\w.]+) import", validation_feedback_str):
+                            mod_path = match.group(1).replace(".", "/") + ".py"
+                            full_path = self.repo_path / mod_path
+                            if full_path.exists():
+                                try:
+                                    content = full_path.read_text(encoding="utf-8")[:4000]
+                                    source_snippets.append(f"# Actual content of {mod_path}:\n{content}")
+                                except OSError:
+                                    pass
+                        if source_snippets:
+                            import_error_context = (
+                                "\n\n## Source File Contents (for import error context)\n"
+                                + "\n\n".join(source_snippets)
+                                + "\n\nIMPORTANT: Only import symbols that actually exist in these files."
+                            )
                     critique_prompt = await build_agentic_prompt(
                         "critique",
                         language=language,
                         code_files=code_files,
                         generated_tests=generated_tests_this_attempt,
-                        validation_feedback=json.dumps(validation_report),
+                        validation_feedback=validation_feedback_str + import_error_context,
                     )
 
                     logger.info(

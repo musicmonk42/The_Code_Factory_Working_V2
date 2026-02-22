@@ -229,7 +229,10 @@ Each test file should start with:
 ```
 
 ## File Naming Convention
-**IMPORTANT**: All test file names MUST follow these rules:
+**CRITICAL NAMING REQUIREMENT**: All test file names MUST follow pytest naming conventions:
+- Files MUST be named `test_<module_name>.py` (e.g., `test_routes.py`, `test_schemas.py`)
 - Use lowercase `test_` prefix (e.g., `test_calculator.py`, `test_utils.py`)
-- DO NOT use capital letters at the start (e.g., NOT `Test.py` or `TestCalculator.py`)
+- DO NOT use capital letters at the start (e.g., NEVER `Test.py`, `Tests.py`, or `TestCalculator.py`)
+- NEVER use generic names like `test_module.py`, `test_file_1.py`, or `tests.py`
+- Each test file should correspond to a specific source module (e.g., `routes.py` → `test_routes.py`)
 - Follow pytest/unittest naming conventions for {{ language }}
