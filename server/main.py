@@ -314,6 +314,7 @@ _recovery_completed = False
 # Placeholders for lazy-loaded modules
 api_keys_router = None
 audit_router = None
+clarifier_ws_router = None
 diagnostics_router = None
 events_router = None
 files_router = None
@@ -337,7 +338,7 @@ def _load_routers():
     Thread-safe: uses a lock to prevent race conditions.
     """
     global _routers_loaded, _router_load_error
-    global api_keys_router, audit_router, diagnostics_router, events_router, fixes_router
+    global api_keys_router, audit_router, clarifier_ws_router, diagnostics_router, events_router, fixes_router
     global files_router, generator_router, jobs_router, omnicore_router, sfe_router, v1_compat_router
     global AgentType, get_agent_loader
     
@@ -355,6 +356,7 @@ def _load_routers():
             from server.routers import (
                 api_keys_router as _api_keys_router,
                 audit as _audit_router,
+                clarifier_ws_router as _clarifier_ws_router,
                 diagnostics_router as _diagnostics_router,
                 events_router as _events_router,
                 fixes_router as _fixes_router,
@@ -370,6 +372,7 @@ def _load_routers():
             # Assign all values atomically (within the lock)
             api_keys_router = _api_keys_router
             audit_router = _audit_router
+            clarifier_ws_router = _clarifier_ws_router
             diagnostics_router = _diagnostics_router
             events_router = _events_router
             files_router = _files_router
@@ -539,6 +542,7 @@ def _include_routers(app_instance: FastAPI) -> bool:
     try:
         app_instance.include_router(api_keys_router, prefix="/api")
         app_instance.include_router(audit_router.router, prefix="/api")
+        app_instance.include_router(clarifier_ws_router)
         app_instance.include_router(diagnostics_router, prefix="/api")
         app_instance.include_router(events_router, prefix="/api")
         app_instance.include_router(files_router)
