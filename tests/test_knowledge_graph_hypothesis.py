@@ -3,8 +3,9 @@
 """
 Property-based tests for the KnowledgeGraph (in-memory backend) using Hypothesis.
 
-Tests invariants for add_fact() and find-related operations that must hold for
-all valid inputs, complementing fixed-input unit tests.
+Tests invariants for ``add_fact()`` and neighbour-relationship operations
+(``add_edge`` / ``get_neighbors``) that must hold for all valid inputs,
+complementing fixed-input unit tests.
 """
 
 from __future__ import annotations
@@ -24,8 +25,8 @@ from self_fixing_engineer.arbiter.knowledge_graph import KnowledgeGraph
 
 
 def _run(coro):
-    """Run an async coroutine in a fresh event loop (pytest-asyncio not required)."""
-    return asyncio.get_event_loop().run_until_complete(coro)
+    """Run an async coroutine in a fresh event loop."""
+    return asyncio.run(coro)
 
 
 _safe_text = st.text(

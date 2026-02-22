@@ -15,7 +15,7 @@ from hypothesis import strategies as st
 from pydantic import ValidationError
 
 # Skip the entire module if heavy optional dependencies are not installed
-pytest.importorskip("aiohttp", reason="aiohttp not installed (required by human_loop.py)")
+pytest.importorskip("aiohttp", reason="aiohttp not installed (required by HumanInLoopConfig via human_loop.py)")
 
 from self_fixing_engineer.arbiter.human_loop import HumanInLoopConfig
 

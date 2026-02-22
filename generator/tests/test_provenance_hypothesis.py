@@ -91,6 +91,10 @@ class TestExtractEndpointsProperties:
         """When code contains a FastAPI-style decorator, at least one endpoint should be detected."""
         result = extract_endpoints_from_code(code)
         assert isinstance(result, list)
+        assert len(result) > 0, (
+            f"Expected at least one endpoint to be extracted from FastAPI-style "
+            f"decorator code, but got empty list. code={code!r}"
+        )
 
 
 # ---------------------------------------------------------------------------

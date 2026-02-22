@@ -76,12 +76,17 @@ from .resilience import CircuitBreaker, RetryPolicy
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
     # MESSAGE_BUS_SHARDS is the canonical env var for shard count (Feature 5).
-    # Fall back to the legacy MESSAGE_BUS_SHARD_COUNT name, then to 4.
-    _shard_count = int(
-        os.environ.get("MESSAGE_BUS_SHARDS")
-        or os.environ.get("MESSAGE_BUS_SHARD_COUNT")
-        or 4
-    )
+    # Fall back to the legacy MESSAGE_BUS_SHARD_COUNT name, then default to 4.
+    _shards_raw = os.environ.get("MESSAGE_BUS_SHARDS") or os.environ.get("MESSAGE_BUS_SHARD_COUNT")
+    try:
+        _shard_count = int(_shards_raw) if _shards_raw is not None else 4
+        if _shard_count < 1:
+            raise ValueError(f"shard count must be ≥ 1, got {_shard_count}")
+    except (ValueError, TypeError):
+        logging.warning(
+            "Invalid shard count in environment (%r); defaulting to 4.", _shards_raw
+        )
+        _shard_count = 4
     return types.SimpleNamespace(
         log_level="INFO",
         LOG_LEVEL="INFO",

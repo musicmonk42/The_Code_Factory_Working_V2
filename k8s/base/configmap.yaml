@@ -45,6 +45,10 @@ data:
   MESSAGE_BUS_WORKERS_PER_SHARD: "4"
   ENABLE_MESSAGE_BUS_GUARDIAN: "1"
   MESSAGE_BUS_GUARDIAN_INTERVAL: "30"
+  # Canonical shard count for the OmniCore message bus (Feature 5).
+  # Takes precedence over MESSAGE_BUS_SHARD_COUNT when both are set.
+  # See docs/SHARDING_GUIDE.md for sizing recommendations.
+  MESSAGE_BUS_SHARDS: "8"
 
   # ============================================
   # LLM Configuration
@@ -192,3 +196,18 @@ data:
   # Session timeout for real-time clarifier Q&A WebSocket connections (seconds).
   # Must match SESSION_TIMEOUT_SECONDS in server/routers/clarifier_ws.py.
   CLARIFIER_WS_TIMEOUT: "300"
+
+  # ============================================
+  # Tier-2 Feature Configuration
+  # ============================================
+
+  # Job-Status WebSocket heartbeat / idle-connection timeout (seconds).
+  # Controls JOBS_WS_TIMEOUT in server/routers/jobs_ws.py.
+  # Must be ≤ the load-balancer idle-timeout (typically 60–600 s).
+  JOBS_WS_TIMEOUT: "30"
+
+  # Post-Quantum Cryptography signing for audit logs.
+  # Set to "true" only after installing pqcrypto>=0.1.3 or liboqs-python>=0.12.0.
+  # See requirements-pqc.txt and docs/ for installation instructions.
+  # Gracefully falls back to HMAC-SHA-256 if the libraries are not present.
+  USE_PQC_SIGNING: "false"

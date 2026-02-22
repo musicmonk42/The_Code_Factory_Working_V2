@@ -85,6 +85,13 @@ services:
       - MESSAGE_BUS_WORKERS_PER_SHARD=4
       - ENABLE_MESSAGE_BUS_GUARDIAN=1
       - MESSAGE_BUS_GUARDIAN_INTERVAL=30
+      # Canonical shard count (Feature 5) — takes precedence over MESSAGE_BUS_SHARD_COUNT
+      - MESSAGE_BUS_SHARDS=${MESSAGE_BUS_SHARDS:-8}
+      # Post-Quantum Cryptography signing for audit logs
+      # Requires pqcrypto>=0.1.3 or liboqs-python>=0.12.0 (see requirements-pqc.txt)
+      - USE_PQC_SIGNING=${USE_PQC_SIGNING:-false}
+      # Job-status WebSocket heartbeat / idle-connection timeout (seconds)
+      - JOBS_WS_TIMEOUT=${JOBS_WS_TIMEOUT:-30}
 
       # ============================================
       # LLM Provider Configuration
