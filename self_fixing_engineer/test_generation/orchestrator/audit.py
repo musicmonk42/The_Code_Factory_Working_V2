@@ -52,7 +52,7 @@ class AuditLogger:
 
 def _get_audit_log_file() -> Union[str, os.PathLike, None]:
     """Read the audit log file path at runtime (supports monkeypatch in tests)."""
-    return getattr(_cfg, "AUDIT_LOG_FILE", None)
+    return getattr(_cfg, "AUDIT_LOG_FILE", None) or "atco_artifacts/atco_audit.log"
 
 
 def _json_serializable_default(obj: Any) -> Any:
