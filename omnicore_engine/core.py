@@ -1304,38 +1304,131 @@ class OmniCoreEngine:
         """
         Log error to external logging systems for centralized monitoring.
 
-        This method integrates with external logging services like:
-        - ELK Stack (Elasticsearch, Logstash, Kibana)
-        - Splunk
-        - DataDog
-        - CloudWatch
+        Supports multiple backends via environment variables:
+        - DATADOG_API_KEY → DataDog Events API
+        - SPLUNK_HEC_URL + SPLUNK_HEC_TOKEN → Splunk HTTP Event Collector
+        - ELASTICSEARCH_URL → Elasticsearch index 'omnicore-errors'
+        - CLOUDWATCH_LOG_GROUP + AWS credentials → CloudWatch Logs
+        - Fallback: structured JSON to stderr
 
         Args:
             log_data: Structured log data to send
-
-        Note:
-            This is a placeholder for external logging integration.
-            In production environments, implement specific integrations
-            based on your monitoring infrastructure:
-            - Configure InfluxDB client and write_api at module level
-            - Use dedicated logging libraries (e.g., python-json-logger)
-            - Integrate with cloud-native monitoring services
         """
-        # Placeholder for external logging integration
-        # In production, this would send to services like:
-        # - InfluxDB for time-series logging (requires configured client)
-        # - Elasticsearch for log aggregation (requires elasticsearch-py)
-        # - CloudWatch/DataDog for cloud monitoring (requires respective SDKs)
+        import json
+        import os
 
-        # Future implementation example:
-        # if hasattr(self, 'influx_client') and self.influx_client:
-        #     write_api = self.influx_client.write_api()
-        #     point = Point("system_errors").tag("component", log_data.get("component"))
-        #     write_api.write(bucket="omnicore", record=point)
+        sent = False
 
-        self.logger.debug(
-            "External logging not configured (placeholder implementation)"
-        )
+        # DataDog
+        datadog_api_key = os.environ.get("DATADOG_API_KEY")
+        if datadog_api_key:
+            async def _send_datadog():
+                try:
+                    import aiohttp
+                    payload = {
+                        "title": log_data.get("error_type", "omnicore_error"),
+                        "text": json.dumps(log_data),
+                        "alert_type": "error",
+                        "tags": [f"component:{log_data.get('component', 'omnicore')}"],
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            "https://api.datadoghq.com/api/v1/events",
+                            headers={"DD-API-KEY": datadog_api_key, "Content-Type": "application/json"},
+                            json=payload,
+                            timeout=aiohttp.ClientTimeout(total=5),
+                        ) as resp:
+                            if resp.status >= 400:
+                                self.logger.warning(f"DataDog returned HTTP {resp.status}")
+                except Exception as e:
+                    self.logger.warning(f"DataDog logging failed: {e}")
+
+            asyncio.create_task(_send_datadog())
+            sent = True
+
+        # Splunk HEC
+        splunk_hec_url = os.environ.get("SPLUNK_HEC_URL")
+        splunk_hec_token = os.environ.get("SPLUNK_HEC_TOKEN")
+        if splunk_hec_url and splunk_hec_token:
+            async def _send_splunk():
+                try:
+                    import aiohttp
+                    payload = {"event": log_data, "sourcetype": "omnicore"}
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            splunk_hec_url,
+                            headers={"Authorization": f"Splunk {splunk_hec_token}", "Content-Type": "application/json"},
+                            json=payload,
+                            timeout=aiohttp.ClientTimeout(total=5),
+                        ) as resp:
+                            if resp.status >= 400:
+                                self.logger.warning(f"Splunk HEC returned HTTP {resp.status}")
+                except Exception as e:
+                    self.logger.warning(f"Splunk logging failed: {e}")
+
+            asyncio.create_task(_send_splunk())
+            sent = True
+
+        # Elasticsearch
+        es_url = os.environ.get("ELASTICSEARCH_URL")
+        if es_url:
+            async def _send_elasticsearch():
+                try:
+                    import aiohttp
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            f"{es_url.rstrip('/')}/omnicore-errors/_doc",
+                            headers={"Content-Type": "application/json"},
+                            json=log_data,
+                            timeout=aiohttp.ClientTimeout(total=5),
+                        ) as resp:
+                            if resp.status >= 400:
+                                self.logger.warning(f"Elasticsearch returned HTTP {resp.status}")
+                except Exception as e:
+                    self.logger.warning(f"Elasticsearch logging failed: {e}")
+
+            asyncio.create_task(_send_elasticsearch())
+            sent = True
+
+        # CloudWatch
+        cw_log_group = os.environ.get("CLOUDWATCH_LOG_GROUP")
+        if cw_log_group:
+            async def _send_cloudwatch():
+                try:
+                    import boto3
+                    import time
+
+                    def _do_cloudwatch():
+                        cw_client = boto3.client("logs")
+                        log_stream = log_data.get("component", "omnicore")
+                        try:
+                            cw_client.create_log_stream(
+                                logGroupName=cw_log_group, logStreamName=log_stream
+                            )
+                        except cw_client.exceptions.ResourceAlreadyExistsException:
+                            pass
+                        cw_client.put_log_events(
+                            logGroupName=cw_log_group,
+                            logStreamName=log_stream,
+                            logEvents=[
+                                {
+                                    "timestamp": int(time.time() * 1000),
+                                    "message": json.dumps(log_data),
+                                }
+                            ],
+                        )
+
+                    await asyncio.to_thread(_do_cloudwatch)
+                except Exception as e:
+                    self.logger.warning(f"CloudWatch logging failed: {e}")
+
+            asyncio.create_task(_send_cloudwatch())
+            sent = True
+
+        # Fallback: structured JSON to stderr (never silent)
+        if not sent:
+            import sys
+            print(json.dumps({"level": "ERROR", "source": "omnicore_external_log", **log_data}), file=sys.stderr)
 
     async def _trigger_self_healing(
         self, component: str, error: str, context: Dict[str, Any]

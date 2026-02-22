@@ -105,7 +105,7 @@ services:
       # Infrastructure — provided by Railway
       # ============================================
       - REDIS_URL=${REDIS_URL}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}  # Kafka broker addresses
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS is required in production — set to your Kafka broker addresses}  # Kafka broker addresses
 
       # ============================================
       # Citus Extension Configuration
@@ -244,7 +244,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required — generate with: openssl rand -base64 32}
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=https://grafana.yourdomain.com
       - GF_SECURITY_COOKIE_SECURE=true

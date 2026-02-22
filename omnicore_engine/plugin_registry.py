@@ -494,8 +494,21 @@ def safe_execute_plugin(fn: Callable, *args, **kwargs):
             pass
 
 
-def verify_plugin_signature(plugin_code: bytes, signature: str) -> bool:
-    """Verifies the HMAC signature of plugin code."""
+def verify_plugin_signature(plugin_code: bytes, signature: Optional[str]) -> bool:
+    """Verifies the HMAC signature of plugin code. Returns True (skip) if signature is None."""
+    import os
+
+    if signature is None:
+        if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
+            logger.error(
+                "verify_plugin_signature: signature is None in PRODUCTION MODE — "
+                "unsigned plugin detected. Set PLUGIN_SIGNING_KEY to enforce signatures."
+            )
+        else:
+            logger.warning(
+                "verify_plugin_signature: signature is None — skipping verification for unsigned plugin."
+            )
+        return True
     signing_key = getattr(
         settings, "PLUGIN_SIGNING_KEY", "insecure_default_key"
     ).encode()

@@ -166,7 +166,7 @@ topologySpreadConstraints:
     whenUnsatisfiable: DoNotSchedule
     labelSelector:
       matchLabels:
-        app: "{{ include \"codefactory.name\" . }}"
+        app.kubernetes.io/name: codefactory
 
 # Environment variables
 env:

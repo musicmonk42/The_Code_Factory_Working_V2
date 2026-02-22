@@ -200,11 +200,56 @@ class FileManager:
 
 # --- Scalable, Immutable Provenance Logger ---
 class ScalableProvenanceLogger:
-    """Logs provenance events with hash chaining and optional Kafka (not implemented)."""
+    """Logs provenance events with hash chaining and optional Kafka integration."""
 
     def __init__(self):
         self._last_hash: str = "genesis"
-        self.kafka_producer = None  # Placeholder for Kafka integration
+        self.kafka_producer = None
+        self._kafka_topic = os.getenv("KAFKA_PROVENANCE_TOPIC", "provenance")
+
+        # Initialize Kafka producer if configured
+        bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+        if bootstrap_servers:
+            try:
+                from aiokafka import AIOKafkaProducer as _AIOKafkaProducer
+                self._AIOKafkaProducer = _AIOKafkaProducer
+                self._kafka_bootstrap_servers = bootstrap_servers
+            except ImportError:
+                utils_logger.warning(
+                    "aiokafka not installed — Kafka provenance logging disabled. "
+                    "Install with: pip install aiokafka"
+                )
+                self._AIOKafkaProducer = None
+                self._kafka_bootstrap_servers = None
+        else:
+            self._AIOKafkaProducer = None
+            self._kafka_bootstrap_servers = None
+
+    async def start(self):
+        """Start the Kafka producer if configured."""
+        if self._AIOKafkaProducer and self._kafka_bootstrap_servers:
+            try:
+                self.kafka_producer = self._AIOKafkaProducer(
+                    bootstrap_servers=self._kafka_bootstrap_servers
+                )
+                await self.kafka_producer.start()
+                utils_logger.info(
+                    f"ScalableProvenanceLogger: Kafka producer started "
+                    f"(servers={self._kafka_bootstrap_servers})"
+                )
+            except Exception as e:
+                utils_logger.warning(f"ScalableProvenanceLogger: Failed to start Kafka producer: {e}")
+                self.kafka_producer = None
+
+    async def stop(self):
+        """Stop the Kafka producer."""
+        if self.kafka_producer:
+            try:
+                await self.kafka_producer.stop()
+            except Exception as e:
+                utils_logger.warning(f"ScalableProvenanceLogger: Failed to stop Kafka producer: {e}")
+            finally:
+                self.kafka_producer = None
 
     def log_event(self, event: Dict[str, Any]):
         event_copy = dict(event)
@@ -218,8 +263,36 @@ class ScalableProvenanceLogger:
         event_copy["chain_hash"] = current_hash
         self._last_hash = current_hash
         utils_logger.info(f"PROVENANCE: {json.dumps(event_copy)}")
-        # if self.kafka_producer:
-        #     self.kafka_producer.send('provenance', json.dumps(event_copy).encode())
+
+        if self.kafka_producer:
+            import asyncio
+
+            async def _send_kafka():
+                try:
+                    await self.kafka_producer.send_and_wait(
+                        self._kafka_topic,
+                        json.dumps(event_copy).encode(),
+                    )
+                except Exception as _kafka_exc:
+                    utils_logger.warning(
+                        f"ScalableProvenanceLogger: Kafka send failed: {_kafka_exc}. "
+                        "Falling back to local storage only."
+                    )
+
+            try:
+                asyncio.get_running_loop()
+                asyncio.create_task(_send_kafka())
+            except RuntimeError:
+                # No running event loop — Kafka send skipped; event stored locally.
+                utils_logger.warning(
+                    "ScalableProvenanceLogger: Kafka send skipped — no running event loop. "
+                    "Call log_event() from within an async context for Kafka delivery."
+                )
+        elif self._kafka_bootstrap_servers:
+            utils_logger.warning(
+                "ScalableProvenanceLogger: Kafka producer not started — "
+                "call await start() first. Falling back to local storage."
+            )
 
 
 # --- Redis Client with Circuit Breaker ---

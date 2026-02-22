@@ -499,17 +499,49 @@ def _execute_subprocess_safely(
 def _perform_integrity_check(
     file_path: str, expected_mime_type: Optional[str] = None
 ) -> bool:
-    if not os.path.exists(file_path):
+    import ast
+    import hashlib as _hashlib
+    import os as _os
+
+    # 1. Verify file exists and is readable
+    if not _os.path.exists(file_path):
         runners_logger.error(f"Integrity check failed: File not found at {file_path}")
         return False
-    if expected_mime_type and "." in file_path:
-        ext = file_path.split(".")[-1].lower()
-        if "python" in expected_mime_type.lower() and ext not in ["py", "pyc", "pyo"]:
-            runners_logger.warning(
-                f"File extension mismatch for {file_path}. Expected Python, got .{ext}."
+    try:
+        with open(file_path, "rb") as fh:
+            file_bytes = fh.read()
+    except OSError as e:
+        runners_logger.error(f"Integrity check failed: Cannot read {file_path}: {e}")
+        return False
+
+    # 2. Check file size > 0 and < configurable max (default 10 MB)
+    max_bytes = int(_os.environ.get("INTEGRITY_MAX_FILE_BYTES", str(10 * 1024 * 1024)))
+    file_size = len(file_bytes)
+    if file_size == 0:
+        runners_logger.error(f"Integrity check failed: {file_path} is empty (0 bytes)")
+        return False
+    if file_size > max_bytes:
+        runners_logger.error(
+            f"Integrity check failed: {file_path} is {file_size} bytes, "
+            f"exceeds max {max_bytes} bytes"
+        )
+        return False
+
+    # 3. Python syntax check for Python files
+    if expected_mime_type and "python" in expected_mime_type.lower():
+        try:
+            ast.parse(file_bytes.decode("utf-8", errors="replace"))
+        except SyntaxError as e:
+            runners_logger.error(
+                f"Integrity check failed: {file_path} has invalid Python syntax: {e}"
             )
+            return False
+
+    # 4. Compute and log SHA-256 hash for audit trail
+    sha256_hash = _hashlib.sha256(file_bytes).hexdigest()
     runners_logger.info(
-        f"Performing conceptual integrity check for {file_path}. (Actual checks not implemented)"
+        f"Integrity check passed for {file_path}: "
+        f"size={file_size} bytes, sha256={sha256_hash}"
     )
     return True
 

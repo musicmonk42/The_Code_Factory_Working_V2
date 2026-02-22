@@ -65,23 +65,27 @@ except ImportError as e:
     # In production, these should ideally be resolved.
     class DummyWorkflowEngine:
         def __init__(self, config):
-            logging.warning("DummyWorkflowEngine: Initialized.")
+            logging.warning("DummyWorkflowEngine: Initialized (required modules failed to import).")
 
         def health_check(self) -> bool:
-            logging.warning("DummyWorkflowEngine: Health check not implemented.")
-            return True
+            raise ImportError(
+                "WorkflowEngine is unavailable — required modules failed to import. "
+                "Check logs for import errors."
+            )
 
         async def orchestrate(
             self, input_file, max_iterations, output_path, dry_run, user_id
         ):
-            logging.warning(
-                f"DummyWorkflowEngine: Orchestrating for {user_id}, dry_run={dry_run}"
+            raise ImportError(
+                "WorkflowEngine is unavailable — required modules failed to import. "
+                "Check logs for import errors."
             )
-            await asyncio.sleep(0.5)
-            return {"status": "dummy_completed"}
 
         def _tune_from_feedback(self, rating):
-            logging.warning(f"DummyWorkflowEngine: Tuning from feedback: {rating}")
+            raise ImportError(
+                "WorkflowEngine is unavailable — required modules failed to import. "
+                "Check logs for import errors."
+            )
 
     class DummyConfigWatcher:
         def __init__(self, path, callback):

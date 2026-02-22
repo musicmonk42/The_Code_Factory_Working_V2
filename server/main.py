@@ -386,9 +386,19 @@ def _load_routers():
             logging.getLogger(__name__).info("✓ All routers loaded successfully")
             return True
         except Exception as e:
+            import traceback
             _routers_loaded = True
             _router_load_error = f"{type(e).__name__}: {e}"
-            logging.getLogger(__name__).error(f"Failed to load routers: {_router_load_error}")
+            _tb = traceback.format_exc()
+            logging.getLogger(__name__).critical(
+                f"Failed to load routers: {_router_load_error}\n{_tb}"
+            )
+            # In production mode, abort startup immediately
+            import os
+            if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
+                raise RuntimeError(
+                    f"Router loading failed in PRODUCTION_MODE — aborting startup: {_router_load_error}"
+                ) from e
             return False
 
 
@@ -1708,6 +1718,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def router_load_error_middleware(request: Request, call_next):
+    """Return HTTP 503 for non-health endpoints when router loading failed in development mode."""
+    import os
+
+    health_paths = {"/health", "/ready", "/api/health", "/api/ready", "/favicon.ico"}
+    if (
+        _router_load_error is not None
+        and request.url.path not in health_paths
+        and os.environ.get("PRODUCTION_MODE", "false").lower() != "true"
+    ):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "service_unavailable",
+                "message": f"Router loading failed: {_router_load_error}",
+            },
+        )
+    return await call_next(request)
 
 # Mount static files
 if static_dir.exists():

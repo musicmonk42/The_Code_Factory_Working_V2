@@ -843,28 +843,16 @@ class GrokLLM(LLMProvider):
         )
 
         if is_code_request:
-            # Return a minimal valid code structure for code generation requests
-            logger.info(
-                "Fallback detected code generation request, returning placeholder code",
-                extra={"provider": self.PROVIDER_NAME}
+            # Raise instead of silently returning placeholder code
+            provider_name = getattr(self, "PROVIDER_NAME", getattr(self, "provider", "unknown"))
+            raise LLMProviderError(
+                f"LLM API unavailable: cannot generate code. "
+                f"Configure GROK_API_KEY or equivalent API key for provider '{provider_name}'.",
+                provider=str(provider_name),
+                error_code="LLM_API_UNAVAILABLE",
             )
-            # Return multi-file JSON format with placeholder
-            return json.dumps(
-                {
-                    "files": {
-                        "main.py": FALLBACK_PYTHON_CODE,
-                        "README.md": FALLBACK_README
-                    },
-                    "metadata": {
-                        "generated_by": "fallback",
-                        "note": "API unavailable - placeholder code returned"
-                    }
-                },
-                indent=2
-            )
-        
+
         if is_clarification_request:
-            # Generate structured clarification response using configured questions
             clarifications = [
                 {"question": q.question, "context": q.context, "priority": q.priority}
                 for q in self._fallback_config.questions
@@ -1140,24 +1128,13 @@ class UnifiedLLMProvider(LLMProvider):
         )
         
         if is_code_request:
-            # Return a minimal valid code structure for code generation requests
-            logger.info(
-                "Fallback detected code generation request, returning placeholder code",
-                extra={"provider": self.provider}
-            )
-            # Return multi-file JSON format with placeholder
-            return json.dumps(
-                {
-                    "files": {
-                        "main.py": FALLBACK_PYTHON_CODE,
-                        "README.md": FALLBACK_README
-                    },
-                    "metadata": {
-                        "generated_by": "fallback",
-                        "note": "Central LLM client unavailable - placeholder code returned"
-                    }
-                },
-                indent=2
+            # Raise instead of silently returning placeholder code
+            provider_name = getattr(self, "provider", "unknown")
+            raise LLMProviderError(
+                f"LLM API unavailable: cannot generate code. "
+                f"Configure GROK_API_KEY or equivalent API key for provider '{provider_name}'.",
+                provider=str(provider_name),
+                error_code="LLM_API_UNAVAILABLE",
             )
         
         if is_clarification_request:

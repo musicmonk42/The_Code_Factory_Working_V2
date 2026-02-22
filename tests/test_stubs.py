@@ -222,7 +222,7 @@ class TestHumanInLoopStub:
         """Test that request_approval auto-approves with override."""
         from self_fixing_engineer.arbiter.stubs import HumanInLoopStub
         
-        with patch.dict(os.environ, {"STUB_AUTO_APPROVE": "true"}):
+        with patch.dict(os.environ, {"STUB_ALLOW_HUMAN_LOOP": "true"}):
             hitl = HumanInLoopStub()
             result = await hitl.request_approval(
                 action="deployment",

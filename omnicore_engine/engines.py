@@ -125,76 +125,58 @@ except ImportError as e:
         """
         Stub implementation of Arbiter for environments without Arbiter installed.
 
-        This is a development/testing stub that provides no-op functionality.
-        The real Arbiter is a sophisticated AI-driven autonomous agent system.
-
-        Industry Standard Note:
-        - Follows the Null Object pattern for graceful degradation
-        - Enables development and testing without full Arbiter installation
-        - Production systems should use the complete Arbiter package
-
-        Real Arbiter Features (when installed):
-        - Autonomous decision-making and task execution
-        - Self-healing and adaptive behavior
-        - Multi-agent coordination and arbitration
-        - Policy-based governance and compliance
-        - Real-time monitoring and alerting
-        - Explainable AI reasoning
+        This is a development/testing stub. Real Arbiter features require installing
+        the self_fixing_engineer package.
         """
+
+        is_stub: bool = True
 
         def __init__(self, *args, **kwargs):
             """
-            Initialize Arbiter stub.
-
-            Args:
-                *args: Ignored in stub implementation
-                **kwargs: Ignored in stub implementation
+            Initialize Arbiter stub. Raises RuntimeError in production mode.
             """
-            pass
+            import os
+
+            if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
+                raise RuntimeError(
+                    "Arbiter is running in stub mode — real Arbiter module not available. "
+                    "Install self_fixing_engineer. PRODUCTION_MODE=true forbids stub usage."
+                )
+            logging.critical(
+                "Arbiter stub initialized. Real Arbiter module is not available. "
+                "Install self_fixing_engineer for full functionality."
+            )
 
         async def start_async_services(self):
-            """
-            No-op async services startup for stub.
-
-            Real implementation would start:
-            - Message queue consumers
-            - Monitoring agents
-            - Health check services
-            - Metric collection workers
-            """
-            pass
+            """Log a critical warning — stub cannot start real services."""
+            logging.critical(
+                "Arbiter stub: start_async_services() called — no real services started. "
+                "Install self_fixing_engineer for full Arbiter functionality."
+            )
 
         async def stop_async_services(self):
-            """
-            No-op async services shutdown for stub.
-
-            Real implementation would gracefully stop:
-            - All async workers and agents
-            - Message queue connections
-            - Monitoring services
-            - Active task executors
-            """
-            pass
+            """No-op stop."""
+            logging.warning("Arbiter stub: stop_async_services() called (no-op).")
 
         async def respond(self, *args, **kwargs):
             """
-            Stub response method indicating Arbiter unavailability.
-
-            Args:
-                *args: Query/request arguments (ignored)
-                **kwargs: Additional parameters (ignored)
+            Raise RuntimeError — stub cannot respond.
 
             Returns:
-                str: Message indicating Arbiter is unavailable
-
-            Note:
-                Real Arbiter would process requests and return:
-                - Intelligent responses based on context
-                - Action recommendations
-                - Status updates
-                - Query results
+                dict: Structured error if STUB_ALLOW_RESPOND=true, else raises.
             """
-            return "Arbiter unavailable"
+            import os
+
+            if os.environ.get("STUB_ALLOW_RESPOND", "false").lower() == "true":
+                return {
+                    "error": "arbiter_unavailable",
+                    "stub_mode": True,
+                    "message": "Arbiter is running in stub mode — real Arbiter module not available.",
+                }
+            raise RuntimeError(
+                "Arbiter is running in stub mode — real Arbiter module not available. "
+                "Install self_fixing_engineer."
+            )
 
 
 try:

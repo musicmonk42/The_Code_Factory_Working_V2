@@ -522,7 +522,7 @@ class HumanInLoopStub:
     Stub implementation of HumanInLoop.
     
     DENIES all requests by default for security.
-    Auto-approves only if STUB_AUTO_APPROVE=true is set.
+    Approves only if STUB_ALLOW_HUMAN_LOOP=true is explicitly set.
     """
     
     def __init__(self, *args, **kwargs):
@@ -538,7 +538,7 @@ class HumanInLoopStub:
         """
         DENY all requests by default for security.
         
-        Only auto-approves if STUB_AUTO_APPROVE=true is explicitly set.
+        Only approves if STUB_ALLOW_HUMAN_LOOP=true is explicitly set.
         
         Args:
             action: Action requiring approval
@@ -551,12 +551,12 @@ class HumanInLoopStub:
         _log_stub_usage("HumanInLoop", "request_approval")
         
         # Security-first: Default to DENY
-        auto_approve = os.getenv("STUB_AUTO_APPROVE", "false").lower() == "true"
+        allow_approve = os.getenv("STUB_ALLOW_HUMAN_LOOP", "false").lower() == "true"
         
         if _production_mode:
             logger.critical(
                 f"HumanInLoop stub: Approval request for '{action}' in PRODUCTION! "
-                f"Result: {'AUTO-APPROVED (override)' if auto_approve else 'DENIED (default secure)'}"
+                f"Result: {'APPROVED (override)' if allow_approve else 'DENIED (default secure)'}"
             )
             warnings.warn(
                 f"HumanInLoop stub used in PRODUCTION for approval of '{action}'",
@@ -564,16 +564,16 @@ class HumanInLoopStub:
                 stacklevel=2
             )
         
-        if auto_approve:
-            logger.warning(
-                f"HumanInLoop stub: AUTO-APPROVING '{action}' "
-                f"(STUB_AUTO_APPROVE=true)"
+        if allow_approve:
+            logger.critical(
+                f"HumanInLoop stub: APPROVING '{action}' "
+                f"(STUB_ALLOW_HUMAN_LOOP=true)"
             )
             return True
         else:
             logger.info(
-                f"HumanInLoop stub: DENYING '{action}' "
-                f"(no human approval - default secure)"
+                f"HumanInLoop stub: DENYING '{action}' — "
+                "Human-in-loop unavailable (stub mode) — defaulting to DENY for safety"
             )
             warnings.warn(
                 f"HumanInLoop stub: Request '{action}' DENIED (no human oversight)",

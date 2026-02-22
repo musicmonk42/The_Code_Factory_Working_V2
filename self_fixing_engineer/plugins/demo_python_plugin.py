@@ -1,6 +1,8 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import datetime
+import hashlib
+import hmac
 import importlib.util  # For dynamic dependency checks
 import json
 import logging
@@ -101,8 +103,24 @@ PLUGIN_MANIFEST = {
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
     },
     "is_demo_plugin": True,  # Security Enhancement: Explicitly mark as demo
-    "signature": "PLACEHOLDER_FOR_HMAC_SIGNATURE",  # Security Enhancement: Placeholder for manifest signature
 }
+
+# Compute real HMAC-SHA256 signature of the manifest (excluding the signature field itself)
+def _compute_manifest_signature() -> str | None:
+    """Compute HMAC-SHA256 signature of the plugin manifest."""
+    _signing_key = os.environ.get("PLUGIN_SIGNING_KEY")
+    if not _signing_key:
+        logger.warning(
+            "demo_python_plugin: PLUGIN_SIGNING_KEY not set — manifest signature is None. "
+            "Signature verification will be skipped for unsigned plugins."
+        )
+        return None
+    _manifest_copy = {k: v for k, v in PLUGIN_MANIFEST.items()}
+    _manifest_json = json.dumps(_manifest_copy, sort_keys=True)
+    return hmac.new(_signing_key.encode(), _manifest_json.encode(), hashlib.sha256).hexdigest()
+
+
+PLUGIN_MANIFEST["signature"] = _compute_manifest_signature()
 
 
 # Health Check: Health function (plugin_health) must actually validate plugin dependencies and runtime.

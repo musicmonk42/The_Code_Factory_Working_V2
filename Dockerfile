@@ -224,6 +224,13 @@ COPY . /app
 ###############################################
 FROM python:3.11-slim AS runtime
 
+# Build arguments for reproducible builds and OCI metadata
+ARG BUILD_DATE
+ARG HELM_VERSION=3.16.4
+ARG HELM_SHA256=fc307327959aa38ed8f9f7e66d45492bb022a66c3e5da6063958254b9767d179
+ARG KUBECTL_VERSION=1.32.3
+ARG KUBECTL_SHA256=ab209d0c5134b61486a0486585604a616a5bb2fc07df46d304b3c95817b2d79f
+
 # Image metadata for better maintainability and security scanning
 # Following OCI Image Format Specification
 # https://github.com/opencontainers/image-spec/blob/main/annotations.md
@@ -234,7 +241,7 @@ LABEL org.opencontainers.image.version="1.0.0"
 LABEL org.opencontainers.image.licenses="Proprietary"
 LABEL org.opencontainers.image.source="https://github.com/musicmonk42/The_Code_Factory_Working_V2"
 LABEL org.opencontainers.image.documentation="https://github.com/musicmonk42/The_Code_Factory_Working_V2/blob/main/README.md"
-LABEL org.opencontainers.image.created="2024"
+LABEL org.opencontainers.image.created=${BUILD_DATE:-2025}
 LABEL maintainer="support@novatraxlabs.com"
 LABEL security.scan="true"
 LABEL security.trivy="enabled"
@@ -329,16 +336,23 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
 
 # Install Helm for Kubernetes chart validation
 # Helm is required for deploy agent to validate Helm charts
-# Using official installation script
-RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash && \
+# Version and SHA256 are pinned via build ARGs for reproducibility
+RUN curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/helm.tar.gz \
+      "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" && \
+    echo "${HELM_SHA256}  /tmp/helm.tar.gz" | sha256sum -c - && \
+    tar xzf /tmp/helm.tar.gz -C /tmp linux-amd64/helm && \
+    mv /tmp/linux-amd64/helm /usr/local/bin/helm && \
+    rm -rf /tmp/helm.tar.gz /tmp/linux-amd64 && \
     helm version
 
 # Install kubectl for Kubernetes manifest validation
 # kubectl is required for deploy agent to validate K8s manifests
-# Using latest stable version
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    chmod +x kubectl && \
-    mv kubectl /usr/local/bin/ && \
+# Version and SHA256 are pinned via build ARGs for reproducible builds
+RUN curl -sfL --retry 3 --retry-delay 5 --retry-all-errors \
+      -o /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
+    echo "${KUBECTL_SHA256}  /usr/local/bin/kubectl" | sha256sum -c - && \
+    chmod +x /usr/local/bin/kubectl && \
     kubectl version --client
 
 # Install Docker CLI so Dockerfile validation tools can run `docker build` checks.
@@ -396,8 +410,9 @@ RUN ln -sf /opt/chroma_cache /home/appuser/.cache/chroma/onnx_models
 
 USER appuser
 
-# The FastAPI server runs on port 8080 (Railway) or PORT env var, Prometheus metrics on port 9090
-EXPOSE 8080 9090
+# The FastAPI server runs on port 8000 (default) or PORT env var, Prometheus metrics on port 9090
+# Note: Railway sets PORT=8080; pass --build-arg PORT_HINT=8080 for Railway-specific images.
+EXPOSE 8000 9090
 
 # Docker healthcheck for container liveness
 # CRITICAL: Uses /health endpoint for liveness checks, NOT /ready

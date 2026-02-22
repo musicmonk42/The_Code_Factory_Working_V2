@@ -187,19 +187,28 @@ except ImportError as e:
 
         async def explain(self, *args, **kwargs):
             """
-            Return a mock explanation.
-
-            Real implementation would provide detailed reasoning about:
-            - Why a particular decision was made
-            - What factors influenced the outcome
-            - Alternative paths that were considered
-            - Confidence levels and uncertainties
+            Return a structured explanation dict (stub mode).
 
             Returns:
-                str: Mock explanation message
+                dict: Structured explanation with stub_mode flag
             """
+            import os
+
             check_production_mode_usage("ExplainableReasonerPlugin", "explain")
-            return "Mock explanation."
+            if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
+                logger.critical(
+                    "ExplainableReasonerPlugin is running in stub mode in PRODUCTION. "
+                    "Install self_fixing_engineer for full XAI capabilities."
+                )
+            return {
+                "explanation": (
+                    "Explainable reasoning unavailable (Arbiter not installed). "
+                    "Install self_fixing_engineer package for full XAI capabilities."
+                ),
+                "stub_mode": True,
+                "confidence": None,
+                "factors": [],
+            }
 
     class PolicyEngine:
         """

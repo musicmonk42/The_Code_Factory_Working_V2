@@ -265,19 +265,12 @@ class DummyPRCreator:
 
     async def create_pr(self, *args, **kwargs):
         """
-        Stub implementation that simulates PR creation.
+        Stub implementation that returns failure — no real PR will be created.
 
         Returns:
-            tuple: (True, "https://github.com/stub-pr-url")
+            tuple: (False, "") indicating failure
         """
-        pr_info = {
-            "args": args,
-            "kwargs": kwargs,
-            "url": "https://github.com/stub-pr-url",
-        }
-        self.created_prs.append(pr_info)
-
-        log("Using DummyPRCreator. Simulating PR creation.", level="DEBUG")
+        log("Using DummyPRCreator. PR creation unavailable (stub mode).", level="DEBUG")
 
         if _ENVIRONMENT == "production":
             log(
@@ -286,7 +279,7 @@ class DummyPRCreator:
                 level="ERROR",
             )
 
-        return True, "https://github.com/stub-pr-url"
+        return False, ""
 
     async def create_jira_ticket(self, *args, **kwargs):
         """
@@ -332,12 +325,12 @@ class DummyMutationTester:
 
     async def run_mutations(self, *args, **kwargs):
         """
-        Stub implementation that simulates 100% mutation score.
+        Stub implementation that returns a clearly invalid sentinel score.
 
         Returns:
-            tuple: (True, 100.0, "Stubbed mutation score")
+            tuple: (False, 0.0, error_message) — fails CI quality gates
         """
-        log("Using DummyMutationTester. Simulating 100% mutation score.", level="DEBUG")
+        log("Using DummyMutationTester. Mutation testing unavailable (stub mode).", level="DEBUG")
 
         if _ENVIRONMENT == "production":
             log(
@@ -346,7 +339,7 @@ class DummyMutationTester:
                 level="ERROR",
             )
 
-        return True, 100.0, "Stubbed mutation score"
+        return False, 0.0, "Mutation testing unavailable (stub mode) — install mutmut or cosmic-ray"
 
 
 class DummyTestEnricher:
