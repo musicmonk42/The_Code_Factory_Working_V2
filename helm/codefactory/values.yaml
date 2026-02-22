@@ -256,13 +256,18 @@ env:
   # development/testing when audit crypto is intentionally disabled.
   AUDIT_CRYPTO_MODE: "software"
   AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"  # Set to "0" for production
-  
+  # Audit log compression algorithm (gzip, zstd, or none)
+  COMPRESSION_ALGO: "gzip"
+
   # Kubernetes/Cloud Native secret management
   # For Kubernetes/Helm: Set USE_ENV_SECRETS=true (plaintext secrets, K8s encrypts via etcd)
   # For AWS: Set USE_ENV_SECRETS=false and configure KMS (see AWS_KMS_TROUBLESHOOTING.md)
   # Railway: Set USE_ENV_SECRETS=true (Railway encrypts at platform level)
   USE_ENV_SECRETS: "true"
   AUDIT_CRYPTO_USE_KMS: "false"  # KMS not used in Kubernetes - secrets managed by K8s
+
+  # Docker validation: skip when Docker socket is not available (standard in K8s pods)
+  SKIP_DOCKER_VALIDATION: "true"
 
   # Logging
   LOG_LEVEL: "INFO"

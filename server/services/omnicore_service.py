@@ -1336,6 +1336,10 @@ def _fix_double_nesting(output_dir: Path) -> None:
             dst = output_dir / item
             if not dst.exists():
                 shutil.move(str(src), str(dst))
+            else:
+                logger.warning(
+                    f"Double-nesting flatten: skipping '{item}' — destination already exists at {dst}"
+                )
         try:
             if not os.listdir(nested_generated):
                 os.rmdir(nested_generated)
@@ -1343,6 +1347,7 @@ def _fix_double_nesting(output_dir: Path) -> None:
             pass
 
 
+class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
 

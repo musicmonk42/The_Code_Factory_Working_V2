@@ -208,6 +208,18 @@ spec:
                   name: {{ .Values.secrets.security.encryptionKeySecretName }}
                   key: allowed-origins
                   optional: true
+            - name: PRIVATE_KEY_B64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: private-key-b64
+                  optional: true
+            - name: PRIVATE_KEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.security.encryptionKeySecretName }}
+                  key: private-key-password
+                  optional: true
           {{- with .Values.startupProbe }}
           startupProbe:
             {{- toYaml . | nindent 12 }}

@@ -2093,11 +2093,12 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
             # Fix: Remove always=True/False from @field_validator calls (Pydantic V1 arg, not valid in V2)
             if _re.search(r'@field_validator\s*\([^)]*always\s*=\s*(?:True|False)', content):
                 def _strip_always(m: "re.Match[str]") -> str:
-                    result = _re.sub(r',?\s*always\s*=\s*(?:True|False)\s*,?', lambda ma: (
-                        "," if ma.group(0).strip().startswith(",") and ma.group(0).strip().endswith(",") else ""
-                    ), m.group(0))
-                    # Clean up artifacts like "(," or ", )" or "()"
-                    result = _re.sub(r'\(\s*,', '(', result)
+                    # Remove ", always=True", "always=True," or "always=True" (standalone)
+                    result = _re.sub(r',\s*always\s*=\s*(?:True|False)', '', m.group(0))
+                    result = _re.sub(r'always\s*=\s*(?:True|False)\s*,\s*', '', result)
+                    result = _re.sub(r'always\s*=\s*(?:True|False)', '', result)
+                    # Clean up artifacts like "(," or ", )"
+                    result = _re.sub(r'\(\s*,\s*', '(', result)
                     result = _re.sub(r',\s*\)', ')', result)
                     return result
 
