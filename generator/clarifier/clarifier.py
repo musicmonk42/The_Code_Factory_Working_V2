@@ -82,7 +82,7 @@ from prometheus_client import Counter, Histogram
 
 # Import LLM and Prioritizer modules; provide dummies if they fail (e.g., if files are missing).
 try:
-    from .clarifier_llm import GrokLLM, LLMProvider
+    from .clarifier_llm import GrokLLM, LLMProvider, LLMUnavailableError
     from .clarifier_prioritizer import DefaultPrioritizer, Prioritizer
 except ImportError as e:
     logging.warning(
@@ -90,6 +90,9 @@ except ImportError as e:
     )
 
     # Minimal Dummies for LLM/Prioritizer to allow Clarifier class to initialize
+    class LLMUnavailableError(RuntimeError):
+        """Stub: actual class is in clarifier_llm.py."""
+
     class LLMProvider:
         """Stub LLM Provider - actual implementation should be in clarifier_llm.py"""
 
@@ -1600,6 +1603,8 @@ Format your response as a JSON array of strings, for example:
                         return ambiguities[:10]  # Limit to 10 ambiguities
                 except json.JSONDecodeError:
                     self.logger.warning("Failed to parse LLM response as JSON, falling back to rule-based")
+            except LLMUnavailableError:
+                raise
             except Exception as e:
                 self.logger.warning(f"LLM-based ambiguity detection failed: {e}, using rule-based fallback")
         
@@ -1699,6 +1704,8 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                             return validated_questions[:10]  # Limit to 10 questions
                 except json.JSONDecodeError:
                     self.logger.warning("Failed to parse LLM response as JSON, falling back to rule-based")
+            except LLMUnavailableError:
+                raise
             except Exception as e:
                 self.logger.warning(f"LLM-based question generation failed: {e}, using rule-based fallback")
         

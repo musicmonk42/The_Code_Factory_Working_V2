@@ -822,3 +822,53 @@ This is a minimal README with just enough content to pass the relaxed test mode 
             # Should fail in strict mode
             assert result["valid"] is False, "Minimal README should fail in strict mode"
             assert len(result["errors"]) > 0
+
+
+class TestRunFailFastValidationInitPy:
+    """Tests for the __init__.py check added to run_fail_fast_validation."""
+
+    def test_run_fail_fast_validation_warns_missing_init_py(self, tmp_path):
+        """A subdirectory with .py files but no __init__.py produces a warning."""
+        generated_files = {
+            "main.py": "print('hello')",
+            "requirements.txt": "flask",
+            "app/routes.py": "# routes",
+        }
+        result = run_fail_fast_validation(
+            generated_files, output_dir=str(tmp_path), target_language="python"
+        )
+        warnings = result.get("warnings", [])
+        assert any("app" in w and "__init__.py" in w for w in warnings), (
+            f"Expected a warning about missing __init__.py in 'app' dir, got: {warnings}"
+        )
+
+    def test_run_fail_fast_validation_no_warning_when_init_py_present(self, tmp_path):
+        """No warning when all subdirectories contain __init__.py."""
+        generated_files = {
+            "main.py": "print('hello')",
+            "requirements.txt": "flask",
+            "app/__init__.py": "",
+            "app/routes.py": "# routes",
+        }
+        result = run_fail_fast_validation(
+            generated_files, output_dir=str(tmp_path), target_language="python"
+        )
+        warnings = result.get("warnings", [])
+        init_py_warnings = [w for w in warnings if "__init__.py" in w]
+        assert len(init_py_warnings) == 0, (
+            f"Should not warn when __init__.py is present, got: {init_py_warnings}"
+        )
+
+    def test_run_fail_fast_validation_root_py_files_not_flagged(self, tmp_path):
+        """Root-level .py files (no subdirectory) are not flagged."""
+        generated_files = {
+            "main.py": "print('hello')",
+            "requirements.txt": "flask",
+            "utils.py": "# utils",
+        }
+        result = run_fail_fast_validation(
+            generated_files, output_dir=str(tmp_path), target_language="python"
+        )
+        warnings = result.get("warnings", [])
+        init_py_warnings = [w for w in warnings if "__init__.py" in w]
+        assert len(init_py_warnings) == 0

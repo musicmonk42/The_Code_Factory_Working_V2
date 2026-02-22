@@ -1276,6 +1276,12 @@ def run_fail_fast_validation(
                 results["valid"] = False
                 results["errors"].extend(spec_result["errors"])
         
+        # Check for missing __init__.py in Python package directories.
+        # Any directory (derived from file paths in generated_files) that contains
+        # .py files but no __init__.py may cause import errors at test time.
+        if output_dir:
+            _check_missing_init_py(generated_files, output_dir, results)
+        
         # Write error file if failed
         if not results["valid"] and output_dir:
             _write_error_file(output_dir, results["errors"], results["checks"])
@@ -1299,6 +1305,45 @@ def run_fail_fast_validation(
         # End OpenTelemetry span
         if span:
             span.end()
+
+
+def _check_missing_init_py(
+    generated_files: Dict[str, str],
+    output_dir: str,
+    results: Dict[str, Any],
+) -> None:
+    """Warn when a Python package directory is missing ``__init__.py``.
+
+    Iterates over every file path in *generated_files* and records a warning
+    for each unique subdirectory that contains ``.py`` files but has no
+    ``__init__.py``, which would cause import errors in generated tests.
+
+    The check emits warnings (not errors) so it never flips ``results["valid"]``
+    to ``False`` on its own.
+    """
+    # Collect directories that contain .py files and those that have __init__.py.
+    dirs_with_py: set = set()
+    dirs_with_init: set = set()
+
+    for file_path in generated_files:
+        parts = Path(file_path).parts
+        if len(parts) < 2:
+            # Root-level file — no subdirectory to check.
+            continue
+        parent = str(Path(file_path).parent)
+        if file_path.endswith(".py"):
+            dirs_with_py.add(parent)
+        if Path(file_path).name == "__init__.py":
+            dirs_with_init.add(parent)
+
+    missing_init_dirs = sorted(dirs_with_py - dirs_with_init)
+    for d in missing_init_dirs:
+        warning_msg = (
+            f"Directory '{d}' contains .py files but no __init__.py"
+            f" — may cause import errors in generated tests"
+        )
+        results.setdefault("warnings", []).append(warning_msg)
+        logger.warning(warning_msg)
 
 
 def _write_error_file(output_dir: str, errors: List[str], checks: Dict[str, Any]) -> None:

@@ -878,13 +878,44 @@ class TruncateSummarizer(SummarizerStrategy):
         return truncated
 
 
+class LLMUnavailableError(RuntimeError):
+    """Raised when no LLM API key is configured or the LLM API call fails.
+
+    Callers should catch this exception and fall back to rule-based processing.
+    """
+
+
+# Map of provider names to the environment variables that configure them.
+_PROVIDER_KEY_MAP: Dict[str, List[str]] = {
+    "openai": ["OPENAI_API_KEY"],
+    "anthropic": ["ANTHROPIC_API_KEY"],
+    "grok": ["XAI_API_KEY", "GROK_API_KEY"],
+    "xai": ["XAI_API_KEY", "GROK_API_KEY"],
+    "google": ["GOOGLE_API_KEY"],
+    "gemini": ["GOOGLE_API_KEY"],
+    "ollama": ["OLLAMA_HOST"],
+}
+_ALL_LLM_KEY_ENVS: List[str] = [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "XAI_API_KEY",
+    "GROK_API_KEY",
+    "GOOGLE_API_KEY",
+    "OLLAMA_HOST",
+]
+
+
 class LLMClient:
     """
     Client for interacting with LLM APIs.
 
-    If using transformers or torch for local models, lazy load them:
-        transformers = get_transformers()
-        torch = get_torch()
+    Delegates to ``runner/llm_client.py::call_llm_api()`` which supports
+    OpenAI, Anthropic, Grok, Gemini and Ollama.  Responses are cached on
+    disk (keyed on the SHA-256 of the prompt) to avoid redundant API calls.
+
+    Raises:
+        LLMUnavailableError: When no API key is configured for the requested
+            provider, or when the underlying API call fails.
     """
 
     def __init__(self, llm_config: LLMConfig, cache_dir: str = "parser_cache"):
@@ -896,12 +927,99 @@ class LLMClient:
             f"LLMClient initialized with provider={llm_config.provider}, model={llm_config.model}"
         )
 
+    def _check_api_key_available(self) -> None:
+        """Raise LLMUnavailableError if no API key is configured.
+
+        Checks the provider-specific environment variables first; if the
+        provider is not recognised, falls back to checking all known LLM key
+        environment variables.
+        """
+        provider = self.llm_config.provider.lower()
+        key_envs = _PROVIDER_KEY_MAP.get(provider)
+
+        if key_envs is None and self.llm_config.api_key_env_var:
+            key_envs = [self.llm_config.api_key_env_var]
+
+        if key_envs:
+            has_key = any(os.environ.get(k) for k in key_envs)
+        else:
+            # Unknown provider — check whether any supported LLM key is set.
+            has_key = any(os.environ.get(k) for k in _ALL_LLM_KEY_ENVS)
+
+        if not has_key:
+            raise LLMUnavailableError(
+                f"No API key available for LLM provider '{provider}'. "
+                f"Set one of: {', '.join(_ALL_LLM_KEY_ENVS)}"
+            )
+
     async def call_api(self, prompt: str, **kwargs) -> str:
-        """Placeholder implementation for LLM API calls."""
-        logger.warning(
-            "LLMClient.call_api() called but not fully implemented. Returning empty string."
-        )
-        return ""
+        """Call the configured LLM provider and return the response text.
+
+        Uses a file-based cache (keyed on SHA-256 of the prompt) to avoid
+        redundant API calls.  Delegates to
+        ``runner/llm_client.py::call_llm_api()`` for the actual network call.
+
+        Args:
+            prompt: The prompt to send to the LLM.
+            **kwargs: Extra keyword arguments forwarded to ``call_llm_api()``.
+
+        Returns:
+            The LLM response as a plain string.
+
+        Raises:
+            LLMUnavailableError: When no API key is configured or the call fails.
+        """
+        self._check_api_key_available()
+
+        # --- File-based cache ---
+        cache_key = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        cache_subdir = self.cache_dir / cache_key[:2]
+        cache_file = cache_subdir / cache_key
+
+        if cache_file.exists():
+            try:
+                cached = cache_file.read_text(encoding="utf-8")
+                if LLM_CLIENT_CACHE_HITS is not None:
+                    LLM_CLIENT_CACHE_HITS.inc()
+                logger.debug(f"LLMClient: cache hit for prompt hash {cache_key[:8]}")
+                return cached
+            except Exception as cache_read_err:
+                logger.warning(f"LLMClient: failed to read cache file: {cache_read_err}")
+
+        # --- Delegate to central runner/llm_client ---
+        provider = self.llm_config.provider.lower()
+        model = self.llm_config.model
+
+        if LLM_CLIENT_CALLS is not None:
+            LLM_CLIENT_CALLS.labels(provider=provider, model=model, call_type="api").inc()
+
+        try:
+            from runner.llm_client import call_llm_api  # lazy import to avoid cycles
+
+            response = await call_llm_api(
+                prompt=prompt,
+                model=model,
+                provider=provider,
+                **kwargs,
+            )
+            content: str = (
+                response.get("content", "") if isinstance(response, dict) else str(response)
+            )
+        except LLMUnavailableError:
+            raise
+        except Exception as exc:
+            if LLM_CLIENT_FALLBACKS is not None:
+                LLM_CLIENT_FALLBACKS.labels(reason="api_error").inc()
+            raise LLMUnavailableError(f"LLM API call failed: {exc}") from exc
+
+        # --- Persist to cache ---
+        try:
+            cache_subdir.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(content, encoding="utf-8")
+        except Exception as cache_write_err:
+            logger.warning(f"LLMClient: failed to write cache file: {cache_write_err}")
+
+        return content
 
 
 class FeedbackLoop:
