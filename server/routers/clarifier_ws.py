@@ -234,14 +234,17 @@ router = APIRouter(prefix="/api/clarifier", tags=["Clarifier"])
 # Constants
 # ---------------------------------------------------------------------------
 
-SESSION_TIMEOUT_SECONDS: int = int(
-    os.environ.get("CLARIFIER_WS_TIMEOUT", "300")
-)  # 5 minutes – matches WebPrompt timeout
+try:
+    SESSION_TIMEOUT_SECONDS: int = int(
+        os.environ.get("CLARIFIER_WS_TIMEOUT", "300")
+    )
+except (ValueError, TypeError):
+    SESSION_TIMEOUT_SECONDS = 300  # fallback to 5 minutes
 HEARTBEAT_INTERVAL_SECONDS: float = 30.0
 
 #: Strict pattern for ``job_id`` — must contain at least one alphanumeric
 #: character, may include hyphens/underscores, 1–128 chars total.
-_JOB_ID_RE = re.compile(r"^(?=[a-zA-Z0-9_-]{1,128}$)(?=.*[a-zA-Z0-9])")
+_JOB_ID_RE = re.compile(r"^(?=.*[a-zA-Z0-9])[a-zA-Z0-9_-]{1,128}$")
 
 
 def _validate_job_id(job_id: str) -> None:

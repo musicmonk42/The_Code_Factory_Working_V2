@@ -247,7 +247,11 @@ def _normalize_path(prefix: str, path: str) -> str:
         '/api/v1/users'
         >>> _normalize_path("", "/users")
         '/users'
+        >>> _normalize_path("", "")
+        '/'
     """
+    if not prefix and not path:
+        return "/"
     combined = f"{prefix.rstrip('/')}/{path.lstrip('/')}"
     if not combined.startswith("/"):
         combined = f"/{combined}"
