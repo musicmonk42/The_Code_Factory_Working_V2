@@ -176,6 +176,15 @@ except ImportError as e:
 
 import hashlib  # For compute_hash in logging
 
+# ---------------------------------------------------------------------------
+# Optional WebSocket registry integration
+# ---------------------------------------------------------------------------
+try:
+    from server.routers.clarifier_ws import get_clarifier_registry
+    _CLARIFIER_REGISTRY_AVAILABLE = True
+except ImportError:
+    _CLARIFIER_REGISTRY_AVAILABLE = False
+
 # ===== CRITICAL FIX: LAZY INITIALIZATION =====
 # This prevents configuration from loading during module import, which was causing
 # pytest to fail during test collection. Now configuration loads only when first used,
@@ -1199,6 +1208,37 @@ class WebPrompt(UserPromptChannel):
 
         user_id = context.get("user_id", "anonymous")
         session_id = str(uuid.uuid4())
+
+        # Attempt delivery via live WebSocket session before falling back to HTTP form.
+        if _CLARIFIER_REGISTRY_AVAILABLE:
+            try:
+                _registry = get_clarifier_registry()
+                _ws_session = _registry.get_session(session_id)
+                if _ws_session is None:
+                    # Also check by job_id passed in context
+                    _job_id = context.get("job_id") or context.get("session_id")
+                    if _job_id:
+                        _ws_session = _registry.get_session(str(_job_id))
+                if _ws_session is not None and _ws_session.connected and not _ws_session.is_expired:
+                    ws_timeout = self.config.get("ws_timeout", 290) if hasattr(self, "config") and isinstance(self.config, dict) else 290
+                    translated_questions = [
+                        self._translate_text(q, target_language or self.target_language)
+                        for q in questions
+                    ]
+                    ws_answers = await asyncio.wait_for(
+                        _ws_session.send_questions_and_wait(translated_questions),
+                        timeout=ws_timeout,
+                    )
+                    if ws_answers:
+                        if (target_language or self.target_language) != "en":
+                            ws_answers = [self._translate_text(a, "en") for a in ws_answers]
+                        duration = time.perf_counter() - start_time
+                        PROMPT_LATENCY.labels(channel=channel_name).observe(duration)
+                        log_interaction(user_id, channel_name, questions, ws_answers, duration, target_language or self.target_language)
+                        return ws_answers
+            except Exception:
+                pass  # fall through to HTTP form path
+
         WebPrompt._web_question_cache[session_id] = [
             self._translate_text(q, target_language or self.target_language)
             for q in questions
@@ -1270,6 +1310,35 @@ class WebPrompt(UserPromptChannel):
             return
 
         session_id = str(uuid.uuid4())
+
+        # Attempt delivery via live WebSocket session for parity with prompt().
+        if _CLARIFIER_REGISTRY_AVAILABLE:
+            try:
+                _registry = get_clarifier_registry()
+                _job_id = context.get("job_id") or context.get("session_id")
+                _ws_session = _registry.get_session(str(_job_id)) if _job_id else None
+                if _ws_session is not None and _ws_session.connected and not _ws_session.is_expired:
+                    ws_timeout = self.config.get("ws_timeout", 290) if hasattr(self, "config") and isinstance(self.config, dict) else 290
+                    compliance_texts = [
+                        self._translate_text(q_data["text"], target_language or self.target_language)
+                        for q_data in COMPLIANCE_QUESTIONS
+                    ]
+                    ws_answers_list = await asyncio.wait_for(
+                        _ws_session.send_questions_and_wait(compliance_texts),
+                        timeout=ws_timeout,
+                    )
+                    if ws_answers_list:
+                        for i, q_data in enumerate(COMPLIANCE_QUESTIONS):
+                            if i < len(ws_answers_list):
+                                answer = ws_answers_list[i]
+                                if (target_language or self.target_language) != "en" and isinstance(answer, str):
+                                    answer = self._translate_text(answer, "en")
+                                store_compliance_answer(user_id, q_data["id"] if "id" in q_data else str(i), answer)
+                        logger.info(f"Compliance questions answered via WebSocket for user {user_id}.")
+                        return
+            except Exception:
+                pass  # fall through to HTTP form path
+
         translated_compliance_questions = []
         for q_data in COMPLIANCE_QUESTIONS:
             translated_q_data = q_data.copy()

@@ -1996,22 +1996,33 @@ async def validate_generated_project(
             output_dir / "routes.py",
         ]
         found_endpoints = set()
+        try:
+            from generator.utils.ast_endpoint_extractor import ASTEndpointExtractor as _ASTExtractor
+            _ast_extractor_cls = _ASTExtractor
+        except ImportError:
+            _ast_extractor_cls = None
+
         for ep_file in endpoint_files:
             if ep_file.exists():
                 try:
-                    ep_content = ep_file.read_text(encoding="utf-8")
-                    
-                    # Simple pattern matching for FastAPI routes
-                    import re
-                    endpoint_patterns = [
-                        r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
-                        r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
-                    ]
-                    
-                    for pattern in endpoint_patterns:
-                        matches = re.findall(pattern, ep_content, re.IGNORECASE)
-                        for method, path in matches:
-                            found_endpoints.add(path)
+                    if _ast_extractor_cls is not None:
+                        ast_endpoints = _ast_extractor_cls().extract_from_file(str(ep_file))
+                        for ep in ast_endpoints:
+                            found_endpoints.add(ep["path"])
+                    else:
+                        ep_content = ep_file.read_text(encoding="utf-8")
+
+                        # Simple pattern matching for FastAPI routes (fallback)
+                        import re
+                        endpoint_patterns = [
+                            r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                            r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
+                        ]
+
+                        for pattern in endpoint_patterns:
+                            matches = re.findall(pattern, ep_content, re.IGNORECASE)
+                            for method, path in matches:
+                                found_endpoints.add(path)
                 except Exception as e:
                     result["warnings"].append(f"Could not analyze {ep_file.name} for endpoints: {e}")
         

@@ -6,6 +6,7 @@ Self-Fixing Engineer (SFE) endpoints.
 Handles code analysis, error detection, fix proposals, and automated fixing.
 """
 
+import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -1707,3 +1708,102 @@ async def get_evolution_history(
     except Exception as exc:
         logger.error("Error fetching evolution history: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to retrieve evolution history: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Policy evaluation endpoint (GraphRAG-backed)
+# ---------------------------------------------------------------------------
+
+try:
+    from self_fixing_engineer.mesh.mesh_policy import MeshPolicyBackend as _MeshPolicyBackend
+    _MESH_POLICY_AVAILABLE = True
+except ImportError:
+    _MESH_POLICY_AVAILABLE = False
+
+_mesh_policy_backend: Optional["_MeshPolicyBackend"] = None
+_mesh_policy_lock = threading.Lock()
+
+
+def _get_mesh_policy_backend() -> Optional["_MeshPolicyBackend"]:
+    """Return a lazily-created singleton ``MeshPolicyBackend`` instance."""
+    global _mesh_policy_backend
+    if not _MESH_POLICY_AVAILABLE:
+        return None
+    if _mesh_policy_backend is None:
+        with _mesh_policy_lock:
+            if _mesh_policy_backend is None:
+                try:
+                    _mesh_policy_backend = _MeshPolicyBackend()
+                except Exception as exc:
+                    logger.error("Failed to create MeshPolicyBackend: %s", exc)
+                    return None
+    return _mesh_policy_backend
+
+
+@router.get(
+    "/policy/evaluate",
+    summary="Evaluate a policy with optional GraphRAG reasoning",
+    tags=["Policy"],
+)
+async def evaluate_policy(
+    policy_id: str = Query(..., description="Policy identifier to evaluate"),
+    context: Optional[str] = Query(None, description="JSON-encoded context dict"),
+) -> Dict[str, Any]:
+    """
+    **GET /api/sfe/policy/evaluate**
+
+    Evaluate a named policy using ``MeshPolicyBackend.evaluate_policy()``.
+    When ``GraphRAGPolicyReasoner`` is available the evaluation performs
+    BFS dependency resolution, conflict detection, and structured
+    ``PolicyDecision`` output; otherwise it falls back to the flat
+    allow/deny list logic.
+
+    ### Query Parameters
+    | Parameter | Type | Description |
+    |---|---|---|
+    | `policy_id` | str | Policy identifier (required) |
+    | `context` | str | Optional JSON-encoded context dict |
+
+    ### Response
+    | Field | Type | Description |
+    |---|---|---|
+    | `policy_id` | str | Evaluated policy ID |
+    | `allowed` | bool | Whether the policy permits the action |
+    | `explanation` | str | Human-readable reasoning |
+    | `evaluated_policies` | list | Ordered list of policies checked |
+    | `conflicts` | list | Detected conflicting policy IDs |
+    | `confidence` | float | Decision confidence score |
+    """
+    if not _MESH_POLICY_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="MeshPolicyBackend not available (missing dependency)",
+        )
+
+    ctx: Optional[Dict[str, Any]] = None
+    if context:
+        try:
+            ctx = json.loads(context)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid JSON in 'context' parameter: {exc}",
+            ) from exc
+
+    backend = _get_mesh_policy_backend()
+    if backend is None:
+        raise HTTPException(
+            status_code=503,
+            detail="MeshPolicyBackend could not be initialised",
+        )
+
+    try:
+        return backend.evaluate_policy(policy_id, ctx)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Policy evaluation error: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Policy evaluation failed: {exc}",
+        ) from exc

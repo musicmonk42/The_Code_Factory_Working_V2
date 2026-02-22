@@ -1763,23 +1763,38 @@ def test_{file_stem}_syntax_error_documentation():
             Complete test file content with real TestClient tests
         """
         import re
-        
-        # Extract endpoints from the code
-        endpoint_patterns = [
-            (r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', 'app'),
-            (r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', 'router'),
-        ]
-        
+
+        # Extract endpoints from the code — prefer AST extractor, fall back to regex
         endpoints = []
-        for pattern, source in endpoint_patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
-            for method, path in matches:
-                endpoints.append({
-                    'method': method.upper(),
-                    'path': path,
-                    'source': source
-                })
-        
+        try:
+            from generator.utils.ast_endpoint_extractor import ASTEndpointExtractor
+            ast_results = ASTEndpointExtractor().extract_from_source(content, file_path)
+            endpoints = [
+                {"method": ep["method"], "path": ep["path"], "source": "ast"}
+                for ep in ast_results
+            ]
+        except Exception as _exc:
+            logger.debug(
+                "[TESTGEN] AST endpoint extraction failed for %s, using regex fallback: %s",
+                file_path,
+                _exc,
+            )
+
+        if not endpoints:
+            # Regex fallback
+            endpoint_patterns = [
+                (r'@app\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', 'app'),
+                (r'@router\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', 'router'),
+            ]
+            for pattern, source in endpoint_patterns:
+                matches = re.findall(pattern, content, re.IGNORECASE)
+                for method, path in matches:
+                    endpoints.append({
+                        'method': method.upper(),
+                        'path': path,
+                        'source': source
+                    })
+
         # Determine the import based on file path
         # FIX Bug 1: Compute correct import path for nested packages
         # Strip "generated/<project>/" prefix to get package-relative path
