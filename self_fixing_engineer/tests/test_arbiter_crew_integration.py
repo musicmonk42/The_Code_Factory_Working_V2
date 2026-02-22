@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+pytest.importorskip("sqlalchemy")
 import yaml
 from self_fixing_engineer.agent_orchestration.crew_manager import (
     CrewAgentBase,

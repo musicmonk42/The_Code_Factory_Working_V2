@@ -3,10 +3,15 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-# Fix: Import from self_fixing_engineer.arbiter.file_watcher instead of file_watcher
-import self_fixing_engineer.arbiter.file_watcher as file_watcher_module
 import pytest
+pytest.importorskip("aiosmtplib")
+pytest.importorskip("typer")
+pytest.importorskip("aiolimiter")
+pytest.importorskip("apscheduler")
+pytest.importorskip("networkx")
 import yaml
+import self_fixing_engineer.arbiter.file_watcher as file_watcher_module
+# Fix: Import from self_fixing_engineer.arbiter.file_watcher instead of file_watcher
 from aiolimiter import AsyncLimiter
 from self_fixing_engineer.arbiter.file_watcher import (
     AlerterConfig,
