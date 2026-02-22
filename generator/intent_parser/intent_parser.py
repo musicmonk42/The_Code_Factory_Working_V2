@@ -655,22 +655,50 @@ class RegexExtractor(ExtractorStrategy):
 class NLPExtractor(ExtractorStrategy):
     """
     NLP-based extractor using spaCy (lazy loaded).
-
-    Example implementation:
-        def extract(self, sections, language='en'):
-            spacy = get_spacy()  # Lazy load spacy only when this method is called
-            nlp = spacy.load(f"{language}_core_web_sm")
-            # ... rest of extraction logic
+    Falls back to regex extraction if spaCy is unavailable.
     """
 
     def extract(
         self, sections: Dict[str, str], language: str = "en"
     ) -> Dict[str, List[str]]:
-        """Placeholder implementation. Override this method to use NLP-based extraction."""
-        logger.warning(
-            "NLPExtractor.extract() called but not implemented. Returning empty dict."
-        )
-        return {}
+        """Extract named entities, noun chunks, and key phrases from each section."""
+        extracted: Dict[str, List[str]] = {}
+        try:
+            spacy = get_spacy()
+            model_name = f"{language}_core_web_sm"
+            try:
+                nlp = spacy.load(model_name)
+            except OSError:
+                # Fallback to English if language model not found
+                nlp = spacy.load("en_core_web_sm")
+            for section_name, text in sections.items():
+                if not text:
+                    extracted[section_name] = []
+                    continue
+                doc = nlp(str(text))
+                concepts: List[str] = []
+                # Named entities
+                for ent in doc.ents:
+                    if ent.text.strip():
+                        concepts.append(ent.text.strip())
+                # Noun chunks
+                for chunk in doc.noun_chunks:
+                    text_clean = chunk.text.strip()
+                    if text_clean and text_clean not in concepts:
+                        concepts.append(text_clean)
+                extracted[section_name] = concepts
+            EXTRACTION_COUNT.labels(extractor_type="nlp", language=language).inc()
+        except (ImportError, OSError):
+            # Fallback: simple regex extraction
+            for section_name, text in sections.items():
+                if not text:
+                    extracted[section_name] = []
+                    continue
+                # Extract capitalized phrases as key entities
+                words = re.findall(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b', str(text))
+                extracted[section_name] = list(dict.fromkeys(words))
+            EXTRACTION_COUNT.labels(extractor_type="regex_fallback", language=language).inc()
+        return extracted
 
 
 class AmbiguityDetectorStrategy(ABC):
@@ -695,11 +723,49 @@ class LLMDetector(AmbiguityDetectorStrategy):
         logger.info("LLMDetector initialized (stub implementation)")
 
     async def detect(self, text: str, dry_run: bool, language: str = "en") -> List[str]:
-        """Placeholder implementation. Override this method to use LLM-based detection."""
-        logger.warning(
-            "LLMDetector.detect() called but not implemented. Returning empty list."
-        )
-        return []
+        """Use the configured LLM to identify ambiguities in the text."""
+        if dry_run:
+            return []
+        try:
+            api_key_env = self.llm_config.api_key_env_var
+            api_key = os.environ.get(api_key_env) if api_key_env else None
+            if not api_key:
+                logger.warning("LLMDetector: No API key configured, returning empty ambiguities.")
+                return []
+            prompt = (
+                "Identify all ambiguous or unclear statements in the following requirements text. "
+                "List each ambiguity on a new line, starting with '- '. "
+                "If there are no ambiguities, respond with 'NONE'.\n\n"
+                f"Requirements:\n{text}"
+            )
+            import aiohttp
+            payload = {
+                "model": self.llm_config.model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+                "max_tokens": 500,
+            }
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(f"LLMDetector: API returned status {resp.status}")
+                        return []
+                    data = await resp.json()
+            content = data["choices"][0]["message"]["content"].strip()
+            if content.upper() == "NONE" or not content:
+                return []
+            ambiguities = [line.lstrip("- ").strip() for line in content.splitlines() if line.strip().startswith("-")]
+            if not ambiguities and content:
+                ambiguities = [line.strip() for line in content.splitlines() if line.strip()]
+            return ambiguities
+        except Exception as e:
+            logger.warning(f"LLMDetector.detect() failed: {e}. Returning empty list.")
+            return []
 
 
 class SummarizerStrategy(ABC):
@@ -728,11 +794,67 @@ class LLMSummarizer(SummarizerStrategy):
     def summarize(
         self, requirements: Dict[str, Any], language: str = "en"
     ) -> Dict[str, Any]:
-        """Placeholder implementation. Override this method to use LLM-based summarization."""
-        logger.warning(
-            "LLMSummarizer.summarize() called but not implemented. Returning requirements as-is."
-        )
-        return requirements
+        """Use the configured LLM to summarize/structure requirements. Falls back to TruncateSummarizer."""
+        try:
+            api_key_env = self.llm_config.api_key_env_var
+            api_key = os.environ.get(api_key_env) if api_key_env else None
+            if not api_key:
+                logger.warning("LLMSummarizer: No API key configured, using TruncateSummarizer fallback.")
+                return TruncateSummarizer().summarize(requirements, language)
+            import asyncio
+            import aiohttp
+
+            async def _call():
+                prompt = (
+                    "Summarize and structure the following requirements into a concise, well-organized dict. "
+                    "Respond with valid JSON only.\n\n"
+                    f"Requirements:\n{json.dumps(requirements, indent=2)}"
+                )
+                payload = {
+                    "model": self.llm_config.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": self.llm_config.temperature,
+                    "max_tokens": self.llm_config.max_tokens_summary,
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp:
+                        if resp.status != 200:
+                            return None
+                        data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+
+            try:
+                try:
+                    asyncio.get_running_loop()
+                    # Inside a running loop — can't block; fall back
+                    return TruncateSummarizer().summarize(requirements, language)
+                except RuntimeError:
+                    pass  # No running loop — safe to run_until_complete
+                content = asyncio.run(_call())
+            except RuntimeError:
+                return TruncateSummarizer().summarize(requirements, language)
+
+            if not content:
+                return TruncateSummarizer().summarize(requirements, language)
+
+            # Parse JSON response
+            try:
+                # Strip markdown code blocks if present
+                cleaned = content.strip()
+                if cleaned.startswith("```"):
+                    cleaned = re.sub(r"^```[a-z]*\n?", "", cleaned)
+                    cleaned = re.sub(r"\n?```$", "", cleaned)
+                return json.loads(cleaned)
+            except (json.JSONDecodeError, ValueError):
+                return {"summary": content}
+        except Exception as e:
+            logger.warning(f"LLMSummarizer.summarize() failed: {e}. Using TruncateSummarizer fallback.")
+            return TruncateSummarizer().summarize(requirements, language)
 
 
 class TruncateSummarizer(SummarizerStrategy):

@@ -419,12 +419,33 @@ class GeneratorService:
         """
         logger.info(f"Generating code for job {job_id}")
 
-        # Placeholder: Call actual code generation
-        return {
-            "job_id": job_id,
-            "generated_files": ["main.py", "config.py", "tests/test_main.py"],
-            "status": "completed",
-        }
+        # Wire to real codegen agent
+        try:
+            from generator.agents.codegen_agent.codegen_agent import (
+                generate_code as _codegen_agent_generate,
+            )
+
+            state_summary = clarified_requirements.get("state_summary", "")
+            config_path = clarified_requirements.get("config_path", "prod_config.yaml")
+
+            result = await _codegen_agent_generate(
+                requirements=clarified_requirements,
+                state_summary=state_summary,
+                config_path_or_dict=config_path,
+            )
+            if isinstance(result, dict):
+                result.setdefault("job_id", job_id)
+                result.setdefault("status", "completed")
+            return result
+        except Exception as e:
+            logger.error(
+                f"Code generation failed for job {job_id}: {e}", exc_info=True
+            )
+            return {
+                "job_id": job_id,
+                "status": "error",
+                "message": str(e),
+            }
 
     async def run_codegen_agent(
         self, job_id: str, requirements: str, language: str, framework: Optional[str] = None

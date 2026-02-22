@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from server.dependencies import require_agents_ready, get_job_or_404
@@ -660,62 +660,87 @@ async def download_job_files(job_id: str):
 
 
 @router.get("/{job_id}/download-partial")
-async def download_partial_results(job_id: str):
+async def download_partial_results(
+    job_id: str,
+    authorization: Optional[str] = Header(default=None),
+):
     """
     Download generated files even if job is incomplete (development/debugging only).
-    
-    ⚠️  SECURITY WARNING: This endpoint is intended for development/debugging only.
-    In production environments, implement authentication checks to prevent unauthorized access.
-    
-    This endpoint allows downloading partial results when a job hasn't completed
-    normally. Useful for debugging and retrieving code when test generation or
-    other late-stage steps hang or fail.
-    
+
+    Requires a valid Authorization: Bearer <token> header. In development mode
+    (DEVELOPMENT_MODE=true), unauthenticated access is allowed with a warning.
+
     **Path Parameters:**
     - job_id: Unique job identifier
-    
+
     **Returns:**
     - ZIP file download (application/zip) with PARTIAL suffix in filename
-    
+
     **Errors:**
+    - 401: Missing or invalid authorization token
     - 404: Job not found or no files available
-    
-    **TODO**: Add authentication in production.
-    Example implementation:
-        
-        # Check if in development mode
-        if not os.getenv("DEVELOPMENT_MODE", "false").lower() == "true":
-            # Require authentication
-            raise HTTPException(status_code=403, detail="This endpoint requires authentication")
     """
+    from fastapi import Request
     from fastapi.responses import FileResponse
     from pathlib import Path
     import zipfile
     import tempfile
-    
+
+    development_mode = os.getenv("DEVELOPMENT_MODE", "false").lower() == "true"
+
+    if not development_mode:
+        if not authorization or not authorization.lower().startswith("bearer "):
+            raise HTTPException(
+                status_code=401,
+                detail="Authorization required. Provide a valid Bearer token.",
+            )
+        token = authorization[7:].strip()  # skip "bearer " or "Bearer " (7 chars)
+        if not token:
+            raise HTTPException(
+                status_code=401,
+                detail="Bearer token is missing or empty.",
+            )
+        # Validate token via JWT verification if available
+        try:
+            import jwt
+
+            secret = os.getenv("JWT_SECRET_KEY", "")
+            if secret:
+                jwt.decode(token, secret, algorithms=["HS256"])
+        except Exception as auth_exc:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Invalid or expired authorization token: {auth_exc}",
+            ) from auth_exc
+    else:
+        logger.warning(
+            f"download_partial_results: DEVELOPMENT_MODE is enabled — "
+            f"unauthenticated access allowed for job {job_id}. "
+            "Do not use this in production."
+        )
+
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    
+
     job_dir = Path(f"./uploads/{job_id}")
     if not job_dir.exists() or not list(job_dir.rglob('*')):
         raise HTTPException(
             status_code=404,
             detail=f"No files found for job {job_id}",
         )
-    
+
     # Create temporary ZIP file
     with tempfile.NamedTemporaryFile(mode='w+b', suffix='.zip', delete=False) as tmp_file:
         zip_path = tmp_file.name
-        
+
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Add all files from job directory, excluding existing output zips to avoid nesting
             for file_path in job_dir.rglob('*'):
                 if file_path.is_file() and not file_path.name.endswith('_output.zip'):
                     arcname = file_path.relative_to(job_dir)
                     zipf.write(file_path, arcname=arcname)
-        
+
         logger.info(f"Created partial ZIP archive for job {job_id}")
-    
+
     return FileResponse(
         path=zip_path,
         media_type='application/zip',

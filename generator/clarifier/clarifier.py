@@ -94,11 +94,10 @@ except ImportError as e:
         """Stub LLM Provider - actual implementation should be in clarifier_llm.py"""
 
         def __init__(self, *args, **kwargs):
-            logging.warning(
-                "Using stub LLMProvider - clarifier_llm.py module not available"
+            raise ImportError(
+                "LLMProvider is unavailable: clarifier_llm.py module failed to import. "
+                "Ensure all dependencies are installed and clarifier_llm.py is present."
             )
-            self.api_key = kwargs.get("api_key")
-            self.model = kwargs.get("model", "default")
 
         async def generate(self, prompt: str, **kwargs) -> str:
             """Stub method that raises NotImplementedError"""
@@ -111,10 +110,10 @@ except ImportError as e:
         """Stub Grok LLM Provider - actual implementation should be in clarifier_llm.py"""
 
         def __init__(self, *args, **kwargs):
-            logging.warning(
-                "Using stub GrokLLM - clarifier_llm.py module not available"
+            raise ImportError(
+                "GrokLLM is unavailable: clarifier_llm.py module failed to import. "
+                "Ensure all dependencies are installed and clarifier_llm.py is present."
             )
-            super().__init__(*args, **kwargs)
 
         async def generate(self, prompt: str, **kwargs) -> str:
             """Stub method that raises NotImplementedError"""

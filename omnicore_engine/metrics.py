@@ -549,11 +549,21 @@ def get_plugin_metrics() -> Dict:
 
 
 def get_test_metrics() -> Dict:
-    """Returns a simplified dictionary of test-related metrics. (Placeholder)"""
-    return {
-        "test_suite_runs_total": 0,
-        "test_failures_total": 0,
-    }
+    """Returns a dictionary of test-related metrics from the Prometheus registry."""
+    target_names = {"test_suite_runs_total", "test_failures_total"}
+    result: Dict = {"data_available": False}
+    for collector in list(REGISTRY.collect()):
+        for sample in collector.samples:
+            name = sample.name
+            # Match without label suffixes (e.g. _total)
+            base_name = name
+            if base_name in target_names:
+                result[base_name] = sample.value
+                result["data_available"] = True
+    # Ensure both keys always present
+    result.setdefault("test_suite_runs_total", 0)
+    result.setdefault("test_failures_total", 0)
+    return result
 
 
 # --- END FILE ---
