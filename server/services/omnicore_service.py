@@ -6968,7 +6968,9 @@ class OmniCoreService:
                     logger.warning(f"[PIPELINE] Job {job_id} validation step error: {val_err}")
             else:
                 # Validate step was not run (no output_path or materializer unavailable)
-                stages_completed.append("validate:skipped") (uses existing provenance.validate_spec_fidelity)
+                stages_completed.append("validate:skipped")
+            
+            # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
                     if md_content:
