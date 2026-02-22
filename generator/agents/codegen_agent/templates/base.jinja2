@@ -69,6 +69,20 @@ Your task is to implement the ACTUAL endpoints defined in the specification.
 {{ macros.render_context(diagram_descriptions, "Architecture Diagrams") }}
 {% endif %}
 
+{% if md_content is defined and md_content %}
+---
+
+## AUTHORITATIVE PROJECT SPECIFICATION
+
+The following is the user's complete project specification. This is the PRIMARY source of truth.
+ALL code generation MUST implement the features, endpoints, architecture, and requirements described below.
+Do NOT use generic boilerplate — implement exactly what this specification describes.
+
+{{ md_content }}
+
+---
+{% endif %}
+
 ---
 
 ## TASK: GENERATE PRODUCTION-READY CODE
