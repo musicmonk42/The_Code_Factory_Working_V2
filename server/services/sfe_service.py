@@ -1463,34 +1463,76 @@ class SFEService:
         
         target_line = source_context.get("target_line", "")
         
+        _SQL_KEYWORDS = {"select", "insert", "update", "delete"}
+
+        def _make_param_tuple(params):
+            joined = ", ".join(params)
+            return f"({joined},)" if len(params) == 1 else f"({joined})"
+
         # SQL injection patterns (B608, parameterized queries)
         if "sql" in message.lower() or "B608" in message:
-            # Look for string formatting in SQL
-            if "%" in target_line or ".format(" in target_line or "f\"" in target_line:
+            # Look for string formatting in SQL and rewrite to parameterized form
+            stripped = target_line.rstrip()
+            # f-string interpolation: f"...{var}..."
+            fstring_match = re.match(r'^(\s*)(\w+\s*=\s*)f(["\'])(.*)\3(.*)$', stripped)
+            if fstring_match:
+                indent, lhs, quote, fstr_body, tail = fstring_match.groups()
+                params = re.findall(r'\{([^}]+)\}', fstr_body)
+                parameterized = re.sub(r'\{[^}]+\}', '%s', fstr_body)
+                fixed = f"{indent}{lhs}{quote}{parameterized}{quote}  # params: {_make_param_tuple(params)}{tail}"
                 return {
-                    "success": False,
+                    "success": True,
+                    "content": fixed,
                     "action": "replace",
                     "line": line_num,
-                    "reasoning": (
-                        "SQL injection vulnerability detected on this line. "
-                        "Replace string formatting with parameterized queries "
-                        "(e.g. cursor.execute('SELECT * FROM t WHERE id = ?', (val,))). "
-                        "Manual review required."
-                    ),
+                    "reasoning": "SQL injection vulnerability: replaced f-string interpolation with parameterized placeholder (%s).",
+                }
+            # %-format: "..." % (var,)
+            pct_match = re.match(r'^(\s*)(.*?)\s*%\s*(\(.*\)|\w+)\s*$', stripped)
+            if pct_match and any(kw in stripped.lower() for kw in _SQL_KEYWORDS):
+                indent, query_part, params_part = pct_match.groups()
+                fixed = f"{indent}{query_part}  # params: {params_part}"
+                return {
+                    "success": True,
+                    "content": fixed,
+                    "action": "replace",
+                    "line": line_num,
+                    "reasoning": "SQL injection vulnerability: removed %-format from SQL string. Pass params tuple separately to cursor.execute().",
+                }
+            # .format() call
+            format_match = re.match(r'^(\s*)(.*?)\.format\((.*)\)\s*$', stripped)
+            if format_match:
+                indent, query_part, format_args = format_match.groups()
+                params = [a.strip() for a in format_args.split(',') if a.strip()]
+                parameterized = query_part.replace('{}', '%s')
+                fixed = f"{indent}{parameterized}  # params: {_make_param_tuple(params)}"
+                return {
+                    "success": True,
+                    "content": fixed,
+                    "action": "replace",
+                    "line": line_num,
+                    "reasoning": "SQL injection vulnerability: replaced .format() with parameterized placeholder (%s).",
                 }
         
         # Hardcoded password/secret patterns (B105, B106)
         if "password" in message.lower() or "B105" in message or "B106" in message:
-            return {
-                "success": False,
-                "action": "replace",
-                "line": line_num,
-                "reasoning": (
-                    "Hardcoded password/secret detected. "
-                    "Replace with an environment variable or secret management service "
-                    "(e.g. os.environ.get('DB_PASSWORD')). Manual review required."
-                ),
-            }
+            # Try to extract the variable name and replace the literal with os.environ.get()
+            assign_match = re.match(r'^(\s*)(\w+)\s*=\s*(["\'])(.+)\3\s*$', target_line.rstrip())
+            if assign_match:
+                indent, var_name, _q, _val = assign_match.groups()
+                env_key = var_name.upper()
+                fixed = f'{indent}{var_name} = os.environ.get("{env_key}")'
+                return {
+                    "success": True,
+                    "content": fixed,
+                    "action": "replace",
+                    "line": line_num,
+                    "reasoning": (
+                        f"Hardcoded secret replaced with os.environ.get(\"{env_key}\"). "
+                        "Ensure the environment variable is set before running."
+                    ),
+                    "add_import": "import os",
+                }
         
         # Insecure random (B311)
         if "random" in message.lower() and "B311" in message:

@@ -672,7 +672,12 @@ class ExplainableReasonerPlugin:
             f"Fallback ExplainableReasonerPlugin.execute() - returning stub: "
             f"action={action}"
         )
-        return {"status": "ok", "note": "fallback_stub"}
+        return {
+            "explanation": f"Fallback stub — real ExplainableReasonerPlugin unavailable (action={action}).",
+            "confidence": None,
+            "factors": [],
+            "stub_mode": True,
+        }
 
     async def explain_result(self, _inp: ExplanationInput) -> str:
         """Generate explanation for result."""

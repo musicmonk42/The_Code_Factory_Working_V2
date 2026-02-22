@@ -658,8 +658,10 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
         # Check if API key is available
         api_key = kwargs.get("api_key") or os.environ.get("OPENAI_API_KEY")
         if not api_key:
-            logger.warning("OpenAI API key not found, using MockLLM")
-            return MockLLM(provider="openai", **kwargs)
+            raise ValueError(
+                "OpenAI API key not found. Set the OPENAI_API_KEY environment variable, "
+                "pass api_key= explicitly, or set LLM_USE_MOCK=true for local development only."
+            )
 
         return OpenAILLM(**kwargs)
 
@@ -673,8 +675,10 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
         # Check if API key is available
         api_key = kwargs.get("api_key") or os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            logger.warning("Anthropic API key not found, using MockLLM")
-            return MockLLM(provider="anthropic", **kwargs)
+            raise ValueError(
+                "Anthropic API key not found. Set the ANTHROPIC_API_KEY environment variable, "
+                "pass api_key= explicitly, or set LLM_USE_MOCK=true for local development only."
+            )
 
         return AnthropicLLM(**kwargs)
 
@@ -688,8 +692,10 @@ def init_llm(provider: str = "openai", **kwargs) -> LLMBase:
         # Check if API key is available
         api_key = kwargs.get("api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not api_key:
-            logger.warning("Gemini API key not found, using MockLLM")
-            return MockLLM(provider="gemini", **kwargs)
+            raise ValueError(
+                "Gemini API key not found. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable, "
+                "pass api_key= explicitly, or set LLM_USE_MOCK=true for local development only."
+            )
 
         return GeminiLLM(**kwargs)
 
