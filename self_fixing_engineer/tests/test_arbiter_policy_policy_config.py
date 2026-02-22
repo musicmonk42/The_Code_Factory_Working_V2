@@ -33,6 +33,17 @@ import pytest
 # For standalone execution, we might need to adjust sys.path, but for a pytest run from the project root, this is fine.
 from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
 from pydantic import SecretStr, ValidationError
+from self_fixing_engineer.arbiter.policy import config as config_module
+
+
+@pytest.fixture(autouse=True)
+def reset_arbiter_config_singleton():
+    """Reset ArbiterConfig singleton and cache between tests for isolation."""
+    # Reset before test
+    config_module._instance = None
+    yield
+    # Reset after test
+    config_module._instance = None
 
 ########## Type Validation and Field Defaults ##########
 
@@ -137,12 +148,11 @@ def test_env_loading_and_override(monkeypatch, tmp_path):
 ########## Secret Redaction in to_dict ##########
 
 
-def test_secret_redaction_to_dict():
+def test_secret_redaction_to_dict(monkeypatch):
     """Validates that secret values are redacted in the to_dict() output."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         # Fernet key must be 32 url-safe base64-encoded bytes.
@@ -312,12 +322,11 @@ def test_invalid_field_type(monkeypatch):
 ########## Public API and Symbol Coverage ##########
 
 
-def test_public_api_symbols():
+def test_public_api_symbols(monkeypatch):
     """Confirms that essential public symbols are available and have the correct type."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
@@ -329,12 +338,11 @@ def test_public_api_symbols():
 ########## Security: No Secrets in Logs ##########
 
 
-def test_no_secrets_in_repr():
+def test_no_secrets_in_repr(monkeypatch):
     """Ensures that __repr__ does not leak secret values."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         valid_key = b"8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
@@ -366,12 +374,11 @@ def test_bad_env_file(monkeypatch, tmp_path):
 ########## Mutability/Reload ##########
 
 
-def test_model_reload_and_mutation(tmp_path):
+def test_model_reload_and_mutation(monkeypatch, tmp_path):
     """Tests that config values can be mutated after instantiation."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         cfg = ArbiterConfig()
@@ -385,12 +392,11 @@ def test_model_reload_and_mutation(tmp_path):
 ########## All Branches of to_dict ##########
 
 
-def test_to_dict_all_branches():
+def test_to_dict_all_branches(monkeypatch):
     """Ensures all branches of the to_dict method, especially redaction, are covered."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         # The DECISION_OPTIMIZER_SETTINGS has default values.
@@ -427,12 +433,11 @@ def test_to_dict_all_branches():
 ########## Coverage: All Public Fields and Defaults ##########
 
 
-def test_all_public_fields_present():
+def test_all_public_fields_present(monkeypatch):
     """Checks that all expected public fields are present in the model."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         cfg = ArbiterConfig()
@@ -449,12 +454,11 @@ def test_all_public_fields_present():
         assert "CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL" in fields
 
 
-def test_new_config_fields_present():
+def test_new_config_fields_present(monkeypatch):
     """Tests the presence and default values of newly added config fields."""
     # Clean up env vars
-
-    os.environ.pop("LLM_MODEL", None)
-    os.environ.pop("PAUSE_CIRCUIT_BREAKER_TASKS", None)
+    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
     with patch("redis.asyncio.Redis.from_url"):
         cfg = ArbiterConfig()

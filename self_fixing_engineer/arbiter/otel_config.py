@@ -100,14 +100,8 @@ class NoOpSpan:
     def get_span_context(self):
         """Return a valid but non-recording span context."""
         try:
-            from opentelemetry.trace import SpanContext, TraceFlags
-            return SpanContext(
-                trace_id=0,
-                span_id=0,
-                is_remote=False,
-                trace_flags=TraceFlags.DEFAULT,
-                trace_state=None,
-            )
+            from opentelemetry.trace import INVALID_SPAN_CONTEXT
+            return INVALID_SPAN_CONTEXT
         except ImportError:
             return type(
                 "SpanContext",
@@ -471,6 +465,18 @@ class OpenTelemetryConfig:
                     cls._instance = cls()
                     cls._instance._initialize()
         return cls._instance
+
+    @classmethod
+    def reset_for_testing(cls):
+        """Reset all class-level state for test isolation. Call from test setup_method.
+
+        NOTE: This must only be called between tests when no other threads are accessing
+        the singleton. Resetting the lock is safe in this context because all test
+        threads have completed before setup_method runs.
+        """
+        cls._instance = None
+        cls._initialized = False
+        cls._lock = threading.Lock()
 
     def _initialize(self):
         """Initialize OpenTelemetry with proper environment configuration."""

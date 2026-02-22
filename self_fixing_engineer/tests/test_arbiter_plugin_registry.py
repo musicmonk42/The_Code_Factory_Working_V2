@@ -22,6 +22,8 @@ from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
 @pytest.fixture(autouse=True)
 def reset_registry(tmp_path):
     """Reset the PluginRegistry and plugins.json before each test."""
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
+    PLUGIN_REGISTRY.clear()
     persist_path = tmp_path / "plugins.json"
     # Clear any existing plugins.json in the project root
     root_plugins_json = os.path.abspath(
