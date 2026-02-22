@@ -1005,30 +1005,20 @@ def plugin_list():
 @click.option(
     "--verify-signature",
     is_flag=True,
-    help="Verify digital signature of the plugin package (conceptual).",
+    help="Verify digital signature of the plugin package. Not yet implemented; raises an error when used.",
 )
 async def plugin_install(plugin_identifier, verify_signature):
     console.print(
         f"[yellow]Attempting to install plugin: {plugin_identifier}...[/yellow]"
     )
 
-    # In a real system, this would involve:
-    # 1. Download/locate plugin package (e.g., from a trusted registry or local path).
-    # 2. (Optional) Verify digital signature if verify_signature is true.
-    # 3. (Optional) Create an isolated environment (venv) for the plugin if it has complex dependencies.
-    # 4. Install dependencies (pip install).
-    # 5. Dynamically load the module.
-    # 6. Call its registration function.
-
     try:
         if verify_signature:
-            console.print(
-                "[red]Signature verification is conceptual and not fully implemented.[/red]"
+            raise NotImplementedError(
+                "Plugin signature verification is not yet implemented. "
+                "This feature is planned for a future release. "
+                "Re-run without --verify-signature to install without verification."
             )
-            # Real implementation would involve:
-            # - Fetching public key
-            # - Verifying signature on package hash
-            # - if not valid: raise Exception("Invalid signature")
 
         # Assume plugin_identifier is a Python module name or path to a .py file for hot-loading
         if Path(plugin_identifier).suffix == ".py" and Path(plugin_identifier).exists():
@@ -1070,6 +1060,8 @@ async def plugin_install(plugin_identifier, verify_signature):
                 f"Plugin install failed: '{plugin_identifier}' no register() found",
                 severity="medium",
             )
+    except NotImplementedError:
+        raise
     except ImportError as e:
         console.print(
             f"[red]Error: Plugin module '{plugin_identifier}' not found. Ensure it's in PYTHONPATH or correctly named: {e}[/red]"

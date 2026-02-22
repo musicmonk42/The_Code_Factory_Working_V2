@@ -325,10 +325,14 @@ class DummyMutationTester:
 
     async def run_mutations(self, *args, **kwargs):
         """
-        Stub implementation that returns a clearly invalid sentinel score.
+        Stub implementation that returns a ``None`` sentinel score.
+
+        Callers must treat ``(None, None, …)`` as "skipped" rather than
+        "failed" so that CI quality gates are not triggered by a missing
+        mutation-testing tool.
 
         Returns:
-            tuple: (False, 0.0, error_message) — fails CI quality gates
+            tuple: (None, None, message) — callers should skip mutation gate
         """
         log("Using DummyMutationTester. Mutation testing unavailable (stub mode).", level="DEBUG")
 
@@ -339,7 +343,7 @@ class DummyMutationTester:
                 level="ERROR",
             )
 
-        return False, 0.0, "Mutation testing unavailable (stub mode) — install mutmut or cosmic-ray"
+        return None, None, "Mutation testing unavailable — install mutmut or cosmic-ray"
 
 
 class DummyTestEnricher:

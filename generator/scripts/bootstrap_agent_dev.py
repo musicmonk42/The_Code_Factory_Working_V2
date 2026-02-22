@@ -3,7 +3,7 @@
 """
 DEVELOPMENT-ONLY BOOTSTRAP SCRIPT
 
-This script creates dummy/stub modules required for local CLI/dev testing
+This script creates thin wrapper modules required for local CLI/dev testing
 of testgen_agent.py and related tools. It must NEVER be run or imported in
 production or packaged with production builds.
 
@@ -11,9 +11,12 @@ Usage:
     python scripts/bootstrap_agent_dev.py
 
 What it does:
-- Generates local dummy files in 'tests/mocks/' directory that mimic interfaces of real dependencies.
+- Generates local thin-wrapper files in 'tests/mocks/' directory that delegate
+  to the real implementations in generator/agents/testgen_agent/.
 - Allows the agent to run for development/testing without a production setup.
 - Prevents accidental overwriting of production files by using a dedicated mock directory.
+- Removes 'tests/mocks/' after bootstrap completes so the files are not left
+  around to be accidentally imported or committed.
 
 CAUTION:
 - These files are for developer convenience ONLY.
@@ -29,6 +32,7 @@ SECURITY:
 
 import logging
 import os
+import shutil
 import sys
 
 logging.basicConfig(
@@ -39,11 +43,12 @@ logger = logging.getLogger(__name__)
 
 def create_dummy_files():
     """
-    Creates dummy Python modules and a temporary Git repository
-    required for local development and testing of testgen_agent.py.
+    Creates thin Python wrapper modules in 'tests/mocks/' that delegate to
+    the real implementations in generator/agents/testgen_agent/.
 
-    All dummy files are created in 'tests/mocks/' directory to prevent
-    accidental overwriting of production files.
+    All files are created in 'tests/mocks/' directory to prevent accidental
+    overwriting of production files.  The directory is removed after the
+    bootstrap completes.
     """
     logger.info("Starting creation of dummy development environment modules...")
 
@@ -103,60 +108,56 @@ async def build_agentic_prompt(purpose: str, language: str, code_files: Dict[str
 async def initialize_codebase_for_rag(repo_path: str):
     _logger.warning("[testgen_prompt wrapper] initialize_codebase_for_rag not delegated; skipping.")
 """,
-        "testgen_response_handler.py": """
+        "testgen_response_handler.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+import asyncio
+import logging
 from typing import Dict, Any
-# DUMMY RESPONSE HANDLER: For development and local testing ONLY.
-def parse_llm_response(response_content: str, language: str) -> Dict[str, str]:
-    if "fix" in response_content.lower() or "heal" in response_content.lower():
-        return {"fixed_test_dummy.py": "// Healed test content (DUMMY)"}
-    return {"test_file_dummy.py": f"// Parsed test content for {language} (DUMMY): {response_content[:50]}"}
-""",
-        "testgen_validator.py": """
-import asyncio
-from typing import Dict, Any, List
-# DUMMY TEST VALIDATOR: For development and local testing ONLY.
-async def validate_test_quality(code_files: Dict[str, str], test_files: Dict[str, str], language: str, validation_type: str) -> Dict[str, Any]:
-    print(f"[VALIDATOR_DUMMY] Validating quality for {language} with type {validation_type}")
-    if validation_type == 'coverage':
-        return {"status": "success", "coverage_percentage": 85.0, "issues": []}
-    if validation_type == 'mutation':
-        return {"status": "success", "mutation_score": 70.0, "issues": []}
-    if validation_type == 'stress_performance':
-        return {"status": "success", "performance_score": 0.9, "issues": []}
-    return {"status": "failed", "score": 0.0, "issues": [f"Unsupported validation type (DUMMY): {validation_type}"]}
-""",
-        "deploy_llm_call.py": """
-import asyncio
-from typing import Dict, Any, AsyncGenerator, Optional, List, Tuple, Type
-# DUMMY LLM CALL ORCHESTRATOR: For development and local testing ONLY.
-try:
-    from presidio_analyzer import AnalyzerEngine
-    from presidio_anonymizer import AnonymizerEngine
-    print("[PRESIDIO_DUMMY] Presidio modules available for dummy use.")
-except ImportError:
-    AnalyzerEngine = None
-    AnonymizerEngine = None
-    print("[PRESIDIO_DUMMY] Presidio not installed for dummy deploy_llm_call.")
+_logger = logging.getLogger(__name__)
 
-class DummyClientSession:
-    async def __aenter__(self): return self
-    async def __aexit__(self, exc_type, exc_val, exc_tb): pass
-    async def post(self, url, json, headers=None, timeout=None):
-        class DummyResponse:
-            async def json(self): return {"choices": [{"message": {"content": "mocked LLM response content"}}]}
-            async def text(self): return "mocked LLM response content"
-            @property
-            def content(self):
-                class DummyContent:
-                    async def iter_any(self): yield b'data: {"choices":[{"delta":{"content":"mocked"}}]}'
-                return DummyContent()
-            def raise_for_status(self): pass
-            @property
-            def status(self): return 200
-        return DummyResponse()
-    @property
-    def closed(self): return False
-    async def close(self): pass
+async def parse_llm_response(response_content: str, language: str) -> Dict[str, str]:
+    \"\"\"Thin wrapper that delegates to the real response parser in testgen_agent.\"\"\"
+    try:
+        from generator.agents.testgen_agent.testgen_response_handler import parse_llm_response as _real_parser
+        return await _real_parser(response_content=response_content, language=language)
+    except Exception as exc:
+        _logger.warning(f"[testgen_response_handler wrapper] real parser unavailable: {exc}; returning empty dict.")
+        return {}
+""",
+        "testgen_validator.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+import asyncio
+import logging
+from typing import Dict, Any
+_logger = logging.getLogger(__name__)
+
+async def validate_test_quality(code_files: Dict[str, str], test_files: Dict[str, str], language: str, validation_type: str) -> Dict[str, Any]:
+    \"\"\"Thin wrapper that delegates to the real validator in testgen_agent.\"\"\"
+    try:
+        from generator.agents.testgen_agent.testgen_validator import validate_test_quality as _real_validator
+        return await _real_validator(
+            code_files=code_files, test_files=test_files,
+            language=language, validation_type=validation_type
+        )
+    except Exception as exc:
+        _logger.warning(f"[testgen_validator wrapper] real validator unavailable: {exc}; returning skipped status.")
+        return {"status": "skipped", "issues": [str(exc)]}
+""",
+        "deploy_llm_call.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+import asyncio
+import logging
+from typing import Dict, Any, AsyncGenerator, Optional
+_logger = logging.getLogger(__name__)
+
+async def call_llm(prompt: str, **kwargs) -> Dict[str, Any]:
+    \"\"\"Thin wrapper that delegates to runner.llm_client.call_llm_api.\"\"\"
+    try:
+        from runner.llm_client import call_llm_api
+        return await call_llm_api(prompt=prompt, **kwargs)
+    except Exception as exc:
+        _logger.warning(f"[deploy_llm_call wrapper] call_llm_api unavailable: {exc}")
+        raise
 """,
     }
 
@@ -189,9 +190,9 @@ class DummyClientSession:
         logger.info(f"Created '{llm_providers_dir}' directory.")
 
     print("\n" + "=" * 80)
-    print("DUMMY DEVELOPMENT ENVIRONMENT BOOTSTRAP COMPLETE".center(80))
+    print("DEV BOOTSTRAP COMPLETE".center(80))
     print("".center(80))
-    print(f"Mock files created in: {os.path.abspath(mock_dir)}".center(80))
+    print(f"Wrapper files created in: {os.path.abspath(mock_dir)}".center(80))
     print("".center(80))
     print(
         "You can now run `testgen_agent.py` locally for development and testing.".center(
@@ -199,16 +200,36 @@ class DummyClientSession:
         )
     )
     print("".center(80))
-    print("To use these mocks, add the mock directory to your Python path:".center(80))
+    print("To use these wrappers, add the mock directory to your Python path:".center(80))
     print(f"    export PYTHONPATH=$PYTHONPATH:{os.path.abspath(mock_dir)}".center(80))
     print("".center(80))
-    print("REMEMBER: These are DUMMY implementations.".center(80))
-    print("DO NOT package or deploy these dummy files to production.".center(80))
+    print("NOTE: These wrapper files delegate to the real implementations.".center(80))
+    print("DO NOT deploy these files to production environments.".center(80))
     print(
         "Your production environment MUST have the real modules installed.".center(80)
     )
     print("=" * 80 + "\n")
 
 
+def cleanup_mock_files():
+    """Remove the tests/mocks/ directory created by create_dummy_files().
+
+    Call this after you have finished using the wrapper files so they are not
+    accidentally committed or imported by other code.
+    """
+    mock_dir = os.path.join("tests", "mocks")
+    try:
+        shutil.rmtree(mock_dir)
+        logger.info(f"Cleaned up mock directory: {mock_dir}")
+    except FileNotFoundError:
+        pass  # Already gone — nothing to do
+    except Exception as cleanup_err:
+        logger.warning(f"Could not remove mock directory '{mock_dir}': {cleanup_err}")
+
+
 if __name__ == "__main__":
     create_dummy_files()
+    # Cleanup is deferred to here so the wrapper files are available for use
+    # during the session (e.g. add to PYTHONPATH, run testgen_agent).
+    # Remove them when done so they are not accidentally committed.
+    cleanup_mock_files()

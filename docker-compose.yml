@@ -51,6 +51,11 @@ services:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - OLLAMA_HOST=${OLLAMA_HOST:-}
       - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-openai}
+      # LLM_USE_MOCK: set to "true" ONLY for local development when no real API keys are
+      # available. agent_core.init_llm() raises ValueError if a key is missing and this
+      # flag is not set — which is the correct production behaviour.
+      # Never set this to "true" in staging or production.
+      - LLM_USE_MOCK=${LLM_USE_MOCK:-false}
       - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}

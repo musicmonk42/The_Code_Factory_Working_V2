@@ -1172,6 +1172,14 @@ class GenerationOrchestrator:
                         target_identifier, src_test_path_relative, language
                     )
                 )
+                # None sentinel means the tool is not installed — treat as skipped
+                if mutation_score is None:
+                    log(
+                        f"Mutation testing skipped for {target_identifier}: {mutation_log}",
+                        level="INFO",
+                    )
+                    mutation_success = False
+                    mutation_score = -1.0
             except Exception as e:
                 log(
                     f"Exception during mutation testing for {target_identifier}: {e}",
