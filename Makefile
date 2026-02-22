@@ -8,7 +8,7 @@
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
-	validate-few-shot
+	validate-few-shot mutation-test
 
 # Default target
 .DEFAULT_GOAL := help
@@ -287,6 +287,13 @@ deployment-validate: ## Validate generated deployment files (Docker, K8s, Helm)
 		echo "$(YELLOW)No uploads directory found. Run code generation first.$(NC)"; \
 	fi
 	@echo "$(GREEN)Deployment validation complete!$(NC)"
+
+mutation-test: ## Run mutation tests with mutmut (targets generator/main/provenance.py and testgen_agent.py)
+	@echo "$(BLUE)Running mutation tests...$(NC)"
+	@echo "$(YELLOW)Note: This may take several minutes. See docs/MUTATION_TESTING.md for details.$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && mutmut run --no-progress
+	mutmut results
+	@echo "$(GREEN)Mutation test run complete! Check results above.$(NC)"
 
 validate-few-shot: ## Validate project-level few-shot examples for deploy agent
 	@echo "$(BLUE)Validating project-level few-shot examples...$(NC)"

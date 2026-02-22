@@ -75,12 +75,20 @@ from .resilience import CircuitBreaker, RetryPolicy
 
 def _create_fallback_settings():
     """Create a minimal settings object for when ArbiterConfig is unavailable."""
+    # MESSAGE_BUS_SHARDS is the canonical env var for shard count (Feature 5).
+    # Fall back to the legacy MESSAGE_BUS_SHARD_COUNT name, then to 4.
+    _shard_count = int(
+        os.environ.get("MESSAGE_BUS_SHARDS")
+        or os.environ.get("MESSAGE_BUS_SHARD_COUNT")
+        or 4
+    )
     return types.SimpleNamespace(
         log_level="INFO",
         LOG_LEVEL="INFO",
         database_path="sqlite:///./omnicore.db",
         DB_PATH="sqlite:///./omnicore.db",
-        MESSAGE_BUS_SHARD_COUNT=4,
+        MESSAGE_BUS_SHARD_COUNT=_shard_count,
+        message_bus_shard_count=_shard_count,
         MESSAGE_BUS_MAX_QUEUE_SIZE=10000,
         MESSAGE_BUS_WORKERS_PER_SHARD=2,
         MESSAGE_BUS_SUBSCRIPTION_TIMEOUT=30.0,  # Default 30 seconds for subscription operations
