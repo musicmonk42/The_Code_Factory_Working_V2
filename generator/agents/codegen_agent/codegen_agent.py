@@ -1196,6 +1196,7 @@ if PLUGIN_AVAILABLE:
                             redis_client=redis_client,
                             include_frontend=include_frontend,
                             frontend_type=frontend_type,
+                            md_content=md_content,
                         )
                     except TemplateNotFound as e:
                         logger.warning(
@@ -1515,6 +1516,7 @@ else:
                             redis_client=redis_client,
                             include_frontend=include_frontend,
                             frontend_type=frontend_type,
+                            md_content=md_content,
                         )
                     except TemplateNotFound as e:
                         logger.warning(

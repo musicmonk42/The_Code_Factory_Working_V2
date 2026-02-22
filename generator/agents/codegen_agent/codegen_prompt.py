@@ -1218,6 +1218,7 @@ async def build_code_generation_prompt(
     redis_client: Optional[aioredis.Redis] = None,
     include_frontend: bool = False,
     frontend_type: Optional[str] = None,
+    md_content: str = "",
 ) -> str:
     """
     Builds a production-ready, context-aware, and optimized prompt for code generation.
@@ -1394,7 +1395,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
 
             # 7. Extract required endpoints from MD content
             required_endpoints = []
-            md_content = requirements.get("md_content", "")
+            md_content = md_content or requirements.get("md_content", "")
             if md_content:
                 from generator.main.provenance import extract_endpoints_from_md
                 try:
@@ -1432,6 +1433,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 include_frontend=include_frontend,
                 frontend_type=frontend_type or DEFAULT_FRONTEND_TYPE,
                 required_endpoints=required_endpoints,
+                md_content=md_content,
             )
 
             # 9. Final self-critique and refinement (if enabled)
