@@ -11,6 +11,10 @@ metadata:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # WebSocket support for /api/clarifier/ws/* endpoints
+    nginx.ingress.kubernetes.io/proxy-set-header-upgrade: "$http_upgrade"
+    nginx.ingress.kubernetes.io/proxy-set-header-connection: "upgrade"
+    nginx.ingress.kubernetes.io/websocket-services: "codefactory-api"
   labels:
     app: codefactory
 spec:

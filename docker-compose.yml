@@ -113,6 +113,8 @@ services:
       - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
       # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
       - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
+      # Clarifier WebSocket session timeout (seconds)
+      - CLARIFIER_WS_TIMEOUT=${CLARIFIER_WS_TIMEOUT:-300}
     ports:
       - "8000:8000"  # Main API endpoint
       - "8001:8001"  # Metrics port

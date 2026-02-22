@@ -185,3 +185,10 @@ data:
 
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds, default = 3600)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
+
+  # ============================================
+  # Clarifier WebSocket Configuration
+  # ============================================
+  # Session timeout for real-time clarifier Q&A WebSocket connections (seconds).
+  # Must match SESSION_TIMEOUT_SECONDS in server/routers/clarifier_ws.py.
+  CLARIFIER_WS_TIMEOUT: "300"

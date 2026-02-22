@@ -65,6 +65,10 @@ ingress:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/rate-limit: "100"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # WebSocket support for /api/clarifier/ws/* endpoints
+    nginx.ingress.kubernetes.io/proxy-set-header-upgrade: "$http_upgrade"
+    nginx.ingress.kubernetes.io/proxy-set-header-connection: "upgrade"
+    nginx.ingress.kubernetes.io/websocket-services: "codefactory-api"
     # kubernetes.io/ingress.class: nginx
     # kubernetes.io/tls-acme: "true"
   hosts:
@@ -242,6 +246,10 @@ env:
 
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
+
+  # Clarifier WebSocket Configuration
+  # Session timeout for real-time clarifier Q&A WebSocket connections (seconds).
+  CLARIFIER_WS_TIMEOUT: "300"
   
   # Kafka Configuration: Multiple variables for component compatibility
   # Different components check different variable names due to evolution of codebase:

@@ -17,6 +17,7 @@ Features:
 
 import asyncio
 import logging
+import os
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -36,7 +37,9 @@ router = APIRouter(prefix="/api/clarifier", tags=["Clarifier"])
 # Constants
 # ---------------------------------------------------------------------------
 
-SESSION_TIMEOUT_SECONDS: int = 300  # 5 minutes – matches WebPrompt timeout
+SESSION_TIMEOUT_SECONDS: int = int(
+    os.environ.get("CLARIFIER_WS_TIMEOUT", "300")
+)  # 5 minutes – matches WebPrompt timeout
 HEARTBEAT_INTERVAL_SECONDS: float = 30.0
 
 
