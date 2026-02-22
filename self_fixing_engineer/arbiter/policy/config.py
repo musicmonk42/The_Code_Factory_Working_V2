@@ -342,11 +342,13 @@ class ArbiterConfig(BaseSettings):
         """Validates critical secrets, file paths, LLM settings, and circuit breaker settings."""
         with tracer.start_as_current_span("validate_secrets") as span:
             start_time = time.monotonic()
+            ci_value = (os.getenv("CI") or "").lower()
+            gha_value = (os.getenv("GITHUB_ACTIONS") or "").lower()
             is_test_or_ci = (
                 os.getenv("TESTING") == "1"
                 or os.getenv("ENVIRONMENT") == "test"
-                or os.getenv("CI") in ("1", "true", "True", "TRUE")
-                or os.getenv("GITHUB_ACTIONS") in ("1", "true", "True", "TRUE")
+                or ci_value in ("1", "true")
+                or gha_value in ("1", "true")
             )
             is_production = (
                 os.getenv("APP_ENV", "development") == "production"
