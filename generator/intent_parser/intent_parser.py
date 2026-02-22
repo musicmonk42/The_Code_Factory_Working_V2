@@ -471,6 +471,9 @@ class MarkdownStrategy(ParserStrategy):
                 r"(\*\*|__|\*|_)(.*?)\1", r"\2", sections[section]
             )
             sections[section] = re.sub(r"\[.*?\]\(.*?\)", "", sections[section])
+            sections[section] = re.sub(
+                r"```[\w]*\n.*?```", "[CODE_BLOCK]", sections[section], flags=re.DOTALL
+            )
 
         FORMAT_DETECTION_COUNT.labels(format="markdown").inc()
         logger.debug(f"Parsed Markdown into {len(sections)} sections.")

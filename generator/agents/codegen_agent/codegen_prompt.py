@@ -1173,7 +1173,12 @@ def _parse_requirements_flexible(requirements: Any) -> Dict[str, Any]:
                 features = [requirements.strip()]
 
         # Append header and code-block summaries for richer context
-        features = features + header_features + code_block_features
+        already_extracted = set(features)
+        filtered_header_features = [
+            h for h in header_features
+            if not any(feat in h for feat in already_extracted)
+        ]
+        features = features + filtered_header_features + code_block_features
 
         return {
             "features": features,
