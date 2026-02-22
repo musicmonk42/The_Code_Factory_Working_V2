@@ -441,7 +441,7 @@ class UserPromptChannel(ABC):
 
     def _translate_text(self, text: str, dest: str) -> str:
         """Translates text if dest language is different from source (assumed 'en')."""
-        if not self.translator:
+        if not getattr(self, "translator", None):
             # Translation not available, return original text
             return text
         if self.target_language != dest:
@@ -1197,15 +1197,6 @@ class WebPrompt(UserPromptChannel):
         PROMPT_CYCLES.labels(channel=channel_name).inc()
         start_time = time.perf_counter()
 
-        if not HAS_FASTAPI:
-            logger.error(
-                "FastAPI not found. WebPrompt cannot function. Falling back to CLI dummy."
-            )
-            PROMPT_ERRORS.labels(channel=channel_name, type="FastAPINotInstalled").inc()
-            return await CLIPrompt(target_language=target_language).prompt(
-                questions, context, target_language
-            )
-
         user_id = context.get("user_id", "anonymous")
         session_id = str(uuid.uuid4())
 
@@ -1238,6 +1229,15 @@ class WebPrompt(UserPromptChannel):
                         return ws_answers
             except Exception:
                 pass  # fall through to HTTP form path
+
+        if not HAS_FASTAPI:
+            logger.error(
+                "FastAPI not found. WebPrompt cannot function. Falling back to CLI dummy."
+            )
+            PROMPT_ERRORS.labels(channel=channel_name, type="FastAPINotInstalled").inc()
+            return await CLIPrompt(target_language=target_language).prompt(
+                questions, context, target_language
+            )
 
         WebPrompt._web_question_cache[session_id] = [
             self._translate_text(q, target_language or self.target_language)
