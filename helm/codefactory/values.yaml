@@ -220,6 +220,10 @@ env:
   LLM_MAX_RETRIES: "3"
   LLM_TEMPERATURE: "0.7"
   TESTGEN_LLM_TIMEOUT: "300"
+  # LLM_USE_MOCK: set to "true" ONLY for non-production testing when no real API keys are
+  # available. agent_core.init_llm() raises ValueError on a missing key unless
+  # this flag is "true". Never enable in staging or production deployments.
+  LLM_USE_MOCK: "false"
 
   # Feature flags
   ENABLE_DATABASE: "1"
