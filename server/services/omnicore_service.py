@@ -4686,7 +4686,7 @@ class OmniCoreService:
                     result = await self._execute_deploy_all_targets(
                         job_id, payload, start_time
                     )
-                    span.set_status(Status(StatusCode.OK, "Deploy all targets completed"))
+                    span.set_status(Status(StatusCode.OK))
                     return result
             else:
                 return await self._execute_deploy_all_targets(

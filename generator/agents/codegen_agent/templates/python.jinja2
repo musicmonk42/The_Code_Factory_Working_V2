@@ -339,6 +339,7 @@ python-dotenv==1.0.0
 - ✓ CRITICAL: When using middleware with Request parameter, import: from fastapi import Request
 - ✓ CRITICAL: When using time in middleware, import: import time
 - ✓ CRITICAL: For BaseHTTPMiddleware, import from starlette: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
+- ✓ CRITICAL: BaseHTTPMiddleware requires 'app' as first arg to __init__. Register with app.add_middleware(MyMiddleware) — pass the CLASS. NEVER instantiate middleware directly in tests. Test middleware through TestClient(app).
 
 {% elif target_framework == "flask" %}
 ---

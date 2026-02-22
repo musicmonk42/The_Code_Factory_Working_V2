@@ -3500,7 +3500,7 @@ async def handle_deploy_response(
                 total_latency
             )
             span.set_status(
-                Status(StatusCode.OK, "Response handling completed successfully.")
+                Status(StatusCode.OK)
             )
 
             # Validate that output doesn't contain unsubstituted placeholders
@@ -3548,6 +3548,10 @@ async def handle_deploy_response(
                 '<JAVA_VERSION>': '21',
                 '{GO_VERSION}': '1.22',
                 '<GO_VERSION>': '1.22',
+                '{BASE_VERSION}': '3.11-slim',
+                '<BASE_VERSION>': '3.11-slim',
+                '{RUBY_VERSION}': '3.3',
+                '<RUBY_VERSION>': '3.3',
                 # FIX Issue 6: Add missing placeholders
                 '{APP_HOME}': '/app',
                 '<APP_HOME>': '/app',

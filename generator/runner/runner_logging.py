@@ -54,6 +54,7 @@ if not logger.handlers:
     _initial_handler.setFormatter(_initial_formatter)
     logger.addHandler(_initial_handler)
     logger.setLevel(logging.INFO)
+logger.propagate = False
 # --- END FIX ---
 
 SIGNING_ENABLED = (

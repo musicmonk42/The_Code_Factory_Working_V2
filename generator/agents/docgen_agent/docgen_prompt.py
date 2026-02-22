@@ -1187,7 +1187,7 @@ class DocGenPromptAgent:
                 span.set_attribute("final_prompt_length", len(final_prompt_content))
                 span.set_attribute("final_prompt_tokens", prompt_tokens)
                 span.set_attribute("template_used", template_name)
-                span.set_status(Status(StatusCode.OK, "Prompt built successfully."))
+                span.set_status(Status(StatusCode.OK))
 
                 logger.info(
                     f"Prompt built successfully for {doc_type} (template: {template_name}). Tokens: {prompt_tokens}, Latency: {latency:.2f}s"
