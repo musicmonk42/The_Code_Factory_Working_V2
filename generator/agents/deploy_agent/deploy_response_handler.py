@@ -239,7 +239,7 @@ ERROR_FILENAME = "error.txt"
 # to these formats produces files that start with "!" — an invalid token for
 # Dockerfile parsers (parse error: unexpected '!') and YAML parsers alike.
 TECHNICAL_DEPLOY_FORMATS: frozenset = frozenset({
-    "dockerfile", "docker", "yaml", "kubernetes", "helm",
+    "docker", "yaml", "kubernetes", "helm",
     "json", "hcl", "terraform",
 })
 

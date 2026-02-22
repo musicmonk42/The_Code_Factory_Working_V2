@@ -595,14 +595,6 @@ class MarkdownPlugin(DocGenPlugin):
         found_sections = len(
             re.findall(r"^\s*#{1,6}\s+\S", content, re.MULTILINE)
         )
-        # Also count schema-listed sections for backwards-compatibility.
-        for section in required_sections:
-            if re.search(
-                rf"^\s*#{{1,6}}\s+{re.escape(section)}\s*$",
-                content,
-                re.IGNORECASE | re.MULTILINE,
-            ):
-                found_sections += 1
 
         if found_sections < min_sections:
             issues.append(
