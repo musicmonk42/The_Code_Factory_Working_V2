@@ -304,33 +304,49 @@ def validate_has_content(content: str, filename: str) -> Dict[str, Any]:
 
 
 def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[Dict[str, str]]:
-    """Extract API endpoints from code using regex.
-    
+    """Extract API endpoints from code using AST analysis (Python) or regex.
+
     Supports multiple languages and frameworks:
-    - Python: FastAPI, Flask decorators
+    - Python: FastAPI, Flask decorators (AST-based with regex fallback)
     - TypeScript/JavaScript: Express, NestJS, Fastify
     - Java: Spring Boot annotations
     - Go: standard http handlers
     """
     endpoints = []
-    
-    # Python patterns (FastAPI, Flask)
+
+    # For Python files, attempt AST-based extraction first.
+    if filename.endswith(".py") or (not filename and code_content.strip().startswith(("import ", "from ", "@", "def ", "class "))):
+        try:
+            from generator.utils.ast_endpoint_extractor import ASTEndpointExtractor
+            _ast_extractor = ASTEndpointExtractor()
+        except ImportError:
+            _ast_extractor = None
+
+        if _ast_extractor is not None:
+            try:
+                ast_results = _ast_extractor.extract_from_source(code_content, filename or "<string>")
+                if ast_results:
+                    return [{"method": ep["method"], "path": ep["path"]} for ep in ast_results]
+            except Exception:
+                pass  # fall through to regex
+
+    # Python patterns (FastAPI, Flask) — regex fallback
     python_patterns = [
         r'@\w+\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']',
         r'@route\s*\(\s*["\']([^"\']+)["\']',
     ]
-    
+
     # TypeScript/JavaScript route patterns
     ts_js_patterns = [
         r"""app\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",           # Express
         r"""router\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",        # Express Router
         r"""server\.(get|post|put|delete|patch)\s*\(\s*['"]([^'"]+)['"]""",       # Fastify
     ]
-    
+
     # NestJS decorator pattern (needs separate handling due to different capture group order)
     # Captures: (method_name, path) where method_name is the decorator (Get, Post, etc.)
     nestjs_pattern = r"""@(Get|Post|Put|Delete|Patch)\s*\(\s*['"]([^'"]+)['"]"""
-    
+
     # Determine which patterns to use based on file extension
     if filename.endswith(('.ts', '.js')):
         patterns = ts_js_patterns
@@ -340,7 +356,7 @@ def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[D
             endpoints.append({"method": method.upper(), "path": path})
     else:
         patterns = python_patterns
-    
+
     for pattern in patterns:
         matches = re.findall(pattern, code_content, re.IGNORECASE)
         for match in matches:
@@ -349,7 +365,7 @@ def extract_endpoints_from_code(code_content: str, filename: str = "") -> List[D
             else:
                 method, path = "GET", match
             endpoints.append({"method": method.upper(), "path": path})
-    
+
     return endpoints
 
 

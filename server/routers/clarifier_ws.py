@@ -381,6 +381,52 @@ class ClarifierWebSocketSession:
         self._answer_event.clear()
         return answers
 
+    async def send_questions_and_wait(
+        self, questions: List[str], timeout: float = SESSION_TIMEOUT_SECONDS
+    ) -> List[str]:
+        """Push *questions* into the session queue and wait for answers.
+
+        This coroutine combines :meth:`push_questions` and
+        :meth:`wait_for_answers` into a single call suitable for use by
+        ``WebPrompt`` when a live WebSocket client is connected.
+
+        Args:
+            questions: List of question strings to send to the client.
+            timeout: Maximum seconds to wait for the client's answers.
+
+        Returns:
+            A list of answer strings in the same order as *questions*.
+            Returns an empty list if the session times out or no answers
+            are received.
+        """
+        await self.push_questions(questions)
+        answers_dict = await self.wait_for_answers(timeout=timeout)
+        # Convert the dict (keyed by question index or text) to an ordered list
+        if not answers_dict:
+            return []
+        # If answers are keyed by integer index, return in order; otherwise
+        # preserve insertion order (Python 3.7+).
+        ordered: List[str] = []
+        for i, q in enumerate(questions):
+            key = str(i)
+            if key in answers_dict:
+                ordered.append(answers_dict[key])
+            elif q in answers_dict:
+                ordered.append(answers_dict[q])
+            else:
+                # This question has no matching answer key; stop ordered lookup
+                logger.debug(
+                    "No answer key found for question index %d in job %s; "
+                    "falling back to dict values",
+                    i,
+                    self.job_id,
+                )
+                break
+        if len(ordered) != len(questions):
+            # Fall back to raw dict values (best-effort positional ordering)
+            ordered = list(answers_dict.values())
+        return ordered
+
     def status(self) -> Dict[str, Any]:
         """Return a JSON-serialisable status snapshot."""
         return {
@@ -482,6 +528,19 @@ class ClarifierSessionRegistry:
 
 # Module-level singleton
 registry = ClarifierSessionRegistry()
+
+
+def get_clarifier_registry() -> ClarifierSessionRegistry:
+    """Return the module-level ``ClarifierSessionRegistry`` singleton.
+
+    Provides a stable import target for consumers that need to look up
+    live WebSocket sessions without importing the ``registry`` name
+    directly (which would bind at import time).
+
+    Returns:
+        The module-level ``ClarifierSessionRegistry`` instance.
+    """
+    return registry
 
 
 # ---------------------------------------------------------------------------

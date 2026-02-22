@@ -400,6 +400,16 @@ class MeshPolicyBackend:
         self.multi_fernet = multi_fernet
         self._version_counter = 0
 
+        # Optional GraphRAG policy reasoner — initialised if available.
+        try:
+            from self_fixing_engineer.mesh.graph_rag_policy import (  # noqa: PLC0415
+                GraphRAGPolicyReasoner,
+                GRAPH_RAG_AVAILABLE,
+            )
+            self._graph_reasoner = GraphRAGPolicyReasoner() if GRAPH_RAG_AVAILABLE else None
+        except Exception:
+            self._graph_reasoner = None
+
         if backend_type == "local":
             self.local_dir = Path(kwargs.get("local_dir", "policies"))
             self.local_dir.mkdir(parents=True, exist_ok=True)
@@ -725,6 +735,15 @@ class MeshPolicyBackend:
             if policy_data:
                 self._validate_policy_schema(policy_data)
                 self.policy_cache[cache_key] = policy_data
+                # Seed the graph reasoner with the freshly loaded policy.
+                if self._graph_reasoner is not None:
+                    try:
+                        policy_dict = dict(policy_data)
+                        if "id" not in policy_dict:
+                            policy_dict["id"] = policy_id
+                        self._graph_reasoner.add_policy(policy_dict)
+                    except Exception:
+                        pass  # graph seeding is best-effort
             return policy_data
         except Exception as e:
             await _dlq_policy_op("load", policy_id, e)
@@ -839,6 +858,58 @@ class MeshPolicyBackend:
         logger.info(
             "DLQ replay complete.", replayed=replayed_count, failed=failed_count
         )
+
+    def evaluate_policy(
+        self,
+        policy_id: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Evaluate a policy using GraphRAGPolicyReasoner when available.
+
+        Delegates to :class:`~self_fixing_engineer.mesh.graph_rag_policy.GraphRAGPolicyReasoner`
+        if it was successfully initialised; otherwise falls back to the flat
+        allow/deny list stored in the policy cache.
+
+        Args:
+            policy_id: The identifier of the policy to evaluate.
+            context: Optional context dict passed to the graph reasoner for
+                condition matching.
+
+        Returns:
+            A JSON-serialisable dict with keys compatible with
+            ``PolicyDecision``:
+            ``policy_id``, ``allowed``, ``explanation``,
+            ``evaluated_policies``, ``conflicts``, ``confidence``.
+        """
+        if self._graph_reasoner is not None:
+            try:
+                decision = self._graph_reasoner.evaluate_policy(policy_id, context)
+                return decision.model_dump()
+            except Exception as exc:
+                logger.warning(
+                    "GraphRAG policy evaluation failed, falling back to flat allow/deny",
+                    policy_id=policy_id,
+                    error=str(exc),
+                )
+
+        # Flat allow/deny fallback — synchronous check against cached policy data.
+        cache_key = f"{policy_id}:latest"
+        policy_data = self.policy_cache.get(cache_key) or {}
+        allowed_rules = policy_data.get("allow", [])
+        denied_rules = policy_data.get("deny", [])
+        allowed = bool(allowed_rules) and not denied_rules
+        explanation = (
+            f"Policy '{policy_id}' evaluated via flat allow/deny lists. "
+            f"allow={allowed_rules}, deny={denied_rules}."
+        )
+        return {
+            "policy_id": policy_id,
+            "allowed": allowed,
+            "explanation": explanation,
+            "evaluated_policies": [policy_id],
+            "conflicts": [],
+            "confidence": 1.0,
+        }
 
 
 class Policy:
