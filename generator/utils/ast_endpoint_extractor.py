@@ -1,38 +1,236 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """
-AST-Based Endpoint Extraction for FastAPI Applications
+ast_endpoint_extractor.py — AST-Based Endpoint Extraction for FastAPI Applications
 
-Walks the Python AST to find FastAPI/Starlette route decorators,
-resolves APIRouter prefixes, and traces include_router() calls to
-compute fully-qualified endpoint paths.
+This module provides a production-grade, observability-aware static analysis
+engine that walks the Python AST to discover FastAPI / Starlette route
+registrations.  It resolves ``APIRouter`` prefixes, traces
+``include_router()`` call chains, and produces fully-qualified endpoint
+metadata suitable for code-generation pipelines and OpenAPI enrichment.
 
-Industry Standards Applied:
-- Visitor Pattern: Uses ast.NodeVisitor for clean tree traversal
-- Single Responsibility Principle: Extraction logic isolated in one class
-- Defensive Programming: Graceful handling of unparseable source
-- Type Safety: Full type hints for better IDE support and runtime checking
+Key Features
+------------
+- **Visitor-Pattern AST Traversal:** Two-pass analysis (assignments → routes)
+  ensures router prefixes are resolved before endpoint paths are computed.
+- **Pydantic-Validated Results:** Each discovered endpoint is validated
+  through an ``EndpointInfo`` model before being returned, guaranteeing
+  schema conformance across downstream consumers.
+- **Prometheus Metrics:** Extraction count and duration are exported as
+  ``ast_endpoint_extraction_total`` and
+  ``ast_endpoint_extraction_duration_seconds`` for SRE dashboards.
+- **OpenTelemetry Tracing:** Every public method emits a span, enabling
+  distributed-trace correlation in code-generation workflows.
+- **Security Hardening:** Input size limits prevent denial-of-service via
+  excessively large source files, and path-traversal validation protects
+  the ``extract_from_file`` entry-point.
+- **Graceful Degradation:** Prometheus and OpenTelemetry are conditionally
+  imported; the module operates fully without either dependency installed.
+
+Industry Standards Applied
+--------------------------
+- **Visitor Pattern** (GoF) for clean, extensible tree traversal.
+- **Single Responsibility Principle** — extraction logic isolated in one class.
+- **Defensive Programming** — graceful handling of unparseable source.
+- **Type Safety** — full type hints for IDE support and runtime checking.
+- **Observability** — RED metrics (Rate, Errors, Duration) via Prometheus.
+- **Structured Validation** — Pydantic ``BaseModel`` for output contracts.
+
+Architecture
+------------
+::
+
+    ┌───────────────────┐
+    │  Python source    │
+    └────────┬──────────┘
+             │  ast.parse()
+             ▼
+    ┌───────────────────┐
+    │  Pass 1: collect  │  ← APIRouter / include_router prefixes
+    └────────┬──────────┘
+             ▼
+    ┌───────────────────┐
+    │  Pass 2: routes   │  ← decorated function definitions
+    └────────┬──────────┘
+             ▼
+    ┌───────────────────┐
+    │  EndpointInfo[]   │  ← validated Pydantic models → List[dict]
+    └───────────────────┘
 """
+
+from __future__ import annotations
 
 import ast
 import logging
-from typing import Any, Dict, List, Optional, Set
+import os
+import time
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Union
 
+# ---------------------------------------------------------------------------
+# Pydantic — required for structured result validation
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Prometheus — conditional import with no-op stubs
+# ---------------------------------------------------------------------------
+try:
+    from prometheus_client import Counter, Histogram
+
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    Counter = None  # type: ignore[assignment,misc]
+    Histogram = None  # type: ignore[assignment,misc]
+
+# Idempotent metric registration
+_extraction_total: Any = None
+_extraction_duration: Any = None
+
+if PROMETHEUS_AVAILABLE:
+    try:
+        _extraction_total = Counter(
+            "ast_endpoint_extraction_total",
+            "Total AST endpoint extraction operations",
+            ["status"],
+        )
+    except ValueError:
+        from prometheus_client import REGISTRY as _REGISTRY
+
+        _extraction_total = _REGISTRY._names_to_collectors.get(
+            "ast_endpoint_extraction_total"
+        )
+
+    try:
+        _extraction_duration = Histogram(
+            "ast_endpoint_extraction_duration_seconds",
+            "Duration of AST endpoint extraction operations in seconds",
+        )
+    except ValueError:
+        from prometheus_client import REGISTRY as _REGISTRY
+
+        _extraction_duration = _REGISTRY._names_to_collectors.get(
+            "ast_endpoint_extraction_duration_seconds"
+        )
+
+
+class _NoopMetric:
+    """Lightweight no-op stub that silently accepts any Prometheus-style call."""
+
+    def labels(self, *args: Any, **kwargs: Any) -> "_NoopMetric":
+        return self
+
+    def inc(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def observe(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+
+_NOOP = _NoopMetric()
+
+if _extraction_total is None:
+    _extraction_total = _NOOP
+if _extraction_duration is None:
+    _extraction_duration = _NOOP
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry — conditional import with NullTracer fallback
+# ---------------------------------------------------------------------------
+try:
+    from opentelemetry import trace
+
+    tracer = trace.get_tracer(__name__)
+    TRACING_AVAILABLE = True
+except ImportError:
+    TRACING_AVAILABLE = False
+
+    class NullContext:
+        """No-op context manager returned when OpenTelemetry is unavailable."""
+
+        def __enter__(self) -> "NullContext":
+            return self
+
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+            pass
+
+        def set_attribute(self, key: str, value: Any) -> None:
+            pass
+
+    class NullTracer:
+        """No-op tracer that mirrors the OpenTelemetry ``Tracer`` interface."""
+
+        def start_as_current_span(
+            self, name: str, *args: Any, **kwargs: Any
+        ) -> NullContext:
+            return NullContext()
+
+    tracer = NullTracer()  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Constants & configuration
+# ---------------------------------------------------------------------------
+
+#: Default maximum source size (bytes) accepted for parsing.
+DEFAULT_MAX_SOURCE_SIZE: int = 10 * 1024 * 1024  # 10 MB
+
 # HTTP methods recognised by FastAPI / Starlette
-_HTTP_METHODS: frozenset[str] = frozenset(
+_HTTP_METHODS: FrozenSet[str] = frozenset(
     {"get", "post", "put", "delete", "patch", "head", "options", "trace"}
 )
 
 # Names commonly used for FastAPI / APIRouter instances
-_APP_NAMES: frozenset[str] = frozenset({"app", "application"})
-_ROUTER_NAMES: frozenset[str] = frozenset({"router", "api_router"})
+_APP_NAMES: FrozenSet[str] = frozenset({"app", "application"})
+_ROUTER_NAMES: FrozenSet[str] = frozenset({"router", "api_router"})
+
+# ---------------------------------------------------------------------------
+# Pydantic result model
+# ---------------------------------------------------------------------------
+
+
+class EndpointInfo(BaseModel):
+    """Structured representation of a discovered FastAPI endpoint.
+
+    This model validates and normalises the metadata extracted from route
+    decorators.  The extractor constructs ``EndpointInfo`` instances
+    internally and converts them to plain dicts for backward-compatible
+    return values.
+
+    Attributes:
+        method: The HTTP method (upper-case, e.g. ``"GET"``).
+        path: The fully-qualified route path (e.g. ``"/api/v1/users"``).
+        function_name: The Python function or coroutine name.
+        line_number: The 1-based line number in the source file.
+
+    Examples:
+        >>> info = EndpointInfo(
+        ...     method="GET",
+        ...     path="/health",
+        ...     function_name="health_check",
+        ...     line_number=42,
+        ... )
+        >>> info.model_dump()
+        {'method': 'GET', 'path': '/health', 'function_name': 'health_check', 'line_number': 42}
+    """
+
+    method: str = Field(..., description="HTTP method (upper-case)")
+    path: str = Field(..., description="Fully-qualified route path")
+    function_name: str = Field(..., description="Handler function name")
+    line_number: int = Field(..., ge=1, description="Source line number")
+
+
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
 
 
 def _normalize_path(prefix: str, path: str) -> str:
-    """
-    Join a router prefix and a route path, ensuring exactly one leading
+    """Join a router prefix and a route path, ensuring exactly one leading
     slash and no duplicate slashes.
 
     Args:
@@ -60,8 +258,7 @@ def _normalize_path(prefix: str, path: str) -> str:
 
 
 def _resolve_string_node(node: ast.expr) -> Optional[str]:
-    """
-    Attempt to resolve an AST expression to a plain string.
+    """Attempt to resolve an AST expression to a plain string.
 
     Handles:
     - String constants  (``ast.Constant``)
@@ -86,9 +283,31 @@ def _resolve_string_node(node: ast.expr) -> Optional[str]:
     return None
 
 
-class ASTEndpointExtractor:
+def _validate_filepath(filepath: str) -> None:
+    """Validate that *filepath* does not contain path-traversal sequences.
+
+    Args:
+        filepath: The file path to validate.
+
+    Raises:
+        ValueError: If the path contains ``..`` components or null bytes.
     """
-    Extract FastAPI endpoints from Python source code using AST analysis.
+    if "\x00" in filepath:
+        raise ValueError("Filepath must not contain null bytes")
+    normalized = os.path.normpath(filepath)
+    if ".." in normalized.split(os.sep):
+        raise ValueError(
+            f"Path traversal detected in filepath: {filepath!r}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Main extractor class
+# ---------------------------------------------------------------------------
+
+
+class ASTEndpointExtractor:
+    """Extract FastAPI endpoints from Python source code using AST analysis.
 
     This class walks the abstract syntax tree of a Python module to discover
     route registrations made via decorators (``@app.get``, ``@router.post``,
@@ -96,10 +315,20 @@ class ASTEndpointExtractor:
     ``include_router(router, prefix=...)`` calls to produce fully-qualified
     endpoint paths.
 
+    The extractor is **stateless across calls** — internal bookkeeping is
+    reset at the start of each extraction so a single instance can be reused
+    safely.
+
     Industry Standards Applied:
-    - Visitor Pattern for clean, extensible tree traversal
-    - Defensive Programming with graceful error recovery
-    - Immutable internal state per extraction run
+        - **Visitor Pattern** for clean, extensible tree traversal.
+        - **Defensive Programming** with graceful error recovery.
+        - **Pydantic Validation** for output schema enforcement.
+        - **Observability** via Prometheus metrics and OpenTelemetry spans.
+
+    Args:
+        max_source_size: Maximum source-code size in bytes that will be
+            accepted for parsing.  Defaults to ``DEFAULT_MAX_SOURCE_SIZE``
+            (10 MB).  Set to ``0`` to disable the limit.
 
     Examples:
         >>> extractor = ASTEndpointExtractor()
@@ -116,11 +345,27 @@ class ASTEndpointExtractor:
         '/health'
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_source_size: int = DEFAULT_MAX_SOURCE_SIZE) -> None:
+        self._max_source_size: int = max_source_size
         # Per-run state — reset at the start of each extraction
         self._router_prefixes: Dict[str, str] = {}
         self._include_router_prefixes: Dict[str, str] = {}
         self._endpoints: List[Dict[str, Any]] = []
+
+    # ------------------------------------------------------------------
+    # Dunder methods
+    # ------------------------------------------------------------------
+
+    def __repr__(self) -> str:
+        return (
+            f"ASTEndpointExtractor(max_source_size={self._max_source_size!r})"
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"<ASTEndpointExtractor max_source_size="
+            f"{self._max_source_size} bytes>"
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -129,8 +374,13 @@ class ASTEndpointExtractor:
     def extract_from_source(
         self, source: str, filename: str = "<string>"
     ) -> List[Dict[str, Any]]:
-        """
-        Parse *source* as Python and return discovered FastAPI endpoints.
+        """Parse *source* as Python and return discovered FastAPI endpoints.
+
+        The method validates input size, parses the source into an AST, and
+        performs a two-pass analysis to resolve router prefixes before
+        extracting route metadata.  Each result is validated through the
+        ``EndpointInfo`` Pydantic model before being returned as a plain
+        dict for backward compatibility.
 
         Args:
             source: Python source code to analyse.
@@ -138,8 +388,11 @@ class ASTEndpointExtractor:
                 returned ``line_number`` context.
 
         Returns:
-            A list of endpoint dicts, each containing:
+            A list of endpoint dicts, each containing keys:
             ``method``, ``path``, ``function_name``, ``line_number``.
+
+        Raises:
+            ValueError: If *source* exceeds the configured maximum size.
 
         Examples:
             >>> ASTEndpointExtractor().extract_from_source(
@@ -147,7 +400,74 @@ class ASTEndpointExtractor:
             ... )
             [{'method': 'GET', 'path': '/items', 'function_name': 'list_items', 'line_number': 2}]
         """
+        with tracer.start_as_current_span(
+            "ASTEndpointExtractor.extract_from_source"
+        ) as span:
+            span.set_attribute("filename", filename)
+            span.set_attribute("source_size", len(source))
+
+            start = time.monotonic()
+            try:
+                result = self._do_extract_from_source(source, filename)
+                elapsed = time.monotonic() - start
+                _extraction_total.labels(status="success").inc()
+                _extraction_duration.observe(elapsed)
+                span.set_attribute("endpoint_count", len(result))
+                return result
+            except Exception:
+                elapsed = time.monotonic() - start
+                _extraction_total.labels(status="error").inc()
+                _extraction_duration.observe(elapsed)
+                raise
+
+    def extract_from_file(self, filepath: str) -> List[Dict[str, Any]]:
+        """Read a Python file from disk and return discovered FastAPI endpoints.
+
+        The filepath is validated against path-traversal attacks before
+        reading.  The file contents are then delegated to
+        :meth:`extract_from_source` for AST analysis.
+
+        Args:
+            filepath: Path to a ``.py`` file.
+
+        Returns:
+            A list of endpoint dicts (same schema as
+            :meth:`extract_from_source`).
+
+        Raises:
+            FileNotFoundError: If *filepath* does not exist.
+            PermissionError: If *filepath* cannot be read.
+            ValueError: If *filepath* contains path-traversal sequences or
+                the file contents exceed the configured maximum size.
+        """
+        with tracer.start_as_current_span(
+            "ASTEndpointExtractor.extract_from_file"
+        ) as span:
+            span.set_attribute("filepath", filepath)
+
+            _validate_filepath(filepath)
+            logger.debug("Reading source from %s", filepath)
+            with open(filepath, "r", encoding="utf-8") as fh:
+                source = fh.read()
+            return self.extract_from_source(source, filename=filepath)
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _do_extract_from_source(
+        self, source: str, filename: str
+    ) -> List[Dict[str, Any]]:
+        """Core extraction logic, separated from observability wrapper."""
         self._reset()
+
+        # --- Input validation ---
+        if self._max_source_size > 0 and len(source) > self._max_source_size:
+            raise ValueError(
+                f"Source size ({len(source)} bytes) exceeds maximum "
+                f"allowed size ({self._max_source_size} bytes) for "
+                f"{filename!r}"
+            )
 
         try:
             tree = ast.parse(source, filename=filename)
@@ -171,30 +491,6 @@ class ASTEndpointExtractor:
         )
         return list(self._endpoints)
 
-    def extract_from_file(self, filepath: str) -> List[Dict[str, Any]]:
-        """
-        Read a Python file from disk and return discovered FastAPI endpoints.
-
-        Args:
-            filepath: Path to a ``.py`` file.
-
-        Returns:
-            A list of endpoint dicts (same schema as
-            :meth:`extract_from_source`).
-
-        Raises:
-            FileNotFoundError: If *filepath* does not exist.
-            PermissionError: If *filepath* cannot be read.
-        """
-        logger.debug("Reading source from %s", filepath)
-        with open(filepath, "r", encoding="utf-8") as fh:
-            source = fh.read()
-        return self.extract_from_source(source, filename=filepath)
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _reset(self) -> None:
         """Clear per-run state."""
         self._router_prefixes = {}
@@ -204,8 +500,7 @@ class ASTEndpointExtractor:
     # -- Pass 1: assignments & include_router ---------------------------
 
     def _collect_assignments_and_includes(self, tree: ast.Module) -> None:
-        """
-        Walk top-level statements to populate ``_router_prefixes`` and
+        """Walk top-level statements to populate ``_router_prefixes`` and
         ``_include_router_prefixes``.
         """
         for node in ast.walk(tree):
@@ -272,7 +567,7 @@ class ASTEndpointExtractor:
                 self._process_function(node)
 
     def _process_function(
-        self, node: ast.FunctionDef | ast.AsyncFunctionDef
+        self, node: Union[ast.FunctionDef, ast.AsyncFunctionDef]
     ) -> None:
         """Check every decorator on *node* for route registrations."""
         for decorator in node.decorator_list:
@@ -283,11 +578,13 @@ class ASTEndpointExtractor:
     def _parse_route_decorator(
         self,
         decorator: ast.expr,
-        func_node: ast.FunctionDef | ast.AsyncFunctionDef,
+        func_node: Union[ast.FunctionDef, ast.AsyncFunctionDef],
     ) -> Optional[Dict[str, Any]]:
-        """
-        If *decorator* is a FastAPI route decorator, return an endpoint dict;
-        otherwise return ``None``.
+        """If *decorator* is a FastAPI route decorator, return an endpoint
+        dict; otherwise return ``None``.
+
+        The result is validated through ``EndpointInfo`` before being
+        converted to a plain dict.
         """
         # Decorators like @app.get("/path") are Call nodes whose func is
         # an Attribute node.
@@ -329,19 +626,19 @@ class ASTEndpointExtractor:
         )
         full_path = _normalize_path(prefix, path)
 
-        return {
-            "method": method_name.upper(),
-            "path": full_path,
-            "function_name": func_node.name,
-            "line_number": func_node.lineno,
-        }
+        info = EndpointInfo(
+            method=method_name.upper(),
+            path=full_path,
+            function_name=func_node.name,
+            line_number=func_node.lineno,
+        )
+        return info.model_dump()
 
     # -- Utility extractors ---------------------------------------------
 
     @staticmethod
     def _extract_route_path(call: Optional[ast.Call]) -> str:
-        """
-        Return the route path from a decorator call node.
+        """Return the route path from a decorator call node.
 
         Checks the first positional argument and the ``path`` keyword.
         Falls back to ``"/"`` when the path cannot be determined.
