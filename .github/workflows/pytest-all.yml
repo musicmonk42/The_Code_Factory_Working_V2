@@ -696,9 +696,9 @@ jobs:
             echo "  - Parallel workers: DISABLED (I/O-bound tests)"
           else
             # Other modules can use standard settings with reduced parallelism
-            # Limit to 4 workers to reduce memory pressure and prevent OOM
+            # Use 1 worker to minimize memory pressure and prevent OOM
             COVERAGE_ARGS="--cov=${{ matrix.module }} --cov-report=xml:coverage-${{ matrix.module }}.xml"
-            PYTEST_ARGS="-n 4 --dist loadscope"
+            PYTEST_ARGS="-n 1 --dist loadscope"
             TIMEOUT_VALUE=300
             IGNORE_ARGS=""
           fi
@@ -963,7 +963,7 @@ jobs:
           tail -200 test-output-sfe-arbiter.log || true
 
       - name: Upload Arbiter test artifacts
-        if: failure() && matrix.module == 'self_fixing_engineer'
+        if: always() && matrix.module == 'self_fixing_engineer'
         uses: actions/upload-artifact@v4
         with:
           name: arbiter-test-results-${{ github.run_id }}-${{ github.run_attempt }}
@@ -1305,6 +1305,15 @@ jobs:
           name: junit-${{ matrix.module }}
           path: junit-${{ matrix.module }}.xml
           retention-days: 7
+
+      - name: Upload test log artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-logs-${{ matrix.module }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-output-*.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   combine-coverage:
     name: Combine Coverage Reports
