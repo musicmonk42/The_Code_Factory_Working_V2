@@ -153,6 +153,8 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         (echo "ERROR: redis is not importable. Check SSL/network during pip install." && exit 1); \
         python -c "import sqlalchemy; print(f'✓ sqlalchemy {sqlalchemy.__version__} is installed')" || \
         (echo "ERROR: sqlalchemy is not importable. Check SSL/network during pip install." && exit 1); \
+        python -c "import pylint; print(f'✓ pylint {pylint.__version__} is installed')" || \
+        (echo "ERROR: pylint is not importable. Required for critique agent linting." && exit 1); \
         echo "========================================"; \
         echo "✓ All critical dependencies verified successfully"; \
         echo "========================================"; \

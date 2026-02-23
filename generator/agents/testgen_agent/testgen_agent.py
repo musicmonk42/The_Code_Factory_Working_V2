@@ -2340,32 +2340,65 @@ def test_{file_stem}_syntax_error_documentation():
                                 llm_response_from_generation.get("content", "")
                             )
                             if source_patches:
-                                await self._apply_source_patches(
-                                    source_patches, run_id, log_extra
-                                )
-                                # Reload affected files so subsequent validations see the
-                                # updated source, and update code_files in place.
-                                # Use the same key that was originally in code_files
-                                # (look up by the normalized path to ensure consistency).
-                                for patch_path in source_patches:
-                                    fp_cleaned = patch_path.lstrip("/")
-                                    full_path = (self.repo_path / fp_cleaned).resolve()
-                                    if full_path.is_file():
-                                        try:
-                                            async with aiofiles.open(full_path, "r", encoding="utf-8") as _f:
-                                                patched_content = await _f.read()
-                                            # Update under whichever key this file is tracked
-                                            # (prefer the original key, fall back to patch_path)
-                                            matching_key = next(
-                                                (k for k in code_files if k.lstrip("/") == fp_cleaned),
-                                                patch_path,
-                                            )
-                                            code_files[matching_key] = patched_content
-                                        except Exception as reload_err:
-                                            logger.warning(
-                                                f"Could not reload patched file {patch_path}: {reload_err}",
-                                                extra=log_extra,
-                                            )
+                                # P2: Validate that patch targets match the file identified
+                                # in the error traceback.  If the traceback clearly names a
+                                # specific source file and the LLM patch targets a *different*
+                                # file, skip the incorrect patch to avoid silent corruption.
+                                validated_patches: Dict[str, str] = {}
+                                for patch_path, patch_content in source_patches.items():
+                                    patch_basename = Path(patch_path).name
+                                    traceback_files = re.findall(
+                                        r'File "([^"]+\.py)"',
+                                        execution_errors_str,
+                                    )
+                                    traceback_basenames = {
+                                        Path(fp).name for fp in traceback_files
+                                    }
+                                    if (
+                                        traceback_basenames
+                                        and patch_basename not in traceback_basenames
+                                        # Only skip when the traceback unambiguously points
+                                        # to a single offending file; if multiple files are
+                                        # mentioned we cannot be certain the patch is wrong.
+                                        and len(traceback_basenames) == 1
+                                    ):
+                                        logger.warning(
+                                            "Skipping source patch for '%s': traceback "
+                                            "identifies '%s' as the offending file, not '%s'",
+                                            patch_path,
+                                            next(iter(traceback_basenames)),
+                                            patch_basename,
+                                            extra=log_extra,
+                                        )
+                                    else:
+                                        validated_patches[patch_path] = patch_content
+                                if validated_patches:
+                                    await self._apply_source_patches(
+                                        validated_patches, run_id, log_extra
+                                    )
+                                    # Reload affected files so subsequent validations see the
+                                    # updated source, and update code_files in place.
+                                    # Use the same key that was originally in code_files
+                                    # (look up by the normalized path to ensure consistency).
+                                    for patch_path in validated_patches:
+                                        fp_cleaned = patch_path.lstrip("/")
+                                        full_path = (self.repo_path / fp_cleaned).resolve()
+                                        if full_path.is_file():
+                                            try:
+                                                async with aiofiles.open(full_path, "r", encoding="utf-8") as _f:
+                                                    patched_content = await _f.read()
+                                                # Update under whichever key this file is tracked
+                                                # (prefer the original key, fall back to patch_path)
+                                                matching_key = next(
+                                                    (k for k in code_files if k.lstrip("/") == fp_cleaned),
+                                                    patch_path,
+                                                )
+                                                code_files[matching_key] = patched_content
+                                            except Exception as reload_err:
+                                                logger.warning(
+                                                    f"Could not reload patched file {patch_path}: {reload_err}",
+                                                    extra=log_extra,
+                                                )
                     except ValueError as e:
                         logger.warning(
                             f"Failed to parse LLM generated tests ({e}). Attempting self-healing.",

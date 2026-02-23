@@ -737,6 +737,71 @@ def _strip_markdown_fences(content: str) -> str:
     return content.strip()
 
 
+# Valid first tokens for a Python source file (any of these prefixes on the first
+# non-blank line means the content is already valid Python).
+_VALID_PYTHON_STARTS = (
+    "import ",
+    "from ",
+    "#",
+    '"""',
+    "'''",
+    "def ",
+    "async def ",
+    "class ",
+    "@",
+    "if ",
+    "try:",
+    "with ",
+    "raise ",
+    "pass",
+    "lambda ",
+    "__all__",
+    "__name__",
+    "__version__",
+    "__author__",
+)
+
+
+def _strip_non_python_preamble(content: str, filename: str = "") -> str:
+    """
+    Strip non-Python preamble lines from the start of a code string.
+
+    LLMs occasionally prefix generated Python files with natural-language text
+    such as ``(Refined)`` or ``Here is the refined code:`` that are not valid
+    Python and cause ``NameError`` or ``SyntaxError`` at import time.
+
+    The function advances past any leading lines that do not start with a
+    recognised Python token, stopping as soon as it encounters the first line
+    that looks like valid Python.  If no valid-Python line is found the original
+    content is returned unchanged so callers always receive *something*.
+
+    Args:
+        content: Raw code content (after markdown-fence stripping).
+        filename: Optional filename for log context.
+
+    Returns:
+        Content with non-Python preamble removed, or the original content if
+        no clearly-Python start line was found.
+    """
+    lines = content.splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(stripped.startswith(token) for token in _VALID_PYTHON_STARTS):
+            if i > 0:
+                logger.warning(
+                    "Stripped %d non-Python preamble line(s) from '%s': %r",
+                    i,
+                    filename or "<unknown>",
+                    lines[:i],
+                )
+                return "\n".join(lines[i:])
+            return content
+    # No valid Python start found – return as-is and let the caller handle it.
+    return content
+
+
 class DefaultResponseParser(ResponseParser):
     """
     Default implementation for parsing LLM responses containing test code.
@@ -815,6 +880,9 @@ class DefaultResponseParser(ResponseParser):
                 normalized_filename = normalize_test_filename(filename, language)
                 # FIX Issue 2: Strip markdown fences from code content
                 cleaned_content = _strip_markdown_fences(code_content.strip())
+                # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
+                if language == "python":
+                    cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
                 parsed_files[normalized_filename] = cleaned_content
 
             if parsed_files:
@@ -832,6 +900,9 @@ class DefaultResponseParser(ResponseParser):
                 normalized_filename = normalize_test_filename(filename, language)
                 # FIX Issue 2: Strip markdown fences from content
                 cleaned_content = _strip_markdown_fences(content.strip())
+                # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
+                if language == "python":
+                    cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
                 parsed_files[normalized_filename] = cleaned_content
 
             if parsed_files:
@@ -848,6 +919,9 @@ class DefaultResponseParser(ResponseParser):
             )
             # FIX Issue 2: Strip markdown fences from entire response
             cleaned_response = _strip_markdown_fences(response.strip())
+            # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
+            if language == "python":
+                cleaned_response = _strip_non_python_preamble(cleaned_response, single_filename)
             return {single_filename: cleaned_response}
 
         raise ValueError("Failed to parse LLM response using any available strategy.")

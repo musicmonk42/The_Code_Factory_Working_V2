@@ -107,6 +107,8 @@ services:
       - LLM_MAX_RETRIES=3
       - LLM_TEMPERATURE=0.7
       - TESTGEN_LLM_TIMEOUT=${TESTGEN_LLM_TIMEOUT:-300}  # Testgen-specific timeout (5 minutes)
+      # Maximum tokens for code-generation prompts (supports large README-driven specs)
+      - CODEGEN_MAX_PROMPT_TOKENS=${CODEGEN_MAX_PROMPT_TOKENS:-32000}
 
       # ============================================
       # Infrastructure — provided by Railway

@@ -106,10 +106,10 @@ def test_fallback_providers():
 
 
 def test_token_limit_increased():
-    """Test that MAX_PROMPT_TOKENS is set to 16000."""
+    """Test that MAX_PROMPT_TOKENS is set to at least 32000."""
     from generator.agents.codegen_agent.codegen_prompt import MAX_PROMPT_TOKENS
     
-    assert MAX_PROMPT_TOKENS == 16000, f"MAX_PROMPT_TOKENS should be 16000, got {MAX_PROMPT_TOKENS}"
+    assert MAX_PROMPT_TOKENS >= 32000, f"MAX_PROMPT_TOKENS should be at least 32000, got {MAX_PROMPT_TOKENS}"
 
 
 def test_api_key_redaction():

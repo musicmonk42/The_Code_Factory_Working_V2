@@ -68,6 +68,8 @@ services:
       - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      # Maximum tokens for code-generation prompts (supports large README-driven specs)
+      - CODEGEN_MAX_PROMPT_TOKENS=${CODEGEN_MAX_PROMPT_TOKENS:-32000}
 
       # Infrastructure — provided by Railway
       - REDIS_URL=${REDIS_URL}

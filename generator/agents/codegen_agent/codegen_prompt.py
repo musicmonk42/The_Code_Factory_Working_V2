@@ -185,7 +185,7 @@ def get_or_create_counter(name: str, description: str, labelnames=None):
 # ==============================================================================
 # --- Constants and Configuration ---
 # ==============================================================================
-MAX_PROMPT_TOKENS = 16000
+MAX_PROMPT_TOKENS = int(os.getenv("CODEGEN_MAX_PROMPT_TOKENS", "32000"))
 META_LLM_API_URL = "https://api.x.ai/v1/chat/completions"
 META_LLM_MODEL = "grok-1.5-sonnet"
 META_LLM_API_KEY = os.getenv("GROK_API_KEY")
@@ -383,6 +383,11 @@ The following are MANDATORY checks:
              In Pydantic v2, BaseSettings moved to the separate pydantic-settings package.
              Import it as: from pydantic_settings import BaseSettings  (NOT from pydantic import BaseSettings)
    Check PyPI for latest stable versions if unsure.
+
+5c. PYDANTIC V2 MIGRATION (CRITICAL - these v1 patterns raise TypeError/errors at runtime):
+   - NEVER use constr(regex=...) — this is Pydantic v1 syntax that raises TypeError in v2
+   - ALWAYS use constr(pattern=...) or Annotated[str, Field(pattern=...)] for regex validation
+   - NEVER use class Config: orm_mode = True — use model_config = ConfigDict(from_attributes=True)
 
 5b. README.md REQUIREMENTS (CRITICAL - PIPELINE WILL FAIL IF INCOMPLETE):
    ⚠️ IMPORTANT: The README.md is NOT optional and MUST NOT be a stub.
