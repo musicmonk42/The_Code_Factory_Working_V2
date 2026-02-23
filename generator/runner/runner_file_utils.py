@@ -179,24 +179,15 @@ try:
 except ImportError:
     # Fallbacks so this module is still importable even if runner_metrics
     # doesn't define these yet in this environment.
-
-    class _NoopMetric:
-        def labels(self, *_, **__):
-            return self
-
-        def inc(self, *_, **__):
-            return self
-
-        def observe(self, *_, **__):
-            return self
+    from shared.noop_metrics import NOOP as _noop_metric
 
     try:
         # If UTIL_ERRORS / UTIL_LATENCY exist but util_decorator does not.
         from runner.runner_metrics import UTIL_ERRORS, UTIL_LATENCY  # type: ignore
     except ImportError:
         # Nothing available: use safe no-op metrics.
-        UTIL_ERRORS = _NoopMetric()
-        UTIL_LATENCY = _NoopMetric()
+        UTIL_ERRORS = _noop_metric
+        UTIL_LATENCY = _noop_metric
 
     def util_decorator(name: str):
         """

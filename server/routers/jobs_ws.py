@@ -107,6 +107,8 @@ logger = logging.getLogger(__name__)
 # Prometheus — conditional import with no-op stubs (same pattern as clarifier_ws)
 # ---------------------------------------------------------------------------
 
+from shared.noop_metrics import NOOP as _NOOP, safe_metric as _safe_metric
+
 try:
     from prometheus_client import Counter, Histogram
 
@@ -115,40 +117,6 @@ except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
     Counter = None  # type: ignore[assignment,misc]
     Histogram = None  # type: ignore[assignment,misc]
-
-
-class _NoopMetric:
-    """Lightweight no-op stub that silently accepts any Prometheus-style call."""
-
-    def labels(self, *_args: Any, **_kwargs: Any) -> "_NoopMetric":
-        return self
-
-    def inc(self, *_args: Any, **_kwargs: Any) -> None:
-        pass
-
-    def observe(self, *_args: Any, **_kwargs: Any) -> None:
-        pass
-
-
-_NOOP = _NoopMetric()
-
-
-def _safe_metric(factory: Any, name: str, doc: str, labelnames: Optional[List[str]] = None) -> Any:
-    """Idempotent metric factory — returns ``_NOOP`` when Prometheus is absent."""
-    if not _PROMETHEUS_AVAILABLE or factory is None:
-        return _NOOP
-    kw: Dict[str, Any] = {}
-    if labelnames:
-        kw["labelnames"] = labelnames
-    try:
-        return factory(name, doc, **kw)
-    except ValueError:
-        try:
-            from prometheus_client import REGISTRY as _R
-
-            return _R._names_to_collectors.get(name, _NOOP)
-        except Exception:
-            return _NOOP
 
 
 _jobs_ws_connections_total: Any = _safe_metric(
@@ -185,25 +153,9 @@ try:
     _tracer = _otel_trace.get_tracer(__name__)
     _TRACING_AVAILABLE = True
 except ImportError:  # pragma: no cover
+    from shared.noop_tracing import NullTracer as _NullTracer  # noqa: E402
+
     _TRACING_AVAILABLE = False
-
-    class _NullSpan:
-        def __enter__(self) -> "_NullSpan":
-            return self
-
-        def __exit__(self, *_: Any) -> None:
-            pass
-
-        def set_attribute(self, *_: Any) -> None:
-            pass
-
-        def record_exception(self, *_: Any) -> None:
-            pass
-
-    class _NullTracer:
-        def start_as_current_span(self, *_: Any, **__: Any) -> _NullSpan:
-            return _NullSpan()
-
     _tracer = _NullTracer()  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------

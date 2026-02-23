@@ -396,19 +396,10 @@ async def log_audit_event(action: str, data: Dict[str, Any], **kwargs):
     except ImportError:
         # Fallback: Create dummy metrics if runner_metrics is unavailable
         # This happens during early initialization or in minimal environments
-        class DummyMetric:
-            """Stub metric for when Prometheus is unavailable."""
-            def labels(self, *a, **k):
-                return self
+        from shared.noop_metrics import NOOP as _noop_metric
 
-            def inc(self, *a, **k):
-                pass
-
-            def set(self, *a, **k):
-                pass
-
-        PROVENANCE_LOG_ENTRIES = DummyMetric()
-        ANOMALY_DETECTED_TOTAL = DummyMetric()
+        PROVENANCE_LOG_ENTRIES = _noop_metric
+        ANOMALY_DETECTED_TOTAL = _noop_metric
 
     # --- Pre-flight checks: Validate signing key configuration ---
     if not _DEFAULT_AUDIT_KEY_ID:

@@ -73,6 +73,8 @@ except ImportError:  # pragma: no cover
 # of the omnicore_engine package)
 # ---------------------------------------------------------------------------
 
+from shared.noop_metrics import NOOP as _NOOP, safe_metric as _safe_metric
+
 try:
     from prometheus_client import Counter, Histogram
 
@@ -81,43 +83,6 @@ except ImportError:  # pragma: no cover
     _PROMETHEUS_AVAILABLE = False
     Counter = None  # type: ignore[assignment,misc]
     Histogram = None  # type: ignore[assignment,misc]
-
-
-class _NoopMetric:
-    def labels(self, *_: Any, **__: Any) -> "_NoopMetric":
-        return self
-
-    def inc(self, *_: Any) -> None:
-        pass
-
-    def observe(self, *_: Any) -> None:
-        pass
-
-
-_NOOP: Any = _NoopMetric()
-
-
-def _safe_metric(
-    factory: Any,
-    name: str,
-    doc: str,
-    labelnames: Optional[List[str]] = None,
-) -> Any:
-    """Create a Prometheus metric idempotently; return ``_NOOP`` if unavailable."""
-    if not _PROMETHEUS_AVAILABLE or factory is None:
-        return _NOOP
-    kw: Dict[str, Any] = {}
-    if labelnames:
-        kw["labelnames"] = labelnames
-    try:
-        return factory(name, doc, **kw)
-    except ValueError:
-        try:
-            from prometheus_client import REGISTRY as _R
-
-            return _R._names_to_collectors.get(name, _NOOP)
-        except Exception:
-            return _NOOP
 
 
 _ring_get_shard_total: Any = _safe_metric(
