@@ -83,7 +83,7 @@ jobs:
       # Memory management settings for malloc to reduce memory fragmentation
       MALLOC_TRIM_THRESHOLD_: "100000"
       MALLOC_MMAP_THRESHOLD_: "131072"
-      LLM_API_KEY: "test-placeholder-key-for-ci"  # Prevents pydantic Config validation errors at module load time
+      LLM_API_KEY: "${{ secrets.LLM_API_KEY }}"  # Set in repository secrets to prevent pydantic Config validation errors at module load time
 
     steps:
       - name: Checkout code
