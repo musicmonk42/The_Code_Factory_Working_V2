@@ -38,12 +38,30 @@ from self_fixing_engineer.arbiter.policy import config as config_module
 
 @pytest.fixture(autouse=True)
 def reset_arbiter_config_singleton():
-    """Reset ArbiterConfig singleton and cache between tests for isolation."""
+    """Reset ArbiterConfig singleton and cache between tests for isolation.
+
+    IMPORTANT: This fixture ensures that each test starts with a clean singleton state,
+    preventing state leakage between tests when running in parallel with pytest-xdist.
+    """
+    # Store original instance to detect if it changed during test
+    original_instance = getattr(config_module, '_instance', None)
+
     # Reset before test
     config_module._instance = None
+
+    # Also reset any cached values that might exist in the module
+    if hasattr(config_module, '_lock'):
+        # Don't reset the lock itself, just ensure it's in a known state
+        pass
+
     yield
-    # Reset after test
+
+    # Reset after test - always set to None to ensure clean slate for next test
     config_module._instance = None
+
+    # Force garbage collection to clean up any lingering references
+    import gc
+    gc.collect()
 
 ########## Type Validation and Field Defaults ##########
 
