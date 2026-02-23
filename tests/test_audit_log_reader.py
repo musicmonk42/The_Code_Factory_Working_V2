@@ -1,18 +1,20 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """
-Tests for the unified audit log reader in server/routers/audit.py.
+Tests for the unified audit log router in server/routers/audit.py.
 
 Validates:
-- Simulation log path normalization (agentic_audit.jsonl included)
-- Arbiter encrypted-entry decryption and graceful error handling
+- All module queries are routed through OmniCoreService.route_job()
+  (no direct module imports, no direct file reads)
+- _query_via_omnicore() extracts the logs list from OmniCore's response
+- query_all_audit_logs() returns the correct aggregated structure
+- Graceful degradation when OmniCore is unavailable
 """
 
 import importlib.util
-import json
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -23,18 +25,21 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _load_audit_module():
-    """Load server/routers/audit.py by file path, bypassing __init__.py.
-
-    Pre-stubs the heavyweight top-level dependencies (fastapi, server.services)
-    so the module can be imported in lightweight test environments without the
-    full dependency stack installed.
-    """
+    """Load server/routers/audit.py by file path, bypassing __init__.py."""
     import types
 
     # Stub fastapi if not present
     if "fastapi" not in sys.modules:
         fastapi_stub = types.ModuleType("fastapi")
-        fastapi_stub.APIRouter = MagicMock
+        # Use a pass-through router stub so decorated functions remain callable
+        class _RouterStub:
+            def __init__(self, *a, **kw):
+                pass
+            def get(self, *a, **kw):
+                return lambda f: f
+            def post(self, *a, **kw):
+                return lambda f: f
+        fastapi_stub.APIRouter = _RouterStub
         fastapi_stub.Depends = lambda f: f
         fastapi_stub.HTTPException = Exception
         fastapi_stub.Query = lambda *a, **kw: None
@@ -44,16 +49,10 @@ def _load_audit_module():
     for mod_name in (
         "server",
         "server.services",
-        "server.services.generator_service",
         "server.services.omnicore_service",
     ):
         if mod_name not in sys.modules:
             sys.modules[mod_name] = types.ModuleType(mod_name)
-
-    svc = sys.modules["server.services.generator_service"]
-    if not hasattr(svc, "GeneratorService"):
-        svc.GeneratorService = MagicMock
-        svc.get_generator_service = MagicMock()
 
     omni = sys.modules["server.services.omnicore_service"]
     if not hasattr(omni, "OmniCoreService"):
@@ -64,7 +63,6 @@ def _load_audit_module():
     audit_path = project_root / "server" / "routers" / "audit.py"
     spec = importlib.util.spec_from_file_location("server.routers.audit", audit_path)
     mod = importlib.util.module_from_spec(spec)
-    # Register under its full dotted name so relative imports work
     sys.modules["server.routers.audit"] = mod
     spec.loader.exec_module(mod)
     return mod
@@ -74,295 +72,275 @@ def _load_audit_module():
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_simulation_entry(event_type: str = "agent_decision", event_id: str = "evt-1") -> str:
-    """Return a JSONL line matching the format written by the simulation/agentic logger."""
-    entry = {
-        "event": {
-            "event_type": event_type,
-            "event_id": event_id,
-            "timestamp": "2026-01-01T00:00:00Z",
-            "payload": {"action": "decide"},
-        },
-        "signature": "sig-abc",
-    }
-    return json.dumps(entry)
+def _make_omnicore_result(logs=None):
+    """Return a dict that mimics omnicore_service.route_job() response structure.
 
-
-def _make_arbiter_entry(job_id: str = "job-123", encrypt: bool = False) -> dict:
-    """Return a dict matching the format written by TamperEvidentLogger."""
-    details = {"job_id": job_id, "info": "some detail"}
-    if encrypt:
-        # Simulate what _encrypt_entry produces: details becomes a string token
-        details = "gAAAAABencryptedtoken=="
+    OmniCore wraps audit logs under ``result["data"]["logs"]``.
+    _query_via_omnicore() extracts that nested list, so tests must supply
+    this exact shape to exercise the extraction logic correctly.
+    """
     return {
-        "event_type": "bug_detected",
-        "timestamp": "2026-01-01T00:00:00Z",
-        "user_id": "arbiter_system",
-        "details": details,
-        "current_hash": "abc123",
-        "signature": None,
+        "job_id": "audit_query",
+        "routed": True,
+        "data": {"logs": logs or []},
     }
 
 
 # ---------------------------------------------------------------------------
-# Simulation log path tests
+# _query_via_omnicore tests
 # ---------------------------------------------------------------------------
 
-class TestSimulationLogPaths:
-    """Verify that _query_simulation_audit_logs reads agentic_audit.jsonl."""
+class TestQueryViaOmnicore:
+    """Verify that _query_via_omnicore delegates to omnicore_service.route_job."""
 
     @pytest.mark.asyncio
-    async def test_reads_agentic_audit_jsonl(self, tmp_path, monkeypatch):
-        """agentic_audit.jsonl should be picked up as a valid simulation log."""
+    async def test_routes_generator_to_generator_target(self):
+        """generator module should use target_module='generator'."""
         audit = _load_audit_module()
-        _query_simulation_audit_logs = audit._query_simulation_audit_logs
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result())
 
-        log_file = tmp_path / "agentic_audit.jsonl"
-        log_file.write_text(_make_simulation_entry() + "\n")
-
-        # Change working directory so relative paths resolve correctly
-        monkeypatch.chdir(tmp_path)
-
-        logs = await _query_simulation_audit_logs(
+        await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="generator",
             start_time=None, end_time=None,
             event_type=None, job_id=None, limit=10,
         )
 
-        assert len(logs) == 1
-        assert logs[0]["event_type"] == "agent_decision"
+        call_kwargs = mock_svc.route_job.call_args[1]
+        assert call_kwargs["target_module"] == "generator"
 
     @pytest.mark.asyncio
-    async def test_jsonl_preferred_over_log(self, tmp_path, monkeypatch):
-        """agentic_audit.jsonl should be chosen before agentic_audit.log."""
+    async def test_routes_sfe_modules_to_sfe_target(self):
+        """arbiter, testgen, simulation, guardrails → target_module='sfe'."""
         audit = _load_audit_module()
-        _query_simulation_audit_logs = audit._query_simulation_audit_logs
+        for mod in ("arbiter", "testgen", "simulation", "guardrails"):
+            mock_svc = MagicMock()
+            mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result())
 
-        jsonl_file = tmp_path / "agentic_audit.jsonl"
-        jsonl_file.write_text(_make_simulation_entry(event_type="from_jsonl") + "\n")
+            await audit._query_via_omnicore(
+                omnicore_service=mock_svc,
+                module=mod,
+                start_time=None, end_time=None,
+                event_type=None, job_id=None, limit=10,
+            )
 
-        log_file = tmp_path / "agentic_audit.log"
-        log_file.write_text(_make_simulation_entry(event_type="from_log") + "\n")
+            call_kwargs = mock_svc.route_job.call_args[1]
+            assert call_kwargs["target_module"] == "sfe", f"Wrong target for module={mod}"
 
-        monkeypatch.chdir(tmp_path)
+    @pytest.mark.asyncio
+    async def test_payload_contains_expected_fields(self):
+        """route_job payload should carry action, module, and filter parameters."""
+        audit = _load_audit_module()
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result())
 
-        logs = await _query_simulation_audit_logs(
+        await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="arbiter",
+            start_time="2026-01-01T00:00:00Z",
+            end_time="2026-12-31T00:00:00Z",
+            event_type="bug_detection",
+            job_id="job-999",
+            limit=50,
+        )
+
+        payload = mock_svc.route_job.call_args[1]["payload"]
+        assert payload["action"] == "query_audit_logs"
+        assert payload["module"] == "arbiter"
+        assert payload["start_time"] == "2026-01-01T00:00:00Z"
+        assert payload["end_time"] == "2026-12-31T00:00:00Z"
+        assert payload["event_type"] == "bug_detection"
+        assert payload["job_id"] == "job-999"
+        assert payload["limit"] == 50
+
+    @pytest.mark.asyncio
+    async def test_returns_logs_list_from_data(self):
+        """Extracts the logs list from result['data']['logs']."""
+        audit = _load_audit_module()
+        sample_logs = [{"timestamp": "2026-01-01T00:00:00Z", "event_type": "test"}]
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result(logs=sample_logs))
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="generator",
             start_time=None, end_time=None,
             event_type=None, job_id=None, limit=10,
         )
 
-        assert len(logs) == 1
-        assert logs[0]["event_type"] == "from_jsonl"
+        assert result == sample_logs
 
     @pytest.mark.asyncio
-    async def test_falls_back_to_legacy_log(self, tmp_path, monkeypatch):
-        """Falls back to agentic_audit.log when .jsonl is absent."""
+    async def test_returns_empty_list_when_data_has_no_logs(self):
+        """Returns [] when OmniCore returns data without a logs key."""
         audit = _load_audit_module()
-        _query_simulation_audit_logs = audit._query_simulation_audit_logs
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value={"job_id": "x", "data": {}})
 
-        log_file = tmp_path / "agentic_audit.log"
-        log_file.write_text(_make_simulation_entry(event_type="legacy_event") + "\n")
-
-        monkeypatch.chdir(tmp_path)
-
-        logs = await _query_simulation_audit_logs(
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="testgen",
             start_time=None, end_time=None,
             event_type=None, job_id=None, limit=10,
         )
 
-        assert len(logs) == 1
-        assert logs[0]["event_type"] == "legacy_event"
+        assert result == []
 
     @pytest.mark.asyncio
-    async def test_returns_empty_when_no_log_files(self, tmp_path, monkeypatch):
-        """Returns empty list when no simulation log files are found."""
+    async def test_returns_empty_list_when_omnicore_service_is_none(self):
+        """Returns [] without calling route_job when omnicore_service is None."""
         audit = _load_audit_module()
-        _query_simulation_audit_logs = audit._query_simulation_audit_logs
 
-        monkeypatch.chdir(tmp_path)
-
-        logs = await _query_simulation_audit_logs(
+        result = await audit._query_via_omnicore(
+            omnicore_service=None,
+            module="simulation",
             start_time=None, end_time=None,
             event_type=None, job_id=None, limit=10,
         )
 
-        assert logs == []
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_uses_job_id_as_route_job_job_id(self):
+        """When job_id is provided it is passed as the route_job job_id."""
+        audit = _load_audit_module()
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result())
+
+        await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="generator",
+            start_time=None, end_time=None,
+            event_type=None, job_id="my-job",
+            limit=10,
+        )
+
+        assert mock_svc.route_job.call_args[1]["job_id"] == "my-job"
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_audit_query_when_no_job_id(self):
+        """When job_id is None, route_job is called with job_id='audit_query'."""
+        audit = _load_audit_module()
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value=_make_omnicore_result())
+
+        await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="guardrails",
+            start_time=None, end_time=None,
+            event_type=None, job_id=None,
+            limit=10,
+        )
+
+        assert mock_svc.route_job.call_args[1]["job_id"] == "audit_query"
 
 
 # ---------------------------------------------------------------------------
-# Arbiter decryption tests
+# query_all_audit_logs aggregation tests
 # ---------------------------------------------------------------------------
 
-class TestArbiterDecryption:
-    """Verify that _query_arbiter_audit_logs decrypts entries and handles errors."""
+class TestQueryAllAuditLogsAggregation:
+    """Verify end-to-end aggregation in query_all_audit_logs."""
 
-    def _setup_arbiter_mock(self, audit_module, mock_logger):
-        """Inject mock TamperEvidentLogger into sys.modules for inner imports."""
-        import types
-        arbiter_audit_mod = types.ModuleType("self_fixing_engineer.arbiter.audit_log")
-        arbiter_audit_mod.TamperEvidentLogger = MagicMock()
-        arbiter_audit_mod.TamperEvidentLogger.get_instance.return_value = mock_logger
-        arbiter_audit_mod.AuditLoggerConfig = MagicMock()
-        sys.modules["self_fixing_engineer.arbiter.audit_log"] = arbiter_audit_mod
-        return arbiter_audit_mod
+    def _make_service(self, logs_per_module=None):
+        """Create a mock OmniCoreService that returns logs for each module."""
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(
+            return_value=_make_omnicore_result(logs=logs_per_module or [])
+        )
+        mock_svc.get_audit_trail = AsyncMock(return_value=[])
+        return mock_svc
 
     @pytest.mark.asyncio
-    async def test_reads_plaintext_entries(self, tmp_path, monkeypatch):
-        """Plain-text (non-encrypted) arbiter entries are parsed correctly."""
+    async def test_all_six_modules_queried_by_default(self):
+        """Without a module filter all six modules appear in modules_queried."""
         audit = _load_audit_module()
-        _query_arbiter_audit_logs = audit._query_arbiter_audit_logs
+        mock_svc = self._make_service()
 
-        log_file = tmp_path / "audit_log.jsonl"
-        log_file.write_text(json.dumps(_make_arbiter_entry(job_id="job-999")) + "\n")
-
-        mock_logger = MagicMock()
-        mock_config = MagicMock()
-        mock_config.log_path = str(log_file)
-        mock_logger.config = mock_config
-        mock_logger._decrypt_entry = lambda e: e
-
-        self._setup_arbiter_mock(audit, mock_logger)
-
-        monkeypatch.chdir(tmp_path)
-        logs = await _query_arbiter_audit_logs(
-            start_time=None, end_time=None,
-            event_type=None, job_id=None, limit=10,
+        result = await audit.query_all_audit_logs(
+            module=None, event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=mock_svc,
         )
 
-        assert len(logs) == 1
-        assert logs[0]["job_id"] == "job-999"
-        assert logs[0]["event_type"] == "bug_detected"
+        assert set(result["modules_queried"]) == {
+            "generator", "arbiter", "testgen", "simulation", "omnicore", "guardrails"
+        }
 
     @pytest.mark.asyncio
-    async def test_decryption_called_on_each_entry(self, tmp_path, monkeypatch):
-        """_decrypt_entry is called for every log entry read."""
+    async def test_single_module_filter(self):
+        """When module='generator' only generator is queried."""
         audit = _load_audit_module()
-        _query_arbiter_audit_logs = audit._query_arbiter_audit_logs
+        mock_svc = self._make_service()
 
-        entries = [_make_arbiter_entry(job_id=f"job-{i}") for i in range(3)]
-        log_file = tmp_path / "audit_log.jsonl"
-        log_file.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
-
-        mock_logger = MagicMock()
-        mock_config = MagicMock()
-        mock_config.log_path = str(log_file)
-        mock_logger.config = mock_config
-        decrypt_calls = []
-
-        def fake_decrypt(entry):
-            decrypt_calls.append(entry)
-            return entry
-
-        mock_logger._decrypt_entry = fake_decrypt
-
-        self._setup_arbiter_mock(audit, mock_logger)
-
-        monkeypatch.chdir(tmp_path)
-        logs = await _query_arbiter_audit_logs(
-            start_time=None, end_time=None,
-            event_type=None, job_id=None, limit=10,
+        result = await audit.query_all_audit_logs(
+            module="generator", event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=mock_svc,
         )
 
-        assert len(decrypt_calls) == 3
-        assert len(logs) == 3
+        assert result["modules_queried"] == ["generator"]
 
     @pytest.mark.asyncio
-    async def test_decryption_error_preserved_and_processing_continues(
-        self, tmp_path, monkeypatch
-    ):
-        """When _decrypt_entry raises, the entry is preserved and remaining entries still processed."""
+    async def test_logs_are_tagged_with_module_name(self):
+        """Each returned log entry carries a 'module' field."""
         audit = _load_audit_module()
-        _query_arbiter_audit_logs = audit._query_arbiter_audit_logs
+        sample_log = {"timestamp": "2026-01-01T00:00:00Z", "event_type": "x"}
+        mock_svc = self._make_service(logs_per_module=[sample_log])
 
-        entry1 = _make_arbiter_entry(job_id="job-fail", encrypt=True)
-        entry2 = _make_arbiter_entry(job_id="job-ok")
-
-        log_file = tmp_path / "audit_log.jsonl"
-        log_file.write_text(json.dumps(entry1) + "\n" + json.dumps(entry2) + "\n")
-
-        call_count = {"n": 0}
-
-        def flaky_decrypt(entry):
-            call_count["n"] += 1
-            if call_count["n"] == 1:
-                raise ValueError("Simulated decryption failure")
-            return entry
-
-        mock_logger = MagicMock()
-        mock_config = MagicMock()
-        mock_config.log_path = str(log_file)
-        mock_logger.config = mock_config
-        mock_logger._decrypt_entry = flaky_decrypt
-
-        self._setup_arbiter_mock(audit, mock_logger)
-
-        monkeypatch.chdir(tmp_path)
-        logs = await _query_arbiter_audit_logs(
-            start_time=None, end_time=None,
-            event_type=None, job_id=None, limit=10,
+        result = await audit.query_all_audit_logs(
+            module="arbiter", event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=mock_svc,
         )
 
-        # Both entries should still be present (first one uses original entry dict)
-        assert len(logs) == 2
-        job_ids = {log["job_id"] for log in logs}
-        assert "job-ok" in job_ids
+        assert result["aggregated_logs"][0]["module"] == "arbiter"
 
     @pytest.mark.asyncio
-    async def test_encrypted_details_field_is_handled_gracefully(
-        self, tmp_path, monkeypatch
-    ):
-        """Entries with a string details field (encrypted but not decryptable) don't crash."""
+    async def test_graceful_degradation_when_omnicore_none(self):
+        """Returns a well-formed error response when omnicore_service is None."""
         audit = _load_audit_module()
-        _query_arbiter_audit_logs = audit._query_arbiter_audit_logs
 
-        entry = _make_arbiter_entry(encrypt=True)  # details is a string
-        log_file = tmp_path / "audit_log.jsonl"
-        log_file.write_text(json.dumps(entry) + "\n")
-
-        mock_logger = MagicMock()
-        mock_config = MagicMock()
-        mock_config.log_path = str(log_file)
-        mock_logger.config = mock_config
-        mock_logger._decrypt_entry = lambda e: e
-
-        self._setup_arbiter_mock(audit, mock_logger)
-
-        monkeypatch.chdir(tmp_path)
-        logs = await _query_arbiter_audit_logs(
-            start_time=None, end_time=None,
-            event_type=None, job_id=None, limit=10,
+        result = await audit.query_all_audit_logs(
+            module=None, event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=None,
         )
 
-        # Entry is returned; details falls back to empty dict since it's a string
-        assert len(logs) == 1
-        assert logs[0]["details"] == {}
-        assert logs[0]["job_id"] is None
+        assert result["aggregated_logs"] == []
+        assert result["total_count"] == 0
+        assert result["errors"] is not None
 
     @pytest.mark.asyncio
-    async def test_job_id_filter_works_after_decryption(self, tmp_path, monkeypatch):
-        """job_id filter correctly applies to decrypted details."""
+    async def test_response_shape_preserved(self):
+        """Response always contains the documented keys."""
         audit = _load_audit_module()
-        _query_arbiter_audit_logs = audit._query_arbiter_audit_logs
+        mock_svc = self._make_service()
 
-        entries = [
-            _make_arbiter_entry(job_id="job-match"),
-            _make_arbiter_entry(job_id="job-other"),
-        ]
-        log_file = tmp_path / "audit_log.jsonl"
-        log_file.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
-
-        mock_logger = MagicMock()
-        mock_config = MagicMock()
-        mock_config.log_path = str(log_file)
-        mock_logger.config = mock_config
-        mock_logger._decrypt_entry = lambda e: e
-
-        self._setup_arbiter_mock(audit, mock_logger)
-
-        monkeypatch.chdir(tmp_path)
-        logs = await _query_arbiter_audit_logs(
-            start_time=None, end_time=None,
-            event_type=None, job_id="job-match", limit=10,
+        result = await audit.query_all_audit_logs(
+            module=None, event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=mock_svc,
         )
 
-        assert len(logs) == 1
-        assert logs[0]["job_id"] == "job-match"
+        for key in ("aggregated_logs", "total_count", "modules_queried", "metadata"):
+            assert key in result, f"Missing key: {key}"
+        for meta_key in ("query_timestamp", "module_filter", "event_type_filter",
+                         "job_id_filter", "start_time", "end_time", "limit"):
+            assert meta_key in result["metadata"], f"Missing metadata key: {meta_key}"
+
+    @pytest.mark.asyncio
+    async def test_no_direct_module_imports_in_route_job_calls(self):
+        """route_job source_module is always 'api'."""
+        audit = _load_audit_module()
+        mock_svc = self._make_service()
+
+        await audit.query_all_audit_logs(
+            module="simulation", event_type=None, job_id=None,
+            start_time=None, end_time=None, limit=10,
+            omnicore_service=mock_svc,
+        )
+
+        for call in mock_svc.route_job.call_args_list:
+            assert call[1]["source_module"] == "api"
