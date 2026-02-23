@@ -125,6 +125,34 @@ class TestValidatePydanticV2Compatibility:
         errors = self._validate(files)
         assert any("class Config" in err for err in errors)
 
+    def test_detect_field_regex_kwarg(self):
+        """Field(regex=...) should be flagged as a Pydantic v1 compatibility issue."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, Field\n\n"
+                "class User(BaseModel):\n"
+                "    name: str = Field(..., regex='^[a-z]+$')\n"
+            )
+        }
+        errors = self._validate(files)
+        assert any("regex=" in err for err in errors), (
+            f"Expected error about regex= kwarg, got: {errors}"
+        )
+
+    def test_detect_constr_regex_kwarg(self):
+        """constr(regex=...) should be flagged as a Pydantic v1 compatibility issue."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, constr\n\n"
+                "class Item(BaseModel):\n"
+                "    code: str = constr(regex='^[A-Z]{3}$')\n"
+            )
+        }
+        errors = self._validate(files)
+        assert any("regex=" in err for err in errors), (
+            f"Expected error about regex= kwarg in constr(), got: {errors}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # auto_fix_pydantic_v1_imports
@@ -295,6 +323,47 @@ class TestAutoFixPydanticV1Imports:
         content = fixed["schemas.py"]
         assert "@model_validator(mode='before')" in content
         assert "@root_validator" not in content
+
+    def test_fix_field_regex_to_pattern(self):
+        """Field(..., regex='...') should be rewritten to Field(..., pattern='...')."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, Field\n\n"
+                "class User(BaseModel):\n"
+                "    name: str = Field(..., regex='^[a-z]+$')\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "pattern='^[a-z]+$'" in content, f"Expected pattern= in:\n{content}"
+        assert "regex='^[a-z]+$'" not in content, f"Unexpected regex= in:\n{content}"
+
+    def test_fix_constr_regex_to_pattern(self):
+        """constr(regex='...') should be rewritten to constr(pattern='...')."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, constr\n\n"
+                "class Item(BaseModel):\n"
+                "    code: str = constr(regex='^[A-Z]{3}$')\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "pattern='^[A-Z]{3}$'" in content, f"Expected pattern= in:\n{content}"
+        assert "regex='^[A-Z]{3}$'" not in content, f"Unexpected regex= in:\n{content}"
+
+    def test_fix_regex_and_validate_roundtrip(self):
+        """After fixing regex= to pattern=, the validator should report no errors."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel, Field\n\n"
+                "class User(BaseModel):\n"
+                "    name: str = Field(..., regex='^[a-z]+$')\n"
+            )
+        }
+        fixed = self._fix(files)
+        errors = self._validate(fixed)
+        assert errors == [], f"Expected no errors after fixing regex=, got: {errors}"
 
 
 class TestParseLLMResponsePydanticV2Validation:

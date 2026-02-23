@@ -3195,7 +3195,7 @@ class OmniCoreService:
                                 error_count += 1
                                 logger.warning(
                                     f"[CODEGEN] Failed to auto-fix imports in {filename}: {fix_result['message']}",
-                                    extra={"job_id": job_id, "filename": filename, "error": fix_result["message"]}
+                                    extra={"job_id": job_id, "source_file": filename, "error": fix_result["message"]}
                                 )
                                 continue
                             
@@ -3210,7 +3210,7 @@ class OmniCoreService:
                                     f"[CODEGEN] Auto-fixed imports in {filename}: {', '.join(fixes_applied)}",
                                     extra={
                                         "job_id": job_id,
-                                        "filename": filename,
+                                        "source_file": filename,
                                         "fixes": fixes_applied,
                                         "fix_count": len(fixes_applied)
                                     }
@@ -3221,7 +3221,7 @@ class OmniCoreService:
                             logger.warning(
                                 f"[CODEGEN] Exception while fixing imports in {filename}: {file_err}",
                                 exc_info=True,
-                                extra={"job_id": job_id, "filename": filename, "error": str(file_err)}
+                                extra={"job_id": job_id, "source_file": filename, "error": str(file_err)}
                             )
                     
                     # Summary logging for observability
@@ -6730,9 +6730,10 @@ class OmniCoreService:
                             # Get required files list
                             md_content = payload.get("readme_content", payload.get("requirements", ""))
                             required_files = ["requirements.txt"]
+                            spec_files = []
                             if md_content:
                                 try:
-                                    spec_files = _extract_required_files_from_md(md_content, target_language=target_lang)
+                                    spec_files = _extract_required_files_from_md(md_content, target_language=target_lang) or []
                                     if spec_files:
                                         existing = set(required_files)
                                         required_files.extend(sf for sf in spec_files if sf not in existing)
@@ -6818,6 +6819,52 @@ class OmniCoreService:
                                     
                                     # Continue to next attempt
                                     continue
+
+                            # Low file count check: retry if generated files are < 30% of spec-required
+                            # This catches cases where codegen "succeeds" but only generates a fraction of files
+                            _CODEGEN_MIN_FILE_RATIO = 0.30
+                            if spec_files and codegen_attempt <= max_codegen_retries and validation_passed:
+                                output_dir_path = Path(output_path_for_validation)
+                                if output_dir_path.exists():
+                                    # Collect all generated file names once to avoid O(n*m) rglob calls
+                                    generated_file_names = {
+                                        f.name for f in output_dir_path.rglob("*") if f.is_file()
+                                    }
+                                    generated_count = len(generated_file_names)
+                                    spec_required_count = len(spec_files)
+                                    if spec_required_count > 0 and generated_count < _CODEGEN_MIN_FILE_RATIO * spec_required_count:
+                                        validation_passed = False
+                                        missing_spec_files = [
+                                            sf for sf in spec_files
+                                            if sf not in generated_file_names
+                                        ]
+                                        logger.warning(
+                                            f"[PIPELINE] Job {job_id} generated only {generated_count} files "
+                                            f"but spec requires ~{spec_required_count} ({attempt_label}). "
+                                            f"Retrying with missing-file feedback.",
+                                            extra={"job_id": job_id, "attempt": codegen_attempt,
+                                                   "generated_count": generated_count,
+                                                   "spec_required_count": spec_required_count}
+                                        )
+                                        previous_error = {
+                                            "error_type": "InsufficientOutput",
+                                            "details": (
+                                                f"Only {generated_count} of ~{spec_required_count} required files were generated."
+                                            ),
+                                            "instruction": (
+                                                "Previous generation was incomplete. "
+                                                f"Missing required files: {missing_spec_files[:20]}. "
+                                                "Please generate ALL specified files and endpoints."
+                                            ),
+                                        }
+                                        try:
+                                            shutil.rmtree(str(output_dir_path))
+                                            logger.info(f"[PIPELINE] Job {job_id} cleaned up incomplete output for retry")
+                                        except Exception as _cleanup_err:
+                                            logger.warning(f"[PIPELINE] Job {job_id} cleanup error: {_cleanup_err}")
+                                        if "codegen" in stages_completed:
+                                            stages_completed.remove("codegen")
+                                        continue
                         except Exception as val_err:
                             logger.warning(f"[PIPELINE] Job {job_id} validation check error: {val_err}")
                             # On validation error, assume success and break (fail-open for safety)
@@ -6865,7 +6912,7 @@ class OmniCoreService:
                                                 error_count += 1
                                                 logger.warning(
                                                     f"[CODEGEN] Failed to auto-fix imports in source file {src_file.name}: {fix_result['message']}",
-                                                    extra={"job_id": job_id, "filename": str(src_file), "error": fix_result["message"]}
+                                                    extra={"job_id": job_id, "source_file": str(src_file), "error": fix_result["message"]}
                                                 )
                                                 continue
                                             
@@ -6879,7 +6926,7 @@ class OmniCoreService:
                                                     f"[CODEGEN] Auto-fixed imports in source file {src_file.name}: {', '.join(fixes_applied)}",
                                                     extra={
                                                         "job_id": job_id,
-                                                        "filename": str(src_file),
+                                                        "source_file": str(src_file),
                                                         "fixes": fixes_applied,
                                                         "fix_count": len(fixes_applied)
                                                     }
@@ -6889,7 +6936,7 @@ class OmniCoreService:
                                             logger.warning(
                                                 f"[CODEGEN] Exception while fixing imports in source file {src_file.name}: {file_err}",
                                                 exc_info=True,
-                                                extra={"job_id": job_id, "filename": str(src_file), "error": str(file_err)}
+                                                extra={"job_id": job_id, "source_file": str(src_file), "error": str(file_err)}
                                             )
                                     
                                     if fixed_count > 0:
@@ -7557,7 +7604,7 @@ class OmniCoreService:
                                                             error_count += 1
                                                             logger.warning(
                                                                 f"[TESTGEN] Failed to auto-fix imports in test file {test_file.name}: {fix_result['message']}",
-                                                                extra={"job_id": job_id, "filename": str(test_file), "error": fix_result["message"]}
+                                                                extra={"job_id": job_id, "source_file": str(test_file), "error": fix_result["message"]}
                                                             )
                                                             continue
                                                         
@@ -7573,7 +7620,7 @@ class OmniCoreService:
                                                                 f"[TESTGEN] Auto-fixed imports in test file {test_file.name}: {', '.join(fixes_applied)}",
                                                                 extra={
                                                                     "job_id": job_id,
-                                                                    "filename": str(test_file),
+                                                                    "source_file": str(test_file),
                                                                     "fixes": fixes_applied,
                                                                     "fix_count": len(fixes_applied)
                                                                 }
@@ -7583,7 +7630,7 @@ class OmniCoreService:
                                                         logger.warning(
                                                             f"[TESTGEN] Exception while fixing imports in test file {test_file.name}: {file_err}",
                                                             exc_info=True,
-                                                            extra={"job_id": job_id, "filename": str(test_file), "error": str(file_err)}
+                                                            extra={"job_id": job_id, "source_file": str(test_file), "error": str(file_err)}
                                                         )
                                                 
                                                 # Summary logging
