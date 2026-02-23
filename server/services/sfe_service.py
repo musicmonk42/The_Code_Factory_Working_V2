@@ -305,13 +305,20 @@ class SFEService:
                     )
                     return str(path)
 
-        # If not in metadata, check standard locations
-        uploads_dir = Path("./uploads")
-        job_base = uploads_dir / job_id
+        # If not in metadata, check standard locations in priority order
+        candidate_roots = [
+            Path("./uploads"),
+            Path("./workspace"),
+            Path("/tmp/jobs"),
+            Path("/tmp/codegen"),
+        ]
+        for candidate_root in candidate_roots:
+            job_base = candidate_root / job_id
+            if not job_base.exists():
+                continue
 
-        if job_base.exists():
             # Check standard subdirectories
-            for subdir_name in ["generated", "output"]:
+            for subdir_name in ["generated", "output", "artifacts"]:
                 subdir = job_base / subdir_name
                 if subdir.exists():
                     # Look for project subdirectories
@@ -333,7 +340,7 @@ class SFEService:
                         logger.info(f"Resolved job {job_id} path to: {resolved_path}")
                         return resolved_path
 
-            # If no generated/ or output/, use job_base directly
+            # If no generated/ or output/ subdirectory, use job_base directly
             logger.info(f"Resolved job {job_id} path to job base: {job_base}")
             return str(job_base)
 
@@ -1057,6 +1064,10 @@ class SFEService:
                 data = result["data"]
                 issues = data.get("issues", [])
                 self._populate_errors_cache(issues, job_id)
+                # Ensure the response contains the executive summary fields expected by the UI
+                if "severity_breakdown" not in data or "top_affected_files" not in data:
+                    executive_summary = self._compute_executive_summary(issues)
+                    data = {**data, **executive_summary}
                 # Write analysis report to disk so the GET endpoint can serve it
                 try:
                     resolved_code_path = self._resolve_job_code_path(job_id, ".")
@@ -1069,14 +1080,15 @@ class SFEService:
 
         # Fallback - return empty results instead of fake issues
         logger.warning("Neither direct SFE nor OmniCore available, code analysis unavailable")
+        empty_summary = self._compute_executive_summary([])
         return {
             "job_id": job_id,
             "code_path": code_path,
             "issues_found": 0,
             "issues": [],
-            "severity": {"critical": 0, "high": 0, "medium": 0, "low": 0},
             "source": "fallback",
             "note": "Code analysis unavailable. OmniCore service and SFE CodebaseAnalyzer are not available. Please configure LLM API keys or enable SFE components.",
+            **empty_summary,
         }
 
     async def detect_errors(self, job_id: str) -> Dict[str, Any]:
@@ -1261,6 +1273,73 @@ class SFEService:
                 "line": 0,
             }
         ]
+
+    def _calculate_fix_confidence(
+        self,
+        error_type: str,
+        severity: str,
+        fix_action: str,
+        proposed_changes: List[Dict[str, Any]],
+    ) -> float:
+        """
+        Calculate a dynamic confidence score for a proposed fix.
+
+        The score is based on:
+        - Fix type: pattern-matched fixes (import, security) score higher than
+          heuristic/generic fixes.
+        - Severity: critical/high issues are harder to fix automatically, so
+          confidence is slightly lower unless the fix type is a known pattern.
+        - Fix action: concrete mutations (insert, replace) score higher than
+          informational hints.
+        - Completeness: having at least one proposed change boosts confidence.
+
+        Returns:
+            Confidence value in [0.0, 1.0]
+        """
+        error_type_lower = error_type.lower()
+
+        # Base confidence by fix category.
+        # These values reflect how deterministic each fix type is:
+        # - Import fixes (0.88): adding/removing an import is a purely mechanical
+        #   change with a very low false-positive rate.
+        # - Security fixes (0.75): Bandit-style patterns are well-understood but
+        #   context-dependent; human review is still recommended.
+        # - Complexity fixes (0.65): refactoring requires structural understanding
+        #   and is harder to automate reliably.
+        # - Generic heuristic fixes (0.60): rule-based guesses with higher variance.
+        if "import" in error_type_lower:
+            base = 0.88
+        elif "security" in error_type_lower or error_type_lower.startswith("b"):
+            base = 0.75
+        elif "complexity" in error_type_lower:
+            base = 0.65
+        else:
+            base = 0.60
+
+        # Severity modifier — critical/high bugs are harder to auto-fix
+        severity_penalty = {
+            "critical": -0.05,
+            "high": -0.03,
+            "medium": 0.0,
+            "low": 0.02,
+            "info": 0.03,
+        }
+        base += severity_penalty.get(severity, 0.0)
+
+        # Action modifier — concrete changes are more trustworthy than info
+        if fix_action in ("insert", "replace", "delete"):
+            base += 0.05
+        elif fix_action == "info":
+            base -= 0.05
+
+        # Completeness modifier — having actual changes is positive signal
+        if proposed_changes:
+            base += 0.02
+
+        # Clamp to [0.10, 0.95].  A floor of 0.10 avoids implying zero certainty
+        # for a generated fix, while a ceiling of 0.95 acknowledges that no
+        # automated fix is ever completely guaranteed to be correct.
+        return round(max(0.10, min(0.95, base)), 2)
 
     def _read_source_context(self, file_path: Path, line_num: int, context_lines: int = 5) -> Dict[str, Any]:
         """
@@ -1710,7 +1789,19 @@ class SFEService:
             
             # Determine confidence based on fix success
             if fix_result and fix_result.get("success"):
-                confidence = fix_result.get("confidence", 0.70)
+                # Use explicitly provided confidence when available (e.g. from
+                # pattern-matched fix generators that already calculated it).
+                if "confidence" in fix_result:
+                    confidence = fix_result["confidence"]
+                else:
+                    # Calculate a dynamic confidence based on fix type and severity
+                    # rather than always defaulting to the arbitrary 0.70 value.
+                    confidence = self._calculate_fix_confidence(
+                        error_type=error_type,
+                        severity=severity,
+                        fix_action=fix_result.get("action", "info"),
+                        proposed_changes=proposed_changes,
+                    )
                 reasoning = fix_result.get("reasoning", "Automated fix generated successfully.")
             else:
                 confidence = 0.50
@@ -2936,13 +3027,37 @@ class SFEService:
                 CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
                 code_path_obj = Path(resolved_path)
 
-                # Validate path exists
+                # Validate path exists — fall back to a best-effort scan of stored
+                # job artifacts when the resolved path is missing.
                 if not code_path_obj.exists():
-                    return {
-                        "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
-                        "error": f"Path does not exist: {resolved_path}",
-                        "source": "direct_sfe",
-                    }
+                    # Try to locate code from the job's stored artifacts
+                    fallback_path = None
+                    if job_id:
+                        from server.storage import jobs_db
+                        job = jobs_db.get(job_id)
+                        if job and job.metadata:
+                            # Keys are tried in priority order: the most specific
+                            # (output_path) first, falling back to broader paths.
+                            # We stop at the first key that resolves to an existing path.
+                            for key in ("output_path", "code_path", "generated_path", "artifacts_path"):
+                                candidate = job.metadata.get(key)
+                                if candidate and Path(candidate).exists():
+                                    fallback_path = Path(candidate)
+                                    logger.info(
+                                        f"[SFE] Deep analysis: falling back to job "
+                                        f"metadata path {fallback_path}"
+                                    )
+                                    break
+                    if fallback_path is None:
+                        logger.warning(
+                            f"[SFE] Deep analysis: path does not exist: {resolved_path}"
+                        )
+                        return {
+                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
+                            "error": f"Path does not exist: {resolved_path}",
+                            "source": "direct_sfe",
+                        }
+                    code_path_obj = fallback_path
 
                 # Use CodebaseAnalyzer to perform deep analysis
                 async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
@@ -3007,6 +3122,22 @@ class SFEService:
                         }
 
                 logger.info("Direct SFE deep analysis complete")
+                # Persist the report so the GET /analysis-report endpoint can serve it
+                if job_id:
+                    try:
+                        job_report_base = self._resolve_job_code_path(job_id, ".")
+                        sfe_report_path = (
+                            Path(job_report_base) / "reports" / "sfe_analysis_report.json"
+                        )
+                        sfe_report_path.parent.mkdir(parents=True, exist_ok=True)
+                        sfe_report_path.write_text(
+                            json.dumps(result, indent=2), encoding="utf-8"
+                        )
+                        logger.info(f"[SFE] Deep analysis report saved to {sfe_report_path}")
+                    except Exception as write_err:
+                        logger.warning(
+                            f"[SFE] Could not persist deep analysis report for job {job_id}: {write_err}"
+                        )
                 return result
 
             except Exception as e:
