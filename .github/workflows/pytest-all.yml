@@ -271,8 +271,9 @@ jobs:
           pip install -c .github/constraints.txt fastapi-csrf-protect circuitbreaker defusedxml || true
           # Install optional dependencies that are commonly needed
           pip install -c .github/constraints.txt deap hiredis || echo "WARNING: Some optional deps failed"
-          # Install pytest plugins
+          # Install pytest and plugins
           pip install -c .github/constraints.txt \
+            pytest \
             pytest-cov \
             pytest-xdist \
             pytest-asyncio \
