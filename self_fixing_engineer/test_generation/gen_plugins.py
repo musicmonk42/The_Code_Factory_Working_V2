@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import os
+import threading
 import time
 from collections import defaultdict
 from functools import lru_cache
@@ -611,40 +612,612 @@ class TypeScriptTestGenerator(JavaScriptTestGenerator):
 LANGUAGE_GENERATORS.register("typescript", TypeScriptTestGenerator())
 
 
-# Placeholder stub for AI API - to be implemented
-class _XAIAPIStub:
-    """Stub for external AI API - not yet implemented."""
+# ---------------------------------------------------------------------------
+# Optional heavy dependencies — all imported lazily with no-op fallbacks
+# so the module remains importable in every environment.
+# ---------------------------------------------------------------------------
+
+# LLMClient — shared transport layer for all LLM providers on the platform.
+try:
+    from self_fixing_engineer.arbiter.plugins.llm_client import LLMClient as _LLMClient
+
+    _LLM_CLIENT_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _LLMClient = None  # type: ignore[assignment,misc]
+    _LLM_CLIENT_AVAILABLE = False
+
+# Tenacity — retry with exponential back-off (same pattern as LLMClient).
+try:
+    from tenacity import (
+        retry as _tenacity_retry,
+        retry_if_exception_type as _retry_if_exc_type,
+        stop_after_attempt as _stop_after_attempt,
+        wait_exponential as _wait_exponential,
+    )
+
+    _TENACITY_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TENACITY_AVAILABLE = False
+
+# Prometheus metrics via shared metrics_utils helper (thread-safe, no-op fallback).
+try:
+    from omnicore_engine.metrics_utils import get_or_create_metric as _get_or_create_metric
+    from prometheus_client import Counter as _PCounter, Histogram as _PHistogram
+
+    _XAI_CALL_TOTAL: Any = _get_or_create_metric(
+        _PCounter,
+        "xai_testgen_calls_total",
+        "Total XAITestGenerationAPI.generate_tests() invocations",
+        ("provider", "language", "status"),
+    )
+    _XAI_CALL_LATENCY: Any = _get_or_create_metric(
+        _PHistogram,
+        "xai_testgen_call_latency_seconds",
+        "Latency of XAITestGenerationAPI LLM calls",
+        ("provider", "language"),
+        buckets=(0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0),
+    )
+    _XAI_PARSE_ERRORS: Any = _get_or_create_metric(
+        _PCounter,
+        "xai_testgen_parse_errors_total",
+        "Total failures to parse the LLM JSON response in XAITestGenerationAPI",
+        ("provider",),
+    )
+except Exception:  # pragma: no cover — metrics are best-effort
+    class _DummyMetric:  # type: ignore[no-redef]
+        def labels(self, **_: Any) -> "_DummyMetric": return self
+        def inc(self, *_: Any) -> None: pass
+        def observe(self, *_: Any) -> None: pass
+
+    _XAI_CALL_TOTAL = _DummyMetric()
+    _XAI_CALL_LATENCY = _DummyMetric()
+    _XAI_PARSE_ERRORS = _DummyMetric()
+
+# OpenTelemetry tracer — graceful no-op when the SDK is absent.
+try:
+    from self_fixing_engineer.arbiter.otel_config import (
+        get_tracer_safe as _get_tracer_safe,
+    )
+
+    _xai_tracer: Any = _get_tracer_safe(__name__)
+except ImportError:  # pragma: no cover
+    class _NoOpSpan:
+        def __enter__(self) -> "_NoOpSpan": return self
+        def __exit__(self, *_: Any) -> None: pass
+        def set_attribute(self, *_: Any, **__: Any) -> None: pass
+
+    class _NoOpTracer:  # type: ignore[no-redef]
+        def start_as_current_span(self, _: str, **__: Any) -> "_NoOpSpan":
+            return _NoOpSpan()
+
+    _xai_tracer = _NoOpTracer()  # type: ignore[assignment]
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Hard cap on code sent to the LLM to avoid prompt-injection and token overflow.
+_XAI_MAX_CODE_CHARS: int = 8_000
+# Secret patterns filtered from code before dispatch (case-insensitive).
+_XAI_SECRET_PATTERNS: tuple = (
+    "secret_key",
+    "password",
+    "api_key",
+    "access_token",
+    "private_key",
+    "auth_token",
+    "file://",
+)
+
+_XAI_TEST_GEN_PROMPT_TEMPLATE: str = """\
+You are an expert {language} software engineer specialising in test coverage.
+
+Your task: write comprehensive unit tests for the code below using {framework}.
+
+Rules:
+1. Return ONLY a JSON object: {{"tests": ["<test_source_1>", "<test_source_2>", ...]}}
+2. Each element of "tests" must be a self-contained, runnable test function or block.
+3. Cover the happy path, boundary conditions, and at least one error/exception case.
+4. Do NOT include any explanation, markdown, or code fences outside the JSON.
+
+Code ({language}):
+```
+{code}
+```
+"""
+
+# Lock protecting lazy client initialisation.
+_xai_init_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# XAITestGenerationAPI
+# ---------------------------------------------------------------------------
+
+
+class XAITestGenerationAPI:
+    """AI-powered test generation using the platform's existing LLMClient.
+
+    Reads configuration from environment variables at first use so the object
+    can be instantiated at module load time without triggering network activity:
+
+    * ``XAI_API_PROVIDER``    — LLM provider name (default: ``"openai"``).
+    * ``XAI_API_KEY``         — API key for the provider.
+    * ``XAI_API_MODEL``       — Model identifier (default: ``"gpt-4o"``).
+    * ``XAI_RETRY_ATTEMPTS``  — Max tenacity retry attempts (default: ``3``).
+    * ``XAI_CALL_TIMEOUT``    — Per-call timeout in seconds (default: ``60``).
+
+    Operational features
+    --------------------
+    * **Thread-safe lazy initialisation** — the internal ``LLMClient`` is
+      created at most once, protected by a module-level ``threading.Lock``.
+    * **Circuit breaker** — mirrors the LLMClient pattern; consecutive failures
+      trip the breaker and fast-fail subsequent calls to protect the provider.
+    * **Tenacity retry** — transient network errors are retried with exponential
+      back-off when ``tenacity`` is installed.
+    * **Prometheus metrics** — call counts, latency, and parse errors are
+      emitted to the shared registry.
+    * **OpenTelemetry tracing** — each ``generate_tests()`` invocation creates
+      a span annotated with provider, language, and outcome.
+    * **Input sanitisation** — code is truncated to :data:`_XAI_MAX_CODE_CHARS`
+      and screened for secret/credential patterns before dispatch.
+    * **Graceful degradation** — when ``LLMClient`` is unavailable or no API
+      key is configured, :meth:`generate_tests` raises ``NotImplementedError``
+      so that :func:`_call_ai_for_tests` can skip silently.
+
+    Circuit Breaker Parameters
+    --------------------------
+    The breaker trips after ``cb_threshold`` consecutive failures and re-opens
+    after ``cb_timeout`` seconds.  Both are configurable at construction time.
+    """
+
+    def __init__(
+        self,
+        cb_threshold: int = 5,
+        cb_timeout: float = 300.0,
+    ) -> None:
+        self._provider: str = os.environ.get("XAI_API_PROVIDER", "openai")
+        self._api_key: Optional[str] = os.environ.get("XAI_API_KEY")
+        self._model: str = os.environ.get("XAI_API_MODEL", "gpt-4o")
+        self._retry_attempts: int = int(os.environ.get("XAI_RETRY_ATTEMPTS", "3"))
+        self._call_timeout: int = int(os.environ.get("XAI_CALL_TIMEOUT", "60"))
+
+        # Lazy client state
+        self._client: Optional[Any] = None
+        self._init_error: Optional[str] = None
+        self._initialized: bool = False
+
+        # Circuit breaker
+        self._cb_threshold = cb_threshold
+        self._cb_timeout = cb_timeout
+        self._cb_failures: int = 0
+        self._cb_state: str = "closed"  # closed | open | half-open
+        self._cb_last_failure: Optional[float] = None
+        self._cb_lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Circuit breaker helpers
+    # ------------------------------------------------------------------
+
+    def _check_circuit_breaker(self) -> None:
+        with self._cb_lock:
+            if self._cb_state == "open":
+                elapsed = time.time() - (self._cb_last_failure or 0.0)
+                if elapsed >= self._cb_timeout:
+                    self._cb_state = "half-open"
+                    logger.info(
+                        "XAITestGenerationAPI: circuit breaker → half-open.",
+                        extra={"elapsed_s": round(elapsed, 1), "provider": self._provider},
+                    )
+                else:
+                    raise RuntimeError(
+                        f"XAITestGenerationAPI circuit breaker is OPEN "
+                        f"(retry after {self._cb_timeout - elapsed:.0f}s)."
+                    )
+
+    def _record_cb_success(self) -> None:
+        with self._cb_lock:
+            if self._cb_state in ("half-open", "open"):
+                logger.info(
+                    "XAITestGenerationAPI: circuit breaker → closed.",
+                    extra={"provider": self._provider},
+                )
+            self._cb_failures = 0
+            self._cb_state = "closed"
+
+    def _record_cb_failure(self) -> None:
+        with self._cb_lock:
+            self._cb_failures += 1
+            self._cb_last_failure = time.time()
+            if self._cb_failures >= self._cb_threshold:
+                self._cb_state = "open"
+                logger.warning(
+                    "XAITestGenerationAPI: circuit breaker tripped → OPEN.",
+                    extra={
+                        "consecutive_failures": self._cb_failures,
+                        "provider": self._provider,
+                    },
+                )
+
+    # ------------------------------------------------------------------
+    # Lazy initialisation (thread-safe, one-shot)
+    # ------------------------------------------------------------------
+
+    def _ensure_client(self) -> None:
+        """Initialise LLMClient at most once; re-raise stored errors on retry."""
+        # Fast-path: already initialised (success or permanent failure).
+        if self._initialized:
+            if self._init_error:
+                raise NotImplementedError(self._init_error)
+            return
+
+        with _xai_init_lock:
+            # Double-checked locking: re-test after acquiring the lock.
+            if self._initialized:
+                if self._init_error:
+                    raise NotImplementedError(self._init_error)
+                return
+
+            try:
+                self._do_init()
+            finally:
+                self._initialized = True
+
+    def _do_init(self) -> None:
+        """Perform the actual initialisation (called exactly once)."""
+        if not _LLM_CLIENT_AVAILABLE:
+            self._init_error = (
+                "LLMClient is unavailable — ensure self_fixing_engineer dependencies "
+                "are installed (aiohttp, openai, anthropic, …)."
+            )
+            return
+
+        if not self._api_key:
+            self._init_error = (
+                "No API key configured for AI test generation. "
+                "Set the XAI_API_KEY environment variable."
+            )
+            return
+
+        try:
+            self._client = _LLMClient(  # type: ignore[call-arg]
+                provider=self._provider,
+                api_key=self._api_key,
+                model=self._model,
+                timeout=self._call_timeout,
+                retry_attempts=self._retry_attempts,
+            )
+            logger.info(
+                "XAITestGenerationAPI: LLMClient initialised.",
+                extra={"provider": self._provider, "model": self._model},
+            )
+        except Exception as exc:
+            self._init_error = (
+                f"Failed to initialise LLMClient for provider={self._provider!r}: {exc}"
+            )
+            logger.error(
+                "XAITestGenerationAPI: initialisation failed.",
+                exc_info=True,
+                extra={"provider": self._provider, "error": str(exc)},
+            )
+
+    # ------------------------------------------------------------------
+    # Input sanitisation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _sanitize_code(code: str) -> str:
+        """Truncate oversized snippets and screen for credential patterns.
+
+        Returns the sanitised code string.  Raises ``ValueError`` if a
+        secret pattern is detected so callers can log and skip the call
+        rather than transmitting sensitive data to an external API.
+        """
+        code_lower = code.lower()
+        for pattern in _XAI_SECRET_PATTERNS:
+            if pattern in code_lower:
+                raise ValueError(
+                    f"Code contains a potential secret pattern ({pattern!r}); "
+                    "refusing to dispatch to external LLM API."
+                )
+        if len(code) > _XAI_MAX_CODE_CHARS:
+            code = code[:_XAI_MAX_CODE_CHARS] + "\n# ... (truncated for LLM dispatch)"
+        return code
+
+    # ------------------------------------------------------------------
+    # Core async invocation
+    # ------------------------------------------------------------------
+
+    async def _invoke_llm(self, prompt: str) -> str:
+        """Dispatch *prompt* to the configured LLM and return the raw text response.
+
+        Applies tenacity retry when the library is available.
+        """
+        if self._client is None:
+            raise NotImplementedError("LLMClient not initialised.")
+
+        if _TENACITY_AVAILABLE:
+            @_tenacity_retry(
+                stop=_stop_after_attempt(self._retry_attempts),
+                wait=_wait_exponential(multiplier=1.5, min=1, max=30),
+                retry=_retry_if_exc_type((OSError, TimeoutError)),
+                reraise=True,
+            )
+            async def _with_retry() -> str:
+                return await self._client.generate(prompt)  # type: ignore[union-attr]
+
+            return await _with_retry()
+        else:
+            return await self._client.generate(prompt)  # type: ignore[union-attr]
+
+    # ------------------------------------------------------------------
+    # Response parsing
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_response(raw: str, provider: str) -> Dict[str, Any]:
+        """Extract a ``{"tests": [...]}`` dict from a raw LLM response string.
+
+        Attempts strict JSON parsing first; falls back to locating the first
+        complete JSON object via regex before giving up and returning an empty
+        list.
+        """
+        # Strict parse
+        try:
+            parsed = json.loads(raw)
+            return {"tests": parsed.get("tests", [])}
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # Lenient extraction — handles models that wrap JSON in prose
+        import re as _re
+
+        match = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group())
+                return {"tests": parsed.get("tests", [])}
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Give up
+        _XAI_PARSE_ERRORS.labels(provider=provider).inc()
+        logger.warning(
+            "XAITestGenerationAPI: LLM response could not be parsed as JSON; "
+            "returning empty test list.",
+            extra={"provider": provider, "response_preview": raw[:200]},
+        )
+        return {"tests": []}
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def generate_tests(
-        self, code: str, language: str, test_framework: Optional[str] = None
+        self,
+        code: str,
+        language: str,
+        test_framework: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Stub method for AI-based test generation."""
-        raise NotImplementedError("AI-based test generation is not yet implemented")
+        """Generate unit tests for *code* via the configured LLM provider.
+
+        Parameters
+        ----------
+        code:
+            Source code to generate tests for.  Must not exceed
+            :data:`_XAI_MAX_CODE_CHARS` characters after sanitisation.
+        language:
+            Programming language of *code* (e.g. ``"python"``,
+            ``"javascript"``).
+        test_framework:
+            Target testing framework.  Defaults to ``"pytest"`` for Python
+            and ``"jest"`` for all other languages.
+
+        Returns
+        -------
+        dict
+            ``{"tests": [<test_source_string>, ...]}``
+
+        Raises
+        ------
+        NotImplementedError
+            When ``LLMClient`` is unavailable or no API key is configured.
+        ValueError
+            When *code* contains a detected secret pattern.
+        RuntimeError
+            When the circuit breaker is open.
+        """
+        self._ensure_client()
+        self._check_circuit_breaker()
+
+        framework = test_framework or (
+            "pytest" if language == "python" else "jest"
+        )
+
+        sanitized = self._sanitize_code(code)
+        prompt_hash = hashlib.sha256(sanitized.encode()).hexdigest()[:12]
+
+        prompt = _XAI_TEST_GEN_PROMPT_TEMPLATE.format(
+            language=language,
+            framework=framework,
+            code=sanitized,
+        )
+
+        with _xai_tracer.start_as_current_span("xai_testgen.generate_tests") as span:
+            span.set_attribute("xai.provider", self._provider)
+            span.set_attribute("xai.model", self._model)
+            span.set_attribute("xai.language", language)
+            span.set_attribute("xai.framework", framework)
+            span.set_attribute("xai.prompt_hash", prompt_hash)
+
+            t0 = time.time()
+            try:
+                raw_response = self._run_async(self._invoke_llm(prompt))
+                elapsed = time.time() - t0
+
+                _XAI_CALL_LATENCY.labels(
+                    provider=self._provider, language=language
+                ).observe(elapsed)
+                _XAI_CALL_TOTAL.labels(
+                    provider=self._provider, language=language, status="success"
+                ).inc()
+
+                result = self._parse_response(raw_response, self._provider)
+                self._record_cb_success()
+
+                span.set_attribute("xai.status", "success")
+                span.set_attribute("xai.test_count", len(result.get("tests", [])))
+                logger.info(
+                    "XAITestGenerationAPI: tests generated.",
+                    extra={
+                        "provider": self._provider,
+                        "language": language,
+                        "test_count": len(result.get("tests", [])),
+                        "latency_s": round(elapsed, 3),
+                        "prompt_hash": prompt_hash,
+                    },
+                )
+                return result
+
+            except (NotImplementedError, ValueError, RuntimeError):
+                # Non-retryable / configuration errors — do not trip breaker.
+                _XAI_CALL_TOTAL.labels(
+                    provider=self._provider, language=language, status="config_error"
+                ).inc()
+                span.set_attribute("xai.status", "config_error")
+                raise
+
+            except Exception as exc:
+                elapsed = time.time() - t0
+                _XAI_CALL_TOTAL.labels(
+                    provider=self._provider, language=language, status="error"
+                ).inc()
+                self._record_cb_failure()
+                span.set_attribute("xai.status", "error")
+                span.set_attribute("xai.error", str(exc))
+                logger.error(
+                    "XAITestGenerationAPI: LLM call failed.",
+                    exc_info=True,
+                    extra={
+                        "provider": self._provider,
+                        "language": language,
+                        "latency_s": round(elapsed, 3),
+                        "prompt_hash": prompt_hash,
+                    },
+                )
+                raise
+
+    # ------------------------------------------------------------------
+    # Async/sync bridge
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _run_async(coro: Any) -> str:
+        """Bridge between the sync public API and the async LLMClient.
+
+        Selects the appropriate execution strategy based on whether an event
+        loop is already running (e.g. inside an async web handler).
+        """
+        import asyncio
+        import concurrent.futures
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        if loop.is_running():
+            # We are inside an async context (FastAPI, pytest-asyncio, etc.).
+            # Dispatch to a private thread pool to avoid blocking the loop.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, coro)
+                return future.result(timeout=120)
+        else:
+            return loop.run_until_complete(coro)
 
 
-xai_api = _XAIAPIStub()
+# Module-level singleton — lazily configured from env vars at first call.
+xai_api: Any = XAITestGenerationAPI()
 
 
 def _call_ai_for_tests(code: str, language: str, config: dict) -> List[str]:
+    """Attempt AI-assisted test generation; return ``[]`` on any failure.
+
+    This function is the sole consumer of :data:`xai_api` in this module and
+    is the authoritative place where AI generation errors are absorbed so that
+    the caller (:func:`generate_tests`) can degrade to rule-based generation.
+
+    Parameters
+    ----------
+    code:
+        Source code to generate tests for.
+    language:
+        Programming language of *code*.
+    config:
+        Generation configuration dict.  Relevant keys:
+
+        * ``"retries"`` — if already > 2, skip to avoid infinite recursion.
+        * ``"test_framework"`` — forwarded to ``generate_tests()``.
+
+    Returns
+    -------
+    list[str]
+        Generated test source strings, or ``[]`` when generation is
+        unavailable, blocked by circuit breaker, or fails.
+    """
     retries = config.get("retries", 0)
     if retries > 2:
-        logger.warning("Max retries exceeded for AI generation.")
-        return []
-    if "secret_key" in code.lower() or "file://" in code or "file path" in code.lower():
-        logger.warning("Input code filtered for sensitive content.")
-        return []
-    try:
-        # Placeholder for actual API call
-        # You'll need to define `xai_api` and its `generate_tests` method
-        response = xai_api.generate_tests(code, language, config.get("test_framework"))
-        logger.info(
-            "Successfully generated tests via AI.",
-            extra={"test_count": len(response.get("tests", []))},
+        logger.warning(
+            "_call_ai_for_tests: max retries exceeded; skipping AI generation.",
+            extra={"language": language, "retries": retries},
         )
-        return response.get("tests", [])
-    except Exception as e:
-        code_hash = hashlib.sha256(code.encode()).hexdigest()
-        logger.error(f"AI generation failed: {e}", extra={"code_hash": code_hash})
+        return []
+
+    code_hash = hashlib.sha256(code.encode()).hexdigest()[:12]
+
+    try:
+        response = xai_api.generate_tests(code, language, config.get("test_framework"))
+        tests = response.get("tests", [])
+        logger.info(
+            "_call_ai_for_tests: AI generation succeeded.",
+            extra={
+                "test_count": len(tests),
+                "language": language,
+                "code_hash": code_hash,
+            },
+        )
+        return tests
+
+    except NotImplementedError:
+        logger.debug(
+            "_call_ai_for_tests: AI test generation not configured; skipping.",
+            extra={"language": language},
+        )
+        return []
+
+    except ValueError as exc:
+        # Code contained a secret pattern — never retry.
+        logger.warning(
+            "_call_ai_for_tests: code blocked by sanitisation filter.",
+            extra={"language": language, "reason": str(exc), "code_hash": code_hash},
+        )
+        return []
+
+    except RuntimeError as exc:
+        # Circuit breaker open.
+        logger.warning(
+            "_call_ai_for_tests: circuit breaker is open; skipping AI generation.",
+            extra={"language": language, "reason": str(exc)},
+        )
+        return []
+
+    except Exception as exc:
+        logger.error(
+            "_call_ai_for_tests: unexpected error during AI generation.",
+            exc_info=True,
+            extra={"language": language, "code_hash": code_hash, "error": str(exc)},
+        )
         return []
 
 
@@ -888,6 +1461,7 @@ def generate_tests(
 __all__ = [
     "PythonTestGenerator",
     "JavaScriptTestGenerator",
+    "XAITestGenerationAPI",
     "generate_tests",
     "_call_ai_for_tests",
     "LANGUAGE_GENERATORS",
