@@ -160,24 +160,20 @@ Before generating code, extract and verify you will implement:
 {# endpoint.method is equivalent to endpoint['method'] for dicts #}
 {% macro render_required_endpoints(required_endpoints) %}
 {% if required_endpoints and required_endpoints|length > 0 %}
-## ⚠️ REQUIRED API ENDPOINTS (MUST IMPLEMENT ALL) ⚠️
+## ⚠️ MANDATORY ENDPOINTS — ALL {{ required_endpoints|length }} MUST BE IMPLEMENTED ⚠️
 
-The specification EXPLICITLY requires these endpoints. You MUST implement ALL of them:
+**YOUR CODE WILL BE REJECTED** if any of these endpoints are missing.
+The automated validation gate checks for ALL of these routes in the generated code.
 
+| # | Method | Path |
+|---|--------|------|
 {% for endpoint in required_endpoints %}
-- **{{ endpoint.method }} {{ endpoint.path }}**
+| {{ loop.index }} | {{ endpoint.method }} | {{ endpoint.path }} |
 {% endfor %}
 
-**CRITICAL VALIDATION REQUIREMENT:**
-- EVERY endpoint listed above MUST be implemented in your code
-- Use the EXACT HTTP method ({{ required_endpoints|map(attribute='method')|unique|join(', ') }})
-- Use the EXACT path (including any path parameters)
-- FAILURE TO IMPLEMENT ANY OF THESE ENDPOINTS WILL CAUSE VALIDATION FAILURE
-
-**Implementation Checklist:**
-{% for endpoint in required_endpoints %}
-- [ ] {{ endpoint.method }} {{ endpoint.path }} - Implemented with correct handler
-{% endfor %}
+**EVERY endpoint listed above MUST appear as a route decorator in your generated routes.py file.**
+DO NOT generate only a subset — ALL {{ required_endpoints|length }} endpoints are REQUIRED.
+Generating fewer endpoints than listed here will result in automatic rejection.
 
 {% endif %}
 {% endmacro %}

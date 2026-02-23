@@ -376,7 +376,17 @@ def _scaffold_required_dirs(
                         result.warnings.append(f"Could not copy root schemas.py: {exc}")
                         _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
                 else:
-                    _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
+                    root_models = output_dir / "models.py"
+                    if root_models.exists():
+                        try:
+                            content = root_models.read_text(encoding="utf-8")
+                            _create_if_absent(app_schemas, content, result, output_dir=output_dir, file_type="schemas_py")
+                            logger.debug("%s Copied root models.py → app/schemas.py", _STAGE)
+                        except OSError as exc:
+                            result.warnings.append(f"Could not copy root models.py: {exc}")
+                            _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
+                    else:
+                        _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
             # Copy root-level routes.py if present, else use stub
             app_routes = dir_path / "routes.py"
             if not app_routes.exists():
