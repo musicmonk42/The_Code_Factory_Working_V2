@@ -1,24 +1,64 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 """
-Question Loop - Interactive gap-filling for incomplete specifications.
+Question Loop — interactive gap-filling for incomplete specifications.
 
-This module implements an interactive question system that identifies missing
-required fields in specifications and prompts users to fill them in. It generates
-a spec.lock.yaml file that drives code generation.
+This module implements a structured question system that identifies missing
+required fields in a :class:`~generator.intent_parser.spec_block.SpecBlock`
+and prompts the user to supply them interactively.  It persists the resolved
+specification to ``spec.lock.yaml`` which drives deterministic code generation.
 
-Industry Standards:
-- Interactive CLI with clear prompts
-- YAML-based persistence for answered specs
-- Validation at each step
-- Resume capability via spec.lock.yaml
+Architecture
+------------
+* :class:`Question`             — interrogation unit with optional inline
+  validation via the *validation function registry*.
+* :class:`QuestionResponse`     — typed answer container (Pydantic model).
+* :class:`SpecLock`             — fully-resolved specification after all
+  questions have been answered; persisted as YAML.
+* :func:`generate_questions`    — derives the minimal set of questions from a
+  potentially-incomplete :class:`SpecBlock`.
+* :func:`register_validator`    — extend the built-in validation registry with
+  domain-specific validators at runtime.
+* :func:`run_question_loop`     — high-level entry-point: ask questions, build
+  lock, write ``spec.lock.yaml``.
+
+Validation Registry
+-------------------
+The registry maps *name strings* to callables
+``(str) -> (bool, Optional[str])``.  When a :class:`Question` has a
+non-``None`` :attr:`~Question.validation_fn`, its value is looked up in the
+registry before the user's answer is accepted.  If the validator returns
+``(False, <msg>)`` the error message is printed and the user is re-prompted
+without incrementing a retry counter.
+
+Built-in validators
+~~~~~~~~~~~~~~~~~~~
+* ``validate_package_name``   — PEP 8 module-name regex.
+* ``validate_output_dir``     — safe relative path (no traversal, no absolute).
+* ``validate_project_type``   — membership in the known project-type set.
+* ``validate_not_empty``      — non-blank string.
+* ``validate_python_version`` — ``MAJOR.MINOR[.PATCH]`` version string.
+* ``validate_http_endpoint``  — ``METHOD /path`` format (comma-separated).
+
+External code may add validators via :func:`register_validator` at any time.
+
+Industry Standards
+------------------
+* Interactive CLI with clear prompts and context-sensitive hints.
+* YAML-based persistence for answered specifications.
+* Validation at every user-input step with human-readable error messages.
+* Resume capability via ``spec.lock.yaml``.
+* Structured logging with ``extra={}`` on every call.
 """
+
+from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import re as _re
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import yaml
 from pydantic import BaseModel, Field
@@ -26,6 +66,207 @@ from pydantic import BaseModel, Field
 from generator.intent_parser.spec_block import SpecBlock
 
 logger = logging.getLogger(__name__)
+
+# ===========================================================================
+# Validation function registry
+# ===========================================================================
+
+# Canonical set of project types the platform can scaffold.
+_KNOWN_PROJECT_TYPES: frozenset = frozenset(
+    {
+        "fastapi_service",
+        "flask_service",
+        "cli_tool",
+        "library",
+        "batch_job",
+        "lambda_function",
+        "microservice",
+        "worker",
+        "grpc_service",
+        "graphql_service",
+    }
+)
+
+# Registry: name → (value: str) -> (is_valid: bool, error_msg: Optional[str])
+_VALIDATOR_REGISTRY: Dict[str, Callable[[str], Tuple[bool, Optional[str]]]] = {}
+
+
+def register_validator(
+    name: str,
+    fn: Callable[[str], Tuple[bool, Optional[str]]],
+) -> None:
+    """Register or override a validation function in the global registry.
+
+    Parameters
+    ----------
+    name:
+        String key used in :attr:`Question.validation_fn`.  Existing entries
+        are silently overwritten so that plugins can replace built-in validators.
+    fn:
+        Callable ``(str) -> (bool, Optional[str])``.  Return
+        ``(True, None)`` for valid input, or ``(False, "<human-readable error
+        message>")`` for invalid input.
+
+    Raises
+    ------
+    TypeError
+        If *name* is not a non-empty ``str`` or *fn* is not callable.
+    """
+    if not isinstance(name, str) or not name:
+        raise TypeError("Validator name must be a non-empty string.")
+    if not callable(fn):
+        raise TypeError(f"Validator {name!r} must be callable.")
+    _VALIDATOR_REGISTRY[name] = fn
+    logger.debug(
+        "register_validator: registered validator.",
+        extra={"name": name},
+    )
+
+
+def get_validator(
+    name: str,
+) -> Optional[Callable[[str], Tuple[bool, Optional[str]]]]:
+    """Return the validator registered under *name*, or ``None`` if absent.
+
+    Parameters
+    ----------
+    name:
+        Registry key to look up.
+
+    Returns
+    -------
+    callable or None
+    """
+    return _VALIDATOR_REGISTRY.get(name)
+
+
+# ---------------------------------------------------------------------------
+# Built-in validator implementations
+# ---------------------------------------------------------------------------
+
+
+def _validate_package_name(value: str) -> Tuple[bool, Optional[str]]:
+    """PEP 8 Python package / module name.
+
+    Must start with a lowercase ASCII letter and consist only of lowercase
+    letters, ASCII digits, and underscores.  Length is capped at 64
+    characters to match PyPI naming conventions.
+    """
+    if not value:
+        return False, "Package name must not be empty."
+    if len(value) > 64:
+        return False, "Package name must not exceed 64 characters."
+    if _re.fullmatch(r"[a-z][a-z0-9_]*", value):
+        return True, None
+    return (
+        False,
+        "Package name must start with a lowercase letter and contain only "
+        "lowercase letters, digits, and underscores (e.g. 'my_app', 'user_service').",
+    )
+
+
+def _validate_output_dir(value: str) -> Tuple[bool, Optional[str]]:
+    """Safe relative output directory path.
+
+    Rejects absolute paths, path-traversal components (``..``), and any
+    characters outside the safe set ``[A-Za-z0-9_./ -]``.
+    """
+    if not value:
+        return False, "Output directory must not be empty."
+    # Reject absolute paths
+    if value.startswith("/") or _re.match(r"^[A-Za-z]:[/\\]", value):
+        return False, "Output directory must be a relative path, not an absolute path."
+    # Reject traversal in any path segment (POSIX or Windows separators)
+    parts = _re.split(r"[/\\]", value)
+    if ".." in parts:
+        return False, "Output directory must not contain path traversal components ('..')."
+    # Allow only safe characters
+    if not _re.fullmatch(r"[A-Za-z0-9_./ -]+", value):
+        return (
+            False,
+            "Output directory contains invalid characters. "
+            "Use only letters, digits, underscores, hyphens, spaces, and slashes.",
+        )
+    return True, None
+
+
+def _validate_project_type(value: str) -> Tuple[bool, Optional[str]]:
+    """Membership check against the known project-type set."""
+    if value in _KNOWN_PROJECT_TYPES:
+        return True, None
+    known = ", ".join(sorted(_KNOWN_PROJECT_TYPES))
+    return (
+        False,
+        f"Unknown project type {value!r}.\n"
+        f"  Known types: {known}.",
+    )
+
+
+def _validate_not_empty(value: str) -> Tuple[bool, Optional[str]]:
+    """Non-blank string check."""
+    if value.strip():
+        return True, None
+    return False, "This field is required and must not be blank."
+
+
+def _validate_python_version(value: str) -> Tuple[bool, Optional[str]]:
+    """Semantic version string in ``MAJOR.MINOR`` or ``MAJOR.MINOR.PATCH`` form.
+
+    Enforces Python ≥ 3.8 — the minimum version supported by the platform.
+    Python 2.x and 3.0–3.7 are rejected with an explicit end-of-life message.
+    """
+    if _re.fullmatch(r"\d+\.\d+(\.\d+)?", value):
+        parts = value.split(".")
+        major, minor = int(parts[0]), int(parts[1])
+        if major < 3 or (major == 3 and minor < 8):
+            return (
+                False,
+                f"Python {value} is not supported by this platform. "
+                "Minimum required version is Python 3.8.",
+            )
+        return True, None
+    return (
+        False,
+        "Python version must be in the form MAJOR.MINOR or MAJOR.MINOR.PATCH "
+        "(e.g. '3.11' or '3.12.4').",
+    )
+
+
+def _validate_http_endpoint(value: str) -> Tuple[bool, Optional[str]]:
+    """HTTP endpoint in ``METHOD /path`` form (comma-separated list allowed)."""
+    _VALID_METHODS = frozenset(
+        {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+    )
+    endpoints = [e.strip() for e in value.split(",") if e.strip()]
+    if not endpoints:
+        return False, "At least one HTTP endpoint must be specified."
+    for ep in endpoints:
+        parts = ep.split(None, 1)
+        if len(parts) != 2:
+            return (
+                False,
+                f"Endpoint {ep!r} must be in 'METHOD /path' format "
+                "(e.g. 'GET /health, POST /items').",
+            )
+        method, path = parts
+        if method.upper() not in _VALID_METHODS:
+            return (
+                False,
+                f"Unknown HTTP method {method!r}. "
+                f"Valid methods: {', '.join(sorted(_VALID_METHODS))}.",
+            )
+        if not path.startswith("/"):
+            return False, f"Path {path!r} must start with '/'."
+    return True, None
+
+
+# Register all built-in validators.
+register_validator("validate_package_name", _validate_package_name)
+register_validator("validate_output_dir", _validate_output_dir)
+register_validator("validate_project_type", _validate_project_type)
+register_validator("validate_not_empty", _validate_not_empty)
+register_validator("validate_python_version", _validate_python_version)
+register_validator("validate_http_endpoint", _validate_http_endpoint)
 
 
 class QuestionResponse(BaseModel):
@@ -134,7 +375,12 @@ class Question(BaseModel):
                 user_input = input("Your answer: ").strip()
             
             if user_input:
-                # TODO: Add validation based on validation_fn
+                # Validate using the registered validator, if any.
+                if self.validation_fn and self.validation_fn in _VALIDATOR_REGISTRY:
+                    valid, error_msg = _VALIDATOR_REGISTRY[self.validation_fn](user_input)
+                    if not valid:
+                        print(f"Invalid input: {error_msg}")
+                        continue
                 return QuestionResponse(
                     field_name=self.field_name,
                     value=user_input,
@@ -187,6 +433,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
             prompt="What type of project are you building?",
             hint="This determines the scaffolding, structure, and generated files. Required.",
             default_value=inferred_type,  # Only use inferred type, no default
+            validation_fn="validate_project_type",
             examples=[
                 "fastapi_service",
                 "cli_tool",
@@ -207,8 +454,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
         
         if not default_name and readme_content:
             # Look for "# ProjectName" style headers
-            import re
-            match = re.search(r'^#\s+([A-Za-z_][A-Za-z0-9_]*)', readme_content, re.MULTILINE)
+            match = _re.search(r'^#\s+([A-Za-z_][A-Za-z0-9_]*)', readme_content, _re.MULTILINE)
             if match:
                 default_name = match.group(1).lower().replace("-", "_")
         
@@ -217,6 +463,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
             prompt="What is the Python package/module name?",
             hint="This will be used for imports: 'from <name> import ...'",
             default_value=default_name or "my_app",
+            validation_fn="validate_package_name",
             examples=["my_app", "user_service", "data_pipeline"]
         ))
     
@@ -231,6 +478,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
             prompt="Where should the generated code be written?",
             hint="Relative path from the current directory",
             default_value=default_dir,
+            validation_fn="validate_output_dir",
             examples=["generated/my_app", "output/service", "my_project"]
         ))
     
@@ -458,4 +706,8 @@ __all__ = [
     "generate_questions",
     "create_spec_lock_from_answers",
     "run_question_loop",
+    "register_validator",
+    "get_validator",
+    "_KNOWN_PROJECT_TYPES",
+    "_VALIDATOR_REGISTRY",
 ]

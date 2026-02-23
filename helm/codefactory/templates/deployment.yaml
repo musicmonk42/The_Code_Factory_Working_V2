@@ -161,6 +161,15 @@ spec:
                   name: {{ .Values.secrets.apiKeys.openaiSecretName }}
                   key: xai-api-key
                   optional: true
+            {{- /* XAI Test-Generation API tuning knobs — non-secret, sourced from env values */ -}}
+            - name: XAI_API_PROVIDER
+              value: {{ .Values.env.XAI_API_PROVIDER | default "openai" | quote }}
+            - name: XAI_API_MODEL
+              value: {{ .Values.env.XAI_API_MODEL | default "gpt-4o" | quote }}
+            - name: XAI_RETRY_ATTEMPTS
+              value: {{ .Values.env.XAI_RETRY_ATTEMPTS | default "3" | quote }}
+            - name: XAI_CALL_TIMEOUT
+              value: {{ .Values.env.XAI_CALL_TIMEOUT | default "60" | quote }}
             - name: GROK_API_KEY
               valueFrom:
                 secretKeyRef:

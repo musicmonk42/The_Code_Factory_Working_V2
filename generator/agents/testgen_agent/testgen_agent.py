@@ -1649,14 +1649,92 @@ def test_{file_stem}_syntax_error_documentation():
                         extra={"run_id": run_id}
                     )
         else:
-            # For non-Python languages, create a simple placeholder
-            logger.warning(
-                f"[TESTGEN] Rule-based generation not yet supported for language: {language}",
-                extra={"run_id": run_id}
-            )
+            # For non-Python languages, use language-specific generators or stubs.
+            # Attempt to use the LANGUAGE_GENERATORS registry from gen_plugins.
+            _lang_generators = None
+            try:
+                from self_fixing_engineer.test_generation.gen_plugins import LANGUAGE_GENERATORS as _lang_generators  # noqa: E501
+            except ImportError:
+                pass
+
             for file_path in code_files.keys():
-                test_file_path = f"test_{file_path}"
-                basic_tests[test_file_path] = f"// TODO: Add tests for {file_path}\n"
+                file_stem = Path(file_path).stem
+                code_content = code_files[file_path]
+
+                if language in ("javascript", "typescript"):
+                    ext = "ts" if language == "typescript" else "js"
+                    test_file_path = f"__tests__/{file_stem}.test.{ext}"
+                    if _lang_generators is not None:
+                        gen = _lang_generators.get(language)
+                        if gen is not None:
+                            try:
+                                generated = gen.generate(code_content)
+                                basic_tests[test_file_path] = "\n".join(generated) if isinstance(generated, list) else str(generated)
+                                logger.info(
+                                    f"[TESTGEN] Generated {language} tests for {file_path} -> {test_file_path}",
+                                    extra={"run_id": run_id},
+                                )
+                                continue
+                            except Exception as _exc:
+                                logger.warning(
+                                    f"[TESTGEN] {language} generator failed for {file_path}: {_exc}",
+                                    extra={"run_id": run_id},
+                                )
+                    # Fallback minimal stub
+                    basic_tests[test_file_path] = (
+                        f"// Tests for {file_path}\n"
+                        f"describe('{file_stem}', () => {{\n"
+                        f"  it('should be implemented', () => {{\n"
+                        f"    // TODO: Add tests for {file_path}\n"
+                        f"  }});\n"
+                        f"}});\n"
+                    )
+
+                elif language == "java":
+                    class_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Unknown"
+                    test_file_path = f"src/test/java/{class_name}Test.java"
+                    basic_tests[test_file_path] = (
+                        f"import org.junit.jupiter.api.Test;\n"
+                        f"import static org.junit.jupiter.api.Assertions.*;\n\n"
+                        f"class {class_name}Test {{\n\n"
+                        f"    @Test\n"
+                        f"    void testPlaceholder() {{\n"
+                        f"        // TODO: Add tests for {file_path}\n"
+                        f"        assertTrue(true);\n"
+                        f"    }}\n"
+                        f"}}\n"
+                    )
+
+                elif language == "go":
+                    # Go convention: same directory, _test.go suffix
+                    parent = str(Path(file_path).parent)
+                    test_file_path = (
+                        f"{parent}/{file_stem}_test.go"
+                        if parent and parent != "."
+                        else f"{file_stem}_test.go"
+                    )
+                    package_name = parent.replace("/", "_").replace("-", "_") if parent and parent != "." else "main"
+                    func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Placeholder"
+                    basic_tests[test_file_path] = (
+                        f"package {package_name}\n\n"
+                        f"import \"testing\"\n\n"
+                        f"func Test{func_name}(t *testing.T) {{\n"
+                        f"\t// TODO: Add tests for {file_path}\n"
+                        f"\tt.Log(\"placeholder test\")\n"
+                        f"}}\n"
+                    )
+
+                else:
+                    logger.warning(
+                        f"[TESTGEN] Rule-based generation not supported for language: {language}; "
+                        f"creating placeholder for {file_path}",
+                        extra={"run_id": run_id},
+                    )
+                    test_file_path = f"test_{file_path}"
+                    basic_tests[test_file_path] = (
+                        f"// TODO: Add tests for {file_path}\n"
+                        f"// Language '{language}' is not yet supported by the rule-based generator.\n"
+                    )
         
         logger.info(
             f"[TESTGEN] Generated {len(basic_tests)} basic test files",

@@ -64,6 +64,19 @@ data:
   LLM_USE_MOCK: "false"
 
   # ============================================
+  # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)
+  # ============================================
+  # Provider and model are independent of DEFAULT_LLM_PROVIDER so operators can
+  # target a smaller/cheaper model for automated test generation without affecting
+  # the main code-generation pipeline.
+  # XAI_API_KEY is intentionally kept in the Secret (see secret.yaml) because it
+  # is a credential; the non-sensitive knobs live here in the ConfigMap.
+  XAI_API_PROVIDER: "openai"
+  XAI_API_MODEL: "gpt-4o"
+  XAI_RETRY_ATTEMPTS: "3"
+  XAI_CALL_TIMEOUT: "60"
+
+  # ============================================
   # Feature Flags
   # ============================================
   ENABLE_DATABASE: "1"
