@@ -19,6 +19,8 @@ from unittest.mock import patch, MagicMock, AsyncMock, mock_open
 from pathlib import Path
 import json
 
+pytestmark = pytest.mark.slow
+
 
 class TestSFEPipelineIntegration:
     """Test suite for SFE pipeline integration."""

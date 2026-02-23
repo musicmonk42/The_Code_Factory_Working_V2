@@ -12,6 +12,9 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+
+pytestmark = pytest.mark.slow
+
 from fastapi.testclient import TestClient
 
 from server.schemas import Job, JobStatus
