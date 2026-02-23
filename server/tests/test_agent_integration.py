@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 from server.config import (
     AgentConfig,
     LLMProviderConfig,

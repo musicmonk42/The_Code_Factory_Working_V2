@@ -80,6 +80,7 @@ class TestHealthEndpointTimeouts:
         assert components["agents_status"] == "loading", \
             "Health endpoint should leave agents_status as 'loading' on timeout"
     
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_readiness_endpoint_timeout_wrapper(self):
         """Test that readiness endpoint correctly handles slow get_status with timeout."""
@@ -114,6 +115,7 @@ class TestHealthEndpointTimeouts:
         assert status_text == "timeout", "Status should be 'timeout' on timeout"
     
     
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_startup_lock_timeout_with_redis(self):
         """Test that startup lock timeout protects against slow Redis connections."""
@@ -174,6 +176,7 @@ class TestHealthEndpointBehavior:
         assert components["api"] == "healthy"
         assert components["agents_status"] == "loading"
     
+    @pytest.mark.slow
     @pytest.mark.asyncio
     async def test_readiness_handles_timeout_separately(self):
         """Test that readiness endpoint handles timeout as separate case."""
