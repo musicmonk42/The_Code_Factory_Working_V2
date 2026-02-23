@@ -38,7 +38,11 @@ _real_prometheus_client = sys.modules["prometheus_client"]
 
 @pytest.fixture(autouse=True)
 def setup_env(mocker: MockerFixture):
-    """Set up environment variables and reload metrics module."""
+    """Set up environment variables and reload metrics module.
+
+    This fixture ensures prometheus_client is the real module (not a MagicMock)
+    before each test, and properly cleans up after the test to avoid contamination.
+    """
     # Ensure prometheus_client is the real module (may have been replaced by
     # other test modules between tests).
     pc = sys.modules.get("prometheus_client")
@@ -53,12 +57,22 @@ def setup_env(mocker: MockerFixture):
         mocker.patch.dict(os.environ, {key: value})
 
     # Force reload of the metrics module to pick up new env vars
-    if "self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics" in sys.modules:
-        del sys.modules["self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics"]
+    # Store the module if it exists so we can restore it later
+    metrics_module_key = "self_fixing_engineer.arbiter.meta_learning_orchestrator.metrics"
+    old_metrics_module = sys.modules.get(metrics_module_key)
+
+    if metrics_module_key in sys.modules:
+        del sys.modules[metrics_module_key]
 
     yield
 
-    # Clean up
+    # Clean up - restore original metrics module if it existed
+    if old_metrics_module is not None:
+        sys.modules[metrics_module_key] = old_metrics_module
+    elif metrics_module_key in sys.modules:
+        del sys.modules[metrics_module_key]
+
+    # Clean up environment variables
     for key in SAMPLE_ENV:
         os.environ.pop(key, None)
 
