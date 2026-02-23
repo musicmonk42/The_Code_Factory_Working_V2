@@ -4,12 +4,13 @@
 Centralized Path Configuration Module
 
 This module provides centralized path management for The Code Factory platform.
-It ensures all components (generator, self_fixing_engineer, omnicore_engine) are
-discoverable by adding them to sys.path in a consistent manner.
+It ensures all components (generator, self_fixing_engineer, omnicore_engine,
+shared) are discoverable by adding them to sys.path in a consistent manner.
 
 Features:
 - Defines PROJECT_ROOT as the repository root
 - Lists all component paths
+- Ensures PROJECT_ROOT itself is in sys.path for top-level packages (``shared``)
 - Provides setup_paths() function for explicit setup
 - Auto-executes on import for convenience
 - Idempotent: safe to call multiple times
@@ -59,6 +60,28 @@ def setup_paths(verbose: bool = False) -> List[str]:
     """
     added_paths = []
 
+    # ------------------------------------------------------------------
+    # Step 1: Ensure PROJECT_ROOT is in sys.path.
+    #
+    # Top-level packages such as ``shared`` live directly under the
+    # repository root (e.g. ``shared/noop_metrics.py``).  Python can only
+    # resolve ``from shared.noop_metrics import X`` when PROJECT_ROOT
+    # itself — not just its sub-directories — is present on sys.path.
+    #
+    # ``server/run.py`` and ``conftest.py`` both add the root explicitly,
+    # but standalone scripts that import ``path_setup`` directly would
+    # otherwise miss it.
+    # ------------------------------------------------------------------
+    root_str = str(PROJECT_ROOT)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+        added_paths.append(root_str)
+        if verbose:
+            print(f"[path_setup] Added project root to sys.path: {root_str}")
+
+    # ------------------------------------------------------------------
+    # Step 2: Add per-component sub-directories for legacy-style imports.
+    # ------------------------------------------------------------------
     for component_name, component_path in COMPONENT_PATHS.items():
         if component_path.exists():
             path_str = str(component_path)
