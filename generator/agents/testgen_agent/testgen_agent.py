@@ -1691,7 +1691,7 @@ def test_{file_stem}_syntax_error_documentation():
                     )
 
                 elif language == "java":
-                    class_name = file_stem[0].upper() + file_stem[1:] if file_stem else "Unknown"
+                    class_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Unknown"
                     test_file_path = f"src/test/java/{class_name}Test.java"
                     basic_tests[test_file_path] = (
                         f"import org.junit.jupiter.api.Test;\n"
@@ -1714,10 +1714,11 @@ def test_{file_stem}_syntax_error_documentation():
                         else f"{file_stem}_test.go"
                     )
                     package_name = parent.replace("/", "_").replace("-", "_") if parent and parent != "." else "main"
+                    func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Placeholder"
                     basic_tests[test_file_path] = (
                         f"package {package_name}\n\n"
                         f"import \"testing\"\n\n"
-                        f"func Test{file_stem[0].upper() + file_stem[1:]}(t *testing.T) {{\n"
+                        f"func Test{func_name}(t *testing.T) {{\n"
                         f"\t// TODO: Add tests for {file_path}\n"
                         f"\tt.Log(\"placeholder test\")\n"
                         f"}}\n"

@@ -110,8 +110,9 @@ except ImportError:
 #     class Agent:
 #         def __init__(self, *args, **kwargs): pass
 
-# BenchmarkingEngine and related mocks
-# BenchmarkingEngine mock - these modules don't exist in the project
+# BenchmarkingEngine — real implementation in omnicore_engine.benchmarking_engine.
+# Fallback stubs are retained so that the module degrades gracefully in
+# minimal environments where the omnicore_engine package is not installed.
 try:
     from omnicore_engine.benchmarking_engine import (
         BenchmarkingEngine,

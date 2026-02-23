@@ -210,14 +210,19 @@ def _validate_not_empty(value: str) -> Tuple[bool, Optional[str]]:
 
 
 def _validate_python_version(value: str) -> Tuple[bool, Optional[str]]:
-    """Semantic version string in ``MAJOR.MINOR`` or ``MAJOR.MINOR.PATCH`` form."""
+    """Semantic version string in ``MAJOR.MINOR`` or ``MAJOR.MINOR.PATCH`` form.
+
+    Enforces Python ≥ 3.8 — the minimum version supported by the platform.
+    Python 2.x and 3.0–3.7 are rejected with an explicit end-of-life message.
+    """
     if _re.fullmatch(r"\d+\.\d+(\.\d+)?", value):
         parts = value.split(".")
         major, minor = int(parts[0]), int(parts[1])
-        if major < 2 or (major == 2 and minor < 7):
+        if major < 3 or (major == 3 and minor < 8):
             return (
                 False,
-                f"Python {value} is end-of-life. Minimum supported: 2.7 or ≥ 3.8.",
+                f"Python {value} is not supported by this platform. "
+                "Minimum required version is Python 3.8.",
             )
         return True, None
     return (

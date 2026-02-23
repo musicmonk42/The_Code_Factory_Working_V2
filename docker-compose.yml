@@ -45,6 +45,15 @@ services:
 
       # LLM Provider Configuration
       - XAI_API_KEY=${XAI_API_KEY:-}
+      # XAI Test-Generation API configuration (used by XAITestGenerationAPI in gen_plugins.py)
+      # XAI_API_PROVIDER: LLM provider for AI test generation (openai, anthropic, ollama …)
+      # XAI_API_MODEL:    Model identifier, e.g. gpt-4o, claude-3-5-sonnet-20241022
+      # XAI_RETRY_ATTEMPTS: Max tenacity retry attempts (default: 3)
+      # XAI_CALL_TIMEOUT:   Per-call timeout in seconds (default: 60)
+      - XAI_API_PROVIDER=${XAI_API_PROVIDER:-openai}
+      - XAI_API_MODEL=${XAI_API_MODEL:-gpt-4o}
+      - XAI_RETRY_ATTEMPTS=${XAI_RETRY_ATTEMPTS:-3}
+      - XAI_CALL_TIMEOUT=${XAI_CALL_TIMEOUT:-60}
       - GROK_API_KEY=${GROK_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}

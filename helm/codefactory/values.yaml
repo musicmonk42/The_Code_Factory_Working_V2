@@ -225,6 +225,14 @@ env:
   # this flag is "true". Never enable in staging or production deployments.
   LLM_USE_MOCK: "false"
 
+  # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)
+  # Non-secret tuning knobs — the XAI_API_KEY credential lives in codefactory-secrets.
+  # Override per-environment: helm upgrade --set env.XAI_API_MODEL=gpt-4o-mini ...
+  XAI_API_PROVIDER: "openai"
+  XAI_API_MODEL: "gpt-4o"
+  XAI_RETRY_ATTEMPTS: "3"
+  XAI_CALL_TIMEOUT: "60"
+
   # Feature flags
   ENABLE_DATABASE: "1"
   ENABLE_REDIS: "1"

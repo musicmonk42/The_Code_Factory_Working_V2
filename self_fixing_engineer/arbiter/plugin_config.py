@@ -127,7 +127,11 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
     # Define the original plugin data
     __ORIGINAL_PLUGINS = {
         # Core AI and benchmarking plugins
-        "benchmarking": "self_fixing_engineer.arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
+        # BenchmarkingEngine lives in omnicore_engine.benchmarking_engine and exposes the
+        # arbiter-compatible execute(action, **kwargs) entry-point directly on the class.
+        # The plugin registry entry below points to that class so the arbiter can load
+        # it as a standard plugin without an adapter shim.
+        "benchmarking": "omnicore_engine.benchmarking_engine.BenchmarkingEngine",
         "explainable_reasoner": "self_fixing_engineer.arbiter.explainable_reasoner.ExplainableReasonerPlugin",
         "generate_tests": "self_fixing_engineer.arbiter.generate_tests.GenerateTestsPlugin",
         # World and agent interaction plugins (function-based)

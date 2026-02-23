@@ -122,6 +122,27 @@ spec:
                   name: codefactory-secrets
                   key: xai-api-key
                   optional: true
+            # XAI Test-Generation API tuning knobs (non-secret, sourced from ConfigMap)
+            - name: XAI_API_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: XAI_API_PROVIDER
+            - name: XAI_API_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: XAI_API_MODEL
+            - name: XAI_RETRY_ATTEMPTS
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: XAI_RETRY_ATTEMPTS
+            - name: XAI_CALL_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: XAI_CALL_TIMEOUT
             - name: GROK_API_KEY
               valueFrom:
                 secretKeyRef:

@@ -698,7 +698,8 @@ except ImportError:  # pragma: no cover
 
 # Hard cap on code sent to the LLM to avoid prompt-injection and token overflow.
 _XAI_MAX_CODE_CHARS: int = 8_000
-# Secret patterns filtered from code before dispatch (case-insensitive).
+# Secret / credential patterns filtered from code before dispatch.
+# All entries are pre-lowercased so comparison against code.lower() is uniform.
 _XAI_SECRET_PATTERNS: tuple = (
     "secret_key",
     "password",
@@ -706,6 +707,10 @@ _XAI_SECRET_PATTERNS: tuple = (
     "access_token",
     "private_key",
     "auth_token",
+    "bearer",
+    "credential",
+    "jwt",
+    "oauth",
     "file://",
 )
 
@@ -733,6 +738,27 @@ _xai_init_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 # XAITestGenerationAPI
 # ---------------------------------------------------------------------------
+
+
+
+# Module-level thread pool shared across all _run_async() calls to avoid the
+# overhead of creating and destroying a new executor per invocation.
+_xai_thread_pool: "concurrent.futures.ThreadPoolExecutor | None" = None
+_xai_thread_pool_lock = threading.Lock()
+
+
+def _get_xai_thread_pool() -> "concurrent.futures.ThreadPoolExecutor":
+    """Return (or lazily create) the module-level thread pool for async bridging."""
+    global _xai_thread_pool
+    if _xai_thread_pool is None:
+        with _xai_thread_pool_lock:
+            if _xai_thread_pool is None:
+                import concurrent.futures as _cf
+                _xai_thread_pool = _cf.ThreadPoolExecutor(
+                    max_workers=4,
+                    thread_name_prefix="xai_testgen",
+                )
+    return _xai_thread_pool
 
 
 class XAITestGenerationAPI:
@@ -1116,7 +1142,9 @@ class XAITestGenerationAPI:
         """Bridge between the sync public API and the async LLMClient.
 
         Selects the appropriate execution strategy based on whether an event
-        loop is already running (e.g. inside an async web handler).
+        loop is already running (e.g. inside an async web handler).  Uses the
+        module-level :func:`_get_xai_thread_pool` executor to avoid creating
+        and destroying a new ``ThreadPoolExecutor`` on every call.
         """
         import asyncio
         import concurrent.futures
@@ -1129,10 +1157,9 @@ class XAITestGenerationAPI:
 
         if loop.is_running():
             # We are inside an async context (FastAPI, pytest-asyncio, etc.).
-            # Dispatch to a private thread pool to avoid blocking the loop.
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(asyncio.run, coro)
-                return future.result(timeout=120)
+            # Dispatch to the shared thread pool to avoid blocking the loop.
+            future = _get_xai_thread_pool().submit(asyncio.run, coro)
+            return future.result(timeout=120)
         else:
             return loop.run_until_complete(coro)
 
