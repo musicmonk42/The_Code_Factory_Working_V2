@@ -132,18 +132,89 @@ def initialize_arbiter_components():
 def aggressive_memory_cleanup():
     """
     Memory cleanup after each test.
-    
+
     Runs at function scope to ensure complete isolation between tests.
     This is critical for preventing OOM failures in memory-constrained CI.
-    
+
     Optimized to avoid expensive per-test operations:
     - Single gc.collect() pass instead of multiple
     - Removed per-test module cache scanning and Prometheus registry cleanup
     """
     yield
-    
+
     # Single garbage collection pass is sufficient for most tests
     gc.collect()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_prometheus_metrics():
+    """
+    Reset Prometheus metrics registry between tests.
+
+    This prevents metric collision errors when tests register the same metric
+    names. The registry is global and shared across all tests, so we need to
+    clean it up between test functions.
+
+    Note: This only runs if prometheus_client is available and has been imported.
+    """
+    yield
+
+    try:
+        # Only reset if prometheus_client has been imported
+        if "prometheus_client" in sys.modules:
+            import prometheus_client
+
+            # Get the default registry
+            registry = prometheus_client.REGISTRY
+
+            # Collect all collectors to unregister
+            collectors = list(registry._collector_to_names.keys())
+
+            # Unregister all collectors except the default process/platform collectors
+            for collector in collectors:
+                try:
+                    # Keep the default collectors (process, platform, gc)
+                    collector_name = getattr(collector, '__class__', type(collector)).__name__
+                    if collector_name not in ('ProcessCollector', 'PlatformCollector', 'GCCollector'):
+                        registry.unregister(collector)
+                except Exception:
+                    # Ignore errors during cleanup - collector may already be unregistered
+                    pass
+    except Exception:
+        # Silently ignore if Prometheus cleanup fails
+        pass
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_singleton_instances():
+    """
+    Reset singleton instances between tests.
+
+    Many modules use singleton patterns with _instance variables. This fixture
+    ensures they're reset between tests to prevent state leakage.
+    """
+    yield
+
+    # Reset known singleton instances
+    try:
+        # Reset ArbiterConfig singleton
+        if "self_fixing_engineer.arbiter.policy.policy_config" in sys.modules:
+            config_mod = sys.modules["self_fixing_engineer.arbiter.policy.policy_config"]
+            if hasattr(config_mod, "_instance"):
+                config_mod._instance = None
+    except Exception:
+        pass
+
+    try:
+        # Reset OpenTelemetry tracer provider singletons
+        if "opentelemetry.trace" in sys.modules:
+            from opentelemetry import trace
+            from opentelemetry.trace import NoOpTracerProvider
+            # Reset to no-op tracer to avoid state leakage
+            trace._TRACER_PROVIDER = None
+            trace._TRACER_PROVIDER_SET_ONCE = trace.Once()
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="session")
