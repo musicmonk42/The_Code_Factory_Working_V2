@@ -861,6 +861,120 @@ def is_using_stubs() -> Dict[str, bool]:
 
 
 # =============================================================================
+# EXPLAINABLE REASONER PLUGIN STUB
+# =============================================================================
+
+class ExplainableReasonerPluginStub:
+    """
+    Stub implementation of ExplainableReasonerPlugin.
+
+    Returns structured placeholder explanations when the real Arbiter
+    explainable reasoner is unavailable.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize ExplainableReasonerPlugin stub."""
+        _log_stub_usage("ExplainableReasonerPlugin")
+
+    async def explain(self, *args, **kwargs) -> Dict[str, Any]:
+        """Return a structured explanation indicating stub mode."""
+        _log_stub_usage("ExplainableReasonerPlugin", "explain")
+        return {
+            "explanation": (
+                "Explainable reasoning unavailable (stub mode). "
+                "Install self_fixing_engineer for full XAI capabilities."
+            ),
+            "stub_mode": True,
+            "confidence": None,
+            "factors": [],
+        }
+
+
+# =============================================================================
+# MERKLE TREE STUB
+# =============================================================================
+
+class MerkleTreeStub:
+    """
+    Stub implementation of MerkleTree for tamper-proof audit logging.
+
+    Stores leaves in-memory and returns a fixed mock root hash.
+    """
+
+    def __init__(self, leaves: Optional[List[bytes]] = None, *args, **kwargs):
+        """Initialize MerkleTree stub."""
+        _log_stub_usage("MerkleTree")
+        self._mock_root = b"mock_merkle_root"
+        self.leaves_data: List[bytes] = list(leaves) if leaves else []
+
+    def _recalculate_root(self) -> None:
+        """Mock root recalculation."""
+        self._mock_root = b"mock_recalculated_root"
+
+    def add_leaf(self, leaf: bytes, key: Optional[bytes] = None) -> None:
+        """Add a leaf to the mock Merkle tree."""
+        _log_stub_usage("MerkleTree", "add_leaf")
+        self.leaves_data.append(leaf)
+
+    def get_root(self) -> bytes:
+        """Return the mock root hash."""
+        return self._mock_root
+
+    def get_merkle_root(self) -> str:
+        """Legacy method name for compatibility."""
+        return self._mock_root.hex()
+
+    def make_tree(self) -> None:
+        """Mock tree construction."""
+        self._recalculate_root()
+
+
+# =============================================================================
+# UNIFIED SIMULATION MODULE STUB
+# =============================================================================
+
+class UnifiedSimulationModuleStub:
+    """
+    Stub implementation of UnifiedSimulationModule.
+
+    Provides no-op simulation lifecycle methods for graceful degradation.
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Initialize UnifiedSimulationModule stub."""
+        _log_stub_usage("UnifiedSimulationModule")
+
+    async def initialize(self) -> None:
+        """No-op initialisation."""
+        _log_stub_usage("UnifiedSimulationModule", "initialize")
+
+    async def shutdown(self) -> None:
+        """No-op shutdown."""
+        _log_stub_usage("UnifiedSimulationModule", "shutdown")
+
+
+# =============================================================================
+# FEEDBACK TYPE STUB
+# =============================================================================
+
+class FeedbackTypeStub:
+    """
+    Stub enumeration of feedback types used throughout the platform.
+
+    Provides standard feedback category constants when the real
+    FeedbackType enum is unavailable.
+    """
+
+    BUG_REPORT = "bug_report"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    GENERAL = "general"
+    MOOD_CORRECTION = "mood_correction"
+    FEATURE_REQUEST = "feature_request"
+
+
+# =============================================================================
 # CONVENIENCE EXPORTS
 # =============================================================================
 
@@ -874,5 +988,10 @@ __all__ = [
     "FeedbackManagerStub",
     "ArbiterArenaStub",
     "KnowledgeLoaderStub",
+    "ExplainableReasonerPluginStub",
+    "MerkleTreeStub",
+    "UnifiedSimulationModuleStub",
+    "FeedbackTypeStub",
     "is_using_stubs",
 ]
+

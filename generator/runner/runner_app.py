@@ -11,7 +11,7 @@ import importlib
 import inspect  # --- FIX 1.1 / 1.3 ---
 import json
 import logging
-import re  # Added for TuiLogHandler redact
+import re  # noqa: F401 (kept for backward compatibility with any dependent imports)
 import sys
 
 # --- FIX 1.6: Expose time as a builtin for tests ---
@@ -31,81 +31,45 @@ if not hasattr(builtins, "time"):
 # --- End Fix 1.6 ---
 
 
-# --- Textual / TUI imports with a safe fallback for the test environment. ---
-from unittest.mock import AsyncMock, MagicMock  # --- FIX 1.1 ---
+# --- Textual / TUI imports — consolidated in generator.tui_stubs. ---
+from unittest.mock import AsyncMock, MagicMock  # kept for use elsewhere in this module
 
-try:
-    # In the real app (or under the test harness' textual mocks)
-    from textual.app import App, ComposeResult, on
-    from textual.binding import Binding
-    from textual.containers import Container, Grid, Horizontal, Vertical, VerticalScroll
-    from textual.reactive import reactive
-    from textual.timer import Timer  # Import Timer for type hint
-    from textual.widgets import (
-        Button,
-        DataTable,
-        Footer,
-        Header,
-        Input,
-        Label,
-        Markdown,
-        ProgressBar,
-        RichLog,
-        Screen,
-        Select,
-        Static,
-        Switch,
-        TabbedContent,
-        TabPane,
-        TextArea,
-        Tree,
-        TreeNode,
-    )
+from generator.tui_stubs import (
+    _TEXTUAL_AVAILABLE,
+    App,
+    Binding,
+    Button,
+    ComposeResult,
+    Container,
+    DataTable,
+    Footer,
+    Grid,
+    Header,
+    Horizontal,
+    Input,
+    Label,
+    Markdown,
+    ProgressBar,
+    RichLog,
+    Screen,
+    Select,
+    Static,
+    Switch,
+    TabbedContent,
+    TabPane,
+    TextArea,
+    Timer,
+    Tree,
+    TreeNode,
+    TuiLogHandler,
+    Vertical,
+    VerticalScroll,
+    on,
+    reactive,
+)
 
-    _TextualAppBase = App
-except Exception:
-    # Fallback shim so tests can patch these names:
-    App = MagicMock(name="App")
-    _TextualAppBase = App  # Use the mock as the base
-    ComposeResult = MagicMock(name="ComposeResult")
-
-    def on(*_args, **_kwargs):  # type: ignore
-        def decorator(fn):
-            return fn
-
-        return decorator
-
-    RichLog = MagicMock(name="RichLog")
-    DataTable = MagicMock(name="DataTable")
-    ProgressBar = MagicMock(name="ProgressBar")
-    Markdown = MagicMock(name="Markdown")
-    Label = MagicMock(name="Label")
-    TextArea = MagicMock(name="TextArea")
-    Header = MagicMock(name="Header")
-    Footer = MagicMock(name="Footer")
-    Button = MagicMock(name="Button")
-    TabbedContent = MagicMock(name="TabbedContent")
-    TabPane = MagicMock(name="TabPane")
-    Tree = MagicMock(name="Tree")
-    TreeNode = MagicMock(name="TreeNode")  # Added missing mock
-    Static = MagicMock(name="Static")
-    Switch = MagicMock(name="Switch")
-    Select = MagicMock(name="Select")
-    Screen = MagicMock(name="Screen")
-    Container = MagicMock(name="Container")
-    Horizontal = MagicMock(name="Horizontal")
-    Vertical = MagicMock(name="Vertical")
-    Grid = MagicMock(name="Grid")
-    VerticalScroll = MagicMock(name="VerticalScroll")  # Added missing mock
-    Binding = MagicMock(name="Binding")
-    Timer = MagicMock(name="Timer")  # Add mock for Timer
-
-    def reactive(initial=None, **_kwargs):  # type: ignore
-        # We don't need true reactivity in unit tests.
-        return initial
-
-
-# --- End Test-Safe Fallback ---
+_TextualAppBase = App
+# --- End Textual imports ---
 
 
 # Import necessary components using the corrected module names
@@ -125,83 +89,6 @@ from .runner_metrics import (
 gettext.bindtextdomain("runner", "locale")
 gettext.textdomain("runner")
 _ = gettext.gettext
-
-
-# --- Custom Log Handler for TUI (FIX 3) ---
-class TuiLogHandler(logging.Handler):
-    """A logging handler that writes log records to a RichLog widget."""
-
-    def __init__(self, log_widget: RichLog):
-        super().__init__()
-        self.log_widget = log_widget
-        self.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
-        # Attempt to capture the event loop, handling the case where it's not yet running
-        try:
-            self._loop = asyncio.get_running_loop()
-        except RuntimeError:
-            self._loop = None
-
-    @staticmethod
-    def _redact(message: str) -> str:
-        # minimal: hide OpenAI-style keys
-        return re.sub(r"sk-[A-Za-z0-9]{3,}", "[REDACTED]", message)
-
-    # --- FIX 1.3: Make TuiLogHandler robust with sync/async writes ---
-    def emit(self, record: logging.LogRecord) -> None:
-        if record.name == "textual":
-            return
-
-        try:
-            raw = self.format(record)
-            msg = self._redact(raw)
-
-            # push into LOG_HISTORY
-            LOG_HISTORY.append({"message": msg})
-
-            write = getattr(self.log_widget, "write", None)
-            if not write:
-                return
-
-            # Lazily grab loop if needed
-            if not self._loop:
-                try:
-                    self._loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    self._loop = None
-
-            # Call write
-            result = write(msg)
-
-            # If write(msg) produced an awaitable (AsyncMock or async def), ensure it is awaited
-            if inspect.isawaitable(result):
-                if self._loop and self._loop.is_running():
-                    # Schedule proper awaiting on the running loop
-                    asyncio.run_coroutine_threadsafe(result, self._loop)
-                else:
-                    # Fallback: run synchronously in a fresh loop
-                    asyncio.run(result)
-            # If it's not awaitable, we're done.
-        except Exception:
-            # Absolute last-resort: don't crash tests/app on logging failure
-            try:
-                # --- FIX: Handle awaitable in except block ---
-                msg_to_write = raw if "raw" in locals() else record.getMessage()
-                result = self.log_widget.write(msg_to_write)  # type: ignore
-
-                if inspect.isawaitable(result):
-                    if self._loop and self._loop.is_running():
-                        # Schedule proper awaiting on the running loop
-                        asyncio.run_coroutine_threadsafe(result, self._loop)
-                    else:
-                        # Fallback: run synchronously in a fresh loop
-                        asyncio.run(result)
-                # --- END FIX ---
-            except Exception:
-                print(record.getMessage(), file=sys.stderr)
-
-    # --- END FIX 1.3 ---
 
 
 # --- Endpoint for Plugin Registration ---
@@ -410,7 +297,7 @@ class RunnerApp(_TextualAppBase):
         self.metrics_exporter: MetricsExporter = MetricsExporter(self.config)
 
         # Attach TUI log handler once
-        self.log_handler = TuiLogHandler(self.log_widget)
+        self.log_handler = TuiLogHandler(self.log_widget, log_history=LOG_HISTORY)
         if not any(isinstance(h, TuiLogHandler) for h in logger.handlers):
             logger.addHandler(self.log_handler)
             logger.setLevel(logging.INFO)  # Set logger level

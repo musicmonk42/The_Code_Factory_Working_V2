@@ -363,3 +363,75 @@ class TestGracefulDegradation:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestNewStubImports:
+    """Test that newly added stub classes can be imported and instantiated."""
+
+    def test_import_new_stubs(self):
+        """Test importing all new stub classes."""
+        from self_fixing_engineer.arbiter.stubs import (
+            ExplainableReasonerPluginStub,
+            MerkleTreeStub,
+            UnifiedSimulationModuleStub,
+            FeedbackTypeStub,
+        )
+        assert ExplainableReasonerPluginStub is not None
+        assert MerkleTreeStub is not None
+        assert UnifiedSimulationModuleStub is not None
+        assert FeedbackTypeStub is not None
+
+    def test_new_stubs_in_all(self):
+        """Test that new stubs are exported via __all__."""
+        from self_fixing_engineer.arbiter import stubs
+        for name in (
+            "ExplainableReasonerPluginStub",
+            "MerkleTreeStub",
+            "UnifiedSimulationModuleStub",
+            "FeedbackTypeStub",
+        ):
+            assert name in stubs.__all__, f"{name} missing from __all__"
+
+    @pytest.mark.asyncio
+    async def test_explainable_reasoner_plugin_stub(self):
+        """Test ExplainableReasonerPluginStub.explain returns structured result."""
+        from self_fixing_engineer.arbiter.stubs import ExplainableReasonerPluginStub
+        plugin = ExplainableReasonerPluginStub()
+        result = await plugin.explain()
+        assert isinstance(result, dict)
+        assert result.get("stub_mode") is True
+        assert "explanation" in result
+
+    def test_merkle_tree_stub(self):
+        """Test MerkleTreeStub basic operations."""
+        from self_fixing_engineer.arbiter.stubs import MerkleTreeStub
+        tree = MerkleTreeStub()
+        assert tree.get_root() == b"mock_merkle_root"
+        tree.add_leaf(b"leaf1")
+        assert b"leaf1" in tree.leaves_data
+        tree.make_tree()
+        assert tree.get_root() == b"mock_recalculated_root"
+        assert isinstance(tree.get_merkle_root(), str)
+
+    def test_merkle_tree_stub_with_initial_leaves(self):
+        """Test MerkleTreeStub with initial leaves."""
+        from self_fixing_engineer.arbiter.stubs import MerkleTreeStub
+        tree = MerkleTreeStub(leaves=[b"a", b"b"])
+        assert b"a" in tree.leaves_data
+        assert b"b" in tree.leaves_data
+
+    @pytest.mark.asyncio
+    async def test_unified_simulation_module_stub(self):
+        """Test UnifiedSimulationModuleStub lifecycle methods."""
+        from self_fixing_engineer.arbiter.stubs import UnifiedSimulationModuleStub
+        module = UnifiedSimulationModuleStub()
+        await module.initialize()
+        await module.shutdown()
+
+    def test_feedback_type_stub_constants(self):
+        """Test FeedbackTypeStub has required constants."""
+        from self_fixing_engineer.arbiter.stubs import FeedbackTypeStub
+        assert FeedbackTypeStub.BUG_REPORT is not None
+        assert FeedbackTypeStub.INFO is not None
+        assert FeedbackTypeStub.WARNING is not None
+        assert FeedbackTypeStub.ERROR is not None
