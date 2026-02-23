@@ -87,6 +87,7 @@ from typing import (
 try:
     from generator.main.provenance import (
         ProvenanceTracker,
+        extract_endpoints_from_md,
         run_fail_fast_validation,
         validate_deployment_artifacts,
         validate_spec_fidelity,
@@ -95,6 +96,7 @@ try:
 except ImportError:
     HAS_PROVENANCE = False
     ProvenanceTracker = None
+    extract_endpoints_from_md = None
     run_fail_fast_validation = None
     validate_deployment_artifacts = None
     validate_spec_fidelity = None
@@ -1197,6 +1199,24 @@ class WorkflowEngine:
                                 str(e)
                             )
                 
+                # Auto-increase max_iterations for complex specs with many endpoints
+                if HAS_PROVENANCE and extract_endpoints_from_md and md_content:
+                    try:
+                        endpoint_count = len(extract_endpoints_from_md(md_content))
+                        if endpoint_count > 15:
+                            adjusted = max(max_iterations, 3)
+                            if adjusted > max_iterations:
+                                logger.info(
+                                    f"[STAGE:COMPLEXITY] Detected {endpoint_count} endpoints in spec, "
+                                    f"auto-increasing max_iterations from {max_iterations} to {adjusted}"
+                                )
+                                max_iterations = adjusted
+                    except Exception:
+                        pass
+                
+                # Feedback from spec fidelity failures is carried across iterations
+                previous_feedback = None
+                
                 # Main orchestration loop
                 for iteration in range(max_iterations):
                     # Check timeout
@@ -1223,7 +1243,8 @@ class WorkflowEngine:
                             "input_file": input_file,
                             "md_content": md_content,  # Pass MD content directly
                             "iteration": iteration_num,
-                            "previous_results": result.get("agent_results", {})
+                            "previous_results": result.get("agent_results", {}),
+                            "previous_feedback": previous_feedback,  # Carry spec fidelity feedback across iterations
                         }
                         codegen_result = await self._execute_agent(
                             "codegen",
@@ -1356,27 +1377,42 @@ class WorkflowEngine:
                                 if not spec_result.get("valid", True):
                                     validation_passed = False
                                     missing = spec_result.get("missing_endpoints", [])
-                                    logger.error(
-                                        f"[STAGE:SPEC_VALIDATE] HARD FAIL - Spec fidelity failed. Missing {len(missing)} endpoints",
-                                        extra={"missing_endpoints": missing}
-                                    )
+                                    missing_ep_labels = [f"{e['method']} {e['path']}" for e in missing]
                                     if provenance:
-                                        missing_endpoints = [f"{e['method']} {e['path']}" for e in missing]
                                         provenance.record_error(
                                             ProvenanceTracker.STAGE_SPEC_VALIDATE,
                                             "spec_fidelity_failed",
-                                            f"Missing required endpoints: {missing_endpoints}"
+                                            f"Missing required endpoints: {missing_ep_labels}"
                                         )
-                                    # HARD FAIL: Do not proceed if spec fidelity fails
-                                    result["status"] = WorkflowStatus.FAILED.value
-                                    result["errors"].append({
-                                        "error_type": "SpecFidelityError",
-                                        "message": f"Missing {len(missing)} required endpoints from spec",
-                                        "missing_endpoints": missing,
-                                        "stage": "SPEC_VALIDATE",
-                                        "timestamp": datetime.now(timezone.utc).isoformat()
-                                    })
-                                    break  # Exit iteration loop
+                                    if iteration_num == max_iterations:
+                                        # Last iteration: hard fail
+                                        logger.error(
+                                            f"[STAGE:SPEC_VALIDATE] HARD FAIL - Spec fidelity failed after "
+                                            f"{iteration_num} iteration(s). Missing {len(missing)} endpoints",
+                                            extra={"missing_endpoints": missing}
+                                        )
+                                        result["status"] = WorkflowStatus.FAILED.value
+                                        result["errors"].append({
+                                            "error_type": "SpecFidelityError",
+                                            "message": f"Missing {len(missing)} required endpoints from spec",
+                                            "missing_endpoints": missing,
+                                            "stage": "SPEC_VALIDATE",
+                                            "timestamp": datetime.now(timezone.utc).isoformat()
+                                        })
+                                        break  # Exit iteration loop
+                                    else:
+                                        # More iterations remain — set feedback and retry
+                                        previous_feedback = (
+                                            f"CRITICAL: The previous generation was INCOMPLETE. "
+                                            f"You MUST implement these missing endpoints: {missing_ep_labels}. "
+                                            f"Focus ONLY on the missing functionality."
+                                        )
+                                        logger.warning(
+                                            f"[STAGE:SPEC_VALIDATE] Spec fidelity failed on iteration "
+                                            f"{iteration_num}/{max_iterations}. Missing {len(missing)} endpoint(s). "
+                                            f"Retrying with missing endpoint feedback.",
+                                            extra={"missing_endpoints": missing_ep_labels}
+                                        )
                         
                         # Skip testgen and deploy if validation failed
                         if not validation_passed:
