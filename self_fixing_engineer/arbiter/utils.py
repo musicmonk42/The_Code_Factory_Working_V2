@@ -13,6 +13,7 @@ from aiolimiter import AsyncLimiter
 # Import centralized OpenTelemetry configuration
 from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter
+from omnicore_engine.metrics_utils import get_or_create_metric
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -66,19 +67,12 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# Helper function for idempotent metric creation
-def _get_or_create_metric(metric_class: type, name: str, doc: str, labelnames: list):
-    """Idempotently create or retrieve a Prometheus metric."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    return metric_class(name, doc, labelnames)
-
-
+# Helper function for idempotent metric creation moved to omnicore_engine.metrics_utils
 # Prometheus Metrics
-utils_ops_total = _get_or_create_metric(
+utils_ops_total = get_or_create_metric(
     Counter, "utils_ops_total", "Total utils operations", ["operation"]
 )
-utils_errors_total = _get_or_create_metric(
+utils_errors_total = get_or_create_metric(
     Counter, "utils_errors_total", "Total utils errors", ["operation"]
 )
 

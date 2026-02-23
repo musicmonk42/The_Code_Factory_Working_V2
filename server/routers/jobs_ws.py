@@ -107,7 +107,7 @@ logger = logging.getLogger(__name__)
 # Prometheus — conditional import with no-op stubs (same pattern as clarifier_ws)
 # ---------------------------------------------------------------------------
 
-from shared.noop_metrics import NOOP as _NOOP, safe_metric as _safe_metric
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 try:
     from prometheus_client import Counter, Histogram
@@ -119,25 +119,25 @@ except ImportError:  # pragma: no cover
     Histogram = None  # type: ignore[assignment,misc]
 
 
-_jobs_ws_connections_total: Any = _safe_metric(
+_jobs_ws_connections_total: Any = get_or_create_metric(
     Counter,
     "jobs_ws_connections_total",
     "Total WebSocket connections to the job-status endpoint",
     labelnames=["status"],
 )
-_jobs_ws_events_forwarded_total: Any = _safe_metric(
+_jobs_ws_events_forwarded_total: Any = get_or_create_metric(
     Counter,
     "jobs_ws_events_forwarded_total",
     "Total job events forwarded to WebSocket clients",
     labelnames=["event_type"],
 )
-_jobs_ws_session_duration_seconds: Any = _safe_metric(
+_jobs_ws_session_duration_seconds: Any = get_or_create_metric(
     Histogram,
     "jobs_ws_session_duration_seconds",
     "Duration of job-status WebSocket sessions in seconds",
     labelnames=["terminal_event"],
 )
-_jobs_ws_active_connections: Any = _safe_metric(
+_jobs_ws_active_connections: Any = get_or_create_metric(
     Counter,
     "jobs_ws_active_connections_current",
     "Current count of active job-status WebSocket connections",

@@ -99,72 +99,27 @@ metrics = get_prometheus_metrics()
 audit_logger = get_audit_logger()
 json_logger = get_json_logger()
 
-
-# --- Safe metric wrapper (works with real, mocked, or missing prometheus) ---
-def _safe_metric(ctor, *args, **kwargs):
-    """
-    Returns a metric instance that always supports:
-      - .labels(...)->self
-      - .time() context manager
-      - .inc(), .observe(), .set()
-    If the ctor or returned object is mocked or lacks these, we wrap it.
-    """
-
-    # Local no-op metric
-    class _NoopTimer:
-        def __enter__(self):
-            return None
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    class _NoopMetric:
-        def labels(self, *a, **k):
-            return self
-
-        def time(self):
-            return _NoopTimer()
-
-        def inc(self, *a, **k):
-            pass
-
-        def observe(self, *a, **k):
-            pass
-
-        def set(self, *a, **k):
-            pass
-
-    try:
-        m = ctor(*args, **kwargs)
-        # If it's a mock or unexpected object, ensure required attrs exist
-        has_labels = hasattr(m, "labels") and callable(getattr(m, "labels"))
-        has_time = hasattr(m, "time") and callable(getattr(m, "time"))
-        # If ctor returned a module-level function (mocked) or something odd, wrap it
-        if not (has_labels and has_time):
-            return _NoopMetric()
-        return m
-    except Exception:
-        return _NoopMetric()
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 
-cache_hits = _safe_metric(
-    metrics.Counter, "cache_layer_hits_total", "Cache hits", ["backend"]
+cache_hits = get_or_create_metric(
+    metrics.Counter, "cache_layer_hits_total", "Cache hits", labelnames=["backend"]
 )
-cache_misses = _safe_metric(
-    metrics.Counter, "cache_layer_misses_total", "Cache misses", ["backend"]
+cache_misses = get_or_create_metric(
+    metrics.Counter, "cache_layer_misses_total", "Cache misses", labelnames=["backend"]
 )
-cache_op_latency = _safe_metric(
+cache_op_latency = get_or_create_metric(
     metrics.Histogram,
     "cache_layer_op_latency_seconds",
     "Cache operation latency",
-    ["backend", "operation"],
+    labelnames=["backend", "operation"],
 )
-redis_connection_failures = _safe_metric(
+redis_connection_failures = get_or_create_metric(
     metrics.Counter,
     "cache_layer_redis_connection_failures_total",
     "Redis connection failures",
 )
-file_hmac_failures = _safe_metric(
+file_hmac_failures = get_or_create_metric(
     metrics.Counter,
     "cache_layer_file_hmac_failures_total",
     "File cache HMAC verification failures",

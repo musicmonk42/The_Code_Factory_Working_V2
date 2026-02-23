@@ -45,45 +45,22 @@ except ImportError:
 # P5: Observability: Prometheus Metrics
 try:
     from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
-
-    def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
-        """
-        Safely create or retrieve a Prometheus metric to prevent
-        'Duplicated timeseries in CollectorRegistry' errors when
-        this module is imported through multiple paths.
-        """
-        labelnames = labelnames or []
-        # Check if metric already exists in registry
-        try:
-            existing = REGISTRY._names_to_collectors.get(name)
-            if existing is not None:
-                return existing
-        except (AttributeError, KeyError):
-            pass
-        # Try to create the metric
-        try:
-            return metric_class(name, documentation, labelnames)
-        except ValueError as e:
-            if "Duplicated timeseries" in str(e):
-                existing = REGISTRY._names_to_collectors.get(name)
-                if existing is not None:
-                    return existing
-            raise
+    from omnicore_engine.metrics_utils import get_or_create_metric
 
     PROMETHEUS_AVAILABLE = True
     # Metrics for spec generation - use safe creation
-    SPEC_GEN_TOTAL = _get_or_create_metric(
+    SPEC_GEN_TOTAL = get_or_create_metric(
         Counter, "spec_gen_total", "Total spec generations", ["format", "status"]
     )
-    SPEC_GEN_LATENCY_SECONDS = _get_or_create_metric(
+    SPEC_GEN_LATENCY_SECONDS = get_or_create_metric(
         Histogram, "spec_gen_latency_seconds", "Spec generation latency in seconds", ["format"]
     )
     # Metrics for validation
-    SPEC_VALIDATION_TOTAL = _get_or_create_metric(
+    SPEC_VALIDATION_TOTAL = get_or_create_metric(
         Counter, "spec_validation_total", "Total spec validations", ["format", "is_valid"]
     )
     # Metrics for auto-fix
-    SPEC_AUTO_FIX_TOTAL = _get_or_create_metric(
+    SPEC_AUTO_FIX_TOTAL = get_or_create_metric(
         Counter, "spec_auto_fix_total", "Total spec auto-fix attempts", ["status"]
     )
 except ImportError:

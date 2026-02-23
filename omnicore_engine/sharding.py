@@ -73,7 +73,7 @@ except ImportError:  # pragma: no cover
 # of the omnicore_engine package)
 # ---------------------------------------------------------------------------
 
-from shared.noop_metrics import NOOP as _NOOP, safe_metric as _safe_metric
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 try:
     from prometheus_client import Counter, Histogram
@@ -85,22 +85,22 @@ except ImportError:  # pragma: no cover
     Histogram = None  # type: ignore[assignment,misc]
 
 
-_ring_get_shard_total: Any = _safe_metric(
+_ring_get_shard_total: Any = get_or_create_metric(
     Counter,
     "sharding_ring_get_shard_total",
     "Total get_shard() calls on the ConsistentHashRing",
 )
-_ring_add_shard_total: Any = _safe_metric(
+_ring_add_shard_total: Any = get_or_create_metric(
     Counter,
     "sharding_ring_add_shard_total",
     "Total add_shard() calls on the ConsistentHashRing",
 )
-_ring_remove_shard_total: Any = _safe_metric(
+_ring_remove_shard_total: Any = get_or_create_metric(
     Counter,
     "sharding_ring_remove_shard_total",
     "Total remove_shard() calls on the ConsistentHashRing",
 )
-_ring_get_shard_latency: Any = _safe_metric(
+_ring_get_shard_latency: Any = get_or_create_metric(
     Histogram,
     "sharding_ring_get_shard_latency_seconds",
     "Latency of ConsistentHashRing.get_shard() calls",
