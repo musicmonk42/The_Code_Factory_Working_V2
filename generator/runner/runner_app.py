@@ -258,6 +258,7 @@ class RunnerApp(_TextualAppBase):
         self.mem_progress = ProgressBar(
             total=100, id="mem-progress", show_percentage=True
         )
+        self.pass_rate_label = Label(_("[bold]N/A[/bold]"), id="pass-rate-label")
         self.coverage_tree = Tree(_("Coverage Heatmap"), id="coverage-tree")
         self.doc_markdown_viewer = Markdown(
             _("# Documentation Loading..."), id="doc-markdown-viewer"

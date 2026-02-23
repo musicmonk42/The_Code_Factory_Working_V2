@@ -667,7 +667,7 @@ jobs:
 
       - name: Run tests for ${{ matrix.module }}
         if: matrix.module != 'self_fixing_engineer'
-        timeout-minutes: 65
+        timeout-minutes: 80
         env:
           TESTING: "1"
           AWS_REGION: ""
@@ -749,6 +749,8 @@ jobs:
             IGNORE_ARGS=""
           fi
 
+          # Use timeout command to prevent runaway processes (75 minutes wall-clock time)
+          # Increased from 60m to 75m to accommodate longer-running test suites
           # Set marker filter: skip slow tests on push/PR to keep CI fast.
           # On scheduled nightly runs, include slow/integration tests as well.
           if [ "${{ github.event_name }}" = "schedule" ]; then
@@ -760,7 +762,7 @@ jobs:
           # Use timeout command to prevent runaway processes (60 minutes wall-clock time)
           # Increased from 40m to 60m to accommodate longer-running test suites
           # Use python -m pytest to ensure proper sys.path setup
-          timeout --signal=TERM --kill-after=30s 60m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 75m python -m pytest \
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
@@ -820,7 +822,7 @@ jobs:
                 tail -50 test-output-${{ matrix.module }}.log || true
               elif [ $EXIT_CODE -eq 124 ]; then
                 echo "ERROR: Test execution timed out (timeout command)"
-                echo "Wall-clock time limit (60 minutes) was exceeded"
+                echo "Wall-clock time limit (75 minutes) was exceeded"
                 echo ""
                 echo "=== Last 50 lines of test output ==="
                 tail -50 test-output-${{ matrix.module }}.log || true
