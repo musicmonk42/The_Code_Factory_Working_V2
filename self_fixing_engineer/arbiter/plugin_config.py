@@ -12,9 +12,31 @@ from omnicore_engine.metrics_utils import get_or_create_metric
 # Mock/Placeholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter import PermissionManager
+except ImportError:
+    class PermissionManager:
+        def __init__(self, config):
+            pass
+
+        def check_permission(self, role, permission):
+            return True
+
+try:
     from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    class ArbiterConfig:
+        def __init__(self):
+            self.ROLE_MAP = {"admin": 3, "user": 1}
+            self.PLUGINS_ENABLED = True
+
+try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PlugInKind, registry
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:
@@ -28,22 +50,6 @@ except ImportError:
     class PlugInKind:
         CORE_SERVICE = "core_service"
         FIX = "FIX"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
-
-    class ArbiterConfig:
-        def __init__(self):
-            self.ROLE_MAP = {"admin": 3, "user": 1}
-            self.PLUGINS_ENABLED = True
-
-    class PermissionManager:
-        def __init__(self, config):
-            pass
-
-        def check_permission(self, role, permission):
-            return True
 
 
 # Get tracer using centralized configuration
@@ -290,13 +296,14 @@ class PluginRegistry(metaclass=PluginRegistryMeta):
                 return {"status": "unhealthy", "error": str(e)}
 
 
-# Register as a plugin for dynamic integration with the plugin registry
-registry.register(
-    kind=PlugInKind.CORE_SERVICE,
-    name="PluginConfig",
-    version="1.0.0",
-    author="Arbiter Team",
-)(PluginRegistry)
+def register_plugin_config_plugin():
+    """Register PluginRegistry with the plugin registry. Call during arbiter initialization."""
+    registry.register(
+        kind=PlugInKind.CORE_SERVICE,
+        name="PluginConfig",
+        version="1.0.0",
+        author="Arbiter Team",
+    )(PluginRegistry)
 
 # Create SANDBOXED_PLUGINS as a copy of the registry
 # This matches what the tests expect

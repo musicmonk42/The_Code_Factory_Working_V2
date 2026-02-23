@@ -360,9 +360,22 @@ tracer = get_tracer(__name__)
 # --- Logger Setup ---
 try:
     from self_fixing_engineer.arbiter.agent_state import Base
+except ImportError:
+    # Use SQLAlchemy 2.0 style declarative_base
+    from sqlalchemy.orm import declarative_base
+
+    Base = declarative_base()
+
+try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PlugInKind as MockPlugInKind
-    from arbiter_plugin_registry import registry as mock_registry
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind as MockPlugInKind
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import registry as mock_registry
 except ImportError:
 
     class mock_registry:
@@ -375,15 +388,6 @@ except ImportError:
 
     class MockPlugInKind:
         CORE_SERVICE = "core_service"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
-
-    # Use SQLAlchemy 2.0 style declarative_base
-    from sqlalchemy.orm import declarative_base
-
-    Base = declarative_base()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -1347,9 +1351,8 @@ This request will time out in {context.get('timeout_seconds', 'N/A')} seconds.
         )
 
 
-# Register as a plugin - skip if in testing environment to avoid validation errors
-# during test collection (HumanInLoop doesn't inherit from PluginBase)
-if not os.environ.get("TESTING"):
+def register_human_loop_plugin():
+    """Register HumanInLoop with the plugin registry. Call during arbiter initialization."""
     mock_registry.register(
         kind=MockPlugInKind.CORE_SERVICE,
         name="HumanInLoop",

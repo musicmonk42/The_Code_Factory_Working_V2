@@ -93,7 +93,13 @@ def _get_tracer():
 # Mock/Plausholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PlugInKind, registry
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
 
     class registry:
@@ -107,10 +113,6 @@ except ImportError:
     class PlugInKind:
         CORE_SERVICE = "core_service"
         FIX = "FIX"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
 
 
 # Get logger for this module - follows Python best practices by not configuring

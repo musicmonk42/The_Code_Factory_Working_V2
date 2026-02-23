@@ -42,12 +42,37 @@ def _get_arbiter_registry():
 # Mock/Placeholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter import PermissionManager
+except ImportError:
+    class PermissionManager:
+        def __init__(self, config):
+            self.config = config
+
+        def check_permission(self, role, permission):
+            return True
+
+try:
     from self_fixing_engineer.arbiter.agent_state import Base
+except ImportError:
+    Base = declarative_base()
+
+try:
     from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    class ArbiterConfig:
+        def __init__(self):
+            self.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+            self.REPORTS_DIRECTORY = "./reports"
+            self.ROLE_MAP = {"admin": 3, "user": 1}
+
+try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
     from self_fixing_engineer.arbiter.postgres_client import PostgresClient
-    from arbiter_plugin_registry import PlugInKind as MockPlugInKind
-    from arbiter_plugin_registry import get_registry as get_mock_registry
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
@@ -92,20 +117,11 @@ except ImportError:
     class ConcreteSQLiteClient:
         pass
 
-    class ArbiterConfig:
-        def __init__(self):
-            self.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-            self.REPORTS_DIRECTORY = "./reports"
-            self.ROLE_MAP = {"admin": 3, "user": 1}
-
-    class PermissionManager:
-        def __init__(self, config):
-            self.config = config
-
-        def check_permission(self, role, permission):
-            return True
-
-    class mock_registry:
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind as MockPlugInKind
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import get_registry as get_mock_registry
+except ImportError:
+    class _FallbackMockRegistry:
         @staticmethod
         def register(kind, name, version, author):
             def decorator(cls):
@@ -116,13 +132,8 @@ except ImportError:
     class MockPlugInKind:
         CORE_SERVICE = "core_service"
 
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
-
-    Base = declarative_base()
-
-
+    def get_mock_registry():
+        return _FallbackMockRegistry
 # Check for psycopg2 and aiosqlite for client-specific functionality
 POSTGRES_AVAILABLE = PSYCOPG2_AVAILABLE
 
@@ -240,6 +251,7 @@ class FeedbackLog(Base):
     """SQLAlchemy model for feedback logs."""
 
     __tablename__ = "feedback_logs"
+    __table_args__ = {"extend_existing": True}
     decision_id = Column(String, primary_key=True)
     data = Column(JSON)
     timestamp = Column(DateTime, default=datetime.now(timezone.utc))
@@ -991,13 +1003,14 @@ def check_permission(role: str, permission: str):
     return permission_mgr.check_permission(role, permission)
 
 
-# Register as a plugin
-mock_registry.register(
-    kind=MockPlugInKind.CORE_SERVICE,
-    name="FeedbackManager",
-    version="1.0.0",
-    author="Arbiter Team",
-)(FeedbackManager)
+def register_feedback_plugin():
+    """Register FeedbackManager with the plugin registry. Call during arbiter initialization."""
+    get_mock_registry().register(
+        kind=MockPlugInKind.CORE_SERVICE,
+        name="FeedbackManager",
+        version="1.0.0",
+        author="Arbiter Team",
+    )(FeedbackManager)
 
 
 async def receive_human_feedback(feedback: Dict[str, Any]) -> None:
