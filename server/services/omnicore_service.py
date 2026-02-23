@@ -6826,15 +6826,17 @@ class OmniCoreService:
                             if spec_files and codegen_attempt <= max_codegen_retries and validation_passed:
                                 output_dir_path = Path(output_path_for_validation)
                                 if output_dir_path.exists():
-                                    generated_count = sum(1 for _ in output_dir_path.rglob("*") if _.is_file())
+                                    # Collect all generated file names once to avoid O(n*m) rglob calls
+                                    generated_file_names = {
+                                        f.name for f in output_dir_path.rglob("*") if f.is_file()
+                                    }
+                                    generated_count = len(generated_file_names)
                                     spec_required_count = len(spec_files)
                                     if spec_required_count > 0 and generated_count < _CODEGEN_MIN_FILE_RATIO * spec_required_count:
                                         validation_passed = False
                                         missing_spec_files = [
                                             sf for sf in spec_files
-                                            if not any(
-                                                output_dir_path.rglob(sf)
-                                            )
+                                            if sf not in generated_file_names
                                         ]
                                         logger.warning(
                                             f"[PIPELINE] Job {job_id} generated only {generated_count} files "
@@ -6855,9 +6857,8 @@ class OmniCoreService:
                                                 "Please generate ALL specified files and endpoints."
                                             ),
                                         }
-                                        import shutil as _shutil
                                         try:
-                                            _shutil.rmtree(str(output_dir_path))
+                                            shutil.rmtree(str(output_dir_path))
                                             logger.info(f"[PIPELINE] Job {job_id} cleaned up incomplete output for retry")
                                         except Exception as _cleanup_err:
                                             logger.warning(f"[PIPELINE] Job {job_id} cleanup error: {_cleanup_err}")

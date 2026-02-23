@@ -2039,9 +2039,10 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
 
             # Fix: Field(..., regex=...) → Field(..., pattern=...) and constr(regex=...) → constr(pattern=...)
             # The 'regex' kwarg was renamed to 'pattern' in Pydantic v2.
+            # Note: the simple [^)]* pattern handles common cases; deeply nested parens are rare in Pydantic field defs.
             if _re.search(r'\bregex\s*=', content):
-                content = _re.sub(r'\bField\s*\(([^)]*)\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
-                content = _re.sub(r'\bconstr\s*\(([^)]*)\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
+                content = _re.sub(r'\bField\s*\([^)]*\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
+                content = _re.sub(r'\bconstr\s*\([^)]*\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
                 logger.info("auto_fix_pydantic_v1_imports: replaced regex= with pattern= in %s", filename)
 
             # Fix: V1 error type strings in test assertions → V2 equivalents
