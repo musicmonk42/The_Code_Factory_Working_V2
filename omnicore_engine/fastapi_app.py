@@ -188,8 +188,10 @@ except ImportError as e:
             async def record_feedback(self, *a, **kw): pass
 
         class FeedbackType:  # type: ignore[no-redef]
-            BUG_REPORT = "bug_report"; GENERAL = "general"
-            MOOD_CORRECTION = "mood_correction"; FEATURE_REQUEST = "feature_request"
+            BUG_REPORT = "bug_report"
+            GENERAL = "general"
+            MOOD_CORRECTION = "mood_correction"
+            FEATURE_REQUEST = "feature_request"
 
         class Arbiter:  # type: ignore[no-redef]
             def __init__(self, *a, **kw): pass
@@ -209,7 +211,8 @@ except ImportError as e:
 
         class MerkleTree:  # type: ignore[no-redef]
             def __init__(self, leaves=None, *a, **kw):
-                self._mock_root = b"mock_merkle_root"; self.leaves_data = list(leaves or [])
+                self._mock_root = b"mock_merkle_root"
+                self.leaves_data = list(leaves or [])
             def add_leaf(self, leaf, key=None): self.leaves_data.append(leaf)
             def get_root(self): return self._mock_root
             def get_merkle_root(self): return self._mock_root.hex()

@@ -587,7 +587,7 @@ class HumanInLoopStub:
         _log_stub_usage("HumanInLoop", "notify")
         logger.info(f"HumanInLoop stub notification [{severity}]: {message}")
         warnings.warn(
-            f"HumanInLoop stub: Notification not sent (stub mode)",
+            "HumanInLoop stub: Notification not sent (stub mode)",
             UserWarning,
             stacklevel=2
         )
@@ -766,7 +766,7 @@ class FeedbackManagerStub:
         
         logger.debug(f"Feedback stub: Persisted {component} - {feedback_type}")
         warnings.warn(
-            f"FeedbackManager stub: Feedback saved to local file only",
+            "FeedbackManager stub: Feedback saved to local file only",
             UserWarning,
             stacklevel=2
         )
