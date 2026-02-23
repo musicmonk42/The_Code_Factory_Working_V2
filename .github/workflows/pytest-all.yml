@@ -914,8 +914,8 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          # Use pytest-xdist with loadfile to isolate each test file in its own worker process
-          # This prevents module-level state contamination between test files
+          # Use pytest-forked for better process isolation and cleanup
+          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 120m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
@@ -927,8 +927,7 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            -n auto \
-            --dist loadfile \
+            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
             > test-output-sfe-arbiter.log 2>&1 || {
@@ -1134,7 +1133,8 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Simulation Tests ==="
-          # Use pytest-xdist with loadfile for test file isolation
+          # Use pytest-forked for better process isolation and cleanup
+          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_simulation*.py \
             -v \
@@ -1146,8 +1146,7 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            -n auto \
-            --dist loadfile \
+            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-simulation.xml \
             > test-output-sfe-simulation.log 2>&1 || {
@@ -1186,7 +1185,8 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Self-Healing Tests ==="
-          # Use pytest-xdist with loadfile for test file isolation
+          # Use pytest-forked for better process isolation and cleanup
+          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_self_healing*.py \
             -v \
@@ -1198,8 +1198,7 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            -n auto \
-            --dist loadfile \
+            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-self-healing.xml \
             > test-output-sfe-self-healing.log 2>&1 || {
@@ -1238,7 +1237,8 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Remaining Tests ==="
-          # Use pytest-xdist with loadfile for test file isolation
+          # Use pytest-forked for better process isolation and cleanup
+          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/ \
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
@@ -1254,8 +1254,7 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            -n auto \
-            --dist loadfile \
+            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-remaining.xml \
             > test-output-sfe-remaining.log 2>&1 || {
