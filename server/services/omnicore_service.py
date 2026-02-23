@@ -4503,6 +4503,44 @@ class OmniCoreService:
                             except Exception as svc_err:
                                 logger.warning(f"[DEPLOY] Could not write default service.yaml: {svc_err}")
                         
+                        # Ensure deployment.yaml exists — required for deployment completeness validation.
+                        # If the LLM did not include a Deployment resource, generate a sensible default.
+                        deployment_yaml_path = target_dir / "deployment.yaml"
+                        if not deployment_yaml_path.exists():
+                            _app_name = output_dir.name or "app"
+                            default_deployment_yaml = (
+                                "---\n"
+                                "apiVersion: apps/v1\n"
+                                "kind: Deployment\n"
+                                "metadata:\n"
+                                f"  name: {_app_name}\n"
+                                "spec:\n"
+                                "  replicas: 1\n"
+                                "  selector:\n"
+                                "    matchLabels:\n"
+                                f"      app: {_app_name}\n"
+                                "  template:\n"
+                                "    metadata:\n"
+                                "      labels:\n"
+                                f"        app: {_app_name}\n"
+                                "    spec:\n"
+                                "      containers:\n"
+                                f"      - name: {_app_name}\n"
+                                f"        image: {_app_name}:latest\n"
+                                "        ports:\n"
+                                "        - containerPort: 8000\n"
+                            )
+                            try:
+                                async with aiofiles.open(deployment_yaml_path, "w", encoding="utf-8") as f:
+                                    await f.write(default_deployment_yaml)
+                                try:
+                                    generated_files.append(str(deployment_yaml_path.relative_to(repo_path)))
+                                except ValueError:
+                                    generated_files.append(str(deployment_yaml_path))
+                                logger.info(f"[DEPLOY] Generated default k8s/deployment.yaml (LLM did not include a Deployment resource)")
+                            except Exception as dep_err:
+                                logger.warning(f"[DEPLOY] Could not write default deployment.yaml: {dep_err}")
+                        
                         continue  # Skip the default file writing below
                     elif target == "helm":
                         # FIX Bug 3 & 4: Helm files go into helm/ subdirectory with proper chart structure

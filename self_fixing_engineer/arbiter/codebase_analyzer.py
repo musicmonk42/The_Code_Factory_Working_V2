@@ -924,10 +924,15 @@ class CodebaseAnalyzer:
                         path_strip_prefix = ""
 
                         def __init__(self):
+                            super().__init__()
                             self.messages = []
 
                         def handle_message(self, message):
                             self.messages.append(message)
+
+                        def _display(self, layout):
+                            """No-op display method required by Pylint's BaseReporter interface."""
+                            pass
 
                     reporter = DefectReporter()
                     # Pylint needs an external runner, which is blocking, so this is called within to_thread

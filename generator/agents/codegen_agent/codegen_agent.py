@@ -956,6 +956,12 @@ The features and constraints lists that follow are supplementary summaries only 
    - Add CORS middleware for API endpoints
    - Add route to serve index.html template
 """
+
+    # Compute minimum file count guidance based on spec's file_structure
+    if len(file_structure) > 12:
+        min_files_guidance = f"AT LEAST {len(file_structure)} files to match the specification"
+    else:
+        min_files_guidance = "AT LEAST 8-12 files for a complete scaffold"
     
     prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements from the specification.
 
@@ -1035,7 +1041,7 @@ Your response MUST be VALID JSON in this EXACT format:
 **ABSOLUTE RULES:**
 1. Output ONLY the JSON - no text before or after
 2. Do NOT wrap in markdown fences (no ```json```)
-3. Include AT LEAST 8-12 files for a complete scaffold
+3. Include {min_files_guidance}
 4. ALL code must be complete and functional (no stubs or TODOs)
 5. Properly escape special characters in JSON (\\n for newlines, \\" for quotes)
 6. Implement EVERY requirement from the specification
@@ -1050,7 +1056,14 @@ Your response MUST be VALID JSON in this EXACT format:
 - [ ] At least one test file in tests/
 - [ ] .env.example with configuration vars
 - [ ] .gitignore file included
-
+"""
+    if file_structure:
+        file_list = "\n".join(f"   - [ ] {f}" for f in file_structure)
+        prompt += f"""
+**REQUIRED FILES (from specification):**
+{file_list}
+"""
+    prompt += """
 Verify you have implemented ALL requirements and included ALL necessary files before responding.
 """
     return prompt
