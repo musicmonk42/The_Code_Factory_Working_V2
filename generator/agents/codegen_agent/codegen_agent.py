@@ -1180,6 +1180,17 @@ if PLUGIN_AVAILABLE:
                             f"Full-stack generation enabled - frontend_type={frontend_type}"
                         )
                     
+                    # Derive target_framework from project_type
+                    _project_type = requirements.get("project_type", "")
+                    if _project_type in ("fastapi_service", "microservice", "api_gateway"):
+                        target_framework = "fastapi"
+                    elif _project_type == "flask_service":
+                        target_framework = "flask"
+                    elif _project_type == "django_service":
+                        target_framework = "django"
+                    else:
+                        target_framework = None
+
                     try:
                         prompt = await build_code_generation_prompt(
                             requirements=requirements,
@@ -1189,7 +1200,7 @@ if PLUGIN_AVAILABLE:
                             target_language=requirements.get(
                                 "target_language", "python"
                             ),
-                            target_framework=None,
+                            target_framework=target_framework,
                             enable_meta_llm_critique=False,
                             multi_modal_inputs=None,
                             audit_logger=JsonConsoleAuditLogger(),  # Kept for prompt builder compatibility
@@ -1500,6 +1511,17 @@ else:
                             f"Full-stack generation enabled - frontend_type={frontend_type}"
                         )
                     
+                    # Derive target_framework from project_type
+                    _project_type = requirements.get("project_type", "")
+                    if _project_type in ("fastapi_service", "microservice", "api_gateway"):
+                        target_framework = "fastapi"
+                    elif _project_type == "flask_service":
+                        target_framework = "flask"
+                    elif _project_type == "django_service":
+                        target_framework = "django"
+                    else:
+                        target_framework = None
+
                     try:
                         prompt = await build_code_generation_prompt(
                             requirements=requirements,
@@ -1509,7 +1531,7 @@ else:
                             target_language=requirements.get(
                                 "target_language", "python"
                             ),
-                            target_framework=None,
+                            target_framework=target_framework,
                             enable_meta_llm_critique=False,
                             multi_modal_inputs=None,
                             audit_logger=JsonConsoleAuditLogger(),  # Kept for prompt builder compatibility
