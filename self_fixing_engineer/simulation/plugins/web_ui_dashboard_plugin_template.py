@@ -80,41 +80,10 @@ except ImportError:
     logging.warning(
         "Prometheus client not found. Metrics for dashboard plugin will be disabled."
     )
-
-    class DummyMetric:
-        # Add DEFAULT_BUCKETS to match Histogram.DEFAULT_BUCKETS
-        DEFAULT_BUCKETS = (
-            0.005,
-            0.01,
-            0.025,
-            0.05,
-            0.075,
-            0.1,
-            0.25,
-            0.5,
-            0.75,
-            1.0,
-            2.5,
-            5.0,
-            7.5,
-            10.0,
-            float("inf"),
-        )
-
-        def inc(self, amount: float = 1.0):
-            pass
-
-        def set(self, value: float):
-            pass
-
-        def observe(self, value: float):
-            pass
-
-        def labels(self, *args, **kwargs):
-            return self
+    from shared.noop_metrics import NoopMetric as DummyMetric, NOOP as _noop_metric  # noqa: E402
 
     def _get_or_create_metric(*args, **kwargs):
-        return DummyMetric()
+        return _noop_metric
 
 
 try:
@@ -280,23 +249,11 @@ if PROMETHEUS_AVAILABLE:
         ["component_name"],
     )
 else:
-
-    class DummyMetric:
-        def inc(self, amount: float = 1.0):
-            pass
-
-        def set(self, value: float):
-            pass
-
-        def observe(self, value: float):
-            pass
-
-        def labels(self, *args, **kwargs):
-            return self
+    from shared.noop_metrics import NOOP as _noop2
 
     DASHBOARD_API_CALLS = WEBSOCKET_CONNECTIONS = DASHBOARD_STATE_UPDATES = (
         DASHBOARD_COMPONENT_RENDERS
-    ) = DummyMetric()
+    ) = _noop2
 
 
 # --- Dashboard State Store (memory fallback, Redis in prod) ---

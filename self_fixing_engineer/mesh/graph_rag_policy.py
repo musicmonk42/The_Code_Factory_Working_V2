@@ -77,6 +77,8 @@ from typing import Any, Dict, List, Optional, Set
 # ---------------------------------------------------------------------------
 
 # -- Prometheus --
+from shared.noop_metrics import NoopMetric as _NoopMetric, safe_metric as _safe_create_metric  # noqa: E402
+
 try:
     from prometheus_client import Counter, Gauge, Histogram, REGISTRY
 
@@ -84,24 +86,6 @@ try:
 except ImportError:
     PROMETHEUS_AVAILABLE = False
     REGISTRY = None
-
-    class _NoopMetric:
-        """Fallback metric that silently discards observations."""
-
-        def __init__(self, *_a: Any, **_kw: Any) -> None:
-            pass
-
-        def labels(self, *_a: Any, **_kw: Any) -> "_NoopMetric":  # noqa: ANN204
-            return self
-
-        def inc(self, *_a: Any, **_kw: Any) -> None:
-            pass
-
-        def observe(self, *_a: Any, **_kw: Any) -> None:
-            pass
-
-        def set(self, *_a: Any, **_kw: Any) -> None:
-            pass
 
     Counter = _NoopMetric  # type: ignore[misc,assignment]
     Histogram = _NoopMetric  # type: ignore[misc,assignment]
@@ -115,22 +99,9 @@ try:
     tracer = trace.get_tracer(__name__)
     TRACING_AVAILABLE = True
 except ImportError:
+    from shared.noop_tracing import NullSpan as _NullContext, NullTracer as _NullTracer  # noqa: E402
+
     TRACING_AVAILABLE = False
-
-    class _NullContext:
-        def __enter__(self) -> "_NullContext":
-            return self
-
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-            pass
-
-        def set_attribute(self, key: str, value: Any) -> None:
-            pass
-
-    class _NullTracer:
-        def start_as_current_span(self, name: str, *args: Any, **kwargs: Any) -> _NullContext:
-            return _NullContext()
-
     tracer = _NullTracer()  # type: ignore[assignment]
 
 
@@ -155,34 +126,8 @@ _DEFAULT_MAX_POLICIES = 10_000
 
 
 # ---------------------------------------------------------------------------
-# Idempotent Prometheus metric registration
-# ---------------------------------------------------------------------------
-
-def _safe_create_metric(
-    metric_class: type,
-    name: str,
-    documentation: str,
-    labelnames: tuple = (),
-) -> Any:
-    """Create a Prometheus metric or return the existing collector.
-
-    Uses the internal ``_names_to_collectors`` mapping on the default
-    ``REGISTRY`` to avoid ``ValueError`` on duplicate registration—the
-    same pattern used across the mesh layer (see ``event_bus.py``).
-    """
-    if not PROMETHEUS_AVAILABLE:
-        return _NoopMetric()
-    try:
-        if REGISTRY is not None and name in REGISTRY._names_to_collectors:
-            return REGISTRY._names_to_collectors[name]
-        if labelnames:
-            return metric_class(name, documentation, labelnames)
-        return metric_class(name, documentation)
-    except Exception:
-        return _NoopMetric()
-
-
 # Module-level metrics (created once at import time)
+# ---------------------------------------------------------------------------
 POLICY_EVAL_TOTAL = _safe_create_metric(
     Counter,
     "graph_rag_policy_evaluation_total",

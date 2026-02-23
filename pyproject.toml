@@ -34,7 +34,7 @@ classifiers = [
 # All modules share a single unified requirements.txt
 
 [tool.setuptools]
-packages = ["generator", "omnicore_engine", "self_fixing_engineer", "server"]
+packages = ["generator", "omnicore_engine", "self_fixing_engineer", "server", "shared"]
 
 [tool.pytest.ini_options]
 minversion = "7.4"

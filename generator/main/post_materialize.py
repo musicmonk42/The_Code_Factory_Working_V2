@@ -149,15 +149,11 @@ try:
 
 except ImportError:
     _HAS_PROMETHEUS = False
+    from shared.noop_metrics import NOOP as _noop
 
-    class _NoOpMetric:  # type: ignore[no-redef]
-        def labels(self, *a, **kw): return self
-        def inc(self, *a, **kw): ...
-        def observe(self, *a, **kw): ...
-
-    POST_MATERIALIZE_RUNS = _NoOpMetric()  # type: ignore[assignment]
-    POST_MATERIALIZE_DURATION = _NoOpMetric()  # type: ignore[assignment]
-    POST_MATERIALIZE_FILES_CREATED = _NoOpMetric()  # type: ignore[assignment]
+    POST_MATERIALIZE_RUNS = _noop  # type: ignore[assignment]
+    POST_MATERIALIZE_DURATION = _noop  # type: ignore[assignment]
+    POST_MATERIALIZE_FILES_CREATED = _noop  # type: ignore[assignment]
 
 # =============================================================================
 # LOGGING

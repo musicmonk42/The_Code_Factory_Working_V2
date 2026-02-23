@@ -147,16 +147,7 @@ logger = _init_logging(_pre_args.log_json)
 # -------------------------
 # Prometheus metrics (safe fallbacks)
 # -------------------------
-class _DummyMetric:
-    def labels(self, *_, **__):
-        return self
-
-    def inc(self, *_, **__):
-        return None
-
-    def observe(self, *_, **__):
-        return None
-
+from shared.noop_metrics import NoopMetric as _DummyMetric  # noqa: E402
 
 def _init_metrics():
     try:
@@ -190,23 +181,7 @@ try:
 
     _tracer = trace.get_tracer(__name__)
 except Exception:
-
-    class _NoOpTracer:
-        def start_as_current_span(self, *_a, **_k):
-            class _Span:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, exc_type, exc, tb):
-                    return False
-
-                def set_attribute(self, *_a, **_k):
-                    return None
-
-                def record_exception(self, *_a, **_k):
-                    return None
-
-            return _Span()
+    from shared.noop_tracing import NullTracer as _NoOpTracer  # noqa: E402
 
     _tracer = _NoOpTracer()
 

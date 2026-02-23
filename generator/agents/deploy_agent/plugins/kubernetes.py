@@ -31,28 +31,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # Import TargetPlugin with fallback
-TargetPlugin = globals().get('TargetPlugin')
-
-if TargetPlugin is None:
-    try:
-        from ..deploy_agent import TargetPlugin
-    except ImportError:
-        from abc import ABC
-        
-        class TargetPlugin(ABC):
-            """Fallback TargetPlugin interface."""
-            __version__ = "1.0"
-            
-            async def generate_config(self, target_files, instructions, context, previous_configs):
-                raise NotImplementedError
-            async def validate_config(self, config):
-                raise NotImplementedError
-            async def simulate_deployment(self, config):
-                raise NotImplementedError
-            async def rollback(self, config):
-                raise NotImplementedError
-            def health_check(self):
-                return True
+from generator.agents.deploy_agent.plugins import TargetPlugin
 
 
 class KubernetesPlugin(TargetPlugin):

@@ -177,5 +177,37 @@ def discover_plugins() -> Dict[str, Any]:
     return plugins
 
 
-__all__ = ["discover_plugins"]
+try:
+    from generator.agents.deploy_agent.deploy_agent import TargetPlugin
+except ImportError:
+    from abc import ABC
+    from typing import Dict, Any, Optional, List
+
+    class TargetPlugin(ABC):  # type: ignore[no-redef]
+        """Fallback TargetPlugin interface."""
+        __version__ = "1.0"
+
+        async def generate_config(
+            self,
+            target_files: List[str],
+            instructions: Optional[str],
+            context: Dict[str, Any],
+            previous_configs: Dict[str, Any],
+        ) -> Dict[str, Any]:
+            raise NotImplementedError
+
+        async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+            raise NotImplementedError
+
+        async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]:
+            raise NotImplementedError
+
+        async def rollback(self, config: Dict[str, Any]) -> bool:
+            raise NotImplementedError
+
+        def health_check(self) -> bool:
+            return True
+
+
+__all__ = ["discover_plugins", "TargetPlugin"]
 
