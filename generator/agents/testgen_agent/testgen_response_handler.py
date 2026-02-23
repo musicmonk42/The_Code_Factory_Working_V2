@@ -1332,18 +1332,38 @@ class DefaultResponseParser(ResponseParser):
             r"\b(?:ssh-rsa|ssh-dss|ecdsa-sha2-nistp|ssh-ed25519)\s+[A-Za-z0-9+/=]+\s*$",
         ]
         email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
-        # RFC 2606 reserved domains used exclusively for documentation and testing.
-        # Matches on these domains are test fixture data, not real sensitive data.
+        # RFC 2606 reserved domains and common test-fixture domains used exclusively
+        # for documentation and testing — not real PII.
         _TEST_EMAIL_DOMAIN_RE = re.compile(
-            r"@(?:example\.(?:com|org|net)|test\.com|localhost)\b", re.IGNORECASE
+            r"@(?:example\.(?:com|org|net)"
+            r"|test\.(?:com|org|net)"
+            r"|localhost"
+            r"|invalid"
+            r"|fake\.com"
+            r"|dummy\.com"
+            r"|mock\.com"
+            r"|[A-Za-z0-9.-]+\.test"
+            r")\b",
+            re.IGNORECASE,
         )
 
         issues = []
         for pat in patterns:
             if pat == email_pattern:
-                # Filter out RFC 2606 test/example email addresses before flagging
+                # Filter out RFC 2606 / common test-fixture email addresses before flagging.
+                # Also honour `# noqa: security` pragmas on individual lines — collect all
+                # email addresses that appear on such lines so they can be excluded.
+                noqa_emails: set = set()
+                for line in content.splitlines():
+                    if "# noqa: security" in line:
+                        for m in re.finditer(email_pattern, line):
+                            noqa_emails.add(m.group())
                 email_matches = re.findall(pat, content)
-                real_emails = [e for e in email_matches if not _TEST_EMAIL_DOMAIN_RE.search(e)]
+                real_emails = [
+                    e for e in email_matches
+                    if not _TEST_EMAIL_DOMAIN_RE.search(e)
+                    and e not in noqa_emails
+                ]
                 if real_emails:
                     issues.append(pat)
             elif re.search(pat, content):
