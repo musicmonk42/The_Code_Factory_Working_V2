@@ -85,6 +85,14 @@ except ImportError:
 DEFAULT_FRONTEND_TYPE = "jinja_templates"
 
 # ==============================================================================
+# --- LLM Call Constants ---
+# ==============================================================================
+# Prompt length threshold above which we request more output tokens from the LLM
+LARGE_PROMPT_THRESHOLD = 8000
+# Max tokens to request when generating code from a large spec
+LARGE_PROMPT_MAX_TOKENS = 16384
+
+# ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
 # --- All internal AuditLogger definitions replaced with centralized call ---
@@ -873,7 +881,7 @@ async def hitl_review(
         return ("rejected", f"Internal error during HITL review: {e}")
 
 
-def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool = False) -> str:
+def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool = False, previous_feedback: Optional[str] = None) -> str:
     """
     Builds an enhanced fallback prompt when templates are unavailable.
     This ensures comprehensive spec parsing even without templates.
@@ -885,6 +893,8 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
         requirements: The requirements dict containing features, target_language, 
                      constraints, and other parsed spec data from IntentParser.
         include_frontend: Whether to include frontend file generation (default: False)
+        previous_feedback: Optional feedback from a previous spec fidelity check,
+                          e.g. listing missing endpoints that must be implemented.
         
     Returns:
         A detailed prompt that emphasizes spec compliance and multi-file JSON output
@@ -939,6 +949,11 @@ The features and constraints lists that follow are supplementary summaries only 
         except Exception as e:
             logger.warning(f"Failed to extract endpoints from MD content in fallback prompt: {e}")
     
+    # Build missing endpoints section from previous spec fidelity feedback
+    missing_endpoints_section = ""
+    if previous_feedback:
+        missing_endpoints_section = f"\n## ⚠️ MISSING ENDPOINTS FROM PREVIOUS ATTEMPT\n\n{previous_feedback}\n"
+    
     # Build frontend files section if needed
     frontend_files_text = ""
     if include_frontend and target_language == "python":
@@ -966,6 +981,7 @@ The features and constraints lists that follow are supplementary summaries only 
     prompt = f"""You are an expert {target_language} developer. Generate production-ready code that implements ALL requirements from the specification.
 
 {md_section}
+{missing_endpoints_section}
 {required_endpoints_section}
 {features_text}
 {constraints_text}
@@ -1168,6 +1184,14 @@ if PLUGIN_AVAILABLE:
                 with tracer.start_as_current_span("prepare_prompt"):
                     previous_feedback = await feedback_store.get_feedback(req_hash)
                     
+                    # Override previous_feedback with spec fidelity failure feedback if present
+                    spec_fidelity_feedback = requirements.get("previous_feedback")
+                    if spec_fidelity_feedback:
+                        previous_feedback = spec_fidelity_feedback
+                        logger.info(
+                            f"[CODEGEN] Using spec fidelity feedback from previous iteration: {str(spec_fidelity_feedback)[:200]}"
+                        )
+                    
                     # Extract frontend generation flags from requirements
                     include_frontend = requirements.get("include_frontend", False)
                     frontend_type = requirements.get("frontend_type", None)
@@ -1226,12 +1250,12 @@ if PLUGIN_AVAILABLE:
                         logger.warning(
                             f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend, previous_feedback=previous_feedback)
                     except Exception as e:
                         logger.warning(
                             f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend, previous_feedback=previous_feedback)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
@@ -1291,13 +1315,18 @@ if PLUGIN_AVAILABLE:
                         
                         # NOTE: response_format requires OpenAI-compatible providers
                         # If using non-OpenAI backends, ensure they support structured output
-                        response = await call_llm_api(
-                            response_format={"type": "json_object"},
-                            prompt=prompt,
-                            provider=config.backend,
-                            model=config.model.get(config.backend),
-                            # Removed cache_manager argument
-                        )
+                        _llm_kwargs: Dict[str, Any] = {
+                            "response_format": {"type": "json_object"},
+                            "prompt": prompt,
+                            "provider": config.backend,
+                            "model": config.model.get(config.backend),
+                        }
+                        if len(prompt) > LARGE_PROMPT_THRESHOLD:
+                            _llm_kwargs["max_tokens"] = LARGE_PROMPT_MAX_TOKENS
+                            logger.info(
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
+                            )
+                        response = await call_llm_api(**_llm_kwargs)
                         
                         # FIX: Log LLM response received
                         logger.info(
@@ -1499,6 +1528,14 @@ else:
                 with tracer.start_as_current_span("prepare_prompt"):
                     previous_feedback = await feedback_store.get_feedback(req_hash)
                     
+                    # Override previous_feedback with spec fidelity failure feedback if present
+                    spec_fidelity_feedback = requirements.get("previous_feedback")
+                    if spec_fidelity_feedback:
+                        previous_feedback = spec_fidelity_feedback
+                        logger.info(
+                            f"[CODEGEN] Using spec fidelity feedback from previous iteration: {str(spec_fidelity_feedback)[:200]}"
+                        )
+                    
                     # Extract frontend generation flags from requirements
                     include_frontend = requirements.get("include_frontend", False)
                     frontend_type = requirements.get("frontend_type", None)
@@ -1557,12 +1594,12 @@ else:
                         logger.warning(
                             f"Template not found ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend, previous_feedback=previous_feedback)
                     except Exception as e:
                         logger.warning(
                             f"Prompt build failed ({e}). Using enhanced fallback prompt."
                         )
-                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend)
+                        prompt = _build_fallback_prompt(requirements, include_frontend=include_frontend, previous_feedback=previous_feedback)
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
@@ -1622,13 +1659,18 @@ else:
                         
                         # NOTE: response_format requires OpenAI-compatible providers
                         # If using non-OpenAI backends, ensure they support structured output
-                        response = await call_llm_api(
-                            prompt=prompt,
-                            provider=config.backend,
-                            model=config.model.get(config.backend),
-                            response_format={"type": "json_object"},
-                            # Removed cache_manager argument
-                        )
+                        _llm_kwargs: Dict[str, Any] = {
+                            "prompt": prompt,
+                            "provider": config.backend,
+                            "model": config.model.get(config.backend),
+                            "response_format": {"type": "json_object"},
+                        }
+                        if len(prompt) > LARGE_PROMPT_THRESHOLD:
+                            _llm_kwargs["max_tokens"] = LARGE_PROMPT_MAX_TOKENS
+                            logger.info(
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
+                            )
+                        response = await call_llm_api(**_llm_kwargs)
                         
                         # FIX: Log LLM response received
                         logger.info(
