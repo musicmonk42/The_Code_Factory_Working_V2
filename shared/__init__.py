@@ -179,6 +179,7 @@ except ImportError as _err:  # pragma: no cover
     class NoopTimer:  # type: ignore[no-redef]
         def __enter__(self) -> "NoopTimer":
             return self
+
         def __exit__(self, *_: Any) -> None:
             pass
 
@@ -190,8 +191,10 @@ except ImportError as _err:  # pragma: no cover
     class NullSpan:  # type: ignore[no-redef]
         def __enter__(self) -> "NullSpan":
             return self
+
         def __exit__(self, *_: Any) -> None:
             pass
+
         def __getattr__(self, _: str) -> Any:
             return lambda *a, **k: None
 

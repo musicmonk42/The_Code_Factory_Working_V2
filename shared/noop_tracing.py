@@ -126,18 +126,23 @@ class NullSpan:
 
     def set_attribute(self, *_: Any, **__: Any) -> None:
         """No-op ``set_attribute``."""
+        pass
 
     def record_exception(self, *_: Any, **__: Any) -> None:
         """No-op ``record_exception``."""
+        pass
 
     def set_status(self, *_: Any, **__: Any) -> None:
         """No-op ``set_status``."""
+        pass
 
     def add_event(self, *_: Any, **__: Any) -> None:
         """No-op ``add_event``."""
+        pass
 
     def update_name(self, *_: Any, **__: Any) -> None:
         """No-op ``update_name``."""
+        pass
 
     def is_recording(self) -> bool:
         """Always returns ``False`` — a null span never records anything."""
@@ -145,6 +150,7 @@ class NullSpan:
 
     def end(self, *_: Any, **__: Any) -> None:
         """No-op ``end``."""
+        pass
 
     def get_span_context(self) -> None:  # type: ignore[override]
         """Return ``None`` — no real context exists."""

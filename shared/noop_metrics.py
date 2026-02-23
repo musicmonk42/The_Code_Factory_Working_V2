@@ -199,15 +199,19 @@ class NoopMetric:
 
     def inc(self, *_: Any, **__: Any) -> None:
         """No-op increment."""
+        pass
 
     def dec(self, *_: Any, **__: Any) -> None:
         """No-op decrement."""
+        pass
 
     def set(self, *_: Any, **__: Any) -> None:
         """No-op set."""
+        pass
 
     def observe(self, *_: Any, **__: Any) -> None:
         """No-op observation."""
+        pass
 
     # ------------------------------------------------------------------
     # Timer context manager
@@ -227,6 +231,7 @@ class NoopMetric:
 
     def clear(self, *_: Any, **__: Any) -> None:
         """No-op clear."""
+        pass
 
     def __repr__(self) -> str:  # pragma: no cover
         return "NoopMetric()"
@@ -339,10 +344,7 @@ def safe_metric(
         try:
             from prometheus_client import REGISTRY as _R  # type: ignore[import]
 
-            if (
-                hasattr(_R, "_names_to_collectors")
-                and name in _R._names_to_collectors
-            ):
+            if hasattr(_R, "_names_to_collectors") and name in _R._names_to_collectors:
                 return _R._names_to_collectors[name]
         except ImportError:
             logger.debug(
