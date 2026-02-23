@@ -177,9 +177,9 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         os.environ.pop(key, None)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def in_memory_exporter():
-    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    """Create in-memory exporter for tests - function scope for test isolation."""
     return InMemorySpanExporter()
 
 

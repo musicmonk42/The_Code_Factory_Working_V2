@@ -178,9 +178,9 @@ import atexit
 atexit.register(_restore_original_modules)
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def cleanup_mocked_modules():
-    """Restore original modules when this test module finishes."""
+    """Restore original modules when this test function finishes - function scope for test isolation."""
     yield
     _restore_original_modules()
 

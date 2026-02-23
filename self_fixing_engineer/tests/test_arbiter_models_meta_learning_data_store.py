@@ -77,9 +77,9 @@ async def setup_env(mocker: MockerFixture):
         os.environ.pop(key, None)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_tracer():
-    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    """Create tracer for tests - function scope for test isolation."""
     from self_fixing_engineer.arbiter.otel_config import get_tracer, get_tracer_safe
     try:
         return get_tracer(__name__)
@@ -87,9 +87,9 @@ def test_tracer():
         return get_tracer_safe(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def in_memory_exporter():
-    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    """Create in-memory exporter for tests - function scope for test isolation."""
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter

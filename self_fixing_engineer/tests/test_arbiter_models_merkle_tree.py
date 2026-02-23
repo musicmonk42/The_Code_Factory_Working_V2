@@ -44,15 +44,15 @@ logger = logging.getLogger(__name__)
 # NOTE: Tracer and exporter moved to fixtures to avoid expensive initialization during collection
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_tracer():
-    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    """Create tracer for tests - function scope for test isolation."""
     return get_tracer(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def in_memory_exporter():
-    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    """Create in-memory exporter for tests - function scope for test isolation."""
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry import trace
