@@ -50,13 +50,51 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 # Mock/Plausholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter import PermissionManager
-    from self_fixing_engineer.arbiter.config import ArbiterConfig
-    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from self_fixing_engineer.arbiter.otel_config import get_tracer
-    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
-    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
+    class PermissionManager:
+        def __init__(self, config):
+            self.config = config
 
+        def check_permission(self, role, permission):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    class ArbiterConfig:
+        def __init__(self):
+            self.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+            self.REPORTS_DIRECTORY = "./reports"
+            self.ROLE_MAP = {"admin": 3, "user": 1}
+
+try:
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+except ImportError:
+    # Mock get_tracer if otel_config is missing
+    class MockTracer:
+        def start_as_current_span(self, *args, **kwargs):
+            class MockSpan:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *args):
+                    pass
+
+            return MockSpan()
+
+    def get_tracer(name):
+        return MockTracer()
+
+try:
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
+except ImportError:
     class PostgresClient:
         def __init__(self, db_url, **kwargs):
             pass
@@ -96,18 +134,9 @@ except ImportError:
 
             return MockSession()
 
-    class ArbiterConfig:
-        def __init__(self):
-            self.DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-            self.REPORTS_DIRECTORY = "./reports"
-            self.ROLE_MAP = {"admin": 3, "user": 1}
-
-    class PermissionManager:
-        def __init__(self, config):
-            self.config = config
-
-        def check_permission(self, role, permission):
-            return True
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, registry
+except ImportError:
 
     class registry:
         @staticmethod
@@ -120,25 +149,6 @@ except ImportError:
     class PlugInKind:
         CORE_SERVICE = "core_service"
         FIX = "FIX"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
-
-    # Mock get_tracer if otel_config is missing
-    class MockTracer:
-        def start_as_current_span(self, *args, **kwargs):
-            class MockSpan:
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *args):
-                    pass
-
-            return MockSpan()
-
-    def get_tracer(name):
-        return MockTracer()
 
 
 Base = declarative_base()
@@ -1125,13 +1135,14 @@ class Explorer:
         return summary
 
 
-# Register as a plugin
-registry.register(
-    kind=PlugInKind.CORE_SERVICE,
-    name="Explorer",
-    version="1.0.0",
-    author="Arbiter Team",
-)(Explorer)
+def register_explorer_plugin():
+    """Register Explorer with the plugin registry. Call during arbiter initialization."""
+    registry.register(
+        kind=PlugInKind.CORE_SERVICE,
+        name="Explorer",
+        version="1.0.0",
+        author="Arbiter Team",
+    )(Explorer)
 
 
 class MockLogDB:

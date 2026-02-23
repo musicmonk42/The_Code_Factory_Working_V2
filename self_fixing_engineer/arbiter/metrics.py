@@ -22,20 +22,23 @@ from prometheus_client import (
 # Mock/Placeholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PlugInKind, PluginBase, registry
 except ImportError:
-    import warnings
-    
-    logger = logging.getLogger(__name__)
-    logger.warning(
-        "arbiter_plugin_registry not available. Using fallback registry, PlugInKind, and PluginBase."
-    )
-    warnings.warn(
-        "arbiter_plugin_registry not available - using fallback implementations",
-        UserWarning,
-        stacklevel=2
-    )
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            import warnings
+            # Only warn once
+            if not hasattr(PIIRedactorFilter, '_warned'):
+                PIIRedactorFilter._warned = True
+                warnings.warn(
+                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
+                    UserWarning,
+                    stacklevel=2
+                )
+            return True
 
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, PluginBase, registry
+except ImportError:
     class registry:
         """Fallback plugin registry that tracks registered plugins."""
         _plugins: list = []
@@ -110,19 +113,6 @@ except ImportError:
         
         async def get_capabilities(self):
             return []
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            import warnings
-            # Only warn once
-            if not hasattr(PIIRedactorFilter, '_warned'):
-                PIIRedactorFilter._warned = True
-                warnings.warn(
-                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
-                    UserWarning,
-                    stacklevel=2
-                )
-            return True
 
 
 # Use centralized OpenTelemetry configuration
@@ -647,12 +637,14 @@ class MetricsService(PluginBase):
         ]
 
 
-registry.register(
-    kind=PlugInKind.CORE_SERVICE,
-    name="MetricsService",
-    version="1.0.0",
-    author="Arbiter Team",
-)(MetricsService)
+def register_metrics_plugin():
+    """Register MetricsService with the plugin registry. Call during arbiter initialization."""
+    registry.register(
+        kind=PlugInKind.CORE_SERVICE,
+        name="MetricsService",
+        version="1.0.0",
+        author="Arbiter Team",
+    )(MetricsService)
 
 # Additional metrics for arbiter_growth
 CONFIG_FALLBACK_USED = _idempotent_metric(

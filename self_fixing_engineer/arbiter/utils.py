@@ -25,7 +25,13 @@ from tenacity import (
 try:
     # FIXED: Correctly import PluginBase from the appropriate registry module
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from arbiter_plugin_registry import PluginBase, PlugInKind, registry
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PluginBase, PlugInKind, registry
 except ImportError:
 
     class registry:
@@ -39,10 +45,6 @@ except ImportError:
     class PlugInKind:
         CORE_SERVICE = "core_service"
         FIX = "FIX"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
 
     # FIXED: Mock PluginBase if the real one isn't available
     class PluginBase(object):
@@ -366,8 +368,9 @@ class UtilsPlugin(PluginBase):
         return await check_service_health(*args, **kwargs)
 
 
-# Register as a plugin
-# FIXED: Registration now uses the properly defined PluginBase class.
-registry.register(
-    kind=PlugInKind.CORE_SERVICE, name="Utils", version="1.0.0", author="Arbiter Team"
-)(UtilsPlugin)
+def register_utils_plugin():
+    """Register UtilsPlugin with the plugin registry. Call during arbiter initialization."""
+    # FIXED: Registration now uses the properly defined PluginBase class.
+    registry.register(
+        kind=PlugInKind.CORE_SERVICE, name="Utils", version="1.0.0", author="Arbiter Team"
+    )(UtilsPlugin)

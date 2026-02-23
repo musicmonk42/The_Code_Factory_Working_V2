@@ -42,10 +42,51 @@ except ImportError:
 # Mock/Placeholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter.agent_state import Base
+except ImportError:
+    Base = declarative_base()
+
+try:
     from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
+    class ArbiterConfig:
+        def __init__(self):
+            # Generate a proper Fernet key for testing
+            self.ENCRYPTION_KEY = Fernet.generate_key().decode()
+            self.DATABASE_URL = "sqlite:///monitor.db"
+            self.PLUGINS_ENABLED = True
+
+try:
     from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            return True
+
+try:
     from self_fixing_engineer.arbiter.postgres_client import PostgresClient
-    from arbiter_plugin_registry import PlugInKind, get_registry
+except ImportError:
+    class PostgresClient:
+        def __init__(self, db_url):
+            pass
+
+        async def get_session(self):
+            class MockSession:
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, exc_type, exc_val, exc_tb):
+                    pass
+
+                def add(self, log):
+                    pass
+
+                async def commit(self):
+                    pass
+
+            return MockSession()
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, get_registry
 
     # Lazy getter for registry to avoid import-time initialization
     def _get_registry():
@@ -67,39 +108,6 @@ except ImportError:
     class PlugInKind:
         CORE_SERVICE = "core_service"
         FIX = "FIX"
-
-    class PostgresClient:
-        def __init__(self, db_url):
-            pass
-
-        async def get_session(self):
-            class MockSession:
-                async def __aenter__(self):
-                    return self
-
-                async def __aexit__(self, exc_type, exc_val, exc_tb):
-                    pass
-
-                def add(self, log):
-                    pass
-
-                async def commit(self):
-                    pass
-
-            return MockSession()
-
-    class ArbiterConfig:
-        def __init__(self):
-            # Generate a proper Fernet key for testing
-            self.ENCRYPTION_KEY = Fernet.generate_key().decode()
-            self.DATABASE_URL = "sqlite:///monitor.db"
-            self.PLUGINS_ENABLED = True
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            return True
-
-    Base = declarative_base()
 
 
 # Constants for robust logging
@@ -634,6 +642,8 @@ class Monitor:
 
 
 # Register as a plugin
-registry.register(
-    kind=PlugInKind.CORE_SERVICE, name="Monitor", version="1.0.0", author="Arbiter Team"
-)(Monitor)
+def register_monitor_plugin():
+    """Register Monitor with the plugin registry. Call during arbiter initialization."""
+    _get_registry().register(
+        kind=PlugInKind.CORE_SERVICE, name="Monitor", version="1.0.0", author="Arbiter Team"
+    )(Monitor)

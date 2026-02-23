@@ -53,111 +53,7 @@ except ImportError:
 # Mock/Plausholder imports for a self-contained fix
 try:
     from self_fixing_engineer.arbiter import PermissionManager
-    from self_fixing_engineer.arbiter.config import ArbiterConfig
-    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
-    from self_fixing_engineer.arbiter.otel_config import get_tracer
-    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
-    from arbiter_plugin_registry import PlugInKind, registry
 except ImportError:
-    import warnings
-    
-    logger = logging.getLogger(__name__)
-    logger.warning(
-        "Failed to import arbiter modules. Using fallback implementations for "
-        "registry, PlugInKind, PIIRedactorFilter, PostgresClient, PermissionManager, ArbiterConfig."
-    )
-    warnings.warn(
-        "Arbiter modules not available - using fallback implementations",
-        UserWarning,
-        stacklevel=2
-    )
-
-    class registry:
-        @staticmethod
-        def register(kind, name, version, author, description, tags, dependencies):
-            def decorator(cls):
-                import warnings
-                logger = logging.getLogger(__name__)
-                logger.debug(f"Fallback registry: Registered {name} v{version}")
-                warnings.warn(
-                    f"Plugin {name} registered with fallback registry (not production-ready)",
-                    UserWarning,
-                    stacklevel=3
-                )
-                return cls
-
-            return decorator
-
-    class PlugInKind:
-        ANALYTICS = "analytics"
-        FIX = "FIX"
-
-    class PIIRedactorFilter(logging.Filter):
-        def filter(self, record):
-            import warnings
-            # Only warn once
-            if not hasattr(PIIRedactorFilter, '_warned'):
-                PIIRedactorFilter._warned = True
-                logger = logging.getLogger(__name__)
-                logger.warning("PIIRedactorFilter fallback: No actual PII redaction performed")
-                warnings.warn(
-                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
-                    UserWarning,
-                    stacklevel=2
-                )
-            return True
-
-    class PostgresClient:
-        # In-memory store shared across instances so results persist within a process.
-        _store: dict = {}
-
-        def __init__(self, db_url):
-            import warnings
-            from urllib.parse import urlparse, urlunparse
-            logger = logging.getLogger(__name__)
-            # Mask password in the DSN to avoid leaking credentials to logs.
-            # Use urllib.parse for robust handling of special characters in passwords.
-            try:
-                parsed = urlparse(db_url)
-                if parsed.password:
-                    masked = parsed._replace(netloc=parsed.netloc.replace(
-                        f":{parsed.password}@", ":***@", 1
-                    ))
-                    _safe_url = urlunparse(masked)
-                else:
-                    _safe_url = db_url
-            except Exception:
-                _safe_url = "<masked>"
-            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
-            warnings.warn(
-                f"PostgresClient fallback used - no actual database connection",
-                UserWarning,
-                stacklevel=2
-            )
-
-        async def connect(self):
-            logger = logging.getLogger(__name__)
-            logger.debug("PostgresClient fallback: connect() uses in-memory storage")
-
-        async def disconnect(self):
-            pass
-
-        async def execute(self, query, *args):
-            logger = logging.getLogger(__name__)
-            logger.debug(f"PostgresClient fallback: execute() stored in memory (query omitted)")
-
-        async def fetch(self, query, *args):
-            return []
-
-        async def fetchrow(self, query, *args):
-            return None
-
-        async def store(self, key, value):
-            PostgresClient._store[key] = value
-
-        async def retrieve(self, key, default=None):
-            return PostgresClient._store.get(key, default)
-
     class PermissionManager:
         """
         Fallback PermissionManager with secure default-deny behavior.
@@ -226,6 +122,9 @@ except ImportError:
             # SECURITY: Default DENY - safer than allowing everything
             return False
 
+try:
+    from self_fixing_engineer.arbiter.config import ArbiterConfig
+except ImportError:
     class ArbiterConfig:
         def __init__(self):
             import warnings
@@ -238,6 +137,27 @@ except ImportError:
             )
             self.PLUGINS_ENABLED = True
 
+try:
+    from self_fixing_engineer.arbiter.logging_utils import PIIRedactorFilter
+except ImportError:
+    class PIIRedactorFilter(logging.Filter):
+        def filter(self, record):
+            import warnings
+            # Only warn once
+            if not hasattr(PIIRedactorFilter, '_warned'):
+                PIIRedactorFilter._warned = True
+                logger = logging.getLogger(__name__)
+                logger.warning("PIIRedactorFilter fallback: No actual PII redaction performed")
+                warnings.warn(
+                    "PIIRedactorFilter fallback: No actual PII redaction (always returns True)",
+                    UserWarning,
+                    stacklevel=2
+                )
+            return True
+
+try:
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+except ImportError:
     # Mock get_tracer if otel_config is missing
     class MockTracer:
         def start_as_current_span(self, *args, **kwargs):
@@ -252,6 +172,83 @@ except ImportError:
 
     def get_tracer(name):
         return MockTracer()
+
+try:
+    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
+except ImportError:
+    class PostgresClient:
+        # In-memory store shared across instances so results persist within a process.
+        _store: dict = {}
+
+        def __init__(self, db_url):
+            import warnings
+            from urllib.parse import urlparse, urlunparse
+            logger = logging.getLogger(__name__)
+            # Mask password in the DSN to avoid leaking credentials to logs.
+            # Use urllib.parse for robust handling of special characters in passwords.
+            try:
+                parsed = urlparse(db_url)
+                if parsed.password:
+                    masked = parsed._replace(netloc=parsed.netloc.replace(
+                        f":{parsed.password}@", ":***@", 1
+                    ))
+                    _safe_url = urlunparse(masked)
+                else:
+                    _safe_url = db_url
+            except Exception:
+                _safe_url = "<masked>"
+            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
+            warnings.warn(
+                f"PostgresClient fallback used - no actual database connection",
+                UserWarning,
+                stacklevel=2
+            )
+
+        async def connect(self):
+            logger = logging.getLogger(__name__)
+            logger.debug("PostgresClient fallback: connect() uses in-memory storage")
+
+        async def disconnect(self):
+            pass
+
+        async def execute(self, query, *args):
+            logger = logging.getLogger(__name__)
+            logger.debug(f"PostgresClient fallback: execute() stored in memory (query omitted)")
+
+        async def fetch(self, query, *args):
+            return []
+
+        async def fetchrow(self, query, *args):
+            return None
+
+        async def store(self, key, value):
+            PostgresClient._store[key] = value
+
+        async def retrieve(self, key, default=None):
+            return PostgresClient._store.get(key, default)
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, registry
+except ImportError:
+    class registry:
+        @staticmethod
+        def register(kind, name, version, author, description, tags, dependencies):
+            def decorator(cls):
+                import warnings
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Fallback registry: Registered {name} v{version}")
+                warnings.warn(
+                    f"Plugin {name} registered with fallback registry (not production-ready)",
+                    UserWarning,
+                    stacklevel=3
+                )
+                return cls
+
+            return decorator
+
+    class PlugInKind:
+        ANALYTICS = "analytics"
+        FIX = "FIX"
 
 
 try:
