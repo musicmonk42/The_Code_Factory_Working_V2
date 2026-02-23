@@ -1937,10 +1937,14 @@ def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
                 f"in requirements.txt. Add 'pydantic-settings>=2.0.0'."
             )
 
-        # Check for Pydantic v1 regex= kwarg in Field() or constr() (renamed to pattern= in v2)
+        # Check for Pydantic v1 regex= kwarg in Field() or constr() (renamed to pattern= in v2).
+        # The pattern handles one level of nested parens in default values (e.g. Field(default=f(), regex=...))
+        # while avoiding false positives in unrelated calls like pandas str.contains(regex=True).
         import re as _re_check
-        if _re_check.search(r'\bField\s*\([^)]*\bregex\s*=', content) or \
-                _re_check.search(r'\bconstr\s*\([^)]*\bregex\s*=', content):
+        if _re_check.search(
+            r'\b(?:Field|constr)\s*\((?:[^()]|\([^)]*\))*\bregex\s*=',
+            content, _re_check.DOTALL
+        ):
             errors.append(
                 f"{filename}: Uses Pydantic v1 'regex=' keyword argument in Field() or constr(). "
                 f"Use 'pattern=' instead (Pydantic v2)."
@@ -2039,10 +2043,19 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
 
             # Fix: Field(..., regex=...) → Field(..., pattern=...) and constr(regex=...) → constr(pattern=...)
             # The 'regex' kwarg was renamed to 'pattern' in Pydantic v2.
-            # Note: the simple [^)]* pattern handles common cases; deeply nested parens are rare in Pydantic field defs.
-            if _re.search(r'\bregex\s*=', content):
-                content = _re.sub(r'\bField\s*\([^)]*\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
-                content = _re.sub(r'\bconstr\s*\([^)]*\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
+            # The pattern handles one level of nested parens in default values
+            # (e.g. Field(default=func(), regex=...)) while avoiding false positives
+            # in unrelated calls such as pandas str.contains(regex=True).
+            if _re.search(
+                r'\b(?:Field|constr)\s*\((?:[^()]|\([^)]*\))*\bregex\s*=',
+                content, _re.DOTALL
+            ):
+                content = _re.sub(
+                    r'(\b(?:Field|constr)\s*\((?:[^()]|\([^)]*\))*)\bregex\s*=',
+                    lambda m: m.group(1) + 'pattern=',
+                    content,
+                    flags=_re.DOTALL,
+                )
                 logger.info("auto_fix_pydantic_v1_imports: replaced regex= with pattern= in %s", filename)
 
             # Fix: V1 error type strings in test assertions → V2 equivalents

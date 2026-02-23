@@ -311,6 +311,72 @@ tracer = get_tracer(__name__)
 # The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
 
+
+class _DedupLogFilter(logging.Filter):
+    """Suppress repetitive log messages that exceed a per-message cap.
+
+    When the same message (keyed on logger name + level + first-line of the
+    formatted message) is emitted more than ``max_count`` times within
+    ``window_seconds``, subsequent occurrences are dropped and a one-time
+    summary warning is emitted instead.  This prevents Railway / other
+    log-aggregators from being flooded by repetitive crash loops (e.g. the
+    DefectReporter AttributeError firing once per linted file).
+    """
+
+    def __init__(self, max_count: int = 3, window_seconds: float = 60.0) -> None:
+        super().__init__()
+        self._max_count = max_count
+        self._window = window_seconds
+        self._counts: dict = {}  # key → (count, first_seen_time)
+        self._summarised: set = set()  # keys for which the summary was already logged
+
+    def filter(self, record: logging.LogRecord) -> int:
+        import time as _time
+
+        # Build a stable key from the first line of the message (guard against empty)
+        first_line = (record.getMessage().splitlines() or [""])[0][:200]
+        key = (record.name, record.levelno, first_line)
+
+        now = _time.monotonic()
+        count, first_seen = self._counts.get(key, (0, now))
+
+        # Reset window if expired
+        if now - first_seen > self._window:
+            count = 0
+            first_seen = now
+            self._summarised.discard(key)
+
+        count += 1
+        self._counts[key] = (count, first_seen)
+
+        if count <= self._max_count:
+            return 1
+
+        # Emit a one-time summary warning then suppress
+        if key not in self._summarised:
+            self._summarised.add(key)
+            summary = logging.LogRecord(
+                name=record.name,
+                level=logging.WARNING,
+                pathname=record.pathname,
+                lineno=record.lineno,
+                msg=(
+                    "[DedupFilter] Suppressing duplicate log messages for: %r "
+                    "(shown %d/%d times within %.0fs window)"
+                ),
+                args=(first_line, self._max_count, count, self._window),
+                exc_info=None,
+            )
+            if record.name:
+                logging.getLogger(record.name).handle(summary)
+        return 0
+
+
+# Attach the deduplication filter to the module logger so that crash loops
+# (e.g. DefectReporter AttributeError logged once per linted file) do not
+# flood the log aggregator.
+logger.addFilter(_DedupLogFilter(max_count=3, window_seconds=60.0))
+
 # Prometheus Metrics - Idempotent Registration
 
 
@@ -854,6 +920,9 @@ class CodebaseAnalyzer:
                     from pylint.reporters import BaseReporter
 
                     class DefectReporter(BaseReporter):
+                        # Required by Pylint 3.3.9's reporter interface
+                        path_strip_prefix = ""
+
                         def __init__(self):
                             self.messages = []
 

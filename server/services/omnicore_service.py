@@ -277,6 +277,11 @@ MAX_FILES_IN_README = 10  # Maximum files to list in README
 MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
 MIN_README_LENGTH = 500  # Minimum length for a complete README (characters)
 
+# Minimum fraction of spec-required endpoints that must be present before the
+# pipeline continues past the codegen step.  If the fraction *missing* exceeds
+# this threshold a codegen retry is triggered (subject to max_codegen_retries).
+SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD = 0.50
+
 # Language detection and file extension mappings
 LANGUAGE_FILE_EXTENSIONS = {
     "python": ["*.py"],
@@ -6865,6 +6870,92 @@ class OmniCoreService:
                                         if "codegen" in stages_completed:
                                             stages_completed.remove("codegen")
                                         continue
+
+                            # Spec fidelity check: if >50% of required endpoints are missing,
+                            # retry codegen with the missing endpoints listed explicitly.
+                            if (
+                                md_content
+                                and _PROVENANCE_AVAILABLE
+                                and codegen_attempt <= max_codegen_retries
+                                and validation_passed
+                            ):
+                                try:
+                                    gen_dir_sf = Path(output_path_for_validation)
+                                    gen_files_sf = {}
+                                    for py_file in gen_dir_sf.rglob("*.py"):
+                                        rel = str(py_file.relative_to(gen_dir_sf))
+                                        gen_files_sf[rel] = py_file.read_text(encoding="utf-8")
+
+                                    sf_result = _validate_spec_fidelity(
+                                        md_content, gen_files_sf, output_path_for_validation
+                                    )
+                                    missing_eps = sf_result.get("missing_endpoints", [])
+                                    required_eps = sf_result.get("required_endpoints", [])
+                                    if not required_eps:
+                                        # Fallback: count errors whose text indicates a missing
+                                        # endpoint (format from _validate_spec_fidelity error list).
+                                        required_eps = [
+                                            e for e in sf_result.get("errors", [])
+                                            if "Missing required endpoint" in e
+                                        ] or missing_eps
+
+                                    required_count = len(required_eps)
+                                    missing_count = len(missing_eps)
+                                    if (
+                                        required_count > 0
+                                        and missing_count / required_count > SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD
+                                    ):
+                                        validation_passed = False
+                                        missing_ep_labels = [
+                                            f"{ep.get('method','?')} {ep.get('path','?')}"
+                                            for ep in missing_eps[:20]
+                                        ]
+                                        extra_note = (
+                                            f" (and {missing_count - 20} more)"
+                                            if missing_count > 20
+                                            else ""
+                                        )
+                                        logger.warning(
+                                            f"[PIPELINE] Job {job_id} spec fidelity retry triggered "
+                                            f"({missing_count}/{required_count} endpoints missing, "
+                                            f">{int(SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD*100)}% threshold, "
+                                            f"{attempt_label}). Retrying codegen.",
+                                            extra={
+                                                "job_id": job_id,
+                                                "attempt": codegen_attempt,
+                                                "missing_count": missing_count,
+                                                "required_count": required_count,
+                                            },
+                                        )
+                                        previous_error = {
+                                            "error_type": "SpecFidelityFailure",
+                                            "details": (
+                                                f"Only {required_count - missing_count} of "
+                                                f"{required_count} required endpoints were generated."
+                                            ),
+                                            "instruction": (
+                                                "The previous generation was incomplete. "
+                                                f"The following required endpoints are missing: "
+                                                f"{missing_ep_labels}{extra_note}. "
+                                                "Please generate ALL required endpoints specified in the spec."
+                                            ),
+                                        }
+                                        try:
+                                            shutil.rmtree(output_path_for_validation)
+                                            logger.info(
+                                                f"[PIPELINE] Job {job_id} cleaned up incomplete output for spec fidelity retry"
+                                            )
+                                        except Exception as _sf_cleanup_err:
+                                            logger.warning(
+                                                f"[PIPELINE] Job {job_id} spec fidelity cleanup error: {_sf_cleanup_err}"
+                                            )
+                                        if "codegen" in stages_completed:
+                                            stages_completed.remove("codegen")
+                                        continue
+                                except Exception as sf_err:
+                                    logger.warning(
+                                        f"[PIPELINE] Job {job_id} spec fidelity retry check error: {sf_err}"
+                                    )
                         except Exception as val_err:
                             logger.warning(f"[PIPELINE] Job {job_id} validation check error: {val_err}")
                             # On validation error, assume success and break (fail-open for safety)
