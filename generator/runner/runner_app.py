@@ -11,7 +11,6 @@ import importlib
 import inspect  # --- FIX 1.1 / 1.3 ---
 import json
 import logging
-import re  # noqa: F401 (kept for backward compatibility with any dependent imports)
 import sys
 
 # --- FIX 1.6: Expose time as a builtin for tests ---
