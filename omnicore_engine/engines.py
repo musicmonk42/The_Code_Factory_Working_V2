@@ -52,131 +52,37 @@ except ImportError as e:
 try:
     from arbiter.bug_manager import BugManager
 except Exception as e:
-    # Minimal stub used when arbiter isn't installed (tests will typically patch this)
     logging.info(
         f"BugManager not available (using stub): {e}. "
         "Bug reporting will be disabled. Install arbiter package for full functionality."
     )
-
-    # Minimal stub used when arbiter isn't installed (tests will typically patch this)
-    class BugManager:
-        """
-        Stub implementation of BugManager for environments without Arbiter installed.
-
-        This is a development/testing stub that provides no-op functionality.
-        In production environments with Arbiter installed, the real BugManager
-        from arbiter.bug_manager will be used instead.
-
-        Industry Standard Note:
-        - This stub follows the Null Object pattern for graceful degradation
-        - Tests should mock this class for proper bug reporting verification
-        - Production deployments should install the full Arbiter package
-
-        Real Implementation Features (when Arbiter is available):
-        - Bug tracking and reporting to external systems
-        - Integration with issue trackers (Jira, GitHub Issues)
-        - Automated bug triage and prioritization
-        - ML-based bug pattern detection
-        """
-
-        def __init__(self, *args, **kwargs):
-            """
-            Initialize BugManager stub.
-
-            Args:
-                *args: Ignored in stub implementation
-                **kwargs: Ignored in stub implementation
-            """
-            pass
-
-        async def report_bug(self, payload):
-            """
-            No-op bug reporting method for stub implementation.
-
-            Args:
-                payload: Bug report data (ignored in stub)
-
-            Returns:
-                None (no bug is actually reported)
-
-            Note:
-                In production with Arbiter installed, this method would:
-                - Validate and sanitize the bug report payload
-                - Submit to configured bug tracking systems
-                - Trigger automated triage workflows
-                - Return a bug tracking ID
-            """
-            # no-op fallback for tests / import-time usage
-            return None
+    try:
+        from self_fixing_engineer.arbiter.stubs import BugManagerStub as BugManager
+    except ImportError:
+        class BugManager:
+            """Minimal last-resort stub for BugManager."""
+            def __init__(self, *args, **kwargs): pass
+            async def report_bug(self, payload): return None
 
 
 try:
     from arbiter import Arbiter
 except ImportError as e:
-    # Minimal stub when arbiter isn't installed
     logging.info(
         f"Arbiter not available (using stub): {e}. "
         "AI-driven autonomous agent features will be disabled. "
         "Install arbiter package for full functionality."
     )
-
-    # Minimal stub when arbiter isn't installed
-    class Arbiter:
-        """
-        Stub implementation of Arbiter for environments without Arbiter installed.
-
-        This is a development/testing stub. Real Arbiter features require installing
-        the self_fixing_engineer package.
-        """
-
-        is_stub: bool = True
-
-        def __init__(self, *args, **kwargs):
-            """
-            Initialize Arbiter stub. Raises RuntimeError in production mode.
-            """
-            import os
-
-            if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
-                raise RuntimeError(
-                    "Arbiter is running in stub mode — real Arbiter module not available. "
-                    "Install self_fixing_engineer. PRODUCTION_MODE=true forbids stub usage."
-                )
-            logging.critical(
-                "Arbiter stub initialized. Real Arbiter module is not available. "
-                "Install self_fixing_engineer for full functionality."
-            )
-
-        async def start_async_services(self):
-            """Log a critical warning — stub cannot start real services."""
-            logging.critical(
-                "Arbiter stub: start_async_services() called — no real services started. "
-                "Install self_fixing_engineer for full Arbiter functionality."
-            )
-
-        async def stop_async_services(self):
-            """No-op stop."""
-            logging.warning("Arbiter stub: stop_async_services() called (no-op).")
-
-        async def respond(self, *args, **kwargs):
-            """
-            Raise RuntimeError — stub cannot respond.
-
-            Returns:
-                dict: Structured error if STUB_ALLOW_RESPOND=true, else raises.
-            """
-            import os
-
-            if os.environ.get("STUB_ALLOW_RESPOND", "false").lower() == "true":
-                return {
-                    "error": "arbiter_unavailable",
-                    "stub_mode": True,
-                    "message": "Arbiter is running in stub mode — real Arbiter module not available.",
-                }
-            raise RuntimeError(
-                "Arbiter is running in stub mode — real Arbiter module not available. "
-                "Install self_fixing_engineer."
-            )
+    try:
+        from self_fixing_engineer.arbiter.stubs import ArbiterStub as Arbiter
+    except ImportError:
+        class Arbiter:
+            """Minimal last-resort stub for Arbiter."""
+            is_stub: bool = True
+            def __init__(self, *args, **kwargs): pass
+            async def start_async_services(self): pass
+            async def stop_async_services(self): pass
+            async def respond(self, *args, **kwargs): return "Arbiter unavailable (stub mode)"
 
 
 try:

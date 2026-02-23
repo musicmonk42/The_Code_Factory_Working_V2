@@ -35,323 +35,39 @@ except ImportError:
 
 
 # --- Guard Textual and Async HTTP imports ---
-_TEXTUAL_AVAILABLE = False
-try:
-    import aiohttp  # For making async HTTP requests to the backend API
-    from textual.app import App, on
-    from textual.binding import Binding
-    from textual.containers import Container, Grid, Horizontal, Vertical
-    from textual.css.query import NoMatches
-    from textual.events import Mount
-    from textual.widgets import (  # Keep Select for interval
-        Button,
-        DataTable,
-        Footer,
-        Header,
-        Input,
-        Label,
-        Markdown,
-        ProgressBar,
-        RichLog,
-        Select,
-        Static,
-        TabbedContent,
-        TabPane,
-        TextArea,
-    )
-
-    _TEXTUAL_AVAILABLE = True
-except ImportError:
-    logging.getLogger(__name__).warning(
-        "Textual, aiohttp, or dependencies not found. GUI cannot run."
-    )
-
-    # Define dummy classes to allow file import
-    class App:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def run(self, *args, **kwargs):
-            pass
-
-        def query_one(self, *args, **kwargs):
-            return self
-
-        def focus(self, *args, **kwargs):
-            pass
-
-        def push_screen(self, *args, **kwargs):
-            pass
-
-        def pop_screen(self, *args, **kwargs):
-            pass
-
-        def set_interval(self, *args, **kwargs):
-            return self
-
-        def update(self, *args, **kwargs):
-            pass
-
-        def write(self, *args, **kwargs):
-            pass
-
-        def clear(self, *args, **kwargs):
-            pass
-
-        def add_columns(self, *args, **kwargs):
-            pass
-
-        def add_row(self, *args, **kwargs):
-            pass
-
-        def update_cell_at(self, *args, **kwargs):
-            pass
-
-        def call_soon(self, *args, **kwargs):
-            pass
-
-        def call_from_thread(self, *args, **kwargs):
-            pass
-
-        def create_task(self, *args, **kwargs):
-            pass
-
-        @property
-        def text(self):
-            return ""
-
-        @text.setter
-        def text(self, val):
-            pass
-
-        @property
-        def value(self):
-            return ""
-
-        @value.setter
-        def value(self, val):
-            pass
-
-        @property
-        def classes(self):
-            return ""
-
-        @classes.setter
-        def classes(self, val):
-            pass
-
-        @property
-        def visible(self):
-            return False
-
-        @visible.setter
-        def visible(self, val):
-            pass
-
-        @property
-        def cursor_row(self):
-            return 0
-
-        @cursor_row.setter
-        def cursor_row(self, val):
-            pass
-
-        @property
-        def row_count(self):
-            return 0
-
-        @property
-        def title(self):
-            return ""
-
-        @title.setter
-        def title(self, val):
-            pass
-
-        @property
-        def sub_title(self):
-            return ""
-
-        @sub_title.setter
-        def sub_title(self, val):
-            pass
-
-    class Binding:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class Container:
-        pass
-
-    class Horizontal(Container):
-        pass
-
-    class Vertical(Container):
-        pass
-
-    class Grid(Container):
-        pass
-
-    class Header:
-        pass
-
-    class Footer:
-        pass
-
-    class RichLog:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def write(self, *args, **kwargs):
-            pass  # Note: This is NOT async
-
-    class DataTable:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def add_columns(self, *args, **kwargs):
-            pass
-
-        def clear(self, *args, **kwargs):
-            pass
-
-        def add_row(self, *args, **kwargs):
-            pass
-
-        @property
-        def cursor_row(self):
-            return 0
-
-        @cursor_row.setter
-        def cursor_row(self, val):
-            pass
-
-        @property
-        def row_count(self):
-            return 0
-
-        def get_row_at(self, *args, **kwargs):
-            return ["dummy_id"]
-
-        def update_cell_at(self, *args, **kwargs):
-            pass
-
-    class Button:
-        # Nested Pressed event class for @on(Button.Pressed, ...) decorators
-        class Pressed:
-            def __init__(self, button=None, *args, **kwargs):
-                self.button = button
-
-    class Input:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        @property
-        def value(self):
-            return ""
-
-        @value.setter
-        def value(self, val):
-            pass
-
-        def focus(self, *args, **kwargs):
-            pass
-
-        # Nested Submitted event class for @on(Input.Submitted, ...) decorators
-        class Submitted:
-            def __init__(self, input=None, value="", *args, **kwargs):
-                self.value = value
-                self.input = input
-
-    class TextArea:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        @property
-        def text(self):
-            return ""
-
-        @text.setter
-        def text(self, val):
-            pass
-
-    class Label:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def update(self, *args, **kwargs):
-            pass
-
-        @property
-        def classes(self):
-            return ""
-
-        @classes.setter
-        def classes(self, val):
-            pass
-
-    class ProgressBar:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def update(self, *args, **kwargs):
-            pass
-
-        @property
-        def visible(self):
-            return False
-
-        @visible.setter
-        def visible(self, val):
-            pass
-
-    class TabbedContent:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        @property
-        def active(self):
-            return ""
-
-        @active.setter
-        def active(self, val):
-            pass
-
-    class TabPane:
-        pass
-
-    class Static:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        def update(self, *args, **kwargs):
-            pass
-
-    class Markdown:
-        def __init__(self, *args, **kwargs):
-            pass
-
-    class Select:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        # Nested Changed event class for @on(Select.Changed, ...) decorators
-        class Changed:
-            def __init__(self, select=None, value=None, *args, **kwargs):
-                self.value = value
-                self.select = select
-
-    class Mount:
-        pass
-
-    class NoMatches(Exception):
-        pass
-
-    def on(*args, **kwargs):
-        def decorator(func):
-            return func
-
-        return decorator
+# All Textual widget stubs and _TEXTUAL_AVAILABLE are consolidated in tui_stubs.py.
+from generator.tui_stubs import (  # noqa: E402
+    _TEXTUAL_AVAILABLE,
+    App,
+    Binding,
+    Button,
+    Container,
+    DataTable,
+    Footer,
+    Grid,
+    Header,
+    Horizontal,
+    Input,
+    Label,
+    Markdown,
+    Mount,
+    NoMatches,
+    ProgressBar,
+    RichLog,
+    Select,
+    Static,
+    TabbedContent,
+    TabPane,
+    TextArea,
+    TuiLogHandler,
+    Vertical,
+    on,
+)
+
+# aiohttp is available when _TEXTUAL_AVAILABLE is True (tui_stubs imports it).
+# Import it here so module-level references (aiohttp.ClientSession etc.) resolve.
+if _TEXTUAL_AVAILABLE:
+    import aiohttp  # noqa: F401
 
 
 # --- Custom Module Imports (Guarded for Test Safety) ---
@@ -456,101 +172,6 @@ API_ENDPOINTS = {
 # PRODUCTION FIX: Make config file paths configurable via environment variables
 RUNNER_CONFIG_PATH = os.getenv("RUNNER_CONFIG_PATH", "config.yaml")
 PARSER_CONFIG_PATH = os.getenv("PARSER_CONFIG_PATH", "intent_parser.yaml")
-
-
-class TuiLogHandler(logging.Handler):
-    """A logging handler that writes log records to a RichLog widget."""
-
-    def __init__(self, log_widget: RichLog, app: App):  # FIX: Accept app instance
-        super().__init__()
-        self.setFormatter(
-            logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        )
-        self.log_widget = log_widget
-        self.app = app  # FIX: Store app instance
-        self.queue = asyncio.Queue()
-        self.worker_task = None
-        self._lock = asyncio.Lock()
-
-    async def _process_queue(self):
-        """Process log records from the queue."""
-        while True:
-            try:
-                record = await self.queue.get()
-                formatted = self.format(record)
-                self.log_widget.write(formatted)  # Remove await, as write is not async
-                self.queue.task_done()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                # Use print for critical handler errors, as logging might recurse
-                print(f"TuiLogHandler error: {e}", file=sys.stderr)
-
-    def emit(self, record):
-        """Emit a log record to the queue."""
-        try:
-            # FIX: Detect execution context (Main Thread vs Background Thread)
-            # Textual runs on the Main Thread. call_from_thread MUST NOT be called from the Main Thread.
-            is_app_thread = False
-            if _TEXTUAL_AVAILABLE and hasattr(self.app, "_thread_id"):
-                # _thread_id stores the ID of the thread running the App loop
-                is_app_thread = self.app._thread_id == threading.get_ident()
-
-            if _TEXTUAL_AVAILABLE and not is_app_thread:
-                # We are in a background thread (e.g., worker, asyncio task in executor), safely switch to app thread
-                if hasattr(self.app, "call_from_thread"):
-                    self.app.call_from_thread(self.queue.put_nowait, record)
-                else:
-                    # Fallback if app isn't fully initialized or testing with mocks
-                    self.queue.put_nowait(record)
-            else:
-                # We are already on the App thread (e.g., on_mount, button press callback)
-                # Just put directly into queue; it's thread-safe enough for simple object passing
-                self.queue.put_nowait(record)
-
-            if self.worker_task is None or self.worker_task.done():
-                # FIX: Use app.create_task to run the worker on the app's event loop
-                # Ensure loop is running
-                try:
-                    if (
-                        hasattr(self.app, "_loop")
-                        and self.app._loop
-                        and not self.app._loop.is_closed()
-                    ):
-                        self.worker_task = self.app.create_task(self._process_queue())
-                    elif hasattr(self.app, "create_task"):  # Fallback for mocks
-                        self.worker_task = self.app.create_task(self._process_queue())
-                except Exception:
-                    pass  # Loop might not be ready
-        except Exception as e:
-            print(f"TuiLogHandler emit error: {e}", file=sys.stderr)
-
-    async def _flush_queue(self):
-        """Flush remaining logs in the queue."""
-        # This lock prevents flushing while another flush is ongoing
-        async with self._lock:
-            while not self.queue.empty():
-                try:
-                    record = await self.queue.get()
-                    formatted = self.format(record)
-                    self.log_widget.write(formatted)  # Remove await
-                    self.queue.task_done()
-                except Exception as e:
-                    print(f"TuiLogHandler flush error: {e}", file=sys.stderr)
-
-    def close(self):
-        """Clean up the handler."""
-        if self.worker_task:
-            self.worker_task.cancel()
-            self.worker_task = None
-        try:
-            # FIX: Check if the app's loop is still running and use create_task
-            # Use simpler check that works with both real Textual apps and basic mocks
-            if hasattr(self.app, "create_task"):
-                self.app.create_task(self._flush_queue())
-        except RuntimeError:
-            pass  # Supress error if no loop is available
-        super().close()
 
 
 class MainApp(App):

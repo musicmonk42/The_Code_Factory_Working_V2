@@ -242,13 +242,12 @@ try:
     from arbiter.policy.core import PolicyEngine
 except ImportError:
     logger.warning("PolicyEngine module not found. Policy checks will be unavailable.")
-
-    class PolicyEngine:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def should_auto_learn(self, *args, **kwargs):
-            return True, "Mock Policy: Always allowed"
+    try:
+        from self_fixing_engineer.arbiter.stubs import PolicyEngineStub as PolicyEngine
+    except ImportError:
+        class PolicyEngine:
+            def __init__(self, *args, **kwargs): pass
+            async def should_auto_learn(self, *args, **kwargs): return True, "Mock Policy: Always allowed"
 
 
 try:
@@ -261,13 +260,12 @@ except ImportError:
         logger.debug(
             "KnowledgeGraph module not found; KnowledgeGraph features unavailable."
         )
-
-        class KnowledgeGraph:
-            def __init__(self, *args, **kwargs):
-                pass
-
-            async def add_fact(self, *args, **kwargs):
-                logger.debug("Mock KnowledgeGraph: add_fact called.")
+        try:
+            from self_fixing_engineer.arbiter.stubs import KnowledgeGraphStub as KnowledgeGraph
+        except ImportError:
+            class KnowledgeGraph:
+                def __init__(self, *args, **kwargs): pass
+                async def add_fact(self, *args, **kwargs): logger.debug("Mock KnowledgeGraph: add_fact called.")
 
 
 from omnicore_engine.metrics import (

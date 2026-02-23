@@ -160,391 +160,68 @@ except ImportError as e:
     ARENA_AVAILABLE = False
     MERKLE_TREE_AVAILABLE = False
 
-    class ExplainableReasonerPlugin:
-        """
-        Mock implementation of ExplainableReasonerPlugin for development/testing.
-
-        This stub provides minimal functionality when the real Arbiter explainable
-        reasoner plugin is not available. It follows industry standards for:
-        - Graceful degradation in development environments
-        - Predictable mock responses for testing
-        - Clear indication that real functionality is unavailable
-
-        Real Implementation Features (when Arbiter is installed):
-        - AI-driven explanation generation for agent decisions
-        - Multi-level explanation detail (high-level, detailed, technical)
-        - Natural language reasoning descriptions
-        - Counterfactual analysis ("what-if" scenarios)
-        - Confidence scores and uncertainty quantification
-        - Citation of decision factors and data sources
-        
-        WARNING: This mock should not be used in production mode.
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize mock ExplainableReasonerPlugin."""
-            check_production_mode_usage("ExplainableReasonerPlugin")
-
-        async def explain(self, *args, **kwargs):
-            """
-            Return a structured explanation dict (stub mode).
-
-            Returns:
-                dict: Structured explanation with stub_mode flag
-            """
-            import os
-
-            check_production_mode_usage("ExplainableReasonerPlugin", "explain")
-            if os.environ.get("PRODUCTION_MODE", "false").lower() == "true":
-                logger.critical(
-                    "ExplainableReasonerPlugin is running in stub mode in PRODUCTION. "
-                    "Install self_fixing_engineer for full XAI capabilities."
-                )
-            return {
-                "explanation": (
-                    "Explainable reasoning unavailable (Arbiter not installed). "
-                    "Install self_fixing_engineer package for full XAI capabilities."
-                ),
-                "stub_mode": True,
-                "confidence": None,
-                "factors": [],
-            }
-
-    class PolicyEngine:
-        """
-        Mock implementation of PolicyEngine for development/testing.
-
-        This stub provides minimal policy checking functionality when the real
-        Arbiter policy engine is not available. Production systems should use
-        the full PolicyEngine for:
-        - Governance and compliance enforcement
-        - Access control and authorization
-        - Resource usage policies
-        - Behavior constraints and guardrails
-        - Audit requirements and logging policies
-
-        Industry Standard Features (when Arbiter is installed):
-        - Declarative policy definition (YAML/JSON)
-        - Real-time policy evaluation
-        - Policy versioning and rollback
-        - Policy conflict detection
-        - Explainable policy decisions
-        
-        WARNING: This mock should not be used in production mode.
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize mock PolicyEngine."""
-            check_production_mode_usage("PolicyEngine")
-
-        async def should_auto_learn(self, *args, **kwargs):
-            """
-            Mock policy check for auto-learning permission.
-
-            Real implementation would evaluate:
-            - User/tenant permissions
-            - Resource availability constraints
-            - Regulatory compliance requirements
-            - Risk assessment thresholds
-            - Learning mode configurations
-
-            Returns:
-                tuple: (bool, str) - (should_learn, policy_reason)
-            """
-            check_production_mode_usage("PolicyEngine", "should_auto_learn")
-            return True, "Mock Policy"
-
-    class FeedbackManager:
-        """
-        Mock implementation of FeedbackManager for development/testing.
-
-        This stub provides no-op feedback collection when the real feedback
-        system is not available. Production deployments should use the full
-        FeedbackManager for:
-        - User feedback collection and analysis
-        - Bug report aggregation
-        - Feature request tracking
-        - Sentiment analysis
-        - Feedback-driven improvements
-        - Integration with issue tracking systems
-
-        Industry Standard Features (when installed):
-        - Multi-channel feedback collection (API, UI, CLI)
-        - Structured feedback taxonomy
-        - Automated categorization and routing
-        - Priority scoring and triage
-        - Analytics and trend detection
-        
-        WARNING: This mock should not be used in production mode.
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize mock FeedbackManager."""
-            if is_production_mode():
-                logger.warning(
-                    "Mock FeedbackManager initialized in production mode. "
-                    "Feedback features will be disabled. "
-                    "Install the full FeedbackManager for production use."
-                )
-
-        async def initialize(self):
-            """No-op initialization for mock."""
-            pass
-
-        async def record_feedback(self, *args, **kwargs):
-            """
-            No-op feedback recording for mock.
-
-            Real implementation would:
-            - Validate feedback structure
-            - Store in database with metadata
-            - Trigger automated workflows
-            - Send notifications to relevant teams
-            - Update metrics and dashboards
-            """
-            if is_production_mode():
-                logger.warning("Mock FeedbackManager.record_feedback() called in production mode")
-            pass
-
-    class FeedbackType:
-        """
-        Enumeration of feedback types supported by the system.
-
-        This class defines standard feedback categories used throughout
-        the platform for consistent feedback handling and routing.
-        """
-
-        BUG_REPORT = "bug_report"
-        GENERAL = "general"
-        MOOD_CORRECTION = "mood_correction"
-        FEATURE_REQUEST = "feature_request"
-
-    class Arbiter:
-        """
-        Mock Arbiter implementation for development/testing.
-
-        See engines.py for full documentation of Arbiter capabilities.
-        This mock provides minimal no-op functionality for environments
-        without the full Arbiter installation.
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize mock Arbiter."""
-            pass
-
-        async def start_async_services(self):
-            """No-op service startup for mock."""
-            pass
-
-        async def stop_async_services(self):
-            """No-op service shutdown for mock."""
-            pass
-
-        async def respond(self, *args, **kwargs):
-            """Return unavailable message for mock."""
-            return "Chatbot unavailable"
-
-    class KnowledgeLoader:
-        """
-        Mock KnowledgeLoader for development/testing.
-
-        This stub provides no-op knowledge loading when the real knowledge
-        graph system is not available. Production systems should use the
-        full KnowledgeLoader for:
-        - Loading domain knowledge from various sources
-        - Building and updating knowledge graphs
-        - Semantic reasoning and inference
-        - Knowledge base versioning
-        - Integration with external knowledge sources
-
-        Industry Standard Features (when available):
-        - Multi-format knowledge ingestion (JSON, RDF, GraphML)
-        - Ontology management and validation
-        - Knowledge graph embedding generation
-        - Incremental knowledge updates
-        - Conflict resolution and consistency checking
-        """
-
-        def load_all(self):
-            """No-op knowledge loading for mock."""
-            pass
-
-        def inject_to_arbiter(self, arbiter):
-            """No-op knowledge injection for mock."""
-            pass
-
-    class ArbiterArena:
-        """
-        Mock ArbiterArena for development/testing.
-
-        This stub provides minimal scanning functionality when the real
-        Arbiter Arena (multi-agent coordination system) is not available.
-
-        Real Arena Features (when installed):
-        - Multi-agent task coordination
-        - Competitive agent evaluation
-        - Collaborative problem solving
-        - Agent performance benchmarking
-        - Automated code scanning and analysis
-        - Test case generation
-        - Security vulnerability detection
-
-        Industry Standard Features:
-        - Agent sandboxing and isolation
-        - Resource allocation and scheduling
-        - Performance monitoring and metrics
-        - Result aggregation and consensus
-        - Explainable agent decisions
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize mock ArbiterArena."""
-            pass
-
-        async def start_arena_services(self, *args, **kwargs):
-            """No-op arena service startup for mock."""
-            pass
-
-        async def run_scan(self, codebase_path: str):
-            """
-            Mock codebase scanning.
-
-            Real implementation would perform:
-            - Static code analysis
-            - Security vulnerability scanning
-            - Code quality metrics collection
-            - Dependency analysis
-            - License compliance checking
-            - Architecture validation
-
-            Args:
-                codebase_path: Path to codebase to scan
-
-            Returns:
-                dict: Mock scan results
-            """
-            return {"status": "mock_scan", "results": "mock_results"}
-
-        async def generate_test_cases(self, *args, **kwargs):
-            """
-            Mock test case generation.
-
-            Real implementation would generate:
-            - Unit tests with multiple scenarios
-            - Integration tests for workflows
-            - Edge case coverage
-            - Property-based tests
-            - Performance test scenarios
-
-            Returns:
-                str: Mock test cases message
-            """
-            return "Mock test cases generated."
-
-    class MerkleTree:
-        """
-        Mock MerkleTree implementation for development/testing.
-
-        This stub provides basic Merkle tree functionality for tamper-proof
-        audit logging when the full implementation is not available.
-
-        Real Implementation Features (when available):
-        - Cryptographic hash tree construction
-        - Efficient proof of inclusion
-        - Tamper detection and verification
-        - Incremental updates with proof generation
-        - Integration with blockchain systems
-        - Persistence and recovery
-
-        Industry Standard Applications:
-        - Audit log integrity verification
-        - Distributed system consistency
-        - Certificate transparency
-        - Version control systems
-        - Blockchain and cryptocurrency
-        """
-
-        def __init__(self, leaves: Optional[List[bytes]] = None, *args, **kwargs):
-            """
-            Initialize mock MerkleTree.
-
-            Args:
-                leaves: Optional initial leaf nodes (stored but not processed in mock)
-                *args: Additional arguments (ignored)
-                **kwargs: Additional keyword arguments (ignored)
-            """
-            self._mock_root = b"mock_merkle_root"
-            self.leaves_data = leaves or []
-
-        def _recalculate_root(self):
-            """
-            Mock root recalculation.
-
-            Real implementation would:
-            - Hash all leaf nodes
-            - Build tree bottom-up with pairwise hashing
-            - Store intermediate nodes for proof generation
-            - Update root hash atomically
-            """
-            self._mock_root = b"mock_recalculated_root"
-
-        def add_leaf(self, leaf: bytes, key: Optional[bytes] = None) -> None:
-            """
-            Add a leaf to the mock Merkle tree.
-
-            Args:
-                leaf: Data to add as a leaf node
-                key: Optional key for indexed access (ignored in mock)
-            """
-            self.leaves_data.append(leaf)
-
-        def get_root(self) -> bytes:
-            """
-            Get the mock Merkle tree root hash.
-
-            Returns:
-                bytes: Mock root hash
-            """
-            return self._mock_root
-
-        def get_merkle_root(self) -> str:
-            """Legacy method name for compatibility."""
-            return self._mock_root.hex()
-
-        def make_tree(self):
-            self._recalculate_root()
-
-    class UnifiedSimulationModule:
-        """Mock UnifiedSimulationModule for fallback when real module is unavailable.
-
-        This mock class provides minimal interface compatibility with the real
-        UnifiedSimulationModule to allow the application to start and run basic
-        operations even when the simulation module cannot be imported.
-        """
-
-        def __init__(self, *args, **kwargs):
-            """Initialize the mock simulation module.
-
-            Args:
-                *args: Variable length argument list (ignored in mock).
-                **kwargs: Arbitrary keyword arguments (ignored in mock).
-            """
-            pass
-
-        async def initialize(self):
-            """Initialize the simulation module asynchronously.
-
-            This is a no-op in the mock implementation.
-            """
-            pass
-
-        async def shutdown(self):
-            """Shutdown the simulation module gracefully.
-
-            This is a no-op in the mock implementation, but is required for
-            compatibility with the application shutdown lifecycle.
-            """
-            pass
+    try:
+        from self_fixing_engineer.arbiter.stubs import (
+            ArbiterStub as Arbiter,
+            PolicyEngineStub as PolicyEngine,
+            FeedbackManagerStub as FeedbackManager,
+            ArbiterArenaStub as ArbiterArena,
+            KnowledgeLoaderStub as KnowledgeLoader,
+            ExplainableReasonerPluginStub as ExplainableReasonerPlugin,
+            FeedbackTypeStub as FeedbackType,
+            MerkleTreeStub as MerkleTree,
+            UnifiedSimulationModuleStub as UnifiedSimulationModule,
+        )
+    except ImportError:
+        # Absolute last-resort one-liner stubs for fully isolated environments.
+        class ExplainableReasonerPlugin:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def explain(self, *a, **kw): return {"explanation": "unavailable", "stub_mode": True}
+
+        class PolicyEngine:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def should_auto_learn(self, *a, **kw): return True, "Mock Policy"
+
+        class FeedbackManager:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def initialize(self): pass
+            async def record_feedback(self, *a, **kw): pass
+
+        class FeedbackType:  # type: ignore[no-redef]
+            BUG_REPORT = "bug_report"
+            GENERAL = "general"
+            MOOD_CORRECTION = "mood_correction"
+            FEATURE_REQUEST = "feature_request"
+
+        class Arbiter:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def start_async_services(self): pass
+            async def stop_async_services(self): pass
+            async def respond(self, *a, **kw): return "Chatbot unavailable"
+
+        class KnowledgeLoader:  # type: ignore[no-redef]
+            def load_all(self): pass
+            def inject_to_arbiter(self, arbiter): pass
+
+        class ArbiterArena:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def start_arena_services(self, *a, **kw): pass
+            async def run_scan(self, path): return {"status": "mock_scan"}
+            async def generate_test_cases(self, *a, **kw): return "Mock test cases generated."
+
+        class MerkleTree:  # type: ignore[no-redef]
+            def __init__(self, leaves=None, *a, **kw):
+                self._mock_root = b"mock_merkle_root"
+                self.leaves_data = list(leaves or [])
+            def add_leaf(self, leaf, key=None): self.leaves_data.append(leaf)
+            def get_root(self): return self._mock_root
+            def get_merkle_root(self): return self._mock_root.hex()
+            def make_tree(self): self._mock_root = b"mock_recalculated_root"
+
+        class UnifiedSimulationModule:  # type: ignore[no-redef]
+            def __init__(self, *a, **kw): pass
+            async def initialize(self): pass
+            async def shutdown(self): pass
 
 
 chatbot_arbiter: Optional[Arbiter] = None
