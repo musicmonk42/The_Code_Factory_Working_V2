@@ -24,12 +24,17 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 _saved_modules_ra = {}
 _modules_to_mock_ra = [
     "textual", "textual.app", "textual.containers", "textual.widgets",
-    "textual.events", "textual.binding", "textual.css",
-    "textual.worker", "textual.timer", "textual.reactive",
+    "textual.events", "textual.binding", "textual.css", "textual.css.query",
+    "textual.css.scalar", "textual.worker", "textual.timer", "textual.reactive",
+    # Clear cached generator modules so they re-import with mocked textual,
+    # enabling FakeTextualApp to be used as the RunnerApp base class.
+    "generator.tui_stubs", "generator.runner.runner_app",
 ]
 for _mod in _modules_to_mock_ra:
     if _mod in sys.modules:
         _saved_modules_ra[_mod] = sys.modules[_mod]
+    # Remove from sys.modules so fresh import uses mocked textual
+    sys.modules.pop(_mod, None)
 
 # Mock all textual submodules that runner_app imports
 sys.modules["textual"] = MagicMock()
@@ -39,6 +44,8 @@ sys.modules["textual.widgets"] = MagicMock()
 sys.modules["textual.events"] = MagicMock()
 sys.modules["textual.binding"] = MagicMock()
 sys.modules["textual.css"] = MagicMock()
+sys.modules["textual.css.query"] = MagicMock()
+sys.modules["textual.css.scalar"] = MagicMock()
 sys.modules["textual.worker"] = MagicMock()
 sys.modules["textual.timer"] = MagicMock()
 sys.modules["textual.reactive"] = MagicMock()

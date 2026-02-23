@@ -245,6 +245,9 @@ except ImportError:
         def write(self, *args, **kwargs):
             pass  # Note: NOT async in the real widget either
 
+        def clear(self, *args, **kwargs):
+            pass
+
     class DataTable:
         """Stub for textual.widgets.DataTable."""
 
@@ -391,6 +394,9 @@ except ImportError:
         def __init__(self, *args, **kwargs):
             pass
 
+        def update(self, *args, **kwargs):
+            pass
+
     class Select:
         """Stub for textual.widgets.Select."""
 
@@ -408,6 +414,12 @@ except ImportError:
 
         def __init__(self, *args, **kwargs):
             pass
+
+        # Nested Changed event class for @on(Switch.Changed, ...) decorators
+        class Changed:
+            def __init__(self, switch=None, value=None, *args, **kwargs):
+                self.value = value
+                self.switch = switch
 
     class Tree:
         """Stub for textual.widgets.Tree."""
