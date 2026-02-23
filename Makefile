@@ -39,7 +39,7 @@ install-dev: ## Install all dependencies including development tools
 	@echo "$(BLUE)Installing unified platform development dependencies...$(NC)"
 	pip install --upgrade pip setuptools wheel
 	pip install -r requirements.txt
-	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit
+	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit pylint
 	@echo "$(GREEN)Development installation complete!$(NC)"
 
 install-ai: ## Install optional Tier-1 AI capability dependencies (qiskit, nengo, opencv)
@@ -98,6 +98,8 @@ lint: ## Run all linters on entire platform
 	ruff check generator/ omnicore_engine/ self_fixing_engineer/ shared/ *.py
 	@echo "$(YELLOW)Running Flake8...$(NC)"
 	flake8 generator/ omnicore_engine/ self_fixing_engineer/ shared/ *.py --count --select=E9,F63,F7,F82 --show-source --statistics
+	@echo "$(YELLOW)Running Pylint...$(NC)"
+	pylint generator/ omnicore_engine/ self_fixing_engineer/ shared/ --errors-only --disable=all --enable=E
 	@echo "$(GREEN)Linting complete!$(NC)"
 
 format: ## Format code with Black
