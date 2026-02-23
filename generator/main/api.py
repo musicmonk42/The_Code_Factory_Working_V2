@@ -3,6 +3,7 @@
 # main/api.py
 import asyncio
 import logging
+import json
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -1785,10 +1786,39 @@ async def api_submit_runner_feedback(
         )
         span.set_attribute("entity_id", entity_id)
         try:
-            # Placeholder for feedback storage (e.g., save to DB, send to analytics)
             logger.info(
                 f"Feedback submitted for run {feedback_data.run_id} by entity {entity_id}: rating {feedback_data.rating}, comments: {feedback_data.comments}"
             )
+            # Persist feedback to the database
+            try:
+                feedback_message = json.dumps({
+                    "run_id": feedback_data.run_id,
+                    "rating": feedback_data.rating,
+                    "comments": feedback_data.comments,
+                    "entity_id": entity_id,
+                })
+                feedback_timestamp = datetime.utcnow().isoformat()
+                with engine.connect() as _conn:
+                    _conn.execute(
+                        text(
+                            "CREATE TABLE IF NOT EXISTS feedback "
+                            "(id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                            "type TEXT, message TEXT, timestamp TEXT)"
+                        )
+                    )
+                    _conn.execute(
+                        text(
+                            "INSERT INTO feedback (type, message, timestamp) "
+                            "VALUES (:type, :message, :timestamp)"
+                        ),
+                        {"type": "runner_feedback", "message": feedback_message, "timestamp": feedback_timestamp},
+                    )
+                    _conn.commit()
+            except Exception as db_err:
+                logger.error(
+                    f"Failed to persist feedback to database for run {feedback_data.run_id}: {db_err}",
+                    exc_info=True,
+                )
             span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
             return {"status": "success", "message": "Feedback recorded."}
         except Exception as e:

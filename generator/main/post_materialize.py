@@ -108,38 +108,21 @@ except ImportError:
 
 try:
     from prometheus_client import Counter, Histogram
-    from prometheus_client.registry import REGISTRY as _REGISTRY
+    from omnicore_engine.metrics_utils import get_or_create_metric
 
-    def _safe_metric(cls, name: str, doc: str, **kwargs):
-        """Idempotent metric registration — returns existing collector if present."""
-        try:
-            existing = _REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
-            if existing is not None:
-                return existing
-        except AttributeError:
-            pass
-        try:
-            return cls(name, doc, **kwargs)
-        except ValueError as exc:
-            if "Duplicated timeseries" in str(exc):
-                existing = _REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
-                if existing is not None:
-                    return existing
-            raise
-
-    POST_MATERIALIZE_RUNS = _safe_metric(
+    POST_MATERIALIZE_RUNS = get_or_create_metric(
         Counter,
         "post_materialize_runs_total",
         "Total post_materialize() invocations",
         labelnames=["status"],
     )
-    POST_MATERIALIZE_DURATION = _safe_metric(
+    POST_MATERIALIZE_DURATION = get_or_create_metric(
         Histogram,
         "post_materialize_duration_seconds",
         "Wall-clock time spent in post_materialize()",
-        buckets=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
+        buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
     )
-    POST_MATERIALIZE_FILES_CREATED = _safe_metric(
+    POST_MATERIALIZE_FILES_CREATED = get_or_create_metric(
         Counter,
         "post_materialize_files_created_total",
         "Number of stub files created by post_materialize()",

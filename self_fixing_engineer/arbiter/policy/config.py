@@ -30,6 +30,7 @@ import redis.asyncio as redis
 from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet
 from prometheus_client import REGISTRY, Counter, Histogram
+from omnicore_engine.metrics_utils import get_or_create_metric
 from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -43,51 +44,41 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# Helper function for idempotent metric creation
-def _get_or_create_metric(
-    metric_class: type, name: str, doc: str, labelnames: tuple, buckets: tuple = None
-):
-    """Idempotently create or retrieve a Prometheus metric."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    if buckets is not None and metric_class == Histogram:
-        return metric_class(name, doc, labelnames=labelnames, buckets=buckets)
-    return metric_class(name, doc, labelnames=labelnames)
-
+# Helper function for idempotent metric creation moved to omnicore_engine.metrics_utils
 
 # --- Prometheus Metrics (Define BEFORE using them) ---
-CONFIG_ERRORS = _get_or_create_metric(
+CONFIG_ERRORS = get_or_create_metric(
     Counter,
     "arbiter_config_errors_total",
     "Total configuration errors",
     labelnames=("error_type",),
 )
-CONFIG_INITIALIZATIONS = _get_or_create_metric(
+CONFIG_INITIALIZATIONS = get_or_create_metric(
     Counter,
     "arbiter_config_initializations_total",
     "Total configuration initializations",
     labelnames=("result",),
 )
-CONFIG_RELOAD_FREQUENCY = _get_or_create_metric(
+CONFIG_RELOAD_FREQUENCY = get_or_create_metric(
     Counter,
     "arbiter_config_reload_frequency_total",
     "Total number of configuration reloads",
     labelnames=("result",),
 )
-CONFIG_VALIDATION_DURATION = _get_or_create_metric(
+CONFIG_VALIDATION_DURATION = get_or_create_metric(
     Histogram,
     "arbiter_config_validation_duration_seconds",
     "Duration of configuration validation",
     labelnames=("operation",),
     buckets=(0.001, 0.01, 0.1, 0.5, 1, 2, 5),
 )
-CONFIG_TO_DICT_CACHE_HITS = _get_or_create_metric(
+CONFIG_TO_DICT_CACHE_HITS = get_or_create_metric(
     Counter,
     "arbiter_config_to_dict_cache_hits_total",
     "Total cache hits/misses for to_dict calls",
     labelnames=("result",),
 )
-CONFIG_REDIS_VALIDATION_DURATION = _get_or_create_metric(
+CONFIG_REDIS_VALIDATION_DURATION = get_or_create_metric(
     Histogram,
     "arbiter_config_redis_validation_duration_seconds",
     "Duration of Redis URL validation",

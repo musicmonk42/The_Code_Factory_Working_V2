@@ -913,10 +913,11 @@ class Database:
         WARNING: This is a fallback for development/testing only.
         In production, ensure PolicyEngine is properly initialized with ArbiterConfig.
         Mock usage is logged for security audit purposes.
+        In production mode, the mock will DENY all operations (fail-closed).
         """
         logger.warning(
-            "MockPolicyEngine is in use. All policy checks will be bypassed. "
-            "This is acceptable for development/testing but should be avoided in production. "
+            "MockPolicyEngine is in use. All policy checks will be bypassed in development/testing. "
+            "In production mode, MockPolicyEngine will DENY all operations (fail-closed). "
             "Ensure ARBITER configuration is properly set in production environments."
         )
 
@@ -926,20 +927,23 @@ class Database:
                 if os.getenv("PRODUCTION_MODE", "false").lower() == "true" or os.getenv("APP_ENV", "development") == "production":
                     logger.critical(
                         "CRITICAL: MockPolicyEngine active in PRODUCTION MODE! "
-                        "All policy checks are being bypassed. This is a security risk. "
+                        "All policy checks are being denied (fail-closed). "
                         "Configure real PolicyEngine immediately."
                     )
                     # Track mock usage in production via metrics
                     try:
+                        from omnicore_engine.metrics_utils import get_or_create_metric
                         from prometheus_client import Counter
-                        mock_policy_counter = Counter(
+                        mock_policy_counter = get_or_create_metric(
+                            Counter,
                             'mock_policy_engine_usage_in_production',
                             'Mock policy engine calls in production mode'
                         )
                         mock_policy_counter.inc()
                     except Exception:
                         pass  # Metrics not available
-                
+                    return False, "MockPolicyEngine: Policy check denied in production mode. Configure real PolicyEngine."
+
                 # Log each call for audit purposes
                 logger.debug(
                     f"MockPolicyEngine: Allowing operation. Args: {args[0:2] if args else 'none'}"

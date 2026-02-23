@@ -78,6 +78,7 @@ except ImportError:
 # --- Observability Libraries ---
 try:
     from prometheus_client import Counter, Gauge, Histogram, REGISTRY, start_http_server
+    from omnicore_engine.metrics_utils import get_or_create_metric
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
@@ -110,51 +111,26 @@ utils_logger = logging.getLogger("io_utils")
 # (Assume logging is configured externally.)
 
 
-def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
-    """
-    Safely create or retrieve a Prometheus metric to prevent
-    'Duplicated timeseries in CollectorRegistry' errors when
-    this module is imported through multiple paths.
-    """
-    labelnames = labelnames or []
-    # Check if metric already exists in registry
-    try:
-        existing = REGISTRY._names_to_collectors.get(name)
-        if existing is not None:
-            return existing
-    except (AttributeError, KeyError):
-        pass
-    # Try to create the metric
-    try:
-        return metric_class(name, documentation, labelnames)
-    except ValueError as e:
-        if "Duplicated timeseries" in str(e):
-            existing = REGISTRY._names_to_collectors.get(name)
-            if existing is not None:
-                return existing
-        raise
-
-
 # --- Prometheus Metrics ---
 # Use safe metric creation to prevent 'Duplicated timeseries in CollectorRegistry'
 # errors when this module is imported through multiple paths.
 if PROMETHEUS_AVAILABLE:
-    FILE_OPS_TOTAL = _get_or_create_metric(
+    FILE_OPS_TOTAL = get_or_create_metric(
         Counter, "io_file_ops_total", "File operations", ["operation", "status"]
     )
-    FILE_OPS_LATENCY_SECONDS = _get_or_create_metric(
+    FILE_OPS_LATENCY_SECONDS = get_or_create_metric(
         Histogram, "io_file_ops_latency_seconds", "File operation latency", ["operation"]
     )
-    DOWNLOAD_LATENCY_SECONDS = _get_or_create_metric(
+    DOWNLOAD_LATENCY_SECONDS = get_or_create_metric(
         Histogram, "io_download_latency_seconds", "Download latency"
     )
-    DOWNLOAD_BYTES_TOTAL = _get_or_create_metric(
+    DOWNLOAD_BYTES_TOTAL = get_or_create_metric(
         Counter, "io_download_bytes_total", "Bytes downloaded"
     )
-    IN_PROGRESS_DOWNLOADS = _get_or_create_metric(
+    IN_PROGRESS_DOWNLOADS = get_or_create_metric(
         Gauge, "io_in_progress_downloads_total", "In-progress downloads"
     )
-    SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
+    SAFETY_VIOLATIONS_TOTAL = get_or_create_metric(
         Counter, "io_safety_violations_total", "Safety violations in IO"
     )
 else:

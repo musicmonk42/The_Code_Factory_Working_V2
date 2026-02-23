@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 import aiohttp  # Import aiohttp for specific exception handling
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 # Import custom exceptions and LLMClient from the shared client module
 from .llm_client import APIError, LLMClient, LLMClientError, TimeoutError
@@ -88,50 +89,25 @@ class OllamaAdapter:
         self.security_config = settings.get("security_config", {})
 
         # Prometheus metrics (idempotent registration)
-        self.requests_total = self._get_or_create_metric(
+        self.requests_total = get_or_create_metric(
             Counter,
             "ollama_requests_total",
             "Total Ollama requests",
             labelnames=("status", "correlation_id"),
         )
-        self.processing_latency_seconds = self._get_or_create_metric(
+        self.processing_latency_seconds = get_or_create_metric(
             Histogram,
             "ollama_processing_latency_seconds",
             "Ollama processing latency in seconds",
             labelnames=("correlation_id",),
             buckets=(0.001, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0, float("inf")),
         )
-        self.circuit_breaker_state_gauge = self._get_or_create_metric(
+        self.circuit_breaker_state_gauge = get_or_create_metric(
             Gauge,
             "ollama_circuit_breaker_state",
             "Circuit breaker state (0=closed, 1=half-open, 2=open)",
         )
         self.circuit_breaker_state_gauge.set(0)  # 0 for "closed" initially
-
-    @staticmethod
-    def _get_or_create_metric(
-        metric_class, name, documentation, labelnames=(), buckets=None
-    ):
-        """Idempotently get or create a Prometheus metric."""
-        try:
-            kwargs = {
-                "name": name,
-                "documentation": documentation,
-                "labelnames": labelnames,
-            }
-            if buckets is not None:
-                kwargs["buckets"] = buckets
-            return metric_class(**kwargs)
-        except ValueError as e:
-            if "Duplicated timeseries" in str(e):
-                # Prometheus stores Counters under the base name (without _total suffix)
-                # and may also use _total or _created variants internally.
-                # Try both the original name and the base name without _total.
-                for candidate in [name, name.removesuffix("_total")]:
-                    existing = REGISTRY._names_to_collectors.get(candidate)
-                    if existing is not None and isinstance(existing, metric_class):
-                        return existing
-            raise
 
     async def __aenter__(self):
         """

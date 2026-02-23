@@ -7,6 +7,7 @@ from typing import Any, Dict
 # Import the centralized tracer configuration
 from self_fixing_engineer.arbiter.otel_config import get_tracer
 from prometheus_client import REGISTRY, Counter
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 # Mock/Placeholder imports for a self-contained fix
 try:
@@ -60,19 +61,12 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-# Helper function for idempotent metric creation
-def _get_or_create_metric(metric_class: type, name: str, doc: str, labelnames: list):
-    """Idempotently create or retrieve a Prometheus metric."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    return metric_class(name, doc, labelnames)
-
-
+# Helper function for idempotent metric creation moved to omnicore_engine.metrics_utils
 # Prometheus metrics
-plugin_config_ops_total = _get_or_create_metric(
+plugin_config_ops_total = get_or_create_metric(
     Counter, "plugin_config_ops_total", "Total plugin config operations", ["operation"]
 )
-plugin_config_errors_total = _get_or_create_metric(
+plugin_config_errors_total = get_or_create_metric(
     Counter, "plugin_config_errors_total", "Total plugin config errors", ["operation"]
 )
 

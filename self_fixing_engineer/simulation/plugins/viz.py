@@ -72,28 +72,6 @@ try:
 
     PROMETHEUS_AVAILABLE = True
 
-    def _get_or_create_metric(
-        metric_type: type,
-        name: str,
-        documentation: str,
-        labelnames: Optional[Tuple[str, ...]] = None,
-        buckets: Optional[Tuple[float, ...]] = None,
-    ) -> Any:
-        if labelnames is None:
-            labelnames = ()
-        if name in REGISTRY._names_to_collectors:
-            return REGISTRY._names_to_collectors[name]
-        if metric_type == Histogram:
-            return metric_type(
-                name,
-                documentation,
-                labelnames=labelnames,
-                buckets=buckets or Histogram.DEFAULT_BUCKETS,
-            )
-        if metric_type == Counter:
-            return metric_type(name, documentation, labelnames=labelnames)
-        return metric_type(name, documentation, labelnames=labelnames)
-
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
@@ -110,8 +88,7 @@ except ImportError:
         def labels(self, *args, **kwargs):
             return self
 
-    def _get_or_create_metric(*args, **kwargs):
-        return DummyMetric()
+from omnicore_engine.metrics_utils import get_or_create_metric
 
 
 try:
@@ -224,33 +201,33 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # --- Prometheus Metrics ---
 if PROMETHEUS_AVAILABLE:
-    PLOT_GENERATIONS = _get_or_create_metric(
+    PLOT_GENERATIONS = get_or_create_metric(
         Counter,
         "viz_plot_generations_total",
         "Total plots generated",
         ("plot_type", "status"),
     )
-    PLOT_EXPORTS = _get_or_create_metric(
+    PLOT_EXPORTS = get_or_create_metric(
         Counter, "viz_plot_exports_total", "Total plot exports", ("format", "status")
     )
-    PLOT_CACHE_HITS = _get_or_create_metric(
+    PLOT_CACHE_HITS = get_or_create_metric(
         Counter, "viz_plot_cache_hits_total", "Total plot cache hits"
     )
-    PLOT_CACHE_MISSES = _get_or_create_metric(
+    PLOT_CACHE_MISSES = get_or_create_metric(
         Counter, "viz_plot_cache_misses_total", "Total plot cache misses"
     )
 else:
     # Create dummy metrics for when Prometheus is not available
-    PLOT_GENERATIONS = _get_or_create_metric(
+    PLOT_GENERATIONS = get_or_create_metric(
         None, "viz_plot_generations_total", "Total plots generated"
     )
-    PLOT_EXPORTS = _get_or_create_metric(
+    PLOT_EXPORTS = get_or_create_metric(
         None, "viz_plot_exports_total", "Total plot exports"
     )
-    PLOT_CACHE_HITS = _get_or_create_metric(
+    PLOT_CACHE_HITS = get_or_create_metric(
         None, "viz_plot_cache_hits_total", "Total plot cache hits"
     )
-    PLOT_CACHE_MISSES = _get_or_create_metric(
+    PLOT_CACHE_MISSES = get_or_create_metric(
         None, "viz_plot_cache_misses_total", "Total plot cache misses"
     )
 
