@@ -261,5 +261,67 @@ acceptance_checks:
     assert "Database migrations applied" in spec.acceptance_checks
 
 
+def test_extract_spec_block_from_fastapi_readme():
+    """Test that a FastAPI-structured README without explicit code_factory block
+    produces a valid SpecBlock with project_type='fastapi_service' and HTTP endpoints."""
+    readme = """
+# E-Commerce API
+
+A production-ready e-commerce service built with FastAPI.
+
+## Technology Stack
+- Framework: FastAPI
+- Database: PostgreSQL
+- Cache: Redis
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /products | List all products |
+| POST | /products | Create a product |
+| GET | /products/{id} | Get a product |
+| PUT | /products/{id} | Update a product |
+| DELETE | /products/{id} | Delete a product |
+
+GET /products
+POST /products
+GET /products/{id}
+PUT /products/{id}
+DELETE /products/{id}
+
+## Data Models
+
+### Product
+- id: int
+- name: str
+- price: float
+- stock: int
+"""
+
+    spec = extract_spec_block(readme)
+    assert spec is not None
+    assert spec.project_type == "fastapi_service"
+    assert spec.has_http_interface()
+    assert len(spec.interfaces.http) >= 5
+
+
+def test_extract_spec_block_not_found_still_returns_none():
+    """Test that a truly unstructured README returns None (no tech keywords, no endpoints)."""
+    readme = """
+# Regular README
+
+- Feature 1
+- Feature 2
+
+## Setup
+
+Install dependencies...
+"""
+
+    spec = extract_spec_block(readme)
+    assert spec is None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

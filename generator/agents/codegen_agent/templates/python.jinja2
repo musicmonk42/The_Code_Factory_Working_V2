@@ -213,7 +213,7 @@ class CalculationResponse(BaseModel):
 - String fields: Always specify min_length and max_length where appropriate
 - Numeric fields: Use ge (>=), le (<=), gt (>), lt (<) for range validation
 - Example: \`age: int = Field(..., ge=0, le=150)\`
-- Example: \`email: str = Field(..., min_length=5, max_length=255, regex="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$")\`
+- Example: \`email: str = Field(..., min_length=5, max_length=255, pattern="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\\\.[a-zA-Z]{2,}$")\`
 - Use strip_whitespace=True for string fields to handle leading/trailing spaces
 ```
 

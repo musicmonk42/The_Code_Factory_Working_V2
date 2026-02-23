@@ -69,6 +69,7 @@ When testing Pydantic models (v2.x):
 | `type_error.str` | `string_type` | Value is not a string |
 | `value_error.missing` | `missing` | Required field missing |
 | Custom `ValueError("msg")` | `value_error` | Custom field validator error |
+| `constr(regex=...)` | `constr(pattern=...)` | String regex constraint (V1→V2 rename) |
 
 ### CRITICAL: Parsing Error Types Use the Python TYPE Name, NOT the Field Name
 
