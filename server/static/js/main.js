@@ -3259,23 +3259,127 @@ async function startArbiter() {
             // Error already shown by sanitizeJobId
             return;
         }
-        
-        const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({command: 'start', job_id: jobId, config: {}})
-        });
-        
-        if (!response.ok) {
-            const error = await response.json();
-            showError('Failed to start Arbiter: ' + (error.detail?.message || error.detail || 'Unknown error'));
-            return;
+
+        const btn = document.querySelector('[onclick="startArbiter()"]');
+        const originalText = btn ? btn.textContent : null;
+        if (btn) {
+            btn.innerHTML = '<span class="loading-spinner"></span> Running...';
+            btn.classList.add('btn-loading');
+            btn.disabled = true;
         }
-        
-        const data = await response.json();
-        showSuccess('Arbiter started: ' + (data.status || 'Success'));
+
+        const panel = document.getElementById('arbiter-results-panel');
+        if (panel) {
+            panel.innerHTML = '<p class="loading">Analyzing job <strong>' + escapeHtml(jobId) + '</strong>…</p>';
+        }
+
+        try {
+            const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({command: 'start', job_id: jobId, config: {}})
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                const msg = error.detail?.message || error.detail || 'Unknown error';
+                if (panel) panel.innerHTML = `<div class="error-message">${escapeHtml(msg)}</div>`;
+                showError('Failed to start Arbiter: ' + msg);
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.status === 'error' || data.message) {
+                const msg = data.message || 'Analysis error';
+                if (panel) panel.innerHTML = `<div class="error-message">${escapeHtml(msg)}</div>`;
+                if (data.status === 'error') { showError(msg); return; }
+            }
+
+            if (panel) {
+                const severity = data.severity_breakdown || {};
+                const criticalCount = Number(severity.critical) || 0;
+                const highCount = Number(severity.high) || 0;
+                const mediumCount = Number(severity.medium) || 0;
+                const lowCount = Number(severity.low) || 0;
+                const filesAnalyzed = Number(data.files_analyzed) || 0;
+                const defects = Array.isArray(data.defects) ? data.defects : [];
+                const violations = Array.isArray(data.policy_violations) ? data.policy_violations : [];
+                const totalIssues = defects.length + violations.length;
+
+                let html = `
+                    <div class="executive-summary-card" style="margin-bottom:20px;padding:20px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:8px;color:white;">
+                        <h3 style="margin-top:0;">📊 Arbiter Policy Report</h3>
+                        <p><strong>Job:</strong> ${escapeHtml(jobId)} | <strong>Files analyzed:</strong> ${filesAnalyzed} | <strong>Total issues:</strong> ${totalIssues}</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-top:12px;">
+                            <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:5px;text-align:center;">
+                                <div style="font-size:1.8em;">🔴</div>
+                                <div style="font-size:1.4em;font-weight:bold;">${criticalCount}</div>
+                                <div>Critical</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:5px;text-align:center;">
+                                <div style="font-size:1.8em;">🟠</div>
+                                <div style="font-size:1.4em;font-weight:bold;">${highCount}</div>
+                                <div>High</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:5px;text-align:center;">
+                                <div style="font-size:1.8em;">🟡</div>
+                                <div style="font-size:1.4em;font-weight:bold;">${mediumCount}</div>
+                                <div>Medium</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.2);padding:12px;border-radius:5px;text-align:center;">
+                                <div style="font-size:1.8em;">🔵</div>
+                                <div style="font-size:1.4em;font-weight:bold;">${lowCount}</div>
+                                <div>Low</div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                if (violations.length > 0) {
+                    html += `<h4>🔍 Policy Violations (${violations.length})</h4><ul class="errors-list" style="list-style:none;padding:0;">`;
+                    for (const v of violations) {
+                        html += `<li class="error-item severity-${escapeHtml(v.severity || 'medium')}" style="margin-bottom:8px;padding:10px;border-left:4px solid #e53e3e;background:#fff5f5;border-radius:4px;">
+                            <strong>${escapeHtml(v.category || 'policy')}</strong>
+                            <span class="severity-badge" style="margin-left:8px;">${escapeHtml(v.severity || 'medium')}</span><br>
+                            <small>📁 ${escapeHtml(v.file || 'N/A')} : line ${escapeHtml(String(v.line || 'N/A'))}</small><br>
+                            ${escapeHtml(v.message || '')}
+                        </li>`;
+                    }
+                    html += '</ul>';
+                }
+
+                if (defects.length > 0) {
+                    html += `<h4>🐛 Defects (${defects.length})</h4><ul class="errors-list" style="list-style:none;padding:0;">`;
+                    for (const d of defects) {
+                        html += `<li class="error-item severity-${escapeHtml(d.severity || 'medium')}" style="margin-bottom:8px;padding:10px;border-left:4px solid #dd6b20;background:#fffaf0;border-radius:4px;">
+                            <strong>${escapeHtml(d.type || 'defect')}</strong>
+                            <span class="severity-badge" style="margin-left:8px;">${escapeHtml(d.severity || 'medium')}</span><br>
+                            <small>📁 ${escapeHtml(d.file || 'N/A')} : line ${escapeHtml(String(d.line || 'N/A'))}</small><br>
+                            ${escapeHtml(d.message || '')}
+                        </li>`;
+                    }
+                    html += '</ul>';
+                }
+
+                if (violations.length === 0 && defects.length === 0) {
+                    html += '<p class="no-data">✅ No issues found for this job.</p>';
+                }
+
+                panel.innerHTML = html;
+            }
+
+            showSuccess(`Arbiter analysis complete: ${(data.defects || []).length + (data.policy_violations || []).length} issues found`);
+        } finally {
+            if (btn) {
+                if (originalText) btn.textContent = originalText;
+                btn.classList.remove('btn-loading');
+                btn.disabled = false;
+            }
+        }
     } catch (error) {
         showError('Failed to start Arbiter: ' + error.message);
+        const panel = document.getElementById('arbiter-results-panel');
+        if (panel) panel.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
     }
 }
 

@@ -2478,6 +2478,9 @@ class SFEService:
         """
         logger.info(f"Controlling Arbiter with command {command} via OmniCore")
 
+        if command == "start" and job_id:
+            return await self._run_arbiter_analysis(job_id)
+
         if self.omnicore_service:
             payload = {
                 "action": "control_arbiter",
@@ -2497,6 +2500,215 @@ class SFEService:
             "command": command,
             "status": "executed",
             "arbiter_status": "active" if command == "start" else "idle",
+        }
+
+    async def _run_arbiter_analysis(self, job_id: str) -> Dict[str, Any]:
+        """
+        Run Arbiter policy checks and code analysis for the given job.
+
+        Resolves the generated code path from the job, runs CodebaseAnalyzer,
+        and applies policy-level checks (hardcoded secrets, missing CORS,
+        unused imports, SQL injection, missing error handling, N+1 queries).
+
+        Args:
+            job_id: Job ID whose generated code should be analyzed.
+
+        Returns:
+            Structured results with defects, policy_violations, severity_breakdown,
+            complexity_info, and files_analyzed.
+        """
+        logger.info(f"Running Arbiter analysis for job {job_id}")
+
+        # Resolve the code path for this job
+        resolved_path = self._resolve_job_code_path(job_id, "")
+        if not resolved_path:
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": f"No generated code found for job {job_id}",
+                "defects": [],
+                "policy_violations": [],
+                "severity_breakdown": {},
+                "files_analyzed": 0,
+            }
+
+        code_path_obj = Path(resolved_path)
+        if not code_path_obj.exists():
+            return {
+                "status": "error",
+                "job_id": job_id,
+                "message": f"Code path does not exist: {resolved_path}",
+                "defects": [],
+                "policy_violations": [],
+                "severity_breakdown": {},
+                "files_analyzed": 0,
+            }
+
+        defects: List[Dict[str, Any]] = []
+        policy_violations: List[Dict[str, Any]] = []
+        files_analyzed = 0
+
+        # --- Run CodebaseAnalyzer for structural defects ---
+        if self._sfe_available["codebase_analyzer"]:
+            try:
+                CodebaseAnalyzer = self._sfe_components["codebase_analyzer"]
+                root = str(code_path_obj) if code_path_obj.is_dir() else str(code_path_obj.parent)
+                async with CodebaseAnalyzer(
+                    root_dir=root,
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                ) as analyzer:
+                    if code_path_obj.is_dir():
+                        summary = await analyzer.scan_codebase(root)
+                        if hasattr(summary, "defects"):
+                            for defect in summary.defects:
+                                defects.append({
+                                    "type": getattr(defect, "type", "unknown"),
+                                    "severity": getattr(defect, "severity", "medium"),
+                                    "message": str(defect),
+                                    "file": getattr(defect, "file", ""),
+                                    "line": getattr(defect, "line", 0),
+                                })
+                        if hasattr(summary, "files_analyzed"):
+                            files_analyzed = summary.files_analyzed
+                    else:
+                        raw_issues = await analyzer.analyze_and_propose(str(code_path_obj))
+                        for issue in (raw_issues or []):
+                            defects.append({
+                                "type": issue.get("type", "unknown"),
+                                "severity": issue.get("severity", "medium"),
+                                "message": issue.get("message", str(issue)),
+                                "file": issue.get("file", str(code_path_obj)),
+                                "line": issue.get("line", 0),
+                            })
+                        files_analyzed = 1
+            except Exception as e:
+                logger.warning(f"Arbiter CodebaseAnalyzer failed for job {job_id}: {e}")
+
+        # --- Policy checks on Python source files ---
+        import re as _re
+        py_files: List[Path] = []
+        if code_path_obj.is_dir():
+            py_files = list(code_path_obj.rglob("*.py"))
+        elif code_path_obj.suffix == ".py":
+            py_files = [code_path_obj]
+
+        if not files_analyzed and py_files:
+            files_analyzed = len(py_files)
+
+        for py_file in py_files:
+            try:
+                source = py_file.read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                continue
+
+            rel = str(py_file.relative_to(code_path_obj) if code_path_obj.is_dir() else py_file)
+
+            for lineno, line in enumerate(source.splitlines(), start=1):
+                if _re.search(
+                    r'(?i)(password|secret|api[_-]?key|token)\s*=\s*["\'][^"\']{4,}["\']',
+                    line,
+                ):
+                    policy_violations.append({
+                        "category": "hardcoded_secret",
+                        "severity": "critical",
+                        "file": rel,
+                        "line": lineno,
+                        "message": "Potential hardcoded secret detected",
+                    })
+
+                # SQL injection risk
+                if _re.search(r'(?i)execute\s*\(\s*["\'].*%s|format\s*\(.*SELECT|f["\'].*SELECT', line):
+                    policy_violations.append({
+                        "category": "sql_injection",
+                        "severity": "high",
+                        "file": rel,
+                        "line": lineno,
+                        "message": "Possible SQL injection via string formatting",
+                    })
+
+                # N+1 query pattern (DB call inside loop)
+                if _re.search(r'(?i)(\.query|\.execute|\.filter|\.get)\(', line):
+                    preceding_lines = source.splitlines()[max(0, lineno - 5):lineno - 1]
+                    if preceding_lines and _re.search(
+                        r'^\s*(for |while )', "\n".join(preceding_lines), _re.MULTILINE
+                    ):
+                        policy_violations.append({
+                            "category": "n_plus_one",
+                            "severity": "medium",
+                            "file": rel,
+                            "line": lineno,
+                            "message": "Possible N+1 query pattern detected inside a loop",
+                        })
+
+            # Missing CORS header (Flask/FastAPI apps)
+            if _re.search(r'(?i)(Flask|FastAPI|app\s*=\s*Flask)', source) and not _re.search(
+                r'(?i)(CORS|cors|allow_origins|CORSMiddleware)', source
+            ):
+                policy_violations.append({
+                    "category": "missing_cors",
+                    "severity": "medium",
+                    "file": rel,
+                    "line": 1,
+                    "message": "Web framework detected but no CORS configuration found",
+                })
+
+            # Missing error handling (bare except or no try/except in functions with IO)
+            if _re.search(r'(?i)(open\(|requests\.|httpx\.)', source) and not _re.search(
+                r'\btry\b', source
+            ):
+                policy_violations.append({
+                    "category": "missing_error_handling",
+                    "severity": "medium",
+                    "file": rel,
+                    "line": 1,
+                    "message": "File/network IO detected without any try/except error handling",
+                })
+
+            # Unused imports (simple heuristic: imported name never used elsewhere)
+            import_names: List[str] = []
+            for line in source.splitlines():
+                m = _re.match(r'^\s*import\s+(\w+)', line)
+                if m:
+                    import_names.append(m.group(1))
+                m2 = _re.match(r'^\s*from\s+\S+\s+import\s+(\w+)', line)
+                if m2:
+                    import_names.append(m2.group(1))
+            for name in import_names:
+                # Count occurrences beyond the import line itself
+                if len(_re.findall(r'\b' + _re.escape(name) + r'\b', source)) <= 1:
+                    policy_violations.append({
+                        "category": "unused_import",
+                        "severity": "low",
+                        "file": rel,
+                        "line": 1,
+                        "message": f"Possibly unused import: '{name}'",
+                    })
+
+        # Build combined issues list for executive summary
+        all_issues = [
+            {"severity": d.get("severity", "medium"), "type": d.get("type", "defect"),
+             "file": d.get("file", ""), "line": d.get("line", 0),
+             "message": d.get("message", "")}
+            for d in defects
+        ] + [
+            {"severity": v.get("severity", "medium"), "type": v.get("category", "policy"),
+             "file": v.get("file", ""), "line": v.get("line", 0),
+             "message": v.get("message", "")}
+            for v in policy_violations
+        ]
+        executive_summary = self._compute_executive_summary(all_issues)
+
+        self._arbiter_running = True
+
+        return {
+            "status": "started",
+            "job_id": job_id,
+            "code_path": resolved_path,
+            "defects": defects,
+            "policy_violations": policy_violations,
+            "files_analyzed": files_analyzed or len(py_files),
+            "complexity_info": {},
+            **executive_summary,
         }
 
     async def trigger_arena_competition(

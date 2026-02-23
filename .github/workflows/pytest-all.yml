@@ -733,7 +733,7 @@ jobs:
             # prevent OOM/process exhaustion (exit code 137) and BlockingIOError in CI.
             COVERAGE_ARGS="--cov=server --cov-report=xml:coverage-server.xml"
             PYTEST_ARGS="-n 1"  # 1 worker to prevent OOM/process exhaustion in CI
-            TIMEOUT_VALUE=600  # 10 minutes per test (some integration tests need longer)
+            TIMEOUT_VALUE=60  # 60 seconds per test; slow/integration tests are filtered out
             IGNORE_ARGS=""
 
             echo "✓ I/O optimizations applied"
@@ -751,16 +751,26 @@ jobs:
 
           # Use timeout command to prevent runaway processes (75 minutes wall-clock time)
           # Increased from 60m to 75m to accommodate longer-running test suites
+          # Set marker filter: skip slow tests on push/PR to keep CI fast.
+          # On scheduled nightly runs, include slow/integration tests as well.
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            MARKER_FILTER="not heavy"
+          else
+            MARKER_FILTER="not slow and not heavy"
+          fi
+
+          # Use timeout command to prevent runaway processes (60 minutes wall-clock time)
+          # Increased from 40m to 60m to accommodate longer-running test suites
           # Use python -m pytest to ensure proper sys.path setup
           timeout --signal=TERM --kill-after=30s 75m python -m pytest \
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
             --tb=line \
-            -m "not heavy" \
+            -m "${MARKER_FILTER}" \
             --maxfail=0 \
             --timeout=${TIMEOUT_VALUE} \
-            --durations=20 \
+            --durations=25 \
             $COVERAGE_ARGS \
             $IGNORE_ARGS \
             --junitxml=junit-${{ matrix.module }}.xml \

@@ -14,6 +14,8 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 import asyncio
 
+pytestmark = pytest.mark.slow
+
 # Import the service
 from server.services.omnicore_service import OmniCoreService
 
