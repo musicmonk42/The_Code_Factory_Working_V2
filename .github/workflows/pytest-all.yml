@@ -89,6 +89,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Verify LLM_API_KEY secret is configured
+        run: |
+          # Fail early with a clear message if LLM_API_KEY is missing or empty.
+          # Without this key, Pydantic config validation raises errors during
+          # test discovery/dependency setup, producing confusing CI failures.
+          # See docs/CI-troubleshooting.md for full details and remediation steps.
+          if [ -z "${LLM_API_KEY}" ]; then
+            echo "=========================================================="
+            echo "ERROR: LLM_API_KEY secret is not set or is empty."
+            echo "=========================================================="
+            echo ""
+            echo "This repository secret must be configured before CI can pass:"
+            echo "  1. Go to: Settings > Secrets and variables > Actions"
+            echo "  2. Click 'New repository secret'"
+            echo "  3. Name:  LLM_API_KEY"
+            echo "  4. Value: <your LLM provider API key>"
+            echo ""
+            echo "Without this secret, Pydantic config validation fails during"
+            echo "test discovery, producing confusing import errors."
+            echo ""
+            echo "See docs/CI-troubleshooting.md for full details."
+            echo "=========================================================="
+            exit 1
+          fi
+          echo "✓ LLM_API_KEY is set"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

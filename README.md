@@ -15,6 +15,7 @@ Table of Contents
 - [SPEC_BLOCK_FORMAT.md](./docs/SPEC_BLOCK_FORMAT.md) - **NEW:** Structured YAML spec blocks for deterministic generation
 - [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md) - Comprehensive scalability guide
 - [Manual SFE Dispatch](./docs/MANUAL_SFE_DISPATCH.md) - Control when jobs are sent to Self-Fixing Engineer
+- [CI-troubleshooting.md](./docs/CI-troubleshooting.md) - CI secrets, exit code 143, and best practices
 - [Makefile Commands](#makefile-commands) - Common development commands
 
 Features
@@ -751,6 +752,8 @@ make test              # All component tests (strict)
 ```
 
 > **Important**: All linting and testing commands now enforce strict checking. Errors will cause failures instead of being suppressed, ensuring code quality.
+
+> ⚠️ **CI Secret Required**: The `LLM_API_KEY` repository secret **must** be set in **Settings → Secrets and variables → Actions** for CI to pass. Missing this secret causes Pydantic config validation errors during test discovery. See [CI-troubleshooting.md](./docs/CI-troubleshooting.md) for details and for an explanation of exit code 143 (SIGTERM/cancellation).
 
 See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment instructions.
 
