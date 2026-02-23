@@ -743,6 +743,45 @@ def cleanup_watchdog_at_session_end():
     yield
     _cleanup_watchdog_observers()
     _cleanup_multiprocessing_resources()
+    _cleanup_leaked_threads()
+
+
+# Known safe thread-name substrings to stop after a test session.
+# These are background service threads that should not outlive the test run.
+# WARNING: Only add thread name patterns that are safe to stop (non-critical daemon threads).
+_LEAKED_THREAD_NAMES = (
+    "secret_sync_bridge",  # LLMClient background sync thread
+    "event_bus",           # self_fixing_engineer event bus worker
+)
+
+
+def _cleanup_leaked_threads():
+    """Stop known leaked daemon threads that survive between test runs.
+
+    Some modules (LLMClient, EventBus) start background threads that are not
+    properly terminated when their owning object is garbage-collected.  This
+    causes subsequent tests—especially async ones—to hang because the leaked
+    threads hold references to closed file-descriptors, event-loops, or locks.
+
+    This cleanup is best-effort: we attempt a graceful stop() then a short
+    join(); if the thread ignores the stop we leave it (it's a daemon thread
+    so it won't prevent process exit).
+
+    TODO: Remove entries from _LEAKED_THREAD_NAMES once the owning module is
+    fixed to properly shut down its threads in its own __del__ / close().
+    """
+    for thread in threading.enumerate():
+        tname = thread.name.lower()
+        # Patterns are already lowercase; tname is also lowercased for safe comparison.
+        if any(pattern in tname for pattern in _LEAKED_THREAD_NAMES):
+            try:
+                if hasattr(thread, "stop"):
+                    thread.stop()
+                thread.join(timeout=0.5)
+            except Exception:
+                # Best-effort only: we intentionally swallow exceptions here.
+                # These are daemon threads so they will be reaped when the process exits.
+                pass
 
 
 @pytest.fixture(autouse=True)

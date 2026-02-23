@@ -17,6 +17,12 @@ Dependencies:
 - pytest, pytest-asyncio, unittest.mock, faker, freezegun, aiofiles
 - grpcio, grpcio-tools, presidio-analyzer, presidio-anonymizer
 - prometheus-client, opentelemetry-sdk, audit_log
+
+CI SKIP NOTE: This file is excluded from CI via IGNORE_ARGS in pytest-all.yml.
+Root cause: grpc server fixtures start persistent threads/sockets that are not
+fully cleaned up between tests, causing the xdist worker to crash or the test
+session to hang on teardown with OSError: cannot send (already closed?).
+TODO: Add proper grpc server shutdown in fixture teardown before re-enabling.
 """
 
 import asyncio
