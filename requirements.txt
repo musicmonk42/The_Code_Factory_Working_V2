@@ -294,6 +294,7 @@ pydantic==2.10.6
 pydantic-settings==2.11.0
 pydantic_core==2.27.2
 pyflakes==3.4.0
+pylint>=3.0.0
 Pygments==2.19.2
 PyJWT==2.10.1
 pyOpenSSL==25.1.0

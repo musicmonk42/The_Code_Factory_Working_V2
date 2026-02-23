@@ -80,6 +80,9 @@ pydantic-settings>=2.0.0
 - Use `model_validate()` instead of `parse_obj()`
 - Use `model_dump()` instead of `.dict()`
 - Use `@field_validator` instead of `@validator` (see below)
+- **NEVER** use `constr(regex=...)` — this is Pydantic v1 syntax that raises `TypeError` in v2
+- **ALWAYS** use `constr(pattern=...)` or `Annotated[str, Field(pattern=...)]` for regex validation
+- **NEVER** use `class Config: orm_mode = True` — use `model_config = ConfigDict(from_attributes=True)`
 
 ---
 

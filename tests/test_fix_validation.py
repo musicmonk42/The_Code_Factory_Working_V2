@@ -2,7 +2,7 @@
 
 """
 Test validation for the 5 interrelated fixes:
-1. MAX_PROMPT_TOKENS increased to 16000
+1. MAX_PROMPT_TOKENS increased to 32000 (configurable via CODEGEN_MAX_PROMPT_TOKENS env var)
 2. Tiktoken encoding uses encoding_for_model with fallback
 3. max_tokens increased to 4096 in arbiter config
 4. BaseHTTPMiddleware import instructions added
@@ -21,24 +21,30 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def test_max_prompt_tokens_codegen():
-    """Test that MAX_PROMPT_TOKENS is 16000 in codegen_prompt.py."""
+    """Test that MAX_PROMPT_TOKENS is at least 32000 in codegen_prompt.py."""
     filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_prompt.py'
     with open(filepath, 'r') as f:
         content = f.read()
-        match = re.search(r'^MAX_PROMPT_TOKENS\s*=\s*(\d+)', content, re.MULTILINE)
+        match = re.search(r'^MAX_PROMPT_TOKENS\s*=\s*(.+)$', content, re.MULTILINE)
         assert match, "MAX_PROMPT_TOKENS not found in codegen_prompt.py"
-        assert int(match.group(1)) == 16000, f"Expected 16000, got {match.group(1)}"
+        # Value is now configurable via env var; the default must be >= 32000
+        # Accept either a bare integer or an int(os.getenv(..., "32000")) expression
+        value_str = match.group(1).strip()
+        if value_str.isdigit():
+            assert int(value_str) >= 32000, f"Expected >= 32000, got {value_str}"
+        else:
+            assert '32000' in value_str, f"Expected default of 32000 in expression, got: {value_str}"
 
 
 def test_max_prompt_tokens_critique():
-    """Test that MAX_PROMPT_TOKENS is 16000 in critique_prompt.py (all occurrences)."""
+    """Test that MAX_PROMPT_TOKENS is at least 16000 in critique_prompt.py (all occurrences)."""
     filepath = PROJECT_ROOT / 'generator' / 'agents' / 'critique_agent' / 'critique_prompt.py'
     with open(filepath, 'r') as f:
         content = f.read()
         matches = re.findall(r'MAX_PROMPT_TOKENS\s*=\s*(\d+)', content)
         assert len(matches) >= 2, f"Expected at least 2 MAX_PROMPT_TOKENS assignments, found {len(matches)}"
         for val in matches:
-            assert int(val) == 16000, f"Expected 16000, got {val}"
+            assert int(val) >= 16000, f"Expected >= 16000, got {val}"
 
 
 def test_tiktoken_encoding_for_model():

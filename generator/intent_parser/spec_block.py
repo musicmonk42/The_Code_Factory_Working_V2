@@ -684,8 +684,143 @@ def _extract_spec_block_impl(content: str, span) -> Optional[SpecBlock]:
                     span.set_status(Status(StatusCode.ERROR, f"Spec creation error: {e}"))
                 continue
     
-    logger.debug("No spec block found in content")
-    return None
+    # Fallback: heuristic Markdown parsing for plain-Markdown READMEs
+    logger.debug("No spec block found; attempting heuristic Markdown extraction")
+    return _extract_spec_from_markdown(content, span)
+
+
+def _extract_spec_from_markdown(content: str, span) -> Optional[SpecBlock]:
+    """
+    Heuristic Markdown parser that extracts a SpecBlock from a plain README.
+
+    Detects:
+    - project_type from headings/content keywords (e.g. "FastAPI" → fastapi_service)
+    - package_name from the first H1 heading
+    - HTTP endpoints from code blocks that contain HTTP method lines
+    - Data model field hints (stored as nonfunctional notes for reference)
+
+    Returns a SpecBlock when at least a project_type or HTTP endpoints were found,
+    otherwise returns None so callers can fall back to the empty-spec question loop.
+    """
+    HTTP_METHODS = re.compile(
+        r'^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\s+(\S+)',
+        re.MULTILINE,
+    )
+    TABLE_ROW = re.compile(r'^\|(.+)\|$', re.MULTILINE)
+
+    # --- Detect project_type from keywords in content ---
+    content_lower = content.lower()
+    project_type: Optional[str] = None
+    if "fastapi" in content_lower:
+        project_type = "fastapi_service"
+    elif "flask" in content_lower:
+        project_type = "flask_service"
+    elif "django" in content_lower:
+        project_type = "django_service"
+    elif "grpc" in content_lower:
+        project_type = "grpc_service"
+    elif "graphql" in content_lower:
+        project_type = "graphql_service"
+    elif "websocket" in content_lower:
+        project_type = "websocket_service"
+    elif "lambda" in content_lower or "serverless" in content_lower:
+        project_type = "lambda_function"
+    elif "cli" in content_lower or "command" in content_lower:
+        project_type = "cli_tool"
+    elif "pipeline" in content_lower or "etl" in content_lower:
+        project_type = "data_pipeline"
+    elif "batch" in content_lower:
+        project_type = "batch_job"
+    elif "microservice" in content_lower or "service" in content_lower:
+        project_type = "microservice"
+
+    # --- Extract package_name from first H1 heading ---
+    package_name: Optional[str] = None
+    h1_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+    if h1_match:
+        raw_name = h1_match.group(1).strip()
+        # Normalize to a valid Python identifier
+        normalized = re.sub(r'[^a-z0-9]+', '_', raw_name.lower()).strip('_')
+        if normalized and re.match(r'^[a-z_][a-z0-9_]*$', normalized):
+            package_name = normalized
+
+    # --- Extract HTTP endpoints from fenced code blocks ---
+    endpoints: List[str] = []
+    code_block_pattern = re.compile(r'```[^\n]*\n(.*?)```', re.DOTALL)
+    for block_match in code_block_pattern.finditer(content):
+        block_text = block_match.group(1)
+        for ep_match in HTTP_METHODS.finditer(block_text):
+            endpoint_str = f"{ep_match.group(1)} {ep_match.group(2)}"
+            if endpoint_str not in endpoints:
+                endpoints.append(endpoint_str)
+
+    # Also scan plain text lines (outside code blocks) for HTTP method patterns
+    stripped = code_block_pattern.sub('', content)
+    for ep_match in HTTP_METHODS.finditer(stripped):
+        endpoint_str = f"{ep_match.group(1)} {ep_match.group(2)}"
+        if endpoint_str not in endpoints:
+            endpoints.append(endpoint_str)
+
+    # --- Extract model field hints from Markdown tables ---
+    model_notes: List[str] = []
+    table_rows = TABLE_ROW.findall(content)
+    for row in table_rows:
+        cells = [c.strip() for c in row.split('|') if c.strip()]
+        if len(cells) >= 2:
+            # Skip header separator rows (contain only dashes/colons)
+            if all(re.match(r'^[-: ]+$', c) for c in cells):
+                continue
+            # Skip header rows (Field, Type, Description …)
+            if cells[0].lower() in ('field', 'name', 'attribute', 'parameter', 'column'):
+                continue
+            model_notes.append(' | '.join(cells))
+
+    if not project_type and not endpoints:
+        logger.debug("Heuristic Markdown extraction found nothing actionable")
+        return None
+
+    # Build the SpecBlock
+    interfaces = None
+    if endpoints:
+        try:
+            interfaces = InterfacesSpec(http=endpoints)
+        except Exception as e:
+            logger.warning(f"Could not create InterfacesSpec from extracted endpoints: {e}")
+            interfaces = None
+
+    spec_kwargs: Dict[str, Any] = {}
+    if project_type:
+        spec_kwargs["project_type"] = project_type
+    if package_name:
+        spec_kwargs["package_name"] = package_name
+    if interfaces:
+        spec_kwargs["interfaces"] = interfaces
+    if model_notes:
+        spec_kwargs["nonfunctional"] = [f"model_field: {note}" for note in model_notes[:20]]
+
+    try:
+        spec = SpecBlock(**spec_kwargs)
+        SPEC_BLOCK_FOUND_TOTAL.labels(pattern_type="markdown_heuristic").inc()
+        logger.info(
+            f"Heuristic Markdown extraction: project_type={spec.project_type}, "
+            f"package={spec.package_name}, endpoints={len(endpoints)}, "
+            f"model_notes={len(model_notes)}",
+            extra={
+                "spec_block_found": True,
+                "pattern_type": "markdown_heuristic",
+                "project_type": spec.project_type,
+                "endpoint_count": len(endpoints),
+            },
+        )
+        if span:
+            span.add_event("markdown_heuristic_extraction", {
+                "project_type": spec.project_type or "unknown",
+                "endpoint_count": len(endpoints),
+            })
+        return spec
+    except Exception as e:
+        logger.warning(f"Heuristic Markdown extraction failed to build SpecBlock: {e}")
+        return None
 
 
 def _check_dict_depth(obj: Any, depth: int = 0) -> int:
