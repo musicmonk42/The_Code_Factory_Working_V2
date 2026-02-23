@@ -185,6 +185,8 @@ jobs:
           PIP_NO_CACHE_DIR: "1"
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
+          shopt -s expand_aliases
+          alias python=python3
           python -m pip install --upgrade pip
           # Use constraints file to prevent transitive deps from upgrading protobuf to 6.x
           # Ensure protobuf stays in the <6 family (google-ai-generativelanguage / other deps require this)
@@ -655,6 +657,14 @@ jobs:
           pip uninstall -y torch torchvision torchaudio || true
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
+      - name: Debug Python environment before tests
+        run: |
+          echo "=== Python interpreter debug ==="
+          which python
+          python --version
+          python -m pip list
+          python -m pytest --version
+
       - name: Run tests for ${{ matrix.module }}
         if: matrix.module != 'self_fixing_engineer'
         timeout-minutes: 65
@@ -667,6 +677,8 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           # conftest.py handles path setup automatically via path_setup module
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           export NLTK_DATA="$HOME/nltk_data"
@@ -863,18 +875,10 @@ jobs:
       - name: Clean up processes and memory before Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
-          echo "=== Killing orphan Python processes ==="
-          # Try graceful shutdown first (SIGTERM)
-          pkill -15 python3 || true
-          pkill -15 pytest || true
-          sleep 3
-          # Force kill any remaining processes (SIGKILL)
-          pkill -9 python3 || true
-          pkill -9 pytest || true
-          sleep 2
-          
           echo "=== Clearing system caches ==="
           # Clear user caches only (avoid permission issues)
+          # Note: broad 'pkill -9 python3' and 'pkill -9 pytest' commands removed to prevent
+          # disrupting the Python environment needed for subsequent test steps.
           rm -rf ~/.cache/* || true
           find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
           find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
@@ -896,6 +900,11 @@ jobs:
       - name: Diagnostics before Arbiter tests
         if: always() && matrix.module == 'self_fixing_engineer'
         run: |
+          echo "=== Python interpreter debug ==="
+          which python
+          python --version
+          python -m pip list
+          python -m pytest --version
           echo "=== Key Environment Variables ==="
           echo "TESTING=${TESTING:-unset}"
           echo "CI=${CI:-unset}"
@@ -925,6 +934,8 @@ jobs:
           OTEL_LOGS_EXPORTER: "none"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           # Unset LLM provider API keys to prevent any accidental external calls
           unset OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY OLLAMA_BASE_URL LLM_API_KEY
@@ -1049,6 +1060,8 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
@@ -1151,6 +1164,8 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
@@ -1203,6 +1218,8 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
@@ -1255,6 +1272,8 @@ jobs:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
         run: |
           set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
