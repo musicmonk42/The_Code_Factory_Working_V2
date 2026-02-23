@@ -100,11 +100,14 @@ class ContractValidator:
             if not full_path.exists():
                 raise AssertionError(f"Required file missing: {file_path}")
         
-        # Check for double-nesting (should NOT exist)
-        parent = self.output_dir.parent
-        if parent.name == "generated" and (parent.parent / "generated").exists():
+        # Check for double-nesting (should NOT exist).
+        # A path like uploads/.../generated/<job_id>/ is valid — the output_dir itself
+        # lives inside a "generated" parent, which is the expected job output layout.
+        # Only flag if there is a literal "generated/generated" duplicate nesting, i.e.
+        # output_dir.parent is named "generated" AND output_dir is ALSO named "generated".
+        if self.output_dir.name == "generated" and self.output_dir.parent.name == "generated":
             raise AssertionError(
-                f"Double-nesting detected: {parent.parent}/generated/generated/"
+                f"Double-nesting detected: {self.output_dir.parent}/generated/generated/"
             )
     
     def check_schema_validation(self):
@@ -117,9 +120,21 @@ class ContractValidator:
         
         # Check for @validator or @field_validator decorator usage (Pydantic V1 or V2)
         if "@validator" not in schema_content and "@field_validator" not in schema_content:
-            raise AssertionError(
-                "app/schemas.py should use @validator or @field_validator decorators for validation"
+            # Soften to a warning if Pydantic v2 model_config or Field constraints are used,
+            # as those are valid alternatives to explicit validator decorators
+            uses_pydantic_v2_constraints = (
+                "model_config" in schema_content
+                or "Field(" in schema_content
             )
+            if uses_pydantic_v2_constraints:
+                self.warnings.append(
+                    "app/schemas.py does not use @validator or @field_validator decorators "
+                    "(Pydantic v2 model_config/Field constraints detected — advisory only)"
+                )
+            else:
+                raise AssertionError(
+                    "app/schemas.py should use @validator or @field_validator decorators for validation"
+                )
         
         # Check routes.py for absence of manual validation
         routes_path = self.output_dir / "app" / "routes.py"
@@ -197,6 +212,7 @@ class ContractValidator:
                 ("## API Endpoints", "API Endpoints section"),
                 ("## Project Structure", "Project Structure section"),
                 ("curl", "curl examples for testing endpoints"),
+                ("venv", "Setup section with venv installation instructions"),
             ]
         
         for section, description in required_sections:

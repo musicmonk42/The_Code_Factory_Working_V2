@@ -2583,12 +2583,24 @@ def test_{file_stem}_syntax_error_documentation():
                                 + "\n\n".join(source_snippets)
                                 + "\n\nIMPORTANT: Only import symbols that actually exist in these files."
                             )
+                    # When 422 errors are present, include schemas.py content so the LLM can
+                    # identify the correct field names expected by the route's Pydantic model
+                    schema_context = ""
+                    if "422" in validation_feedback_str:
+                        for fname, fcontent in code_files.items():
+                            if "schemas" in fname.lower() and fname.endswith(".py"):
+                                schema_context += (
+                                    f"\n\n## Schema Definition ({fname}) — use these exact field names in test payloads:\n"
+                                    f"```python\n{fcontent[:4000]}\n```\n"  # truncate to 4000 chars, matching import_error_context above
+                                    "\nIMPORTANT: Tests returning 422 likely have incorrect field names. "
+                                    "Update test payloads to match the Pydantic model fields defined above."
+                                )
                     critique_prompt = await build_agentic_prompt(
                         "critique",
                         language=language,
                         code_files=code_files,
                         generated_tests=generated_tests_this_attempt,
-                        validation_feedback=validation_feedback_str + import_error_context,
+                        validation_feedback=validation_feedback_str + import_error_context + schema_context,
                     )
 
                     logger.info(
