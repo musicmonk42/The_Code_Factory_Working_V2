@@ -862,7 +862,14 @@ class CodebaseAnalyzer:
 
                     reporter = DefectReporter()
                     # Pylint needs an external runner, which is blocking, so this is called within to_thread
-                    Run([str(file_path)], reporter=reporter, do_exit=False)
+                    # Handle API difference: newer Pylint uses exit=False, older uses do_exit=False
+                    try:
+                        Run([str(file_path)], reporter=reporter, exit=False)
+                    except TypeError:
+                        try:
+                            Run([str(file_path)], reporter=reporter, do_exit=False)
+                        except TypeError:
+                            logger.warning("Pylint Run API incompatible, skipping lint for %s", file_path)
                     defects.extend(
                         [
                             {

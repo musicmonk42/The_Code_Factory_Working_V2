@@ -1331,7 +1331,23 @@ class DefaultResponseParser(ResponseParser):
             r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b",
             r"\b(?:ssh-rsa|ssh-dss|ecdsa-sha2-nistp|ssh-ed25519)\s+[A-Za-z0-9+/=]+\s*$",
         ]
-        issues = [pat for pat in patterns if re.search(pat, content)]
+        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"
+        # RFC 2606 reserved domains used exclusively for documentation and testing.
+        # Matches on these domains are test fixture data, not real sensitive data.
+        _TEST_EMAIL_DOMAIN_RE = re.compile(
+            r"@(?:example\.(?:com|org|net)|test\.com|localhost)\b", re.IGNORECASE
+        )
+
+        issues = []
+        for pat in patterns:
+            if pat == email_pattern:
+                # Filter out RFC 2606 test/example email addresses before flagging
+                email_matches = re.findall(pat, content)
+                real_emails = [e for e in email_matches if not _TEST_EMAIL_DOMAIN_RE.search(e)]
+                if real_emails:
+                    issues.append(pat)
+            elif re.search(pat, content):
+                issues.append(pat)
         if issues:
             logger.warning(f"Regex-based security issues in {filename}: {issues}")
             return f"Potential sensitive data detected: {', '.join(issues)}"

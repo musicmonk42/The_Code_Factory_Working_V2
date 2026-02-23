@@ -1937,6 +1937,15 @@ def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
                 f"in requirements.txt. Add 'pydantic-settings>=2.0.0'."
             )
 
+        # Check for Pydantic v1 regex= kwarg in Field() or constr() (renamed to pattern= in v2)
+        import re as _re_check
+        if _re_check.search(r'\bField\s*\([^)]*\bregex\s*=', content) or \
+                _re_check.search(r'\bconstr\s*\([^)]*\bregex\s*=', content):
+            errors.append(
+                f"{filename}: Uses Pydantic v1 'regex=' keyword argument in Field() or constr(). "
+                f"Use 'pattern=' instead (Pydantic v2)."
+            )
+
     return errors
 
 
@@ -2027,6 +2036,13 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     content,
                 )
                 logger.info("auto_fix_pydantic_v1_imports: replaced Field(example=) in %s", filename)
+
+            # Fix: Field(..., regex=...) → Field(..., pattern=...) and constr(regex=...) → constr(pattern=...)
+            # The 'regex' kwarg was renamed to 'pattern' in Pydantic v2.
+            if _re.search(r'\bregex\s*=', content):
+                content = _re.sub(r'\bField\s*\(([^)]*)\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
+                content = _re.sub(r'\bconstr\s*\(([^)]*)\bregex\s*=', lambda m: m.group(0).replace('regex=', 'pattern=', 1), content)
+                logger.info("auto_fix_pydantic_v1_imports: replaced regex= with pattern= in %s", filename)
 
             # Fix: V1 error type strings in test assertions → V2 equivalents
             for v1_type, v2_type in _V1_TO_V2_ERROR_TYPES.items():
