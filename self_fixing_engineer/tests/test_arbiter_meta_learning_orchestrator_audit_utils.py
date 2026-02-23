@@ -57,7 +57,7 @@ SAMPLE_ENV = {
 SAMPLE_EVENT = {"event_type": "test_event", "details": {"test_key": "test_value"}}
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def _ensure_real_aiofiles():
     """Ensure audit_utils uses the real aiofiles module, not a mock.
 

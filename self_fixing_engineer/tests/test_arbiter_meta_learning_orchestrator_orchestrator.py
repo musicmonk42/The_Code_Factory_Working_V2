@@ -74,7 +74,7 @@ SAMPLE_RECORD = {
 }
 
 
-@pytest.fixture(scope="module", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def _ensure_real_aiofiles():
     """Ensure aiofiles is the real module, not a mock.
 

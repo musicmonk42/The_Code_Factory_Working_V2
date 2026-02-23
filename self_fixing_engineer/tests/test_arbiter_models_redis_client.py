@@ -55,15 +55,15 @@ async def setup_env(mocker: MockerFixture):
         os.environ.pop(key, None)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_tracer():
-    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    """Create tracer for tests - function scope for test isolation."""
     return get_tracer("test-redis-client")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def in_memory_exporter():
-    """Create in-memory exporter for tests - deferred to fixture to avoid collection overhead."""
+    """Create in-memory exporter for tests - function scope for test isolation."""
     return InMemorySpanExporter()
 
 

@@ -85,9 +85,9 @@ async def setup_env(mocker: MockerFixture):
         os.environ.pop(key, None)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def test_tracer():
-    """Create tracer for tests - deferred to fixture to avoid collection overhead."""
+    """Create tracer for tests - function scope for test isolation."""
     from self_fixing_engineer.arbiter.otel_config import get_tracer, get_tracer_safe
     try:
         return get_tracer(__name__)
