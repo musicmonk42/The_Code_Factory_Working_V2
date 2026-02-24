@@ -15,6 +15,13 @@ from prometheus_client import Counter
 
 logger = structlog.get_logger(__name__)
 
+# Short-timeout boto3 config to prevent blocking in non-AWS environments
+_BOTO_SSM_CONFIG = BotocoreConfig(
+    connect_timeout=3,
+    read_timeout=5,
+    retries={"max_attempts": 0},
+)
+
 # Prometheus metrics
 key_rotation_counter = Counter(
     "key_rotation_total", "Total number of key rotation events", ["version"]
@@ -168,14 +175,9 @@ class ArbiterConfig:
             NoCredentialsError: If AWS credentials are not configured
         """
         try:
-            _boto_config = BotocoreConfig(
-                connect_timeout=3,
-                read_timeout=5,
-                retries={"max_attempts": 0},
-            )
             ssm_client = boto3.client(
                 "ssm", region_name=os.getenv("AWS_REGION", "us-east-1"),
-                config=_boto_config,
+                config=_BOTO_SSM_CONFIG,
             )
 
             parameter_name = f"/arbiter/encryption_keys/{version}"
@@ -230,14 +232,9 @@ class ArbiterConfig:
             ClientError: If SSM operation fails
         """
         try:
-            _boto_config = BotocoreConfig(
-                connect_timeout=3,
-                read_timeout=5,
-                retries={"max_attempts": 0},
-            )
             ssm_client = boto3.client(
                 "ssm", region_name=os.getenv("AWS_REGION", "us-east-1"),
-                config=_boto_config,
+                config=_BOTO_SSM_CONFIG,
             )
 
             parameter_name = f"/arbiter/encryption_keys/{version}"
