@@ -470,8 +470,63 @@ LANGUAGE_CONFIG = {
 # Plugin registry for custom parsers
 PARSER_REGISTRY: Dict[str, type] = {}
 
+# Valid first tokens for a Python source file (any of these prefixes on the first
+# non-blank line means the content is already valid Python).
+# NOTE: Defined here (early) so that _source_name_from_preamble can reference it.
+_VALID_PYTHON_STARTS = (
+    "import ",
+    "from ",
+    "#",
+    '"""',
+    "'''",
+    "def ",
+    "async def ",
+    "class ",
+    "@",
+    "if ",
+    "try:",
+    "with ",
+    "raise ",
+    "pass",
+    "lambda ",
+    "__all__",
+    "__name__",
+    "__version__",
+    "__author__",
+)
 
-def normalize_test_filename(filename: str, language: str) -> str:
+
+def _source_name_from_preamble(content: str) -> Optional[str]:
+    """
+    Extract a source file name hint from the first few non-blank lines of content.
+
+    LLMs often prefix generated test files with lines like:
+      "file for utils.py"
+      "Tests for models.py"
+      "# tests for schemas.py"
+
+    Returns the bare source-file stem (e.g. "utils") or ``None`` if not found.
+    """
+    for line in content.splitlines()[:5]:
+        stripped = line.strip().lstrip("#").strip()
+        if not stripped:
+            continue
+        # Pattern: "file for X.py", "tests for X.py", "for X.py", etc.
+        m = re.search(r'\bfor\s+([\w_]+)\.py\b', stripped, re.IGNORECASE)
+        if m:
+            return m.group(1).lower()
+        # Pattern: "X.py tests", "X.py test file"
+        m2 = re.search(r'^([\w_]+)\.py\b', stripped, re.IGNORECASE)
+        if m2:
+            stem = m2.group(1).lower()
+            # Only accept if the line looks like a comment/label, not real Python
+            if not any(stripped.startswith(tok) for tok in _VALID_PYTHON_STARTS):
+                return stem
+        # No hint found on this line
+    return None
+
+
+def normalize_test_filename(filename: str, language: str, content: str = "") -> str:
     """
     Normalize test file names to follow proper testing conventions.
     
@@ -481,10 +536,12 @@ def normalize_test_filename(filename: str, language: str) -> str:
     - Missing test_ prefix (Calculator.py -> test_calculator.py)
     - Improper casing (TestCalculator.py -> test_calculator.py)
     - Uppercase TEST_ prefix (TEST_calculator.py -> test_calculator.py)
+    - Generic names (Test.py with "file for utils.py" preamble -> test_utils.py)
     
     Args:
         filename: Original filename from LLM response
         language: Programming language (e.g., "python", "javascript")
+        content: Optional file content used to extract source name from preamble
         
     Returns:
         Normalized filename with proper test_ prefix
@@ -508,8 +565,12 @@ def normalize_test_filename(filename: str, language: str) -> str:
     
     # Handle common problematic patterns
     if name_without_ext == "Test":
-        # Generic "Test.py" -> "test_module.py"
-        normalized_name = "test_module"
+        # Generic "Test.py": try to derive a better name from the preamble
+        preamble_source = _source_name_from_preamble(content) if content else None
+        if preamble_source:
+            normalized_name = f"test_{preamble_source}"
+        else:
+            normalized_name = "test_module"
     elif name_without_ext.startswith("Test") and len(name_without_ext) > 4:
         # "TestCalculator" -> "test_calculator"
         rest = name_without_ext[4:]  # Remove "Test" prefix
@@ -530,6 +591,41 @@ def normalize_test_filename(filename: str, language: str) -> str:
     if result != filename:
         logger.info(f"Normalized test filename: {filename} -> {result}")
     
+    return result
+
+
+def _deduplicate_test_filenames(files: Dict[str, str], ext: str) -> Dict[str, str]:
+    """
+    Ensure that no two entries in *files* share the same normalized name.
+
+    When the LLM produces multiple files that all normalize to the same name
+    (e.g. six ``Test.py`` blocks all become ``test_module.py``), later entries
+    silently overwrite earlier ones.  This function renames collisions by
+    appending an incrementing counter suffix before the extension:
+
+        test_module.py  -> test_module.py   (first occurrence, unchanged)
+        test_module.py  -> test_module_2.py
+        test_module.py  -> test_module_3.py
+
+    Args:
+        files: Dict mapping filename -> content (may contain duplicates).
+        ext: File extension (without leading dot) used to construct names.
+
+    Returns:
+        New dict with all keys unique.
+    """
+    seen: Dict[str, int] = {}  # base_name (without ext) -> next counter
+    result: Dict[str, str] = {}
+    for filename, content in files.items():
+        stem = filename[: -(len(ext) + 1)] if filename.endswith(f".{ext}") else filename
+        if stem not in seen:
+            seen[stem] = 2  # next counter for this stem
+            result[filename] = content
+        else:
+            new_name = f"{stem}_{seen[stem]}.{ext}"
+            logger.info(f"Deduplicated test filename: {filename} -> {new_name}")
+            seen[stem] += 1
+            result[new_name] = content
     return result
 
 
@@ -737,31 +833,6 @@ def _strip_markdown_fences(content: str) -> str:
     return content.strip()
 
 
-# Valid first tokens for a Python source file (any of these prefixes on the first
-# non-blank line means the content is already valid Python).
-_VALID_PYTHON_STARTS = (
-    "import ",
-    "from ",
-    "#",
-    '"""',
-    "'''",
-    "def ",
-    "async def ",
-    "class ",
-    "@",
-    "if ",
-    "try:",
-    "with ",
-    "raise ",
-    "pass",
-    "lambda ",
-    "__all__",
-    "__name__",
-    "__version__",
-    "__author__",
-)
-
-
 def _strip_non_python_preamble(content: str, filename: str = "") -> str:
     """
     Strip non-Python preamble lines from the start of a code string.
@@ -832,12 +903,13 @@ class DefaultResponseParser(ResponseParser):
             parsed = json.loads(response)
             if isinstance(parsed, dict):
                 logger.debug("Successfully parsed response as JSON.")
-                # Apply filename normalization
-                return {
-                    normalize_test_filename(k, language): str(v) 
-                    for k, v in parsed.items() 
+                # Apply filename normalization, passing content for preamble detection
+                raw_files = {
+                    normalize_test_filename(k, language, content=str(v)): str(v)
+                    for k, v in parsed.items()
                     if isinstance(k, str)
                 }
+                return _deduplicate_test_filenames(raw_files, LANGUAGE_CONFIG.get(language, {}).get("ext", "txt"))
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -845,17 +917,18 @@ class DefaultResponseParser(ResponseParser):
         try:
             root = ET.fromstring(response.strip())
             if root.tag == "tests":
-                files = {}
+                files: Dict[str, str] = {}
                 for file_node in root.findall(".//file"):
                     name = file_node.get("name")
                     content_node = file_node.find("content")
                     if name and content_node is not None and content_node.text:
-                        # Apply filename normalization
-                        normalized_name = normalize_test_filename(name, language)
-                        files[normalized_name] = content_node.text.strip()
+                        node_content = content_node.text.strip()
+                        # Apply filename normalization, passing content for preamble detection
+                        normalized_name = normalize_test_filename(name, language, content=node_content)
+                        files[normalized_name] = node_content
                 if files:
                     logger.info(f"Successfully parsed {len(files)} files from XML.")
-                    return files
+                    return _deduplicate_test_filenames(files, LANGUAGE_CONFIG.get(language, {}).get("ext", "txt"))
         except ET.ParseError:
             pass
 
@@ -867,7 +940,7 @@ class DefaultResponseParser(ResponseParser):
         matches = re.findall(code_block_pattern, response, re.DOTALL | re.IGNORECASE)
 
         if matches:
-            parsed_files = {}
+            parsed_files: Dict[str, str] = {}
             for i, (filename_comment, code_content) in enumerate(matches):
                 if filename_comment and filename_comment.strip():
                     filename = filename_comment.strip()
@@ -876,10 +949,10 @@ class DefaultResponseParser(ResponseParser):
                 else:
                     filename = f"test_file_{i+1}.{ext}"
 
-                # Apply filename normalization and strip any remaining fences
-                normalized_filename = normalize_test_filename(filename, language)
                 # FIX Issue 2: Strip markdown fences from code content
                 cleaned_content = _strip_markdown_fences(code_content.strip())
+                # Apply filename normalization, passing content for preamble detection
+                normalized_filename = normalize_test_filename(filename, language, content=cleaned_content)
                 # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
                 if language == "python":
                     cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
@@ -887,7 +960,7 @@ class DefaultResponseParser(ResponseParser):
 
             if parsed_files:
                 logger.info(f"Successfully parsed {len(parsed_files)} code blocks.")
-                return parsed_files
+                return _deduplicate_test_filenames(parsed_files, ext)
 
         # Strategy 4: Extract by file markers
         file_marker_pattern = r"(?:^|\n)#+\s*([\w\-_\.]+\.(?:py|js|ts|java|go|rs))\s*\n(.*?)(?=\n#+\s*[\w\-_\.]+\.|$)"
@@ -896,10 +969,10 @@ class DefaultResponseParser(ResponseParser):
         if file_matches:
             parsed_files = {}
             for filename, content in file_matches:
-                # Apply filename normalization and strip fences
-                normalized_filename = normalize_test_filename(filename, language)
                 # FIX Issue 2: Strip markdown fences from content
                 cleaned_content = _strip_markdown_fences(content.strip())
+                # Apply filename normalization, passing content for preamble detection
+                normalized_filename = normalize_test_filename(filename, language, content=cleaned_content)
                 # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
                 if language == "python":
                     cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
@@ -909,7 +982,7 @@ class DefaultResponseParser(ResponseParser):
                 logger.info(
                     f"Successfully parsed {len(parsed_files)} files using file markers."
                 )
-                return parsed_files
+                return _deduplicate_test_filenames(parsed_files, ext)
 
         # Strategy 5: Treat entire response as a single file
         if response.strip():

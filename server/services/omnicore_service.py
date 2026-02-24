@@ -5628,6 +5628,39 @@ class OmniCoreService:
                         logger.info("[DOCGEN] Created minimal docs/conf.py for job %s", job_id)
                     except OSError as conf_err:
                         logger.warning("[DOCGEN] Could not create conf.py: %s", conf_err)
+                # Ensure a minimal index.rst exists; without it sphinx-build finds
+                # 0 source files and exits with code 2.
+                index_rst = output_dir / "index.rst"
+                if not index_rst.exists():
+                    try:
+                        # Collect any .rst files already in the docs directory to
+                        # include in the toctree (excluding index.rst itself).
+                        rst_entries = []
+                        for _rst_file in sorted(output_dir.glob("*.rst")):
+                            if _rst_file.name != "index.rst":
+                                rst_entries.append(f"   {_rst_file.stem}")
+                        # Also add README if it exists and is not already listed
+                        _readme = output_dir.parent / "README.md"
+                        if _readme.exists():
+                            rst_entries.append("   README")
+                        toctree_body = "\n".join(rst_entries) if rst_entries else ""
+                        index_rst.write_text(
+                            "Welcome to Project Documentation\n"
+                            "=================================\n\n"
+                            ".. toctree::\n"
+                            "   :maxdepth: 2\n"
+                            "   :caption: Contents:\n\n"
+                            f"{toctree_body}\n\n"
+                            "Indices and tables\n"
+                            "==================\n\n"
+                            "* :ref:`genindex`\n"
+                            "* :ref:`modindex`\n"
+                            "* :ref:`search`\n",
+                            encoding="utf-8",
+                        )
+                        logger.info("[DOCGEN] Created minimal docs/index.rst for job %s", job_id)
+                    except OSError as idx_err:
+                        logger.warning("[DOCGEN] Could not create index.rst: %s", idx_err)
                 try:
                     sphinx_result = await asyncio.create_subprocess_exec(
                         "sphinx-build",
@@ -7294,6 +7327,8 @@ class OmniCoreService:
                 stages_completed.append("validate:skipped")
             
             # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
+            # This is a GATE: if >SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD of required
+            # endpoints are missing after the final codegen attempt, fail the job.
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
                     if md_content:
@@ -7311,11 +7346,60 @@ class OmniCoreService:
                             stages_completed.append("spec_validate")
                             logger.info(f"[PIPELINE] Job {job_id} completed step: spec_validate")
                         else:
-                            logger.warning(
-                                f"[PIPELINE] Job {job_id} spec fidelity check found issues: "
-                                f"{spec_result.get('errors', [])}",
-                                extra={"job_id": job_id}
-                            )
+                            missing_eps = spec_result.get("missing_endpoints", [])
+                            required_eps = spec_result.get("required_endpoints", [])
+                            if not required_eps:
+                                required_eps = [
+                                    e for e in spec_result.get("errors", [])
+                                    if "Missing required endpoint" in e
+                                ] or missing_eps
+                            missing_count = len(missing_eps)
+                            required_count = len(required_eps)
+                            if (
+                                required_count > 0
+                                and missing_count / required_count > SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD
+                            ):
+                                missing_ep_labels = [
+                                    f"{ep.get('method', '?')} {ep.get('path', '?')}"
+                                    if isinstance(ep, dict)
+                                    else str(ep)
+                                    for ep in missing_eps[:20]
+                                ]
+                                extra_note = (
+                                    f" (and {missing_count - 20} more)"
+                                    if missing_count > 20
+                                    else ""
+                                )
+                                fail_msg = (
+                                    f"Spec fidelity check failed: {missing_count}/{required_count} "
+                                    f"required endpoints are missing "
+                                    f"(>{int(SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD * 100)}% threshold). "
+                                    f"Missing: {missing_ep_labels}{extra_note}"
+                                )
+                                logger.error(
+                                    f"[PIPELINE] Job {job_id} HARD FAIL — {fail_msg}",
+                                    extra={
+                                        "job_id": job_id,
+                                        "missing_count": missing_count,
+                                        "required_count": required_count,
+                                        "missing_endpoints": missing_ep_labels,
+                                    },
+                                )
+                                stages_completed.append("testgen:skipped")
+                                await self._finalize_failed_job(job_id, error=fail_msg)
+                                return {
+                                    "status": "failed",
+                                    "message": fail_msg,
+                                    "stages_completed": stages_completed,
+                                    "missing_endpoints": missing_ep_labels,
+                                    "output_path": output_path_for_validation,
+                                }
+                            else:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} spec fidelity check found issues: "
+                                    f"{spec_result.get('errors', [])}",
+                                    extra={"job_id": job_id}
+                                )
                 except Exception as spec_err:
                     logger.warning(f"[PIPELINE] Job {job_id} spec validation error: {spec_err}")
             

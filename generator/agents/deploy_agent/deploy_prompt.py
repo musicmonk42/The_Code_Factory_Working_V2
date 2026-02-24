@@ -48,6 +48,12 @@ except ImportError:  # pragma: no cover
     SentenceTransformer = None
     util = None
 
+# Shared singleton for SentenceTransformer model — avoids loading multiple times
+try:
+    from generator.utils.model_registry import get_sentence_transformer as _get_sentence_transformer
+except ImportError:
+    _get_sentence_transformer = None
+
 # --- OpenTelemetry imports with fallback ---
 try:
     from opentelemetry.trace import Status, StatusCode
@@ -348,7 +354,7 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
         # If the optimized prompt retains less than 75% of the original content,
         # the LLM likely stripped critical spec requirements (e.g., required K8s manifests,
         # service.yaml, Helm chart files). Return original to preserve full deployment context.
-        min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.75"))
+        min_length_ratio = float(os.getenv("DEPLOY_PROMPT_MIN_COMPRESSION_RATIO", "0.85"))
         # Use a more conservative ratio for structured prompts (YAML, JSON, code blocks)
         # to avoid stripping required deployment context like K8s manifests or Helm charts
         _structured_markers = ("```yaml", "```json", "apiVersion:", "Chart.yaml", "values.yaml")
@@ -857,9 +863,13 @@ class DeployPromptAgent:
         self.embedding_model: Optional[SentenceTransformer] = None
         if SentenceTransformer and util:  # Check if import was successful
             try:
-                # SentenceTransformer is a heavy dependency, load only if necessary
-                self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-                logger.info("Successfully loaded SentenceTransformer model for few-shot retrieval")
+                # Use shared singleton to avoid loading the model multiple times
+                if _get_sentence_transformer is not None:
+                    self.embedding_model = _get_sentence_transformer("all-MiniLM-L6-v2")
+                else:
+                    self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+                if self.embedding_model:
+                    logger.info("Successfully loaded SentenceTransformer model for few-shot retrieval")
             except Exception as e:
                 logger.warning(
                     "Could not load SentenceTransformer for few-shot retrieval: %s. Few-shot retrieval will be disabled.",

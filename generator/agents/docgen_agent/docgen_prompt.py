@@ -156,6 +156,12 @@ from sentence_transformers import (
     SentenceTransformer,
     util,
 )  # For embedding and semantic search
+
+# Shared singleton for SentenceTransformer model — avoids loading multiple times
+try:
+    from generator.utils.model_registry import get_sentence_transformer as _get_sentence_transformer
+except ImportError:
+    _get_sentence_transformer = None
 from tenacity import (  # For retries on external calls
     retry,
     retry_if_exception_type,
@@ -772,7 +778,11 @@ class DocGenPromptAgent:
         self.languages = languages
         self.embedding_model: Optional[SentenceTransformer] = None
         try:
-            self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+            # Use shared singleton to avoid loading the model multiple times
+            if _get_sentence_transformer is not None:
+                self.embedding_model = _get_sentence_transformer("all-MiniLM-L6-v2")
+            else:
+                self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
         except Exception as e:
             logger.warning(
                 f"Could not load SentenceTransformer for few-shot retrieval: {e}. Few-shot retrieval will be disabled."
