@@ -14,7 +14,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
@@ -85,9 +85,82 @@ MAX_CONCURRENT_PIPELINES = 10
 # Semaphore to limit concurrent pipeline tasks
 _pipeline_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PIPELINES)
 
+# Registry to track active pipeline asyncio.Task objects by job_id.
+# Used during graceful shutdown to cancel in-flight pipelines before
+# persisting FAILED status to the database.
+_active_pipeline_tasks: Dict[str, asyncio.Task[None]] = {}
+
+# Track which jobs have already had a pipeline started to prevent duplicate
+# triggers (e.g. upload auto-trigger racing with explicit run_full_pipeline).
+_jobs_pipeline_started: Set[str] = set()
+
+
+async def cancel_all_pipeline_tasks() -> None:
+    """Cancel all active pipeline tasks during graceful shutdown.
+
+    Called from the lifespan shutdown section before
+    _protect_running_jobs_on_shutdown() to ensure in-flight pipelines
+    are stopped before we attempt to persist FAILED status to the database.
+    """
+    if not _active_pipeline_tasks:
+        return
+
+    # Snapshot the registry immediately — new tasks must not be registered
+    # after this point (they won't be, because the shutdown event is set).
+    tasks = list(_active_pipeline_tasks.values())
+
+    still_running = [t for t in tasks if not t.done()]
+    logger.info(
+        f"[Pipeline] Graceful shutdown: cancelling {len(still_running)} "
+        f"in-flight pipeline task(s) (total registered: {len(tasks)})"
+    )
+
+    for task in still_running:
+        task.cancel()
+
+    if still_running:
+        done, pending = await asyncio.wait(still_running, timeout=10.0)
+        if pending:
+            logger.warning(
+                f"[Pipeline] {len(pending)} pipeline task(s) did not finish within "
+                "the 10-second cancellation timeout and may still be running."
+            )
+        logger.info(
+            f"[Pipeline] Cancellation complete: {len(done)} task(s) stopped, "
+            f"{len(pending)} task(s) timed out."
+        )
+
+
+def _is_shutdown_requested() -> bool:
+    """Return True if the server shutdown event has been set.
+
+    Uses a lazy import to avoid a circular dependency between
+    server.routers.generator and server.main.  The import is O(1) after the
+    first call because Python caches loaded modules in sys.modules.
+    """
+    try:
+        from server.main import _shutdown_event  # noqa: PLC0415 (import-outside-toplevel) - lazy import to avoid circular dependency
+        return _shutdown_event.is_set()
+    except (ImportError, AttributeError):
+        # ImportError  – server.main not yet loaded (e.g. during unit tests).
+        # AttributeError – _shutdown_event not yet defined in server.main.
+        return False
+
+
 # UUID validation pattern (RFC 4122)
 # Used for validating job IDs in API requests to prevent injection attacks
 UUID_PATTERN = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.IGNORECASE)
+
+
+class _PipelineShutdownInterrupt(BaseException):
+    """Raised inside pipeline steps when a SIGTERM shutdown is detected.
+
+    Inherits from BaseException (not Exception) so that generic
+    ``except Exception`` handlers do not accidentally swallow it and
+    continue expensive LLM work during a shutdown sequence.  The outer
+    handler in _run_pipeline_with_semaphore catches BaseException via the
+    finally block and logs the interruption at INFO level.
+    """
 
 
 def get_generator_service() -> GeneratorService:
@@ -286,7 +359,32 @@ async def _run_pipeline_with_semaphore(
         readme_content: Content of the README file
         generator_service: GeneratorService instance
     """
+    # Prevent duplicate pipeline triggers for the same job.
+    # This guards against the race condition where upload auto-trigger and an
+    # explicit run_full_pipeline call both start a pipeline concurrently.
+    if job_id in _jobs_pipeline_started:
+        logger.warning(
+            f"[Pipeline] Duplicate pipeline trigger detected for job {job_id}. "
+            "Skipping to prevent race condition."
+        )
+        return
+
     try:
+        # Register *inside* the try so the finally block always de-registers,
+        # even if an unexpected error occurs between here and the semaphore acquire.
+        _jobs_pipeline_started.add(job_id)
+
+        # Register the current asyncio Task so shutdown can cancel it.
+        task = asyncio.current_task()
+        if task is not None:
+            _active_pipeline_tasks[job_id] = task
+
+        # Note: asyncio uses cooperative multitasking (single event-loop thread).
+        # The check-add in _jobs_pipeline_started and the discard in finally are
+        # each non-awaited operations, so no other coroutine can interleave between
+        # them.  The duplicate-guard above and the cleanup below are therefore
+        # atomically safe without an explicit lock.
+
         # Try to acquire the semaphore
         if _pipeline_semaphore.locked():
             logger.warning(
@@ -300,8 +398,17 @@ async def _run_pipeline_with_semaphore(
                 f"[Pipeline] Starting pipeline for job {job_id}"
             )
             await _trigger_pipeline_background(job_id, readme_content, generator_service)
+    except _PipelineShutdownInterrupt:
+        # Graceful shutdown was requested — log at INFO, not ERROR.
+        # The job will be marked FAILED by _protect_running_jobs_on_shutdown.
+        logger.info(
+            f"[Pipeline] Job {job_id} pipeline interrupted by SIGTERM shutdown request."
+        )
     except Exception as e:
         logger.error(f"[Pipeline] Uncaught error in pipeline wrapper for job {job_id}: {e}", exc_info=True)
+    finally:
+        _jobs_pipeline_started.discard(job_id)
+        _active_pipeline_tasks.pop(job_id, None)
 
 
 async def _trigger_pipeline_background(
@@ -377,6 +484,8 @@ async def _trigger_pipeline_background(
         job.metadata["pipeline_started_at"] = datetime.now(timezone.utc).isoformat()
         
         # Step 1: Run clarification to analyze requirements
+        if _is_shutdown_requested():
+            raise _PipelineShutdownInterrupt("Pipeline interrupted by SIGTERM shutdown")
         logger.info(f"[Pipeline] Running clarification for job {job_id}")
         try:
             clarify_result = await generator_service.clarify_requirements(
@@ -430,6 +539,8 @@ async def _trigger_pipeline_background(
         # Step 2: Run full pipeline (code generation, tests, deployment, docs, critique)
         # Wait for agents to be ready before running full pipeline
         # Implements industry-standard health check pattern with timeout
+        if _is_shutdown_requested():
+            raise _PipelineShutdownInterrupt("Pipeline interrupted by SIGTERM shutdown")
         logger.info(
             f"[Pipeline] Checking agent readiness before pipeline execution",
             extra={"job_id": job_id, "max_wait": AGENT_WAIT_TIMEOUT}
@@ -439,6 +550,8 @@ async def _trigger_pipeline_background(
         agent_ready = False
         last_log_time = 0  # Track last progress log time
         while elapsed < AGENT_WAIT_TIMEOUT:
+            if _is_shutdown_requested():
+                raise _PipelineShutdownInterrupt("Pipeline interrupted by SIGTERM shutdown")
             loader = get_agent_loader()
             omnicore = get_omnicore_service()
             # Check both loader completion AND OmniCore service readiness
@@ -481,6 +594,8 @@ async def _trigger_pipeline_background(
             await finalize_job_failure(job_id, error)
             return
         
+        if _is_shutdown_requested():
+            raise _PipelineShutdownInterrupt("Pipeline interrupted by SIGTERM shutdown")
         job.current_stage = JobStage.GENERATOR_GENERATION
         job.updated_at = datetime.now(timezone.utc)
         logger.info(
