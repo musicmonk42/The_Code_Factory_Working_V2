@@ -434,6 +434,9 @@ class CoverageValidator(TestValidator):
             return {
                 "coverage_percentage": 0.0,
                 "issues": f"Exception during coverage validation: {str(e)}",
+                "metrics": {
+                    "coverage_percentage": 0.0
+                },
             }
         finally:
             if temp_dir:

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import threading
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
@@ -935,15 +936,19 @@ class CodebaseAnalyzer:
                             pass
 
                     reporter = DefectReporter()
+                    # FIX Issue 3: Set PYLINTHOME to a writable directory to avoid cache errors
+                    os.environ.setdefault("PYLINTHOME", os.path.join(tempfile.gettempdir(), "pylint_cache"))
                     # Pylint needs an external runner, which is blocking, so this is called within to_thread
                     # Handle API difference: newer Pylint uses exit=False, older uses do_exit=False
+                    # FIX Issue 3: Also catch AttributeError caused by missing mixin_class_rgx
+                    # in the Pylint async checker when running without full config.
                     try:
                         Run([str(file_path)], reporter=reporter, exit=False)
-                    except TypeError:
+                    except (TypeError, AttributeError):
                         try:
                             Run([str(file_path)], reporter=reporter, do_exit=False)
-                        except TypeError:
-                            logger.warning("Pylint Run API incompatible, skipping lint for %s", file_path)
+                        except (TypeError, AttributeError):
+                            logger.warning("Pylint Run API incompatible or config error, skipping lint for %s", file_path)
                     defects.extend(
                         [
                             {

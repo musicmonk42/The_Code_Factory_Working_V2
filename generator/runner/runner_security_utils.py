@@ -571,7 +571,7 @@ def regex_basic_redactor(data: Any, patterns: Optional[List[Pattern]] = None) ->
 
 
 # NLP-based redactor (if Presidio is available)
-def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, apply_allowlist: bool = True, is_documentation: bool = False) -> Any:
+def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, apply_allowlist: bool = True, should_skip_redaction: bool = False) -> Any:
     """
     Recursively redacts data using Presidio NLP, falling back to regex for non-strings.
     
@@ -579,16 +579,18 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
         data: Data to redact (string, dict, list, or other)
         patterns: Optional additional regex patterns to apply after Presidio
         apply_allowlist: If True, filters out technical terms from TECHNICAL_ALLOWLIST
-        is_documentation: If True, skips or significantly reduces PII scanning for documentation files
+        should_skip_redaction: If True, skips PII scanning (for documentation and test files)
     
     Returns:
         Redacted data with PII removed but technical terms preserved
     """
-    # FIX: Skip PII redaction for documentation files (Fix 4)
-    # Documentation files (README.md, docs/*.md, etc.) intentionally contain
-    # example URLs, service names, and organization names that should not be redacted
-    if is_documentation:
-        logger.debug("Skipping PII redaction for documentation file")
+    # FIX: Skip PII redaction for documentation and test files
+    # Documentation files (README.md, docs/*.md, etc.) intentionally contain example URLs,
+    # service names, and organization names that should not be redacted.
+    # Test files must also be skipped because Presidio misclassifies integer literals
+    # (e.g. 123456) as CARDINAL/DATE_TIME entities, corrupting test assertions.
+    if should_skip_redaction:
+        logger.debug("Skipping PII redaction for file")
         return data
     
     # FIX: Ensure Presidio is loaded only when this function is called
@@ -650,9 +652,9 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
             # --- FIX: REMOVED METRIC INCREMENT ---
             return regex_basic_redactor(data, patterns)  # Fallback on error
     elif isinstance(data, dict):
-        return {k: nlp_presidio_redactor(v, patterns, apply_allowlist, is_documentation) for k, v in data.items()}
+        return {k: nlp_presidio_redactor(v, patterns, apply_allowlist, should_skip_redaction) for k, v in data.items()}
     elif isinstance(data, list):
-        return [nlp_presidio_redactor(item, patterns, apply_allowlist, is_documentation) for item in data]
+        return [nlp_presidio_redactor(item, patterns, apply_allowlist, should_skip_redaction) for item in data]
     return data
 
 
@@ -764,22 +766,33 @@ def redact_secrets(
     if data is None:
         return data
     
-    # Determine if this is a documentation file (Fix 4)
-    is_documentation = False
+    # Determine if this file should skip PII redaction.
+    # Covers: documentation files and test code files.
+    # Test files are skipped because Presidio's NLP pipeline misclassifies integer
+    # literals (e.g. 123456) as CARDINAL/DATE_TIME entities, corrupting test
+    # assertions like: assert response.json() == {"uptime_seconds": "<DATE_TIME>"}
+    should_skip_redaction = False
     if filename:
         filename_lower = filename.lower()
-        is_documentation = (
+        filename_base = os.path.basename(filename_lower)
+        should_skip_redaction = (
             filename_lower.endswith('.md') or
             'readme' in filename_lower or
             '/docs/' in filename_lower or
             filename_lower.startswith('docs/') or
             filename_lower == 'changelog' or
             filename_lower == 'contributing' or
-            filename_lower == 'license'
+            filename_lower == 'license' or
+            # FIX Issue 1: Skip test files to prevent Presidio misclassifying integer
+            # literals (e.g. 123456) as CARDINAL/DATE_TIME entities in test assertions
+            filename_base.startswith('test_') or
+            '_test.' in filename_base or  # matches *_test.py, *_test.js, *_test.go, etc.
+            '/tests/' in filename_lower or
+            filename_lower.startswith('tests/')
         )
-        if is_documentation:
-            logger.debug(f"Detected documentation file: {filename}, skipping PII redaction")
-            # FIX: Return early for documentation files - skip all redaction
+        if should_skip_redaction:
+            logger.debug(f"Skipping PII redaction for file: {filename}")
+            # FIX: Return early for documentation/test files - skip all redaction
             return data
 
     try:
@@ -827,9 +840,9 @@ def redact_secrets(
 
         # FIX: Call the synchronous redactor directly with error handling
         try:
-            # Pass is_documentation flag to nlp_presidio_redactor
+            # Pass should_skip_redaction flag to nlp_presidio_redactor
             if effective_method == "nlp_presidio":
-                result = nlp_presidio_redactor(data, patterns, apply_allowlist=True, is_documentation=is_documentation)
+                result = nlp_presidio_redactor(data, patterns, apply_allowlist=True, should_skip_redaction=should_skip_redaction)
             else:
                 result = redactor(data, patterns)
         except SystemExit:
@@ -851,7 +864,7 @@ def redact_secrets(
             try:
                 log_audit_event(
                     action="security_redact",
-                    data={"method": effective_method, "data_type": str(type(data)), "is_documentation": is_documentation},
+                    data={"method": effective_method, "data_type": str(type(data)), "should_skip_redaction": should_skip_redaction},
                 )
             except Exception:
                 # Silently ignore logging failures - never crash due to logging

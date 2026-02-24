@@ -2154,6 +2154,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
             cmd_to_execute: Union[str, List[str]] = self.framework_info["cmd"]
             span.add_event(f"Executing test command: {cmd_to_execute}")
             exec_results: Dict[str, Any]
+            exec_error: Optional[RunnerError] = None  # FIX Issue 2: defer raise to allow coverage parsing
 
             # --- CRITICAL FIX: REPLACE direct subprocess_wrapper call with backend.execute ---
             try:
@@ -2184,7 +2185,17 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
 
             except RunnerError as e:  # Catch structured errors from backend.execute
                 e.task_id = task_id  # Ensure task_id is propagated
-                raise e  # Re-raise directly
+                # FIX Issue 2: Instead of raising immediately, defer the error so that
+                # coverage parsing can still run against cov.xml in the temp directory.
+                # This preserves partial coverage data even when some tests fail (rc=1).
+                exec_error = e
+                exec_results = {
+                    "success": False,
+                    "stdout": e.extra_info.get("stdout") or "",
+                    "stderr": e.extra_info.get("stderr") or "",
+                    "returncode": e.extra_info.get("returncode", 1),
+                    "duration": time.time() - self.task_status_map[task_id].started_at,
+                }
             except Exception as e:  # Catch any other unexpected errors
                 raise TestExecutionError(
                     error_codes["TEST_EXECUTION_FAILED"],
@@ -2760,6 +2771,27 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
             self._run_feedback(parsed_results, task_id)
 
             final_results = parsed_results
+
+            # FIX Issue 2: If the backend raised an execution error (e.g. pytest rc=1),
+            # return a "failed" TaskResult that still includes coverage data parsed from
+            # cov.xml above. This prevents coverage from being silently discarded when
+            # some tests fail, while still propagating the failure status.
+            if exec_error is not None:
+                await self._update_task_status(
+                    task_id, "failed", results=final_results, finished_at=time.time()
+                )
+                span.set_status(
+                    Status(StatusCode.ERROR, f"Test execution failed: {exec_error.error_code}")
+                )
+                return TaskResult(
+                    task_id=task_id,
+                    status="failed",
+                    results=final_results,
+                    started_at=self.task_status_map[task_id].started_at,
+                    finished_at=time.time(),
+                    tags=task_payload.tags,
+                    environment=task_payload.environment,
+                )
 
             await self._update_task_status(
                 task_id, "completed", results=final_results, finished_at=time.time()
