@@ -62,8 +62,10 @@ def in_memory_exporter():
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     # Replace the module-level NoOpTracer with a real tracer from our provider
+    original_tracer = mt_module.tracer
     mt_module.tracer = provider.get_tracer(mt_module.__name__)
-    return exporter
+    yield exporter
+    mt_module.tracer = original_tracer
 
 
 @pytest_asyncio.fixture(autouse=True)
