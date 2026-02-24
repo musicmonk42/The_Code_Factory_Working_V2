@@ -17,11 +17,13 @@ Architecture:
                               Server Audit Tab ← OmniCore query_audit_records()
 """
 
+import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from server.services.omnicore_service import OmniCoreService, get_omnicore_service
 
@@ -38,7 +40,14 @@ _MODULE_TARGET: Dict[str, str] = {
     "testgen": "sfe",
     "simulation": "sfe",
     "guardrails": "sfe",
+    "omnicore": "omnicore",
 }
+
+# In-memory unified audit store for ingested events (module → list of entries).
+# This is a lightweight fallback store; production deployments should wire this
+# to a persistent backend via the existing audit backend infrastructure.
+_ingest_store: Dict[str, List[Dict[str, Any]]] = {}
+_MAX_INGEST_PER_MODULE = 10_000  # cap to prevent unbounded growth
 
 
 async def _query_via_omnicore(
@@ -81,8 +90,25 @@ async def _query_via_omnicore(
     )
     data = result.get("data") or {}
     if isinstance(data, dict):
-        return data.get("logs", [])
-    return []
+        logs = data.get("logs", [])
+    else:
+        logs = []
+
+    # Supplement with any events that were pushed via POST /audit/ingest
+    ingested = _ingest_store.get(module, [])
+    if ingested:
+        seen_ingested = list(ingested)
+        if start_time:
+            seen_ingested = [e for e in seen_ingested if (e.get("timestamp") or "") >= start_time]
+        if end_time:
+            seen_ingested = [e for e in seen_ingested if (e.get("timestamp") or "") <= end_time]
+        if event_type:
+            seen_ingested = [e for e in seen_ingested if event_type in (e.get("event_type") or "")]
+        if job_id:
+            seen_ingested = [e for e in seen_ingested if job_id in str(e.get("job_id") or "")]
+        logs = logs + seen_ingested
+
+    return logs[:limit]
 
 
 @router.get("/logs/all")
@@ -173,7 +199,9 @@ async def query_all_audit_logs(
     if "omnicore" in modules_to_query:
         try:
             modules_queried.append("omnicore")
-            # Discover job IDs to query
+            omnicore_trail_logs: List[Dict[str, Any]] = []
+
+            # Primary path: use get_audit_trail() for each known job ID
             if job_id:
                 job_ids = [job_id]
             else:
@@ -190,7 +218,51 @@ async def query_all_audit_logs(
                 omnicore_logs = await omnicore_service.get_audit_trail(job_id=jid, limit=limit)
                 for log in omnicore_logs:
                     log["module"] = "omnicore"
-                    aggregated_logs.append(log)
+                    omnicore_trail_logs.append(log)
+
+            # Fix #5: Fall back to local OmniCore log files when primary path returns empty
+            if not omnicore_trail_logs:
+                _omnicore_log_candidates = [
+                    "logs/omnicore_audit.jsonl",
+                    "omnicore_engine/audit/audit_trail.jsonl",
+                ]
+                for _log_path_str in _omnicore_log_candidates:
+                    _log_path = Path(_log_path_str)
+                    if not _log_path.is_file():
+                        continue
+                    try:
+                        with open(_log_path, "r", encoding="utf-8") as _fh:
+                            for _raw in _fh:
+                                _line = _raw.strip()
+                                if not _line:
+                                    continue
+                                try:
+                                    _entry: Dict[str, Any] = json.loads(_line)
+                                except json.JSONDecodeError:
+                                    continue
+                                _ts = _entry.get("timestamp") or _entry.get("ts") or ""
+                                if start_time and _ts and _ts < start_time:
+                                    continue
+                                if end_time and _ts and _ts > end_time:
+                                    continue
+                                if event_type:
+                                    _et = _entry.get("event_type") or _entry.get("event") or ""
+                                    if event_type not in _et:
+                                        continue
+                                if job_id:
+                                    _jid = str(_entry.get("job_id") or "")
+                                    if job_id not in _jid:
+                                        continue
+                                _entry["module"] = "omnicore"
+                                omnicore_trail_logs.append(_entry)
+                                if len(omnicore_trail_logs) >= limit:
+                                    break
+                    except OSError as _exc:
+                        logger.debug("Could not read OmniCore log file %s: %s", _log_path, _exc)
+                    if len(omnicore_trail_logs) >= limit:
+                        break
+
+            aggregated_logs.extend(omnicore_trail_logs)
         except Exception as e:
             logger.error(f"Error querying omnicore audit logs: {e}", exc_info=True)
             errors["omnicore"] = str(e)
@@ -221,6 +293,40 @@ async def query_all_audit_logs(
             "limit": limit,
         },
     }
+
+
+@router.post("/ingest")
+async def ingest_audit_event(
+    event: Dict[str, Any] = Body(..., description="Audit event payload"),
+) -> Dict[str, Any]:
+    """
+    Ingest a single audit event from any platform module.
+
+    Modules call this endpoint to push audit events to the unified store so
+    that they become visible via ``GET /audit/logs/all``.
+
+    **Required fields in the event body:**
+    - ``module``: Source module name (e.g. ``generator``, ``arbiter``)
+    - ``event_type``: Type of the audit event
+    - ``timestamp``: ISO 8601 timestamp (auto-set to *now* if omitted)
+
+    **Returns:**
+    - ``ingested``: ``true`` when the event was stored successfully
+    - ``module``: Module the event was attributed to
+    - ``timestamp``: Timestamp recorded for the event
+    """
+    module_name: str = event.get("module") or "unknown"
+    if not event.get("timestamp"):
+        event["timestamp"] = datetime.now(timezone.utc).isoformat()
+
+    module_store = _ingest_store.setdefault(module_name, [])
+    # Enforce per-module cap – drop oldest entry when full
+    if len(module_store) >= _MAX_INGEST_PER_MODULE:
+        del module_store[0]
+    module_store.append(event)
+
+    logger.debug("Ingested audit event: module=%s event_type=%s", module_name, event.get("event_type"))
+    return {"ingested": True, "module": module_name, "timestamp": event["timestamp"]}
 
 
 @router.get("/logs/event-types")

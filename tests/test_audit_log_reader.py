@@ -40,6 +40,7 @@ def _load_audit_module():
             def post(self, *a, **kw):
                 return lambda f: f
         fastapi_stub.APIRouter = _RouterStub
+        fastapi_stub.Body = lambda *a, **kw: None
         fastapi_stub.Depends = lambda f: f
         fastapi_stub.HTTPException = Exception
         fastapi_stub.Query = lambda *a, **kw: None
