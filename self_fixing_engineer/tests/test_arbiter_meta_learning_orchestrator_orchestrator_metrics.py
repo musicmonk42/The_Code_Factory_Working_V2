@@ -389,11 +389,18 @@ def test_metrics_exposition_format():
         ML_INGESTION_COUNT,
     )
 
+    # Initialize the label combination before reading generate_latest() to ensure
+    # it appears in the output regardless of prior test state. This handles the case
+    # where a prior test incremented the counter but the label combination may not
+    # have been initialized in the current registry yet (so metrics_before would
+    # incorrectly return 0.0 as the default instead of the actual counter value).
+    ML_INGESTION_COUNT.labels()
+
     # Get current values to calculate increments
     metrics_text_before = generate_latest().decode("utf-8")
     metrics_before = parse_metrics_output(metrics_text_before)
 
-    # Get initial value of ml_ingestion_total if it exists
+    # Get initial value of ml_ingestion_total
     ingestion_key = 'ml_ingestion_total{cluster="test-cluster",environment="test"}'
     initial_ingestion = metrics_before.get(ingestion_key, 0.0)
 
