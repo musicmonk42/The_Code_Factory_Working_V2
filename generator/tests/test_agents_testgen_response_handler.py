@@ -513,7 +513,7 @@ class TestPublicAPI:
         response = "{ malformed json }"
 
         # This should raise because the fallback creates invalid Python
-        with pytest.raises(ValueError, match="validation issues"):
+        with pytest.raises(ValueError, match="Failed to parse and heal response"):
             result = await parse_llm_response(response, "python", parser_type="default")
 
     @pytest.mark.asyncio

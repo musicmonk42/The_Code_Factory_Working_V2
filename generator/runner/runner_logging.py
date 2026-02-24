@@ -1444,6 +1444,10 @@ class _HttpHandlerBase(logging.Handler):
                 await self._flush()
             except asyncio.CancelledError:
                 break
+            except RuntimeError as e:
+                if "loop" in str(e).lower() or "closed" in str(e).lower():
+                    break  # Event loop is closing; exit gracefully
+                raise
             except Exception as e:
                 # [FIX] Use print to stderr to avoid recursion
                 print(
@@ -1517,7 +1521,11 @@ class _HttpHandlerBase(logging.Handler):
         )
 
         if self.flush_task and not self.flush_task.done():
-            self.flush_task.cancel()
+            if self._loop is None or not self._loop.is_closed():
+                try:
+                    self.flush_task.cancel()
+                except RuntimeError:
+                    pass  # Event loop may already be closed
 
         if self._loop and self._loop.is_running() and self.queue:
             try:
@@ -1539,7 +1547,7 @@ class _HttpHandlerBase(logging.Handler):
             try:
                 if self._loop and self._loop.is_running():
                     self._loop.run_until_complete(self.session.close())
-                else:
+                elif self._loop and not self._loop.is_closed():
                     asyncio.run(self.session.close())
                 # [FIX] Use print to stderr to avoid recursion
                 print(

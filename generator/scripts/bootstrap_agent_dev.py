@@ -61,6 +61,7 @@ def create_dummy_files():
 
     required_dummy_files = {
         "audit_log.py": """# NOTE: This file is a dev-bootstrap thin wrapper; do not import in production.
+# DUMMY AUDIT LOG
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 import logging
 _logger = logging.getLogger(__name__)
