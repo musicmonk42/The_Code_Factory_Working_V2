@@ -164,6 +164,16 @@ except ImportError:  # pragma: no cover
 
 router = APIRouter(prefix="/v2/jobs", tags=["Jobs v2 WebSocket"])
 
+__all__ = [
+    "router",
+    "_get_omnicore_service",
+    "_build_message",
+    "_check_rate_limit",
+    "_active_connections_by_ip",
+    "_connection_attempts",
+    "_all_active_connections",
+]
+
 # ---------------------------------------------------------------------------
 # Configuration — tunable via environment
 # ---------------------------------------------------------------------------
