@@ -2272,14 +2272,6 @@ class SFEService:
 
         # Use eagerly-loaded MetaLearning component if available
         ml = self._sfe_components.get("meta_learning")
-        if ml is None and not self._sfe_available.get("meta_learning"):
-            # Try direct import as a secondary attempt
-            try:
-                from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
-                ml = get_meta_learning_instance()
-            except Exception as e:
-                logger.warning(f"Direct MetaLearning integration unavailable: {e}")
-
         if ml is not None:
             ml_insights = ml.get_insights()
             if ml_insights is not None:
@@ -2291,6 +2283,7 @@ class SFEService:
                 return ml_insights
 
         # Aggregate real data from errors cache and fixes_db
+        from server.schemas import FixStatus
         from server.storage import fixes_db
 
         # Count errors grouped by type
@@ -2310,17 +2303,26 @@ class SFEService:
         total_fixes = len(all_fixes)
         applied_fixes = sum(
             1 for f in all_fixes
-            if getattr(f, "status", None) is not None
-            and str(getattr(f, "status", "")).lower() in ("applied", "success")
+            if getattr(f, "status", None) == FixStatus.APPLIED
         )
         success_rate = (applied_fixes / total_fixes) if total_fixes > 0 else None
 
-        # Find common fix types
+        # Categorize fixes by type using keyword matching against description
+        _FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
+            "import": ["import", "module", "package"],
+            "type": ["type", "annotation", "cast"],
+            "syntax": ["syntax", "parse", "indent"],
+            "security": ["security", "vulnerability", "injection", "sanitize"],
+            "refactor": ["refactor", "complexity", "simplify", "extract"],
+            "logic": ["logic", "condition", "null", "none", "undefined"],
+        }
         fix_type_counts: Dict[str, int] = {}
         for fix in all_fixes:
-            desc = str(getattr(fix, "description", "") or "")
-            parts = desc.split()
-            ftype = parts[0].lower() if parts else "unknown"
+            desc_lower = str(getattr(fix, "description", "") or "").lower()
+            ftype = next(
+                (t for t, kws in _FIX_TYPE_KEYWORDS.items() if any(kw in desc_lower for kw in kws)),
+                "other",
+            )
             fix_type_counts[ftype] = fix_type_counts.get(ftype, 0) + 1
 
         # Build common_patterns from top error types

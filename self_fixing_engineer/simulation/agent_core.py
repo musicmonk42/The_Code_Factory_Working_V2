@@ -7,8 +7,10 @@ This module provides proper implementations for agent core functionality.
 Uses abstract base classes and factory patterns for extensibility.
 """
 
+import json
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Callable
 from dataclasses import dataclass, field
@@ -71,6 +73,11 @@ class MetaLearning(MetaLearningBase):
     This implementation provides basic experience-based learning with
     configurable learning rate and insight generation.
     """
+
+    #: Maximum number of insights retained in the persistence file.
+    MAX_PERSISTED_INSIGHTS: int = 200
+    #: Maximum number of experiences retained in the persistence file.
+    MAX_PERSISTED_EXPERIENCES: int = 1000
 
     def __init__(self, *args, **kwargs):
         """
@@ -216,8 +223,6 @@ class MetaLearning(MetaLearningBase):
         self, patterns: List[Dict[str, Any]]
     ) -> List[LearningInsight]:
         """Generate insights from detected patterns."""
-        import time
-
         insights = []
         for pattern in patterns:
             if pattern["count"] >= 5:  # Significant pattern
@@ -238,19 +243,22 @@ class MetaLearning(MetaLearningBase):
         """
         Serialize MetaLearning state to a JSON file for persistence across restarts.
 
-        Args:
-            path: File path to write to. Defaults to META_LEARNING_STATE_PATH env var
-                  or ``data/meta_learning_state.json``.
-        """
-        import json as _json
+        Uses an atomic write (temp file + ``os.replace``) so a crash mid-write
+        can never produce a partially-written or corrupt state file.
 
+        Args:
+            path: File path to write to. Defaults to the ``META_LEARNING_STATE_PATH``
+                  environment variable or ``data/meta_learning_state.json``.
+        """
         file_path = path or os.environ.get(
             "META_LEARNING_STATE_PATH", "data/meta_learning_state.json"
         )
+        abs_path = os.path.abspath(file_path)
+        parent_dir = os.path.dirname(abs_path)
         try:
-            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            os.makedirs(parent_dir, exist_ok=True)
             state = {
-                "experiences": self.experiences,
+                "experiences": self.experiences[-self.MAX_PERSISTED_EXPERIENCES:],
                 "insights": [
                     {
                         "timestamp": ins.timestamp,
@@ -258,49 +266,70 @@ class MetaLearning(MetaLearningBase):
                         "data": ins.data,
                         "confidence": ins.confidence,
                     }
-                    for ins in self.insights
+                    for ins in self.insights[-self.MAX_PERSISTED_INSIGHTS:]
                 ],
                 "stats": self.stats,
             }
-            with open(file_path, "w", encoding="utf-8") as f:
-                _json.dump(state, f)
-            logger.debug(f"MetaLearning state persisted to {file_path}")
+            # Write atomically: dump to a sibling temp file then rename.
+            tmp_path = abs_path + ".tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, default=str)
+            os.replace(tmp_path, abs_path)
+            logger.debug("MetaLearning state persisted to %s", abs_path)
         except Exception as e:
-            logger.warning(f"MetaLearning.persist() failed: {e}")
+            logger.warning("MetaLearning.persist() failed: %s", e)
 
     def load(self, path: Optional[str] = None) -> None:
         """
         Restore MetaLearning state from a previously persisted JSON file.
 
-        Args:
-            path: File path to read from. Defaults to META_LEARNING_STATE_PATH env var
-                  or ``data/meta_learning_state.json``.
-        """
-        import json as _json
+        Validates the shape of the loaded data before mutating instance state
+        so a corrupt or stale file cannot leave the instance in a partial state.
 
+        Args:
+            path: File path to read from. Defaults to the ``META_LEARNING_STATE_PATH``
+                  environment variable or ``data/meta_learning_state.json``.
+        """
         file_path = path or os.environ.get(
             "META_LEARNING_STATE_PATH", "data/meta_learning_state.json"
         )
-        if not os.path.exists(file_path):
+        abs_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_path):
             return
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                state = _json.load(f)
-            self.experiences = state.get("experiences", [])
+            with open(abs_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            if not isinstance(state, dict):
+                raise ValueError("Persisted state must be a JSON object")
+            experiences = state.get("experiences", [])
+            if not isinstance(experiences, list):
+                raise ValueError("'experiences' must be a list")
+            raw_insights = state.get("insights", [])
+            if not isinstance(raw_insights, list):
+                raise ValueError("'insights' must be a list")
+            loaded_stats = state.get("stats", {})
+            if not isinstance(loaded_stats, dict):
+                raise ValueError("'stats' must be an object")
+
+            self.experiences = experiences
             self.insights = [
                 LearningInsight(
-                    timestamp=ins["timestamp"],
-                    insight_type=ins["insight_type"],
-                    data=ins["data"],
-                    confidence=ins.get("confidence", 0.0),
+                    timestamp=float(ins["timestamp"]),
+                    insight_type=str(ins["insight_type"]),
+                    data=ins.get("data") or {},
+                    confidence=float(ins.get("confidence", 0.0)),
                 )
-                for ins in state.get("insights", [])
+                for ins in raw_insights
+                if isinstance(ins, dict) and "timestamp" in ins and "insight_type" in ins
             ]
-            loaded_stats = state.get("stats", {})
-            self.stats.update(loaded_stats)
-            logger.debug(f"MetaLearning state loaded from {file_path}")
+            # Restore only keys that exist in the current stats schema so that
+            # adding new stats fields in the future doesn't break old persisted files.
+            for key in self.stats.keys():
+                if key in loaded_stats:
+                    self.stats[key] = int(loaded_stats[key])
+            logger.debug("MetaLearning state loaded from %s", abs_path)
         except Exception as e:
-            logger.warning(f"MetaLearning.load() failed: {e}")
+            logger.warning("MetaLearning.load() failed: %s", e)
 
 
 # ============================================================================
