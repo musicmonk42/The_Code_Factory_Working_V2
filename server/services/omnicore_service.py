@@ -2264,7 +2264,12 @@ class OmniCoreService:
             return await self._run_full_pipeline(job_id, payload)
         elif action == "configure_llm":
             return await self._configure_llm(payload)
-        elif action in ["create_job", "get_status", "query_audit_logs", "get_llm_status"]:
+        elif action == "query_audit_logs":
+            return await self._read_audit_logs_from_files(
+                log_paths=["logs/generator_audit.jsonl", "generator/audit_log/"],
+                payload=payload,
+            )
+        elif action in ["create_job", "get_status", "get_llm_status"]:
             # These are status/query actions that don't need actual agent execution
             return {"status": "acknowledged", "action": action}
         else:
@@ -2640,6 +2645,24 @@ class OmniCoreService:
                 logger.error(f"Error in get_learning_insights for job {job_id}: {e}", exc_info=True)
                 return {"status": "error", "message": str(e)}
         
+        elif action == "query_audit_logs":
+            module = payload.get("module", "")
+            # Map logical module name to its audit log file(s)
+            if module == "guardrails":
+                log_paths = ["simulation/results/audit_trail.log"]
+            elif module == "simulation":
+                log_paths = ["simulation/results/audit_trail.log"]
+            elif module == "arbiter":
+                log_paths = ["self_fixing_engineer/arbiter/audit/audit_trail.jsonl",
+                             "logs/arbiter_audit.jsonl"]
+            elif module == "testgen":
+                log_paths = ["logs/testgen_audit.jsonl"]
+            else:
+                log_paths = ["simulation/results/audit_trail.log",
+                             "logs/arbiter_audit.jsonl",
+                             "logs/testgen_audit.jsonl"]
+            return await self._read_audit_logs_from_files(log_paths=log_paths, payload=payload)
+
         elif action in ["propose_fix", "analyze_bug", "deep_analyze"]:
             # These actions need more complex handling - for now return a not implemented response
             logger.info(f"SFE action {action} not yet implemented in direct dispatch")
@@ -2677,7 +2700,89 @@ class OmniCoreService:
             "status": "error",
             "message": f"Unknown SFE action: {action}",
         }
-    
+
+    async def _read_audit_logs_from_files(
+        self,
+        log_paths: List[str],
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Read and filter JSONL audit log entries from one or more file paths.
+
+        Each path may be a ``.jsonl`` file or a directory (in which case all
+        ``*.jsonl`` files inside it are read).  Entries are filtered according
+        to the standard audit query payload fields:
+        ``start_time``, ``end_time``, ``event_type``, ``job_id``, ``module``,
+        and ``limit``.
+
+        Returns ``{"logs": [...]}`` in the same shape that
+        ``_query_via_omnicore()`` in audit.py expects.
+        """
+        start_time: Optional[str] = payload.get("start_time")
+        end_time: Optional[str] = payload.get("end_time")
+        event_type: Optional[str] = payload.get("event_type")
+        filter_job_id: Optional[str] = payload.get("job_id")
+        filter_module: Optional[str] = payload.get("module")
+        limit: int = int(payload.get("limit", 100))
+
+        logs: List[Dict[str, Any]] = []
+
+        for path_str in log_paths:
+            path = Path(path_str)
+            # Collect the actual files to read
+            files_to_read: List[Path] = []
+            if path.is_dir():
+                files_to_read = sorted(path.glob("*.jsonl"))
+            elif path.is_file():
+                files_to_read = [path]
+            # If neither exists, skip silently
+
+            for log_file in files_to_read:
+                try:
+                    async with aiofiles.open(log_file, "r", encoding="utf-8") as fh:
+                        async for raw_line in fh:
+                            line = raw_line.strip()
+                            if not line:
+                                continue
+                            try:
+                                entry: Dict[str, Any] = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+
+                            # Apply filters
+                            ts = entry.get("timestamp") or entry.get("ts") or ""
+                            if start_time and ts and ts < start_time:
+                                continue
+                            if end_time and ts and ts > end_time:
+                                continue
+                            if event_type:
+                                etype = entry.get("event_type") or entry.get("event") or ""
+                                if event_type not in etype:
+                                    continue
+                            if filter_job_id:
+                                ejid = str(entry.get("job_id") or "")
+                                if filter_job_id not in ejid:
+                                    continue
+                            if filter_module:
+                                # Only reject when the entry explicitly declares a
+                                # different module; entries without a module field are
+                                # assumed to belong to the file's owning module.
+                                emod = entry.get("module")
+                                if emod is not None and filter_module not in emod:
+                                    continue
+
+                            logs.append(entry)
+                            if len(logs) >= limit:
+                                break
+                    if len(logs) >= limit:
+                        break
+                except OSError as exc:
+                    logger.debug("Could not read audit log file %s: %s", log_file, exc)
+
+            if len(logs) >= limit:
+                break
+
+        return {"logs": logs[:limit]}
+
     def _resolve_job_output_path(self, job_id: str, hint_path: str = "") -> Optional[str]:
         """
         Resolve the actual output path for a job, checking multiple standard locations.

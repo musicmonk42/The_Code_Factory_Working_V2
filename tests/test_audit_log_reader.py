@@ -59,6 +59,10 @@ def _load_audit_module():
         omni.OmniCoreService = MagicMock
         omni.get_omnicore_service = MagicMock()
 
+    # Force a fresh load so module-level state (_ingest_store etc.) is reset.
+    if "server.routers.audit" in sys.modules:
+        del sys.modules["server.routers.audit"]
+
     project_root = Path(__file__).parent.parent
     audit_path = project_root / "server" / "routers" / "audit.py"
     spec = importlib.util.spec_from_file_location("server.routers.audit", audit_path)
@@ -344,3 +348,206 @@ class TestQueryAllAuditLogsAggregation:
 
         for call in mock_svc.route_job.call_args_list:
             assert call[1]["source_module"] == "api"
+
+
+# ---------------------------------------------------------------------------
+# POST /audit/ingest endpoint tests
+# ---------------------------------------------------------------------------
+
+class TestIngestAuditEvent:
+    """Verify the POST /audit/ingest endpoint stores events and returns the right shape."""
+
+    @pytest.mark.asyncio
+    async def test_ingest_stores_event_and_returns_ingested_true(self):
+        """A valid ingest request stores the event and returns ingested=True."""
+        audit = _load_audit_module()
+
+        request = audit.AuditIngestRequest(
+            module="generator",
+            event_type="code_generated",
+            job_id="job-abc",
+        )
+        result = await audit.ingest_audit_event(request)
+
+        assert result["ingested"] is True
+        assert result["module"] == "generator"
+        assert "timestamp" in result
+
+    @pytest.mark.asyncio
+    async def test_ingest_auto_sets_timestamp_when_omitted(self):
+        """When timestamp is omitted the endpoint provides a UTC timestamp."""
+        audit = _load_audit_module()
+
+        request = audit.AuditIngestRequest(module="arbiter", event_type="bug_detection")
+        result = await audit.ingest_audit_event(request)
+
+        assert result["timestamp"]  # non-empty string
+        stored = audit._ingest_store["arbiter"][0]
+        assert stored["timestamp"] == result["timestamp"]
+
+    @pytest.mark.asyncio
+    async def test_ingest_preserves_explicit_timestamp(self):
+        """A caller-supplied timestamp must be preserved unchanged."""
+        audit = _load_audit_module()
+        ts = "2026-01-15T12:00:00Z"
+
+        request = audit.AuditIngestRequest(
+            module="testgen", event_type="test_run", timestamp=ts
+        )
+        result = await audit.ingest_audit_event(request)
+
+        assert result["timestamp"] == ts
+        assert audit._ingest_store["testgen"][0]["timestamp"] == ts
+
+    @pytest.mark.asyncio
+    async def test_ingest_does_not_mutate_request_model(self):
+        """The endpoint must not alter the Pydantic model passed to it."""
+        audit = _load_audit_module()
+
+        request = audit.AuditIngestRequest(module="simulation", event_type="agent_decision")
+        original_ts = request.timestamp  # None before ingest
+
+        await audit.ingest_audit_event(request)
+
+        # The model's timestamp field must still be None; mutation would change it
+        assert request.timestamp == original_ts
+
+    @pytest.mark.asyncio
+    async def test_ingest_enforces_per_module_cap(self):
+        """When the store is full, the oldest entry is dropped to stay within the cap."""
+        audit = _load_audit_module()
+        cap = audit._MAX_INGEST_PER_MODULE
+
+        # Pre-fill to exactly the cap using a fresh list so we don't pay the cost
+        # of calling the endpoint cap times during the test.
+        audit._ingest_store["guardrails"] = [
+            {"module": "guardrails", "event_type": "x", "timestamp": f"2026-01-{i:02d}T00:00:00Z"}
+            for i in range(1, cap + 1)
+        ]
+        oldest_ts = audit._ingest_store["guardrails"][0]["timestamp"]
+
+        # Ingest one more event – the oldest should be evicted
+        request = audit.AuditIngestRequest(
+            module="guardrails", event_type="compliance_check", timestamp="2026-12-01T00:00:00Z"
+        )
+        await audit.ingest_audit_event(request)
+
+        store = audit._ingest_store["guardrails"]
+        assert len(store) == cap, "Store must remain at the cap after eviction"
+        timestamps = [e["timestamp"] for e in store]
+        assert oldest_ts not in timestamps, "Oldest entry must have been evicted"
+
+
+# ---------------------------------------------------------------------------
+# Ingest store filtering in _query_via_omnicore
+# ---------------------------------------------------------------------------
+
+class TestQueryViaOmnicoreIngestStoreIntegration:
+    """Verify that _query_via_omnicore merges ingested events with OmniCore results."""
+
+    @pytest.mark.asyncio
+    async def test_ingested_events_appear_in_query_result(self):
+        """Events pushed via ingest appear when querying the same module."""
+        audit = _load_audit_module()
+        # Seed the ingest store directly
+        audit._ingest_store["arbiter"] = [
+            {"module": "arbiter", "event_type": "bug_detection", "timestamp": "2026-06-01T10:00:00Z", "job_id": "j1"},
+        ]
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value={"job_id": "audit_query", "data": {"logs": []}})
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="arbiter",
+            start_time=None, end_time=None, event_type=None, job_id=None, limit=10,
+        )
+
+        assert len(result) == 1
+        assert result[0]["event_type"] == "bug_detection"
+
+    @pytest.mark.asyncio
+    async def test_ingested_events_filtered_by_event_type(self):
+        """event_type filter applies to ingested events."""
+        audit = _load_audit_module()
+        audit._ingest_store["generator"] = [
+            {"module": "generator", "event_type": "code_generated", "timestamp": "2026-06-01T10:00:00Z"},
+            {"module": "generator", "event_type": "test_generated", "timestamp": "2026-06-01T11:00:00Z"},
+        ]
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value={"job_id": "x", "data": {"logs": []}})
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="generator",
+            start_time=None, end_time=None,
+            event_type="code_generated",
+            job_id=None, limit=10,
+        )
+
+        assert len(result) == 1
+        assert result[0]["event_type"] == "code_generated"
+
+    @pytest.mark.asyncio
+    async def test_ingested_events_filtered_by_time_range(self):
+        """start_time / end_time filters apply to ingested events."""
+        audit = _load_audit_module()
+        audit._ingest_store["testgen"] = [
+            {"module": "testgen", "event_type": "test_run", "timestamp": "2026-01-01T00:00:00Z"},
+            {"module": "testgen", "event_type": "test_run", "timestamp": "2026-06-01T00:00:00Z"},
+            {"module": "testgen", "event_type": "test_run", "timestamp": "2026-12-01T00:00:00Z"},
+        ]
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value={"job_id": "x", "data": {"logs": []}})
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="testgen",
+            start_time="2026-02-01T00:00:00Z",
+            end_time="2026-11-01T00:00:00Z",
+            event_type=None, job_id=None, limit=10,
+        )
+
+        assert len(result) == 1
+        assert result[0]["timestamp"] == "2026-06-01T00:00:00Z"
+
+    @pytest.mark.asyncio
+    async def test_ingested_events_combined_with_omnicore_logs(self):
+        """route_job logs and ingest store logs are merged together."""
+        audit = _load_audit_module()
+        omnicore_log = {"event_type": "workflow_start", "timestamp": "2026-06-01T09:00:00Z"}
+        ingested_log = {"module": "simulation", "event_type": "agent_decision", "timestamp": "2026-06-01T10:00:00Z"}
+        audit._ingest_store["simulation"] = [ingested_log]
+
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(
+            return_value={"job_id": "x", "data": {"logs": [omnicore_log]}}
+        )
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="simulation",
+            start_time=None, end_time=None, event_type=None, job_id=None, limit=10,
+        )
+
+        event_types = {e["event_type"] for e in result}
+        assert "workflow_start" in event_types
+        assert "agent_decision" in event_types
+
+    @pytest.mark.asyncio
+    async def test_ingest_store_limit_honoured(self):
+        """Combined log count never exceeds the requested limit."""
+        audit = _load_audit_module()
+        audit._ingest_store["guardrails"] = [
+            {"module": "guardrails", "event_type": "compliance_check", "timestamp": f"2026-06-{i:02d}T00:00:00Z"}
+            for i in range(1, 20)
+        ]
+        mock_svc = MagicMock()
+        mock_svc.route_job = AsyncMock(return_value={"job_id": "x", "data": {"logs": []}})
+
+        result = await audit._query_via_omnicore(
+            omnicore_service=mock_svc,
+            module="guardrails",
+            start_time=None, end_time=None, event_type=None, job_id=None, limit=5,
+        )
+
+        assert len(result) <= 5
