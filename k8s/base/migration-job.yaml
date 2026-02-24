@@ -31,8 +31,8 @@ spec:
       serviceAccountName: codefactory
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -110,7 +110,7 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: false
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: 10001
             capabilities:
               drop:
                 - ALL

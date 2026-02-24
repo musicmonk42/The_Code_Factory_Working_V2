@@ -198,7 +198,7 @@ except ImportError:
                     _safe_url = db_url
             except Exception:
                 _safe_url = "<masked>"
-            logger.warning(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
+            logger.error(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
             warnings.warn(
                 f"PostgresClient fallback used - no actual database connection",
                 UserWarning,
@@ -649,6 +649,7 @@ class CodebaseAnalyzer:
         self.semaphore = None
         self.executor = None
         self.db_client = None
+        self._using_fallback_storage = False
 
         self._tool_cache: Optional[List[ToolInfo]] = None
         self.plugins: List[Plugin] = []
@@ -668,26 +669,57 @@ class CodebaseAnalyzer:
             # do not block the analyzer indefinitely.
             db_url = os.getenv("DATABASE_URL")
             if db_url:
-                db_connect_timeout = float(os.getenv("DB_CONNECT_TIMEOUT", "5"))
-                self.db_client = PostgresClient(db_url)
-                await asyncio.wait_for(
-                    self.db_client.connect(),
-                    timeout=db_connect_timeout,
-                )
-                logger.info("Database client for CodebaseAnalyzer initialized.")
+                try:
+                    db_connect_timeout = float(os.getenv("DB_CONNECT_TIMEOUT", "5"))
+                except ValueError:
+                    logger.warning("Invalid DB_CONNECT_TIMEOUT value; using default of 5s")
+                    db_connect_timeout = 5.0
+                try:
+                    max_db_retries = int(os.getenv("DB_CONNECT_RETRIES", "3"))
+                except ValueError:
+                    logger.warning("Invalid DB_CONNECT_RETRIES value; using default of 3")
+                    max_db_retries = 3
+                try:
+                    db_retry_delay = float(os.getenv("DB_CONNECT_RETRY_DELAY", "2"))
+                except ValueError:
+                    logger.warning("Invalid DB_CONNECT_RETRY_DELAY value; using default of 2s")
+                    db_retry_delay = 2.0
+                self._using_fallback_storage = False
+                last_db_error: Optional[Exception] = None
+                for db_attempt in range(1, max_db_retries + 1):
+                    try:
+                        self.db_client = PostgresClient(db_url)
+                        await asyncio.wait_for(
+                            self.db_client.connect(),
+                            timeout=db_connect_timeout,
+                        )
+                        logger.info("Database client for CodebaseAnalyzer initialized.")
+                        break
+                    except Exception as _db_err:
+                        last_db_error = _db_err
+                        if db_attempt < max_db_retries:
+                            logger.warning(
+                                "DB connect attempt %d/%d failed (%s). Retrying in %.1fs...",
+                                db_attempt, max_db_retries, _db_err, db_retry_delay,
+                            )
+                            await asyncio.sleep(db_retry_delay)
+                        else:
+                            raise
         except asyncio.TimeoutError:
-            logger.warning(
-                "Database connection timed out (host may not be reachable in this environment). "
+            logger.error(
+                "Database connection timed out after retries (host may not be reachable in this environment). "
                 "Continuing without database support.",
             )
             self.db_client = None
+            self._using_fallback_storage = True
             try:
                 analyzer_errors_total.labels(error_type="db_connect_timeout").inc()
             except AttributeError:
                 pass
         except Exception as e:
-            logger.error(f"Failed to connect to database: {e}", exc_info=True)
+            logger.error(f"Failed to connect to database after retries: {e}", exc_info=True)
             self.db_client = None
+            self._using_fallback_storage = True
             try:
                 analyzer_errors_total.labels(error_type="db_connect_fail").inc()
             except AttributeError:

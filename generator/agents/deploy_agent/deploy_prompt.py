@@ -365,6 +365,18 @@ async def optimize_deployment_prompt_text(prompt_text: str) -> str:
             )
             return prompt_text
 
+        # Also reject if the optimized prompt is below an absolute minimum length
+        # to ensure deployment specs (ports, health checks, env vars) aren't lost
+        min_absolute_length = int(os.getenv("DEPLOY_PROMPT_MIN_LENGTH", "500"))
+        if len(optimized) < min_absolute_length:
+            logger.warning(
+                "Prompt optimization result too short: %d chars (minimum: %d). "
+                "Returning original prompt to preserve deployment context.",
+                len(optimized),
+                min_absolute_length,
+            )
+            return prompt_text
+
         LLM_CALLS_TOTAL.labels(provider="deploy_prompt", model=SUMMARY_MODEL).inc()
         LLM_LATENCY_SECONDS.labels(
             provider="deploy_prompt", model=SUMMARY_MODEL

@@ -596,6 +596,13 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
+# Required for Sphinx 9.x
+root_doc = 'index'
+# Backward compatibility with older Sphinx versions
+master_doc = 'index'
+
+source_suffix = {{'.rst': 'restructuredtext', '.md': 'markdown'}}
+
 # Use sphinx_rtd_theme when installed; fall back to the built-in alabaster theme
 # to avoid a hard dependency on sphinx-rtd-theme.
 html_theme = '{html_theme}'
