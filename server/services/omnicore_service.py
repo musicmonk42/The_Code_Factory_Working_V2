@@ -2763,8 +2763,11 @@ class OmniCoreService:
                                 if filter_job_id not in ejid:
                                     continue
                             if filter_module:
-                                emod = entry.get("module") or ""
-                                if filter_module not in emod:
+                                # Only reject when the entry explicitly declares a
+                                # different module; entries without a module field are
+                                # assumed to belong to the file's owning module.
+                                emod = entry.get("module")
+                                if emod is not None and filter_module not in emod:
                                     continue
 
                             logs.append(entry)

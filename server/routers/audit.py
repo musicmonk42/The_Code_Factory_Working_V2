@@ -23,7 +23,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, Query
+import aiofiles
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
 
 from server.services.omnicore_service import OmniCoreService, get_omnicore_service
 
@@ -48,6 +50,24 @@ _MODULE_TARGET: Dict[str, str] = {
 # to a persistent backend via the existing audit backend infrastructure.
 _ingest_store: Dict[str, List[Dict[str, Any]]] = {}
 _MAX_INGEST_PER_MODULE = 10_000  # cap to prevent unbounded growth
+
+
+class AuditIngestRequest(BaseModel):
+    """Request body for ``POST /audit/ingest``.
+
+    All fields beyond the required ones are accepted so that each module can
+    embed its own additional metadata without schema changes.
+    """
+
+    module: str = Field(..., description="Source module name (e.g. 'generator', 'arbiter')")
+    event_type: str = Field(..., description="Type of the audit event")
+    timestamp: Optional[str] = Field(
+        None,
+        description="ISO 8601 timestamp; auto-set to UTC *now* if omitted",
+    )
+    job_id: Optional[str] = Field(None, description="Associated job ID")
+
+    model_config = {"extra": "allow"}
 
 
 async def _query_via_omnicore(
@@ -220,7 +240,7 @@ async def query_all_audit_logs(
                     log["module"] = "omnicore"
                     omnicore_trail_logs.append(log)
 
-            # Fix #5: Fall back to local OmniCore log files when primary path returns empty
+            # Fallback: read local OmniCore log files when primary path returns empty
             if not omnicore_trail_logs:
                 _omnicore_log_candidates = [
                     "logs/omnicore_audit.jsonl",
@@ -231,8 +251,8 @@ async def query_all_audit_logs(
                     if not _log_path.is_file():
                         continue
                     try:
-                        with open(_log_path, "r", encoding="utf-8") as _fh:
-                            for _raw in _fh:
+                        async with aiofiles.open(_log_path, "r", encoding="utf-8") as _fh:
+                            async for _raw in _fh:
                                 _line = _raw.strip()
                                 if not _line:
                                     continue
@@ -297,7 +317,7 @@ async def query_all_audit_logs(
 
 @router.post("/ingest")
 async def ingest_audit_event(
-    event: Dict[str, Any] = Body(..., description="Audit event payload"),
+    event: AuditIngestRequest,
 ) -> Dict[str, Any]:
     """
     Ingest a single audit event from any platform module.
@@ -308,25 +328,37 @@ async def ingest_audit_event(
     **Required fields in the event body:**
     - ``module``: Source module name (e.g. ``generator``, ``arbiter``)
     - ``event_type``: Type of the audit event
-    - ``timestamp``: ISO 8601 timestamp (auto-set to *now* if omitted)
+
+    **Optional fields:**
+    - ``timestamp``: ISO 8601 timestamp (auto-set to UTC *now* if omitted)
+    - ``job_id``: Associated job ID
+    - Any additional module-specific fields are preserved as-is.
 
     **Returns:**
     - ``ingested``: ``true`` when the event was stored successfully
     - ``module``: Module the event was attributed to
     - ``timestamp``: Timestamp recorded for the event
     """
-    module_name: str = event.get("module") or "unknown"
-    if not event.get("timestamp"):
-        event["timestamp"] = datetime.now(timezone.utc).isoformat()
+    ts = event.timestamp or datetime.now(timezone.utc).isoformat()
 
-    module_store = _ingest_store.setdefault(module_name, [])
-    # Enforce per-module cap – drop oldest entry when full
+    # Build an immutable snapshot of the entry; never mutate the Pydantic model.
+    entry: Dict[str, Any] = {
+        **event.model_dump(exclude_none=False),
+        "timestamp": ts,
+    }
+
+    module_store = _ingest_store.setdefault(event.module, [])
+    # Enforce per-module cap – drop the oldest entry when full
     if len(module_store) >= _MAX_INGEST_PER_MODULE:
         del module_store[0]
-    module_store.append(event)
+    module_store.append(entry)
 
-    logger.debug("Ingested audit event: module=%s event_type=%s", module_name, event.get("event_type"))
-    return {"ingested": True, "module": module_name, "timestamp": event["timestamp"]}
+    logger.debug(
+        "Ingested audit event: module=%s event_type=%s",
+        event.module,
+        event.event_type,
+    )
+    return {"ingested": True, "module": event.module, "timestamp": ts}
 
 
 @router.get("/logs/event-types")
