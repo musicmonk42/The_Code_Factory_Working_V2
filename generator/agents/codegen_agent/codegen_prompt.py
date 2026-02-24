@@ -42,6 +42,12 @@ except ImportError:
     faiss = None
     SentenceTransformer = None
 
+# Shared singleton for SentenceTransformer model — avoids loading multiple times
+try:
+    from generator.utils.model_registry import get_sentence_transformer as _get_sentence_transformer
+except ImportError:
+    _get_sentence_transformer = None
+
 try:
     from google.cloud import vision
 
@@ -689,7 +695,11 @@ doc_embeddings = None
 if RAG_ENABLED:
     try:
         logger.info("RAG feature is enabled. Initializing SentenceTransformer model...")
-        encoder = SentenceTransformer("all-MiniLM-L6-v2")
+        # Use shared singleton to avoid loading the model multiple times
+        if _get_sentence_transformer is not None:
+            encoder = _get_sentence_transformer("all-MiniLM-L6-v2")
+        else:
+            encoder = SentenceTransformer("all-MiniLM-L6-v2") if SentenceTransformer else None
         embedding_dim = encoder.get_sentence_embedding_dimension()
         knowledge_base = [
             f"[{lang}] {p}"

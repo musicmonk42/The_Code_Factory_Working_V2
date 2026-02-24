@@ -674,16 +674,26 @@ class CodebaseAnalyzer:
                 except ValueError:
                     logger.warning("Invalid DB_CONNECT_TIMEOUT value; using default of 5s")
                     db_connect_timeout = 5.0
+                # Support both DATABASE_RETRY_ATTEMPTS (new name) and DB_CONNECT_RETRIES (legacy)
                 try:
-                    max_db_retries = int(os.getenv("DB_CONNECT_RETRIES", "3"))
+                    max_db_retries = int(
+                        os.getenv("DATABASE_RETRY_ATTEMPTS")
+                        or os.getenv("DB_CONNECT_RETRIES", "3")
+                    )
                 except ValueError:
-                    logger.warning("Invalid DB_CONNECT_RETRIES value; using default of 3")
+                    logger.warning("Invalid DATABASE_RETRY_ATTEMPTS/DB_CONNECT_RETRIES value; using default of 3")
                     max_db_retries = 3
+                # Support both DATABASE_RETRY_DELAY (new name) and DB_CONNECT_RETRY_DELAY (legacy)
+                # Base delay default is 1s (exponential backoff gives 1s, 2s, 4s for 3 attempts,
+                # matching the 1s/2s/4s delays specified in the production issue).
                 try:
-                    db_retry_delay = float(os.getenv("DB_CONNECT_RETRY_DELAY", "2"))
+                    db_retry_delay = float(
+                        os.getenv("DATABASE_RETRY_DELAY")
+                        or os.getenv("DB_CONNECT_RETRY_DELAY", "1")
+                    )
                 except ValueError:
-                    logger.warning("Invalid DB_CONNECT_RETRY_DELAY value; using default of 2s")
-                    db_retry_delay = 2.0
+                    logger.warning("Invalid DATABASE_RETRY_DELAY/DB_CONNECT_RETRY_DELAY value; using default of 1s")
+                    db_retry_delay = 1.0
                 self._using_fallback_storage = False
                 last_db_error: Optional[Exception] = None
                 for db_attempt in range(1, max_db_retries + 1):
@@ -697,18 +707,20 @@ class CodebaseAnalyzer:
                         break
                     except Exception as _db_err:
                         last_db_error = _db_err
+                        # Exponential backoff: delay doubles on each retry
+                        _retry_delay = db_retry_delay * (2 ** (db_attempt - 1))
                         if db_attempt < max_db_retries:
                             logger.warning(
                                 "DB connect attempt %d/%d failed (%s). Retrying in %.1fs...",
-                                db_attempt, max_db_retries, _db_err, db_retry_delay,
+                                db_attempt, max_db_retries, _db_err, _retry_delay,
                             )
-                            await asyncio.sleep(db_retry_delay)
+                            await asyncio.sleep(_retry_delay)
                         else:
                             raise
         except asyncio.TimeoutError:
-            logger.error(
+            logger.warning(
                 "Database connection timed out after retries (host may not be reachable in this environment). "
-                "Continuing without database support.",
+                "Falling back to in-memory storage.",
             )
             self.db_client = None
             self._using_fallback_storage = True
@@ -717,7 +729,9 @@ class CodebaseAnalyzer:
             except AttributeError:
                 pass
         except Exception as e:
-            logger.error(f"Failed to connect to database after retries: {e}", exc_info=True)
+            logger.warning(
+                "Failed to connect to database after retries: %s. Falling back to in-memory storage.", e
+            )
             self.db_client = None
             self._using_fallback_storage = True
             try:

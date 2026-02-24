@@ -12,6 +12,7 @@ import re
 import sys
 import time
 import uuid
+import yaml
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
@@ -1778,6 +1779,36 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             )
                             # --------------------------------------------
                             config_content = handled["final_config_output"]
+
+                            # For Kubernetes/Helm YAML, validate that the output is
+                            # parseable YAML.  If not, treat it as a generation error
+                            # so the existing retry loop can re-ask the LLM with the
+                            # error message as feedback (up to MAX_LLM_RETRIES attempts).
+                            if target in ("kubernetes", "k8s", "helm"):
+                                yaml_docs = config_content.split("---")
+                                valid_docs = 0
+                                yaml_errors: List[str] = []
+                                for _doc in yaml_docs:
+                                    _doc_stripped = _doc.strip()
+                                    if not _doc_stripped:
+                                        continue
+                                    try:
+                                        _parsed = yaml.safe_load(_doc_stripped)
+                                        # Accept any truthy parsed value (dict, list, etc.)
+                                        if _parsed is not None:
+                                            valid_docs += 1
+                                    except yaml.YAMLError as _ye:
+                                        yaml_errors.append(str(_ye))
+                                if valid_docs == 0 and yaml_errors:
+                                    _err_summary = "; ".join(yaml_errors[:3])
+                                    raise ValueError(
+                                        f"Generated {target} YAML is invalid: {_err_summary}"
+                                    )
+                                if valid_docs == 0 and not yaml_errors:
+                                    raise ValueError(
+                                        f"Generated {target} YAML contained no valid documents"
+                                    )
+
                             logger.info(
                                 f"[DEPLOY_AGENT] Config generated successfully on attempt {attempt + 1}, "
                                 f"length: {len(config_content)} chars"
@@ -1794,15 +1825,15 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                                 # FIX Issue 4: Use fallback template instead of failing
                                 logger.warning(
                                     f"[DEPLOY_AGENT] All {MAX_LLM_RETRIES} attempts failed for {target}, "
-                                    f"using fallback template"
+                                    f"using fallback template (LLM output was invalid)"
                                 )
                                 # Generate fallback config based on target type
                                 project_name = self.repo_path.name
                                 config_content = self._generate_fallback_config(target, project_name)
                                 if config_content:
                                     logger.info(
-                                        f"[DEPLOY_AGENT] Using fallback template for {target}, "
-                                        f"length: {len(config_content)} chars"
+                                        f"[DEPLOY_AGENT] Final config source: FALLBACK TEMPLATE for {target} "
+                                        f"(length: {len(config_content)} chars)"
                                     )
                                     break
                                 else:
