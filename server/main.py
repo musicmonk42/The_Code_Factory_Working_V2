@@ -1388,26 +1388,29 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
 
 async def _protect_running_jobs_on_shutdown():
     """
-    Mark any RUNNING jobs as FAILED before shutdown to prevent
+    Mark any non-terminal jobs as FAILED before shutdown to prevent
     orphaned jobs that get discovered on next restart.
     
     This runs during graceful shutdown (SIGTERM) to ensure jobs
     have clear error messages rather than being silently abandoned.
     """
     try:
-        from server.storage import jobs_db
+        from server.storage import jobs_db, _save_job_to_postgresql
         from server.schemas.jobs import JobStatus
-        
-        # Get all jobs and find RUNNING ones
+
+        # Terminal statuses — jobs already in these states don't need protection
+        terminal_statuses = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+
+        # Get all jobs and find non-terminal ones (PENDING, RUNNING, NEEDS_CLARIFICATION, etc.)
         all_jobs = list(jobs_db.values())
-        running_jobs = [j for j in all_jobs if j.status == JobStatus.RUNNING]
+        non_terminal_jobs = [j for j in all_jobs if j.status not in terminal_statuses]
         
-        if not running_jobs:
-            logger.info("No running jobs to protect during shutdown")
+        if not non_terminal_jobs:
+            logger.info("No non-terminal jobs to protect during shutdown")
             return
         
         shutdown_time = datetime.now(timezone.utc).isoformat()
-        for job in running_jobs:
+        for job in non_terminal_jobs:
             job_id = job.id
             try:
                 # Update job status to FAILED with clear error message
@@ -1427,12 +1430,24 @@ async def _protect_running_jobs_on_shutdown():
                 
                 # Save updated job back to storage (will persist to PostgreSQL if enabled)
                 jobs_db[job_id] = job
+
+                # Explicitly await PostgreSQL persistence to ensure data is saved before
+                # the event loop is torn down during shutdown. The background task created
+                # by jobs_db[job_id] = job may never complete if the loop is shutting down.
+                try:
+                    await _save_job_to_postgresql(job_id, job)
+                    logger.info(f"Persisted job {job_id} status to PostgreSQL")
+                except Exception as pg_err:
+                    logger.warning(
+                        f"Could not persist job {job_id} to PostgreSQL during shutdown "
+                        f"(database may be disconnecting): {pg_err}"
+                    )
                 
                 logger.info(f"Protected job {job_id}: marked as FAILED before shutdown")
             except Exception as e:
                 logger.error(f"Failed to protect job {job_id} during shutdown: {e}")
         
-        logger.info(f"Protected {len(running_jobs)} running job(s) before shutdown")
+        logger.info(f"Protected {len(non_terminal_jobs)} non-terminal job(s) before shutdown")
     except Exception as e:
         logger.error(f"Error protecting running jobs during shutdown: {e}")
 

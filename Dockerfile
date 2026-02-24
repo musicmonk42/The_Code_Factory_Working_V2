@@ -187,12 +187,23 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "========================================"; \
         echo "Downloading NLTK data..."; \
         echo "========================================"; \
-        NLTK_DATA=/opt/nltk_data python -c "import nltk; \
-            nltk.download('punkt', quiet=True); \
-            nltk.download('stopwords', quiet=True); \
-            nltk.download('vader_lexicon', quiet=True); \
-            nltk.download('punkt_tab', quiet=True)" || \
-        (echo "WARNING: Failed to download some NLTK data"); \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.download('punkt', download_dir='/opt/nltk_data')" \
+            && echo "✓ Downloaded punkt" || echo "✗ Failed to download punkt"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.download('stopwords', download_dir='/opt/nltk_data')" \
+            && echo "✓ Downloaded stopwords" || echo "✗ Failed to download stopwords"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.download('vader_lexicon', download_dir='/opt/nltk_data')" \
+            && echo "✓ Downloaded vader_lexicon" || echo "✗ Failed to download vader_lexicon"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.download('punkt_tab', download_dir='/opt/nltk_data')" \
+            && echo "✓ Downloaded punkt_tab" || echo "✗ Failed to download punkt_tab"; \
+        echo "Verifying NLTK data..."; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.data.path.insert(0, '/opt/nltk_data'); nltk.data.find('tokenizers/punkt'); print('✓ Verified punkt')" \
+            || echo "✗ MISSING: punkt at tokenizers/punkt"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.data.path.insert(0, '/opt/nltk_data'); nltk.data.find('corpora/stopwords'); print('✓ Verified stopwords')" \
+            || echo "✗ MISSING: stopwords at corpora/stopwords"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.data.path.insert(0, '/opt/nltk_data'); nltk.data.find('sentiment/vader_lexicon'); print('✓ Verified vader_lexicon')" \
+            || echo "✗ MISSING: vader_lexicon at sentiment/vader_lexicon"; \
+        NLTK_DATA=/opt/nltk_data python -c "import nltk; nltk.data.path.insert(0, '/opt/nltk_data'); nltk.data.find('tokenizers/punkt_tab'); print('✓ Verified punkt_tab')" \
+            || echo "✗ MISSING: punkt_tab at tokenizers/punkt_tab"; \
         echo "✓ NLTK data downloads complete"; \
         # Clean up pip vendor files now that all pip operations are complete
         # This reduces image size - pip is not needed at runtime
