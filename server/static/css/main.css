@@ -1598,3 +1598,21 @@ h3 {
     color: var(--text-primary);
 }
 
+
+.insights-warning {
+    background: rgba(255, 193, 7, 0.15);
+    border-left: 3px solid #ffc107;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    color: #856404;
+    border-radius: 0 4px 4px 0;
+}
+
+.insights-success {
+    background: rgba(40, 167, 69, 0.1);
+    border-left: 3px solid #28a745;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+    color: #155724;
+    border-radius: 0 4px 4px 0;
+}

@@ -278,8 +278,16 @@ spec:
         {{- end }}
         - name: logs
           emptyDir: {}
+        # data is a PVC when persistence.data.enabled, otherwise ephemeral emptyDir.
+        # Using a PVC ensures MetaLearning state and other runtime data survive pod restarts.
+        {{- if .Values.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "codefactory.fullname" . }}-data
+        {{- else }}
         - name: data
           emptyDir: {}
+        {{- end }}
         - name: tmp
           emptyDir: {}
         {{- with .Values.volumes }}

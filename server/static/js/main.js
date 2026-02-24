@@ -1391,6 +1391,14 @@ async function loadInsights() {
         const source = data.source ? escapeHtml(String(data.source)) : 'unknown';
         const mlModule = data.meta_learning_module ? escapeHtml(String(data.meta_learning_module)) : 'N/A';
         const noteHtml = data.note ? `<p class="warning"><strong>Note:</strong> ${escapeHtml(String(data.note))}</p>` : '';
+
+        // Show a warning banner when data is placeholder/unavailable
+        let statusBannerHtml = '';
+        if (data.source === 'fallback_static' || data.source === 'no_data') {
+            statusBannerHtml = `<div class="insights-warning">⚠️ Showing placeholder data. Run code analyses and apply fixes to generate real insights.</div>`;
+        } else if (data.source) {
+            statusBannerHtml = `<div class="insights-success">✅ Showing real analysis data (source: ${source}).</div>`;
+        }
         
         let insightsHtml = '';
         if (Array.isArray(data.insights) && data.insights.length > 0) {
@@ -1409,6 +1417,7 @@ async function loadInsights() {
         }
         
         container.innerHTML = `
+            ${statusBannerHtml}
             ${noteHtml}
             <p>Source: ${source}</p>
             <p>Module: ${mlModule}</p>

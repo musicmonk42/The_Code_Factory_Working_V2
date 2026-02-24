@@ -275,8 +275,10 @@ spec:
             claimName: codefactory-workspace
         - name: logs
           emptyDir: {}
+        # data is a PVC so MetaLearning state and other runtime data survive pod restarts..
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: codefactory-data
         - name: tmp
           emptyDir: {}
 ---
@@ -307,8 +309,10 @@ metadata:
   name: codefactory-uploads
   namespace: codefactory
 spec:
+  # ReadWriteOnce works with all cloud providers out of the box.
+  # Use ReadWriteMany only with NFS/EFS-backed storage and multiple replicas.
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 10Gi
@@ -320,7 +324,19 @@ metadata:
   namespace: codefactory
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
       storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: codefactory-data
+  namespace: codefactory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
