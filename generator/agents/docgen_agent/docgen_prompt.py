@@ -367,6 +367,18 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             # Fallback to hard truncation if global summary fails
             optimized_text = optimized_text[: max_tokens * 4]  # Approximate
 
+        # Reject optimization if the result is below an absolute minimum length
+        # to ensure critical documentation context isn't lost
+        min_absolute_length = int(os.getenv("DOCGEN_PROMPT_MIN_LENGTH", "800"))
+        if len(optimized_text) < min_absolute_length and len(prompt_text) >= min_absolute_length:
+            logger.warning(
+                "Prompt optimization result too short: %d chars (minimum: %d). "
+                "Returning original prompt to preserve documentation context.",
+                len(optimized_text),
+                min_absolute_length,
+            )
+            return prompt_text
+
         return optimized_text
 
     except Exception as e:
@@ -782,6 +794,8 @@ class DocGenPromptAgent:
             )
 
         self.previous_feedback: Dict[str, float] = {}
+        # Cache for enforce_sections() to avoid redundant LLM calls
+        self._enforce_cache: Dict[str, str] = {}
         # REFACTORED: Removed self.llm_orchestrator instance
 
     def _load_few_shot(self, few_shot_dir: str) -> List[Dict[str, str]]:
@@ -909,6 +923,17 @@ class DocGenPromptAgent:
         if not required_sections:
             return prompt_content
 
+        # Check cache before making an expensive LLM call
+        cache_key = hashlib.sha256(
+            json.dumps(
+                {"prompt": prompt_content, "sections": sorted(required_sections)},
+                ensure_ascii=False,
+            ).encode()
+        ).hexdigest()
+        if cache_key in self._enforce_cache:
+            logger.debug("enforce_sections: cache hit, skipping LLM call.")
+            return self._enforce_cache[cache_key]
+
         enforcement_prompt_llm_query = f"""
         You are a prompt engineering expert. Your task is to review the following prompt for documentation generation
         and ensure it explicitly requests the following sections: {', '.join(required_sections)}.
@@ -960,6 +985,7 @@ class DocGenPromptAgent:
                 )
 
             logger.info("Prompt sections enforced successfully by meta-LLM.")
+            self._enforce_cache[cache_key] = enforced_prompt_content
             return enforced_prompt_content
 
         except Exception as e:

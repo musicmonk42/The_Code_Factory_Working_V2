@@ -55,7 +55,7 @@ spec:
               echo "Redis is ready!"
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ .Values.podSecurityContext.runAsUser }}
             allowPrivilegeEscalation: false
             capabilities:
               drop:
@@ -92,7 +92,7 @@ spec:
             {{- toYaml .Values.migrations.resources | nindent 12 }}
           securityContext:
             runAsNonRoot: true
-            runAsUser: 1000
+            runAsUser: {{ .Values.podSecurityContext.runAsUser }}
             allowPrivilegeEscalation: false
             capabilities:
               drop:

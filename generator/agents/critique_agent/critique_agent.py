@@ -365,9 +365,35 @@ async def call_llm_for_critique(
                 return parsed_content
         except json.JSONDecodeError:
             logger.warning(
-                f"LLM response not valid JSON for {step_name}. Returning raw content."
+                f"LLM response not valid JSON for {step_name}. Attempting one retry with explicit JSON instruction."
             )
+            # One retry with explicit JSON format instruction
+            retry_prompt = (
+                f"{prompt}\n\n"
+                "IMPORTANT: Your response MUST be valid JSON only. "
+                "Do not include any explanation or markdown. "
+                "Return ONLY a JSON object."
+            )
+            try:
+                retry_response = await call_llm_api(prompt=retry_prompt, provider=provider)
+                retry_content = retry_response.get("content") if isinstance(retry_response, dict) else str(retry_response)
+                if retry_content:
+                    json_match = re.search(r"```json\s*(.*?)\s*```", retry_content, re.DOTALL | re.IGNORECASE)
+                    if json_match:
+                        parsed_retry = json.loads(json_match.group(1))
+                    else:
+                        parsed_retry = json.loads(retry_content)
+                    if isinstance(retry_response, dict):
+                        retry_response.update(parsed_retry)
+                        return retry_response
+                    return parsed_retry
+            except Exception:
+                pass
             return {
+                "raw_content": content,
+                "parse_error": "LLM output was not valid JSON.",
+                # Backward-compatible aliases so existing callers that check
+                # "error" in result or use result.get("content") still work.
                 "content": content,
                 "error": "LLM output was not valid JSON.",
             }

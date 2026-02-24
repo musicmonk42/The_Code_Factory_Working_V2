@@ -1968,15 +1968,52 @@ class KubernetesHandler(FormatHandler):
                         )
         except Exception as e:
             logger.error(f"Failed to parse Kubernetes YAML: {e}")
-            # Try to provide a minimal fallback deployment if parsing fails
+            # Try to repair common YAML formatting issues before falling back
+            repaired_docs = self._attempt_yaml_repair(raw)
+            if repaired_docs is not None:
+                return repaired_docs if len(repaired_docs) > 1 else repaired_docs[0]
             return self._create_fallback_k8s_deployment(raw)
         
         if not documents:
             logger.warning("No valid Kubernetes resources found in YAML, creating fallback")
+            # Try to repair before falling back
+            repaired_docs = self._attempt_yaml_repair(raw)
+            if repaired_docs is not None:
+                return repaired_docs if len(repaired_docs) > 1 else repaired_docs[0]
             return self._create_fallback_k8s_deployment(raw)
         
         return documents if len(documents) > 1 else documents[0]
-    
+
+    def _attempt_yaml_repair(self, raw: str) -> Optional[List[Dict[str, Any]]]:
+        """Attempt to repair common YAML formatting issues from LLM output.
+
+        Targets the most common LLM mistake: top-level Kubernetes keys
+        (``apiVersion``, ``kind``, ``metadata``, ``spec``) run together on the
+        same line, e.g. ``apiVersion: apps/v1metadata:``.  Other merged-key
+        patterns (``data``, ``rules``, ``subjects``) are intentionally left for
+        a future pass to keep the regex footprint small and its side-effects
+        predictable.
+        """
+        # Try splitting keys that are merged on the same line
+        # e.g., "apiVersion: apps/v1metadata:" -> "apiVersion: apps/v1\nmetadata:"
+        repaired = re.sub(r'(\S)((?:metadata|spec|kind|apiVersion):\s)', r'\1\n\2', raw)
+
+        if repaired != raw:
+            logger.info("Attempting YAML repair: split merged keys onto separate lines")
+            ru_yaml = YAML()
+            try:
+                documents = []
+                for doc in ru_yaml.load_all(repaired):
+                    if doc and isinstance(doc, dict) and "apiVersion" in doc and "kind" in doc:
+                        documents.append(doc)
+                if documents:
+                    logger.info(f"YAML repair successful: recovered {len(documents)} documents")
+                    return documents
+            except Exception as e:
+                logger.warning(f"YAML repair attempt failed: {e}")
+
+        return None
+
     def _create_fallback_k8s_deployment(self, raw: str) -> List[Dict[str, Any]]:
         """
         Create minimal valid Kubernetes Deployment and Service when parsing fails.

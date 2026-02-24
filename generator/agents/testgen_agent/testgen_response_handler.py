@@ -1565,6 +1565,19 @@ class ParserRegistry:
 parser_registry = ParserRegistry()
 
 
+def _has_test_content(content: str) -> bool:
+    """Check if a test file contains actual test functions or classes."""
+    content_lines = content.split('\n')
+    # Strip comments and blank lines
+    lines = [l.strip() for l in content_lines if l.strip() and not l.strip().startswith('#')]
+    if not lines:
+        return False
+    # Check for test functions or test classes
+    has_test_func = any(re.match(r'^\s*(async\s+)?def\s+test_', line) for line in content_lines)
+    has_test_class = any(re.match(r'^\s*class\s+Test', line) for line in content_lines)
+    return has_test_func or has_test_class
+
+
 async def parse_llm_response(
     response: str,
     language: str = "python",
@@ -1600,7 +1613,21 @@ async def parse_llm_response(
 
     try:
         test_files = parser.parse(response, language)
-        
+
+        # Filter out test files that have no actual test functions or classes
+        filtered_files = {}
+        for filename, content in test_files.items():
+            meaningful_lines = [l for l in content.split('\n') if l.strip() and not l.strip().startswith('#')]
+            if _has_test_content(content) or len(''.join(meaningful_lines)) >= 100:
+                filtered_files[filename] = content
+            else:
+                logger.warning(
+                    "Dropping empty/stub test file '%s': no test functions (def test_*) "
+                    "or test classes (class Test*) found and content is minimal.",
+                    filename,
+                )
+        test_files = filtered_files
+
         # FIX #3: Fix import paths after parsing but before validation
         test_files = fix_import_paths(test_files, code_files, language)
 
