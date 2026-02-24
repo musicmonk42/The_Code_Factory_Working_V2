@@ -787,6 +787,8 @@ class ExplainAudit:
         self.flush_interval = self.config.AUDIT_FLUSH_INTERVAL
         self.flush_task_started = False  # Track if flush task is running
         self._tables_initialized = False  # Track if database tables have been created
+        self._eager_init_task: Optional[asyncio.Task] = None  # Background eager-init task
+        self._flush_task: Optional[asyncio.Task] = None  # Periodic flush task
 
         self.web3 = None
         self.encrypter: Optional[Fernet] = None
@@ -844,7 +846,11 @@ class ExplainAudit:
                         "Lazy initialization will be attempted during the first buffer flush if not yet complete.",
                         exc_info=True,
                     )
-            self.safe_create_task(_eager_init())
+            try:
+                asyncio.get_running_loop()
+                self._eager_init_task = asyncio.create_task(_eager_init())
+            except RuntimeError:
+                self.safe_create_task(_eager_init())
 
         # Initialize PolicyEngine with proper config
         try:
@@ -1856,7 +1862,7 @@ class ExplainAudit:
             # Try to create the periodic flush task
             try:
                 asyncio.get_running_loop()  # Raises RuntimeError if no loop
-                asyncio.create_task(periodic_flush_coro())
+                self._flush_task = asyncio.create_task(periodic_flush_coro())
                 self.flush_task_started = True
                 logger.info(f"Periodic audit flush task started (interval: {self.flush_interval}s)")
             except RuntimeError:
@@ -1892,11 +1898,34 @@ class ExplainAudit:
                     )
         
         try:
-            asyncio.create_task(periodic_flush_coro())
+            self._flush_task = asyncio.create_task(periodic_flush_coro())
             self.flush_task_started = True
             logger.info(f"✓ Periodic audit flush task started (interval: {self.flush_interval}s)")
         except Exception as e:
             logger.error(f"Failed to start periodic audit flush task: {e}", exc_info=True)
+
+    async def shutdown(self) -> None:
+        """Cancel background tasks and release resources.
+
+        Call this from tests (and production teardown) to ensure no asyncio
+        tasks or database connections outlive the current event loop.
+        """
+        tasks_to_cancel: list[asyncio.Task] = []
+        if self._eager_init_task is not None and not self._eager_init_task.done():
+            tasks_to_cancel.append(self._eager_init_task)
+        if self._flush_task is not None and not self._flush_task.done():
+            tasks_to_cancel.append(self._flush_task)
+        for task in tasks_to_cancel:
+            task.cancel()
+        if tasks_to_cancel:
+            await asyncio.gather(*tasks_to_cancel, return_exceptions=True)
+        # Dispose the database engine to close any open connections / background
+        # threads (e.g. aiosqlite worker threads) before the event loop closes.
+        if self._db_client is not None and hasattr(self._db_client, "engine"):
+            try:
+                await self._db_client.engine.dispose()
+            except Exception as e:  # pragma: no cover
+                logger.debug(f"Audit: error disposing DB engine during shutdown: {e}")
 
     async def _log_audit(
         self, event: str, sim_id: str, user_id: str, details: Dict[str, Any]
