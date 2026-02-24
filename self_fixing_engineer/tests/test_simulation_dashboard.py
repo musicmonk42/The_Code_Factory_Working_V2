@@ -104,7 +104,7 @@ def test_load_plugin_dashboard_panels_cached(mock_plugin_and_result_dirs):
     Test that the caching function correctly discovers and loads plugins
     from the mock directory.
     """
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     dashboard.load_plugin_dashboard_panels_cached()
 
@@ -131,7 +131,7 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
     with open(dangerous_plugin_path, "w") as f:
         f.write("def register_my_dashboard_panels(register_func): pass")
 
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     dashboard.load_plugin_dashboard_panels_cached()
 
@@ -143,7 +143,7 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
 
 def test_is_version_compatible():
     """Test the version compatibility check helper function."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     assert dashboard.is_version_compatible("1.1.0", "1.0.0", "2.0.0") is True
     assert dashboard.is_version_compatible("0.9.0", "1.0.0", "2.0.0") is False
@@ -159,7 +159,7 @@ def test_display_onboarding_wizard_config_generation(
     mock_streamlit, mock_plugin_and_result_dirs
 ):
     """Test that the onboarding wizard correctly generates config and plugins."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     # Mock user input
     mock_streamlit.selectbox.side_effect = ["agentic_swarm", "redis", "fs"]
@@ -185,7 +185,7 @@ def test_display_onboarding_wizard_config_generation(
 @pytest.mark.asyncio
 async def test_run_health_checks_gui_success(mock_onboarding_backends):
     """Test that health checks pass successfully."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     mock_config = {
         "notification_backend": {"type": "redis", "url": "redis://localhost:6379/0"},
@@ -202,7 +202,7 @@ async def test_run_health_checks_gui_success(mock_onboarding_backends):
 
 def test_sanitize_plugin_name():
     """Test the sanitize_plugin_name function for security."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     with pytest.raises(ValueError, match="Path traversal"):
         dashboard.sanitize_plugin_name("../etc/passwd")
@@ -221,7 +221,7 @@ def test_sanitize_plugin_name():
 
 def test_load_all_simulation_results(mock_plugin_and_result_dirs):
     """Test that results are loaded and sorted correctly."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     results = dashboard.load_all_simulation_results(
         mock_plugin_and_result_dirs.RESULTS_DIR
@@ -240,7 +240,7 @@ def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_di
     with open(invalid_json_path, "w") as f:
         f.write("{'key': 'invalid_json'")
 
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     results = dashboard.load_all_simulation_results(
         mock_plugin_and_result_dirs.RESULTS_DIR
@@ -255,7 +255,7 @@ def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_di
 
 def test_translation_function(mock_streamlit):
     """Test the localization function `t` with different languages."""
-    from simulation import dashboard
+    from self_fixing_engineer.simulation import dashboard
 
     # Mock session state for language
     mock_streamlit.session_state["lang"] = "en"

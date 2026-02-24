@@ -91,29 +91,16 @@ jobs:
 
       - name: Verify LLM_API_KEY secret is configured
         run: |
-          # Fail early with a clear message if LLM_API_KEY is missing or empty.
-          # Without this key, Pydantic config validation raises errors during
-          # test discovery/dependency setup, producing confusing CI failures.
-          # See docs/CI-troubleshooting.md for full details and remediation steps.
+          # Ensure LLM_API_KEY is set so Pydantic config validation passes during
+          # test discovery.  If the repository secret is not configured (e.g. for
+          # external PRs or fresh forks), fall back to a safe dummy value – the
+          # tests mock all LLM calls and never need a real key.
           if [ -z "${LLM_API_KEY}" ]; then
-            echo "=========================================================="
-            echo "ERROR: LLM_API_KEY secret is not set or is empty."
-            echo "=========================================================="
-            echo ""
-            echo "This repository secret must be configured before CI can pass:"
-            echo "  1. Go to: Settings > Secrets and variables > Actions"
-            echo "  2. Click 'New repository secret'"
-            echo "  3. Name:  LLM_API_KEY"
-            echo "  4. Value: <your LLM provider API key>"
-            echo ""
-            echo "Without this secret, Pydantic config validation fails during"
-            echo "test discovery, producing confusing import errors."
-            echo ""
-            echo "See docs/CI-troubleshooting.md for full details."
-            echo "=========================================================="
-            exit 1
+            echo "LLM_API_KEY secret is not set; using dummy value for CI tests."
+            echo "LLM_API_KEY=sk-dummy-llm-key-for-tests" >> "$GITHUB_ENV"
+          else
+            echo "✓ LLM_API_KEY is set"
           fi
-          echo "✓ LLM_API_KEY is set"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -962,8 +949,6 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          # Use pytest-forked for better process isolation and cleanup
-          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 120m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
@@ -975,7 +960,6 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
             > test-output-sfe-arbiter.log 2>&1 || {
@@ -1185,8 +1169,6 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Simulation Tests ==="
-          # Use pytest-forked for better process isolation and cleanup
-          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_simulation*.py \
             -v \
@@ -1198,7 +1180,6 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-simulation.xml \
             > test-output-sfe-simulation.log 2>&1 || {
@@ -1239,8 +1220,6 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Self-Healing Tests ==="
-          # Use pytest-forked for better process isolation and cleanup
-          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/test_self_healing*.py \
             -v \
@@ -1252,7 +1231,6 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-self-healing.xml \
             > test-output-sfe-self-healing.log 2>&1 || {
@@ -1293,8 +1271,6 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Remaining Tests ==="
-          # Use pytest-forked for better process isolation and cleanup
-          # --forked runs each test in a separate fork, preventing resource leaks
           timeout --signal=TERM --kill-after=30s 45m python -m pytest \
             self_fixing_engineer/tests/ \
             --ignore=self_fixing_engineer/tests/test_arbiter*.py \
@@ -1310,7 +1286,6 @@ jobs:
             -p no:warnings \
             -p no:randomly \
             -p no:cacheprovider \
-            --forked \
             --import-mode=importlib \
             --junitxml=junit-sfe-remaining.xml \
             > test-output-sfe-remaining.log 2>&1 || {

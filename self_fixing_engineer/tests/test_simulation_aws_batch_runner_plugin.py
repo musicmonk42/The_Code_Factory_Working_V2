@@ -212,6 +212,7 @@ async def test_run_batch_job_full_workflow_success(
         patch("shutil.make_archive") as mock_make_archive,
         patch("os.path.getsize", return_value=1024),
         patch("os.path.exists", return_value=True),
+        patch("os.makedirs"),
         patch("builtins.open", mock_open(read_data='{"result": "success"}')),
     ):
         mock_make_archive.return_value = "/mock/archive.tar.gz"

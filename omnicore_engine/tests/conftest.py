@@ -23,34 +23,25 @@ def reset_test_state():
 
 
 @pytest.fixture(scope="function", autouse=True)
-def cleanup_event_loops():
+async def cleanup_event_loops():
     """Ensure async tasks are properly cleaned up between tests.
 
-    Note: We intentionally do NOT close the event loop here. pytest-asyncio
-    in AUTO mode manages the event loop lifecycle itself. Closing the loop
-    prematurely causes 'previous item was not torn down properly' errors
-    because pytest-asyncio's own teardown can no longer use the loop.
+    Using an async fixture ensures teardown runs within the same event-loop
+    that the test used, so pending tasks are visible and can be cancelled
+    before pytest-asyncio finalises the loop.  Running a sync fixture for
+    this purpose is unreliable in Python 3.11 + pytest-asyncio ≥ 0.23
+    because asyncio.get_event_loop() no longer reliably returns the loop
+    that was active during the async test.
     """
     yield
 
-    # Cancel any pending async tasks without closing the event loop
-    try:
-        loop = asyncio.get_event_loop()
-        if not loop.is_closed():
-            pending = [t for t in asyncio.all_tasks(loop) if not t.done()]
-            for task in pending:
-                task.cancel()
-            # Allow cancellations to process only if the loop is not already running
-            if pending and not loop.is_running():
-                try:
-                    loop.run_until_complete(
-                        asyncio.gather(*pending, return_exceptions=True)
-                    )
-                except RuntimeError:
-                    pass
-    except RuntimeError:
-        # No event loop in current thread
-        pass
+    # Cancel every task that was left running by the test (but not our own task).
+    current = asyncio.current_task()
+    pending = [t for t in asyncio.all_tasks() if not t.done() and t is not current]
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
 
     # Force garbage collection to clean up any remaining async resources
     gc.collect()
