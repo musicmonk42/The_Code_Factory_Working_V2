@@ -438,24 +438,25 @@ class LocalBackend(Backend):
         # Build subprocess environment: add code/ subdir to PYTHONPATH so that
         # test imports like `from app.main import app` resolve correctly even
         # when the source tree is nested inside the sandbox code/ directory.
-        env = os.environ.copy()
+        # subprocess_wrapper already copies os.environ internally, so we only
+        # need to pass the specific overrides here.
         _pythonpath_parts: List[str] = []
         _code_subdir = work_dir / "code"
         if _code_subdir.exists():
             _pythonpath_parts.append(str(_code_subdir))
         # Also include work_dir itself for conftest.py / root-level packages
         _pythonpath_parts.append(str(work_dir))
-        _existing_pythonpath = env.get("PYTHONPATH", "")
+        _existing_pythonpath = os.environ.get("PYTHONPATH", "")
         if _existing_pythonpath:
             _pythonpath_parts.append(_existing_pythonpath)
-        env["PYTHONPATH"] = os.pathsep.join(p for p in _pythonpath_parts if p)
+        env_overrides = {"PYTHONPATH": os.pathsep.join(p for p in _pythonpath_parts if p)}
 
         try:
             result = await subprocess_wrapper(
                 command,
                 timeout=timeout,
                 cwd=work_dir,
-                env=env,
+                env=env_overrides,
                 # Sandboxing (set_limits, drop_priv) is handled by default in subprocess_wrapper
             )
         except (asyncio.TimeoutError, subprocess.TimeoutExpired) as e:

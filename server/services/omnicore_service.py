@@ -5639,9 +5639,11 @@ class OmniCoreService:
                         for _rst_file in sorted(output_dir.glob("*.rst")):
                             if _rst_file.name != "index.rst":
                                 rst_entries.append(f"   {_rst_file.stem}")
-                        # Also add README if it exists and is not already listed
-                        _readme = output_dir.parent / "README.md"
-                        if _readme.exists():
+                        # Only add README.rst to the toctree — Sphinx reads .rst by default.
+                        # README.md requires the myst-parser extension which may not be
+                        # present; omit it to avoid a "document not found" build error.
+                        _readme_rst = output_dir.parent / "README.rst"
+                        if _readme_rst.exists() and "README" not in rst_entries:
                             rst_entries.append("   README")
                         toctree_body = "\n".join(rst_entries) if rst_entries else ""
                         index_rst.write_text(
@@ -7390,7 +7392,7 @@ class OmniCoreService:
                                         "missing_endpoints": missing_ep_labels,
                                     },
                                 )
-                                stages_completed.append("testgen:skipped")
+                                stages_completed.append("spec_validate:failed")
                                 await self._finalize_failed_job(job_id, error=fail_msg)
                                 return {
                                     "status": "failed",

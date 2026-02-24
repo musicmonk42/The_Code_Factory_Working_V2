@@ -614,20 +614,68 @@ def _deduplicate_test_filenames(files: Dict[str, str], ext: str) -> Dict[str, st
 
     Returns:
         New dict with all keys unique.
+
+    .. note::
+        Python ``dict`` has unique keys, so callers that build *files* via
+        dict-comprehension or ``d[k] = v`` assignment will silently lose
+        duplicates before this function is ever called.  Always use
+        :func:`_insert_deduped` when accumulating items inside a loop instead
+        of calling this function as a post-processing step.
     """
-    seen: Dict[str, int] = {}  # base_name (without ext) -> next counter
     result: Dict[str, str] = {}
+    _counter: Dict[str, int] = {}  # stem -> next counter to try
     for filename, content in files.items():
-        stem = filename[: -(len(ext) + 1)] if filename.endswith(f".{ext}") else filename
-        if stem not in seen:
-            seen[stem] = 2  # next counter for this stem
-            result[filename] = content
-        else:
-            new_name = f"{stem}_{seen[stem]}.{ext}"
-            logger.info(f"Deduplicated test filename: {filename} -> {new_name}")
-            seen[stem] += 1
-            result[new_name] = content
+        _insert_deduped(result, filename, content, ext, _counter)
     return result
+
+
+def _insert_deduped(
+    target: Dict[str, str],
+    filename: str,
+    content: str,
+    ext: str,
+    counter: Dict[str, int],
+) -> str:
+    """
+    Insert *filename* → *content* into *target*, renaming on collision.
+
+    Collision resolution appends an incrementing integer to the stem::
+
+        test_module.py  (first)   → test_module.py
+        test_module.py  (second)  → test_module_2.py
+        test_module.py  (third)   → test_module_3.py
+
+    Args:
+        target:   Accumulator dict (modified in-place).
+        filename: Proposed filename (already normalized).
+        content:  File content.
+        ext:      Extension without leading dot (e.g. ``"py"``).
+        counter:  Mutable dict tracking the next counter value for each stem.
+                  Pass the *same* dict across all calls in one parse pass.
+
+    Returns:
+        The actual filename used (may differ from *filename* after dedup).
+    """
+    stem = filename[: -(len(ext) + 1)] if filename.endswith(f".{ext}") else filename
+    if filename not in target:
+        # No filename collision — insert as-is and seed the counter so future
+        # collisions with this stem start at _2.
+        if stem not in counter:
+            counter[stem] = 2
+        target[filename] = content
+        return filename
+    # Collision: find the next available counter-suffixed name, skipping any
+    # slots that are already occupied (e.g. if test_module_2.py was inserted
+    # earlier by a different code path).
+    n = counter.get(stem, 2)
+    candidate = f"{stem}_{n}.{ext}"
+    while candidate in target:
+        n += 1
+        candidate = f"{stem}_{n}.{ext}"
+    counter[stem] = n + 1
+    logger.info("Deduplicated test filename: %s -> %s", filename, candidate)
+    target[candidate] = content
+    return candidate
 
 
 # Health Endpoints for Kubernetes
@@ -904,13 +952,14 @@ class DefaultResponseParser(ResponseParser):
             parsed = json.loads(response)
             if isinstance(parsed, dict):
                 logger.debug("Successfully parsed response as JSON.")
-                # Apply filename normalization, passing content for preamble detection
-                raw_files = {
-                    normalize_test_filename(k, language, content=str(v)): str(v)
-                    for k, v in parsed.items()
-                    if isinstance(k, str)
-                }
-                return _deduplicate_test_filenames(raw_files, LANGUAGE_CONFIG.get(language, {}).get("ext", "txt"))
+                _ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
+                raw_files: Dict[str, str] = {}
+                _ctr: Dict[str, int] = {}
+                for k, v in parsed.items():
+                    if isinstance(k, str):
+                        normed = normalize_test_filename(k, language, content=str(v))
+                        _insert_deduped(raw_files, normed, str(v), _ext, _ctr)
+                return raw_files
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -918,7 +967,9 @@ class DefaultResponseParser(ResponseParser):
         try:
             root = ET.fromstring(response.strip())
             if root.tag == "tests":
+                _ext = LANGUAGE_CONFIG.get(language, {}).get("ext", "txt")
                 files: Dict[str, str] = {}
+                _ctr = {}
                 for file_node in root.findall(".//file"):
                     name = file_node.get("name")
                     content_node = file_node.find("content")
@@ -926,10 +977,10 @@ class DefaultResponseParser(ResponseParser):
                         node_content = content_node.text.strip()
                         # Apply filename normalization, passing content for preamble detection
                         normalized_name = normalize_test_filename(name, language, content=node_content)
-                        files[normalized_name] = node_content
+                        _insert_deduped(files, normalized_name, node_content, _ext, _ctr)
                 if files:
                     logger.info(f"Successfully parsed {len(files)} files from XML.")
-                    return _deduplicate_test_filenames(files, LANGUAGE_CONFIG.get(language, {}).get("ext", "txt"))
+                    return files
         except ET.ParseError:
             pass
 
@@ -942,6 +993,7 @@ class DefaultResponseParser(ResponseParser):
 
         if matches:
             parsed_files: Dict[str, str] = {}
+            _ctr = {}
             for i, (filename_comment, code_content) in enumerate(matches):
                 if filename_comment and filename_comment.strip():
                     filename = filename_comment.strip()
@@ -957,11 +1009,11 @@ class DefaultResponseParser(ResponseParser):
                 # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
                 if language == "python":
                     cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
-                parsed_files[normalized_filename] = cleaned_content
+                _insert_deduped(parsed_files, normalized_filename, cleaned_content, ext, _ctr)
 
             if parsed_files:
                 logger.info(f"Successfully parsed {len(parsed_files)} code blocks.")
-                return _deduplicate_test_filenames(parsed_files, ext)
+                return parsed_files
 
         # Strategy 4: Extract by file markers
         file_marker_pattern = r"(?:^|\n)#+\s*([\w\-_\.]+\.(?:py|js|ts|java|go|rs))\s*\n(.*?)(?=\n#+\s*[\w\-_\.]+\.|$)"
@@ -969,6 +1021,7 @@ class DefaultResponseParser(ResponseParser):
 
         if file_matches:
             parsed_files = {}
+            _ctr = {}
             for filename, content in file_matches:
                 # FIX Issue 2: Strip markdown fences from content
                 cleaned_content = _strip_markdown_fences(content.strip())
@@ -977,13 +1030,13 @@ class DefaultResponseParser(ResponseParser):
                 # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
                 if language == "python":
                     cleaned_content = _strip_non_python_preamble(cleaned_content, normalized_filename)
-                parsed_files[normalized_filename] = cleaned_content
+                _insert_deduped(parsed_files, normalized_filename, cleaned_content, ext, _ctr)
 
             if parsed_files:
                 logger.info(
                     f"Successfully parsed {len(parsed_files)} files using file markers."
                 )
-                return _deduplicate_test_filenames(parsed_files, ext)
+                return parsed_files
 
         # Strategy 5: Treat entire response as a single file
         if response.strip():

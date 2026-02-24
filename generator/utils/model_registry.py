@@ -18,7 +18,6 @@ Usage::
 
 import logging
 import threading
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +42,6 @@ def get_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
         ``sentence_transformers`` package is not installed or model loading
         fails.
     """
-    global _sentence_transformer_instances
-
     if model_name in _sentence_transformer_instances:
         return _sentence_transformer_instances[model_name]
 
