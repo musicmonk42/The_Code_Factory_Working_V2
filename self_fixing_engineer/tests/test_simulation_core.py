@@ -255,6 +255,7 @@ def test_execute_remotely_success():
 def test_execute_remotely_failure(monkeypatch):
     """Test remote execution failure."""
     monkeypatch.setattr("self_fixing_engineer.simulation.core.KUBERNETES_AVAILABLE", False)
+    monkeypatch.setattr("self_fixing_engineer.simulation.core.UNDER_PYTEST", False)
     result = execute_remotely({"name": "test"}, "kubernetes")
     assert result["status"] == "ERROR"
 

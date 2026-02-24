@@ -70,6 +70,12 @@ def test_check_and_import_success(monkeypatch):
 
 def test_check_and_import_critical_failure(monkeypatch):
     monkeypatch.setattr("importlib.import_module", MagicMock(side_effect=ImportError))
+    # Patch _is_test_environment to return False so sys.exit(1) is called as it
+    # would be in production, validating the critical-import-failure code path.
+    monkeypatch.setattr(
+        "self_fixing_engineer.simulation.agentic._is_test_environment",
+        lambda: False,
+    )
     with pytest.raises(SystemExit):
         check_and_import("nonexistent", critical=True)
 

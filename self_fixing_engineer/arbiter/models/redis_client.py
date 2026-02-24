@@ -79,6 +79,14 @@ def _get_or_create_metric(
     If the metric already exists in the registry, it returns the existing one.
     Otherwise, it creates a new metric of the specified class.
     """
+    # Guard: metric_class must be a real type, not a string or mock object.
+    if not isinstance(metric_class, type):
+        logger.warning(
+            f"metric_class for '{name}' is not a type ({type(metric_class).__name__}), "
+            "skipping metric creation."
+        )
+        return metric_class() if callable(metric_class) else metric_class
+
     try:
         existing_metric = REGISTRY._names_to_collectors.get(name)
         if existing_metric and isinstance(existing_metric, metric_class):
