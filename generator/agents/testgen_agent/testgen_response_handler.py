@@ -512,11 +512,12 @@ def _source_name_from_preamble(content: str) -> Optional[str]:
         if not stripped:
             continue
         # Pattern: "file for X.py", "tests for X.py", "for X.py", etc.
-        m = re.search(r'\bfor\s+([\w_]+)\.py\b', stripped, re.IGNORECASE)
+        # Require an alphabetic start character to avoid matching numeric/private names.
+        m = re.search(r'\bfor\s+([a-zA-Z_][a-zA-Z0-9_]*)\.py\b', stripped, re.IGNORECASE)
         if m:
             return m.group(1).lower()
         # Pattern: "X.py tests", "X.py test file"
-        m2 = re.search(r'^([\w_]+)\.py\b', stripped, re.IGNORECASE)
+        m2 = re.search(r'^([a-zA-Z_][a-zA-Z0-9_]*)\.py\b', stripped, re.IGNORECASE)
         if m2:
             stem = m2.group(1).lower()
             # Only accept if the line looks like a comment/label, not real Python

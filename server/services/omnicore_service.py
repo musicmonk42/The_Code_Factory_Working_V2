@@ -7348,6 +7348,11 @@ class OmniCoreService:
                         else:
                             missing_eps = spec_result.get("missing_endpoints", [])
                             required_eps = spec_result.get("required_endpoints", [])
+                            # Fallback: derive required_eps count from error messages when the
+                            # validator doesn't populate required_endpoints directly.
+                            # NOTE: This assumes the validator uses "Missing required endpoint"
+                            # in its error messages (see generator/main/provenance.py).
+                            # If the validator changes its message format, update this filter.
                             if not required_eps:
                                 required_eps = [
                                     e for e in spec_result.get("errors", [])

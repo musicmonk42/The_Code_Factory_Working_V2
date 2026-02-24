@@ -684,6 +684,8 @@ class CodebaseAnalyzer:
                     logger.warning("Invalid DATABASE_RETRY_ATTEMPTS/DB_CONNECT_RETRIES value; using default of 3")
                     max_db_retries = 3
                 # Support both DATABASE_RETRY_DELAY (new name) and DB_CONNECT_RETRY_DELAY (legacy)
+                # Base delay default is 1s (exponential backoff gives 1s, 2s, 4s for 3 attempts,
+                # matching the 1s/2s/4s delays specified in the production issue).
                 try:
                     db_retry_delay = float(
                         os.getenv("DATABASE_RETRY_DELAY")

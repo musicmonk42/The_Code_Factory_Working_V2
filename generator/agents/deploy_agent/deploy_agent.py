@@ -1794,7 +1794,8 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                                         continue
                                     try:
                                         _parsed = yaml.safe_load(_doc_stripped)
-                                        if isinstance(_parsed, dict):
+                                        # Accept any truthy parsed value (dict, list, etc.)
+                                        if _parsed is not None:
                                             valid_docs += 1
                                     except yaml.YAMLError as _ye:
                                         yaml_errors.append(str(_ye))

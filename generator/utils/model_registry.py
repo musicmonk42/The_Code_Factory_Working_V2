@@ -16,8 +16,11 @@ Usage::
     model = get_sentence_transformer("model-name")
 """
 
+import logging
 import threading
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 _model_lock = threading.Lock()
 _sentence_transformer_instances: dict = {}
@@ -37,7 +40,8 @@ def get_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
 
     Returns:
         A ``SentenceTransformer`` instance, or ``None`` if the
-        ``sentence_transformers`` package is not installed.
+        ``sentence_transformers`` package is not installed or model loading
+        fails.
     """
     global _sentence_transformer_instances
 
@@ -51,8 +55,17 @@ def get_sentence_transformer(model_name: str = "all-MiniLM-L6-v2"):
                 from sentence_transformers import SentenceTransformer
                 _sentence_transformer_instances[model_name] = SentenceTransformer(model_name)
             except ImportError:
+                logger.info(
+                    "sentence_transformers not installed; SentenceTransformer singleton unavailable"
+                )
                 _sentence_transformer_instances[model_name] = None
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Failed to load SentenceTransformer model '%s': %s. "
+                    "Few-shot retrieval will be disabled.",
+                    model_name,
+                    exc,
+                )
                 _sentence_transformer_instances[model_name] = None
 
     return _sentence_transformer_instances[model_name]
