@@ -91,6 +91,14 @@ DEFAULT_FRONTEND_TYPE = "jinja_templates"
 LARGE_PROMPT_THRESHOLD = 8000
 # Max tokens to request when generating code from a large spec
 LARGE_PROMPT_MAX_TOKENS = 32768
+# Per-model output token limits (completion tokens); used to cap LARGE_PROMPT_MAX_TOKENS
+MODEL_MAX_OUTPUT_TOKENS = {
+    "gpt-4o": 16384,
+    "gpt-4o-mini": 16384,
+    "gpt-4-turbo": 4096,
+    "gpt-4": 8192,
+    "o1": 100000,
+}
 
 # ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
@@ -1322,9 +1330,11 @@ if PLUGIN_AVAILABLE:
                             "model": config.model.get(config.backend),
                         }
                         if len(prompt) > LARGE_PROMPT_THRESHOLD:
-                            _llm_kwargs["max_tokens"] = LARGE_PROMPT_MAX_TOKENS
+                            model_name = config.model.get(config.backend)
+                            model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
+                            _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
@@ -1668,9 +1678,11 @@ else:
                             "response_format": {"type": "json_object"},
                         }
                         if len(prompt) > LARGE_PROMPT_THRESHOLD:
-                            _llm_kwargs["max_tokens"] = LARGE_PROMPT_MAX_TOKENS
+                            model_name = config.model.get(config.backend)
+                            model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
+                            _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
