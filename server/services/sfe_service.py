@@ -2308,7 +2308,7 @@ class SFEService:
         success_rate = (applied_fixes / total_fixes) if total_fixes > 0 else None
 
         # Categorize fixes by type using keyword matching against description
-        _FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
+        FIX_TYPE_KEYWORDS: Dict[str, List[str]] = {
             "import": ["import", "module", "package"],
             "type": ["type", "annotation", "cast"],
             "syntax": ["syntax", "parse", "indent"],
@@ -2320,7 +2320,7 @@ class SFEService:
         for fix in all_fixes:
             desc_lower = str(getattr(fix, "description", "") or "").lower()
             ftype = next(
-                (t for t, kws in _FIX_TYPE_KEYWORDS.items() if any(kw in desc_lower for kw in kws)),
+                (t for t, kws in FIX_TYPE_KEYWORDS.items() if any(kw in desc_lower for kw in kws)),
                 "other",
             )
             fix_type_counts[ftype] = fix_type_counts.get(ftype, 0) + 1

@@ -112,12 +112,12 @@ data:
   #                        Used by: omnicore_engine/message_bus for job routing
   # - USE_KAFKA_AUDIT: Controls Kafka for audit event streaming
   #                    Used by: Audit logging system for distributed event collection
-  # All four should be set to the same value for consistent behavior.
-  # Setting all to "true" enables Kafka across the entire platform.
-  ENABLE_KAFKA: "true"  # Legacy flag - Keep for backward compatibility
-  KAFKA_ENABLED: "true"  # Primary flag - Main configuration source
-  USE_KAFKA_INGESTION: "true"  # Message bus ingestion - Event routing
-  USE_KAFKA_AUDIT: "true"  # Audit system - Compliance logging
+  # IMPORTANT: All four must match. Set to "true" only when KAFKA_BOOTSTRAP_SERVERS
+  # is provided via a Kubernetes Secret. Defaults to "false" (safe no-broker default).
+  ENABLE_KAFKA: "false"
+  KAFKA_ENABLED: "false"
+  USE_KAFKA_INGESTION: "false"
+  USE_KAFKA_AUDIT: "false"
   
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
 
@@ -136,7 +136,9 @@ data:
   # Audit Crypto Configuration
   # ============================================
   AUDIT_CRYPTO_MODE: "software"
-  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"
+  # CRITICAL: "0" = fail fast if crypto cannot initialize (correct for production).
+  # Set to "1" only in development/testing when audit crypto is intentionally off.
+  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "0"
   # Audit log compression algorithm (gzip, zstd, or none)
   COMPRESSION_ALGO: "gzip"
 
@@ -166,6 +168,9 @@ data:
   # ============================================
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+
+  # MetaLearning state file path — must be on the data PVC so state survives pod restarts.
+  META_LEARNING_STATE_PATH: "/app/data/meta_learning_state.json"
 
   # SFE Checkpoint Manager uses container-friendly defaults:
   # - CHECKPOINT_AUDIT_LOG_PATH defaults to ./logs/checkpoint/audit.log

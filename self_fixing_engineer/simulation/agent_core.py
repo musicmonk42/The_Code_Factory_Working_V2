@@ -75,9 +75,9 @@ class MetaLearning(MetaLearningBase):
     """
 
     #: Maximum number of insights retained in the persistence file.
-    MAX_PERSISTED_INSIGHTS: int = 200
+    MAX_PERSISTED_INSIGHTS = 200
     #: Maximum number of experiences retained in the persistence file.
-    MAX_PERSISTED_EXPERIENCES: int = 1000
+    MAX_PERSISTED_EXPERIENCES = 1000
 
     def __init__(self, *args, **kwargs):
         """

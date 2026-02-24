@@ -20,8 +20,10 @@ fullnameOverride: ""
 serviceAccount:
   # Specifies whether a service account should be created
   create: true
-  # Automatically mount a ServiceAccount's API credentials?
-  automount: true
+  # Do NOT auto-mount the service account token — pods in this chart do not
+  # call the Kubernetes API, so mounting the token is an unnecessary attack surface.
+  # See CIS Kubernetes Benchmark 5.1.6.
+  automount: false
   # Annotations to add to the service account
   annotations: {}
   # The name of the service account to use.
@@ -147,14 +149,25 @@ persistence:
   uploads:
     enabled: true
     storageClass: ""
-    accessMode: ReadWriteMany
+    # ReadWriteOnce is supported by all cloud providers out of the box.
+    # Change to ReadWriteMany only when using an NFS/EFS-backed storage class
+    # AND running more than one replica, otherwise pods will fail to schedule.
+    accessMode: ReadWriteOnce
     size: 10Gi
     annotations: {}
   workspace:
     enabled: true
     storageClass: ""
-    accessMode: ReadWriteMany
+    accessMode: ReadWriteOnce
     size: 5Gi
+    annotations: {}
+  # Small PVC for runtime data files (MetaLearning state, clarifier DB, etc.)
+  # Survives pod restarts; backed by ReadWriteOnce since a single replica writes to it.
+  data:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 1Gi
     annotations: {}
 
 nodeSelector: {}
@@ -311,12 +324,12 @@ env:
   #                        Used by: omnicore_engine/message_bus for job routing
   # - USE_KAFKA_AUDIT: Controls Kafka for audit event streaming
   #                    Used by: Audit logging system for distributed event collection
-  # All four should be set to the same value for consistent behavior.
-  # Setting all to "true" enables Kafka across the entire platform.
-  ENABLE_KAFKA: "true"  # Legacy flag - Keep for backward compatibility
-  KAFKA_ENABLED: "true"  # Primary flag - Main configuration source
-  USE_KAFKA_INGESTION: "true"  # Message bus ingestion - Event routing
-  USE_KAFKA_AUDIT: "true"  # Audit system - Compliance logging
+  # IMPORTANT: All four must be set to the same value for consistent behavior.
+  # Set to "true" only when KAFKA_BOOTSTRAP_SERVERS is also provided via a Secret.
+  ENABLE_KAFKA: "false"
+  KAFKA_ENABLED: "false"
+  USE_KAFKA_INGESTION: "false"
+  USE_KAFKA_AUDIT: "false"
   
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
 
@@ -330,11 +343,11 @@ env:
   TRANSFORMERS_CACHE: "/opt/huggingface_cache"
 
   # Audit Crypto Configuration
-  # CRITICAL: For production deployments, set AUDIT_CRYPTO_ALLOW_INIT_FAILURE=0
-  # to fail fast if crypto cannot be initialized. Change to "1" only for
-  # development/testing when audit crypto is intentionally disabled.
+  # CRITICAL: "0" means fail fast if crypto cannot be initialized — the correct
+  # setting for production. Set to "1" only in development/testing when audit
+  # crypto is intentionally disabled.
   AUDIT_CRYPTO_MODE: "software"
-  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "1"  # Set to "0" for production
+  AUDIT_CRYPTO_ALLOW_INIT_FAILURE: "0"
   # Audit log compression algorithm (gzip, zstd, or none)
   COMPRESSION_ALGO: "gzip"
 
@@ -358,6 +371,11 @@ env:
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+
+  # MetaLearning state persistence path.
+  # Points to the data PVC so state survives pod restarts.
+  # Override if you mount the data volume at a different path.
+  META_LEARNING_STATE_PATH: "/app/data/meta_learning_state.json"
 
   # SFE Checkpoint Manager Paths (container-friendly defaults)
   # These use relative paths that resolve to /app/logs/checkpoint/ in containers

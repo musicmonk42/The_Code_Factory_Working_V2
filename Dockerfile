@@ -471,7 +471,7 @@ EXPOSE 8000 9090
 # Starts checking after 120 seconds to allow startup time (agents load in background)
 # Times out after 10 seconds, retries 5 times before marking unhealthy
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=5 \
-    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
 
 # Explicitly set SIGTERM as the stop signal
 # This ensures proper signal propagation for graceful shutdown

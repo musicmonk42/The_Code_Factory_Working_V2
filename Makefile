@@ -223,7 +223,7 @@ run-server: ## Run the unified Code Factory server
 	@echo "$(BLUE)Starting Code Factory server...$(NC)"
 	@echo "$(YELLOW)API docs: http://localhost:8000/docs$(NC)"
 	@echo "$(YELLOW)Audit config: http://localhost:8000/audit/config/status$(NC)"
-	cd server && python main.py
+	python server/run.py
 
 # =============================================================================
 # Docker
@@ -395,6 +395,7 @@ k8s-deploy-staging: ## Deploy to Kubernetes (staging)
 
 k8s-deploy-prod: ## Deploy to Kubernetes (production)
 	@echo "$(RED)Deploying to Kubernetes production environment...$(NC)"
+	@read -p "Are you sure you want to deploy to PRODUCTION? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted" && exit 1)
 	kubectl apply -k k8s/overlays/production
 	@echo "$(GREEN)Deployed to production!$(NC)"
 
@@ -457,7 +458,8 @@ helm-install: ## Install with Helm (development)
 	helm upgrade --install codefactory ./helm/codefactory \
 		--create-namespace \
 		--namespace codefactory \
-		--set image.tag=latest
+		--set image.tag=latest \
+		--wait --atomic
 	@echo "$(GREEN)Helm release installed!$(NC)"
 
 helm-install-dev: ## Install with Helm (development environment)
@@ -468,7 +470,8 @@ helm-install-dev: ## Install with Helm (development environment)
 		--set image.tag=dev \
 		--set replicaCount=1 \
 		--set resources.limits.cpu=1000m \
-		--set resources.limits.memory=2Gi
+		--set resources.limits.memory=2Gi \
+		--wait --atomic
 	@echo "$(GREEN)Dev Helm release installed!$(NC)"
 
 helm-install-prod: ## Install with Helm (production environment)
@@ -478,7 +481,8 @@ helm-install-prod: ## Install with Helm (production environment)
 		--namespace codefactory-production \
 		--set image.tag=latest \
 		--set replicaCount=3 \
-		--set autoscaling.enabled=true
+		--set autoscaling.enabled=true \
+		--wait --atomic --timeout 10m
 	@echo "$(GREEN)Production Helm release installed!$(NC)"
 
 helm-uninstall: ## Uninstall Helm release
