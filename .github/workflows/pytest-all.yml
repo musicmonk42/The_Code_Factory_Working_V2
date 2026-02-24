@@ -768,7 +768,7 @@ jobs:
             -v \
             --tb=line \
             -m "${MARKER_FILTER}" \
-            --maxfail=0 \
+            --maxfail=10 \
             --timeout=${TIMEOUT_VALUE} \
             --durations=25 \
             $COVERAGE_ARGS \
@@ -970,7 +970,7 @@ jobs:
             --tb=long \
             -m "not heavy and not slow and not integration and not external" \
             --timeout=600 \
-            --maxfail=100 \
+            --maxfail=10 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
@@ -1091,7 +1091,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
-            --maxfail=100 \
+            --maxfail=10 \
             --durations=0 \
             -p no:warnings \
             -p no:randomly \
@@ -1193,7 +1193,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
-            --maxfail=50 \
+            --maxfail=10 \
             --durations=10 \
             -p no:warnings \
             -p no:randomly \
@@ -1247,7 +1247,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
-            --maxfail=50 \
+            --maxfail=10 \
             --durations=10 \
             -p no:warnings \
             -p no:randomly \
@@ -1305,7 +1305,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
-            --maxfail=50 \
+            --maxfail=10 \
             --durations=10 \
             -p no:warnings \
             -p no:randomly \
