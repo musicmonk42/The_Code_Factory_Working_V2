@@ -96,6 +96,7 @@ class MetaLearning(MetaLearningBase):
             f"MetaLearning initialized with learning_rate={self.learning_rate}, "
             f"insight_threshold={self.insight_threshold}"
         )
+        self.load()
 
     def learn(
         self, experiences: List[Dict[str, Any]], **kwargs
@@ -138,13 +139,15 @@ class MetaLearning(MetaLearningBase):
                 f"found {len(patterns)} patterns, generated {len(new_insights)} insights"
             )
 
-            return {
+            result = {
                 "success": True,
                 "experiences_processed": len(experiences),
                 "patterns_found": len(patterns),
                 "insights_generated": len(new_insights),
                 "total_insights": len(self.insights),
             }
+            self.persist()
+            return result
 
         except Exception as e:
             self.stats["failed_learnings"] += 1
@@ -230,6 +233,74 @@ class MetaLearning(MetaLearningBase):
                     )
 
         return insights
+
+    def persist(self, path: Optional[str] = None) -> None:
+        """
+        Serialize MetaLearning state to a JSON file for persistence across restarts.
+
+        Args:
+            path: File path to write to. Defaults to META_LEARNING_STATE_PATH env var
+                  or ``data/meta_learning_state.json``.
+        """
+        import json as _json
+
+        file_path = path or os.environ.get(
+            "META_LEARNING_STATE_PATH", "data/meta_learning_state.json"
+        )
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
+            state = {
+                "experiences": self.experiences,
+                "insights": [
+                    {
+                        "timestamp": ins.timestamp,
+                        "insight_type": ins.insight_type,
+                        "data": ins.data,
+                        "confidence": ins.confidence,
+                    }
+                    for ins in self.insights
+                ],
+                "stats": self.stats,
+            }
+            with open(file_path, "w", encoding="utf-8") as f:
+                _json.dump(state, f)
+            logger.debug(f"MetaLearning state persisted to {file_path}")
+        except Exception as e:
+            logger.warning(f"MetaLearning.persist() failed: {e}")
+
+    def load(self, path: Optional[str] = None) -> None:
+        """
+        Restore MetaLearning state from a previously persisted JSON file.
+
+        Args:
+            path: File path to read from. Defaults to META_LEARNING_STATE_PATH env var
+                  or ``data/meta_learning_state.json``.
+        """
+        import json as _json
+
+        file_path = path or os.environ.get(
+            "META_LEARNING_STATE_PATH", "data/meta_learning_state.json"
+        )
+        if not os.path.exists(file_path):
+            return
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                state = _json.load(f)
+            self.experiences = state.get("experiences", [])
+            self.insights = [
+                LearningInsight(
+                    timestamp=ins["timestamp"],
+                    insight_type=ins["insight_type"],
+                    data=ins["data"],
+                    confidence=ins.get("confidence", 0.0),
+                )
+                for ins in state.get("insights", [])
+            ]
+            loaded_stats = state.get("stats", {})
+            self.stats.update(loaded_stats)
+            logger.debug(f"MetaLearning state loaded from {file_path}")
+        except Exception as e:
+            logger.warning(f"MetaLearning.load() failed: {e}")
 
 
 # ============================================================================

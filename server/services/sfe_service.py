@@ -97,6 +97,7 @@ class SFEService:
             "arbiter": None,
             "checkpoint": None,
             "mesh_metrics": None,
+            "meta_learning": None,
         }
         self._sfe_available = {
             "codebase_analyzer": False,
@@ -104,6 +105,7 @@ class SFEService:
             "arbiter": False,
             "checkpoint": False,
             "mesh_metrics": False,
+            "meta_learning": False,
         }
 
         # Initialize SFE components
@@ -190,6 +192,18 @@ class SFEService:
             logger.warning(f"SFE mesh metrics unavailable: {e}")
         except Exception as e:
             logger.warning(f"Error loading mesh metrics: {e}")
+
+        # Try to load MetaLearning eagerly so insights accumulate across calls
+        try:
+            from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
+
+            self._sfe_components["meta_learning"] = get_meta_learning_instance()
+            self._sfe_available["meta_learning"] = True
+            logger.info("✓ SFE meta_learning loaded")
+        except ImportError as e:
+            logger.warning(f"SFE meta_learning unavailable: {e}")
+        except Exception as e:
+            logger.warning(f"Error loading meta_learning: {e}")
 
         # Log component availability summary
         available = [k for k, v in self._sfe_available.items() if v]
@@ -2034,8 +2048,10 @@ class SFEService:
             # Feed fix outcome to MetaLearning so insights accumulate over time.
             if not dry_run and files_modified:
                 try:
-                    from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
-                    ml = get_meta_learning_instance()
+                    ml = self._sfe_components.get("meta_learning")
+                    if ml is None:
+                        from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
+                        ml = get_meta_learning_instance()
                     experience = {
                         "fix_id": fix_id,
                         "job_id": fix.job_id,
@@ -2045,7 +2061,7 @@ class SFEService:
                     }
                     ml.learn([experience])
                 except Exception as _ml_err:
-                    logger.debug(f"MetaLearning feed skipped: {_ml_err}")
+                    logger.warning(f"MetaLearning feed skipped: {_ml_err}")
 
             return {
                 "fix_id": fix_id,
@@ -2254,10 +2270,17 @@ class SFEService:
             if result.get("data"):
                 return result["data"]
 
-        # Direct integration with MetaLearning when OmniCore returns nothing
-        try:
-            from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
-            ml = get_meta_learning_instance()
+        # Use eagerly-loaded MetaLearning component if available
+        ml = self._sfe_components.get("meta_learning")
+        if ml is None and not self._sfe_available.get("meta_learning"):
+            # Try direct import as a secondary attempt
+            try:
+                from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
+                ml = get_meta_learning_instance()
+            except Exception as e:
+                logger.warning(f"Direct MetaLearning integration unavailable: {e}")
+
+        if ml is not None:
             ml_insights = ml.get_insights()
             if ml_insights is not None:
                 ml_insights["job_id"] = job_id
@@ -2266,44 +2289,69 @@ class SFEService:
                 )
                 ml_insights["source"] = "direct_meta_learning"
                 return ml_insights
-        except Exception as e:
-            logger.debug(f"Direct MetaLearning integration unavailable: {e}")
 
-        # Fallback with meta-learning insights about known patterns
+        # Aggregate real data from errors cache and fixes_db
+        from server.storage import fixes_db
+
+        # Count errors grouped by type
+        errors = list(self._errors_cache.values())
+        if job_id:
+            errors = [e for e in errors if e.get("job_id") == job_id]
+        total_errors = len(errors)
+        error_type_counts: Dict[str, int] = {}
+        for err in errors:
+            etype = str(err.get("type", "unknown"))
+            error_type_counts[etype] = error_type_counts.get(etype, 0) + 1
+
+        # Count fixes and calculate real success rate
+        all_fixes = list(fixes_db.values())
+        if job_id:
+            all_fixes = [f for f in all_fixes if getattr(f, "job_id", None) == job_id]
+        total_fixes = len(all_fixes)
+        applied_fixes = sum(
+            1 for f in all_fixes
+            if getattr(f, "status", None) is not None
+            and str(getattr(f, "status", "")).lower() in ("applied", "success")
+        )
+        success_rate = (applied_fixes / total_fixes) if total_fixes > 0 else None
+
+        # Find common fix types
+        fix_type_counts: Dict[str, int] = {}
+        for fix in all_fixes:
+            desc = str(getattr(fix, "description", "") or "")
+            parts = desc.split()
+            ftype = parts[0].lower() if parts else "unknown"
+            fix_type_counts[ftype] = fix_type_counts.get(ftype, 0) + 1
+
+        # Build common_patterns from top error types
+        common_patterns = sorted(error_type_counts, key=lambda k: error_type_counts[k], reverse=True)[:5]
+
+        if total_errors == 0 and total_fixes == 0:
+            return {
+                "job_id": job_id,
+                "total_errors": 0,
+                "total_fixes": 0,
+                "applied_fixes": 0,
+                "success_rate": None,
+                "common_patterns": [],
+                "meta_learning_module": "aggregated_real_data",
+                "source": "no_data",
+                "note": "No analysis data yet. Run code analyses and apply fixes to generate real insights.",
+                "insights": [],
+            }
+
         return {
             "job_id": job_id,
-            "total_fixes": 150,
-            "success_rate": 0.85,
-            "common_patterns": ["missing_imports", "type_errors", "syntax_errors"],
-            "meta_learning_module": "self_fixing_engineer.arbiter.meta_learning_orchestrator (fallback)",
-            "source": "fallback_static",
-            "note": "These are static fallback values, not real analysis data.",
-            "insights": [
-                {
-                    "pattern": "Frontend-Backend Endpoint Mismatch",
-                    "description": "Multiple instances of frontend calling wrong endpoint paths",
-                    "recommendation": "Add OpenAPI/Swagger validation to enforce API endpoint contracts",
-                    "severity": "high",
-                },
-                {
-                    "pattern": "Timeout-Then-Fallback Anti-pattern",
-                    "description": "Services wait 30s for message bus timeout before falling back, causing poor UX",
-                    "recommendation": "Fail fast with immediate validation checks; use direct module integration when available",
-                    "severity": "high",
-                },
-                {
-                    "pattern": "Unhelpful Error Messages",
-                    "description": "Generic 'unavailable' messages don't guide users to solutions",
-                    "recommendation": "Implement error message templates with actionable guidance pointing to Settings → API Keys",
-                    "severity": "medium",
-                },
-                {
-                    "pattern": "Missing Feature Detection",
-                    "description": "Frontend doesn't know if backend features are available; buttons shown even when disabled",
-                    "recommendation": "Add /api/sfe/capabilities endpoint; disable buttons with tooltips when features unavailable",
-                    "severity": "medium",
-                },
-            ],
+            "total_errors": total_errors,
+            "total_fixes": total_fixes,
+            "applied_fixes": applied_fixes,
+            "success_rate": success_rate,
+            "common_patterns": common_patterns,
+            "error_type_counts": error_type_counts,
+            "fix_type_counts": fix_type_counts,
+            "meta_learning_module": "aggregated_real_data",
+            "source": "aggregated_real_data",
+            "insights": [],
         }
 
     async def get_sfe_status(self, job_id: str) -> Dict[str, Any]:
