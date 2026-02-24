@@ -276,12 +276,12 @@ class DistributedRateLimiter:
 
 # --- Circuit Breaker ---
 class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 10, timeout: int = 300, recovery_threshold: int = 3):
+    def __init__(self, failure_threshold: int = 5, timeout: int = 300, recovery_threshold: int = 3):
         """
         Initialize circuit breaker with production-grade settings.
         
         Args:
-            failure_threshold: Number of failures before circuit opens (default: 10, was 5)
+            failure_threshold: Number of failures before circuit opens (default: 5)
             timeout: Seconds to wait before trying half-open state (default: 300, was 60)
             recovery_threshold: Number of successful requests in half-open state before closing (default: 3)
         """
@@ -707,10 +707,12 @@ class LLMClient:
                         detail="SDK or API key may be missing",
                     )
 
+                logger.info(f"[LLM] Calling {provider}/{model} with prompt length: {len(prompt)}")
                 response = await plugin.call(
                     prompt=prompt, model=model, stream=stream, **kwargs
                 )
                 latency = time.time() - start_time
+                logger.info(f"[LLM] {provider}/{model} responded in {latency:.1f}s")
                 metrics.LLM_LATENCY_SECONDS.labels(provider=provider, model=model).observe(
                     latency
                 )
@@ -771,41 +773,39 @@ class LLMClient:
                     return stream_generator()
 
             except (LLMError, ConfigurationError) as e:
-                # Check if this is a circuit breaker error
-                if "Circuit breaker open" in str(e):
-                    # Try fallback providers
-                    fallback_providers = self._get_fallback_providers(provider)
-                    if fallback_providers and attempt == 0:  # Only try fallback on first attempt
-                        logger.warning(
-                            f"Circuit breaker open for {provider}. "
-                            f"Attempting fallback providers: {fallback_providers}"
-                        )
-                        for fallback_provider in fallback_providers:
-                            try:
-                                # Check if fallback provider is available
-                                if await self.circuit_breaker.allow_request(fallback_provider):
-                                    logger.info(f"Trying fallback provider: {fallback_provider}")
-                                    
-                                    # Remap model for fallback provider
-                                    fallback_model = self._remap_model_for_provider(model, fallback_provider)
-                                    
-                                    # Recursively call with fallback provider and remapped model
-                                    return await self.call_llm_api(
-                                        prompt=prompt,
-                                        model=fallback_model,
-                                        stream=stream,
-                                        provider=fallback_provider,
-                                        max_retries=1,  # Limit retries for fallback
-                                        job_id=job_id,  # Pass job_id for budget tracking
-                                        **kwargs
-                                    )
-                            except Exception as fallback_error:
-                                logger.warning(
-                                    f"Fallback provider {fallback_provider} also failed: {fallback_error}"
+                # Try fallback providers on ANY error, not just circuit breaker
+                fallback_providers = self._get_fallback_providers(provider)
+                if fallback_providers and attempt == 0:  # Only try fallback on first attempt
+                    logger.warning(
+                        f"Provider {provider} failed with {type(e).__name__}: {e}. "
+                        f"Attempting fallback providers: {fallback_providers}"
+                    )
+                    for fallback_provider in fallback_providers:
+                        try:
+                            # Check if fallback provider is available
+                            if await self.circuit_breaker.allow_request(fallback_provider):
+                                logger.info(f"Trying fallback provider: {fallback_provider}")
+                                
+                                # Remap model for fallback provider
+                                fallback_model = self._remap_model_for_provider(model, fallback_provider)
+                                
+                                # Recursively call with fallback provider and remapped model
+                                return await self.call_llm_api(
+                                    prompt=prompt,
+                                    model=fallback_model,
+                                    stream=stream,
+                                    provider=fallback_provider,
+                                    max_retries=1,  # Limit retries for fallback
+                                    job_id=job_id,  # Pass job_id for budget tracking
+                                    **kwargs
                                 )
-                                continue
+                        except Exception as fallback_error:
+                            logger.warning(
+                                f"Fallback provider {fallback_provider} also failed: {fallback_error}"
+                            )
+                            continue
                 
-                # No fallback succeeded or wasn't a circuit breaker error
+                # No fallback succeeded
                 metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                 self.circuit_breaker.record_failure(provider)
                 raise
@@ -864,7 +864,7 @@ class LLMClient:
                 "[ENSEMBLE] Provider %s/%s timed out after %.0fs",
                 provider, model, timeout,
             )
-            raise
+            raise LLMError(f"Provider {provider}/{model} timed out after {timeout:.0f}s")
 
     async def call_ensemble_api(
         self,
