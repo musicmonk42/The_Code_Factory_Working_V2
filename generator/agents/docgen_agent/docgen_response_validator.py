@@ -51,6 +51,7 @@ from nltk.tokenize import sent_tokenize
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
+from shared.plugin_registry_base import BasePluginRegistry, HotReloadableRegistryMixin
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -834,13 +835,22 @@ class MkDocsPlugin(DocGenPlugin):
 
 
 # --- Plugin Registry with Hot-Reload ---
-class PluginRegistry(FileSystemEventHandler):
+class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePluginRegistry):
     """
     Central registry for all DocGen plugins.
+
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry` and the
+    hot-reload event handler from
+    :class:`shared.plugin_registry_base.HotReloadableRegistryMixin`.
+    Domain-specific concerns (default plugin registration and format-specific
+    ``get_plugin()``) are kept here.
+
     Supports hot-reload and dynamic plugin discovery.
     """
 
     def __init__(self, plugin_dir: str = "docgen_plugins"):
+        super().__init__()
         self.plugin_dir = Path(plugin_dir)
         self.plugins: Dict[str, DocGenPlugin] = {}
         self._observer: Optional[Observer] = None

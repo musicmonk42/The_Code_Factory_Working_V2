@@ -93,6 +93,7 @@ from runner.runner_metrics import (
     LLM_TOKEN_OUTPUT_TOTAL,
     UTIL_ERRORS,
 )
+from shared.plugin_registry_base import BasePluginRegistry
 
 # --- SUMMARIZATION IMPORTS (from user request) ---
 from runner.summarize_utils import (
@@ -274,13 +275,21 @@ class CopyrightCompliance(CompliancePlugin):
 
 
 # --- Plugin Registry and Dynamic Loading ---
-class PluginRegistry:
+class PluginRegistry(BasePluginRegistry):
     """
     Registry for dynamically loading and managing compliance plugins.
-    Plugins can be loaded from a plugins directory or registered programmatically.
+
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry`.
+    Domain-specific behaviour (``CompliancePlugin`` type enforcement and
+    directory-based dynamic loading) is kept here.
+
+    Plugins can be loaded from a plugins directory or registered
+    programmatically.
     """
 
     def __init__(self, plugins_dir: Optional[Path] = None):
+        super().__init__()
         self.plugins: Dict[str, CompliancePlugin] = {}
         self.plugins_dir = plugins_dir
 

@@ -51,6 +51,7 @@ from runner.runner_metrics import (
     LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,  # <-- FIX: Use new name with alias
 )
 from runner.runner_security_utils import redact_secrets
+from shared.plugin_registry_base import BasePluginRegistry, HotReloadableRegistryMixin
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -409,7 +410,16 @@ class TargetPlugin(ABC):
     def health_check(self) -> bool: ...
 
 
-class PluginRegistry(FileSystemEventHandler):
+class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePluginRegistry):
+    """Registry for deploy-target plugins with filesystem hot-reload support.
+
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry` and the
+    hot-reload event handler from
+    :class:`shared.plugin_registry_base.HotReloadableRegistryMixin`.
+    Domain-specific concerns (health check on register, ``register_callback``,
+    and ``TargetPlugin`` type enforcement) are kept here.
+    """
     def __init__(self, plugin_dir: str = "./plugins", register_callback: Optional[Callable[[str, TargetPlugin], None]] = None) -> None:
         super().__init__()
         self.plugins: Dict[str, TargetPlugin] = {}
@@ -453,6 +463,14 @@ class PluginRegistry(FileSystemEventHandler):
         logger.info(
             f"Loaded {len(self.plugins)} plugins from {self.plugin_dir}"
         )
+
+    def _scan_plugins(self) -> None:
+        """Satisfy :class:`~shared.plugin_registry_base.HotReloadableRegistryMixin` contract.
+
+        Delegates to :meth:`load_plugins` which performs the full directory
+        scan and hot-reload cycle for this registry.
+        """
+        self.load_plugins()
 
     def _load_plugin_file(self, plugin_file: str) -> None:
         module_name_base = Path(plugin_file).stem

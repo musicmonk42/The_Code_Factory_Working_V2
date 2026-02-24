@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from self_fixing_engineer.arbiter.human_loop import HumanInLoop
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from self_fixing_engineer.arbiter.arbiter_array_backend import ConcreteArrayBackend as ArrayBackend
+from self_fixing_engineer.arbiter.persistent_array_store import ConcretePersistentArrayStore as ArrayBackend
 from self_fixing_engineer.arbiter.metrics import (
     get_or_create_counter,
     get_or_create_gauge,
@@ -1346,8 +1346,10 @@ class DecisionOptimizer:
 
         task_scores = await asyncio.gather(*[score(task) for task in task_queue])
 
-        scores_array = self.array_backend.array(task_scores)
-        numpy_scores = self.array_backend.asnumpy(scores_array)
+        # Convert task scores directly to a NumPy array.
+        # The array() / asnumpy() helpers were removed from ConcretePersistentArrayStore
+        # (they were trivial np.array() wrappers belonging to the numerical backend).
+        numpy_scores = np.array(task_scores)
 
         # Defensive check to prevent crashes from bad mocks or backends
         if not hasattr(numpy_scores, "argsort"):
