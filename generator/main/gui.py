@@ -69,6 +69,11 @@ from generator.tui_stubs import (  # noqa: E402
 if _TEXTUAL_AVAILABLE:
     import aiohttp  # noqa: F401
 
+try:
+    from textual.testing import run_test as textual_run_test
+except ImportError:
+    textual_run_test = None
+
 
 # --- Custom Module Imports (Guarded for Test Safety) ---
 try:
@@ -232,6 +237,11 @@ class MainApp(App):
         self.feedback_error = None
         self.tui_log_handler = None  # Add handler attribute
         self.metrics_update_interval_task = None  # Initialize timer attribute
+
+    def run_test(self, *args, **kwargs):
+        if textual_run_test is None:
+            raise RuntimeError("textual.testing.run_test is not available in the installed version of Textual.")
+        return textual_run_test(self, *args, **kwargs)
 
     async def on_mount(self) -> None:
         if not self._app_initialized:
@@ -1159,6 +1169,11 @@ class HelpScreen(App):
     """A simple help screen."""
 
     BINDINGS = [Binding("escape", "quit", "Close")]
+
+    def run_test(self, *args, **kwargs):
+        if textual_run_test is None:
+            raise RuntimeError("textual.testing.run_test is not available in the installed version of Textual.")
+        return textual_run_test(self, *args, **kwargs)
 
     def compose(self):
         yield Header()
