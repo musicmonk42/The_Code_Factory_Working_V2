@@ -6849,7 +6849,6 @@ class OmniCoreService:
                                     )
                                     
                                     # Clean up failed output
-                                    import shutil
                                     try:
                                         shutil.rmtree(output_path_for_validation)
                                         logger.info(f"[PIPELINE] Job {job_id} cleaned up failed output directory for retry")
@@ -7124,6 +7123,14 @@ class OmniCoreService:
 
                     # Set previous_error so the next attempt gets error context in the prompt
                     # (this also changes the prompt content, busting the LLM cache key)
+                    _class_config_hint = ""
+                    if "class Config:" in error_msg or "class Config" in error_msg:
+                        _class_config_hint = (
+                            "\n\nCRITICAL: Do NOT use 'class Config:' inside Pydantic models. "
+                            "Instead use:\n"
+                            "    model_config = ConfigDict(extra='forbid', from_attributes=True)\n"
+                            "and add 'from pydantic import ConfigDict' to imports."
+                        )
                     previous_error = {
                         "error_type": codegen_result.get("error_type", "CodegenError"),
                         "details": error_msg,
@@ -7131,6 +7138,7 @@ class OmniCoreService:
                         "instruction": (
                             "The previous code generation attempt failed. "
                             "Please fix the following error and regenerate the code:\n"
+                            + _class_config_hint
                         ),
                     }
 
