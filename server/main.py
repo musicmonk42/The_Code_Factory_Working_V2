@@ -943,6 +943,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                 failed_count = 0
                 running_reset_count = 0
                 pending_reset_count = 0
+                clarification_reset_count = 0
                 
                 # Pagination parameters for enterprise-scale job recovery
                 # Industry Standard: Process in batches to avoid memory exhaustion
@@ -1094,6 +1095,22 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                                 )
                                 await save_job_to_database(job)
                             
+                            elif job.status == JobStatus.NEEDS_CLARIFICATION:
+                                # NEEDS_CLARIFICATION jobs are also non-terminal and can become
+                                # orphaned when the container restarts while awaiting user input.
+                                _mark_job_as_failed(
+                                    job,
+                                    original_status="NEEDS_CLARIFICATION",
+                                    error_message=f"Job interrupted by container restart while awaiting clarification. Job ID: {job_id}. Please resubmit your request.",
+                                    recovery_timestamp=recovery_timestamp
+                                )
+                                clarification_reset_count += 1
+                                logger.info(
+                                    f"Reset NEEDS_CLARIFICATION job {job_id} to FAILED after restart",
+                                    extra={"job_id": job_id, "recovery_action": "reset_needs_clarification"}
+                                )
+                                await save_job_to_database(job)
+                            
                             # Add job back to in-memory storage (idempotent)
                             await add_job(job)
                             recovered_count += 1
@@ -1129,6 +1146,8 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         logger.info(f"  → Reset {running_reset_count} RUNNING jobs to FAILED")
                     if pending_reset_count > 0:
                         logger.info(f"  → Reset {pending_reset_count} PENDING jobs to FAILED")
+                    if clarification_reset_count > 0:
+                        logger.info(f"  → Reset {clarification_reset_count} NEEDS_CLARIFICATION jobs to FAILED")
                 else:
                     logger.info("✓ No jobs to recover from database")
                 
@@ -1145,6 +1164,7 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
                         "failed_count": failed_count,
                         "running_reset_count": running_reset_count,
                         "pending_reset_count": pending_reset_count,
+                        "clarification_reset_count": clarification_reset_count,
                         "total_processed": total_processed
                     }
                 )
@@ -1574,6 +1594,14 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Code Factory API Server")
+    
+    # Cancel active pipeline tasks before protecting running jobs so that
+    # in-flight pipelines are stopped before we persist FAILED status.
+    try:
+        from server.routers.generator import cancel_all_pipeline_tasks
+        await cancel_all_pipeline_tasks()
+    except Exception as e:
+        logger.warning(f"Error cancelling pipeline tasks during shutdown: {e}")
     
     # Protect running jobs before shutting down
     await _protect_running_jobs_on_shutdown()

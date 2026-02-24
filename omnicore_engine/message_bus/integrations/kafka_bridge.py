@@ -46,6 +46,7 @@ Usage
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import random
@@ -73,6 +74,14 @@ except Exception:  # pragma: no cover
     aiokafka = None
     AIOKafkaConsumer = None
     AIOKafkaProducer = None
+
+# Cache the AIOKafkaProducer constructor parameter names once at import time so
+# that every call to start() avoids redundant introspection overhead.
+_PRODUCER_SUPPORTS_MAX_IN_FLIGHT: bool = (
+    AIOKafkaProducer is not None
+    and "max_in_flight_requests_per_connection"
+    in inspect.signature(AIOKafkaProducer.__init__).parameters
+)
 
 # Optional Prometheus metrics
 try:
@@ -375,22 +384,9 @@ class KafkaBridge:
             "ssl_context": self.cfg.ssl_context,
         }
         
-        try:
-            # Try with max_in_flight_requests_per_connection
+        if _PRODUCER_SUPPORTS_MAX_IN_FLIGHT:
             producer_kwargs["max_in_flight_requests_per_connection"] = self.cfg.max_in_flight_requests_per_connection
-            self._producer = AIOKafkaProducer(**producer_kwargs)
-        except TypeError as e:
-            # Parameter not supported in this aiokafka version, try without it
-            if "max_in_flight_requests_per_connection" in str(e):
-                logger.warning(
-                    f"AIOKafkaProducer does not support 'max_in_flight_requests_per_connection' parameter: {e}. "
-                    "Falling back to producer without this parameter."
-                )
-                producer_kwargs.pop("max_in_flight_requests_per_connection", None)
-                self._producer = AIOKafkaProducer(**producer_kwargs)
-            else:
-                # Some other TypeError, re-raise it
-                raise
+        self._producer = AIOKafkaProducer(**producer_kwargs)
         
         await self._producer.start()
 
