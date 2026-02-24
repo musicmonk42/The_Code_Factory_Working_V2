@@ -373,6 +373,19 @@ class ServerConfig(BaseSettings):
         ge=1000,
         le=60000
     )
+
+    # Sentry Configuration
+    sentry_dsn: Optional[str] = Field(
+        default=None,
+        description=(
+            "Sentry DSN for error tracking. Set SENTRY_DSN environment variable to enable. "
+            "Example: https://<key>@<org>.ingest.sentry.io/<project>"
+        ),
+    )
+    sentry_environment: str = Field(
+        default_factory=lambda: os.getenv("SENTRY_ENVIRONMENT", os.getenv("APP_ENV", "development")),
+        description="Sentry environment tag (defaults to APP_ENV or 'development')",
+    )
     
     @field_validator("app_env")
     @classmethod
