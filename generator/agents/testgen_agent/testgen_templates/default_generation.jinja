@@ -30,6 +30,14 @@ names listed here.  Do **not** invent symbols that are not present in this contr
   code returns (e.g., if a route returns `{"status": "ok"}`, assert `"ok"`, not `"healthy"`).
 - Do NOT mock response models or replace them with generic `dict` unless the source
   code itself produces a plain dict.
+- For FastAPI async tests using httpx, NEVER use `AsyncClient(app=app, ...)`.
+  Instead use `httpx.ASGITransport(app=app)` and pass it as the `transport` parameter:
+  ```python
+  import httpx
+  transport = httpx.ASGITransport(app=app)
+  async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as ac:
+      response = await ac.get("/endpoint")
+  ```
 {% endif %}
 
 ## Requirements
