@@ -106,9 +106,12 @@ class TestMultipassConstants:
 
     def test_endpoint_threshold_value(self):
         src = self._src()
-        match = re.search(r'MULTIPASS_ENDPOINT_THRESHOLD\s*=\s*(\d+)', src)
-        assert match, "MULTIPASS_ENDPOINT_THRESHOLD not assigned a value"
-        assert int(match.group(1)) == 15, "MULTIPASS_ENDPOINT_THRESHOLD should be 15"
+        # Value is now read from os.environ with default "15"
+        match = re.search(
+            r'os\.environ\.get\("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD",\s*"(\d+)"\)', src
+        )
+        assert match, "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default not found"
+        assert int(match.group(1)) == 15, "MULTIPASS_ENDPOINT_THRESHOLD default should be 15"
 
     def test_multipass_groups_defined(self):
         src = self._src()
@@ -325,9 +328,139 @@ class TestMultipassContextAccumulation:
     def test_already_list_is_union_of_merged_and_prior_retry(self):
         """_already must combine merged files AND files from a previous pipeline retry."""
         src = self._src()
-        # _already = list(set(list(_merged_files.keys()) + _already_generated))
         assert "_already_generated" in src, "_already_generated not used in accumulation"
         assert "_merged_files.keys()" in src, "_merged_files.keys() not used in accumulation"
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure: env-var configurability of thresholds
+# ---------------------------------------------------------------------------
+
+class TestEnvVarConfigurability:
+    """Verify that multipass thresholds are driven by env vars (operator-tunable)."""
+
+    def _src(self):
+        return _get_codegen_module()
+
+    def test_endpoint_threshold_reads_from_env(self):
+        """CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD env var must control the threshold."""
+        src = self._src()
+        assert "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD" in src, (
+            "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD env-var name not found in codegen_agent.py"
+        )
+        assert 'os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD"' in src, (
+            "MULTIPASS_ENDPOINT_THRESHOLD must be loaded from os.environ.get()"
+        )
+
+    def test_file_threshold_reads_from_env(self):
+        """CODEGEN_MULTIPASS_FILE_THRESHOLD env var must control the threshold."""
+        src = self._src()
+        assert "CODEGEN_MULTIPASS_FILE_THRESHOLD" in src, (
+            "CODEGEN_MULTIPASS_FILE_THRESHOLD env-var name not found in codegen_agent.py"
+        )
+        assert 'os.environ.get("CODEGEN_MULTIPASS_FILE_THRESHOLD"' in src, (
+            "MULTIPASS_FILE_THRESHOLD must be loaded from os.environ.get()"
+        )
+
+    def test_env_var_default_values_are_correct(self):
+        """Default values for both thresholds must be 15 and 20 respectively."""
+        src = self._src()
+        # CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default = "15"
+        ep_match = re.search(
+            r'os\.environ\.get\("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD",\s*"(\d+)"\)', src
+        )
+        assert ep_match, "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default value not found"
+        assert ep_match.group(1) == "15", (
+            f"Default endpoint threshold should be 15, got {ep_match.group(1)}"
+        )
+        # CODEGEN_MULTIPASS_FILE_THRESHOLD default = "20"
+        fi_match = re.search(
+            r'os\.environ\.get\("CODEGEN_MULTIPASS_FILE_THRESHOLD",\s*"(\d+)"\)', src
+        )
+        assert fi_match, "CODEGEN_MULTIPASS_FILE_THRESHOLD default value not found"
+        assert fi_match.group(1) == "20", (
+            f"Default file threshold should be 20, got {fi_match.group(1)}"
+        )
+
+    def test_threshold_is_converted_to_int(self):
+        """Env-var strings must be cast to int so comparisons work."""
+        src = self._src()
+        # Both assignments must be wrapped in int(...)
+        ep_count = len(re.findall(
+            r'int\(\s*os\.environ\.get\("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD"', src
+        ))
+        fi_count = len(re.findall(
+            r'int\(\s*os\.environ\.get\("CODEGEN_MULTIPASS_FILE_THRESHOLD"', src
+        ))
+        assert ep_count >= 1, "MULTIPASS_ENDPOINT_THRESHOLD not wrapped in int()"
+        assert fi_count >= 1, "MULTIPASS_FILE_THRESHOLD not wrapped in int()"
+
+    def test_k8s_configmap_contains_threshold_vars(self):
+        """k8s/base/configmap.yaml must expose the multipass threshold env vars."""
+        cm = Path("k8s/base/configmap.yaml").read_text(encoding="utf-8")
+        assert "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD" in cm, (
+            "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD missing from k8s/base/configmap.yaml"
+        )
+        assert "CODEGEN_MULTIPASS_FILE_THRESHOLD" in cm, (
+            "CODEGEN_MULTIPASS_FILE_THRESHOLD missing from k8s/base/configmap.yaml"
+        )
+
+    def test_helm_values_contains_threshold_vars(self):
+        """helm/codefactory/values.yaml must expose the multipass threshold env vars."""
+        values = Path("helm/codefactory/values.yaml").read_text(encoding="utf-8")
+        assert "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD" in values, (
+            "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD missing from helm/codefactory/values.yaml"
+        )
+        assert "CODEGEN_MULTIPASS_FILE_THRESHOLD" in values, (
+            "CODEGEN_MULTIPASS_FILE_THRESHOLD missing from helm/codefactory/values.yaml"
+        )
+
+    def test_docker_compose_contains_threshold_vars(self):
+        """docker-compose.yml must expose the multipass threshold env vars."""
+        dc = Path("docker-compose.yml").read_text(encoding="utf-8")
+        assert "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD" in dc, (
+            "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD missing from docker-compose.yml"
+        )
+        assert "CODEGEN_MULTIPASS_FILE_THRESHOLD" in dc, (
+            "CODEGEN_MULTIPASS_FILE_THRESHOLD missing from docker-compose.yml"
+        )
+
+    def test_docker_compose_production_contains_threshold_vars(self):
+        """docker-compose.production.yml must expose the multipass threshold env vars."""
+        dc_prod = Path("docker-compose.production.yml").read_text(encoding="utf-8")
+        assert "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD" in dc_prod, (
+            "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD missing from docker-compose.production.yml"
+        )
+        assert "CODEGEN_MULTIPASS_FILE_THRESHOLD" in dc_prod, (
+            "CODEGEN_MULTIPASS_FILE_THRESHOLD missing from docker-compose.production.yml"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure: HPA scale-down window covers multi-pass job duration
+# ---------------------------------------------------------------------------
+
+class TestHpaScaleDownWindow:
+    """Verify the production HPA scale-down stabilisation window is long enough."""
+
+    def _hpa(self):
+        return Path("k8s/overlays/production/hpa.yaml").read_text(encoding="utf-8")
+
+    def test_scale_down_window_at_least_900s(self):
+        """HPA scale-down stabilisationWindowSeconds must be >= 900 (3 × LLM_TIMEOUT)."""
+        hpa = self._hpa()
+        # Find the stabilizationWindowSeconds under scaleDown
+        # Pattern: scaleDown:\n  ...\n  stabilizationWindowSeconds: NNN
+        match = re.search(
+            r'scaleDown:.*?stabilizationWindowSeconds:\s*(\d+)',
+            hpa, re.DOTALL
+        )
+        assert match, "stabilizationWindowSeconds not found under scaleDown in production HPA"
+        window = int(match.group(1))
+        assert window >= 900, (
+            f"HPA scale-down stabilisationWindowSeconds is {window}s but must be >= 900s "
+            f"(3 multi-pass calls × 300s LLM_TIMEOUT) to prevent mid-job pod eviction"
+        )
 
 
 if __name__ == "__main__":

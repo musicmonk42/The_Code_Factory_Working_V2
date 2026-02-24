@@ -108,10 +108,16 @@ MODEL_MAX_OUTPUT_TOKENS = {
 # ==============================================================================
 # --- Multi-Pass Code Generation Constants ---
 # ==============================================================================
-# Threshold: if a spec has more than this many detected API endpoints, use multi-pass generation
-MULTIPASS_ENDPOINT_THRESHOLD = 15
-# Threshold: if a spec has more than this many required files, use multi-pass generation
-MULTIPASS_FILE_THRESHOLD = 20
+# Threshold: use multi-pass generation when the spec has at least this many API endpoints.
+# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 15).
+MULTIPASS_ENDPOINT_THRESHOLD: int = int(
+    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "15")
+)
+# Threshold: use multi-pass generation when the spec references at least this many files.
+# Configurable at runtime via CODEGEN_MULTIPASS_FILE_THRESHOLD (default: 20).
+MULTIPASS_FILE_THRESHOLD: int = int(
+    os.environ.get("CODEGEN_MULTIPASS_FILE_THRESHOLD", "20")
+)
 
 # File generation groups for multi-pass mode (processed in order).
 # Each pass focuses on a logical subset of files; earlier passes are provided as
