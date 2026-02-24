@@ -1483,6 +1483,9 @@ async def lifespan(app: FastAPI):
             logger.info("✓ PostgreSQL job storage is ready (multi-worker safe)")
         else:
             logger.info("PostgreSQL not available, using in-memory storage only")
+    except asyncio.CancelledError:
+        logger.warning("Received shutdown signal during PostgreSQL initialization. Shutting down gracefully.")
+        raise
     except Exception as e:
         logger.warning(f"Failed to initialize PostgreSQL job storage: {e}")
     
@@ -1522,6 +1525,9 @@ async def lifespan(app: FastAPI):
                 "Check for slow imports or validation errors in router modules."
             )
             routers_ok = False
+        except asyncio.CancelledError:
+            logger.warning("Received shutdown signal during router loading. Shutting down gracefully.")
+            raise
         except Exception as e:
             logger.error(
                 f"❌ CRITICAL: Router loading failed with exception: {e}. "
