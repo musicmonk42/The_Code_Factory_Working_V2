@@ -1953,6 +1953,105 @@ def validate_pydantic_v2_compatibility(files: Dict[str, str]) -> List[str]:
     return errors
 
 
+def _fix_class_config_to_model_config(content: str) -> str:
+    """
+    Transform 'class Config:' nested inside BaseModel/BaseSettings subclasses
+    into 'model_config = ConfigDict(...)' assignments (Pydantic v2 style).
+
+    Returns the transformed content string (unchanged if no transformation is needed).
+    """
+    import re as _re
+
+    # Pydantic v2 renames for known Config attributes
+    _ATTR_RENAMES = {
+        "orm_mode": "from_attributes",
+        "schema_extra": "json_schema_extra",
+    }
+
+    try:
+        tree = ast.parse(content)
+    except SyntaxError:
+        return content
+
+    lines = content.splitlines(keepends=True)
+
+    # Collect all class Config AST nodes nested inside BaseModel/BaseSettings classes
+    config_nodes = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            base_names = [
+                base.id if isinstance(base, ast.Name)
+                else base.attr if isinstance(base, ast.Attribute)
+                else None
+                for base in node.bases
+            ]
+            if "BaseModel" in base_names or "BaseSettings" in base_names:
+                for child in node.body:
+                    if isinstance(child, ast.ClassDef) and child.name == "Config":
+                        config_nodes.append(child)
+
+    if not config_nodes:
+        return content
+
+    # Sort in reverse order to replace from bottom to top (preserve line numbers)
+    config_nodes.sort(key=lambda n: n.lineno, reverse=True)
+
+    changed = False
+    for config_node in config_nodes:
+        # Extract key=value pairs from the Config class body
+        kwargs = []
+        for stmt in config_node.body:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        attr_name = _ATTR_RENAMES.get(target.id, target.id)
+                        try:
+                            attr_val = ast.unparse(stmt.value)
+                        except AttributeError:
+                            # Python < 3.9 fallback: handle simple constants
+                            if isinstance(stmt.value, ast.Constant):
+                                attr_val = repr(stmt.value.value)
+                            elif hasattr(ast, "NameConstant") and isinstance(stmt.value, ast.NameConstant):
+                                attr_val = repr(stmt.value.value)
+                            else:
+                                attr_val = "..."
+                        kwargs.append(f"{attr_name}={attr_val}")
+
+        # Determine indentation of 'class Config:' line (1-indexed → 0-indexed)
+        config_line_idx = config_node.lineno - 1
+        config_line_text = lines[config_line_idx]
+        indent_str = config_line_text[: len(config_line_text) - len(config_line_text.lstrip())]
+
+        # Build the replacement line
+        kwargs_str = ", ".join(kwargs)
+        replacement = f"{indent_str}model_config = ConfigDict({kwargs_str})\n"
+
+        # Replace lines from config_node.lineno to config_node.end_lineno (inclusive, 1-indexed)
+        start_idx = config_node.lineno - 1  # inclusive, 0-indexed
+        end_idx = config_node.end_lineno    # exclusive, 0-indexed
+        lines[start_idx:end_idx] = [replacement]
+        changed = True
+
+    if not changed:
+        return content
+
+    result = "".join(lines)
+
+    # Add 'ConfigDict' to existing pydantic import or insert a new import line
+    if not _re.search(r'\bimport\b[^\n]*\bConfigDict\b', result):
+        if _re.search(r'from\s+pydantic\s+import\s+', result):
+            result = _re.sub(
+                r'(from\s+pydantic\s+import\s+)([^\n]+)',
+                lambda m: m.group(1) + m.group(2).rstrip() + ", ConfigDict",
+                result,
+                count=1,
+            )
+        else:
+            result = "from pydantic import ConfigDict\n" + result
+
+    return result
+
+
 def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
     """
     Automatically fix common Pydantic v1 → v2 migration issues in generated files.
@@ -1964,6 +2063,7 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
     - V1 error type strings in test assertions → V2 equivalents
     - `pydantic==1.x` pin in requirements.txt → `pydantic>=2.0`
     - Adds `pydantic-settings>=2.0.0` to requirements.txt when BaseSettings is used.
+    - `class Config:` inside BaseModel/BaseSettings subclasses → `model_config = ConfigDict(...)`
 
     Args:
         files: Dictionary mapping filenames to file contents.
@@ -2138,6 +2238,16 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     "auto_fix_pydantic_v1_imports: removed always=True/False from @field_validator in %s",
                     filename,
                 )
+
+            # Fix: class Config: inside BaseModel/BaseSettings → model_config = ConfigDict(...)
+            if "class Config:" in content and ("BaseModel" in content or "BaseSettings" in content):
+                new_content = _fix_class_config_to_model_config(content)
+                if new_content != content:
+                    content = new_content
+                    logger.info(
+                        "auto_fix_pydantic_v1_imports: replaced class Config: with model_config = ConfigDict() in %s",
+                        filename,
+                    )
 
             fixed_files[filename] = content
 

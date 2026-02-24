@@ -365,8 +365,116 @@ class TestAutoFixPydanticV1Imports:
         errors = self._validate(fixed)
         assert errors == [], f"Expected no errors after fixing regex=, got: {errors}"
 
+    def test_fix_class_config_to_model_config(self):
+        """'class Config:' inside a BaseModel subclass should be replaced with model_config = ConfigDict(...)."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        extra = 'forbid'\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "class Config:" not in content, f"Expected class Config: to be removed:\n{content}"
+        assert "model_config = ConfigDict(" in content, f"Expected model_config = ConfigDict(...):\n{content}"
+        assert "ConfigDict" in content
+        assert "extra='forbid'" in content
 
-class TestParseLLMResponsePydanticV2Validation:
+    def test_fix_class_config_orm_mode_renamed(self):
+        """orm_mode = True should be renamed to from_attributes = True in ConfigDict."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class Item(BaseModel):\n"
+                "    id: int\n\n"
+                "    class Config:\n"
+                "        orm_mode = True\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "class Config:" not in content
+        assert "from_attributes=True" in content, f"Expected from_attributes=True:\n{content}"
+        assert "orm_mode" not in content, f"Unexpected orm_mode in:\n{content}"
+
+    def test_fix_class_config_schema_extra_renamed(self):
+        """schema_extra should be renamed to json_schema_extra in ConfigDict."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class Item(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        schema_extra = {'example': {'name': 'foo'}}\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "class Config:" not in content
+        assert "json_schema_extra=" in content, f"Expected json_schema_extra=:\n{content}"
+        # Ensure the old standalone 'schema_extra =' (without json_ prefix) is gone
+        assert "schema_extra =" not in content, f"Unexpected bare schema_extra= in:\n{content}"
+
+    def test_fix_class_config_adds_configdict_import(self):
+        """After fixing class Config:, 'ConfigDict' should be added to pydantic imports."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        extra = 'forbid'\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "ConfigDict" in content
+        # Should have ConfigDict in the pydantic import
+        assert "from pydantic import" in content
+
+    def test_fix_class_config_and_validate_roundtrip(self):
+        """After fixing class Config:, the validator should report no errors."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        extra = 'forbid'\n"
+                "        orm_mode = True\n"
+            )
+        }
+        fixed = self._fix(files)
+        errors = self._validate(fixed)
+        assert errors == [], f"Expected no errors after fixing class Config:, got: {errors}"
+
+    def test_fix_class_config_multiple_models(self):
+        """Multiple models with class Config: should all be fixed."""
+        files = {
+            "schemas.py": (
+                "from pydantic import BaseModel\n\n"
+                "class User(BaseModel):\n"
+                "    name: str\n\n"
+                "    class Config:\n"
+                "        extra = 'forbid'\n\n"
+                "class Item(BaseModel):\n"
+                "    id: int\n\n"
+                "    class Config:\n"
+                "        orm_mode = True\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["schemas.py"]
+        assert "class Config:" not in content, f"Expected all class Config: to be removed:\n{content}"
+        assert content.count("model_config = ConfigDict(") == 2, (
+            f"Expected 2 model_config = ConfigDict(...), got:\n{content}"
+        )
+
+
+
     """Integration tests: pydantic validation runs before files are materialized."""
 
     def _parse(self, response, lang="python"):
