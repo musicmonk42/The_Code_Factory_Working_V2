@@ -8,11 +8,19 @@ from typing import Any, Dict, Optional
 
 import boto3
 import structlog
+from botocore.config import Config as BotocoreConfig
 from botocore.exceptions import ClientError, NoCredentialsError
 from cryptography.fernet import Fernet, InvalidToken
 from prometheus_client import Counter
 
 logger = structlog.get_logger(__name__)
+
+# Short-timeout boto3 config to prevent blocking in non-AWS environments
+_BOTO_SSM_CONFIG = BotocoreConfig(
+    connect_timeout=3,
+    read_timeout=5,
+    retries={"max_attempts": 0},
+)
 
 # Prometheus metrics
 key_rotation_counter = Counter(
@@ -168,7 +176,8 @@ class ArbiterConfig:
         """
         try:
             ssm_client = boto3.client(
-                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1")
+                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1"),
+                config=_BOTO_SSM_CONFIG,
             )
 
             parameter_name = f"/arbiter/encryption_keys/{version}"
@@ -224,7 +233,8 @@ class ArbiterConfig:
         """
         try:
             ssm_client = boto3.client(
-                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1")
+                "ssm", region_name=os.getenv("AWS_REGION", "us-east-1"),
+                config=_BOTO_SSM_CONFIG,
             )
 
             parameter_name = f"/arbiter/encryption_keys/{version}"

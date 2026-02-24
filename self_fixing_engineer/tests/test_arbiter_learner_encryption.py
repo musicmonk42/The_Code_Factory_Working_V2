@@ -133,7 +133,8 @@ class TestArbiterConfig:
         # Set up initial keys
         ArbiterConfig.ENCRYPTION_KEYS = {"v1": Fernet(Fernet.generate_key())}
 
-        with patch.object(key_rotation_counter, "labels") as mock_counter:
+        with patch.object(key_rotation_counter, "labels") as mock_counter, \
+             patch.object(ArbiterConfig, "_persist_key_to_ssm") as mock_persist:
             mock_labels = MagicMock()
             mock_counter.return_value = mock_labels
 
@@ -148,6 +149,8 @@ class TestArbiterConfig:
             # Verify metric was incremented
             mock_counter.assert_called_with(version="v2")
             mock_labels.inc.assert_called_once()
+            # Verify SSM persistence was attempted (but mocked)
+            mock_persist.assert_called_once()
 
 
 class TestEncryptValue:
@@ -385,8 +388,9 @@ class TestIntegration:
             data, ArbiterConfig.ENCRYPTION_KEYS["v1"], "v1"
         )
 
-        # Rotate to v2
-        await ArbiterConfig.rotate_keys("v2")
+        # Rotate to v2 - mock SSM persistence to avoid network calls in tests
+        with patch.object(ArbiterConfig, "_persist_key_to_ssm"):
+            await ArbiterConfig.rotate_keys("v2")
 
         # Should still be able to decrypt v1 data
         decrypted = await decrypt_value(encrypted_v1, ArbiterConfig.ENCRYPTION_KEYS)

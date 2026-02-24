@@ -98,6 +98,14 @@ def pytest_collection_finish(session):
     Clear PYTEST_COLLECTING so that actual test runs can load components.
     """
     os.environ.pop("PYTEST_COLLECTING", None)
+    # Remove arbiter.arbiter from sys.modules so it can be re-imported
+    # without the PYTEST_COLLECTING stub when initialize_arbiter_components runs
+    for mod_name in list(sys.modules.keys()):
+        if mod_name in (
+            "self_fixing_engineer.arbiter.arbiter",
+            "self_fixing_engineer.arbiter",
+        ):
+            sys.modules.pop(mod_name, None)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -119,10 +127,12 @@ def initialize_arbiter_components():
     
     # Load components now that collection is complete and mocks are cleaned up
     try:
-        from self_fixing_engineer.arbiter import _load_components, _components_loaded
-        if not _components_loaded:
-            _load_components()
-    except ImportError:
+        import self_fixing_engineer.arbiter as _arbiter_pkg
+        # Reset loaded state so _load_components() will re-import with real modules
+        _arbiter_pkg._components_loaded = False
+        _arbiter_pkg._components_loading = False
+        _arbiter_pkg._load_components()
+    except Exception:
         pass
     
     yield
