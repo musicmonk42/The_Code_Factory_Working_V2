@@ -7,6 +7,7 @@ Provides fixtures and hooks to ensure proper test isolation.
 
 import gc
 import asyncio
+import threading
 import pytest
 
 
@@ -45,6 +46,21 @@ async def cleanup_event_loops():
 
     # Force garbage collection to clean up any remaining async resources
     gc.collect()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def check_no_leaked_nondaemon_threads():
+    """Fail if a test leaks non-daemon threads that could outlive the event loop."""
+    before = {t.ident for t in threading.enumerate() if not t.daemon}
+    yield
+    leaked = [
+        t for t in threading.enumerate()
+        if not t.daemon and t.ident not in before and t.is_alive()
+    ]
+    assert not leaked, (
+        f"Test leaked {len(leaked)} non-daemon thread(s): "
+        + ", ".join(f"{t.name} (ident={t.ident})" for t in leaked)
+    )
 
 
 # NOTE: The class_level_isolation fixture was removed because it caused race conditions
