@@ -199,6 +199,16 @@ _GENERIC_TOPICS: frozenset = frozenset({
 _JOB_ID_RE = re.compile(r"^(?=.*[a-zA-Z0-9])[a-zA-Z0-9_-]{1,128}$")
 
 
+def _get_omnicore_service():
+    """Lazily import and return the OmniCoreService instance.
+
+    Extracted into a module-level helper so tests can monkeypatch it without
+    having to reach inside a nested function scope.
+    """
+    from server.services.omnicore_service import get_omnicore_service  # noqa: PLC0415
+    return get_omnicore_service()
+
+
 def _validate_job_id(job_id: str) -> None:
     """Validate *job_id* format; raise ``HTTPException(422)`` on failure.
 
@@ -444,9 +454,7 @@ async def job_status_websocket(websocket: WebSocket, job_id: str) -> None:
         event_loop = asyncio.get_event_loop()
 
         try:
-            from server.services.omnicore_service import get_omnicore_service
-
-            omnicore_service = get_omnicore_service()
+            omnicore_service = _get_omnicore_service()
             _bus = getattr(omnicore_service, "_message_bus", None)
             bus_ready = bool(
                 _bus is not None

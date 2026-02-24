@@ -421,7 +421,7 @@ class TestgenAgent:
     REFACTORED: Uses central runner components.
     """
 
-    def __init__(self, repo_path: str, arbiter_bridge: Optional[Any] = None):
+    def __init__(self, repo_path: str = ".", arbiter_bridge: Optional[Any] = None):
         self.repo_path = Path(repo_path)
         if not self.repo_path.exists() or not self.repo_path.is_dir():
             raise ValueError(

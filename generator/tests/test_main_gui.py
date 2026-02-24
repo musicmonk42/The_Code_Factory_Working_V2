@@ -23,8 +23,9 @@ os.environ["GENERATOR_API_BASE_URL"] = "http://localhost:8000/api/v1"
 # Check if Textual run_test is available
 try:
     from textual.app import App
-    HAS_RUN_TEST = hasattr(App, 'run_test')
-except ImportError:
+    import textual.testing as _textual_testing
+    HAS_RUN_TEST = hasattr(App, 'run_test') and hasattr(_textual_testing, 'run_test')
+except (ImportError, RuntimeError):
     HAS_RUN_TEST = False
 
 
