@@ -2038,7 +2038,7 @@ def _fix_class_config_to_model_config(content: str) -> str:
     result = "".join(lines)
 
     # Add 'ConfigDict' to existing pydantic import or insert a new import line
-    if not _re.search(r'\bimport\b[^\n]*\bConfigDict\b', result):
+    if not _re.search(r'from\s+pydantic\s+import\b[^\n]*\bConfigDict\b', result):
         if _re.search(r'from\s+pydantic\s+import\s+', result):
             result = _re.sub(
                 r'(from\s+pydantic\s+import\s+)([^\n]+)',
