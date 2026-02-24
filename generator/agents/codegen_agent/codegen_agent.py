@@ -1386,6 +1386,7 @@ if PLUGIN_AVAILABLE:
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
                                         voting_strategy="majority",
+                                        timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
                                         _pass_dict["content"]
@@ -1416,6 +1417,7 @@ if PLUGIN_AVAILABLE:
                                 prompt=prompt,
                                 models=_ensemble_models,
                                 voting_strategy="majority",
+                                timeout_per_provider=180.0,
                             )
                             response = (
                                 response_dict["content"]
@@ -1783,6 +1785,7 @@ else:
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
                                         voting_strategy="majority",
+                                        timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
                                         _pass_dict["content"]
@@ -1813,6 +1816,7 @@ else:
                                 prompt=prompt,
                                 models=_ensemble_models,
                                 voting_strategy="majority",
+                                timeout_per_provider=180.0,
                             )
                             response = (
                                 response_dict["content"]
