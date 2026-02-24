@@ -954,7 +954,7 @@ jobs:
             -v \
             --tb=long \
             -m "not heavy and not slow and not integration and not external" \
-            --timeout=600 \
+            --timeout=120 \
             --maxfail=10 \
             --durations=0 \
             -p no:warnings \

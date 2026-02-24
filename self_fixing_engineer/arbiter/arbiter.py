@@ -25,12 +25,14 @@ if os.getenv("PYTEST_COLLECTING"):
     # Define a minimal stub class for Arbiter to satisfy imports during collection
     class Arbiter:
         """Stub Arbiter class for pytest collection mode"""
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     # Define a stub for MyArbiterConfig
     class MyArbiterConfig:
         """Stub MyArbiterConfig for pytest collection mode"""
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     # Stop here - the rest of the module won't load
     __all__ = ['Arbiter', 'MyArbiterConfig', 'logger']
@@ -439,8 +441,9 @@ else:
     
         class MultiModalPlugin:
             """Fallback stub for MultiModalPlugin when dependencies are not available."""
-    
-            pass
+
+            def __init__(self, *args, **kwargs):
+                pass
     
     
     try:
