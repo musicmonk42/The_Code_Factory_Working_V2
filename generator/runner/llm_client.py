@@ -680,20 +680,22 @@ class LLMClient:
                     metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                     raise LLMError("Circuit breaker open")
 
+                skip_cache = kwargs.pop("skip_cache", False)
                 cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
-                cached = await self.cache.get(cache_key)
-                if cached and not stream:
-                    metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
-                    logger.info(
-                        f"[LLM] Cache HIT for {provider}/{model}",
-                        extra={
-                            "provider": provider,
-                            "model": model,
-                            "cache_key": cache_key[:16],
-                            "job_id": job_id
-                        }
-                    )
-                    return cached
+                if not skip_cache:
+                    cached = await self.cache.get(cache_key)
+                    if cached and not stream:
+                        metrics.LLM_CALLS_TOTAL.labels(provider=provider, model=model).inc()
+                        logger.info(
+                            f"[LLM] Cache HIT for {provider}/{model}",
+                            extra={
+                                "provider": provider,
+                                "model": model,
+                                "cache_key": cache_key[:16],
+                                "job_id": job_id
+                            }
+                        )
+                        return cached
 
                 plugin = self.manager.get_provider(provider)
                 # [FIX] Graceful degradation if provider plugin failed to load (e.g., missing SDK/Key)

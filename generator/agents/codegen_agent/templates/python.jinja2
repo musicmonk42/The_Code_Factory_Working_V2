@@ -357,6 +357,19 @@ python-dotenv==1.0.0
 - ✓ CRITICAL: When using time in middleware, import: import time
 - ✓ CRITICAL: For BaseHTTPMiddleware, import from starlette: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
 - ✓ CRITICAL: BaseHTTPMiddleware requires 'app' as first arg to __init__. Register with app.add_middleware(MyMiddleware) — pass the CLASS. NEVER instantiate middleware directly in tests. Test middleware through TestClient(app).
+- ✓ CRITICAL: When using Pydantic v2, fields declared as `Optional[X]` MUST have a default value (e.g., `Optional[str] = None`). In Pydantic v2, `Optional` only affects the type union, it does NOT make the field optional without a default.
+- ✓ CRITICAL: NEVER use `@app.on_event('startup')` or `@app.on_event('shutdown')` — these are deprecated in modern FastAPI. Instead, use the `lifespan` context manager pattern:
+  ```python
+  from contextlib import asynccontextmanager
+
+  @asynccontextmanager
+  async def lifespan(app: FastAPI):
+      # startup logic
+      yield
+      # shutdown logic
+
+  app = FastAPI(lifespan=lifespan)
+  ```
 
 {% elif target_framework == "flask" %}
 ---

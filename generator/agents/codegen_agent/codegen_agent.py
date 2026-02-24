@@ -90,7 +90,7 @@ DEFAULT_FRONTEND_TYPE = "jinja_templates"
 # Prompt length threshold above which we request more output tokens from the LLM
 LARGE_PROMPT_THRESHOLD = 8000
 # Max tokens to request when generating code from a large spec
-LARGE_PROMPT_MAX_TOKENS = 16384
+LARGE_PROMPT_MAX_TOKENS = 32768
 
 # ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
@@ -1326,6 +1326,8 @@ if PLUGIN_AVAILABLE:
                             logger.info(
                                 f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
                             )
+                        if requirements.get("previous_error") or requirements.get("previous_feedback"):
+                            _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
                         
                         # FIX: Log LLM response received
@@ -1670,6 +1672,8 @@ else:
                             logger.info(
                                 f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={LARGE_PROMPT_MAX_TOKENS}"
                             )
+                        if requirements.get("previous_error") or requirements.get("previous_feedback"):
+                            _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
                         
                         # FIX: Log LLM response received
