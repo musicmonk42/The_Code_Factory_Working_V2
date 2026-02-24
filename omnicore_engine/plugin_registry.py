@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 from pydantic import BaseModel, Field
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from shared.plugin_registry_base import BasePluginRegistry
 
 # REMOVED: sys.path manipulation (path hacking)
 # The code now relies on proper package installation and PYTHONPATH configuration.
@@ -723,13 +724,14 @@ class Plugin:
                     self.logger.debug("metrics increment failed (noop).")
 
 
-class PluginRegistry:
+class PluginRegistry(BasePluginRegistry):
     """
     Thread-safe registry for managing plugin lifecycle, registration, and persistence.
     
-    The registry supports deferred persistence for plugins registered before the
-    database connection is established. This is common during module import time
-    when plugins use decorators to register themselves.
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry` and adds
+    omnicore-specific concerns: audit logging, entrypoint management, and
+    message-bus adapter attachment.
     
     Thread Safety:
         - Plugin registration uses _register_lock for thread-safe operations
@@ -738,6 +740,7 @@ class PluginRegistry:
     """
     
     def __init__(self):
+        super().__init__()
         _configure_logger()  # Configure logger on first use
         self._plugins = defaultdict(dict)
         self._entrypoints = {}
@@ -2006,7 +2009,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py") and self.registry._loop:
+        if Path(event.src_path).suffix == ".py" and self.registry._loop:
             self.logger.info(f"File modified: {event.src_path}. Reloading plugin...")
             self.registry._loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(
@@ -2017,7 +2020,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py") and self.registry._loop:
+        if Path(event.src_path).suffix == ".py" and self.registry._loop:
             self.logger.info(f"File created: {event.src_path}. Loading new plugin...")
             self.registry._loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(
@@ -2028,7 +2031,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_deleted(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py"):
+        if Path(event.src_path).suffix == ".py":
             self.logger.info(f"File deleted: {event.src_path}. Unloading plugin...")
             module_name = Path(event.src_path).stem
             self.logger.warning(

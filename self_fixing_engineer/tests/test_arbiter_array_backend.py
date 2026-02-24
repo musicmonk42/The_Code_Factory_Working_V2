@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Use TYPE_CHECKING to prevent MagicMock from being used as type annotations
 if TYPE_CHECKING:
-    from self_fixing_engineer.arbiter.arbiter_array_backend import (
-        ConcreteArrayBackend as _ConcreteArrayBackend,
+    from self_fixing_engineer.arbiter.persistent_array_store import (
+        ConcretePersistentArrayStore as _ConcreteArrayBackend,
         ArrayBackendError as _ArrayBackendError,
         ArraySizeLimitError as _ArraySizeLimitError,
         StorageError as _StorageError,
@@ -29,7 +29,7 @@ else:
 
 
 def _reload_backend_with_real_aiofiles():
-    """Reload the arbiter_array_backend module with real aiofiles."""
+    """Reload the persistent_array_store module with real aiofiles."""
     # Remove any mocked aiofiles modules from sys.modules
     mocked_modules = [key for key in sys.modules.keys() if 'aiofiles' in key]
     for mod_name in mocked_modules:
@@ -49,11 +49,11 @@ def _reload_backend_with_real_aiofiles():
         pass  # aiofiles may not be installed
     
     # Reload the backend module
-    if 'self_fixing_engineer.arbiter.arbiter_array_backend' in sys.modules:
-        del sys.modules['self_fixing_engineer.arbiter.arbiter_array_backend']
+    if 'self_fixing_engineer.arbiter.persistent_array_store' in sys.modules:
+        del sys.modules['self_fixing_engineer.arbiter.persistent_array_store']
     
-    from self_fixing_engineer.arbiter import arbiter_array_backend
-    return arbiter_array_backend
+    from self_fixing_engineer.arbiter import persistent_array_store
+    return persistent_array_store
 
 
 # Global module references - will be set by fixture with runtime type guards
@@ -84,7 +84,7 @@ def ensure_real_aiofiles():
             pytest.skip("Cannot load real backend module - got mock or None")
         
         # Update global references to use the reloaded module with runtime checks
-        ConcreteArrayBackend = getattr(_backend, "ConcreteArrayBackend", None)
+        ConcreteArrayBackend = getattr(_backend, "ConcretePersistentArrayStore", None)
         ArrayBackendError = getattr(_backend, "ArrayBackendError", None)
         ArraySizeLimitError = getattr(_backend, "ArraySizeLimitError", None)
         StorageError = getattr(_backend, "StorageError", None)
@@ -106,11 +106,11 @@ def ensure_real_aiofiles():
             aiofiles_in_backend = getattr(_backend, 'aiofiles')
             # Use isinstance first to avoid triggering attribute access
             if isinstance(aiofiles_in_backend, (MagicMock, Mock)):
-                pytest.skip("arbiter_array_backend has mocked aiofiles - cannot run persistence tests")
+                pytest.skip("persistent_array_store has mocked aiofiles - cannot run persistence tests")
             # Only check _mock_name if isinstance passed
             try:
                 if hasattr(aiofiles_in_backend, '_mock_name'):
-                    pytest.skip("arbiter_array_backend has mocked aiofiles - cannot run persistence tests")
+                    pytest.skip("persistent_array_store has mocked aiofiles - cannot run persistence tests")
             except (AttributeError, TypeError):
                 pass  # Not a mock, continue
     except Exception as e:

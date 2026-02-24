@@ -192,7 +192,11 @@ data:
   # Tier-1 AI Capabilities (Feature Flags)
   # ============================================
   # Feature 1: Quantum / Neuromorphic Array Backend
-  # These flags activate the respective backends inside ArrayBackend.
+  # These flags activate the respective numerical-computing backends inside
+  # omnicore_engine.array_backend.ArrayBackend (the mathematical abstraction that
+  # wraps NumPy/CuPy/Dask/PyTorch/Qiskit/Nengo).
+  # NOTE: This is distinct from the Arbiter persistence layer, which was renamed
+  # from ArrayBackend → PersistentArrayStore in self_fixing_engineer.arbiter.persistent_array_store.
   # Both fall back to NumPy when the optional libraries (qiskit, nengo) are not installed.
   ARRAY_BACKEND_QUANTUM: "false"        # Set to "true" + install qiskit to enable
   ARRAY_BACKEND_NEUROMORPHIC: "false"   # Set to "true" + install nengo  to enable

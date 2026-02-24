@@ -35,6 +35,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import InvalidVersion
 from packaging.version import parse as version_parse
 from prometheus_client import REGISTRY, CollectorRegistry, Counter, Histogram
+from shared.plugin_registry_base import BasePluginRegistry, DependencyAwareRegistryMixin
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -284,9 +285,18 @@ except ImportError:
     plugin_errors_total = DummyMetric()
 
 
-class PluginRegistry:
+class PluginRegistry(DependencyAwareRegistryMixin, BasePluginRegistry):
     """
-    Singleton registry for managing plugins.
+    Singleton registry for managing plugins in the Arbiter/SFE platform.
+
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry` and the
+    validation helpers from
+    :class:`shared.plugin_registry_base.DependencyAwareRegistryMixin`.
+    Domain-specific concerns (``PlugInKind`` enum support,
+    ``register_with_omnicore()`` bridge, and signature verification) are
+    kept here.
+
     This class is thread-safe for mutation operations via a global lock.
     """
 
@@ -345,6 +355,24 @@ class PluginRegistry:
 
                 logger.info("PluginRegistry singleton created")
             return cls._instance
+
+    def __init__(self, persist_path: str = "plugins.json") -> None:
+        # Guard: prevent re-initialization of the singleton instance.
+        # BasePluginRegistry.__init__ must only run once; subsequent PluginRegistry()
+        # calls return the same object and must not reset the lock or logger.
+        # ``persist_path`` is intentionally consumed only in ``__new__``, which
+        # runs exclusively on first construction and stores the path in
+        # ``self._persist_path``.  Subsequent calls to ``__init__`` on the
+        # already-created singleton must not re-set ``_persist_path`` because
+        # ``__new__`` has already chosen the correct path (potentially a
+        # temp-dir path in testing/startup mode).
+        if getattr(self, "_base_initialized", False):
+            return
+        super().__init__()
+        self._base_initialized = True
+        # Override the base-class logger with the module-level logger that
+        # carries the PII-redaction filter registered in this module.
+        self.logger = logger
 
     def set_event_hook(self, hook: Callable[[Dict[str, Any]], None]):
         """
@@ -447,24 +475,20 @@ class PluginRegistry:
                 pass
 
     def _validate_name(self, name: str) -> None:
-        """Validate plugin name format."""
-        if not name or not re.match(r"^[a-zA-Z0-9_-]+$", name):
-            raise ValueError(
-                f"Invalid plugin name '{name}': Must be non-empty and contain only alphanumeric characters, underscores, or hyphens"
-            )
+        """Validate plugin name format.
+
+        Delegates to :class:`~shared.plugin_registry_base.DependencyAwareRegistryMixin`.
+        Kept as a thin override to preserve any future arbiter-specific constraints.
+        """
+        super()._validate_name(name)
 
     def _validate_version(self, version_str: str) -> None:
-        """Validate semantic version format."""
-        try:
-            v = version_parse(version_str)
-            if len(v.release) != 3:
-                raise InvalidVersion(
-                    f"Version '{version_str}' must have exactly three components."
-                )
-        except InvalidVersion as e:
-            raise ValueError(
-                f"Invalid version '{version_str}': Must follow semantic versioning (e.g., 1.2.3)"
-            ) from e
+        """Validate semantic version format.
+
+        Delegates to :class:`~shared.plugin_registry_base.DependencyAwareRegistryMixin`.
+        Kept as a thin override to preserve any future arbiter-specific constraints.
+        """
+        super()._validate_version(version_str)
 
     def _validate_dependencies(
         self, kind: PlugInKind, name: str, dependencies: List[Dict[str, str]]
@@ -518,7 +542,11 @@ class PluginRegistry:
                 )
 
     def _satisfies_version(self, current: str, required: str) -> bool:
-        return SpecifierSet(required).contains(version_parse(current))
+        """Check version satisfaction.
+
+        Delegates to :class:`~shared.plugin_registry_base.DependencyAwareRegistryMixin`.
+        """
+        return super()._satisfies_version(current, required)
 
     async def register_with_omnicore(
         self, kind: PlugInKind, name: str, plugin: PluginBase, version: str, author: str

@@ -159,6 +159,11 @@ __author__: str = "Novatrax Labs"
 try:
     from shared.noop_metrics import NOOP, NoopMetric, NoopTimer, safe_metric
     from shared.noop_tracing import NullSpan, NullTracer
+    from shared.plugin_registry_base import (
+        BasePluginRegistry,
+        DependencyAwareRegistryMixin,
+        HotReloadableRegistryMixin,
+    )
 
     _SHARED_AVAILABLE: bool = True
 except ImportError as _err:  # pragma: no cover
@@ -219,4 +224,8 @@ __all__ = [
     # noop_tracing
     "NullSpan",
     "NullTracer",
+    # plugin_registry_base
+    "BasePluginRegistry",
+    "HotReloadableRegistryMixin",
+    "DependencyAwareRegistryMixin",
 ]

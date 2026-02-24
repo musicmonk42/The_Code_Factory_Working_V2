@@ -93,6 +93,7 @@ from runner.runner_metrics import (
     LLM_TOKEN_OUTPUT_TOTAL,
     UTIL_ERRORS,
 )
+from shared.plugin_registry_base import BasePluginRegistry
 
 # --- SUMMARIZATION IMPORTS (from user request) ---
 from runner.summarize_utils import (
@@ -274,13 +275,21 @@ class CopyrightCompliance(CompliancePlugin):
 
 
 # --- Plugin Registry and Dynamic Loading ---
-class PluginRegistry:
+class PluginRegistry(BasePluginRegistry):
     """
     Registry for dynamically loading and managing compliance plugins.
-    Plugins can be loaded from a plugins directory or registered programmatically.
+
+    Inherits the common plugin-registry interface from
+    :class:`shared.plugin_registry_base.BasePluginRegistry`.
+    Domain-specific behaviour (``CompliancePlugin`` type enforcement and
+    directory-based dynamic loading) is kept here.
+
+    Plugins can be loaded from a plugins directory or registered
+    programmatically.
     """
 
     def __init__(self, plugins_dir: Optional[Path] = None):
+        super().__init__()
         self.plugins: Dict[str, CompliancePlugin] = {}
         self.plugins_dir = plugins_dir
 
@@ -319,6 +328,24 @@ class PluginRegistry:
     def get_plugin(self, plugin_name: str) -> Optional[CompliancePlugin]:
         """Get a plugin by name."""
         return self.plugins.get(plugin_name)
+
+    def get(self, name: str) -> Optional[CompliancePlugin]:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.get`.
+
+        Delegates to :meth:`get_plugin` so that code using the canonical
+        ``BasePluginRegistry`` interface works alongside the existing
+        ``get_plugin()`` call sites.
+        """
+        return self.get_plugin(name)
+
+    def list_plugins(self) -> Dict[str, CompliancePlugin]:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.list_plugins`.
+
+        Returns a ``{name: plugin}`` snapshot of all registered compliance plugins.
+        Complements the existing :meth:`get_all_plugins` which returns a list.
+        """
+        with self._lock:
+            return dict(self.plugins)
 
     def get_all_plugins(self) -> List[CompliancePlugin]:
         """Get all registered plugins."""
