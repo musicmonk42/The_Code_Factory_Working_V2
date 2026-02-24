@@ -3027,6 +3027,15 @@ class OmniCoreService:
                         f"[CODEGEN] Injecting previous_error into requirements for job {job_id}: "
                         f"error_type={previous_error_from_payload.get('error_type')}"
                     )
+                    # Propagate already_generated_files so the codegen agent's multi-pass
+                    # logic can skip regenerating files that already exist on disk.
+                    _already_gen = previous_error_from_payload.get("already_generated_files", [])
+                    if _already_gen:
+                        requirements_dict["already_generated_files"] = _already_gen
+                        logger.info(
+                            f"[CODEGEN] Propagating {len(_already_gen)} already-generated files "
+                            f"to codegen agent for additive retry (job {job_id})"
+                        )
                 
                 # Parse requirements to extract structured features for the prompt builder
                 fallback_features = [requirements] if requirements else ["No specific features provided"]
@@ -6923,6 +6932,11 @@ class OmniCoreService:
                                                    "generated_count": generated_count,
                                                    "spec_required_count": spec_required_count}
                                         )
+                                        # Collect already-generated file paths (relative) to pass to retry
+                                        already_generated_files = [
+                                            str(f.relative_to(output_dir_path))
+                                            for f in output_dir_path.rglob("*") if f.is_file()
+                                        ]
                                         previous_error = {
                                             "error_type": "InsufficientOutput",
                                             "details": (
@@ -6931,14 +6945,18 @@ class OmniCoreService:
                                             "instruction": (
                                                 "Previous generation was incomplete. "
                                                 f"Missing required files: {missing_spec_files[:20]}. "
-                                                "Please generate ALL specified files and endpoints."
+                                                "The following files were already generated and should be skipped; "
+                                                f"focus only on generating the missing files: {already_generated_files[:30]}. "
+                                                "Please generate ALL remaining specified files and endpoints."
                                             ),
+                                            "already_generated_files": already_generated_files,
                                         }
-                                        try:
-                                            shutil.rmtree(str(output_dir_path))
-                                            logger.info(f"[PIPELINE] Job {job_id} cleaned up incomplete output for retry")
-                                        except Exception as _cleanup_err:
-                                            logger.warning(f"[PIPELINE] Job {job_id} cleanup error: {_cleanup_err}")
+                                        # Additive retry: keep existing files on disk so the retry
+                                        # only needs to generate the missing ones (new files are merged in).
+                                        logger.info(
+                                            f"[PIPELINE] Job {job_id} keeping {len(already_generated_files)} "
+                                            f"existing files for additive retry"
+                                        )
                                         if "codegen" in stages_completed:
                                             stages_completed.remove("codegen")
                                         continue
@@ -6999,6 +7017,12 @@ class OmniCoreService:
                                                 "required_count": required_count,
                                             },
                                         )
+                                        # Collect already-generated file paths (relative) for additive retry
+                                        _sf_dir = Path(output_path_for_validation)
+                                        sf_already_generated = [
+                                            str(f.relative_to(_sf_dir))
+                                            for f in _sf_dir.rglob("*") if f.is_file()
+                                        ] if _sf_dir.exists() else []
                                         previous_error = {
                                             "error_type": "SpecFidelityFailure",
                                             "details": (
@@ -7009,18 +7033,18 @@ class OmniCoreService:
                                                 "The previous generation was incomplete. "
                                                 f"The following required endpoints are missing: "
                                                 f"{missing_ep_labels}{extra_note}. "
-                                                "Please generate ALL required endpoints specified in the spec."
+                                                "The following files were already generated and MUST NOT be "
+                                                f"regenerated: {sf_already_generated[:30]}. "
+                                                "Please generate ONLY the files needed to implement the missing endpoints."
                                             ),
+                                            "already_generated_files": sf_already_generated,
                                         }
-                                        try:
-                                            shutil.rmtree(output_path_for_validation)
-                                            logger.info(
-                                                f"[PIPELINE] Job {job_id} cleaned up incomplete output for spec fidelity retry"
-                                            )
-                                        except Exception as _sf_cleanup_err:
-                                            logger.warning(
-                                                f"[PIPELINE] Job {job_id} spec fidelity cleanup error: {_sf_cleanup_err}"
-                                            )
+                                        # Additive retry: keep existing files on disk so the retry
+                                        # only needs to generate implementations for missing endpoints.
+                                        logger.info(
+                                            f"[PIPELINE] Job {job_id} keeping {len(sf_already_generated)} "
+                                            f"existing files for additive spec fidelity retry"
+                                        )
                                         if "codegen" in stages_completed:
                                             stages_completed.remove("codegen")
                                         continue
