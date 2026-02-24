@@ -65,11 +65,18 @@ services:
       # flag is not set — which is the correct production behaviour.
       # Never set this to "true" in staging or production.
       - LLM_USE_MOCK=${LLM_USE_MOCK:-false}
+      # Per-call LLM API timeout (seconds).
+      # Multi-pass ensemble generation makes 3 sequential ensemble calls per large-spec job;
+      # total generation budget per job = up to 3 × LLM_TIMEOUT (background task, not HTTP).
       - LLM_TIMEOUT=${LLM_TIMEOUT:-300}
       - LLM_MAX_RETRIES=${LLM_MAX_RETRIES:-3}
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
       # Maximum tokens for code-generation prompts (supports large README-driven specs)
       - CODEGEN_MAX_PROMPT_TOKENS=${CODEGEN_MAX_PROMPT_TOKENS:-32000}
+      # Multi-pass code generation thresholds.
+      # Raise to disable multi-pass for all but the largest specs; lower to enable earlier.
+      - CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}
+      - CODEGEN_MULTIPASS_FILE_THRESHOLD=${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}
 
       # Infrastructure — provided by Railway
       - REDIS_URL=${REDIS_URL}

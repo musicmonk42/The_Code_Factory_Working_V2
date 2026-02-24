@@ -216,6 +216,10 @@ env:
 
   # LLM Configuration
   DEFAULT_LLM_PROVIDER: "openai"
+  # Per-call LLM API timeout (seconds).
+  # NOTE: Multi-pass ensemble generation makes 3 sequential ensemble calls per large-spec job.
+  # Each call is bounded by LLM_TIMEOUT; the total budget per job is up to 3 × LLM_TIMEOUT.
+  # Jobs run as async background tasks so this does not affect the HTTP worker timeout.
   LLM_TIMEOUT: "300"
   LLM_MAX_RETRIES: "3"
   LLM_TEMPERATURE: "0.7"
@@ -228,6 +232,13 @@ env:
   # available. agent_core.init_llm() raises ValueError on a missing key unless
   # this flag is "true". Never enable in staging or production deployments.
   LLM_USE_MOCK: "false"
+  # Multi-pass code generation thresholds.
+  # When a spec reaches either threshold the codegen agent splits generation into
+  # sequential passes (core → routes/services → infrastructure) and auto-enables
+  # ensemble voting per chunk.  Override per-environment:
+  #   helm upgrade --set env.CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=20 ...
+  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "15"
+  CODEGEN_MULTIPASS_FILE_THRESHOLD: "20"
 
   # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)
   # Non-secret tuning knobs — the XAI_API_KEY credential lives in codefactory-secrets.

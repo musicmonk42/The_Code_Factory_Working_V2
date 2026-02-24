@@ -8,7 +8,7 @@
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
-	validate-few-shot mutation-test
+	validate-few-shot mutation-test codegen-multipass-status
 
 # Default target
 .DEFAULT_GOAL := help
@@ -58,6 +58,11 @@ test: ## Run all tests
 	@echo "$(BLUE)Running all tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest -v --tb=short
 	@echo "$(GREEN)Tests complete!$(NC)"
+
+test-large-spec-fixes: ## Run tests for large-spec pipeline fixes (multi-pass, ensemble, additive retry)
+	@echo "$(BLUE)Running large-spec pipeline fix tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest tests/test_large_spec_pipeline_fixes.py -v --tb=short
+	@echo "$(GREEN)Large-spec fix tests complete!$(NC)"
 
 test-collect: ## Verify pytest can collect all tests without errors
 	@echo "$(BLUE)Verifying pytest collection...$(NC)"
@@ -611,6 +616,34 @@ ci-local: ## Run CI checks locally
 	make security-scan
 	make test
 	@echo "$(GREEN)CI checks complete!$(NC)"
+
+# =============================================================================
+# Codegen Multi-Pass Diagnostics
+# =============================================================================
+
+codegen-multipass-status: ## Show current multi-pass code-generation thresholds and model token limits
+	@echo "$(BLUE)Codegen Multi-Pass Configuration$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Active thresholds (override via environment variables):$(NC)"
+	@echo "  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD = $${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}  (endpoints; auto-enables ensemble + multi-pass)"
+	@echo "  CODEGEN_MULTIPASS_FILE_THRESHOLD     = $${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}   (required files; secondary trigger)"
+	@echo ""
+	@echo "$(YELLOW)Behaviour:$(NC)"
+	@echo "  Specs with fewer endpoints/files  → single-pass, honours config.ensemble_enabled"
+	@echo "  Specs that reach either threshold → 3-pass generation (core / routes+services / infra)"
+	@echo "                                       each pass uses call_ensemble_api() majority vote"
+	@echo ""
+	@echo "$(YELLOW)Additive retry:$(NC)"
+	@echo "  InsufficientOutput / SpecFidelityFailure retries KEEP existing files on disk."
+	@echo "  The retry prompt lists already-generated files so the LLM adds only missing ones."
+	@echo ""
+	@echo "$(YELLOW)To disable multi-pass entirely:$(NC)"
+	@echo "  export CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=9999"
+	@echo "  export CODEGEN_MULTIPASS_FILE_THRESHOLD=9999"
+	@echo ""
+	@echo "$(YELLOW)To lower the threshold (enable for smaller specs):$(NC)"
+	@echo "  export CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=10"
+	@echo ""
 
 # =============================================================================
 # Setup

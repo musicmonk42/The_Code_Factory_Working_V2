@@ -93,12 +93,81 @@ LARGE_PROMPT_THRESHOLD = 8000
 LARGE_PROMPT_MAX_TOKENS = 32768
 # Per-model output token limits (completion tokens); used to cap LARGE_PROMPT_MAX_TOKENS
 MODEL_MAX_OUTPUT_TOKENS = {
-    "gpt-4o": 16384,
-    "gpt-4o-mini": 16384,
+    "gpt-4o": 65536,           # Updated: supports up to 65536 output tokens
+    "gpt-4o-mini": 65536,      # Updated: supports up to 65536 output tokens
     "gpt-4-turbo": 4096,
     "gpt-4": 8192,
+    "gpt-4.5-preview": 16384,  # Added: GPT-4.5-preview
     "o1": 100000,
+    "o3-mini": 65536,           # Added: o3-mini
+    "claude-3-5-sonnet-20241022": 8192,   # Added: Claude 3.5 Sonnet
+    "claude-3-5-haiku-20241022": 8192,    # Added: Claude 3.5 Haiku
+    "claude-3-opus-20240229": 4096,       # Added: Claude 3 Opus
 }
+
+# ==============================================================================
+# --- Multi-Pass Code Generation Constants ---
+# ==============================================================================
+# Threshold: use multi-pass generation when the spec has at least this many API endpoints.
+# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 15).
+MULTIPASS_ENDPOINT_THRESHOLD: int = int(
+    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "15")
+)
+# Threshold: use multi-pass generation when the spec references at least this many files.
+# Configurable at runtime via CODEGEN_MULTIPASS_FILE_THRESHOLD (default: 20).
+MULTIPASS_FILE_THRESHOLD: int = int(
+    os.environ.get("CODEGEN_MULTIPASS_FILE_THRESHOLD", "20")
+)
+
+# File generation groups for multi-pass mode (processed in order).
+# Each pass focuses on a logical subset of files; earlier passes are provided as
+# context to later passes so the LLM does not regenerate already-produced files.
+_MULTIPASS_GROUPS = [
+    {
+        "name": "core",
+        "focus": (
+            "Generate ONLY the core application files: "
+            "main.py, app.py, config.py, database.py, db.py, models.py, schemas.py, "
+            "__init__.py files, and any other foundational modules. "
+            "Do NOT generate router, service, test, or infrastructure files in this pass."
+        ),
+    },
+    {
+        "name": "routes_and_services",
+        "focus": (
+            "Generate ONLY the router/controller and service layer files: "
+            "all files in routers/, api/, services/, controllers/ directories. "
+            "Implement ALL required API endpoints from the specification. "
+            "Do NOT regenerate core app files or infrastructure files."
+        ),
+    },
+    {
+        "name": "infrastructure",
+        "focus": (
+            "Generate ONLY infrastructure and configuration files: "
+            "requirements.txt, Dockerfile, docker-compose.yml, .env.example, "
+            "alembic.ini, alembic/env.py, Makefile, pyproject.toml, and similar config files. "
+            "Do NOT generate Python application code in this pass."
+        ),
+    },
+]
+
+
+def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
+    """Count the number of API endpoints in the spec using a simple regex heuristic."""
+    md = requirements.get("md_content", "") or requirements.get("description", "")
+    if not md:
+        return 0
+    matches = set(
+        re.findall(r'\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b\s+/\S+', md, re.IGNORECASE)
+    )
+    return len(matches)
+
+
+def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
+    """Return True when the spec is large enough to warrant multi-pass generation."""
+    return _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD
+
 
 # ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
@@ -1267,51 +1336,94 @@ if PLUGIN_AVAILABLE:
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
-                    # --- LLM Execution Change: Implement Ensemble/Single Call Logic ---
-                    if config.ensemble_enabled:
-                        # Ensemble call logic (as per sample update, assuming it exists)
-                        models = [
-                            {
-                                "provider": "openai",
-                                "model": config.model.get("openai", "gpt-4o"),
-                            },
-                            {
-                                "provider": "gemini",
-                                "model": config.model.get("gemini", "gemini-2.5-pro"),
-                            },
-                            {
-                                "provider": "grok",
-                                "model": config.model.get("grok", "grok-4"),
-                            },
-                        ]
-                        response_dict = await call_ensemble_api(
-                            prompt=prompt,
-                            models=models,
-                            voting_strategy="majority",
-                            # Removed cache_manager argument
-                        )
-                        response = (
-                            response_dict["content"]
-                            if isinstance(response_dict, dict)
-                            and "content" in response_dict
-                            else str(response_dict)
-                        )
-                        backend_used = "ensemble"
-                        
-                        # FIX: Log LLM ensemble response received
+                    # --- LLM Execution Change: Multi-Pass Ensemble / Single Call Logic ---
+                    # Auto-enable ensemble for large specs so every chunk gets majority-voted output.
+                    _use_multipass = _should_use_multipass(requirements)
+                    _effective_ensemble = config.ensemble_enabled
+                    if not _effective_ensemble and _use_multipass:
+                        _ep_count = _count_spec_endpoints(requirements)
                         logger.info(
-                            f"[CODEGEN] LLM ensemble response received",
-                            extra={
-                                "backend": "ensemble",
-                                "response_length": len(str(response)),
-                                "response_preview": str(response)[:200]
-                            }
+                            f"[CODEGEN] Auto-enabling ensemble mode for large spec "
+                            f"({_ep_count} endpoints detected)"
                         )
+                        _effective_ensemble = True
+
+                    # Shared ensemble models list (used by both ensemble paths)
+                    _ensemble_models = [
+                        {"provider": "openai", "model": config.model.get("openai", "gpt-4o")},
+                        {"provider": "gemini", "model": config.model.get("gemini", "gemini-2.5-pro")},
+                        {"provider": "grok", "model": config.model.get("grok", "grok-4")},
+                    ]
+
+                    if _effective_ensemble:
+                        backend_used = "ensemble"
+                        if _use_multipass:
+                            # Multi-pass ensemble: each chunk independently uses ensemble voting
+                            logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
+                            _already_generated = list(requirements.get("already_generated_files", []))
+                            _merged_files: Dict[str, str] = {}
+                            for _group in _MULTIPASS_GROUPS:
+                                _already = list(set(_merged_files.keys()) | set(_already_generated))
+                                _already_note = (
+                                    f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
+                                    if _already else ""
+                                )
+                                _pass_prompt = (
+                                    f"{prompt}{_already_note}"
+                                    f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
+                                    f"{_group['focus']}\n"
+                                    f"Return ONLY the files for this pass as a JSON object with a 'files' key."
+                                )
+                                try:
+                                    _pass_dict = await call_ensemble_api(
+                                        prompt=_pass_prompt,
+                                        models=_ensemble_models,
+                                        voting_strategy="majority",
+                                    )
+                                    _pass_resp = (
+                                        _pass_dict["content"]
+                                        if isinstance(_pass_dict, dict) and "content" in _pass_dict
+                                        else str(_pass_dict)
+                                    )
+                                    _pass_files = parse_llm_response(_pass_resp)
+                                    _merged_files.update(_pass_files)
+                                    logger.info(
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
+                                        f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                    )
+                                except Exception as _pass_err:
+                                    logger.warning(
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed: "
+                                        f"{_pass_err}. Continuing with remaining passes."
+                                    )
+                            response = {"files": _merged_files}
+                            logger.info(
+                                f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
+                                extra={"backend": "ensemble", "response_length": len(str(response))}
+                            )
+                        else:
+                            # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            response_dict = await call_ensemble_api(
+                                prompt=prompt,
+                                models=_ensemble_models,
+                                voting_strategy="majority",
+                            )
+                            response = (
+                                response_dict["content"]
+                                if isinstance(response_dict, dict) and "content" in response_dict
+                                else str(response_dict)
+                            )
+                            logger.info(
+                                f"[CODEGEN] LLM ensemble response received",
+                                extra={
+                                    "backend": "ensemble",
+                                    "response_length": len(str(response)),
+                                    "response_preview": str(response)[:200]
+                                }
+                            )
                     else:
-                        # Single call logic (using configured backend)
+                        # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
-                        
-                        # FIX: Log LLM call attempt
                         logger.info(
                             f"[CODEGEN] Calling LLM",
                             extra={
@@ -1320,7 +1432,6 @@ if PLUGIN_AVAILABLE:
                                 "requirements_keys": list(requirements.keys())
                             }
                         )
-                        
                         # NOTE: response_format requires OpenAI-compatible providers
                         # If using non-OpenAI backends, ensure they support structured output
                         _llm_kwargs: Dict[str, Any] = {
@@ -1334,13 +1445,12 @@ if PLUGIN_AVAILABLE:
                             model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
                             _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), "
+                                f"requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
-                        
-                        # FIX: Log LLM response received
                         logger.info(
                             f"[CODEGEN] LLM response received",
                             extra={
@@ -1615,51 +1725,94 @@ else:
 
                 # Generate Code
                 with tracer.start_as_current_span("call_llm"):
-                    # --- LLM Execution Change: Implement Ensemble/Single Call Logic ---
-                    if config.ensemble_enabled:
-                        # Ensemble call logic (as per sample update, assuming it exists)
-                        models = [
-                            {
-                                "provider": "openai",
-                                "model": config.model.get("openai", "gpt-4o"),
-                            },
-                            {
-                                "provider": "gemini",
-                                "model": config.model.get("gemini", "gemini-2.5-pro"),
-                            },
-                            {
-                                "provider": "grok",
-                                "model": config.model.get("grok", "grok-4"),
-                            },
-                        ]
-                        response_dict = await call_ensemble_api(
-                            prompt=prompt,
-                            models=models,
-                            voting_strategy="majority",
-                            # Removed cache_manager argument
-                        )
-                        response = (
-                            response_dict["content"]
-                            if isinstance(response_dict, dict)
-                            and "content" in response_dict
-                            else str(response_dict)
-                        )
-                        backend_used = "ensemble"
-                        
-                        # FIX: Log LLM ensemble response received
+                    # --- LLM Execution Change: Multi-Pass Ensemble / Single Call Logic ---
+                    # Auto-enable ensemble for large specs so every chunk gets majority-voted output.
+                    _use_multipass = _should_use_multipass(requirements)
+                    _effective_ensemble = config.ensemble_enabled
+                    if not _effective_ensemble and _use_multipass:
+                        _ep_count = _count_spec_endpoints(requirements)
                         logger.info(
-                            f"[CODEGEN] LLM ensemble response received",
-                            extra={
-                                "backend": "ensemble",
-                                "response_length": len(str(response)),
-                                "response_preview": str(response)[:200]
-                            }
+                            f"[CODEGEN] Auto-enabling ensemble mode for large spec "
+                            f"({_ep_count} endpoints detected)"
                         )
+                        _effective_ensemble = True
+
+                    # Shared ensemble models list (used by both ensemble paths)
+                    _ensemble_models = [
+                        {"provider": "openai", "model": config.model.get("openai", "gpt-4o")},
+                        {"provider": "gemini", "model": config.model.get("gemini", "gemini-2.5-pro")},
+                        {"provider": "grok", "model": config.model.get("grok", "grok-4")},
+                    ]
+
+                    if _effective_ensemble:
+                        backend_used = "ensemble"
+                        if _use_multipass:
+                            # Multi-pass ensemble: each chunk independently uses ensemble voting
+                            logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
+                            _already_generated = list(requirements.get("already_generated_files", []))
+                            _merged_files: Dict[str, str] = {}
+                            for _group in _MULTIPASS_GROUPS:
+                                _already = list(set(_merged_files.keys()) | set(_already_generated))
+                                _already_note = (
+                                    f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
+                                    if _already else ""
+                                )
+                                _pass_prompt = (
+                                    f"{prompt}{_already_note}"
+                                    f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
+                                    f"{_group['focus']}\n"
+                                    f"Return ONLY the files for this pass as a JSON object with a 'files' key."
+                                )
+                                try:
+                                    _pass_dict = await call_ensemble_api(
+                                        prompt=_pass_prompt,
+                                        models=_ensemble_models,
+                                        voting_strategy="majority",
+                                    )
+                                    _pass_resp = (
+                                        _pass_dict["content"]
+                                        if isinstance(_pass_dict, dict) and "content" in _pass_dict
+                                        else str(_pass_dict)
+                                    )
+                                    _pass_files = parse_llm_response(_pass_resp)
+                                    _merged_files.update(_pass_files)
+                                    logger.info(
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
+                                        f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                    )
+                                except Exception as _pass_err:
+                                    logger.warning(
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed: "
+                                        f"{_pass_err}. Continuing with remaining passes."
+                                    )
+                            response = {"files": _merged_files}
+                            logger.info(
+                                f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
+                                extra={"backend": "ensemble", "response_length": len(str(response))}
+                            )
+                        else:
+                            # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            response_dict = await call_ensemble_api(
+                                prompt=prompt,
+                                models=_ensemble_models,
+                                voting_strategy="majority",
+                            )
+                            response = (
+                                response_dict["content"]
+                                if isinstance(response_dict, dict) and "content" in response_dict
+                                else str(response_dict)
+                            )
+                            logger.info(
+                                f"[CODEGEN] LLM ensemble response received",
+                                extra={
+                                    "backend": "ensemble",
+                                    "response_length": len(str(response)),
+                                    "response_preview": str(response)[:200]
+                                }
+                            )
                     else:
-                        # Single call logic (using configured backend)
+                        # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
-                        
-                        # FIX: Log LLM call attempt
                         logger.info(
                             f"[CODEGEN] Calling LLM",
                             extra={
@@ -1668,7 +1821,6 @@ else:
                                 "requirements_keys": list(requirements.keys())
                             }
                         )
-                        
                         # NOTE: response_format requires OpenAI-compatible providers
                         # If using non-OpenAI backends, ensure they support structured output
                         _llm_kwargs: Dict[str, Any] = {
@@ -1682,13 +1834,12 @@ else:
                             model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
                             _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), "
+                                f"requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
-                        
-                        # FIX: Log LLM response received
                         logger.info(
                             f"[CODEGEN] LLM response received",
                             extra={
@@ -1701,12 +1852,6 @@ else:
 
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
-                    
-                    # FIX: Log parsed files
-                    logger.info(
-                        f"[CODEGEN] Parsed {len(code_files)} files from LLM response",
-                        extra={"files": list(code_files.keys())}
-                    )
                     
                     code_files = add_traceability_comments(
                         code_files,
