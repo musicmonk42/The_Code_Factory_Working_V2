@@ -2009,12 +2009,26 @@ def test_{file_stem}_syntax_error_documentation():
 
     # REFACTORED: Main loop now uses runner logger and provenance
     async def generate_tests(
-        self, target_files: List[str], language: str, policy: Policy
+        self,
+        target_files: Optional[List[str]] = None,
+        language: str = "python",
+        policy: Optional["Policy"] = None,
+        *,
+        code_files: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """
         Orchestrates the generation, validation, critique, and refinement of tests.
         Returns a final report of the process.
+
+        Args:
+            target_files: List of file paths to load code from. Optional when code_files is provided.
+            language: Programming language of the code under test.
+            policy: Agent behavior and quality gate configuration. Defaults to Policy().
+            code_files: Mapping of filename to content. When provided, skips file loading from disk.
         """
+        if policy is None:
+            policy = Policy()
+
         # Store policy for use in _call_llm_with_retry
         self.policy = policy
 
@@ -2032,7 +2046,7 @@ def test_{file_stem}_syntax_error_documentation():
                         {
                             "run_id": run_id,
                             "language": language,
-                            "target_files_count": len(target_files),
+                            "target_files_count": len(target_files) if target_files else 0,
                             "quality_threshold": policy.quality_threshold,
                         }
                     )
@@ -2055,7 +2069,12 @@ def test_{file_stem}_syntax_error_documentation():
 
             try:
                 span.add_event("Loading code files.")
-                code_files = await self._load_code_files(target_files)
+                if code_files is None:
+                    if not target_files:
+                        raise ValueError(
+                            "Either 'target_files' or 'code_files' must be provided."
+                        )
+                    code_files = await self._load_code_files(target_files)
                 await add_provenance(
                     "code_files_loaded",
                     {

@@ -2183,6 +2183,8 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                     ),
                 }
 
+            except TimeoutError:  # Let TimeoutError propagate to outer handler
+                raise
             except RunnerError as e:  # Catch structured errors from backend.execute
                 e.task_id = task_id  # Ensure task_id is propagated
                 # FIX Issue 2: Instead of raising immediately, defer the error so that
@@ -2787,6 +2789,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                     task_id=task_id,
                     status="failed",
                     results=final_results,
+                    error=exec_error.as_dict(),
                     started_at=self.task_status_map[task_id].started_at,
                     finished_at=time.time(),
                     tags=task_payload.tags,

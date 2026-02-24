@@ -945,6 +945,7 @@ class TestAsyncFileOperations:
         assert test_file.read_text() == "Output content"
 
 
+@pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestUIMessageHelpers:
     """Tests for UI message helper methods."""
 
