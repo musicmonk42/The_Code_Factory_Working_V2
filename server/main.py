@@ -1253,7 +1253,26 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         logger.warning("  Without Sentry, production errors will only be visible in container logs.")
         logger.warning("=" * 80)
     elif sentry_dsn:
-        logger.info("✓ Sentry error tracking: ENABLED")
+        # Initialize Sentry SDK when DSN is provided
+        try:
+            import sentry_sdk
+            sentry_environment = os.getenv("SENTRY_ENVIRONMENT", os.getenv("APP_ENV", "development"))
+            _raw_sample_rate = os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
+            try:
+                _traces_sample_rate = float(_raw_sample_rate)
+            except ValueError:
+                logger.warning(
+                    "Invalid SENTRY_TRACES_SAMPLE_RATE=%r; using default 0.1", _raw_sample_rate
+                )
+                _traces_sample_rate = 0.1
+            sentry_sdk.init(
+                dsn=sentry_dsn,
+                environment=sentry_environment,
+                traces_sample_rate=_traces_sample_rate,
+            )
+            logger.info("✓ Sentry error tracking: ENABLED (environment=%s)", sentry_environment)
+        except ImportError:
+            logger.warning("⚠ SENTRY_DSN set but sentry-sdk is not installed; skipping initialization")
     
     logger.info("=" * 80)
     logger.info("Platform initialization complete")

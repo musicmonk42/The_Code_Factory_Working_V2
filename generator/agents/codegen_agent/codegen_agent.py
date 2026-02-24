@@ -10,6 +10,7 @@ import re
 import shutil
 import sqlite3
 import sys
+import time
 import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -1363,6 +1364,12 @@ if PLUGIN_AVAILABLE:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             for _group in _MULTIPASS_GROUPS:
+                                _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
+                                logger.info(
+                                    f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
+                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                )
+                                _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
                                 _already_note = (
                                     f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
@@ -1387,13 +1394,15 @@ if PLUGIN_AVAILABLE:
                                     )
                                     _pass_files = parse_llm_response(_pass_resp)
                                     _merged_files.update(_pass_files)
+                                    _pass_duration = time.monotonic() - _pass_start
                                     logger.info(
                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
-                                        f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                        f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
                                     )
                                 except Exception as _pass_err:
+                                    _pass_duration = time.monotonic() - _pass_start
                                     logger.warning(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed: "
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
                                         f"{_pass_err}. Continuing with remaining passes."
                                     )
                             response = {"files": _merged_files}
@@ -1752,6 +1761,12 @@ else:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             for _group in _MULTIPASS_GROUPS:
+                                _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
+                                logger.info(
+                                    f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
+                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                )
+                                _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
                                 _already_note = (
                                     f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
@@ -1776,13 +1791,15 @@ else:
                                     )
                                     _pass_files = parse_llm_response(_pass_resp)
                                     _merged_files.update(_pass_files)
+                                    _pass_duration = time.monotonic() - _pass_start
                                     logger.info(
                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
-                                        f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                        f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
                                     )
                                 except Exception as _pass_err:
+                                    _pass_duration = time.monotonic() - _pass_start
                                     logger.warning(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed: "
+                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
                                         f"{_pass_err}. Continuing with remaining passes."
                                     )
                             response = {"files": _merged_files}

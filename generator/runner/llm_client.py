@@ -825,43 +825,102 @@ class LLMClient:
                     # Last attempt failed, raise error
                     raise LLMError(f"LLM call failed after {max_retries} retries: {e}") from e
 
+    async def _call_llm_with_provider_timeout(
+        self,
+        prompt: str,
+        provider: str,
+        model: str,
+        timeout: float,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """Invoke ``call_llm_api`` for a single provider with a hard timeout.
+
+        Designed to be called from ``call_ensemble_api`` so that the timeout
+        logic lives in one place rather than as closures captured inside a loop.
+        Logs a structured ``[ENSEMBLE]`` error before re-raising so that
+        operators can immediately identify which provider is the bottleneck.
+
+        Args:
+            prompt: Prompt text forwarded to ``call_llm_api``.
+            provider: LLM provider name (e.g. ``"openai"``).
+            model: Model identifier (e.g. ``"gpt-4o"``).
+            timeout: Maximum seconds to wait for this provider to respond.
+            **kwargs: Additional arguments forwarded to ``call_llm_api``.
+
+        Returns:
+            The raw response dict from ``call_llm_api``.
+
+        Raises:
+            asyncio.TimeoutError: If the provider does not respond within *timeout*.
+            LLMError: Propagated from ``call_llm_api`` on non-timeout failures.
+        """
+        try:
+            return await asyncio.wait_for(
+                self.call_llm_api(prompt, model=model, provider=provider, **kwargs),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "[ENSEMBLE] Provider %s/%s timed out after %.0fs",
+                provider, model, timeout,
+            )
+            raise
+
     async def call_ensemble_api(
         self,
         prompt: str,
         models: List[Dict[str, str]],  # List of {provider, model}
         voting_strategy: str = "majority",
+        timeout_per_provider: Optional[float] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         await self._is_initialized.wait()
         results = []
-        tasks = []
 
         # Validate models list before processing
         if not models:
             raise LLMError("Empty models list provided to ensemble API")
 
-        # Create tasks for all models
+        # Resolve per-provider timeout: explicit parameter > env var > 180s default
+        effective_timeout: float = (
+            timeout_per_provider
+            if timeout_per_provider is not None
+            else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "180"))
+        )
+
+        # Build a validated list of (provider, model) pairs and their coroutines.
+        # Using an explicit list keeps the error-reporting loop index-aligned with
+        # task_results, and avoids re-reading the original `models` argument after
+        # it may have contained entries with missing fields.
+        valid_models: List[Dict[str, str]] = []
+        tasks = []
+
         for m in models:
             provider = m.get("provider")
             model = m.get("model")
-            
+
             # Infer default provider if not specified
             if not provider:
                 provider = getattr(self.config, 'llm_provider', 'openai') or 'openai'
                 logger.info(
                     f"Model configuration missing 'provider', using default: {provider}"
                 )
-            
+
             # Skip only if model is missing (provider is now guaranteed)
             if not model:
                 logger.warning(
                     f"Skipping model configuration with missing 'model' key: {m}"
                 )
                 continue
-            
+
+            valid_models.append({"provider": provider, "model": model})
             tasks.append(
-                self.call_llm_api(
-                    prompt, model=model, provider=provider, **kwargs
+                self._call_llm_with_provider_timeout(
+                    prompt=prompt,
+                    provider=provider,
+                    model=model,
+                    timeout=effective_timeout,
+                    **kwargs,
                 )
             )
 
@@ -869,7 +928,7 @@ class LLMClient:
         if not tasks:
             raise LLMError("No valid model configurations found in ensemble API call")
 
-        # Run all calls in parallel
+        # Run all calls in parallel; individual timeouts are enforced per-task.
         task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Track which providers failed and why
@@ -879,8 +938,8 @@ class LLMClient:
                 results.append(result)
             elif isinstance(result, Exception):
                 # Get the provider/model info for this failed task
-                provider = models[idx].get("provider", "unknown")
-                model = models[idx].get("model", "unknown")
+                provider = valid_models[idx].get("provider", "unknown")
+                model = valid_models[idx].get("model", "unknown")
                 error_msg = str(result)
                 failed_providers.append(f"{provider}/{model}: {error_msg}")
                 logger.warning(
@@ -1042,6 +1101,7 @@ async def call_ensemble_api(
     voting_strategy: str = "majority",
     config: Optional[RunnerConfig] = None,
     stream: bool = False,
+    timeout_per_provider: Optional[float] = None,
     **kwargs,
 ) -> Dict[str, Any]:
     """
@@ -1053,6 +1113,8 @@ async def call_ensemble_api(
         voting_strategy: Strategy for combining results
         config: Optional RunnerConfig. If None, will attempt to load from file with fallback to defaults.
         stream: Whether to stream the response (default: False)
+        timeout_per_provider: Per-provider timeout in seconds. Defaults to ENSEMBLE_PROVIDER_TIMEOUT_SECONDS
+            env var (default 180s). Pass an explicit value to override.
         **kwargs: Additional parameters to forward to call_llm_api
     
     Returns:
@@ -1098,7 +1160,12 @@ async def call_ensemble_api(
     
     # Call the ensemble API and provide additional context on failure
     try:
-        return await _async_client.call_ensemble_api(prompt, models, voting_strategy, stream=stream, **kwargs)
+        return await _async_client.call_ensemble_api(
+            prompt, models, voting_strategy,
+            timeout_per_provider=timeout_per_provider,
+            stream=stream,
+            **kwargs,
+        )
     except LLMError as e:
         # Add additional logging for module-level context
         model_list = ", ".join([f"{m.get('provider', 'unknown')}/{m.get('model', 'unknown')}" for m in models])

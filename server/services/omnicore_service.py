@@ -219,6 +219,19 @@ DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "60
 # Maximum number of files to analyze in depth during SFE analysis (prevents timeout)
 MAX_SFE_FILES_TO_ANALYZE = int(os.getenv("MAX_SFE_FILES_TO_ANALYZE", "50"))
 
+# Per-step pipeline timeouts — codegen timeout triggers a FAILED job (critical path).
+# Other step timeouts (testgen, critique, sfe_analysis, docgen) return an error status
+# and allow the pipeline to continue gracefully (non-critical path).
+# All values are configurable via environment variables for operator tuning.
+PIPELINE_STEP_TIMEOUTS: Dict[str, int] = {
+    "codegen": int(os.environ.get("PIPELINE_CODEGEN_TIMEOUT_SECONDS", "600")),
+    "testgen": int(os.environ.get("PIPELINE_TESTGEN_TIMEOUT_SECONDS", "300")),
+    "deploy": int(os.environ.get("PIPELINE_DEPLOY_TIMEOUT_SECONDS", "300")),
+    "docgen": int(os.environ.get("PIPELINE_DOCGEN_TIMEOUT_SECONDS", "300")),
+    "critique": int(os.environ.get("PIPELINE_CRITIQUE_TIMEOUT_SECONDS", "300")),
+    "sfe_analysis": int(os.environ.get("PIPELINE_SFE_TIMEOUT_SECONDS", "600")),
+}
+
 # ============================================================================
 # INDUSTRY STANDARD: Named Constants for Configuration and Limits
 # Following OWASP and industry best practices for secure, maintainable code
@@ -6800,7 +6813,27 @@ class OmniCoreService:
                         extra={"job_id": job_id, "attempt": codegen_attempt, "previous_error": previous_error}
                     )
 
-                codegen_result = await self._run_codegen(job_id, codegen_payload)
+                codegen_timeout = PIPELINE_STEP_TIMEOUTS["codegen"]
+                try:
+                    codegen_result = await asyncio.wait_for(
+                        self._run_codegen(job_id, codegen_payload),
+                        timeout=codegen_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"[PIPELINE] Step 'codegen' timed out after {codegen_timeout}s for job {job_id}",
+                        extra={"job_id": job_id, "timeout": codegen_timeout}
+                    )
+                    await self._finalize_failed_job(
+                        job_id,
+                        error=f"Code generation timed out after {codegen_timeout}s",
+                    )
+                    return {
+                        "status": "failed",
+                        "message": f"Code generation timed out after {codegen_timeout}s",
+                        "stages_completed": stages_completed,
+                        "job_id": job_id,
+                    }
 
                 if codegen_result.get("status") == "completed":
                     # Codegen succeeded - now validate before committing to success
@@ -7769,7 +7802,18 @@ class OmniCoreService:
                                 f"[PIPELINE] Job {job_id} starting step: testgen with {len(source_files)} source files "
                                 f"(language: {detected_language}, LLM-based: {llm_provider_configured})"
                             )
-                            testgen_result = await self._run_testgen(job_id, testgen_payload)
+                            _testgen_timeout = PIPELINE_STEP_TIMEOUTS["testgen"]
+                            try:
+                                testgen_result = await asyncio.wait_for(
+                                    self._run_testgen(job_id, testgen_payload),
+                                    timeout=_testgen_timeout,
+                                )
+                            except asyncio.TimeoutError:
+                                logger.error(
+                                    f"[PIPELINE] Step 'testgen' timed out after {_testgen_timeout}s for job {job_id}",
+                                    extra={"job_id": job_id, "timeout": _testgen_timeout}
+                                )
+                                testgen_result = {"status": "error", "message": f"testgen timed out after {_testgen_timeout}s"}
                             
                             # Check for skipped status first (non-Python projects)
                             if testgen_result.get("status") == "skipped":
@@ -7985,7 +8029,18 @@ class OmniCoreService:
                     "language": detected_language,
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
-                critique_result = await self._run_critique(job_id, critique_payload)
+                _critique_timeout = PIPELINE_STEP_TIMEOUTS["critique"]
+                try:
+                    critique_result = await asyncio.wait_for(
+                        self._run_critique(job_id, critique_payload),
+                        timeout=_critique_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"[PIPELINE] Step 'critique' timed out after {_critique_timeout}s for job {job_id}",
+                        extra={"job_id": job_id, "timeout": _critique_timeout}
+                    )
+                    critique_result = {"status": "error", "message": f"critique timed out after {_critique_timeout}s"}
                 if critique_result.get("status") == "completed":
                     stages_completed.append("critique")
                     logger.info(f"[PIPELINE] Job {job_id} completed step: critique - found {critique_result.get('issues_found', 0)} issues, fixed {critique_result.get('issues_fixed', 0)}")
@@ -8071,7 +8126,18 @@ class OmniCoreService:
                         "language": detected_language,
                     }
                     logger.info(f"[PIPELINE] Job {job_id} starting step: sfe_analysis")
-                    sfe_result = await self._run_sfe_analysis(job_id, sfe_payload)
+                    _sfe_timeout = PIPELINE_STEP_TIMEOUTS["sfe_analysis"]
+                    try:
+                        sfe_result = await asyncio.wait_for(
+                            self._run_sfe_analysis(job_id, sfe_payload),
+                            timeout=_sfe_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            f"[PIPELINE] Step 'sfe_analysis' timed out after {_sfe_timeout}s for job {job_id}",
+                            extra={"job_id": job_id, "timeout": _sfe_timeout}
+                        )
+                        sfe_result = {"status": "error", "message": f"sfe_analysis timed out after {_sfe_timeout}s"}
                     
                     if sfe_result.get("status") == "completed":
                         stages_completed.append("sfe_analysis")
@@ -8193,7 +8259,18 @@ class OmniCoreService:
                         "language": detected_language,  # FIX Issue A: Propagate detected language
                     }
                     logger.info(f"[PIPELINE] Job {job_id} starting step: docgen")
-                    docgen_result = await self._run_docgen(job_id, docgen_payload)
+                    _docgen_timeout = PIPELINE_STEP_TIMEOUTS["docgen"]
+                    try:
+                        docgen_result = await asyncio.wait_for(
+                            self._run_docgen(job_id, docgen_payload),
+                            timeout=_docgen_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            f"[PIPELINE] Step 'docgen' timed out after {_docgen_timeout}s for job {job_id}",
+                            extra={"job_id": job_id, "timeout": _docgen_timeout}
+                        )
+                        docgen_result = {"status": "error", "message": f"docgen timed out after {_docgen_timeout}s"}
                     if docgen_result.get("status") == "completed":
                         stages_completed.append("docgen")
                         logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")

@@ -664,16 +664,18 @@ class CodebaseAnalyzer:
         self.semaphore = asyncio.Semaphore(self.max_workers)
         try:
             # Connect to a database if a URL is provided in the config.
-            # Apply a short timeout so that unresolvable hostnames (e.g.,
+            # Apply a timeout so that unresolvable hostnames (e.g.,
             # `postgres.railway.internal` outside of Railway's internal network)
             # do not block the analyzer indefinitely.
+            # Default increased to 15s to give DNS resolution time in container
+            # environments like Railway where the first lookup may take several seconds.
             db_url = os.getenv("DATABASE_URL")
             if db_url:
                 try:
-                    db_connect_timeout = float(os.getenv("DB_CONNECT_TIMEOUT", "5"))
+                    db_connect_timeout = float(os.getenv("DB_CONNECT_TIMEOUT", "15"))
                 except ValueError:
-                    logger.warning("Invalid DB_CONNECT_TIMEOUT value; using default of 5s")
-                    db_connect_timeout = 5.0
+                    logger.warning("Invalid DB_CONNECT_TIMEOUT value; using default of 15s")
+                    db_connect_timeout = 15.0
                 # Support both DATABASE_RETRY_ATTEMPTS (new name) and DB_CONNECT_RETRIES (legacy)
                 try:
                     max_db_retries = int(
@@ -697,6 +699,10 @@ class CodebaseAnalyzer:
                 self._using_fallback_storage = False
                 last_db_error: Optional[Exception] = None
                 for db_attempt in range(1, max_db_retries + 1):
+                    # Compute exponential back-off once per attempt so both error
+                    # branches use the same value without code duplication.
+                    _retry_delay = db_retry_delay * (2 ** (db_attempt - 1))
+                    is_last_attempt = db_attempt >= max_db_retries
                     try:
                         self.db_client = PostgresClient(db_url)
                         await asyncio.wait_for(
@@ -705,22 +711,34 @@ class CodebaseAnalyzer:
                         )
                         logger.info("Database client for CodebaseAnalyzer initialized.")
                         break
+                    except asyncio.TimeoutError:
+                        last_db_error = asyncio.TimeoutError(
+                            f"Connection timed out after {db_connect_timeout}s"
+                        )
+                        if is_last_attempt:
+                            raise
+                        logger.warning(
+                            "DB connect attempt %d/%d timed out after %.0fs. Retrying in %.1fs...",
+                            db_attempt, max_db_retries, db_connect_timeout, _retry_delay,
+                        )
+                        await asyncio.sleep(_retry_delay)
                     except Exception as _db_err:
                         last_db_error = _db_err
-                        # Exponential backoff: delay doubles on each retry
-                        _retry_delay = db_retry_delay * (2 ** (db_attempt - 1))
-                        if db_attempt < max_db_retries:
-                            logger.warning(
-                                "DB connect attempt %d/%d failed (%s). Retrying in %.1fs...",
-                                db_attempt, max_db_retries, _db_err, _retry_delay,
-                            )
-                            await asyncio.sleep(_retry_delay)
-                        else:
+                        if is_last_attempt:
                             raise
+                        # Exponential backoff: delay doubles on each retry
+                        logger.warning(
+                            "DB connect attempt %d/%d failed (%s). Retrying in %.1fs...",
+                            db_attempt, max_db_retries, _db_err, _retry_delay,
+                        )
+                        await asyncio.sleep(_retry_delay)
         except asyncio.TimeoutError:
             logger.warning(
-                "Database connection timed out after retries (host may not be reachable in this environment). "
+                "Database connection timed out after %.0fs on all %d attempts "
+                "(host may not be reachable in this environment). "
+                "Increase DB_CONNECT_TIMEOUT env var if DNS resolution is slow. "
                 "Falling back to in-memory storage.",
+                db_connect_timeout, max_db_retries,
             )
             self.db_client = None
             self._using_fallback_storage = True
@@ -730,7 +748,9 @@ class CodebaseAnalyzer:
                 pass
         except Exception as e:
             logger.warning(
-                "Failed to connect to database after retries: %s. Falling back to in-memory storage.", e
+                "Failed to connect to database after %d attempts (%s: %s). "
+                "Falling back to in-memory storage.",
+                max_db_retries, type(e).__name__, e,
             )
             self.db_client = None
             self._using_fallback_storage = True
