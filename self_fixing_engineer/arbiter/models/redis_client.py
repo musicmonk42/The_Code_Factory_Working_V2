@@ -85,7 +85,7 @@ def _get_or_create_metric(
             f"metric_class for '{name}' is not a type ({type(metric_class).__name__}), "
             "skipping metric creation."
         )
-        return metric_class() if callable(metric_class) else metric_class
+        return None
 
     try:
         existing_metric = REGISTRY._names_to_collectors.get(name)
