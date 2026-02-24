@@ -915,22 +915,69 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
 
     def on_modified(self, event):
         """Handle plugin file modifications for hot-reload."""
-        if event.is_directory or not event.src_path.endswith(".py"):
+        from pathlib import Path as _Path
+        if event.is_directory or _Path(event.src_path).suffix != ".py":
             return
 
         logger.info(f"Plugin file modified: {event.src_path}, reloading...")
         self._scan_plugins()
 
     def get_plugin(self, format_name: str) -> DocGenPlugin:
-        """Get a plugin by format name."""
+        """Get a plugin by format name (domain-specific accessor with error on missing)."""
         if format_name not in self.plugins:
             raise ValueError(
                 f"No validation plugin found for '{format_name}'. Available: {list(self.plugins.keys())}"
             )
         return self.plugins[format_name]
 
+    def get(self, name: str) -> Optional[DocGenPlugin]:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.get`.
+
+        Returns ``None`` instead of raising :exc:`ValueError` when the plugin is
+        not found — consistent with the canonical ``BasePluginRegistry`` contract.
+        Callers that need the error-raising behaviour should use :meth:`get_plugin`.
+        """
+        return self.plugins.get(name)
+
+    def register(self, name: str, plugin: DocGenPlugin, **kwargs: Any) -> None:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.register`.
+
+        Registers *plugin* under *name*, allowing callers to extend the
+        registry beyond the built-in defaults at runtime.
+
+        Args:
+            name:    Format key (e.g. ``"md"``, ``"rst"``).
+            plugin:  A :class:`DocGenPlugin` instance.
+            **kwargs: Accepted for interface compatibility; not used.
+        """
+        with self._lock:
+            self.plugins[name] = plugin
+        self._record_operation("register", "success")
+        self._update_active_count(1)
+        logger.info("Registered DocGen plugin: %s", name)
+
+    def unregister(self, name: str) -> bool:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.unregister`.
+
+        Removes the plugin registered under *name*.
+
+        Args:
+            name: The format key to remove.
+
+        Returns:
+            ``True`` if the plugin existed and was removed; ``False`` otherwise.
+        """
+        with self._lock:
+            existed = self.plugins.pop(name, None) is not None
+        status = "success" if existed else "not_found"
+        self._record_operation("unregister", status)
+        if existed:
+            self._update_active_count(-1)
+            logger.info("Unregistered DocGen plugin: %s", name)
+        return existed
+
     def list_plugins(self) -> List[str]:
-        """List all available plugin formats."""
+        """List all available plugin format names."""
         return list(self.plugins.keys())
 
     def shutdown(self):

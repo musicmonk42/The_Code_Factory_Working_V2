@@ -212,7 +212,7 @@ class PluginEventHandler(FileSystemEventHandler):
         Args:
             event: The file system event object containing details about the modification.
         """
-        if event.is_directory or not event.src_path.endswith(".py"):
+        if event.is_directory or Path(event.src_path).suffix != ".py":
             return
 
         self._schedule_async_task(
@@ -226,7 +226,7 @@ class PluginEventHandler(FileSystemEventHandler):
         Args:
             event: The file system event object containing details about the creation.
         """
-        if event.is_directory or not event.src_path.endswith(".py"):
+        if event.is_directory or Path(event.src_path).suffix != ".py":
             return
 
         self._schedule_async_task(

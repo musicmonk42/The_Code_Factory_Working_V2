@@ -559,7 +559,11 @@ class ConcretePersistentArrayStore(PersistentArrayStore):
                 ).inc()
                 raise StorageError(f"Failed to close array backend: {e}") from e
 
-
+    # ``aclose`` is the standard async-resource cleanup name used by Python's
+    # async context managers, aioredis, aiosqlite, and the asynccontextmanager
+    # protocol.  ``close`` is kept as the primary implementation; ``aclose``
+    # delegates to it so that both conventions work transparently.
+    aclose = close
 
     @retry(
         stop=stop_after_attempt(3),

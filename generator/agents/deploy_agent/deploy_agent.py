@@ -465,10 +465,18 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
         )
 
     def _scan_plugins(self) -> None:
-        """Satisfy :class:`~shared.plugin_registry_base.HotReloadableRegistryMixin` contract.
+        """Implement :meth:`~shared.plugin_registry_base.HotReloadableRegistryMixin._scan_plugins`.
 
-        Delegates to :meth:`load_plugins` which performs the full directory
-        scan and hot-reload cycle for this registry.
+        This registry performs a **full** directory rescan on every hot-reload
+        event (close-then-reload all plugins), implemented by
+        :meth:`load_plugins`.  That method handles path setup, old-plugin
+        teardown, glob discovery, and per-file loading via
+        :meth:`_load_plugin_file`.
+
+        This delegation ensures that ``on_modified`` events from the watchdog
+        observer (inherited through the mixin) trigger the same complete reload
+        cycle as a manual call to :meth:`load_plugins`, keeping both code paths
+        in sync without duplication.
         """
         self.load_plugins()
 
@@ -536,7 +544,41 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
             self.register_callback(target, plugin)
 
     def get_plugin(self, target: str) -> Optional[TargetPlugin]:
+        """Retrieve the plugin registered for *target* (domain-specific accessor)."""
         return self.plugins.get(target)
+
+    def get(self, name: str) -> Optional[TargetPlugin]:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.get`.
+
+        Delegates to :meth:`get_plugin` so that code using the canonical
+        ``BasePluginRegistry`` interface works alongside the existing
+        ``get_plugin()`` call sites.
+        """
+        return self.get_plugin(name)
+
+    def unregister(self, name: str) -> bool:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.unregister`.
+
+        Removes the plugin registered under *name*.  Returns ``True`` if it
+        was present, ``False`` otherwise.
+        """
+        if name in self.plugins:
+            del self.plugins[name]
+            self.plugin_info.pop(name, None)
+            self._record_operation("unregister", "success")
+            self._update_active_count(-1)
+            logger.info("Unregistered plugin: %s", name)
+            return True
+        self._record_operation("unregister", "not_found")
+        return False
+
+    def list_plugins(self) -> Dict[str, TargetPlugin]:
+        """Implement :meth:`~shared.plugin_registry_base.BasePluginRegistry.list_plugins`.
+
+        Returns a snapshot of the current ``{target: plugin}`` mapping.
+        """
+        with self._lock:
+            return dict(self.plugins)
 
     def start_watching(self) -> None:
         # --- FIX: Disable Watchdog in TESTING environments ---
@@ -555,7 +597,7 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
             "created",
             "modified",
             "deleted",
-        } and event.src_path.endswith(".py"):
+        } and Path(event.src_path).suffix == ".py":
             asyncio.create_task(asyncio.to_thread(self.load_plugins))
 
 

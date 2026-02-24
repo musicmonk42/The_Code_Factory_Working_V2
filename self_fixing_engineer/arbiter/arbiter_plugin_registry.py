@@ -360,6 +360,12 @@ class PluginRegistry(DependencyAwareRegistryMixin, BasePluginRegistry):
         # Guard: prevent re-initialization of the singleton instance.
         # BasePluginRegistry.__init__ must only run once; subsequent PluginRegistry()
         # calls return the same object and must not reset the lock or logger.
+        # ``persist_path`` is intentionally consumed only in ``__new__``, which
+        # runs exclusively on first construction and stores the path in
+        # ``self._persist_path``.  Subsequent calls to ``__init__`` on the
+        # already-created singleton must not re-set ``_persist_path`` because
+        # ``__new__`` has already chosen the correct path (potentially a
+        # temp-dir path in testing/startup mode).
         if getattr(self, "_base_initialized", False):
             return
         super().__init__()

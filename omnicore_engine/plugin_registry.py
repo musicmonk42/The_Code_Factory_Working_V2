@@ -2009,7 +2009,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py") and self.registry._loop:
+        if Path(event.src_path).suffix == ".py" and self.registry._loop:
             self.logger.info(f"File modified: {event.src_path}. Reloading plugin...")
             self.registry._loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(
@@ -2020,7 +2020,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py") and self.registry._loop:
+        if Path(event.src_path).suffix == ".py" and self.registry._loop:
             self.logger.info(f"File created: {event.src_path}. Loading new plugin...")
             self.registry._loop.call_soon_threadsafe(
                 lambda: asyncio.create_task(
@@ -2031,7 +2031,7 @@ class PluginEventHandler(FileSystemEventHandler):
     def on_deleted(self, event):
         if event.is_directory:
             return
-        if event.src_path.endswith(".py"):
+        if Path(event.src_path).suffix == ".py":
             self.logger.info(f"File deleted: {event.src_path}. Unloading plugin...")
             module_name = Path(event.src_path).stem
             self.logger.warning(

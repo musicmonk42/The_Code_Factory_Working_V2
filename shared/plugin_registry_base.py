@@ -222,6 +222,7 @@ import abc
 import logging
 import re
 import threading
+from pathlib import Path as _Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from packaging.specifiers import SpecifierSet
@@ -547,7 +548,19 @@ class BasePluginRegistry(abc.ABC):
             duration_seconds: Optional wall-clock duration of the operation.
                               When provided, records an observation on the
                               ``plugin_registry_operation_duration_seconds``
-                              histogram.
+                              histogram.  Subclasses should capture a
+                              ``start = time.monotonic()`` before the
+                              operation and pass
+                              ``time.monotonic() - start`` here::
+
+                                  import time
+                                  start = time.monotonic()
+                                  with self._lock:
+                                      self._store[name] = plugin
+                                  self._record_operation(
+                                      "register", "success",
+                                      duration_seconds=time.monotonic() - start,
+                                  )
         """
         registry_name = type(self).__qualname__
         try:
@@ -707,7 +720,9 @@ class HotReloadableRegistryMixin:
         if getattr(event, "is_directory", False):
             return
         src_path: str = getattr(event, "src_path", "")
-        if not src_path.endswith(".py"):
+        # Use Path.suffix for an exact match against the ".py" extension.
+        # A bare endswith(".py") would incorrectly match ".pyc" or ".pyx" files.
+        if _Path(src_path).suffix != ".py":
             return
         self._scan_plugins()
 

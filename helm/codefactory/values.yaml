@@ -250,6 +250,10 @@ env:
   # Tier-1 AI Capability Feature Flags
   # ---------------------------------------------------------------------------
   # Feature 1: Quantum / Neuromorphic Array Backend
+  # Controls omnicore_engine.array_backend.ArrayBackend — the numerical-computing
+  # abstraction (NumPy/CuPy/Dask/PyTorch/Qiskit/Nengo backends).
+  # NOTE: Unrelated to the Arbiter persistence layer, which was renamed from
+  # ArrayBackend → PersistentArrayStore in self_fixing_engineer.arbiter.persistent_array_store.
   # Requires qiskit + qiskit-aer (quantum) or nengo (neuromorphic) to be installed.
   # Both fall back silently to NumPy when the optional libraries are absent.
   # Enable via: helm install --set env.ARRAY_BACKEND_QUANTUM=true ...

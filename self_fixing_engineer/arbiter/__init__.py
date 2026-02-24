@@ -154,6 +154,10 @@ __all__ = [
     "HumanInLoopConfig",
     "ArbiterConfig",
     "get_component_status",
+    # Persistent array store (canonical replacement for arbiter_array_backend)
+    "persistent_array_store",
+    "PersistentArrayStore",
+    "ConcretePersistentArrayStore",
     # Stub implementations for graceful degradation
     "stubs",
     "ArbiterStub",
@@ -194,7 +198,21 @@ def __getattr__(name):
         if name == "stubs":
             return _stubs_module
         return getattr(_stubs_module, name)
-    
+
+    # Lazy-load persistent_array_store and its public classes.
+    # This avoids the heavy import (NumPy, cryptography, Redis, SQLite, etc.)
+    # until the caller actually needs the persistent array store.
+    if name in ("persistent_array_store", "PersistentArrayStore", "ConcretePersistentArrayStore"):
+        try:
+            from . import persistent_array_store as _pas_module
+            if name == "persistent_array_store":
+                return _pas_module
+            return getattr(_pas_module, name)
+        except ImportError as exc:
+            raise ImportError(
+                f"Cannot import {name!r} from 'arbiter.persistent_array_store': {exc}"
+            ) from exc
+
     if name in _LAZY_COMPONENT_NAMES:
         # Load components on first access
         _load_components()
