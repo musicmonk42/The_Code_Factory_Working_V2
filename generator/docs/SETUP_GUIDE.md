@@ -8,7 +8,7 @@ This handbook provides step-by-step instructions for setting up the development 
 
 ## 📝 Prerequisites
 
-- **Python:** 3.9 or higher
+- **Python:** 3.10 or higher
 - **Git:** For cloning the repository
 - **Docker:** (Optional) For validation and local LLM setup
 - **Ollama:** (Optional) For LocalProvider (no API key needed)

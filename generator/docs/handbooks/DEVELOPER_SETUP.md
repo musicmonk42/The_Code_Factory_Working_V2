@@ -8,7 +8,7 @@ This handbook provides detailed instructions for setting up the development envi
 
 ## 📝 Prerequisites
 
-- **Python**: 3.9 or higher
+- **Python**: 3.10 or higher
 - **Git**: For version control
 - **Docker**: (Optional) For validation and local LLM setup
 - **Ollama**: (Optional) For local LLM provider (`local_provider.py`)
