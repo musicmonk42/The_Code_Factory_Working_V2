@@ -172,6 +172,19 @@ data:
   # MetaLearning state file path — must be on the data PVC so state survives pod restarts.
   META_LEARNING_STATE_PATH: "/app/data/meta_learning_state.json"
 
+  # ============================================
+  # Arbiter Configuration
+  # ============================================
+  # Arbiter world-size: number of virtual agent slots managed by the primary Arbiter.
+  # Increase for larger multi-agent deployments.
+  ARBITER_WORLD_SIZE: "10"
+  # Arbiter role: "admin" grants the primary arbiter full policy and governance access.
+  ARBITER_ROLE: "admin"
+  # Absolute path for the encrypted PolicyManager policy file.
+  # MUST resolve to a path on the data PersistentVolumeClaim so policies survive
+  # pod restarts and rolling upgrades. Override via kustomize overlays when needed.
+  POLICY_CONFIG_FILE_PATH: "/app/data/policies.json"
+
   # SFE Checkpoint Manager uses container-friendly defaults:
   # - CHECKPOINT_AUDIT_LOG_PATH defaults to ./logs/checkpoint/audit.log
   # - CHECKPOINT_DLQ_PATH defaults to ./logs/checkpoint/dlq.jsonl

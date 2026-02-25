@@ -2132,29 +2132,78 @@ _policy_engine_instance: Optional[PolicyEngine] = None
 _policy_engine_lock = threading.Lock()
 
 
-def initialize_policy_engine(arbiter_instance: Any):
-    """Initializes the global PolicyEngine instance."""
+def initialize_policy_engine(
+    arbiter_instance: Any, policy_manager: Optional[Any] = None
+):
+    """Initializes the global PolicyEngine instance.
+
+    Args:
+        arbiter_instance: The Arbiter instance that owns this engine.
+        policy_manager: Optional :class:`PolicyManager` for encrypted, persistent
+            policy storage.  When provided the engine delegates all load/save
+            operations to it instead of reading the JSON file directly.
+
+    Side-effects:
+        Registers the new engine as the "arbiter" domain engine on the
+        :class:`~self_fixing_engineer.arbiter.policy.facade.UnifiedPolicyFacade`
+        global singleton so that all downstream components routing through the
+        facade immediately see the live engine.
+    """
     global _policy_engine_instance
     with tracer.start_as_current_span("initialize_policy_engine") as span:
+        span.set_attribute(
+            "has_policy_manager", policy_manager is not None
+        )
         with _policy_engine_lock:
             try:
                 # Ensure single instance of PolicyEngine
                 if _policy_engine_instance is None:
-                    logger.info("Initializing global PolicyEngine instance...")
-                    # Create PolicyEngine with provided arbiter instance and config
+                    logger.info(
+                        '{"event": "initialize_policy_engine", "status": "starting", '
+                        '"has_policy_manager": %s}',
+                        policy_manager is not None,
+                    )
                     _policy_engine_instance = PolicyEngine(
-                        arbiter_instance, get_config()
+                        arbiter_instance, get_config(), policy_manager=policy_manager
                     )
                     # Start policy refresher task
                     asyncio.create_task(
                         _policy_engine_instance.start_policy_refresher()
                     )
+                    # Register with UnifiedPolicyFacade so all routing goes live
+                    try:
+                        from self_fixing_engineer.arbiter.policy.facade import (
+                            get_unified_policy_facade,
+                        )
+                        get_unified_policy_facade().register_engine(
+                            "arbiter", _policy_engine_instance
+                        )
+                        logger.info(
+                            '{"event": "initialize_policy_engine", '
+                            '"status": "registered_with_facade"}'
+                        )
+                    except Exception as _fe:
+                        logger.warning(
+                            '{"event": "initialize_policy_engine", '
+                            '"status": "facade_registration_failed", "error": "%s"}',
+                            _fe,
+                        )
                     logger.info(
-                        "Global PolicyEngine initialized and refresher started."
+                        '{"event": "initialize_policy_engine", "status": "success"}'
                     )
                     span.set_attribute("init_status", "success")
+                else:
+                    logger.debug(
+                        '{"event": "initialize_policy_engine", '
+                        '"status": "already_initialized"}'
+                    )
+                    span.set_attribute("init_status", "already_initialized")
             except Exception as e:
-                logger.error(f"Failed to initialize PolicyEngine: {e}")
+                logger.error(
+                    '{"event": "initialize_policy_engine", "status": "failed", "error": "%s"}',
+                    e,
+                    exc_info=True,
+                )
                 POLICY_ENGINE_INIT_ERRORS.labels(error_type="init_failed").inc()
                 span.record_exception(e)
                 raise

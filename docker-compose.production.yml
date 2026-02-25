@@ -193,6 +193,17 @@ services:
       - AUDIT_LOG_PATH=/app/logs/audit_trail.log
 
       # ============================================
+      # Arbiter Configuration
+      # ============================================
+      # Arbiter world-size controls how many virtual agent slots the Arbiter manages.
+      - ARBITER_WORLD_SIZE=${ARBITER_WORLD_SIZE:-10}
+      # Arbiter role: "admin" for full-access primary arbiter.
+      - ARBITER_ROLE=${ARBITER_ROLE:-admin}
+      # Absolute path for the encrypted policy configuration file (PolicyManager).
+      # Must be on the data PVC so policies survive pod/container restarts.
+      - POLICY_CONFIG_FILE_PATH=${POLICY_CONFIG_FILE_PATH:-/app/data/policies.json}
+
+      # ============================================
       # Worker Configuration
       # ============================================
       # Single worker mode - FastAPI is async and multiple workers cause job sync issues
