@@ -1435,7 +1435,7 @@ BEGIN YOUR RESPONSE WITH THE CONFIGURATION NOW (no preamble):"""
         
         if target == "docker":
             # Fallback Dockerfile template for Python FastAPI apps (app/ layout)
-            return f"""FROM python:3.11-slim
+            return """FROM python:3.11-slim
 
 WORKDIR /app
 

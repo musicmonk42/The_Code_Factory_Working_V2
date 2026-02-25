@@ -530,8 +530,7 @@ class MarkdownPlugin(DocGenPlugin):
             issues.append(f"Content too short: {len(content)} < {min_length}")
 
         # FIXED: More reasonable section checking
-        required_sections = schema.get("sections", [])
-        
+
         # Check if DOCGEN_TEST_MODE is enabled for relaxed validation
         test_mode = os.environ.get("DOCGEN_TEST_MODE", "0") == "1"
         

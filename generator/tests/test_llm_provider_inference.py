@@ -211,10 +211,10 @@ class TestProviderInference:
             call_count["count"] += 1
             # First call should be explicit openai
             if call_count["count"] == 1:
-                assert provider == "openai", f"Expected provider='openai' (explicit)"
+                assert provider == "openai", "Expected provider='openai' (explicit)"
             # Second call should infer claude
             elif call_count["count"] == 2:
-                assert provider == "claude", f"Expected provider='claude' (inferred)"
+                assert provider == "claude", "Expected provider='claude' (inferred)"
             return {"content": "response_" + str(call_count["count"])}
 
         with patch.object(initialized_client, "call_llm_api", side_effect=mock_call_llm_api):

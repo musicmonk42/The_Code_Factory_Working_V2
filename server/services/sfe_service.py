@@ -1547,10 +1547,10 @@ class SFEService:
         # Generate specific refactoring guidance
         suggestions = []
         if complexity > 15:
-            suggestions.append(f"Extract nested logic into separate helper functions")
+            suggestions.append("Extract nested logic into separate helper functions")
         if complexity > 10:
             suggestions.append(f"Break down {function_name} into smaller, focused functions")
-            suggestions.append(f"Consider using early returns to reduce nesting")
+            suggestions.append("Consider using early returns to reduce nesting")
         suggestions.append(f"Add unit tests for {function_name} before refactoring")
         
         guidance = f"Complexity score: {complexity} at line {line_num}. Recommendations:\n" + "\n".join(f"  - {s}" for s in suggestions)
@@ -3610,8 +3610,7 @@ class SFEService:
     def _query_dependencies(self, graph: Dict[str, Any], query: str, depth: int, limit: int) -> List[Dict[str, Any]]:
         """Query dependencies with depth traversal."""
         relationships = graph.get("relationships", [])
-        query_lower = query.lower()
-        
+
         # Find all dependencies starting from query
         visited = set()
         results = []
@@ -4495,7 +4494,7 @@ class SFEService:
                 "status": "error",
                 "imports_fixed": 0,
                 "fixed_files": [],
-                "note": f"Import fixing is currently unavailable. The ImportFixer module may not be initialized. Check server logs for details.",
+                "note": "Import fixing is currently unavailable. The ImportFixer module may not be initialized. Check server logs for details.",
                 "details": str(e),
             }
     

@@ -690,7 +690,7 @@ def health():
             )
             if is_fastapi_any:
                 generation_quality = "fastapi_real"
-                notes = f"Real FastAPI TestClient tests generated for 1 endpoints."
+                notes = "Real FastAPI TestClient tests generated for 1 endpoints."
             else:
                 generation_quality = "ast_structural"
                 notes = "AST-based structural tests generated; LLM-based generation recommended for higher coverage."

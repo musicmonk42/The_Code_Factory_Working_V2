@@ -74,7 +74,7 @@ class SpecDrivenPipeline:
         """
         self.job_id = job_id or "unknown"
         logger.info(
-            f"Initialized SpecDrivenPipeline",
+            "Initialized SpecDrivenPipeline",
             extra={"job_id": self.job_id}
         )
     

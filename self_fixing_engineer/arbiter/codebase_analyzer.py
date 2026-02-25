@@ -200,7 +200,7 @@ except ImportError:
                 _safe_url = "<masked>"
             logger.error(f"PostgresClient fallback: No actual database connection to {_safe_url}; using in-memory storage")
             warnings.warn(
-                f"PostgresClient fallback used - no actual database connection",
+                "PostgresClient fallback used - no actual database connection",
                 UserWarning,
                 stacklevel=2
             )
@@ -214,7 +214,7 @@ except ImportError:
 
         async def execute(self, query, *args):
             logger = logging.getLogger(__name__)
-            logger.debug(f"PostgresClient fallback: execute() stored in memory (query omitted)")
+            logger.debug("PostgresClient fallback: execute() stored in memory (query omitted)")
 
         async def fetch(self, query, *args):
             return []
@@ -697,7 +697,6 @@ class CodebaseAnalyzer:
                     logger.warning("Invalid DATABASE_RETRY_DELAY/DB_CONNECT_RETRY_DELAY value; using default of 1s")
                     db_retry_delay = 1.0
                 self._using_fallback_storage = False
-                last_db_error: Optional[Exception] = None
                 for db_attempt in range(1, max_db_retries + 1):
                     # Compute exponential back-off once per attempt so both error
                     # branches use the same value without code duplication.
@@ -712,9 +711,6 @@ class CodebaseAnalyzer:
                         logger.info("Database client for CodebaseAnalyzer initialized.")
                         break
                     except asyncio.TimeoutError:
-                        last_db_error = asyncio.TimeoutError(
-                            f"Connection timed out after {db_connect_timeout}s"
-                        )
                         if is_last_attempt:
                             raise
                         logger.warning(
@@ -723,7 +719,6 @@ class CodebaseAnalyzer:
                         )
                         await asyncio.sleep(_retry_delay)
                     except Exception as _db_err:
-                        last_db_error = _db_err
                         if is_last_attempt:
                             raise
                         # Exponential backoff: delay doubles on each retry

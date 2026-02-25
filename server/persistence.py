@@ -108,7 +108,7 @@ async def _retry_with_backoff(operation_name: str, operation_callable, *args, **
     # Check circuit breaker
     if _circuit_open:
         logger.warning(f"Circuit breaker OPEN - skipping {operation_name}")
-        raise RuntimeError(f"Circuit breaker open for database operations")
+        raise RuntimeError("Circuit breaker open for database operations")
     
     last_exception = None
     delay = INITIAL_RETRY_DELAY

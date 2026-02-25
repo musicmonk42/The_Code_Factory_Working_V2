@@ -333,7 +333,6 @@ class RabbitMQSettings(BaseSettings):
     @classmethod
     @field_validator("exchange_name")
     def validate_exchange_name_in_prod(cls, v, info: ValidationInfo):
-        values = info.data if info and hasattr(info, 'data') else {}
         if PRODUCTION_MODE:
             if "*" in v or "?" in v:
                 raise ValueError(

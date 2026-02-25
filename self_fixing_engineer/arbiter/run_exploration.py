@@ -135,7 +135,7 @@ except ImportError:
                 "This is a mock implementation for dev/test only."
             )
             warnings.warn(
-                f"Arbiter fallback: run_task() returning mock success",
+                "Arbiter fallback: run_task() returning mock success",
                 UserWarning,
                 stacklevel=2
             )
@@ -167,7 +167,7 @@ except ImportError:
                 "This is a mock implementation for dev/test only."
             )
             warnings.warn(
-                f"Arbiter fallback: explore_and_fix() returning mock success",
+                "Arbiter fallback: explore_and_fix() returning mock success",
                 UserWarning,
                 stacklevel=2
             )

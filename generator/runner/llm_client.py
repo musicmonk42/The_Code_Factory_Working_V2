@@ -665,7 +665,7 @@ class LLMClient:
                 # FIX: Log circuit breaker state before call
                 circuit_state = self.circuit_breaker.get_state(provider)
                 logger.debug(
-                    f"[LLM] Circuit breaker state",
+                    "[LLM] Circuit breaker state",
                     extra={
                         "provider": provider,
                         "state": circuit_state,
@@ -676,7 +676,7 @@ class LLMClient:
                 if not await self.circuit_breaker.allow_request(provider):
                     # FIX: Log when circuit is open and blocking call
                     logger.warning(
-                        f"[LLM] Circuit breaker OPEN - call blocked",
+                        "[LLM] Circuit breaker OPEN - call blocked",
                         extra={
                             "provider": provider,
                             "state": self.circuit_breaker.get_state(provider),
@@ -1184,9 +1184,9 @@ async def call_llm_api(
                         )
                     else:
                         logger.info(
-                            f"✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
-                            f"This is acceptable for development/testing. "
-                            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location."
+                            "✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            "This is acceptable for development/testing. "
+                            "For production, set RUNNER_CONFIG_PATH or place config in a standard location."
                         )
                     
                     # Create minimal config with required fields suitable for development
@@ -1250,9 +1250,9 @@ async def call_ensemble_api(
                         )
                     else:
                         logger.info(
-                            f"✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
-                            f"This is acceptable for development/testing. "
-                            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location."
+                            "✅ Using minimal fallback configuration (backend=docker, framework=pytest). "
+                            "This is acceptable for development/testing. "
+                            "For production, set RUNNER_CONFIG_PATH or place config in a standard location."
                         )
                     
                     # Create minimal config with required fields suitable for development

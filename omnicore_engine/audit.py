@@ -1371,7 +1371,6 @@ class ExplainAudit:
     @retry(tries=3, delay=1, backoff=2)
     async def _flush_buffer(self):
         AUDIT_RECORDS.labels(operation="flush_buffer").inc()
-        start_time = time.time()
         records_to_flush = []
 
         with self.lock:

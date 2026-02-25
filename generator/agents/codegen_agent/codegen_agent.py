@@ -57,10 +57,6 @@ try:
     )
     # FIX: Import from runner_audit to avoid circular dependency
     from generator.runner.runner_audit import log_audit_event
-    from generator.runner.runner_metrics import (
-        LLM_CIRCUIT_STATE,
-        LLM_RATE_LIMIT_EXCEEDED,
-    )
     from generator.runner.runner_security_utils import scan_for_vulnerabilities
 except ImportError as e:
     # Hard fail: this agent is not allowed to run without the runner stack.
@@ -982,8 +978,7 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
     constraints = requirements.get("constraints", [])
     md_content = requirements.get("md_content", "") or requirements.get("readme_content", "")
     file_structure = requirements.get("file_structure", [])
-    frontend_type = requirements.get("frontend_type", DEFAULT_FRONTEND_TYPE)
-    
+
     # Build features section from parsed spec
     features_text = ""
     if features:
@@ -1381,11 +1376,14 @@ if PLUGIN_AVAILABLE:
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
                                 )
+                                # NOTE: Using "first" voting strategy because majority voting requires exact
+                                # string matches across providers, which is impossible for code generation.
+                                # Different LLMs produce semantically equivalent but textually different code.
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
-                                        voting_strategy="majority",
+                                        voting_strategy="first",
                                         timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
@@ -1413,10 +1411,13 @@ if PLUGIN_AVAILABLE:
                             )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            # NOTE: Using "first" voting strategy because majority voting requires exact
+                            # string matches across providers, which is impossible for code generation.
+                            # Different LLMs produce semantically equivalent but textually different code.
                             response_dict = await call_ensemble_api(
                                 prompt=prompt,
                                 models=_ensemble_models,
-                                voting_strategy="majority",
+                                voting_strategy="first",
                                 timeout_per_provider=180.0,
                             )
                             response = (
@@ -1425,7 +1426,7 @@ if PLUGIN_AVAILABLE:
                                 else str(response_dict)
                             )
                             logger.info(
-                                f"[CODEGEN] LLM ensemble response received",
+                                "[CODEGEN] LLM ensemble response received",
                                 extra={
                                     "backend": "ensemble",
                                     "response_length": len(str(response)),
@@ -1436,7 +1437,7 @@ if PLUGIN_AVAILABLE:
                         # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
                         logger.info(
-                            f"[CODEGEN] Calling LLM",
+                            "[CODEGEN] Calling LLM",
                             extra={
                                 "backend": config.backend,
                                 "model": config.model.get(config.backend),
@@ -1463,7 +1464,7 @@ if PLUGIN_AVAILABLE:
                             _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
                         logger.info(
-                            f"[CODEGEN] LLM response received",
+                            "[CODEGEN] LLM response received",
                             extra={
                                 "backend": config.backend,
                                 "response_length": len(str(response)),
@@ -1552,7 +1553,7 @@ if PLUGIN_AVAILABLE:
             except Exception as e:
                 # FIX: Improve error logging with more context
                 logger.error(
-                    f"[CODEGEN] Generation failed",
+                    "[CODEGEN] Generation failed",
                     extra={
                         "error_type": type(e).__name__,
                         "error_message": str(e),
@@ -1780,11 +1781,14 @@ else:
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
                                 )
+                                # NOTE: Using "first" voting strategy because majority voting requires exact
+                                # string matches across providers, which is impossible for code generation.
+                                # Different LLMs produce semantically equivalent but textually different code.
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
-                                        voting_strategy="majority",
+                                        voting_strategy="first",
                                         timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
@@ -1812,10 +1816,13 @@ else:
                             )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            # NOTE: Using "first" voting strategy because majority voting requires exact
+                            # string matches across providers, which is impossible for code generation.
+                            # Different LLMs produce semantically equivalent but textually different code.
                             response_dict = await call_ensemble_api(
                                 prompt=prompt,
                                 models=_ensemble_models,
-                                voting_strategy="majority",
+                                voting_strategy="first",
                                 timeout_per_provider=180.0,
                             )
                             response = (
@@ -1824,7 +1831,7 @@ else:
                                 else str(response_dict)
                             )
                             logger.info(
-                                f"[CODEGEN] LLM ensemble response received",
+                                "[CODEGEN] LLM ensemble response received",
                                 extra={
                                     "backend": "ensemble",
                                     "response_length": len(str(response)),
@@ -1835,7 +1842,7 @@ else:
                         # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
                         logger.info(
-                            f"[CODEGEN] Calling LLM",
+                            "[CODEGEN] Calling LLM",
                             extra={
                                 "backend": config.backend,
                                 "model": config.model.get(config.backend),
@@ -1862,7 +1869,7 @@ else:
                             _llm_kwargs["skip_cache"] = True
                         response = await call_llm_api(**_llm_kwargs)
                         logger.info(
-                            f"[CODEGEN] LLM response received",
+                            "[CODEGEN] LLM response received",
                             extra={
                                 "backend": config.backend,
                                 "response_length": len(str(response)),
@@ -1945,7 +1952,7 @@ else:
             except Exception as e:
                 # FIX: Improve error logging with more context
                 logger.error(
-                    f"[CODEGEN] Generation failed",
+                    "[CODEGEN] Generation failed",
                     extra={
                         "error_type": type(e).__name__,
                         "error_message": str(e),

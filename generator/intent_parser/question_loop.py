@@ -415,8 +415,7 @@ def generate_questions(spec: SpecBlock, readme_content: Optional[str] = None) ->
     if not spec.project_type:
         # Try to infer from readme
         inferred_type = None
-        default_type = None  # No default - require explicit choice
-        
+
         if readme_content:
             content_lower = readme_content.lower()
             if "fastapi" in content_lower or "rest api" in content_lower:

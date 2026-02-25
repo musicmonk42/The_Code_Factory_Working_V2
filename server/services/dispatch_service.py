@@ -582,7 +582,7 @@ async def _dispatch_via_kafka(event: Dict[str, Any], correlation_id: str) -> boo
         producer.close()
         
         logger.debug(
-            f"Kafka message sent successfully",
+            "Kafka message sent successfully",
             extra={
                 "correlation_id": correlation_id,
                 "topic": topic,
@@ -902,7 +902,7 @@ async def process_dispatch_queue(batch_size: int = 100, max_runtime: Optional[fl
         while True:
             # Check runtime limit
             if max_runtime and (time.time() - start_time) >= max_runtime:
-                logger.info(f"Max runtime reached, stopping processor")
+                logger.info("Max runtime reached, stopping processor")
                 break
 
             try:

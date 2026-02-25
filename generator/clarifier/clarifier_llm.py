@@ -549,8 +549,8 @@ class GrokLLM(LLMProvider):
         # If no API key, raise LLMUnavailableError so callers can fall back gracefully.
         if not self.has_api_key:
             raise LLMUnavailableError(
-                f"GrokLLM: no API key configured. "
-                f"Set GROK_API_KEY or XAI_API_KEY to enable LLM-based generation."
+                "GrokLLM: no API key configured. "
+                "Set GROK_API_KEY or XAI_API_KEY to enable LLM-based generation."
             )
 
         # Prepare request parameters

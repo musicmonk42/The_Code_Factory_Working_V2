@@ -108,7 +108,7 @@ class LevelPrefixFormatter(logging.Formatter):
         # before the formatter runs (e.g., "Loaded %d plugins" -> "Loaded [REDACTED] plugins")
         try:
             formatted = super().format(record)
-        except (ValueError, TypeError, KeyError) as e:
+        except (ValueError, TypeError, KeyError):
             # Formatting failed, likely due to corrupted format string
             # Fall back to simple string representation
             try:

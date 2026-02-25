@@ -29,7 +29,7 @@ def verify_kafka_config():
     use_kafka_ingestion = os.getenv("USE_KAFKA_INGESTION", "false")
     use_kafka_audit = os.getenv("USE_KAFKA_AUDIT", "false")
     
-    print(f"Environment Variables:")
+    print("Environment Variables:")
     print(f"  ENABLE_KAFKA: {enable_kafka}")
     print(f"  KAFKA_ENABLED: {kafka_enabled}")
     print(f"  USE_KAFKA_INGESTION: {use_kafka_ingestion}")
@@ -39,7 +39,7 @@ def verify_kafka_config():
     try:
         from self_fixing_engineer.arbiter.config import ArbiterConfig
         config = ArbiterConfig()
-        print(f"\nArbiterConfig:")
+        print("\nArbiterConfig:")
         print(f"  KAFKA_ENABLED: {config.KAFKA_ENABLED} (type: {type(config.KAFKA_ENABLED).__name__})")
         print(f"  KAFKA_BOOTSTRAP_SERVERS: {config.KAFKA_BOOTSTRAP_SERVERS}")
         
@@ -56,8 +56,8 @@ def verify_kafka_config():
     # Try to check ShardedMessageBus
     try:
         from omnicore_engine.message_bus.sharded_message_bus import ShardedMessageBus
-        print(f"\nShardedMessageBus:")
-        print(f"  Module loaded successfully")
+        print("\nShardedMessageBus:")
+        print("  Module loaded successfully")
         # Note: We don't instantiate here to avoid startup side effects
     except Exception as e:
         print(f"  ❌ Failed to import ShardedMessageBus: {e}")
@@ -76,7 +76,7 @@ def verify_agent_readiness():
     # Check that dependency exists
     try:
         from server.dependencies import require_agents_ready
-        print(f"✅ require_agents_ready dependency exists")
+        print("✅ require_agents_ready dependency exists")
     except ImportError as e:
         print(f"❌ Failed to import require_agents_ready: {e}")
         return False
@@ -86,9 +86,9 @@ def verify_agent_readiness():
         with open('server/routers/jobs.py', 'r') as f:
             jobs_content = f.read()
             if 'require_agents_ready' in jobs_content and 'Depends(require_agents_ready)' in jobs_content:
-                print(f"✅ require_agents_ready is used in server/routers/jobs.py")
+                print("✅ require_agents_ready is used in server/routers/jobs.py")
             else:
-                print(f"❌ require_agents_ready not found in server/routers/jobs.py")
+                print("❌ require_agents_ready not found in server/routers/jobs.py")
                 return False
     except Exception as e:
         print(f"❌ Failed to check jobs.py: {e}")
@@ -99,9 +99,9 @@ def verify_agent_readiness():
         with open('server/routers/generator.py', 'r') as f:
             gen_content = f.read()
             if 'require_agents_ready' in gen_content and 'Depends(require_agents_ready)' in gen_content:
-                print(f"✅ require_agents_ready is used in server/routers/generator.py")
+                print("✅ require_agents_ready is used in server/routers/generator.py")
             else:
-                print(f"❌ require_agents_ready not found in server/routers/generator.py")
+                print("❌ require_agents_ready not found in server/routers/generator.py")
                 return False
     except Exception as e:
         print(f"❌ Failed to check generator.py: {e}")
@@ -132,25 +132,25 @@ def verify_nltk_config():
             print(f"✅ vader_lexicon found at {vader_path}")
         else:
             print(f"⚠️  vader_lexicon not found at {vader_path}")
-            print(f"   (This may be expected in development, should be present in Docker)")
+            print("   (This may be expected in development, should be present in Docker)")
     else:
         print(f"⚠️  {expected_path} directory does not exist")
-        print(f"   (This is expected in development, should exist in Docker container)")
+        print("   (This is expected in development, should exist in Docker container)")
     
     # Check Dockerfile
     try:
         with open('Dockerfile', 'r') as f:
             dockerfile_content = f.read()
             if 'NLTK_DATA="/opt/nltk_data"' in dockerfile_content or 'NLTK_DATA=/opt/nltk_data' in dockerfile_content:
-                print(f"✅ NLTK_DATA is set in Dockerfile")
+                print("✅ NLTK_DATA is set in Dockerfile")
             else:
-                print(f"❌ NLTK_DATA not found in Dockerfile")
+                print("❌ NLTK_DATA not found in Dockerfile")
                 return False
             
             if 'COPY --from=builder --chown=appuser:appgroup /opt/nltk_data /opt/nltk_data' in dockerfile_content:
-                print(f"✅ NLTK data is copied with correct ownership in Dockerfile")
+                print("✅ NLTK data is copied with correct ownership in Dockerfile")
             else:
-                print(f"❌ NLTK data copy not found in Dockerfile")
+                print("❌ NLTK data copy not found in Dockerfile")
                 return False
     except Exception as e:
         print(f"❌ Failed to check Dockerfile: {e}")

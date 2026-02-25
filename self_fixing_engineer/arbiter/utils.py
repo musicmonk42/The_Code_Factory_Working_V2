@@ -87,11 +87,7 @@ _HEALTH_CHECK_LIMITER = None
 def _get_health_check_limiter():
     """Get or create an AsyncLimiter for the current event loop."""
     global _HEALTH_CHECK_LIMITER
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    # Create a new limiter if none exists or if the event loop has changed
+    # Create a new limiter if none exists
     if _HEALTH_CHECK_LIMITER is None:
         _HEALTH_CHECK_LIMITER = AsyncLimiter(
             HEALTH_CHECK_RATE_LIMIT_MAX_RATE, HEALTH_CHECK_RATE_LIMIT_TIME_PERIOD

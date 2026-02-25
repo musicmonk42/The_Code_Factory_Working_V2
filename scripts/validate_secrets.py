@@ -429,14 +429,11 @@ class OutputFormatter:
                 # Status icon
                 if result.status == ValidationStatus.PASS:
                     icon = "✓"
-                    color = ""
                 elif result.status == ValidationStatus.FAIL:
                     icon = "✗"
-                    color = ""
                 else:
                     icon = "⚠"
-                    color = ""
-                
+
                 lines.append(f"{icon} {result.name}: {result.message}")
                 
                 if result.details:
@@ -444,7 +441,7 @@ class OutputFormatter:
                         lines.append(f"  └─ {key}: {value}")
                 
                 if result.remediation and result.status != ValidationStatus.PASS:
-                    lines.append(f"  Remediation:")
+                    lines.append("  Remediation:")
                     for line in result.remediation.split('\n'):
                         lines.append(f"    {line}")
                 

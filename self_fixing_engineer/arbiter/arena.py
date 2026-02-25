@@ -53,7 +53,7 @@ except ImportError as e:
     import warnings
     logger.warning(f"SimulationEngine not available ({e}), using fallback")
     warnings.warn(
-        f"SimulationEngine not available - using fallback implementation",
+        "SimulationEngine not available - using fallback implementation",
         UserWarning,
         stacklevel=2
     )

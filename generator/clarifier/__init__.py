@@ -281,7 +281,7 @@ class _ClarifierPromptProxy:
         # Check if module is actually a proxy (circular import), raise ImportError
         if isinstance(module, _ClarifierPromptProxy):
             raise ImportError(
-                f"clarifier_prompt module failed to load properly "
+                "clarifier_prompt module failed to load properly "
                 "(circular import or stub). Cannot access attribute: {name}"
             )
         

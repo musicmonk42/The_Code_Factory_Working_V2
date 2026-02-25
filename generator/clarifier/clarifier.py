@@ -1940,7 +1940,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                         f"Created history directory: {history_dir}",
                         extra={"operation": "create_history_dir"}
                     )
-                except PermissionError as pe:
+                except PermissionError:
                     # Fallback to /tmp if primary path is not writable
                     fallback_path = "/tmp/clarifier_history.json"
                     self.logger.warning(

@@ -149,7 +149,7 @@ class ProvenanceTracker:
         self.errors: List[Dict[str, Any]] = []
         self.started_at = datetime.now(timezone.utc).isoformat()
         
-        logger.info(f"ProvenanceTracker initialized", extra={"job_id": self.job_id})
+        logger.info("ProvenanceTracker initialized", extra={"job_id": self.job_id})
     
     @staticmethod
     def _generate_job_id() -> str:
@@ -804,7 +804,7 @@ def validate_readme_completeness(readme_content: str, language: str = "python") 
         else:
             # curl is only a warning since it's for examples
             if cmd_key == "curl":
-                warnings.append(f"No curl examples found (recommended)")
+                warnings.append("No curl examples found (recommended)")
             else:
                 errors.append(f"Missing required command: {cmd_key}")
     
@@ -1055,7 +1055,7 @@ def _write_spec_error_file(output_dir: str, result: Dict[str, Any]) -> None:
         f.write("-" * 40 + "\n")
         f.write(f"  Timestamp: {timestamp}\n")
         f.write(f"  Duration:  {result.get('duration_ms', 0):.2f} ms\n")
-        f.write(f"  Stage:     SPEC_VALIDATE\n\n")
+        f.write("  Stage:     SPEC_VALIDATE\n\n")
         
         # Summary statistics
         missing_count = len(result.get("missing_endpoints", []))
