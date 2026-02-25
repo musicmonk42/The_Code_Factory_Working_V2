@@ -2619,10 +2619,20 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
 
         if module_path not in code_files:
             # Module file is entirely missing — generate a stub.
+            # Determine up-front whether any router-pattern symbols are present
+            # so the APIRouter import can be emitted once at the module header.
+            has_router_syms = any(
+                sym.lower() in _ROUTER_VARIABLE_PATTERNS
+                for sym in symbols
+                if not sym[0].isupper()
+            )
             stub_lines = [
                 "# Auto-generated stub — module referenced but not produced by LLM\n",
-                "from typing import Any\n\n",
+                "from typing import Any\n",
             ]
+            if has_router_syms:
+                stub_lines.append("from fastapi import APIRouter as _APIRouter\n")
+            stub_lines.append("\n")
             for sym in sorted(symbols):
                 # Uppercase initial → class; known router patterns → APIRouter();
                 # other known variable suffixes → None variable;
@@ -2634,8 +2644,8 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         f"    pass\n\n\n"
                     )
                 elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                    # Import already emitted at module header above.
                     stub_lines.append(
-                        f"from fastapi import APIRouter as _APIRouter\n"
                         f"{sym} = _APIRouter()  # Stub router — configure routes\n\n\n"
                     )
                 elif _is_likely_variable(sym):
@@ -2659,17 +2669,36 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             existing_content = code_files[module_path]
             try:
                 tree = ast.parse(existing_content)
+                # Collect names from function/class definitions at any nesting depth.
                 defined_names: Set[str] = {
                     node.name
                     for node in ast.walk(tree)
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                 }
+                # Also collect top-level variable assignment names so that existing
+                # module-level variables (e.g. ``db_engine = ...``) are not re-stubbed.
+                for node in ast.iter_child_nodes(tree):
+                    if isinstance(node, ast.Assign):
+                        for target in node.targets:
+                            if isinstance(target, ast.Name):
+                                defined_names.add(target.id)
+                    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                        defined_names.add(node.target.id)
             except SyntaxError:
                 defined_names = set()
 
             missing = symbols - defined_names
             if missing:
+                # Emit the APIRouter import once at the top of the appended block
+                # if any missing symbol needs it.
+                has_router_missing = any(
+                    sym.lower() in _ROUTER_VARIABLE_PATTERNS
+                    for sym in missing
+                    if not sym[0].isupper()
+                )
                 appended_lines = ["\n\n# Auto-generated stubs for symbols missing from this module\n"]
+                if has_router_missing:
+                    appended_lines.append("from fastapi import APIRouter as _APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
                         appended_lines.append(
@@ -2678,9 +2707,9 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f"    pass\n"
                         )
                     elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                        # Import already emitted at block header above.
                         appended_lines.append(
-                            f"\nfrom fastapi import APIRouter as _APIRouter\n"
-                            f"{sym} = _APIRouter()  # Stub router — configure routes\n"
+                            f"\n{sym} = _APIRouter()  # Stub router — configure routes\n"
                         )
                     elif _is_likely_variable(sym):
                         appended_lines.append(
