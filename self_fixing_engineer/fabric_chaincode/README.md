@@ -2,6 +2,13 @@
 
 \# Fabric Chaincode Module - Self-Fixing Engineer (SFE) 🚀  
 
+> ⚠️ **Experimental / Not Yet Production-Ready**: Hyperledger Fabric integration is
+> experimental and not yet fully implemented in this build. The `fabric_sdk_py` Python
+> client library is not bundled, and selecting `dlt_type: fabric` will cause the platform
+> to log a warning and fall back to no-op mode rather than connecting to a Fabric network.
+> The Go chaincode (`checkpoint_chaincode.go`) is provided for future use. For a stable
+> DLT backend, use the Ethereum/EVM integration instead.
+
 Fabric Chaincode v1.0.0 - The "Immutable Ledger" Edition  
 
 \*\*Proprietary Technology by Novatrax Labs\*\*

@@ -220,6 +220,11 @@ make run-omnicore
 
 Setup DLT (optional, for checkpoint_chaincode.go, CheckpointContract.sol):
 
+> ⚠️ **Note:** Hyperledger Fabric integration is experimental and not yet fully production-ready.
+> The `fabric_sdk_py` library is not bundled with this build. Attempting to connect to a Fabric
+> network will log a warning and fall back to no-op mode rather than raising an error.
+> Use EVM/Ethereum for a stable DLT backend.
+
 Deploy Hyperledger Fabric test network:
 ./network.sh up  # From Fabric samples
 
