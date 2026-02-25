@@ -404,6 +404,19 @@ class ServerConfig(BaseSettings):
         description="Enable plugin integrity checks via HASH_MANIFEST (default: false in dev, true in prod)",
     )
     
+    @field_validator("encryption_mode")
+    @classmethod
+    def validate_encryption_mode(cls, v: str) -> str:
+        """Validate that encryption_mode is one of the supported backends."""
+        valid_modes = {"local", "aws_kms", "azure_keyvault"}
+        if v not in valid_modes:
+            raise ValueError(
+                f"Invalid ENCRYPTION_MODE: '{v}'. "
+                f"Must be one of {sorted(valid_modes)}. "
+                "See SECURITY_CONFIGURATION.md for details."
+            )
+        return v
+
     @field_validator("app_env")
     @classmethod
     def validate_env(cls, v: str) -> str:

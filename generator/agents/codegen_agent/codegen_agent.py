@@ -171,6 +171,38 @@ def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
     return _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD
 
 
+async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
+    """
+    Emit a progress log at regular intervals while a multi-pass LLM call is
+    in-flight.
+
+    Designed to be run as a background asyncio Task and cancelled via
+    ``task.cancel()`` as soon as the LLM call completes (success **or** failure).
+    The ``finally`` block on the caller must call::
+
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+
+    This ensures the task is always cleaned up and never leaks, even when the
+    caller exits via exception or cancellation.
+
+    Args:
+        pass_name: Human-readable name of the current generation pass, used
+            in the log message so operators can correlate heartbeats with passes.
+        interval: Seconds between successive log messages (default: 30 s).
+    """
+    elapsed = 0
+    while True:
+        await asyncio.sleep(interval)
+        elapsed += interval
+        logger.info(
+            "[CODEGEN] Multi-pass ensemble heartbeat: pass '%s' still in progress "
+            "(%ds elapsed) — container is alive and working",
+            pass_name,
+            elapsed,
+        )
+
+
 # ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
@@ -1363,6 +1395,8 @@ if PLUGIN_AVAILABLE:
                             logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
+                            # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
+                            _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
                                 _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
                                 logger.info(
@@ -1384,9 +1418,23 @@ if PLUGIN_AVAILABLE:
                                 # NOTE: Using "first" voting strategy because majority voting requires exact
                                 # string matches across providers, which is impossible for code generation.
                                 # Different LLMs produce semantically equivalent but textually different code.
-                                logger.info(
-                                    "[CODEGEN] Multi-pass ensemble heartbeat: pass '%s' LLM call in progress ",
-                                    _group['name'],
+                                #
+                                # Global timeout guard: abort early if we have already consumed the
+                                # configured pipeline budget across previous passes.
+                                _multipass_elapsed = time.monotonic() - _multipass_global_start
+                                if _multipass_elapsed >= PIPELINE_CODEGEN_TIMEOUT_SECONDS:
+                                    logger.error(
+                                        "[CODEGEN] Multi-pass ensemble global timeout reached "
+                                        "(%.0fs >= %ds); aborting remaining passes with %d files collected",
+                                        _multipass_elapsed,
+                                        PIPELINE_CODEGEN_TIMEOUT_SECONDS,
+                                        len(_merged_files),
+                                    )
+                                    break
+                                # Spawn a periodic heartbeat task so container health-checks and log
+                                # monitors can confirm the job is alive during long LLM calls.
+                                _heartbeat = asyncio.create_task(
+                                    _multipass_heartbeat(_group['name'])
                                 )
                                 try:
                                     _pass_dict = await call_ensemble_api(
@@ -1438,6 +1486,11 @@ if PLUGIN_AVAILABLE:
                                             f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
                                             f"{_fb_err}. Continuing with remaining passes."
                                         )
+                                finally:
+                                    # Always cancel the heartbeat task to avoid resource leaks,
+                                    # regardless of whether the LLM call succeeded or raised.
+                                    _heartbeat.cancel()
+                                    await asyncio.gather(_heartbeat, return_exceptions=True)
                             response = {"files": _merged_files}
                             logger.info(
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
@@ -1818,6 +1871,8 @@ else:
                             logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
+                            # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
+                            _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
                                 _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
                                 logger.info(
@@ -1839,9 +1894,23 @@ else:
                                 # NOTE: Using "first" voting strategy because majority voting requires exact
                                 # string matches across providers, which is impossible for code generation.
                                 # Different LLMs produce semantically equivalent but textually different code.
-                                logger.info(
-                                    "[CODEGEN] Multi-pass ensemble heartbeat: pass '%s' LLM call in progress ",
-                                    _group['name'],
+                                #
+                                # Global timeout guard: abort early if we have already consumed the
+                                # configured pipeline budget across previous passes.
+                                _multipass_elapsed = time.monotonic() - _multipass_global_start
+                                if _multipass_elapsed >= PIPELINE_CODEGEN_TIMEOUT_SECONDS:
+                                    logger.error(
+                                        "[CODEGEN] Multi-pass ensemble global timeout reached "
+                                        "(%.0fs >= %ds); aborting remaining passes with %d files collected",
+                                        _multipass_elapsed,
+                                        PIPELINE_CODEGEN_TIMEOUT_SECONDS,
+                                        len(_merged_files),
+                                    )
+                                    break
+                                # Spawn a periodic heartbeat task so container health-checks and log
+                                # monitors can confirm the job is alive during long LLM calls.
+                                _heartbeat = asyncio.create_task(
+                                    _multipass_heartbeat(_group['name'])
                                 )
                                 try:
                                     _pass_dict = await call_ensemble_api(
@@ -1893,6 +1962,11 @@ else:
                                             f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
                                             f"{_fb_err}. Continuing with remaining passes."
                                         )
+                                finally:
+                                    # Always cancel the heartbeat task to avoid resource leaks,
+                                    # regardless of whether the LLM call succeeded or raised.
+                                    _heartbeat.cancel()
+                                    await asyncio.gather(_heartbeat, return_exceptions=True)
                             response = {"files": _merged_files}
                             logger.info(
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
