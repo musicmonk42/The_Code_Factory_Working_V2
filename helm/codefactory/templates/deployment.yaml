@@ -161,7 +161,7 @@ spec:
                   name: {{ .Values.secrets.apiKeys.openaiSecretName }}
                   key: xai-api-key
                   optional: true
-            {{- /* XAI Test-Generation API tuning knobs — non-secret, sourced from env values */ -}}
+            {{- /* XAI Test-Generation API tuning knobs — non-secret, sourced from env values */}}
             - name: XAI_API_PROVIDER
               value: {{ .Values.env.XAI_API_PROVIDER | default "openai" | quote }}
             - name: XAI_API_MODEL
