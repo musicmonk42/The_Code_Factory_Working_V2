@@ -1446,15 +1446,20 @@ Review the error carefully and ensure your generated code does not repeat the sa
 
             # 7. Extract required endpoints from MD content
             required_endpoints = []
+            spec_structure = None
             md_content = md_content or requirements.get("md_content", "")
             if md_content:
-                from generator.main.provenance import extract_endpoints_from_md
+                from generator.main.provenance import extract_endpoints_from_md, extract_file_structure_from_md
                 try:
                     required_endpoints = extract_endpoints_from_md(md_content)
                     if required_endpoints:
                         logger.info(f"Extracted {len(required_endpoints)} required endpoints from specification")
                 except Exception as e:
                     logger.warning(f"Failed to extract endpoints from MD content: {e}")
+                try:
+                    spec_structure = extract_file_structure_from_md(md_content)
+                except Exception as e:
+                    logger.warning(f"Failed to extract file structure from MD content: {e}")
             
             # 8. Load and Render Template
             template_name = f"{target_language}.jinja2"
@@ -1474,7 +1479,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 state_summary=state_summary,
                 previous_feedback=previous_feedback,
                 previous_error_context=error_context,
-                syntax_safety_instructions=get_syntax_safety_instructions(target_language),
+                syntax_safety_instructions=get_syntax_safety_instructions(target_language, spec_structure),
                 rag_context=rag_context,
                 best_practices=best_practices,
                 image_descriptions=image_desc,
@@ -1531,7 +1536,7 @@ Review the error carefully and ensure your generated code does not repeat the sa
 
             # 8. Prepend Syntax Safety Instructions
             # These are CRITICAL to reduce syntax errors from LLM generation
-            prompt = get_syntax_safety_instructions(target_language) + "\n\n" + prompt
+            prompt = get_syntax_safety_instructions(target_language, spec_structure) + "\n\n" + prompt
 
             if error_context:
                 # If this is a retry, add error context prominently at the start

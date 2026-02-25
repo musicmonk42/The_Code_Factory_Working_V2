@@ -335,3 +335,128 @@ async def test_fastapi_hitl_review_endpoint_ignored_if_missing(temp_codegen_env)
 # ---------------------------------------------------------------------------
 # End of file
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# _build_symbol_manifest — unit tests
+# ---------------------------------------------------------------------------
+
+from agents.codegen_agent.codegen_agent import _build_symbol_manifest
+
+
+def test_build_symbol_manifest_captures_functions_and_classes():
+    """
+    Top-level public functions and classes must appear in the manifest.
+    """
+    files = {
+        "app/auth.py": (
+            "from typing import Optional\n\n"
+            "class Role:\n    pass\n\n"
+            "def get_current_user(token: str) -> Optional[str]:\n    return None\n\n"
+            "async def create_access_token(data: dict) -> str:\n    return ''\n"
+        ),
+    }
+    manifest = _build_symbol_manifest(files)
+
+    assert "app.auth" in manifest
+    assert "Role" in manifest
+    assert "get_current_user" in manifest
+    assert "create_access_token" in manifest
+
+
+def test_build_symbol_manifest_captures_top_level_assignments():
+    """
+    Module-level variable assignments (e.g. api_router = APIRouter()) must
+    appear in the manifest so later passes know to import them rather than
+    re-define them.
+    """
+    files = {
+        "app/routing.py": (
+            "from fastapi import APIRouter\n\n"
+            "api_router = APIRouter()\n\n"
+            "@api_router.get('/items')\n"
+            "def list_items():\n    return []\n"
+        ),
+    }
+    manifest = _build_symbol_manifest(files)
+
+    assert "app.routing" in manifest
+    assert "api_router" in manifest
+    assert "list_items" in manifest
+
+
+def test_build_symbol_manifest_excludes_private_symbols():
+    """
+    Names starting with underscore are private and must NOT appear in the manifest.
+    """
+    files = {
+        "app/utils.py": (
+            "def _helper(): pass\n"
+            "class _Internal: pass\n"
+            "def public_util(): pass\n"
+            "_private_var = 42\n"
+        ),
+    }
+    manifest = _build_symbol_manifest(files)
+
+    assert "_helper" not in manifest
+    assert "_Internal" not in manifest
+    assert "_private_var" not in manifest
+    assert "public_util" in manifest
+
+
+def test_build_symbol_manifest_skips_non_python_files():
+    """
+    Non-Python files (requirements.txt, Dockerfile, etc.) must be silently ignored.
+    """
+    files = {
+        "requirements.txt": "fastapi\nuvicorn\n",
+        "Dockerfile": "FROM python:3.12\nCMD uvicorn main:app\n",
+        "app/main.py": "def run(): pass\n",
+    }
+    manifest = _build_symbol_manifest(files)
+
+    assert "requirements" not in manifest
+    assert "Dockerfile" not in manifest
+    assert "app.main" in manifest
+    assert "run" in manifest
+
+
+def test_build_symbol_manifest_skips_files_with_syntax_errors():
+    """
+    Python files that fail to parse must be silently skipped, not crash.
+    """
+    files = {
+        "app/broken.py": "def : invalid syntax\n",
+        "app/good.py": "def valid_fn(): pass\n",
+    }
+    manifest = _build_symbol_manifest(files)
+
+    assert "app.broken" not in manifest
+    assert "app.good" in manifest
+    assert "valid_fn" in manifest
+
+
+def test_build_symbol_manifest_returns_empty_string_for_empty_input():
+    """Empty files dict must return an empty string, not crash."""
+    assert _build_symbol_manifest({}) == ""
+
+
+def test_build_symbol_manifest_does_not_include_nested_symbols():
+    """
+    Methods inside classes and nested functions must NOT appear as module-level
+    exports in the manifest (top-level only).
+    """
+    files = {
+        "app/service.py": (
+            "class UserService:\n"
+            "    def create(self, data): pass\n"
+            "    def delete(self, id): pass\n"
+        ),
+    }
+    manifest = _build_symbol_manifest(files)
+
+    # The class should appear, but not its methods
+    assert "UserService" in manifest
+    assert "create" not in manifest
+    assert "delete" not in manifest

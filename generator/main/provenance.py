@@ -1195,6 +1195,9 @@ def validate_spec_fidelity(
         # Extract expected file structure from MD spec and validate it
         expected_structure = extract_file_structure_from_md(md_content)
         expected_dirs = expected_structure.get("directories", [])
+        # Filter out entries that look like files (have a file extension) — e.g. ".env.example".
+        # Use os.path.basename so nested paths like "some/dir/.env.example" are handled correctly.
+        expected_dirs = [d for d in expected_dirs if not os.path.splitext(os.path.basename(d))[1]]
         missing_dirs: List[str] = []
         if output_dir and expected_dirs:
             for expected_dir in expected_dirs:

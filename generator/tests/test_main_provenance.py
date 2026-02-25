@@ -1130,3 +1130,64 @@ class TestExtractFileStructureFromMd:
         assert "app/services" in sv["missing_directories"]
         assert "app/routers" not in sv["missing_directories"]
         assert sv["passed"] is False
+
+
+class TestStructureValidationDirectoryFilter:
+    """Verify that file-like entries are excluded from the directory check."""
+
+    def test_env_example_not_reported_as_missing_directory(self):
+        """
+        .env.example has a file extension and must be filtered out of the
+        expected-directories list before the on-disk check is performed.
+        The spec validator must not flag it as a missing directory.
+        """
+        import tempfile, os
+        from generator.main.provenance import validate_spec_fidelity
+
+        # Spec mentions .env.example and a real directory
+        md = "Project layout:\n- `.env.example`\n- `app/`\n- `app/main.py`\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            os.makedirs(os.path.join(tmpdir, "app"), exist_ok=True)
+            result = validate_spec_fidelity(md, {}, output_dir=tmpdir)
+
+        sv = result["structure_validation"]
+        assert ".env.example" not in sv["missing_directories"], (
+            ".env.example is a file, not a directory — it must be filtered out"
+        )
+
+    def test_alembic_ini_not_reported_as_missing_directory(self):
+        """
+        alembic.ini has a .ini extension and must not appear in missing directories.
+        """
+        import tempfile
+        from generator.main.provenance import validate_spec_fidelity
+
+        md = "Config files: `alembic.ini`, `alembic/`\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import os
+            os.makedirs(os.path.join(tmpdir, "alembic"), exist_ok=True)
+            result = validate_spec_fidelity(md, {}, output_dir=tmpdir)
+
+        sv = result["structure_validation"]
+        assert "alembic.ini" not in sv["missing_directories"], (
+            "alembic.ini is a file, not a directory — it must be filtered out"
+        )
+
+    def test_plain_directory_still_checked(self):
+        """
+        Regular directories (no extension) must still be included in the check.
+        A genuinely missing directory must still be reported.
+        """
+        import tempfile
+        from generator.main.provenance import validate_spec_fidelity
+
+        md = "Use `app/routers/` and `app/services/` directories.\n"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import os
+            # Only create app/routers — leave app/services absent
+            os.makedirs(os.path.join(tmpdir, "app", "routers"), exist_ok=True)
+            result = validate_spec_fidelity(md, {}, output_dir=tmpdir)
+
+        sv = result["structure_validation"]
+        assert "app/services" in sv["missing_directories"]
+        assert "app/routers" not in sv["missing_directories"]

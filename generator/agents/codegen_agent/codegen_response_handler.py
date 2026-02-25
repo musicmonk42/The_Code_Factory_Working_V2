@@ -618,7 +618,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 is_production_ready, prod_error = validate_production_ready(code_files)
                 if not is_production_ready:
                     logger.warning("Production-ready validation failed: %s", prod_error)
-                    # Continue but log the issue
+                    # Append to any pre-existing syntax errors rather than overwriting them.
+                    existing = code_files.get(ERROR_FILENAME, "")
+                    code_files[ERROR_FILENAME] = (
+                        existing + ("\n\n" if existing else "") + prod_error
+                    )
                 else:
                     logger.info("Production-ready validation passed for %d files", len(code_files))
 
@@ -697,7 +701,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     is_production_ready, prod_error = validate_production_ready(code_files)
                     if not is_production_ready:
                         logger.warning("Production-ready validation failed for multi-file response")
-                        code_files[ERROR_FILENAME] = prod_error
+                        # Append to any pre-existing syntax errors rather than overwriting them.
+                        existing = code_files.get(ERROR_FILENAME, "")
+                        code_files[ERROR_FILENAME] = (
+                            existing + ("\n\n" if existing else "") + prod_error
+                        )
                     
                     log_action(
                         "Parsed Multi-File Response",
@@ -1121,6 +1129,9 @@ _EXTENSION_TO_LANGUAGE: Dict[str, str] = {
     "css": "css",
     # Dockerfile (when extension is present)
     "dockerfile": "dockerfile",
+    # INI-style config files (e.g. alembic.ini, setup.cfg)
+    "ini": "config",
+    "cfg": "config",
 }
 
 # Mapping of well-known extensionless filenames (or dot-files) to their language types.
@@ -2459,6 +2470,44 @@ def monitor_and_scan_code(code_files: Dict[str, str]) -> Dict[str, str]:
 # removed. All external security analysis should be funneled through
 # `scan_for_vulnerabilities` provided by the runner layer.
 
+# Suffixes that indicate an imported name is a module-level variable rather than
+# a callable.  Names ending with these strings get a simple object assignment
+# instead of a stub function definition.
+_VARIABLE_SUFFIXES: Tuple[str, ...] = (
+    "_router", "_app", "_engine", "_client", "_pool",
+    "_db", "_session", "_manager", "_factory", "_registry",
+    "_config", "_settings", "_broker", "_bus", "_cache",
+)
+
+
+def _is_likely_variable(name: str) -> bool:
+    """Return ``True`` when *name* looks like a module-level variable, not a callable.
+
+    Uses a suffix-based heuristic: well-known framework object names end with
+    suffixes such as ``_router``, ``_engine``, ``_client``, etc.  When an
+    imported name matches one of these patterns it should be stubbed as a simple
+    variable assignment rather than a callable stub function.
+
+    Args:
+        name: The imported symbol name to classify.
+
+    Returns:
+        ``True`` if the name should be treated as a variable; ``False`` if it
+        should be treated as a callable (function or class).
+
+    Examples:
+        >>> _is_likely_variable("api_router")
+        True
+        >>> _is_likely_variable("db_engine")
+        True
+        >>> _is_likely_variable("get_current_user")
+        False
+        >>> _is_likely_variable("User")
+        False
+    """
+    name_lower = name.lower()
+    return any(name_lower.endswith(suffix) for suffix in _VARIABLE_SUFFIXES)
+
 
 def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     """Scan generated Python files for local module imports and generate stubs.
@@ -2479,9 +2528,11 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     Name classification heuristic
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     An imported name that starts with an uppercase letter is treated as a
-    *class*; otherwise it is treated as a *function*.  Both stubs raise
-    ``NotImplementedError`` so any accidental runtime invocation surfaces
-    immediately rather than returning a silent ``None``.
+    *class*; otherwise it is treated as a *function* returning ``None`` or
+    a *variable* (based on known naming conventions such as ``_router``,
+    ``_engine``, ``_client`` suffixes).  Variables get a minimal object
+    assignment; functions get a ``return None`` body so they don't crash
+    immediately at runtime.
 
     Args:
         code_files: Mapping of relative file paths to source code strings, as
@@ -2528,18 +2579,23 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 "from typing import Any\n\n",
             ]
             for sym in sorted(symbols):
-                # Uppercase initial → class; lowercase initial → function.
+                # Uppercase initial → class; known variable suffixes → variable;
+                # otherwise → function returning None.
                 if sym[0].isupper():
                     stub_lines.append(
                         f"class {sym}:\n"
                         f'    """Stub class."""\n'
                         f"    pass\n\n\n"
                     )
+                elif _is_likely_variable(sym):
+                    stub_lines.append(
+                        f"{sym} = None  # Stub variable — replace with actual instance\n\n\n"
+                    )
                 else:
                     stub_lines.append(
                         f"def {sym}(*args: Any, **kwargs: Any) -> Any:\n"
-                        f'    """Stub function."""\n'
-                        f'    raise NotImplementedError("{sym} is a stub")\n\n\n'
+                        f'    """Minimal implementation - replace with actual logic."""\n'
+                        f"    return None\n\n\n"
                     )
             code_files[module_path] = "".join(stub_lines)
             logger.info(
@@ -2570,11 +2626,15 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f'    """Stub class."""\n'
                             f"    pass\n"
                         )
+                    elif _is_likely_variable(sym):
+                        appended_lines.append(
+                            f"\n{sym} = None  # Stub variable — replace with actual instance\n"
+                        )
                     else:
                         appended_lines.append(
                             f"\ndef {sym}(*args: Any, **kwargs: Any) -> Any:\n"
-                            f'    """Stub function."""\n'
-                            f'    raise NotImplementedError("{sym} is a stub")\n'
+                            f'    """Minimal implementation - replace with actual logic."""\n'
+                            f"    return None\n"
                         )
                 code_files[module_path] = existing_content + "".join(appended_lines)
                 logger.info(

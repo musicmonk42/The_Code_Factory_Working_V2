@@ -2,6 +2,7 @@
 
 # agents/codegen_agent.py
 import asyncio
+import ast
 import json
 import logging
 import logging.handlers
@@ -149,6 +150,9 @@ _MULTIPASS_GROUPS = [
             "Generate ONLY infrastructure and configuration files: "
             "requirements.txt, Dockerfile, docker-compose.yml, .env.example, "
             "alembic.ini, alembic/env.py, Makefile, pyproject.toml, and similar config files. "
+            "Also generate Kubernetes manifests in k8s/ (e.g. k8s/deployment.yaml, k8s/service.yaml, "
+            "k8s/ingress.yaml, k8s/configmap.yaml) and Helm chart files in helm/ "
+            "(e.g. helm/Chart.yaml, helm/values.yaml, helm/templates/deployment.yaml). "
             "Do NOT generate Python application code in this pass."
         ),
     },
@@ -169,6 +173,83 @@ def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
 def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
     """Return True when the spec is large enough to warrant multi-pass generation."""
     return _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD
+
+
+def _build_symbol_manifest(files: Dict[str, str]) -> str:
+    """Extract top-level public symbols from Python files and return a manifest string.
+
+    Used to give later passes in a multi-pass generation context knowledge about
+    what was already defined in earlier passes, so they can import from the correct
+    modules rather than re-defining or stubbing symbols.
+
+    Only **top-level** nodes in each module are collected (not nested class methods
+    or inner functions), matching the symbols that would appear in an ``__all__``
+    export or a ``from module import ...`` statement.
+
+    The following top-level constructs are captured:
+
+    * ``def``/``async def`` — functions
+    * ``class`` — class definitions
+    * ``name = ...`` / ``name: type = ...`` — simple variable assignments
+      (e.g. ``api_router = APIRouter()``, ``app = FastAPI()``)
+
+    Private names (starting with ``_``) are intentionally excluded because they
+    should not be imported across module boundaries.
+
+    Args:
+        files: Mapping of relative file paths to source code strings, as
+            produced by :func:`parse_llm_response`.  Non-Python files and files
+            that contain syntax errors are silently skipped.
+
+    Returns:
+        A human-readable string listing each module and its exported symbols,
+        suitable for direct inclusion in an LLM prompt.  Returns an empty string
+        when no Python files with parseable public symbols are found.
+
+    Examples:
+        >>> result = _build_symbol_manifest({"app/auth.py": "def get_current_user(): ..."})
+        >>> "app.auth: get_current_user" in result
+        True
+    """
+    lines: List[str] = []
+    for path, content in sorted(files.items()):
+        if not path.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+
+        symbols: List[str] = []
+        # Walk only the direct children of the module (top-level statements).
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if not node.name.startswith("_"):
+                    symbols.append(node.name)
+            elif isinstance(node, ast.Assign):
+                # Simple assignments: ``name = value`` at module scope.
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and not target.id.startswith("_"):
+                        symbols.append(target.id)
+            elif isinstance(node, ast.AnnAssign):
+                # Annotated assignments: ``name: Type = value`` at module scope.
+                if isinstance(node.target, ast.Name) and not node.target.id.startswith("_"):
+                    symbols.append(node.target.id)
+
+        # Deduplicate while preserving first-seen order.
+        seen: set = set()
+        unique_symbols = [s for s in symbols if not (s in seen or seen.add(s))]  # type: ignore[func-returns-value]
+
+        if unique_symbols:
+            module_name = path.replace("/", ".").removesuffix(".py")
+            lines.append(f"  {module_name}: {', '.join(sorted(unique_symbols))}")
+
+    if not lines:
+        return ""
+    return (
+        "Symbol manifest from earlier passes (import from these modules — do NOT redefine):\n"
+        + "\n".join(lines)
+    )
 
 
 async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
@@ -1403,6 +1484,7 @@ if PLUGIN_AVAILABLE:
                             logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
+                            _symbol_manifest: str = ""
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
@@ -1417,8 +1499,11 @@ if PLUGIN_AVAILABLE:
                                     f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
                                     if _already else ""
                                 )
+                                _manifest_note = (
+                                    f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
+                                )
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -1458,6 +1543,9 @@ if PLUGIN_AVAILABLE:
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
                                      _merged_files.update(_pass_files)
+                                     # After each pass, rebuild the symbol manifest so later
+                                     # passes know what was already defined.
+                                     _symbol_manifest = _build_symbol_manifest(_merged_files)
                                      _pass_duration = time.monotonic() - _pass_start
                                      logger.info(
                                          f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
@@ -1854,6 +1942,7 @@ else:
                             logger.info("[CODEGEN] Multi-pass ensemble generation: starting")
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
+                            _symbol_manifest: str = ""
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
@@ -1868,8 +1957,11 @@ else:
                                     f"\n\nAlready-generated files (DO NOT regenerate these): {_already}\n"
                                     if _already else ""
                                 )
+                                _manifest_note = (
+                                    f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
+                                )
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -1909,6 +2001,9 @@ else:
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
                                      _merged_files.update(_pass_files)
+                                     # After each pass, rebuild the symbol manifest so later
+                                     # passes know what was already defined.
+                                     _symbol_manifest = _build_symbol_manifest(_merged_files)
                                      _pass_duration = time.monotonic() - _pass_start
                                      logger.info(
                                          f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
