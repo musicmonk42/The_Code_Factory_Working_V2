@@ -36,6 +36,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "codefactory.serviceAccountName" . }}
+      # terminationGracePeriodSeconds must exceed preStop sleep + uvicorn graceful shutdown
+      # timeout + buffer.  See values.yaml for the rationale and formula.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 90 }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       {{- with .Values.topologySpreadConstraints }}

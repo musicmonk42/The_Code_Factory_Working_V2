@@ -287,17 +287,24 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Environment variables for the runtime stage
 # SECURITY: No hardcoded encryption keys - must be provided at runtime
-# AUDIT CRYPTO: Set AUDIT_CRYPTO_MODE to "full" when AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 is configured
-# FEATURE FLAGS: Set to "1" to enable, "0" to disable, "auto" for auto-detection
-# PARALLEL AGENT LOADING: Enabled by default for faster startup
-# NLTK_DATA: Set to /opt/nltk_data (accessible by appuser, not /root/nltk_data)
-# HF_HOME: Set to /opt/huggingface_cache for pre-downloaded models (replaces deprecated TRANSFORMERS_CACHE)
-# MPLCONFIGDIR: Set to /tmp/matplotlib to prevent permission errors
-# KAFKA: Multiple variables for compatibility - different components check different names
-#   - KAFKA_ENABLED: Primary flag checked by ArbiterConfig (via Pydantic validation_alias)
-#   - ENABLE_KAFKA: Alias checked by some older components
-#   - USE_KAFKA_INGESTION: Controls Kafka for event ingestion
-#   - USE_KAFKA_AUDIT: Controls Kafka for audit events
+# AUDIT CRYPTO: "software" mode requires AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64 at runtime.
+#               AUDIT_CRYPTO_ALLOW_INIT_FAILURE=1 lets the container start without the key so that
+#               operators can inject it via K8s Secret / Railway variable without a rebuild.
+# FEATURE FLAGS: Set to "1" to enable, "0" to disable. "auto" is NEVER used — explicit values
+#               prevent accidental exposure of powerful subsystems (CIS Docker Benchmark 4.6).
+# PARALLEL AGENT LOADING: Enabled by default for faster startup.
+# NLTK_DATA: /opt/nltk_data (pre-downloaded; accessible by appuser, not /root/nltk_data).
+# HF_HOME: /opt/huggingface_cache for pre-downloaded models (replaces deprecated TRANSFORMERS_CACHE).
+# MPLCONFIGDIR: /tmp/matplotlib to prevent permission errors.
+# KAFKA: Multiple variables for backward-compatibility across components:
+#   - KAFKA_ENABLED: Primary flag checked by ArbiterConfig (via Pydantic validation_alias).
+#   - ENABLE_KAFKA: Legacy alias checked by older components.
+#   - USE_KAFKA_INGESTION / USE_KAFKA_AUDIT: Fine-grained Kafka routing controls.
+# PIPELINE_CODEGEN_TIMEOUT_SECONDS: Per-job outer budget for multi-pass code generation (900 s / 15 min).
+# ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: Per-provider timeout for ensemble LLM calls (300 s / 5 min).
+# ENCRYPTION_MODE: Encryption backend — local | aws_kms | azure_keyvault (see SECURITY_CONFIGURATION.md).
+# SUPPRESS_SECURITY_WARNINGS: Set to "1" in development to silence security-posture log warnings.
+# PLUGIN_INTEGRITY_CHECK_ENABLED: Enable plugin hash verification via HASH_MANIFEST.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -305,12 +312,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SKIP_IMPORT_TIME_VALIDATION=1 \
     SPACY_WARNING_IGNORE=W007 \
     AWS_REGION="" \
-    AUDIT_CRYPTO_MODE="disabled" \
+    AUDIT_CRYPTO_MODE="software" \
     AUDIT_CRYPTO_ALLOW_INIT_FAILURE="1" \
     ENABLE_DATABASE="1" \
-    ENABLE_FEATURE_STORE="auto" \
-    ENABLE_HSM="auto" \
-    ENABLE_LIBVIRT="auto" \
+    ENABLE_FEATURE_STORE="0" \
+    ENABLE_HSM="0" \
+    ENABLE_LIBVIRT="0" \
     KAFKA_ENABLED="true" \
     ENABLE_KAFKA="true" \
     USE_KAFKA_INGESTION="true" \
@@ -325,8 +332,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     TLDEXTRACT_CACHE="/tmp/tldextract_cache" \
     ARBITER_WORLD_SIZE="10" \
     ARBITER_ROLE="admin" \
-    POLICY_CONFIG_FILE_PATH="/app/data/policies.json"
-    # SENTRY_DSN: Set at deployment time for error tracking
+    POLICY_CONFIG_FILE_PATH="/app/data/policies.json" \
+    PIPELINE_CODEGEN_TIMEOUT_SECONDS="900" \
+    ENSEMBLE_PROVIDER_TIMEOUT_SECONDS="300" \
+    CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD="25" \
+    ENCRYPTION_MODE="local" \
+    SUPPRESS_SECURITY_WARNINGS="0" \
+    PLUGIN_INTEGRITY_CHECK_ENABLED="false"
+    # SENTRY_DSN / SENTRY_ENVIRONMENT: Set at deployment time for error tracking.
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 
 # Optional: curl for debugging and healthchecks
