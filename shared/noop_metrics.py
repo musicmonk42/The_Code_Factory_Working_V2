@@ -345,7 +345,16 @@ def safe_metric(
             from prometheus_client import REGISTRY as _R  # type: ignore[import]
 
             if hasattr(_R, "_names_to_collectors") and name in _R._names_to_collectors:
-                return _R._names_to_collectors[name]
+                existing = _R._names_to_collectors[name]
+                if factory is not None and not isinstance(existing, factory):
+                    logger.warning(
+                        "Metric %r already registered as %s but %s was requested; "
+                        "returning existing metric.",
+                        name,
+                        type(existing).__name__,
+                        getattr(factory, "__name__", str(factory)),
+                    )
+                return existing
         except ImportError:
             logger.debug(
                 "prometheus_client not installed — returning NOOP for %r", name
