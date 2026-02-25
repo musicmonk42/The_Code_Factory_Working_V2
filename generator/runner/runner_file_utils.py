@@ -1100,6 +1100,9 @@ MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10MB per file limit
 MAX_FILES_PER_BATCH = 1000  # Maximum files in a single materialization
 MAX_PATH_LENGTH = 255  # Maximum filename length (POSIX limit)
 
+# Timeout (seconds) for the cold-start subprocess import check in validate_generated_project().
+COLD_START_IMPORT_TIMEOUT_SECONDS = 10
+
 # Build and cache directories that should not be moved during output layout enforcement
 EXCLUDED_BUILD_DIRS = {'__pycache__', '.pytest_cache', '.git', 'node_modules', '.mypy_cache', '.ruff_cache'}
 
@@ -2391,6 +2394,52 @@ async def validate_generated_project(
                 )
                 result["valid"] = False
     
+    # Cold-start import verification: attempt to import the main app module in a subprocess
+    # to catch cross-file import failures that ast.parse() alone cannot detect (Fix 4/10).
+    if lang in ("python", "py") and result.get("valid", True):
+        import os as _os_cold
+        import subprocess
+        import sys as _sys
+
+        # Determine entry module: prefer app.main, fall back to main
+        if (output_dir / "app" / "main.py").exists():
+            entry_module = "app.main"
+        elif (output_dir / "main.py").exists():
+            entry_module = "main"
+        else:
+            entry_module = None
+
+        if entry_module:
+            child_env = dict(_os_cold.environ)
+            child_env["PYTHONPATH"] = str(output_dir)
+            try:
+                proc = subprocess.run(
+                    [_sys.executable, "-c", f"import {entry_module}; print('OK')"],
+                    cwd=str(output_dir),
+                    env=child_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=COLD_START_IMPORT_TIMEOUT_SECONDS,
+                )
+                if proc.returncode != 0:
+                    import_error = (proc.stderr or proc.stdout).strip()
+                    result["errors"].append(
+                        f"Cold-start import check failed for '{entry_module}': {import_error}"
+                    )
+                    result["valid"] = False
+                    logger.error(
+                        "Cold-start import check failed for '%s': %s", entry_module, import_error
+                    )
+                else:
+                    logger.debug("Cold-start import check passed for '%s'", entry_module)
+            except subprocess.TimeoutExpired:
+                result["warnings"].append(
+                    f"Cold-start import check timed out for '{entry_module}' "
+                    f"(>{COLD_START_IMPORT_TIMEOUT_SECONDS}s)"
+                )
+            except Exception as e:
+                result["warnings"].append(f"Cold-start import check error: {e}")
+
     # Calculate validation time
     result["validation_time_ms"] = (time.time() - start_time) * 1000
     

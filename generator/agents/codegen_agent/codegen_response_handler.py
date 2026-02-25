@@ -296,6 +296,15 @@ def is_audit_logging_available() -> bool:
 DEFAULT_FILENAME = "main.py"
 ERROR_FILENAME = "error.txt"
 
+# Maximum fraction of files that may fail validation before a high-rejection-rate
+# warning is emitted to the pipeline.  Also triggers when the absolute count
+# of failed files exceeds MAX_FAILED_FILES_ABSOLUTE.
+MAX_REJECTION_RATE = 0.30
+MAX_FAILED_FILES_ABSOLUTE = 5
+
+# Timeout (seconds) for the cold-start subprocess import check.
+COLD_START_IMPORT_TIMEOUT_SECONDS = 10
+
 # Common LLM response prefixes that should be stripped before JSON parsing
 # Includes variations with/without newlines and mixed casing (e.g. "json\n{...}", "json {...")
 LLM_RESPONSE_PREFIXES = [
@@ -588,7 +597,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     errors[filename] = "Content is not a string."
                     continue
 
-                cleaned = _normalize_file_content(_clean_code_block(content))
+                # Content is already per-file extracted from JSON — skip _clean_code_block()
+                # to preserve YAML, requirements.txt, Helm templates, etc.
+                cleaned = _normalize_file_content(content)
                 
                 # Use validate_and_repair_syntax instead of _validate_syntax
                 validation_result = validate_and_repair_syntax(cleaned, lang, filename)
@@ -637,7 +648,37 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 else:
                     logger.info("Production-ready validation passed for %d files", len(code_files))
 
-                return _finalize_with_pydantic_v2_validation(code_files)
+                # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
+                code_files = _detect_module_package_collisions(code_files)
+
+                # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
+                shadow_warnings = _detect_name_shadowing(code_files)
+                for w in shadow_warnings:
+                    logger.warning("Name shadowing detected: %s", w)
+
+                # Compute validation summary for pipeline gating decisions (Fix 6)
+                non_error_files = {k: v for k, v in code_files.items() if k != ERROR_FILENAME}
+                files_passed_count = len(non_error_files)
+                files_failed_count = len(errors)
+                total_count = files_passed_count + files_failed_count
+                rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
+                if files_failed_count > files_passed_count * MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
+                    logger.warning(
+                        "High file rejection rate: %d/%d files failed (%.0f%%)",
+                        files_failed_count, total_count, rejection_rate * 100,
+                    )
+
+                # Finalize without __validation_summary__ to avoid polluting code processing
+                finalized = _finalize_with_pydantic_v2_validation(code_files)
+                # Attach summary after finalization so it is never treated as a code file.
+                # Serialised as JSON so consumers can parse it without eval().
+                finalized["__validation_summary__"] = json.dumps({
+                    "files_passed": files_passed_count,
+                    "files_failed": files_failed_count,
+                    "rejection_rate": round(rejection_rate, 4),
+                    "shadow_warnings": shadow_warnings,
+                })
+                return finalized
     except json.JSONDecodeError:
         # Not valid JSON, continue with cleaning approach
         logger.debug("Raw JSON parsing failed, trying with code block cleaning")
@@ -668,7 +709,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         errors[filename] = "Content is not a string."
                         continue
 
-                    cleaned = _normalize_file_content(_clean_code_block(content))
+                    # Content is already per-file extracted from JSON — skip _clean_code_block()
+                    # to preserve YAML, requirements.txt, Helm templates, etc.
+                    cleaned = _normalize_file_content(content)
                     
                     # Infer per-file language from extension instead of using project-level lang
                     file_lang = _infer_language_from_filename(filename, default_lang=lang)
@@ -728,7 +771,38 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                             "auto_repairs": repair_logs if repair_logs else None,
                         },
                     )
-                    return _finalize_with_pydantic_v2_validation(code_files)
+
+                    # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
+                    code_files = _detect_module_package_collisions(code_files)
+
+                    # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
+                    shadow_warnings = _detect_name_shadowing(code_files)
+                    for w in shadow_warnings:
+                        logger.warning("Name shadowing detected: %s", w)
+
+                    # Compute validation summary for pipeline gating decisions (Fix 6)
+                    non_error_files = {k: v for k, v in code_files.items() if k != ERROR_FILENAME}
+                    files_passed_count = len(non_error_files)
+                    files_failed_count = len(errors)
+                    total_count = files_passed_count + files_failed_count
+                    rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
+                    if files_failed_count > files_passed_count * MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
+                        logger.warning(
+                            "High file rejection rate: %d/%d files failed (%.0f%%)",
+                            files_failed_count, total_count, rejection_rate * 100,
+                        )
+
+                    # Finalize without __validation_summary__ to avoid polluting code processing
+                    finalized = _finalize_with_pydantic_v2_validation(code_files)
+                    # Attach summary after finalization so it is never treated as a code file.
+                    # Serialised as JSON so consumers can parse it without eval().
+                    finalized["__validation_summary__"] = json.dumps({
+                        "files_passed": files_passed_count,
+                        "files_failed": files_failed_count,
+                        "rejection_rate": round(rejection_rate, 4),
+                        "shadow_warnings": shadow_warnings,
+                    })
+                    return finalized
                 # If nothing usable, fall through to single-file handling.
 
         except json.JSONDecodeError:
@@ -865,6 +939,93 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 # ==============================================================================
 
 
+def _detect_module_package_collisions(code_files: Dict[str, str]) -> Dict[str, str]:
+    """
+    Detect and resolve module/package name collisions in the generated file map.
+
+    When the multi-pass ensemble generates both ``app/routes.py`` (a module) and
+    ``app/routes/__init__.py`` (a package), Python cannot resolve both.  This
+    function removes the bare module file and keeps the package directory tree,
+    which is more complete.
+
+    Args:
+        code_files: Mapping of filename → content as returned by the parser.
+
+    Returns:
+        A new mapping with collisions resolved (module file removed).
+    """
+    cleaned: Dict[str, str] = dict(code_files)
+
+    # Build a set of package roots: any path of the form "foo/__init__.py"
+    # maps to a package root of "foo"
+    package_roots: set = set()
+    for path in list(cleaned.keys()):
+        norm = path.replace("\\", "/")
+        if norm.endswith("/__init__.py"):
+            root = norm[: -len("/__init__.py")]
+            package_roots.add(root)
+
+    for root in package_roots:
+        module_path = root + ".py"
+        if module_path in cleaned:
+            logger.warning(
+                "Module/package collision detected: removing '%s' in favour of '%s/__init__.py'",
+                module_path,
+                root,
+            )
+            del cleaned[module_path]
+
+    return cleaned
+
+
+def _detect_name_shadowing(code_files: Dict[str, str]) -> List[str]:
+    """
+    Detect handler function names that shadow imported names, which would cause
+    infinite recursion at runtime.
+
+    For each Python file, uses ``ast.parse()`` to:
+      1. Collect all imported names.
+      2. Collect all function/class definition names.
+      3. Flag any definition name that matches an imported name.
+
+    Args:
+        code_files: Mapping of filename → content.
+
+    Returns:
+        List of warning strings, one per shadowing occurrence.
+    """
+    import ast as _ast
+
+    shadow_issues: List[str] = []
+
+    for filename, content in code_files.items():
+        if not filename.endswith(".py"):
+            continue
+        try:
+            tree = _ast.parse(content, filename=filename)
+        except SyntaxError:
+            continue
+
+        imported_names: set = set()
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
+                for alias in node.names:
+                    imported_names.add(alias.asname if alias.asname else alias.name)
+            elif isinstance(node, _ast.ImportFrom):
+                for alias in node.names:
+                    imported_names.add(alias.asname if alias.asname else alias.name)
+
+        for node in _ast.walk(tree):
+            if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                if node.name in imported_names:
+                    shadow_issues.append(
+                        f"{filename}: definition '{node.name}' shadows an imported name "
+                        f"— this will cause infinite recursion or NameError at runtime"
+                    )
+
+    return shadow_issues
+
+
 def _contains_code_markers(text: str) -> bool:
     """
     Check if text contains indicators that it's actual code rather than prose.
@@ -910,6 +1071,16 @@ def _contains_code_markers(text: str) -> bool:
         # Other languages
         'function ', 'const ', 'let ', 'var ', 'public ', 'private ',
         'package ', 'namespace ', 'using ', 'include ', '#include',
+        # YAML / Kubernetes / Docker / Config markers
+        'apiversion:', 'kind:', 'metadata:', 'spec:', 'replicas:',
+        'services:', 'image:', 'ports:', 'volumes:', 'environment:',
+        'name:', 'version:', 'description:', 'dependencies:',
+        # Requirements.txt version specifiers
+        '>=', '<=', '~=',
+        # Helm/Jinja2 template markers
+        '{{', '}}', '{%', '%}',
+        # Dockerfile markers
+        'FROM ', 'RUN ', 'COPY ', 'CMD ', 'ENTRYPOINT ', 'WORKDIR ', 'EXPOSE ',
     )
     
     # Prose indicators (if these dominate, it's likely not code)
@@ -1341,6 +1512,13 @@ def _validate_yaml_content(code: str, filename: str) -> Tuple[bool, str]:
     if not code.strip():
         return False, "Empty YAML content"
     
+    # Skip strict YAML validation for Helm/Jinja2 template files
+    # Templates contain {{ }}, {%  %} syntax which is not valid YAML
+    TEMPLATE_MARKERS = ('{{', '}}', '{%', '%}')
+    if any(marker in code for marker in TEMPLATE_MARKERS) or 'templates/' in filename:
+        logger.debug("Skipping strict YAML validation for template file %s", filename)
+        return True, "Skipped validation for template file"
+
     # Check for markdown code fences - these indicate improper extraction
     if code.strip().startswith("```") or "```yaml" in code or "```yml" in code:
         return False, (

@@ -932,3 +932,205 @@ def test_production_ready_failure_appends_to_existing_error_file():
 
     # error.txt should exist (from syntax failure of bad.py or prod-ready failure of stub.py)
     assert crh.ERROR_FILENAME in files
+
+
+# ==============================================================================
+# Tests for: Fix 8/1 - YAML/config content preserved through multi-file JSON path
+# ==============================================================================
+
+def test_yaml_content_preserved_in_multi_file_json():
+    """YAML files in a multi-file JSON response must not be emptied by _clean_code_block."""
+    import json as _json
+
+    k8s_yaml = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: my-app\n"
+        "spec:\n"
+        "  replicas: 3\n"
+    )
+    response = _json.dumps({
+        "files": {
+            "main.py": "print('ok')",
+            "k8s/deployment.yaml": k8s_yaml,
+        }
+    })
+
+    files = crh.parse_llm_response(response, lang="python")
+    assert "k8s/deployment.yaml" in files, "YAML file should be preserved"
+    assert files["k8s/deployment.yaml"].strip() == k8s_yaml.strip()
+
+
+def test_requirements_txt_preserved_in_multi_file_json():
+    """requirements.txt content must not be emptied by the cleaner."""
+    import json as _json
+
+    req_content = "fastapi>=0.109.0\npydantic>=2.0.0\nuvicorn>=0.27.0\n"
+    response = _json.dumps({
+        "files": {
+            "main.py": "print('ok')",
+            "requirements.txt": req_content,
+        }
+    })
+
+    files = crh.parse_llm_response(response, lang="python")
+    assert "requirements.txt" in files, "requirements.txt should be preserved"
+    assert "fastapi" in files["requirements.txt"]
+
+
+def test_contains_code_markers_yaml():
+    """YAML content with apiVersion/kind should be recognised as non-prose."""
+    yaml_content = "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app\n"
+    assert crh._contains_code_markers(yaml_content), "YAML content should be recognised as code"
+
+
+def test_contains_code_markers_requirements_txt():
+    """requirements.txt content with version specifiers should be recognised."""
+    req = "fastapi>=0.109.0\npydantic>=2.0.0\n"
+    assert crh._contains_code_markers(req), "Requirements content should be recognised as code"
+
+
+def test_contains_code_markers_helm_template():
+    """Helm templates with {{ }} markers should be recognised."""
+    helm = "replicas: {{ .Values.replicaCount }}\nimage: {{ .Values.image }}\n"
+    assert crh._contains_code_markers(helm), "Helm template content should be recognised as code"
+
+
+# ==============================================================================
+# Tests for: Fix 2/9 - Helm/Jinja2 template YAML validation skip
+# ==============================================================================
+
+def test_validate_yaml_helm_template_skipped():
+    """Helm templates with {{ }} should pass YAML validation (skipped, not rejected)."""
+    helm_content = (
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "spec:\n"
+        "  replicas: {{ .Values.replicaCount }}\n"
+    )
+    is_valid, msg = crh._validate_yaml_content(helm_content, "helm/templates/deployment.yaml")
+    assert is_valid, f"Helm template should pass validation, got: {msg}"
+    assert "template" in msg.lower()
+
+
+def test_validate_yaml_templates_path_skipped():
+    """Files with 'templates/' in path should be treated as templates."""
+    content = "name: {{ .Values.name }}\n"
+    is_valid, msg = crh._validate_yaml_content(content, "helm/templates/service.yaml")
+    assert is_valid
+
+
+# ==============================================================================
+# Tests for: Fix 3 - Module/package collision detection and resolution
+# ==============================================================================
+
+def test_detect_module_package_collisions_removes_module_file():
+    """When both routes.py and routes/__init__.py exist, routes.py is removed."""
+    files = {
+        "app/routes.py": "# module",
+        "app/routes/__init__.py": "# package",
+        "app/routes/auth.py": "# auth",
+        "main.py": "# main",
+    }
+    result = crh._detect_module_package_collisions(files)
+    assert "app/routes.py" not in result, "Module file should be removed on collision"
+    assert "app/routes/__init__.py" in result, "Package __init__.py should be kept"
+    assert "app/routes/auth.py" in result
+    assert "main.py" in result
+
+
+def test_detect_module_package_no_collision():
+    """Files without collisions should be returned unchanged."""
+    files = {
+        "app/routes/__init__.py": "# package",
+        "app/models.py": "# models",
+    }
+    result = crh._detect_module_package_collisions(files)
+    assert result == files
+
+
+# ==============================================================================
+# Tests for: Fix 5 - Name shadowing detection
+# ==============================================================================
+
+def test_detect_name_shadowing_finds_shadowed_handler():
+    """Handler that shadows an imported name should be flagged."""
+    code = (
+        "from app.services.product_service import list_products\n\n"
+        "def list_products(request):\n"
+        "    return list_products()\n"
+    )
+    files = {"app/routes/products.py": code}
+    warnings = crh._detect_name_shadowing(files)
+    assert any("list_products" in w for w in warnings), (
+        f"Should warn about 'list_products' shadowing, got: {warnings}"
+    )
+
+
+def test_detect_name_shadowing_no_shadow():
+    """Clean code with no shadowing should produce no warnings."""
+    code = (
+        "from app.services.product_service import get_products\n\n"
+        "def list_products(request):\n"
+        "    return get_products()\n"
+    )
+    files = {"app/routes/products.py": code}
+    warnings = crh._detect_name_shadowing(files)
+    assert warnings == []
+
+
+def test_detect_name_shadowing_skips_non_python():
+    """Non-Python files should be skipped silently."""
+    files = {"k8s/deploy.yaml": "apiVersion: v1\n"}
+    warnings = crh._detect_name_shadowing(files)
+    assert warnings == []
+
+
+# ==============================================================================
+# Tests for: Fix 6 - __validation_summary__ is valid JSON and attached after finalization
+# ==============================================================================
+
+def test_validation_summary_is_valid_json():
+    """__validation_summary__ must be serialised as JSON (parseable without eval)."""
+    import json as _json
+
+    response = _json.dumps({
+        "files": {
+            "main.py": "print('ok')",
+            "util.py": "x = 1",
+        }
+    })
+
+    files = crh.parse_llm_response(response, lang="python")
+    assert "__validation_summary__" in files, "__validation_summary__ key must be present"
+
+    raw_summary = files["__validation_summary__"]
+    # Must be valid JSON (not a Python repr)
+    summary = _json.loads(raw_summary)
+
+    assert "files_passed" in summary
+    assert "files_failed" in summary
+    assert "rejection_rate" in summary
+    assert "shadow_warnings" in summary
+    assert isinstance(summary["files_passed"], int)
+    assert isinstance(summary["files_failed"], int)
+    assert isinstance(summary["rejection_rate"], float)
+    assert isinstance(summary["shadow_warnings"], list)
+
+
+def test_validation_summary_not_treated_as_code_file():
+    """__validation_summary__ must not be passed to code processors as a file."""
+    import json as _json
+
+    response = _json.dumps({
+        "files": {
+            "main.py": "print('ok')",
+        }
+    })
+
+    files = crh.parse_llm_response(response, lang="python")
+    # Ensure there is no syntax error from __validation_summary__ being parsed as Python
+    assert crh.ERROR_FILENAME not in files or "__validation_summary__" not in files.get(
+        crh.ERROR_FILENAME, ""
+    )
