@@ -734,9 +734,19 @@ class AuditLedgerClient:
                         f"Successfully connected to Ethereum DLT at {self.audit_ledger_url}"
                     )
                 elif self.dlt_type == "hyperledger_fabric":
-                    raise DLTUnsupportedError(
-                        "Hyperledger Fabric is not supported in this build."
+                    # Graceful degradation: Hyperledger Fabric is experimental and
+                    # not yet fully implemented. Log a warning and remain in no-op
+                    # mode instead of raising an unhandled error that would block
+                    # the Arbiter startup or audit pipeline.
+                    logger.warning(
+                        "Hyperledger Fabric integration is experimental and not yet "
+                        "fully implemented. The fabric_sdk_py library is not available "
+                        "in this build. Falling back to no-op mode — audit entries "
+                        "will NOT be written to the Fabric ledger. "
+                        "To enable Fabric support, install fabric_sdk_py and configure "
+                        "a running Fabric network."
                     )
+                    self._is_connected = False  # remain disconnected; no-op mode
                 else:
                     raise ValueError(f"Unsupported DLT type: {self.dlt_type}")
 
@@ -1110,9 +1120,14 @@ class AuditLedgerClient:
                         ).observe(receipt.gasUsed)
 
                     elif self.dlt_type == "hyperledger_fabric":
-                        raise DLTUnsupportedError(
-                            "Hyperledger Fabric is not supported in this build."
+                        # Graceful degradation: Hyperledger Fabric is experimental.
+                        # Log a warning and skip the DLT write rather than raising
+                        # an unhandled error.
+                        logger.warning(
+                            "Hyperledger Fabric DLT write skipped — Fabric integration "
+                            "is experimental and not yet fully implemented in this build."
                         )
+                        return None
 
                     else:
                         raise ValueError(
@@ -1716,9 +1731,13 @@ class AuditLedgerClient:
                     )
                     return connected
                 elif self.dlt_type == "hyperledger_fabric":
-                    raise DLTUnsupportedError(
-                        "Hyperledger Fabric is not supported in this build."
+                    # Graceful degradation: Fabric is experimental — report as
+                    # not connected rather than raising an error.
+                    logger.warning(
+                        "Hyperledger Fabric is_connected check: Fabric integration is "
+                        "experimental and not yet fully implemented. Reporting as disconnected."
                     )
+                    return False
                 else:
                     return False  # For unsupported types, assume not connected
             except DLTUnsupportedError as e:

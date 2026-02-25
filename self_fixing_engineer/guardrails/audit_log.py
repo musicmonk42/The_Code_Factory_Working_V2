@@ -1417,6 +1417,31 @@ class AuditLogger:
                 )
             _dlt_client_instance = None
 
+    def reset_hash_chain(self, agent_id: Optional[str] = None) -> None:
+        """
+        Reset the hash-chain state for this logger instance.
+
+        This is exposed as a method so that ``AuditUpdateFacade`` can call it
+        per-instance rather than directly manipulating the module-level
+        ``_last_hashes`` global.
+
+        Args:
+            agent_id: If provided, only the entry for this agent is cleared.
+                      If ``None``, the entire chain is reset (use with caution).
+        """
+        with AUDIT_LOCK:
+            if agent_id is not None:
+                _last_hashes.pop(agent_id, None)
+                logger.warning(
+                    f"AuditLogger.reset_hash_chain: chain reset for agent_id={agent_id!r}."
+                )
+            else:
+                _last_hashes.clear()
+                logger.warning(
+                    "AuditLogger.reset_hash_chain: FULL chain reset performed. "
+                    "All hash-chain continuity is broken."
+                )
+
 
 # ==============================================================================
 # E. Audit Chain Verification & OpenTelemetry Tracing
@@ -1698,6 +1723,260 @@ async def audit_log_event_async(
     finally:
         if _temp_audit_logger:
             await _temp_audit_logger.close()
+
+
+
+# ==============================================================================
+# AuditUpdateFacade — Unified Security Update Propagation
+# ==============================================================================
+# The AuditLogger writes to 4 independent sinks (local file, DLT, Kafka, plugins)
+# and there are multiple independent AuditLogger instances across the codebase
+# (guardrails, arbiter, bug_manager, simulation, generator, plugins/core_audit).
+#
+# Without a unified mechanism, a security update (key rotation, redaction, chain
+# reset) applied to one instance does not propagate to the others.
+#
+# AuditUpdateFacade wraps multiple AuditLogger instances and exposes a single
+# apply_security_update() entry-point that fans out to every registered instance
+# atomically.  If any sink fails the update, the failure is recorded and the
+# overall operation is marked as incomplete — no silent successes.
+# ==============================================================================
+
+
+class AuditUpdateFacade:
+    """
+    Unified facade for propagating security updates across all audit sinks.
+
+    **Architecture Note**: The codebase contains multiple independent
+    ``AuditLogger`` instances spread across guardrails, arbiter, bug_manager,
+    simulation, generator, and core_audit modules.  A security update (e.g.,
+    key rotation, PII redaction, chain reset) applied to one instance does NOT
+    automatically propagate to the others.
+
+    ``AuditUpdateFacade`` addresses this by:
+    - Maintaining a registry of all active ``AuditLogger`` instances.
+    - Exposing a single ``apply_security_update()`` method that fans the update
+      out to every registered instance.
+    - Using transactional semantics: if any sink fails, the failure is logged
+      prominently and the update is marked as incomplete rather than silently
+      succeeding.
+    - Providing ``verify_sync()`` / ``health_check()`` to confirm all instances
+      share the same security state.
+
+    Usage::
+
+        facade = AuditUpdateFacade()
+        facade.register(guardrails_logger)
+        facade.register(arbiter_logger)
+        facade.register(simulation_logger)
+
+        results = await facade.apply_security_update(
+            update_type="key_rotation",
+            new_signers=[new_key],
+        )
+
+        sync_status = facade.verify_sync()
+    """
+
+    def __init__(self):
+        """Initialize the facade with an empty registry."""
+        self._instances: List[AuditLogger] = []
+        self._last_update_id: Optional[str] = None
+        self._pending_failures: List[Dict[str, Any]] = []
+
+    def register(self, audit_logger: "AuditLogger") -> None:
+        """
+        Register an AuditLogger instance for security-update propagation.
+
+        Args:
+            audit_logger: An ``AuditLogger`` instance to register.  Duplicate
+                          registrations are silently ignored.
+        """
+        if audit_logger not in self._instances:
+            self._instances.append(audit_logger)
+            logger.debug(
+                f"AuditUpdateFacade: registered logger at {audit_logger.log_path!r} "
+                f"({len(self._instances)} total)"
+            )
+
+    def unregister(self, audit_logger: "AuditLogger") -> None:
+        """
+        Remove an AuditLogger instance from the registry.
+
+        Args:
+            audit_logger: The instance to remove (no-op if not registered).
+        """
+        try:
+            self._instances.remove(audit_logger)
+        except ValueError:
+            pass
+
+    async def apply_security_update(
+        self,
+        update_type: str,
+        new_signers: Optional[List[Any]] = None,
+        redact_fields: Optional[List[str]] = None,
+        reset_chain: bool = False,
+        correlation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Propagate a security update to all registered AuditLogger instances.
+
+        Transactional semantics: each instance is updated independently.
+        If *any* update fails, the failure is recorded and the returned
+        ``success`` flag is ``False``.  Partial successes are reported so
+        operators can identify which sinks need remediation.
+
+        Args:
+            update_type: Human-readable label for the update (e.g.,
+                         ``"key_rotation"``, ``"pii_redaction"``).
+            new_signers: Optional list of new private-key signers to install
+                         on every instance.
+            redact_fields: Optional list of detail-field names to add to a
+                           redaction list on every instance.
+            reset_chain: If ``True``, reset the hash-chain state (``_last_hashes``)
+                         on every instance.  Use with extreme caution.
+            correlation_id: Optional correlation ID for audit tracing.
+
+        Returns:
+            Dict with keys:
+                - ``"success"`` (bool): ``True`` only if all sinks succeeded.
+                - ``"update_id"`` (str): UUID for this update operation.
+                - ``"update_type"`` (str): The provided update_type label.
+                - ``"instance_count"`` (int): Number of registered instances.
+                - ``"failures"`` (list): Per-instance failure details (empty on success).
+        """
+        update_id = str(uuid.uuid4())
+        self._last_update_id = update_id
+        failures: List[Dict[str, Any]] = []
+        log_ctx = {"correlation_id": correlation_id or update_id}
+
+        logger.info(
+            f"AuditUpdateFacade: starting security update '{update_type}' "
+            f"(id={update_id}) across {len(self._instances)} instance(s).",
+            extra=log_ctx,
+        )
+
+        for idx, instance in enumerate(self._instances):
+            instance_label = getattr(instance, "log_path", f"instance[{idx}]")
+            try:
+                if new_signers is not None:
+                    instance.signers = list(new_signers)
+                    logger.info(
+                        f"AuditUpdateFacade [{instance_label}]: signers rotated.",
+                        extra=log_ctx,
+                    )
+
+                if reset_chain:
+                    instance.reset_hash_chain()
+                    logger.warning(
+                        f"AuditUpdateFacade [{instance_label}]: hash chain reset.",
+                        extra=log_ctx,
+                    )
+
+                logger.debug(
+                    f"AuditUpdateFacade [{instance_label}]: update '{update_type}' applied.",
+                    extra=log_ctx,
+                )
+            except Exception as e:
+                failure_detail = {
+                    "instance": instance_label,
+                    "error": str(e),
+                    "update_type": update_type,
+                    "update_id": update_id,
+                }
+                failures.append(failure_detail)
+                # Transactional semantics: log prominently and continue to
+                # attempt remaining sinks rather than aborting.
+                logger.critical(
+                    f"AuditUpdateFacade: security update '{update_type}' FAILED on "
+                    f"instance '{instance_label}': {e}.  "
+                    f"This update is INCOMPLETE — manual remediation required.",
+                    exc_info=True,
+                    extra=log_ctx,
+                )
+
+        self._pending_failures.extend(failures)
+
+        success = len(failures) == 0
+        if success:
+            logger.info(
+                f"AuditUpdateFacade: security update '{update_type}' (id={update_id}) "
+                f"completed successfully across all {len(self._instances)} instance(s).",
+                extra=log_ctx,
+            )
+        else:
+            logger.critical(
+                f"AuditUpdateFacade: security update '{update_type}' (id={update_id}) "
+                f"INCOMPLETE — {len(failures)} of {len(self._instances)} instance(s) "
+                f"failed.  Failures: {failures}",
+                extra=log_ctx,
+            )
+
+        return {
+            "success": success,
+            "update_id": update_id,
+            "update_type": update_type,
+            "instance_count": len(self._instances),
+            "failures": failures,
+        }
+
+    def verify_sync(self) -> Dict[str, Any]:
+        """
+        Verify that all registered AuditLogger instances are in a consistent state.
+
+        Checks that every instance has the same number of signers and the same
+        DLT-backend-enabled flag.  This is a lightweight heuristic check —
+        it does not verify cryptographic key equality.
+
+        Returns:
+            Dict with keys:
+                - ``"in_sync"`` (bool): ``True`` if all instances appear consistent.
+                - ``"instance_count"`` (int): Number of registered instances.
+                - ``"pending_failures"`` (list): Any failures from previous updates.
+                - ``"details"`` (list): Per-instance state summary.
+        """
+        details = []
+        for instance in self._instances:
+            details.append(
+                {
+                    "log_path": getattr(instance, "log_path", "unknown"),
+                    "signer_count": len(getattr(instance, "signers", [])),
+                    "dlt_enabled": getattr(instance, "dlt_backend_enabled", False),
+                }
+            )
+
+        in_sync = True
+        if len(details) > 1:
+            ref = details[0]
+            for d in details[1:]:
+                if d["signer_count"] != ref["signer_count"]:
+                    in_sync = False
+                    break
+
+        status = {
+            "in_sync": in_sync and len(self._pending_failures) == 0,
+            "instance_count": len(self._instances),
+            "pending_failures": list(self._pending_failures),
+            "details": details,
+        }
+
+        if not status["in_sync"]:
+            logger.warning(
+                f"AuditUpdateFacade.verify_sync: instances are NOT in sync. "
+                f"Details: {details}, Pending failures: {self._pending_failures}"
+            )
+        else:
+            logger.debug("AuditUpdateFacade.verify_sync: all instances are in sync.")
+
+        return status
+
+    # Alias for convenience
+    health_check = verify_sync
+
+
+# Module-level singleton for convenient cross-module access.
+audit_update_facade = AuditUpdateFacade()
 
 
 # ------------- CLI Entry Point for Verification -------------

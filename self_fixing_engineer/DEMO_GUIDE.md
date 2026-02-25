@@ -420,6 +420,12 @@ For a full blockchain demo (optional, requires more setup):
 
 
 
+> ⚠️ **Note:** Hyperledger Fabric integration is experimental and not yet fully implemented.
+> The `fabric_sdk_py` library is not included in the default build. If you select
+> `dlt_type: fabric`, the platform will log a warning and fall back to no-op mode —
+> no audit entries will be written to the Fabric ledger. Use Ethereum/EVM for a
+> stable DLT backend during the demo.
+
 Set Up Hyperledger Fabric:Follow the Fabric test network guide:
 
 curl -sSL https://bit.ly/2ysbOFE | bash -s

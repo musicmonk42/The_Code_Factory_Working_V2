@@ -6,9 +6,15 @@ Stub implementations for test generation orchestrator.
 These stub classes are designed for offline/demo mode and testing.
 They should NOT be used in production environments.
 
+**PRODUCTION USE IS FORBIDDEN**: Using these stubs in production bypasses real
+security scanning, policy enforcement, and event publishing. Any attempt to use
+these stubs in a detected production environment will raise a RuntimeError.
+
 Environment Variables:
     TEST_GENERATION_OFFLINE_MODE: Set to "true" to explicitly enable stub mode
-    ENVIRONMENT: If set to "production", stubs will log warnings
+    APP_ENV: Primary environment selector ("production", "staging", "development", "test")
+    PRODUCTION_MODE: Legacy flag — "true" or "1" also triggers production mode
+    FORCE_PRODUCTION_MODE: Override — "true" forces production mode regardless
 """
 
 import logging
@@ -19,17 +25,51 @@ from test_generation.orchestrator.console import log
 _OFFLINE_MODE = (
     os.environ.get("TEST_GENERATION_OFFLINE_MODE", "false").lower() == "true"
 )
-_ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
+
+
+def _is_production() -> bool:
+    """
+    Detect production mode using the same priority order as server/environment.py.
+
+    Priority order (highest to lowest):
+        1. FORCE_PRODUCTION_MODE=true
+        2. APP_ENV=production or APP_ENV=prod
+        3. PRODUCTION_MODE=true or PRODUCTION_MODE=1
+        4. Legacy ENVIRONMENT=production (for backward compatibility)
+
+    Returns:
+        True if the application is running in production mode.
+    """
+    if os.environ.get("FORCE_PRODUCTION_MODE", "").lower() == "true":
+        return True
+    app_env = os.environ.get("APP_ENV", "").lower()
+    if app_env in ("production", "prod"):
+        return True
+    prod_mode = os.environ.get("PRODUCTION_MODE", "")
+    if prod_mode.lower() == "true" or prod_mode == "1":
+        return True
+    # Legacy variable kept for backward compat (lower priority than APP_ENV)
+    if os.environ.get("ENVIRONMENT", "").lower() == "production":
+        return True
+    return False
+
+
+_PRODUCTION = _is_production()
 
 
 def _check_stub_usage_safety():
     """
     Check if stub usage is safe and log appropriate warnings.
 
+    Production usage is explicitly forbidden because these stubs return
+    false-negative results (e.g., "no vulnerabilities", "approved") which
+    would silently hide real security issues in production.
+
     Raises:
         RuntimeError: If stubs are being used in a production environment
+                      without TEST_GENERATION_OFFLINE_MODE=true.
     """
-    if _ENVIRONMENT == "production" and not _OFFLINE_MODE:
+    if _PRODUCTION and not _OFFLINE_MODE:
         error_msg = (
             "Stub classes are being used in PRODUCTION environment! "
             "This is NOT safe for production use. "
@@ -55,81 +95,84 @@ class DummyPolicyEngine:
     """
     A stub for the PolicyEngine for offline/demo mode.
 
-    WARNING: This stub always allows all operations and should NOT be used in production.
+    **WARNING — PRODUCTION USE FORBIDDEN**: In production this stub raises
+    ``RuntimeError`` from every policy method to prevent silent auto-approval
+    of all test integrations.  In non-production/dev/test environments the
+    stub auto-approves (allow-by-default) so that CI pipelines are not blocked.
 
     Activation:
         - Automatically used when PolicyEngine is not available
         - Explicitly enabled by setting TEST_GENERATION_OFFLINE_MODE=true
-        - Logs warnings when used in non-test environments
+        - Raises RuntimeError in production to prevent false policy passes
     """
 
     def __init__(self):
         """Initialize the dummy policy engine with usage logging."""
-        # [GAP #13 FIX] Enhanced production mode detection
-        is_production = (
-            os.getenv("PRODUCTION_MODE", "false").lower() == "true" 
-            or os.getenv("APP_ENV", "development") == "production"
-            or _ENVIRONMENT == "production"
-        )
-        
-        if is_production:
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyPolicyEngine initialized in PRODUCTION MODE! "
-                "This is a SECURITY RISK - all policy checks will be bypassed. "
-                "Configure real PolicyEngine immediately.",
+                "This is a SECURITY RISK — all policy methods will raise RuntimeError. "
+                "Configure a real PolicyEngine immediately.",
                 level="ERROR",
             )
-            # Try to track this via metrics
-            try:
-                from prometheus_client import Counter
-                dummy_policy_counter = Counter(
-                    'dummy_policy_engine_in_production',
-                    'DummyPolicyEngine active in production'
-                )
-                dummy_policy_counter.inc()
-            except Exception:
-                pass
         else:
             log(
                 "DummyPolicyEngine initialized. All operations will be allowed (STUB MODE).",
-                level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+                level="WARNING",
             )
-        
+
         self.usage_count = 0
-        self.is_production = is_production
 
     async def should_integrate_test(self, *args, **kwargs):
         """
-        Stub implementation that always allows test integration.
+        Stub implementation — deny-by-default in production, allow in dev/test.
+
+        Raises:
+            RuntimeError: Always raised in production to prevent silent approvals.
 
         Returns:
-            tuple: (True, "Stubbed") indicating test can be integrated
+            tuple: (True, "Stubbed") in non-production environments only.
         """
         self.usage_count += 1
 
-        # [GAP #13 FIX] Track every call in production
-        if self.is_production:
-            log(
-                f"CRITICAL: DummyPolicyEngine.should_integrate_test called in PRODUCTION! "
-                f"Call #{self.usage_count}. All operations are being auto-allowed.",
-                level="ERROR",
+        if _PRODUCTION:
+            msg = (
+                f"DummyPolicyEngine.should_integrate_test called in PRODUCTION "
+                f"(call #{self.usage_count}). Raising RuntimeError to prevent "
+                "silent auto-approval of test integrations."
             )
-        else:
-            log(
-                "Using DummyPolicyEngine. All tests are allowed to be integrated.",
-                level="DEBUG",
-            )
+            log(msg, level="ERROR")
+            raise RuntimeError(msg)
 
+        log(
+            "Using DummyPolicyEngine. All tests are allowed to be integrated.",
+            level="DEBUG",
+        )
         return True, "Stubbed"
 
     async def requires_pr_for_integration(self, *args, **kwargs):
         """
-        Stub implementation that never requires PRs.
+        Stub implementation — requires PR in production, skips in dev/test.
+
+        In production a PR review is always required; in non-production the stub
+        returns ``(False, ...)`` so that offline CI flows are not blocked.
+
+        Raises:
+            RuntimeError: Always raised in production.
 
         Returns:
-            tuple: (False, "Stubbed policy requires no PR")
+            tuple: (False, "Stubbed policy requires no PR") in non-production only.
         """
         self.usage_count += 1
+
+        if _PRODUCTION:
+            msg = (
+                "DummyPolicyEngine.requires_pr_for_integration called in PRODUCTION. "
+                "Raising RuntimeError — a real PolicyEngine must be configured."
+            )
+            log(msg, level="ERROR")
+            raise RuntimeError(msg)
+
         log("Using DummyPolicyEngine. No PRs are required.", level="DEBUG")
         return False, "Stubbed policy requires no PR"
 
@@ -152,7 +195,7 @@ class DummyEventBus:
         """Initialize the dummy event bus."""
         log(
             "DummyEventBus initialized. All events will be discarded (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
         self.published_events = []
 
@@ -169,15 +212,19 @@ class DummyEventBus:
 
         log(f"Using DummyEventBus. Event published: {args}", level="DEBUG")
 
-        if _ENVIRONMENT == "production":
-            log("CRITICAL: DummyEventBus.publish called in PRODUCTION!", level="ERROR")
+        if _PRODUCTION:
+            log("CRITICAL: DummyEventBus.publish called in PRODUCTION!", level="CRITICAL")
 
 
 class DummySecurityScanner:
     """
     A stub for the security scanner.
 
-    WARNING: This stub never finds security issues and should NOT be used in production.
+    **WARNING — PRODUCTION USE FORBIDDEN**: This stub always returns
+    ``(False, [], "NONE")`` (i.e., "no vulnerabilities found"), which is a
+    false-negative result that would silently hide real security issues.
+    In production this method raises ``RuntimeError`` instead of returning
+    the misleading safe-looking tuple.
 
     Activation: Same as DummyPolicyEngine
     """
@@ -186,25 +233,35 @@ class DummySecurityScanner:
         """Initialize the dummy security scanner."""
         log(
             "DummySecurityScanner initialized. No security scans will be performed (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
 
     async def scan_test_file(self, *args, **kwargs):
         """
-        Stub implementation that always reports no security issues.
+        Stub implementation — raises RuntimeError in production, otherwise
+        returns a sentinel 'no issues' tuple.
+
+        Production use is forbidden because returning ``(False, [], "NONE")``
+        in production would silently mask real vulnerabilities and give a false
+        sense of security.
+
+        Raises:
+            RuntimeError: Always raised in production to prevent false-negative
+                          security results from reaching production pipelines.
 
         Returns:
-            tuple: (False, [], "NONE") indicating no issues found
+            tuple: (False, [], "NONE") in non-production environments only.
         """
-        log("Using DummySecurityScanner. No security issues found.", level="DEBUG")
-
-        if _ENVIRONMENT == "production":
-            log(
-                "CRITICAL: DummySecurityScanner.scan_test_file called in PRODUCTION! "
-                "Security vulnerabilities may not be detected!",
-                level="ERROR",
+        if _PRODUCTION:
+            msg = (
+                "DummySecurityScanner.scan_test_file called in PRODUCTION. "
+                "Raising RuntimeError to prevent false-negative security results. "
+                "Configure a real SecurityScanner implementation."
             )
+            log(msg, level="ERROR")
+            raise RuntimeError(msg)
 
+        log("Using DummySecurityScanner. No security issues found.", level="DEBUG")
         return False, [], "NONE"
 
 
@@ -221,7 +278,7 @@ class DummyKnowledgeGraphClient:
         """Initialize the dummy knowledge graph client."""
         log(
             "DummyKnowledgeGraphClient initialized. Metrics will be discarded (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
         self.metrics = []
 
@@ -239,7 +296,7 @@ class DummyKnowledgeGraphClient:
             f"Using DummyKnowledgeGraphClient. Metrics updated: {kwargs}", level="DEBUG"
         )
 
-        if _ENVIRONMENT == "production":
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyKnowledgeGraphClient used in PRODUCTION!", level="ERROR"
             )
@@ -258,7 +315,7 @@ class DummyPRCreator:
         """Initialize the dummy PR creator."""
         log(
             "DummyPRCreator initialized. PR/ticket creation will be simulated (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
         self.created_prs = []
         self.created_tickets = []
@@ -272,7 +329,7 @@ class DummyPRCreator:
         """
         log("Using DummyPRCreator. PR creation unavailable (stub mode).", level="DEBUG")
 
-        if _ENVIRONMENT == "production":
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyPRCreator.create_pr called in PRODUCTION! "
                 "No actual PR will be created!",
@@ -297,7 +354,7 @@ class DummyPRCreator:
 
         log("Using DummyPRCreator. Simulating Jira ticket creation.", level="DEBUG")
 
-        if _ENVIRONMENT == "production":
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyPRCreator.create_jira_ticket called in PRODUCTION! "
                 "No actual ticket will be created!",
@@ -320,7 +377,7 @@ class DummyMutationTester:
         """Initialize the dummy mutation tester."""
         log(
             "DummyMutationTester initialized. Mutation testing will be simulated (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
 
     async def run_mutations(self, *args, **kwargs):
@@ -336,7 +393,7 @@ class DummyMutationTester:
         """
         log("Using DummyMutationTester. Mutation testing unavailable (stub mode).", level="DEBUG")
 
-        if _ENVIRONMENT == "production":
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyMutationTester.run_mutations called in PRODUCTION! "
                 "Mutation testing results are not real!",
@@ -359,7 +416,7 @@ class DummyTestEnricher:
         """Initialize the dummy test enricher."""
         log(
             "DummyTestEnricher initialized. No test enrichment will be performed (STUB MODE).",
-            level="WARNING" if _ENVIRONMENT != "test" else "DEBUG",
+            level="WARNING",
         )
 
     async def enrich_test(self, content, *args, **kwargs):
@@ -376,7 +433,7 @@ class DummyTestEnricher:
         """
         log("Using DummyTestEnricher. No enrichment applied.", level="DEBUG")
 
-        if _ENVIRONMENT == "production":
+        if _PRODUCTION:
             log(
                 "CRITICAL: DummyTestEnricher.enrich_test called in PRODUCTION! "
                 "Tests will not be enriched!",

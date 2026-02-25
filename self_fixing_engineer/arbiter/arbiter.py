@@ -453,25 +453,40 @@ else:
     
         class Neo4jKnowledgeGraph:
             """
-            Fallback stub for Neo4jKnowledgeGraph when neo4j driver is not installed.
-    
+            No-op fallback stub for Neo4jKnowledgeGraph when neo4j driver is not installed.
+
             This is an optional dependency used for knowledge graph features.
+            All public methods return safe empty results so the Arbiter can start
+            and operate normally without the knowledge graph.
+
             To enable Neo4jKnowledgeGraph:
             1. Install neo4j driver: pip install neo4j
             2. Configure NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD environment variables
             3. Ensure arbiter.models.knowledge_graph_db module is available
             """
-    
+
             def __init__(self, *args, **kwargs):
-                logging.error(
-                    "Neo4jKnowledgeGraph initialization failed. Required dependencies: neo4j driver. "
-                    "Install with: pip install neo4j"
+                logging.warning(
+                    "Neo4jKnowledgeGraph is unavailable (neo4j driver not installed). "
+                    "Knowledge graph features will be disabled. "
+                    "Install with: pip install neo4j to enable."
                 )
-                raise NotImplementedError(
-                    "Neo4jKnowledgeGraph requires neo4j module. "
-                    "Install with: pip install neo4j. "
-                    "This is an optional dependency for knowledge graph features."
-                )
+                self._available = False
+
+            async def add_fact(self, *args, **kwargs):
+                return None
+
+            async def find_related_facts(self, *args, **kwargs):
+                return []
+
+            async def get_facts(self, *args, **kwargs):
+                return []
+
+            async def query(self, *args, **kwargs):
+                return []
+
+            async def close(self, *args, **kwargs):
+                pass
     
     
     try:
@@ -1637,9 +1652,22 @@ else:
                     "text_processing": {"enabled": True},
                 }
             )
-            self.knowledge_graph = Neo4jKnowledgeGraph(
-                audit_logger=AuditLogManager(self.db_client)
-            )
+            try:
+                self.knowledge_graph = Neo4jKnowledgeGraph(
+                    audit_logger=AuditLogManager(self.db_client)
+                )
+            except ImportError as e:
+                logger.warning(f"[{name}] Knowledge graph unavailable (missing dependency): {e}")
+                self.knowledge_graph = None
+            except NotImplementedError as e:
+                logger.warning(f"[{name}] Knowledge graph not implemented: {e}")
+                self.knowledge_graph = None
+            except Exception as e:
+                logger.error(
+                    f"[{name}] Unexpected error initializing knowledge graph: {e}",
+                    exc_info=True,
+                )
+                self.knowledge_graph = None
             
             # Initialize Arbiter Constitution for governance and ethical constraints
             try:
