@@ -29,6 +29,10 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       serviceAccountName: codefactory
+      # terminationGracePeriodSeconds must exceed preStop sleep (15 s) + uvicorn graceful
+      # shutdown timeout (60 s) with a safety buffer.
+      # Formula: preStop(15) + gracefulShutdown(60) + buffer(15) = 90 s.
+      terminationGracePeriodSeconds: 90
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001

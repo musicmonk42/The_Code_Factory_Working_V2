@@ -176,6 +176,12 @@ tolerations: []
 
 affinity: {}
 
+# terminationGracePeriodSeconds must be greater than:
+#   preStop sleep (15 s) + uvicorn timeout_graceful_shutdown (60 s) + buffer (15 s) = 90 s.
+# Lowering this value will cause Kubernetes to SIGKILL the pod before graceful shutdown
+# completes, potentially interrupting in-flight LLM calls and losing job state.
+terminationGracePeriodSeconds: 90
+
 # Topology spread for better availability
 topologySpreadConstraints:
   - maxSkew: 1
@@ -250,8 +256,15 @@ env:
   # sequential passes (core → routes/services → infrastructure) and auto-enables
   # ensemble voting per chunk.  Override per-environment:
   #   helm upgrade --set env.CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=20 ...
-  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "15"
+  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "25"
   CODEGEN_MULTIPASS_FILE_THRESHOLD: "20"
+  # Pipeline codegen outer budget: maximum wall-clock seconds for one full multi-pass
+  # code-generation job (3 sequential ensemble passes).  900 s = 15 minutes.
+  # Override: helm upgrade --set env.PIPELINE_CODEGEN_TIMEOUT_SECONDS=1200 ...
+  PIPELINE_CODEGEN_TIMEOUT_SECONDS: "900"
+  # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
+  # Override: helm upgrade --set env.ENSEMBLE_PROVIDER_TIMEOUT_SECONDS=360 ...
+  ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
 
   # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)
   # Non-secret tuning knobs — the XAI_API_KEY credential lives in codefactory-secrets.
@@ -313,6 +326,21 @@ env:
   # See requirements-pqc.txt for installation instructions.
   # Falls back gracefully to HMAC-SHA-256 when libraries are absent.
   USE_PQC_SIGNING: "false"
+
+  # ============================================
+  # Security Posture Configuration
+  # ============================================
+  # Encryption backend for data at rest.
+  # Options: local (software AES), aws_kms, azure_keyvault.
+  # See SECURITY_CONFIGURATION.md for full details.
+  # Override: helm upgrade --set env.ENCRYPTION_MODE=aws_kms ...
+  ENCRYPTION_MODE: "local"
+  # Set to "1" to suppress security-posture startup warnings in development/staging.
+  # Must be "0" in production so operators are alerted to unresolved settings.
+  SUPPRESS_SECURITY_WARNINGS: "0"
+  # Enable plugin integrity checks via HASH_MANIFEST.
+  # Default "false"; set to "true" in production overlays together with HASH_MANIFEST.
+  PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
   
   # Kafka Configuration: Multiple variables for component compatibility
   # Different components check different variable names due to evolution of codebase:

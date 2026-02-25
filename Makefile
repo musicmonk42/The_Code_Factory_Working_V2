@@ -644,17 +644,23 @@ ci-local: ## Run CI checks locally
 # Codegen Multi-Pass Diagnostics
 # =============================================================================
 
-codegen-multipass-status: ## Show current multi-pass code-generation thresholds and model token limits
+codegen-multipass-status: ## Show current multi-pass code-generation thresholds and timeout budgets
 	@echo "$(BLUE)Codegen Multi-Pass Configuration$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Active thresholds (override via environment variables):$(NC)"
-	@echo "  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD = $${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}  (endpoints; auto-enables ensemble + multi-pass)"
+	@echo "  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD = $${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-25}  (endpoints; auto-enables ensemble + multi-pass)"
 	@echo "  CODEGEN_MULTIPASS_FILE_THRESHOLD     = $${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}   (required files; secondary trigger)"
+	@echo ""
+	@echo "$(YELLOW)Active timeout budgets:$(NC)"
+	@echo "  PIPELINE_CODEGEN_TIMEOUT_SECONDS     = $${PIPELINE_CODEGEN_TIMEOUT_SECONDS:-900}  (outer per-job budget; 15 min default)"
+	@echo "  ENSEMBLE_PROVIDER_TIMEOUT_SECONDS    = $${ENSEMBLE_PROVIDER_TIMEOUT_SECONDS:-300}  (per-provider LLM call; 5 min default)"
 	@echo ""
 	@echo "$(YELLOW)Behaviour:$(NC)"
 	@echo "  Specs with fewer endpoints/files  → single-pass, honours config.ensemble_enabled"
 	@echo "  Specs that reach either threshold → 3-pass generation (core / routes+services / infra)"
 	@echo "                                       each pass uses call_ensemble_api() majority vote"
+	@echo "  A periodic heartbeat task logs progress every 30 s per pass so container health"
+	@echo "  checks see activity throughout long LLM calls."
 	@echo ""
 	@echo "$(YELLOW)Additive retry:$(NC)"
 	@echo "  InsufficientOutput / SpecFidelityFailure retries KEEP existing files on disk."
@@ -666,6 +672,9 @@ codegen-multipass-status: ## Show current multi-pass code-generation thresholds 
 	@echo ""
 	@echo "$(YELLOW)To lower the threshold (enable for smaller specs):$(NC)"
 	@echo "  export CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=10"
+	@echo ""
+	@echo "$(YELLOW)To extend the per-job timeout budget (very large specs):$(NC)"
+	@echo "  export PIPELINE_CODEGEN_TIMEOUT_SECONDS=1800"
 	@echo ""
 
 # =============================================================================
