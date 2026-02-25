@@ -1437,55 +1437,30 @@ if PLUGIN_AVAILABLE:
                                     _multipass_heartbeat(_group['name'])
                                 )
                                 try:
-                                    _pass_dict = await call_ensemble_api(
-                                        prompt=_pass_prompt,
-                                        models=_ensemble_models,
-                                        voting_strategy="first",
-                                        timeout_per_provider=float(
-                                            os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300")
-                                        ),
-                                    )
-                                    _pass_resp = (
-                                        _pass_dict["content"]
-                                        if isinstance(_pass_dict, dict) and "content" in _pass_dict
-                                        else str(_pass_dict)
-                                    )
-                                    _pass_files = parse_llm_response(_pass_resp)
-                                    _merged_files.update(_pass_files)
-                                    _pass_duration = time.monotonic() - _pass_start
-                                    logger.info(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
-                                        f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
-                                    )
+                                     _pass_dict = await call_llm_api(
+                                         prompt=_pass_prompt,
+                                         provider=config.backend,
+                                         model=config.model.get(config.backend),
+                                         response_format={"type": "json_object"},
+                                     )
+                                     _pass_resp = (
+                                         _pass_dict["content"]
+                                         if isinstance(_pass_dict, dict) and "content" in _pass_dict
+                                         else str(_pass_dict)
+                                     )
+                                     _pass_files = parse_llm_response(_pass_resp)
+                                     _merged_files.update(_pass_files)
+                                     _pass_duration = time.monotonic() - _pass_start
+                                     logger.info(
+                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
+                                         f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
+                                     )
                                 except Exception as _pass_err:
-                                    _pass_duration = time.monotonic() - _pass_start
-                                    logger.warning(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
-                                        f"{_pass_err}. Attempting single-provider fallback."
-                                    )
-                                    try:
-                                        _fb_dict = await call_llm_api(
-                                            prompt=_pass_prompt,
-                                            provider=config.backend,
-                                            model=config.model.get(config.backend),
-                                            response_format={"type": "json_object"},
-                                        )
-                                        _fb_resp = (
-                                            _fb_dict["content"]
-                                            if isinstance(_fb_dict, dict) and "content" in _fb_dict
-                                            else str(_fb_dict)
-                                        )
-                                        _pass_files = parse_llm_response(_fb_resp)
-                                        _merged_files.update(_pass_files)
-                                        logger.info(
-                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback succeeded: "
-                                            f"+{len(_pass_files)} files (total={len(_merged_files)})"
-                                        )
-                                    except Exception as _fb_err:
-                                        logger.warning(
-                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
-                                            f"{_fb_err}. Continuing with remaining passes."
-                                        )
+                                     _pass_duration = time.monotonic() - _pass_start
+                                     logger.warning(
+                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
+                                         f"{_pass_err}. Continuing with remaining passes."
+                                     )
                                 finally:
                                     # Always cancel the heartbeat task to avoid resource leaks,
                                     # regardless of whether the LLM call succeeded or raised.
@@ -1913,55 +1888,30 @@ else:
                                     _multipass_heartbeat(_group['name'])
                                 )
                                 try:
-                                    _pass_dict = await call_ensemble_api(
-                                        prompt=_pass_prompt,
-                                        models=_ensemble_models,
-                                        voting_strategy="first",
-                                        timeout_per_provider=float(
-                                            os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300")
-                                        ),
-                                    )
-                                    _pass_resp = (
-                                        _pass_dict["content"]
-                                        if isinstance(_pass_dict, dict) and "content" in _pass_dict
-                                        else str(_pass_dict)
-                                    )
-                                    _pass_files = parse_llm_response(_pass_resp)
-                                    _merged_files.update(_pass_files)
-                                    _pass_duration = time.monotonic() - _pass_start
-                                    logger.info(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
-                                        f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
-                                    )
+                                     _pass_dict = await call_llm_api(
+                                         prompt=_pass_prompt,
+                                         provider=config.backend,
+                                         model=config.model.get(config.backend),
+                                         response_format={"type": "json_object"},
+                                     )
+                                     _pass_resp = (
+                                         _pass_dict["content"]
+                                         if isinstance(_pass_dict, dict) and "content" in _pass_dict
+                                         else str(_pass_dict)
+                                     )
+                                     _pass_files = parse_llm_response(_pass_resp)
+                                     _merged_files.update(_pass_files)
+                                     _pass_duration = time.monotonic() - _pass_start
+                                     logger.info(
+                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
+                                         f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
+                                     )
                                 except Exception as _pass_err:
-                                    _pass_duration = time.monotonic() - _pass_start
-                                    logger.warning(
-                                        f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
-                                        f"{_pass_err}. Attempting single-provider fallback."
-                                    )
-                                    try:
-                                        _fb_dict = await call_llm_api(
-                                            prompt=_pass_prompt,
-                                            provider=config.backend,
-                                            model=config.model.get(config.backend),
-                                            response_format={"type": "json_object"},
-                                        )
-                                        _fb_resp = (
-                                            _fb_dict["content"]
-                                            if isinstance(_fb_dict, dict) and "content" in _fb_dict
-                                            else str(_fb_dict)
-                                        )
-                                        _pass_files = parse_llm_response(_fb_resp)
-                                        _merged_files.update(_pass_files)
-                                        logger.info(
-                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback succeeded: "
-                                            f"+{len(_pass_files)} files (total={len(_merged_files)})"
-                                        )
-                                    except Exception as _fb_err:
-                                        logger.warning(
-                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
-                                            f"{_fb_err}. Continuing with remaining passes."
-                                        )
+                                     _pass_duration = time.monotonic() - _pass_start
+                                     logger.warning(
+                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
+                                         f"{_pass_err}. Continuing with remaining passes."
+                                     )
                                 finally:
                                     # Always cancel the heartbeat task to avoid resource leaks,
                                     # regardless of whether the LLM call succeeded or raised.
