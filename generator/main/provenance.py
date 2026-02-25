@@ -919,8 +919,11 @@ def validate_spec_fidelity(
         
         # Normalize paths for case-insensitive comparison with trailing slash handling
         def normalize_path(path: str) -> str:
-            """Normalize a path for comparison (remove trailing slashes, lowercase)."""
-            return path.rstrip('/').lower()
+            """Normalize a path for comparison (remove trailing slashes, lowercase, strip api version prefix)."""
+            normalized = path.rstrip('/').lower()
+            # Strip /api/v{N} prefix so /api/v1/orders and /orders compare as equal
+            normalized = re.sub(r'^/api/v\d+', '', normalized)
+            return normalized or '/'
         
         # Build lookup set of found endpoints
         found_set: Set[Tuple[str, str]] = {
