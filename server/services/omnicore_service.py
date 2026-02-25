@@ -75,6 +75,7 @@ try:
         extract_required_files_from_md as _extract_required_files_from_md,
         extract_output_dir_from_md as _extract_output_dir_from_md,
         validate_readme_completeness as _validate_readme_completeness,
+        extract_file_structure_from_md as _extract_file_structure_from_md,
     )
     _PROVENANCE_AVAILABLE = True
 except ImportError:
@@ -3737,7 +3738,8 @@ class OmniCoreService:
                     # README patching, Sphinx placeholder — mirrors the engine.py MATERIALIZE stage.
                     try:
                         from generator.main.post_materialize import post_materialize as _post_materialize
-                        pm_result = _post_materialize(output_path)
+                        _pm_spec_structure = payload.get("spec_structure")
+                        pm_result = _post_materialize(output_path, spec_structure=_pm_spec_structure)
                         if pm_result.files_created:
                             logger.info(
                                 f"[CODEGEN] post_materialize created "
@@ -6821,10 +6823,33 @@ class OmniCoreService:
             # Transform payload for codegen - it needs 'requirements' not 'readme_content'
             # Preserve all original payload fields that might be needed
             raw_md = payload.get("readme_content", payload.get("requirements", ""))
+
+            # Extract spec structure from README before codegen so the prompt
+            # can be built with spec-derived directory requirements.
+            spec_structure = None
+            if raw_md and _PROVENANCE_AVAILABLE:
+                try:
+                    spec_structure = _extract_file_structure_from_md(raw_md)
+                    logger.info(
+                        "[PIPELINE] Extracted spec structure for job %s: %d dirs, %d files",
+                        job_id,
+                        len(spec_structure.get("directories", [])),
+                        len(spec_structure.get("files", [])),
+                        extra={"job_id": job_id},
+                    )
+                except Exception as _spec_struct_err:
+                    logger.warning(
+                        "[PIPELINE] Failed to extract spec structure for job %s: %s",
+                        job_id,
+                        _spec_struct_err,
+                        extra={"job_id": job_id},
+                    )
+
             codegen_payload = {
                 **payload,  # Preserve all original fields
                 "requirements": raw_md,
                 "md_content": raw_md,  # Ensure codegen agent always has raw spec under md_content
+                "spec_structure": spec_structure,  # Pass spec-derived structure requirements
             }
             # Remove readme_content from codegen payload as it's now in requirements
             codegen_payload.pop("readme_content", None)

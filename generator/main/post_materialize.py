@@ -157,6 +157,91 @@ MAX_README_CHARS_FOR_DOCS: int = 4096
 # Directories that every generated project must contain
 REQUIRED_DIRS: tuple = ("app", "tests", "reports")
 
+# Modular subdirectories for the app package (Python FastAPI layout)
+MODULAR_SUBDIRS: List[str] = [
+    "app/routers",
+    "app/services",
+    "app/middleware",
+    "app/utils",
+    "app/models",
+    "app/schemas",
+]
+
+# Alembic stub file contents keyed by relative path
+ALEMBIC_STUB_FILES: Dict[str, str] = {
+    "alembic.ini": (
+        "# Alembic Configuration\n"
+        "[alembic]\n"
+        "script_location = alembic\n"
+        "sqlalchemy.url = driver://user:pass@localhost/dbname\n\n"
+        "[loggers]\n"
+        "keys = root,sqlalchemy,alembic\n\n"
+        "[handlers]\n"
+        "keys = console\n\n"
+        "[formatters]\n"
+        "keys = generic\n\n"
+        "[logger_root]\n"
+        "level = WARN\n"
+        "handlers = console\n"
+        "qualname =\n\n"
+        "[logger_sqlalchemy]\n"
+        "level = WARN\n"
+        "handlers =\n"
+        "qualname = sqlalchemy.engine\n\n"
+        "[logger_alembic]\n"
+        "level = INFO\n"
+        "handlers =\n"
+        "qualname = alembic\n\n"
+        "[handler_console]\n"
+        "class = StreamHandler\n"
+        "args = (sys.stderr,)\n"
+        "level = NOTSET\n"
+        "formatter = generic\n\n"
+        "[formatter_generic]\n"
+        "format = %(levelname)-5.5s [%(name)s] %(message)s\n"
+        "datefmt = %H:%M:%S\n"
+    ),
+    "alembic/env.py": (
+        '"""Alembic Environment Configuration"""\n'
+        "from logging.config import fileConfig\n"
+        "from sqlalchemy import engine_from_config, pool\n"
+        "from alembic import context\n\n"
+        "config = context.config\n"
+        "if config.config_file_name is not None:\n"
+        "    fileConfig(config.config_file_name)\n\n"
+        "target_metadata = None\n\n\n"
+        "def run_migrations_offline() -> None:\n"
+        '    """Run migrations in \'offline\' mode."""\n'
+        '    url = config.get_main_option("sqlalchemy.url")\n'
+        "    context.configure(\n"
+        "        url=url,\n"
+        "        target_metadata=target_metadata,\n"
+        "        literal_binds=True,\n"
+        '        dialect_opts={"paramstyle": "named"},\n'
+        "    )\n"
+        "    with context.begin_transaction():\n"
+        "        context.run_migrations()\n\n\n"
+        "def run_migrations_online() -> None:\n"
+        '    """Run migrations in \'online\' mode."""\n'
+        "    connectable = engine_from_config(\n"
+        "        config.get_section(config.config_ini_section, {}),\n"
+        '        prefix="sqlalchemy.",\n'
+        "        poolclass=pool.NullPool,\n"
+        "    )\n"
+        "    with connectable.connect() as connection:\n"
+        "        context.configure(\n"
+        "            connection=connection, target_metadata=target_metadata\n"
+        "        )\n"
+        "        with context.begin_transaction():\n"
+        "            context.run_migrations()\n\n\n"
+        "if context.is_offline_mode():\n"
+        "    run_migrations_offline()\n"
+        "else:\n"
+        "    run_migrations_online()\n"
+    ),
+    "alembic/versions/.gitkeep": "# Placeholder for migration versions\n",
+}
+
 # =============================================================================
 # RESULT DATACLASS
 # =============================================================================
@@ -199,6 +284,7 @@ class PostMaterializeResult:
 def post_materialize(
     output_dir: Path,
     entry_point: Optional[str] = None,
+    spec_structure: Optional[Dict] = None,
 ) -> PostMaterializeResult:
     """Apply post-materialization fixups to a generated project directory.
 
@@ -217,6 +303,12 @@ def post_materialize(
             ``None``, the function auto-detects whether ``app/main.py``
             exists and falls back to ``"app.main:app"`` or ``"main:app"``
             accordingly.
+        spec_structure: Optional structure dict (from
+            ``extract_file_structure_from_md()``) with keys
+            ``'directories'``, ``'files'``, and ``'modules'``.  When
+            provided, :func:`ensure_modular_structure` uses these
+            spec-derived directories instead of the :data:`MODULAR_SUBDIRS`
+            defaults.
 
     Returns:
         :class:`PostMaterializeResult` with details of files created and
@@ -283,6 +375,16 @@ def post_materialize(
             _ensure_provenance_report(output_dir, result)
 
             # ------------------------------------------------------------------
+            # Phase 6: Modular app subpackage structure
+            # ------------------------------------------------------------------
+            ensure_modular_structure(output_dir, result, spec_structure=spec_structure)
+
+            # ------------------------------------------------------------------
+            # Phase 7: Alembic scaffolding stubs
+            # ------------------------------------------------------------------
+            ensure_alembic_scaffolding(output_dir, result)
+
+            # ------------------------------------------------------------------
             # Finalize
             # ------------------------------------------------------------------
             result.duration_seconds = time.monotonic() - start_ts
@@ -330,6 +432,64 @@ def post_materialize(
             POST_MATERIALIZE_RUNS.labels(status="error").inc()
 
     return result
+
+
+def ensure_modular_structure(
+    output_dir: Path,
+    result: PostMaterializeResult,
+    spec_structure: Optional[Dict] = None,
+) -> None:
+    """Create all required modular subdirectories with ``__init__.py`` files.
+
+    Uses *spec_structure* when supplied (derived from the README spec via
+    ``extract_file_structure_from_md()``); otherwise falls back to
+    :data:`MODULAR_SUBDIRS`.
+
+    Args:
+        output_dir: Project root directory.
+        result: Mutable result object updated in-place.
+        spec_structure: Optional structure dict with a ``'directories'`` list.
+    """
+    dirs_to_create: List[str] = (
+        spec_structure.get("directories", []) if spec_structure else []
+    ) or MODULAR_SUBDIRS
+
+    for subdir in dirs_to_create:
+        dir_path = output_dir / Path(subdir)
+        dir_path.mkdir(parents=True, exist_ok=True)
+        if subdir.startswith("app/") or subdir.startswith("app\\"):
+            _create_if_absent(
+                dir_path / "__init__.py",
+                "# auto-generated for package imports\n",
+                result,
+                output_dir=output_dir,
+                file_type="init_py",
+            )
+
+
+def ensure_alembic_scaffolding(
+    output_dir: Path,
+    result: PostMaterializeResult,
+) -> None:
+    """Create Alembic scaffolding stubs if not already present.
+
+    Writes :data:`ALEMBIC_STUB_FILES` to *output_dir* only when those paths do
+    not already exist, so that any richer files produced by the LLM are never
+    overwritten.
+
+    Args:
+        output_dir: Project root directory.
+        result: Mutable result object updated in-place.
+    """
+    for rel_path, content in ALEMBIC_STUB_FILES.items():
+        full_path = output_dir / Path(rel_path)
+        _create_if_absent(
+            full_path,
+            content,
+            result,
+            output_dir=output_dir,
+            file_type="alembic_stub",
+        )
 
 
 # =============================================================================

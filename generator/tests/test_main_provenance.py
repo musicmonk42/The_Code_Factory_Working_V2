@@ -911,3 +911,222 @@ class TestRunFailFastValidationInitPy:
         warnings = result.get("warnings", [])
         init_py_warnings = [w for w in warnings if "__init__.py" in w]
         assert len(init_py_warnings) == 0
+
+
+# ==============================================================================
+# Tests for extract_file_structure_from_md
+# ==============================================================================
+
+
+class TestExtractFileStructureFromMd:
+    """Tests for extract_file_structure_from_md — the two-pass spec structure parser."""
+
+    def test_empty_string_returns_empty_structure(self):
+        from generator.main.provenance import extract_file_structure_from_md
+
+        result = extract_file_structure_from_md("")
+        assert result == {"directories": [], "files": [], "modules": []}
+
+    def test_whitespace_only_returns_empty_structure(self):
+        from generator.main.provenance import extract_file_structure_from_md
+
+        result = extract_file_structure_from_md("   \n\t  ")
+        assert result == {"directories": [], "files": [], "modules": []}
+
+    def test_raises_type_error_on_non_string(self):
+        from generator.main.provenance import extract_file_structure_from_md
+
+        with pytest.raises(TypeError, match="str"):
+            extract_file_structure_from_md(None)  # type: ignore[arg-type]
+
+    def test_raises_type_error_on_list(self):
+        from generator.main.provenance import extract_file_structure_from_md
+
+        with pytest.raises(TypeError, match="str"):
+            extract_file_structure_from_md([])  # type: ignore[arg-type]
+
+    def test_unicode_tree_block_extracts_nested_dirs(self):
+        """Full tree block: all directories including siblings must be detected."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = """
+```
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── products.py
+│   │   └── orders.py
+│   ├── services/
+│   │   └── __init__.py
+│   ├── middleware/
+│   │   └── auth.py
+│   └── utils/
+│       └── helpers.py
+├── alembic/
+│   └── env.py
+├── tests/
+│   ├── test_products.py
+│   └── test_orders.py
+└── alembic.ini
+```
+"""
+        result = extract_file_structure_from_md(md)
+
+        # Top-level directories must be detected
+        for expected_dir in ["app", "alembic", "tests"]:
+            assert expected_dir in result["directories"], (
+                f"Expected top-level directory '{expected_dir}' in {result['directories']}"
+            )
+
+        # Nested app sub-packages must be detected
+        for expected_dir in [
+            "app/routers",
+            "app/services",
+            "app/middleware",
+            "app/utils",
+        ]:
+            assert expected_dir in result["directories"], (
+                f"Expected nested directory '{expected_dir}' in {result['directories']}"
+            )
+
+        # File paths must be reconstructed correctly
+        assert "app/routers/products.py" in result["files"]
+        assert "app/routers/orders.py" in result["files"]
+        assert "alembic/env.py" in result["files"]
+        assert "tests/test_products.py" in result["files"]
+
+        # Python module paths must be derived from files
+        assert "app.routers.products" in result["modules"]
+        assert "app.routers.orders" in result["modules"]
+
+    def test_backtick_inline_file_reference(self):
+        """Backtick-quoted multi-part file paths must be captured."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "Auth logic lives in `app/routers/auth.py`."
+        result = extract_file_structure_from_md(md)
+
+        assert "app/routers/auth.py" in result["files"]
+        assert "app/routers" in result["directories"]
+        assert "app" in result["directories"]
+        assert "app.routers.auth" in result["modules"]
+
+    def test_backtick_inline_directory_reference(self):
+        """Backtick-quoted directory paths (trailing /) must be captured."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "Place schemas in `app/schemas/` and models in `app/models/`."
+        result = extract_file_structure_from_md(md)
+
+        assert "app/schemas" in result["directories"]
+        assert "app/models" in result["directories"]
+
+    def test_trailing_slash_directory_reference(self):
+        """Bare directory references with trailing / in prose must be captured."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "Routes in app/routers/ and business logic in app/services/."
+        result = extract_file_structure_from_md(md)
+
+        assert "app/routers" in result["directories"]
+        assert "app/services" in result["directories"]
+
+    def test_glob_pattern_extracts_directory(self):
+        """Glob patterns like app/routers/*.py must yield the directory."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "All routers: app/routers/*.py.  All tests: tests/test_*.py."
+        result = extract_file_structure_from_md(md)
+
+        assert "app/routers" in result["directories"]
+        assert "tests" in result["directories"]
+        # Ensure no partial filename segment is treated as a directory
+        assert "tests/test_" not in result["directories"]
+
+    def test_ancestor_directories_are_recorded(self):
+        """When a deep path is detected, all ancestor directories must be added."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "`app/routers/v1/products.py`"
+        result = extract_file_structure_from_md(md)
+
+        assert "app" in result["directories"]
+        assert "app/routers" in result["directories"]
+        assert "app/routers/v1" in result["directories"]
+
+    def test_no_duplicate_directories(self):
+        """The same directory must not appear twice even if referenced multiple times."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "app/routers/ and app/routers/ again, plus `app/routers/auth.py`."
+        result = extract_file_structure_from_md(md)
+
+        assert result["directories"].count("app/routers") == 1
+
+    def test_no_duplicate_files(self):
+        """The same file must not appear twice."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "`app/main.py` is the entrypoint. See `app/main.py` for details."
+        result = extract_file_structure_from_md(md)
+
+        assert result["files"].count("app/main.py") == 1
+
+    def test_deterministic_output(self):
+        """Calling the function twice with the same input must return equal results."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = """
+```
+├── app/
+│   ├── main.py
+│   └── routers/
+│       └── auth.py
+└── tests/
+    └── test_auth.py
+```
+"""
+        assert extract_file_structure_from_md(md) == extract_file_structure_from_md(md)
+
+    def test_modules_only_for_python_files(self):
+        """Only .py files should generate module entries."""
+        from generator.main.provenance import extract_file_structure_from_md
+
+        md = "`app/config.yml` and `app/main.py`."
+        result = extract_file_structure_from_md(md)
+
+        assert "app.main" in result["modules"]
+        assert "app.config" not in result["modules"]
+
+    def test_structure_validation_in_validate_spec_fidelity(self):
+        """validate_spec_fidelity must include a 'structure_validation' key."""
+        from generator.main.provenance import validate_spec_fidelity
+
+        md = "app/routers/ and app/services/."
+        result = validate_spec_fidelity(md, {})
+
+        assert "structure_validation" in result
+        sv = result["structure_validation"]
+        assert "expected_directories" in sv
+        assert "missing_directories" in sv
+        assert "passed" in sv
+        # Without an output_dir there are no missing dirs (nothing to check on disk)
+        assert sv["passed"] is True
+
+    def test_structure_validation_detects_missing_dirs(self):
+        """When output_dir is provided and a spec dir is absent, it is flagged."""
+        from generator.main.provenance import validate_spec_fidelity
+        import tempfile, os
+
+        md = "Use app/routers/ for routing and app/services/ for business logic."
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create only app/routers — leave app/services absent
+            os.makedirs(os.path.join(tmpdir, "app", "routers"), exist_ok=True)
+            result = validate_spec_fidelity(md, {}, output_dir=tmpdir)
+
+        sv = result["structure_validation"]
+        assert "app/services" in sv["missing_directories"]
+        assert "app/routers" not in sv["missing_directories"]
+        assert sv["passed"] is False

@@ -297,21 +297,62 @@ def get_readme_checklist(target_language: str = "python") -> str:
 # --- Syntax Safety Instructions ---
 # ==============================================================================
 
-def get_syntax_safety_instructions(target_language: str = "python") -> str:
+def get_syntax_safety_instructions(
+    target_language: str = "python",
+    spec_structure: Optional[Dict[str, List[str]]] = None,
+) -> str:
     """
     Generate language-aware syntax safety instructions for code generation.
     
     Args:
         target_language: Target programming language (default: "python")
+        spec_structure: Optional dictionary with keys ``'directories'``,
+            ``'files'``, and ``'modules'`` derived from the README spec via
+            ``extract_file_structure_from_md()``.  When provided, the
+            project-structure section of the prompt is built dynamically from
+            the spec rather than using the hardcoded defaults.
         
     Returns:
         str: Language-specific syntax safety instructions including README checklist
     """
     # Get language-specific README checklist
     readme_checklist = get_readme_checklist(target_language)
-    
+
+    # Build the project-structure bullet list for point 5.
+    # Use spec-derived directories when available; fall back to defaults.
+    if spec_structure and spec_structure.get("directories"):
+        _spec_dirs = spec_structure["directories"]
+        # Show up to 10 directories to keep the prompt concise
+        dir_lines = "\n".join(
+            f"   - {d}/" for d in _spec_dirs[:10]
+        )
+        structure_section = (
+            "5. ORGANIZE INTO FILES:\n"
+            "   Structure the project using the directories required by the spec:\n"
+            f"{dir_lines}\n"
+            "   Ensure every Python directory has an __init__.py file.\n"
+            "   - app/main.py (FastAPI app instance, imports routers)\n"
+            "   - requirements.txt (dependencies)\n"
+            "   - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)\n"
+            "   - .env.example (example environment variables with NO real secrets)"
+        )
+    else:
+        structure_section = (
+            "5. ORGANIZE INTO FILES:\n"
+            "   Structure as a proper project with separate files using app/ directory:\n"
+            "   - app/main.py (FastAPI app instance, imports router from app/routes.py, includes middleware)\n"
+            "   - app/routes.py (API route definitions with APIRouter - ALL endpoints defined here)\n"
+            "   - app/schemas.py (Pydantic models for request/response validation)\n"
+            "   - tests/test_health.py (health endpoint tests)\n"
+            "   - tests/test_version.py (version endpoint tests)\n"
+            "   - tests/test_echo.py (echo endpoint tests if /echo is required)\n"
+            "   - requirements.txt (dependencies)\n"
+            "   - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)\n"
+            "   - .env.example (example environment variables with NO real secrets)"
+        )
+
     # Build the instructions string with the language-specific checklist
-    return """
+    return f"""
 CRITICAL SYNTAX REQUIREMENTS:
 
 You MUST ensure all generated code has valid syntax before responding.
@@ -359,17 +400,7 @@ The following are MANDATORY checks:
    - ✓ In tests, test middleware behavior through TestClient(app).get("/endpoint"), NOT by instantiating middleware directly
    - ✓ For middleware tests, only verify the middleware's effect on responses (e.g., check for X-Process-Time header), do NOT instantiate middleware classes in test fixtures
 
-5. ORGANIZE INTO FILES:
-   Structure as a proper project with separate files using app/ directory:
-   - app/main.py (FastAPI app instance, imports router from app/routes.py, includes middleware)
-   - app/routes.py (API route definitions with APIRouter - ALL endpoints defined here)
-   - app/schemas.py (Pydantic models for request/response validation)
-   - tests/test_health.py (health endpoint tests)
-   - tests/test_version.py (version endpoint tests)
-   - tests/test_echo.py (echo endpoint tests if /echo is required)
-   - requirements.txt (dependencies)
-   - README.md (COMPREHENSIVE - see requirements below - THIS IS MANDATORY)
-   - .env.example (example environment variables with NO real secrets)
+{structure_section}
 
 5a. DEPENDENCY VERSIONS (CRITICAL FOR COMPATIBILITY):
    ⚠️ IMPORTANT: Use CURRENT, STABLE package versions from 2024-2025.
