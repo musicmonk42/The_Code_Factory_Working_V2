@@ -1381,11 +1381,14 @@ if PLUGIN_AVAILABLE:
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
                                 )
+                                # NOTE: Using "first" voting strategy because majority voting requires exact
+                                # string matches across providers, which is impossible for code generation.
+                                # Different LLMs produce semantically equivalent but textually different code.
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
-                                        voting_strategy="majority",
+                                        voting_strategy="first",
                                         timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
@@ -1413,10 +1416,13 @@ if PLUGIN_AVAILABLE:
                             )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            # NOTE: Using "first" voting strategy because majority voting requires exact
+                            # string matches across providers, which is impossible for code generation.
+                            # Different LLMs produce semantically equivalent but textually different code.
                             response_dict = await call_ensemble_api(
                                 prompt=prompt,
                                 models=_ensemble_models,
-                                voting_strategy="majority",
+                                voting_strategy="first",
                                 timeout_per_provider=180.0,
                             )
                             response = (
@@ -1780,11 +1786,14 @@ else:
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
                                 )
+                                # NOTE: Using "first" voting strategy because majority voting requires exact
+                                # string matches across providers, which is impossible for code generation.
+                                # Different LLMs produce semantically equivalent but textually different code.
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
-                                        voting_strategy="majority",
+                                        voting_strategy="first",
                                         timeout_per_provider=180.0,
                                     )
                                     _pass_resp = (
@@ -1812,10 +1821,13 @@ else:
                             )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
+                            # NOTE: Using "first" voting strategy because majority voting requires exact
+                            # string matches across providers, which is impossible for code generation.
+                            # Different LLMs produce semantically equivalent but textually different code.
                             response_dict = await call_ensemble_api(
                                 prompt=prompt,
                                 models=_ensemble_models,
-                                voting_strategy="majority",
+                                voting_strategy="first",
                                 timeout_per_provider=180.0,
                             )
                             response = (
