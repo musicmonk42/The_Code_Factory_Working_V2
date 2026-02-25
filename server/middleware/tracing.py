@@ -138,7 +138,7 @@ def setup_tracing(
             provider.add_span_processor(processor)
             
             logger.info(
-                f"OTLP trace exporter configured",
+                "OTLP trace exporter configured",
                 extra={
                     "endpoint": otlp_endpoint,
                     "service_name": service_name,
@@ -163,7 +163,7 @@ def setup_tracing(
             logger.warning(f"Could not instrument logging: {e}")
         
         logger.info(
-            f"Distributed tracing enabled",
+            "Distributed tracing enabled",
             extra={
                 "service_name": service_name,
                 "service_version": service_version,

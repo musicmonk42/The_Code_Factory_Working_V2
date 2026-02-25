@@ -1178,12 +1178,12 @@ def _validate_helm_chart_structure(chart_data: Dict[str, Any]) -> Tuple[bool, Op
     # Validate apiVersion
     api_version = chart_data.get("apiVersion")
     if not isinstance(api_version, str) or not api_version:
-        return False, f"apiVersion must be a non-empty string"
+        return False, "apiVersion must be a non-empty string"
     
     # Validate name
     name = chart_data.get("name")
     if not isinstance(name, str) or not name:
-        return False, f"name must be a non-empty string"
+        return False, "name must be a non-empty string"
     
     return True, None
 
@@ -2208,7 +2208,7 @@ class OmniCoreService:
             else:
                 # Loader still running, attempt lazy loading
                 logger.info(
-                    f"Agents not yet loaded, attempting lazy loading",
+                    "Agents not yet loaded, attempting lazy loading",
                     extra={"job_id": job_id, "action": action}
                 )
             
@@ -2228,7 +2228,7 @@ class OmniCoreService:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             logger.warning(
-                f"Agent dispatch failed - agents not ready",
+                "Agent dispatch failed - agents not ready",
                 extra={
                     "job_id": job_id,
                     "action": action,
@@ -2240,7 +2240,7 @@ class OmniCoreService:
         
         # Log successful agent dispatch
         logger.debug(
-            f"Dispatching action to generator agents",
+            "Dispatching action to generator agents",
             extra={"job_id": job_id, "action": action, "agents_loaded": True}
         )
         
@@ -2389,7 +2389,7 @@ class OmniCoreService:
                     settings = ArbiterConfig()
                     settings_source = "ArbiterConfig"
                     logger.debug(
-                        f"[SFE] Initialized BugManager with ArbiterConfig",
+                        "[SFE] Initialized BugManager with ArbiterConfig",
                         extra={"job_id": job_id, "settings_source": settings_source}
                     )
                 except (ImportError, ModuleNotFoundError) as e:
@@ -2413,7 +2413,7 @@ class OmniCoreService:
                         settings = Settings()
                         settings_source = "Settings(default)"
                         logger.info(
-                            f"[SFE] Using fallback Settings for BugManager",
+                            "[SFE] Using fallback Settings for BugManager",
                             extra={"job_id": job_id, "settings_source": settings_source}
                         )
                     except Exception as e:
@@ -2478,7 +2478,6 @@ class OmniCoreService:
             code_path = payload.get("code_path", "")
             code_path = self._resolve_job_output_path(job_id, code_path)
             scan_depth = payload.get("scan_depth", "full")
-            include_potential = payload.get("include_potential", True)
             
             if not code_path or not Path(code_path).exists():
                 return {
@@ -2908,7 +2907,7 @@ class OmniCoreService:
             generated_files.append(relative_path)
             
             logger.info(
-                f"[DEPLOY] Generated default Helm Chart.yaml",
+                "[DEPLOY] Generated default Helm Chart.yaml",
                 extra={
                     "file": relative_path,
                     "chart_name": default_chart["name"],
@@ -3202,7 +3201,7 @@ class OmniCoreService:
                 # parse it into a dict so materialize_file_map can process it.
                 if isinstance(result, str):
                     logger.warning(
-                        f"[CODEGEN] Agent returned string instead of dict, attempting JSON parse",
+                        "[CODEGEN] Agent returned string instead of dict, attempting JSON parse",
                         extra={"job_id": job_id, "result_length": len(result)}
                     )
                     try:
@@ -3240,7 +3239,7 @@ class OmniCoreService:
                 # FIX: Check if result is empty (no files generated)
                 if len(result) == 0:
                     logger.error(
-                        f"[CODEGEN] Empty result - no files generated",
+                        "[CODEGEN] Empty result - no files generated",
                         extra={"job_id": job_id}
                     )
                     return {
@@ -3276,7 +3275,7 @@ class OmniCoreService:
                         error_msg = f"{error_content}\n\nSuggestions:\n" + "\n".join(f"  • {s}" for s in suggestions)
                     
                     logger.error(
-                        f"[CODEGEN] Generation failed with error",
+                        "[CODEGEN] Generation failed with error",
                         extra={
                             "job_id": job_id,
                             "error": error_content[:500],
@@ -3374,7 +3373,7 @@ class OmniCoreService:
                         )
                     else:
                         logger.debug(
-                            f"[CODEGEN] Import auto-fix completed: no missing imports detected",
+                            "[CODEGEN] Import auto-fix completed: no missing imports detected",
                             extra={"job_id": job_id}
                         )
                         
@@ -3453,7 +3452,7 @@ class OmniCoreService:
                     elif custom_output_dir == "generated":
                         custom_output_dir = ""
                         logger.info(
-                            f"[CODEGEN] Stripped 'generated' from output_dir (would be redundant)",
+                            "[CODEGEN] Stripped 'generated' from output_dir (would be redundant)",
                             extra={"job_id": job_id}
                         )
                 
@@ -3464,7 +3463,7 @@ class OmniCoreService:
                 
                 # Ensure output path is within uploads directory
                 if not str(output_path).startswith(str(base_uploads_dir)):
-                    raise SecurityError(f"Invalid job_id: path traversal attempt detected")
+                    raise SecurityError("Invalid job_id: path traversal attempt detected")
                 
                 output_path.mkdir(parents=True, exist_ok=True)
                 logger.info(
@@ -3630,7 +3629,7 @@ class OmniCoreService:
                         files_key_unwrapped = False
                         if "files" in file_map and isinstance(file_map["files"], dict):
                             logger.info(
-                                f"[CODEGEN] Fallback: unwrapping nested 'files' key",
+                                "[CODEGEN] Fallback: unwrapping nested 'files' key",
                                 extra={"job_id": job_id}
                             )
                             file_map = file_map["files"]
@@ -3815,7 +3814,7 @@ class OmniCoreService:
                 # FIX: Check if any files were successfully written
                 if len(generated_files) == 0:
                     logger.error(
-                        f"[CODEGEN] Failed to write any code files to disk",
+                        "[CODEGEN] Failed to write any code files to disk",
                         extra={
                             "job_id": job_id,
                             "files_failed": files_failed,
@@ -4106,7 +4105,6 @@ class OmniCoreService:
             # Wrap test generation with configurable timeout
             async with asyncio.timeout(DEFAULT_TESTGEN_TIMEOUT):
                 code_path = payload.get("code_path", f"./uploads/{job_id}/generated")
-                test_type = payload.get("test_type", "unit")
                 coverage_target = float(payload.get("coverage_target", 80.0))
                 
                 # Create testgen agent with correct repo path
@@ -4539,8 +4537,7 @@ class OmniCoreService:
                             
                             # Determine filename based on document kind
                             # Use case-insensitive search for better compatibility
-                            doc_lower = doc.lower()
-                            
+
                             # Try to extract the kind field more robustly
                             kind_match = re.search(r'kind:\s*(\w+)', doc, re.IGNORECASE)
                             kind = kind_match.group(1) if kind_match else None
@@ -4626,7 +4623,7 @@ class OmniCoreService:
                                     generated_files.append(str(service_yaml_path.relative_to(repo_path)))
                                 except ValueError:
                                     generated_files.append(str(service_yaml_path))
-                                logger.info(f"[DEPLOY] Generated default k8s/service.yaml (LLM did not include a Service resource)")
+                                logger.info("[DEPLOY] Generated default k8s/service.yaml (LLM did not include a Service resource)")
                             except Exception as svc_err:
                                 logger.warning(f"[DEPLOY] Could not write default service.yaml: {svc_err}")
                         
@@ -4664,7 +4661,7 @@ class OmniCoreService:
                                     generated_files.append(str(deployment_yaml_path.relative_to(repo_path)))
                                 except ValueError:
                                     generated_files.append(str(deployment_yaml_path))
-                                logger.info(f"[DEPLOY] Generated default k8s/deployment.yaml (LLM did not include a Deployment resource)")
+                                logger.info("[DEPLOY] Generated default k8s/deployment.yaml (LLM did not include a Deployment resource)")
                             except Exception as dep_err:
                                 logger.warning(f"[DEPLOY] Could not write default deployment.yaml: {dep_err}")
                         
@@ -4812,7 +4809,7 @@ class OmniCoreService:
                                                         else:
                                                             await f.write(str(_chart_data))
                                                     generated_files.append(str(chart_file.relative_to(repo_path)))
-                                                    logger.info(f"[DEPLOY] Generated helm Chart.yaml from structured YAML")
+                                                    logger.info("[DEPLOY] Generated helm Chart.yaml from structured YAML")
                                                 else:
                                                     # Use apiVersion/name from top-level as Chart.yaml
                                                     chart_meta = {k: v for k, v in parsed_yaml.items() if k not in structured_keys}
@@ -4828,7 +4825,7 @@ class OmniCoreService:
                                                         else:
                                                             await f.write(str(_values_data))
                                                     generated_files.append(str(values_file.relative_to(repo_path)))
-                                                    logger.info(f"[DEPLOY] Generated helm values.yaml from structured YAML")
+                                                    logger.info("[DEPLOY] Generated helm values.yaml from structured YAML")
                                                 if "templates" in parsed_yaml and isinstance(parsed_yaml["templates"], dict):
                                                     for tmpl_name, tmpl_content in parsed_yaml["templates"].items():
                                                         if "/" in tmpl_name:
@@ -4844,7 +4841,7 @@ class OmniCoreService:
                                                     await f.write(yaml.dump(parsed_yaml, default_flow_style=False))
                                                 generated_files.append(str(chart_file.relative_to(repo_path)))
                                                 logger.info(
-                                                    f"[DEPLOY] Generated helm Chart.yaml (validated)",
+                                                    "[DEPLOY] Generated helm Chart.yaml (validated)",
                                                     extra={
                                                         "chart_name": parsed_yaml.get("name"),
                                                         "api_version": parsed_yaml.get("apiVersion")
@@ -5014,7 +5011,7 @@ class OmniCoreService:
         # Path traversal protection (matching platform security patterns)
         if ".." in job_id or "/" in job_id or "\\" in job_id:
             logger.error(f"[DEPLOY_ALL] Path traversal attempt detected in job_id: {job_id}")
-            raise SecurityError(f"Invalid job_id: path traversal attempt detected")
+            raise SecurityError("Invalid job_id: path traversal attempt detected")
         
         # Start timing and tracing
         start_time = time.time()
@@ -5077,7 +5074,7 @@ class OmniCoreService:
             Dict with deployment results and metadata
         """
         logger.info(
-            f"[DEPLOY_ALL] Starting deployment for all targets",
+            "[DEPLOY_ALL] Starting deployment for all targets",
             extra={
                 "job_id": job_id,
                 "targets": ["docker", "kubernetes", "helm"],
@@ -5211,7 +5208,7 @@ class OmniCoreService:
             }
         
         logger.info(
-            f"[DEPLOY_ALL] All deployment targets completed successfully",
+            "[DEPLOY_ALL] All deployment targets completed successfully",
             extra={
                 "job_id": job_id,
                 "targets": targets,
@@ -6769,7 +6766,7 @@ class OmniCoreService:
                     if spec_lock.package_name or spec_lock.module_name:
                         payload["package_name"] = spec_lock.package_name or spec_lock.module_name
             except ImportError:
-                logger.debug(f"[PIPELINE] Spec integration not available, using legacy flow")
+                logger.debug("[PIPELINE] Spec integration not available, using legacy flow")
             except Exception as e:
                 logger.warning(
                     f"[PIPELINE] Spec processing failed, continuing with legacy flow: {e}",
@@ -7281,7 +7278,7 @@ class OmniCoreService:
                                         )
                                     else:
                                         logger.debug(
-                                            f"[CODEGEN] Import auto-fix for source files completed: no missing imports detected",
+                                            "[CODEGEN] Import auto-fix for source files completed: no missing imports detected",
                                             extra={"job_id": job_id}
                                         )
                         
@@ -8052,7 +8049,7 @@ class OmniCoreService:
                                                     )
                                                 else:
                                                     logger.debug(
-                                                        f"[TESTGEN] Import auto-fix for test files completed: no missing imports detected",
+                                                        "[TESTGEN] Import auto-fix for test files completed: no missing imports detected",
                                                         extra={"job_id": job_id}
                                                     )
                                             else:
@@ -8665,10 +8662,10 @@ class OmniCoreService:
                             extra={"job_id": job_id, "checks_passed": len(validation_report.checks_passed)}
                         )
                 else:
-                    logger.debug(f"[PIPELINE] Skipping validation (no output path or spec_lock)")
+                    logger.debug("[PIPELINE] Skipping validation (no output path or spec_lock)")
                     
             except ImportError:
-                logger.debug(f"[PIPELINE] Validation integration not available")
+                logger.debug("[PIPELINE] Validation integration not available")
             except Exception as e:
                 logger.warning(
                     f"[PIPELINE] Post-generation validation failed: {e}",

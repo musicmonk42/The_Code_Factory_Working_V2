@@ -656,7 +656,7 @@ def log_audit_event_sync(action: str, data: Dict[str, Any], **kwargs) -> None:
     try:
         # STEP 1: Check if there's a running event loop
         # This is the key to avoiding "coroutine was never awaited" warnings
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
         
         # STEP 2: If we got here, we're in an async context with a running loop
         # Create a fire-and-forget task with proper error handling

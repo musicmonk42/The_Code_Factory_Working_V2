@@ -933,22 +933,6 @@ class ImportFixerEngine:
                     "message": f"Syntax error detected: {e}",
                 }
 
-            # Common stdlib modules to check for
-            STDLIB_MODULES = {
-                'time', 'os', 'sys', 'json', 're', 'math', 'datetime', 'typing',
-                'collections', 'pathlib', 'logging', 'hashlib', 'uuid', 'base64',
-                'functools', 'itertools', 'copy', 'io', 'subprocess', 'tempfile',
-                'shutil', 'random', 'string', 'pickle', 'csv', 'urllib', 'http',
-                'email', 'inspect', 'warnings', 'asyncio', 'threading', 'multiprocessing'
-            }
-            
-            # FastAPI-specific names commonly used
-            FASTAPI_NAMES = {
-                'Request', 'Response', 'HTTPException', 'Depends', 'Header',
-                'Query', 'Path', 'Body', 'Cookie', 'File', 'UploadFile',
-                'Form', 'status', 'WebSocket', 'BackgroundTasks'
-            }
-
             # Fix incorrect BaseHTTPMiddleware import path (ALWAYS check this first)
             # Use regex to ensure we only match actual import statements, not comments or strings
             lines = code.split('\n')
@@ -958,9 +942,7 @@ class ImportFixerEngine:
                 # This avoids modifying comments or strings
                 match = import_pattern.match(line)
                 if match:
-                    # Preserve indentation and replace only the module path
-                    indent = match.group(1)
-                    replacement = line.replace('from fastapi.middleware.base import', 
+                    replacement = line.replace('from fastapi.middleware.base import',
                                               'from starlette.middleware.base import', 1)
                     lines[i] = replacement
                     fixes_applied.append("Fixed BaseHTTPMiddleware import: fastapi.middleware.base -> starlette.middleware.base")

@@ -215,7 +215,7 @@ except LookupError:
                         nltk.download("punkt")
                         nltk.download("stopwords")
                         logger.info("NLTK data downloaded successfully.")
-                except (IOError, OSError) as lock_error:
+                except (IOError, OSError):
                     # Lock held by another process - wait and check if data is now available
                     logger.info("Another process is downloading NLTK data, waiting...")
                     time.sleep(2)

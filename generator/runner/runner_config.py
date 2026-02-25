@@ -877,11 +877,11 @@ def load_config(
     # If runner_config.yaml is not found, try falling back to config.yaml
     if resolved_path is None and Path(config_file).name == "runner_config.yaml":
         logger.debug(
-            f"runner_config.yaml not found, attempting fallback to config.yaml"
+            "runner_config.yaml not found, attempting fallback to config.yaml"
         )
         resolved_path = _find_config_file("config.yaml")
         if resolved_path is not None:
-            logger.info(f"✅ Using config.yaml as fallback for runner_config.yaml")
+            logger.info("✅ Using config.yaml as fallback for runner_config.yaml")
             config_file = "config.yaml"
     
     # Check if file should exist (not a test scenario with overrides)
@@ -896,15 +896,15 @@ def load_config(
         if filename == "runner_config.yaml":
             searched_paths = [
                 f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
-                f"   - ./runner_config.yaml: not found",
-                f"   - ./config/runner_config.yaml: not found",
+                "   - ./runner_config.yaml: not found",
+                "   - ./config/runner_config.yaml: not found",
             ]
         elif filename == "config.yaml":
             searched_paths = [
                 f"   - Environment variable RUNNER_CONFIG_PATH: {env_path if env_path else '(not set)'}",
-                f"   - ./config.yaml: not found",
-                f"   - ./generator/config.yaml: not found",
-                f"   - ./config/config.yaml: not found",
+                "   - ./config.yaml: not found",
+                "   - ./generator/config.yaml: not found",
+                "   - ./config/config.yaml: not found",
             ]
         else:
             searched_paths = [
@@ -914,7 +914,7 @@ def load_config(
             
         error_msg = (
             f"⚠️  {filename} not found in:\n" + "\n".join(searched_paths) + "\n"
-            f"For production, set RUNNER_CONFIG_PATH or place config in a standard location"
+            "For production, set RUNNER_CONFIG_PATH or place config in a standard location"
         )
         raise ConfigurationError("CONFIGURATION_ERROR", detail=error_msg)
     

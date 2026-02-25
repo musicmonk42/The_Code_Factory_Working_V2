@@ -811,7 +811,7 @@ async def run_generator_workflow(
             if bridge:
                 try:
                     await bridge.report_bug({
-                        "title": f"Critical failure in generator workflow",
+                        "title": "Critical failure in generator workflow",
                         "description": f"Unexpected critical error in workflow {correlation_id}: {str(e)}",
                         "severity": "critical",
                         "error": str(e),

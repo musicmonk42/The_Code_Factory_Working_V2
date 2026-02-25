@@ -3095,13 +3095,6 @@ else:
                     except Exception:
                         pass
 
-                kg_facts_count = 0
-                if hasattr(self, "knowledge_graph") and self.knowledge_graph:
-                    try:
-                        kg_facts_count = getattr(self.knowledge_graph, "facts_count", 0) or 0
-                    except Exception:
-                        pass
-
                 # Try LLM-powered analysis
                 suggestion = None
                 xai_key = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
@@ -3109,12 +3102,6 @@ else:
                 llm_api_key = getattr(getattr(self, "settings", None), "llm_api_key", None) or xai_key or openai_key
 
                 if llm_api_key and _AIOHTTP_AVAILABLE:
-                    prompt_data = {
-                        "event_summary": event_summary,
-                        "metrics": metrics_dict,
-                        "bug_summary": bug_summary,
-                        "knowledge_graph_facts": kg_facts_count,
-                    }
                     prompt = (
                         "Analyze this Code Factory platform runtime data and suggest the single most impactful "
                         "new feature or improvement to implement:\n\n"

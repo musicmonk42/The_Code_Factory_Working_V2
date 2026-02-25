@@ -64,7 +64,7 @@ class ContractValidator:
             print(f"📋 {name}...")
             try:
                 check_func()
-                print(f"   ✅ PASS\n")
+                print("   ✅ PASS\n")
             except AssertionError as e:
                 self.errors.append(f"{name}: {e}")
                 print(f"   ❌ FAIL: {e}\n")

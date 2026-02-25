@@ -423,7 +423,7 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
 
     assert (
         count_value is not None
-    ), f"Could not find sample ending with '_count' with labels {{'model': 'm'}}"
+    ), "Could not find sample ending with '_count' with labels {'model': 'm'}"
     assert count_value - baseline_latency_count == 2
     # <<< END FIX
 

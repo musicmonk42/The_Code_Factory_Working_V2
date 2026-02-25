@@ -1194,7 +1194,6 @@ class OpenAIMultiModalProvider(MultiModalPluginInterface):
                 else:
                     video_path = video_data
                 cap = _cv2.VideoCapture(video_path)
-                fps = cap.get(_cv2.CAP_PROP_FPS) or 25.0
                 total_frames = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT))
                 # Extract first, middle, last frames
                 frame_indices = {0, total_frames // 2, max(0, total_frames - 1)}

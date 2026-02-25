@@ -751,8 +751,8 @@ class AuditLogger:
                 # Check if corruption is at entry 0 (first entry) - this suggests a completely corrupted file
                 if failure_index == 0:
                     logger.warning(
-                        f"Audit chain corrupted at entry 0. This suggests file corruption. "
-                        f"Backing up corrupted file and resetting chain.",
+                        "Audit chain corrupted at entry 0. This suggests file corruption. "
+                        "Backing up corrupted file and resetting chain.",
                         extra={"context": "startup"},
                     )
                     # Backup the corrupted file
@@ -794,8 +794,8 @@ class AuditLogger:
                 # Also handle corruption at entry 0 in non-production
                 if failure_index == 0:
                     logger.info(
-                        f"Audit chain corrupted at entry 0 in non-production. "
-                        f"Backing up and resetting chain.",
+                        "Audit chain corrupted at entry 0 in non-production. "
+                        "Backing up and resetting chain.",
                         extra={"context": "startup"},
                     )
                     backup_path = f"{self.log_path}.corrupted.{int(time.time())}"

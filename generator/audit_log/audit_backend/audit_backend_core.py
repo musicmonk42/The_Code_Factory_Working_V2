@@ -977,7 +977,7 @@ class LogBackend(abc.ABC):
             except RuntimeError:
                 # No running event loop - log instead of creating task
                 logger.warning(
-                    f"Could not send alert for decryption failure (no event loop)"
+                    "Could not send alert for decryption failure (no event loop)"
                 )
             raise
         except Exception as e:

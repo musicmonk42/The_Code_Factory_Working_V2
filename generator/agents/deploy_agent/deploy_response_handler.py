@@ -723,7 +723,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
                 trail_match = re.search(pattern, extracted, re.IGNORECASE)
                 if trail_match:
                     extracted = extracted[:trail_match.start()].rstrip()
-                    logger.debug(f"Stripped trailing explanatory text from Dockerfile")
+                    logger.debug("Stripped trailing explanatory text from Dockerfile")
                     break
             
             logger.debug(f"Extracted Dockerfile from first FROM/ARG: {len(extracted)} chars")
@@ -1963,7 +1963,7 @@ class KubernetesHandler(FormatHandler):
                         documents.append(doc)
                     else:
                         logger.warning(
-                            f"Skipping invalid Kubernetes resource: missing apiVersion or kind",
+                            "Skipping invalid Kubernetes resource: missing apiVersion or kind",
                             extra={"doc_keys": list(doc.keys()) if isinstance(doc, dict) else None}
                         )
         except Exception as e:

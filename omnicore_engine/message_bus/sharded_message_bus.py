@@ -2184,7 +2184,7 @@ class ShardedMessageBus:
                 return stats
             
             logger.info(
-                f"Starting message replay",
+                "Starting message replay",
                 extra={
                     "max_age_seconds": max_age_seconds,
                     "max_retries": max_retries,
@@ -2192,10 +2192,6 @@ class ShardedMessageBus:
                     "component": "message_replay"
                 }
             )
-            
-            # Calculate cutoff time
-            import time
-            cutoff_time = time.time() - max_age_seconds
             
             # Query DLQ messages from database
             # This is a production-ready implementation skeleton
@@ -2267,7 +2263,7 @@ class ShardedMessageBus:
             #     stats["total_processed"] += 1
             
             logger.info(
-                f"Message replay completed",
+                "Message replay completed",
                 extra={
                     "replayed": stats["replayed"],
                     "failed": stats["failed"],

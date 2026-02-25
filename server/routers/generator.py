@@ -542,7 +542,7 @@ async def _trigger_pipeline_background(
         if _is_shutdown_requested():
             raise _PipelineShutdownInterrupt("Pipeline interrupted by SIGTERM shutdown")
         logger.info(
-            f"[Pipeline] Checking agent readiness before pipeline execution",
+            "[Pipeline] Checking agent readiness before pipeline execution",
             extra={"job_id": job_id, "max_wait": AGENT_WAIT_TIMEOUT}
         )
         
@@ -1217,7 +1217,7 @@ async def get_generator_status(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     status = await generator_service.get_job_status(job_id)
     return status
@@ -1244,7 +1244,7 @@ async def get_generator_logs(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     logs = await generator_service.get_job_logs(job_id, limit=limit)
     return LogsResponse(job_id=job_id, logs=logs, count=len(logs))
@@ -1484,7 +1484,7 @@ async def get_clarification_feedback(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     feedback = await generator_service.get_clarification_feedback(
         job_id=job_id,
@@ -1692,7 +1692,7 @@ async def run_codegen(
     - 404: Job not found
     - 403: Policy denied
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     result = await generator_service.run_codegen_agent(
         job_id=job_id,
@@ -1732,7 +1732,7 @@ async def run_testgen(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     result = await generator_service.run_testgen_agent(
         job_id=job_id,
@@ -1776,7 +1776,7 @@ async def run_deploy(
     - 404: Job not found
     - 403: Policy denied
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     result = await generator_service.run_deploy_agent(
         job_id=job_id,
@@ -1816,7 +1816,7 @@ async def run_docgen(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     result = await generator_service.run_docgen_agent(
         job_id=job_id,
@@ -1856,7 +1856,7 @@ async def run_critique(
     **Errors:**
     - 404: Job not found
     """
-    job = await _get_job_or_404(job_id)
+    await _get_job_or_404(job_id)
 
     result = await generator_service.run_critique_agent(
         job_id=job_id,

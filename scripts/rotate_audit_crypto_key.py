@@ -580,11 +580,11 @@ class KeyBackupManager:
         try:
             # Write backup with metadata
             with open(backup_path, 'w') as f:
-                f.write(f"# Audit Crypto Key Backup\n")
+                f.write("# Audit Crypto Key Backup\n")
                 f.write(f"# Timestamp: {timestamp}\n")
                 f.write(f"# Deployment Mode: {deployment_mode.value}\n")
-                f.write(f"# DO NOT COMMIT THIS FILE TO VERSION CONTROL\n")
-                f.write(f"\n")
+                f.write("# DO NOT COMMIT THIS FILE TO VERSION CONTROL\n")
+                f.write("\n")
                 f.write(f"AUDIT_CRYPTO_SOFTWARE_KEY_MASTER_ENCRYPTION_KEY_B64={key_value}\n")
             
             # Set restrictive permissions (owner read/write only)

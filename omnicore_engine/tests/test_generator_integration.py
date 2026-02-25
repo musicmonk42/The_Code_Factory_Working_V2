@@ -434,7 +434,7 @@ class TestAuditLogManagerFallback:
                 hasattr(omega.audit_log_manager, "log") or
                 hasattr(omega.audit_log_manager, "add_entry")
             )
-            assert has_logging_method, f"audit_log_manager should have a logging method"
+            assert has_logging_method, "audit_log_manager should have a logging method"
 
 
 if __name__ == "__main__":

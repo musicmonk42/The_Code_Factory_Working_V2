@@ -439,7 +439,7 @@ class TestgenAgent:
         self._init_task = None  # Track initialization task
         try:
             # Try to get the running loop and create a background task
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
             # We're in an async context, schedule initialization as a background task
             self._init_task = asyncio.create_task(self._async_init())
             logger.info("Scheduled codebase initialization for RAG as background task.")
@@ -1324,7 +1324,7 @@ Agent --> Dev : Deliver Report
                     else:
                         module_name = file_path_obj.stem
                     
-                    test_lines.append(f'# Import the module being tested')
+                    test_lines.append('# Import the module being tested')
                     if functions:
                         funcs_to_import = ', '.join(functions[:10])  # Limit to first 10
                         if len(functions) > 10:
@@ -1346,11 +1346,11 @@ Agent --> Dev : Deliver Report
                     for func_name in functions:
                         test_lines.append(f'def test_{func_name}():')
                         test_lines.append(f'    """Test {func_name} function."""')
-                        test_lines.append(f'    # Test that the function can be called without raising an exception')
-                        test_lines.append(f'    try:')
+                        test_lines.append('    # Test that the function can be called without raising an exception')
+                        test_lines.append('    try:')
                         test_lines.append(f'        result = {func_name}()')
-                        test_lines.append(f'    except (TypeError, Exception):')
-                        test_lines.append(f'        pass  # Function may require arguments')
+                        test_lines.append('    except (TypeError, Exception):')
+                        test_lines.append('        pass  # Function may require arguments')
                         test_lines.append('')
                         test_lines.append('')
                     
@@ -1368,7 +1368,7 @@ Agent --> Dev : Deliver Report
                         test_lines.append(f'    def test_{class_name.lower()}_instantiation(self):')
                         test_lines.append(f'        """Test that {class_name} can be instantiated."""')
                         test_lines.append(f'        instance = {class_name}()')
-                        test_lines.append(f'        assert instance is not None')
+                        test_lines.append('        assert instance is not None')
                         test_lines.append('')
                         
                         # POST-GENERATION VALIDATION: Only generate validation tests for
@@ -1392,9 +1392,9 @@ Agent --> Dev : Deliver Report
                                     min_len = field_cons["min_length"]
                                     valid_args.append(f'{field_name}="{"a" * max(min_len, 1)}"')
                             args_str = ", ".join(valid_args)
-                            test_lines.append(f'        from pydantic import ValidationError')
+                            test_lines.append('        from pydantic import ValidationError')
                             test_lines.append(f'        instance = {class_name}({args_str})')
-                            test_lines.append(f'        assert instance is not None')
+                            test_lines.append('        assert instance is not None')
                             test_lines.append('')
 
                             # Generate negative tests only for confirmed numeric constraints
@@ -1402,25 +1402,25 @@ Agent --> Dev : Deliver Report
                                 if "gt" in field_cons and isinstance(field_cons["gt"], (int, float)):
                                     test_lines.append(f'    def test_{class_name.lower()}_{field_name}_negative_rejected(self):')
                                     test_lines.append(f'        """Test that {class_name}.{field_name} rejects values <= {field_cons["gt"]} (gt={field_cons["gt"]})."""')
-                                    test_lines.append(f'        from pydantic import ValidationError')
-                                    test_lines.append(f'        import pytest')
-                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append('        from pydantic import ValidationError')
+                                    test_lines.append('        import pytest')
+                                    test_lines.append('        with pytest.raises(ValidationError):')
                                     test_lines.append(f'            {class_name}({field_name}={field_cons["gt"] - 1})')
                                     test_lines.append('')
                                 elif "ge" in field_cons and isinstance(field_cons["ge"], (int, float)):
                                     test_lines.append(f'    def test_{class_name.lower()}_{field_name}_below_min_rejected(self):')
                                     test_lines.append(f'        """Test that {class_name}.{field_name} rejects values < {field_cons["ge"]} (ge={field_cons["ge"]})."""')
-                                    test_lines.append(f'        from pydantic import ValidationError')
-                                    test_lines.append(f'        import pytest')
-                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append('        from pydantic import ValidationError')
+                                    test_lines.append('        import pytest')
+                                    test_lines.append('        with pytest.raises(ValidationError):')
                                     test_lines.append(f'            {class_name}({field_name}={field_cons["ge"] - 1})')
                                     test_lines.append('')
                                 if "min_length" in field_cons and isinstance(field_cons["min_length"], int) and field_cons["min_length"] > 0:
                                     test_lines.append(f'    def test_{class_name.lower()}_{field_name}_empty_rejected(self):')
                                     test_lines.append(f'        """Test that {class_name}.{field_name} rejects empty string (min_length={field_cons["min_length"]})."""')
-                                    test_lines.append(f'        from pydantic import ValidationError')
-                                    test_lines.append(f'        import pytest')
-                                    test_lines.append(f'        with pytest.raises(ValidationError):')
+                                    test_lines.append('        from pydantic import ValidationError')
+                                    test_lines.append('        import pytest')
+                                    test_lines.append('        with pytest.raises(ValidationError):')
                                     test_lines.append(f'            {class_name}({field_name}="")')
                                     test_lines.append('')
                         
@@ -2727,7 +2727,7 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
-                            "title": f"Test generation failed: File operation error",
+                            "title": "Test generation failed: File operation error",
                             "description": f"Test generation run {run_id} failed during file operations: {str(e)}",
                             "severity": "high",
                             "agent": "testgen",
@@ -2756,7 +2756,7 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
-                            "title": f"Test generation failed: Configuration/parsing error",
+                            "title": "Test generation failed: Configuration/parsing error",
                             "description": f"Test generation run {run_id} failed due to validation or parsing issues: {str(e)}",
                             "severity": "medium",
                             "agent": "testgen",
@@ -2785,7 +2785,7 @@ def test_{file_stem}_syntax_error_documentation():
                 if self.arbiter_bridge:
                     try:
                         await self.arbiter_bridge.report_bug({
-                            "title": f"Test generation failed: LLM operation error",
+                            "title": "Test generation failed: LLM operation error",
                             "description": f"Test generation run {run_id} failed during LLM operations or validation: {str(e)}",
                             "severity": "high",
                             "agent": "testgen",

@@ -431,7 +431,7 @@ def _publish_compliance_to_arbiter(compliance_map: Dict[str, Dict[str, Any]], co
         
         # Try to get running event loop
         try:
-            loop = asyncio.get_running_loop()
+            asyncio.get_running_loop()
         except RuntimeError:
             logger.debug("No running event loop, cannot publish to Arbiter")
             return

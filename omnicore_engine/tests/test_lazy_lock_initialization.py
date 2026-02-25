@@ -103,7 +103,7 @@ async def test_lazy_lock_creation():
         # Verify lock was created
         if registry._init_lock is not None:
             if isinstance(registry._init_lock, asyncio.Lock):
-                print(f"  ✅ Lock lazily created as asyncio.Lock")
+                print("  ✅ Lock lazily created as asyncio.Lock")
             else:
                 print(f"  ❌ ERROR: Expected asyncio.Lock, got {type(registry._init_lock)}")
                 return False
