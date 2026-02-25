@@ -451,7 +451,7 @@ class ArbiterBridge:
         try:
             with BRIDGE_OPERATION_DURATION.labels(operation="update_knowledge").time() if HAS_PROMETHEUS else _NoOpTimer():
                 result = await asyncio.wait_for(
-                    self.knowledge_graph.add_fact(domain, key, data),
+                    self.knowledge_graph.add_fact(domain, key, data, source="generator"),
                     timeout=5.0
                 )
             
