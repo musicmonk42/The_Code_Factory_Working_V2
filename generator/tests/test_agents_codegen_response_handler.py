@@ -757,3 +757,178 @@ def test_validate_yaml_content_empty():
     assert not is_valid, "Empty YAML should be rejected"
     assert "empty" in msg.lower()
 
+
+
+# ==============================================================================
+# Tests for: _is_likely_variable
+# ==============================================================================
+
+def test_is_likely_variable_router_suffix():
+    """Names ending with _router are module-level variables, not callables."""
+    assert crh._is_likely_variable("api_router") is True
+    assert crh._is_likely_variable("auth_router") is True
+
+
+def test_is_likely_variable_engine_client_pool():
+    """Common infrastructure object suffixes are recognised as variables."""
+    assert crh._is_likely_variable("db_engine") is True
+    assert crh._is_likely_variable("redis_client") is True
+    assert crh._is_likely_variable("connection_pool") is True
+
+
+def test_is_likely_variable_callable_names_return_false():
+    """Plain function/class names must NOT be misclassified as variables."""
+    assert crh._is_likely_variable("get_current_user") is False
+    assert crh._is_likely_variable("authenticate_user") is False
+    assert crh._is_likely_variable("create_access_token") is False
+
+
+def test_is_likely_variable_uppercase_class_name():
+    """Uppercase names (classes) are not variable-like."""
+    assert crh._is_likely_variable("User") is False
+    assert crh._is_likely_variable("Role") is False
+
+
+def test_is_likely_variable_case_insensitive():
+    """Suffix matching should be case-insensitive."""
+    assert crh._is_likely_variable("API_ROUTER") is True
+    assert crh._is_likely_variable("DB_ENGINE") is True
+
+
+# ==============================================================================
+# Tests for: ensure_local_module_stubs — stub generation quality
+# ==============================================================================
+
+def test_ensure_local_module_stubs_function_returns_none_not_raises():
+    """
+    Stub functions must return None, not raise NotImplementedError.
+    Generated stubs must be safe to call at runtime.
+    """
+    code_files = {
+        "app/routes.py": "from app.auth import authenticate_user\n",
+    }
+    result = crh.ensure_local_module_stubs(code_files)
+
+    assert "app/auth.py" in result
+    stub_src = result["app/auth.py"]
+    assert "NotImplementedError" not in stub_src
+    assert "return None" in stub_src
+
+
+def test_ensure_local_module_stubs_variable_gets_assignment_not_function():
+    """
+    Variable-like symbols (e.g. api_router) must become ``name = None`` assignments,
+    not stub functions.
+    """
+    code_files = {
+        "app/main.py": "from app.routing import api_router\n",
+    }
+    result = crh.ensure_local_module_stubs(code_files)
+
+    assert "app/routing.py" in result
+    stub_src = result["app/routing.py"]
+    # Should NOT create a def for a variable-like name
+    assert "def api_router" not in stub_src
+    # Should create a simple assignment
+    assert "api_router = None" in stub_src
+
+
+def test_ensure_local_module_stubs_class_uses_pass():
+    """
+    Uppercase-initial symbols (classes) must remain as ``class Foo: pass`` stubs.
+    """
+    code_files = {
+        "app/routes.py": "from app.models import UserModel, Role\n",
+    }
+    result = crh.ensure_local_module_stubs(code_files)
+
+    assert "app/models.py" in result
+    stub_src = result["app/models.py"]
+    assert "class UserModel:" in stub_src
+    assert "class Role:" in stub_src
+
+
+def test_ensure_local_module_stubs_no_notimplementederror_anywhere():
+    """
+    End-to-end: no stub (function, class, or variable) should raise NotImplementedError.
+    """
+    code_files = {
+        "app/api.py": (
+            "from app.auth import get_current_user, Role, create_access_token\n"
+            "from app.db import db_engine, SessionLocal\n"
+        ),
+    }
+    result = crh.ensure_local_module_stubs(code_files)
+    for path, content in result.items():
+        assert "NotImplementedError" not in content, (
+            f"NotImplementedError found in stub file {path}"
+        )
+
+
+# ==============================================================================
+# Tests for: .ini / .cfg files skip Python syntax validation
+# ==============================================================================
+
+def test_ini_file_skips_python_syntax_validation():
+    """
+    Files with .ini extension must not be validated as Python code.
+    alembic.ini content should pass through without SyntaxError.
+    """
+    assert crh._should_skip_syntax_validation("alembic.ini") is True
+
+
+def test_cfg_file_skips_python_syntax_validation():
+    """setup.cfg must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("setup.cfg") is True
+
+
+def test_py_file_does_not_skip_syntax_validation():
+    """Python files must still be validated."""
+    assert crh._should_skip_syntax_validation("main.py") is False
+
+
+def test_yaml_file_skips_python_syntax_validation():
+    """YAML files must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("docker-compose.yaml") is True
+    assert crh._should_skip_syntax_validation("values.yml") is True
+
+
+def test_ini_file_in_multifile_response_no_syntax_error():
+    """
+    Parsing a multi-file JSON that includes an alembic.ini must NOT produce a
+    SyntaxError entry in the error file — the .ini content should be accepted as-is.
+    """
+    import json as _json
+    ini_content = "[alembic]\nscript_location = alembic\nsqlalchemy.url = sqlite:///./test.db\n"
+    response = _json.dumps({"files": {"alembic.ini": ini_content, "app/main.py": "x = 1"}})
+
+    files = crh.parse_llm_response(response, lang="python")
+
+    assert "alembic.ini" in files
+    # Content may be normalised (e.g. trailing newline stripped) — compare stripped.
+    assert files["alembic.ini"].strip() == ini_content.strip()
+    # Should not flag alembic.ini as a syntax error
+    if crh.ERROR_FILENAME in files:
+        assert "alembic.ini" not in files[crh.ERROR_FILENAME]
+
+
+# ==============================================================================
+# Tests for: production-ready validation error file merging
+# ==============================================================================
+
+def test_production_ready_failure_appends_to_existing_error_file():
+    """
+    When both syntax errors and production-ready failures exist, both should
+    appear in error.txt (appended), not one overwriting the other.
+    """
+    import json as _json
+
+    # A file with a syntax error AND stub patterns
+    bad_py = "def : invalid"  # syntax error
+    stub_py = "\n".join(["x = 1"] * 3 + ["raise NotImplementedError('x')", "raise NotImplementedError('y')"])
+
+    response = _json.dumps({"files": {"bad.py": bad_py, "stub.py": stub_py}})
+    files = crh.parse_llm_response(response, lang="python")
+
+    # error.txt should exist (from syntax failure of bad.py or prod-ready failure of stub.py)
+    assert crh.ERROR_FILENAME in files
