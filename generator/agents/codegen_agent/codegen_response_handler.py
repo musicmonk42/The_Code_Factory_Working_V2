@@ -662,7 +662,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 files_failed_count = len(errors)
                 total_count = files_passed_count + files_failed_count
                 rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
-                if files_failed_count > files_passed_count * MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
+                if rejection_rate > MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
                     logger.warning(
                         "High file rejection rate: %d/%d files failed (%.0f%%)",
                         files_failed_count, total_count, rejection_rate * 100,
@@ -786,7 +786,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     files_failed_count = len(errors)
                     total_count = files_passed_count + files_failed_count
                     rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
-                    if files_failed_count > files_passed_count * MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
+                    if rejection_rate > MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
                         logger.warning(
                             "High file rejection rate: %d/%d files failed (%.0f%%)",
                             files_failed_count, total_count, rejection_rate * 100,

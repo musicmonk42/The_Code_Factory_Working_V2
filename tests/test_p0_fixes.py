@@ -146,6 +146,11 @@ def test_engine_testgen_completed_below_threshold_zero_not_completed():
     """
     'completed_below_threshold' with final_metric_value=0 must NOT be
     added to stages_completed (Fix 7).
+
+    The decision logic is intentionally replicated here rather than imported from
+    engine.py because engine.py carries heavy async/framework dependencies that
+    make unit-level import impractical.  The test imports AgentStatus to keep
+    the status literals in sync with the production enum.
     """
     # Import AgentStatus to ensure our test values stay in sync with the enum.
     try:
@@ -157,7 +162,8 @@ def test_engine_testgen_completed_below_threshold_zero_not_completed():
         _failed_val = "failed"
         _skipped_val = "skipped"
 
-    def _should_append(status, metric):
+    def _should_append(status: str, metric: int) -> bool:
+        """Mirror the gate condition applied in engine.py to testgen stage completion."""
         _below_threshold_zero = (
             status == "completed_below_threshold" and metric == 0
         )
