@@ -162,32 +162,9 @@ except ImportError:
     tracer = trace.get_tracer(__name__)
     OTEL_AVAILABLE = False
 
-from prometheus_client import Counter, Histogram, REGISTRY, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server
 
-
-def _get_or_create_metric(metric_class, name, documentation, labelnames=None):
-    """
-    Safely create or retrieve a Prometheus metric to prevent
-    'Duplicated timeseries in CollectorRegistry' errors when
-    this module is imported through multiple paths.
-    """
-    labelnames = labelnames or []
-    # Check if metric already exists in registry
-    try:
-        existing = REGISTRY._names_to_collectors.get(name)
-        if existing is not None:
-            return existing
-    except (AttributeError, KeyError):
-        pass
-    # Try to create the metric
-    try:
-        return metric_class(name, documentation, labelnames)
-    except ValueError as e:
-        if "Duplicated timeseries" in str(e):
-            existing = REGISTRY._names_to_collectors.get(name)
-            if existing is not None:
-                return existing
-        raise
+from shared.noop_metrics import safe_metric as _get_or_create_metric
 
 
 # UPGRADE: Sentry for Error Aggregation

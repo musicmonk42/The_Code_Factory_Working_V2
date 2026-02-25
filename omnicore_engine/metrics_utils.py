@@ -30,7 +30,8 @@ This module provides a single, production-quality implementation with:
   is imported on first use, not at module-load time.  This prevents CPU
   timeout (exit code 152) during ``pytest --collect-only``.
 * **Graceful degradation** — when ``prometheus_client`` is not installed,
-  every public function silently returns a :class:`DummyMetric` no-op stub
+  every public function silently returns a :class:`~shared.noop_metrics.NoopMetric`
+  no-op stub (exported here as :data:`DummyMetric` for backward compatibility)
   so that callers never need ``if metric is None`` guards.
 * **Zero external dependencies at import time** — only stdlib modules are
   imported at the top level.
@@ -252,67 +253,15 @@ def safe_histogram(
 
 
 # ---------------------------------------------------------------------------
-# No-op fallback — matches the full prometheus_client Metric interface
+# No-op fallback — canonical implementation lives in shared.noop_metrics.
 # ---------------------------------------------------------------------------
+# ``NoopMetric`` provides the full Prometheus metric interface as a silent
+# no-op, ensuring callers can always call ``.labels().inc()`` etc. without
+# ``None`` guards.  ``DummyMetric`` is retained as a public backward-compat
+# alias so existing callers using
+# ``from omnicore_engine.metrics_utils import DummyMetric`` continue to work.
 
-
-class _DummyMetric:
-    """Lightweight no-op metric that silently accepts any Prometheus-style call.
-
-    Implements the ``labels → child-metric → inc/dec/set/observe`` chain so
-    that call-sites like ``MY_COUNTER.labels(kind="fix").inc()`` work without
-    ``None`` checks even when ``prometheus_client`` is not installed.
-
-    ``DEFAULT_BUCKETS`` mirrors ``prometheus_client.Histogram.DEFAULT_BUCKETS``
-    so that code referencing it at class level does not raise.
-    """
-
-    DEFAULT_BUCKETS = (
-        0.005,
-        0.01,
-        0.025,
-        0.05,
-        0.075,
-        0.1,
-        0.25,
-        0.5,
-        0.75,
-        1.0,
-        2.5,
-        5.0,
-        7.5,
-        10.0,
-        float("inf"),
-    )
-
-    def labels(self, *args: Any, **kwargs: Any) -> "_DummyMetric":
-        return self
-
-    def inc(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def dec(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def set(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def observe(self, *args: Any, **kwargs: Any) -> None:
-        pass
-
-    def time(self) -> "_DummyTimer":
-        """Return a no-op context-manager for ``.time()`` usage."""
-        return _DummyTimer()
-
-
-class _DummyTimer:
-    """No-op context manager returned by :meth:`_DummyMetric.time`."""
-
-    def __enter__(self) -> "_DummyTimer":
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        pass
+from shared.noop_metrics import NoopMetric as _DummyMetric
 
 
 # Public alias so callers can write ``from omnicore_engine.metrics_utils import DummyMetric``

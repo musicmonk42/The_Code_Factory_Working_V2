@@ -14,7 +14,8 @@ from datetime import datetime
 from typing import Any, Dict, Optional, Union
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
-from prometheus_client.metrics import MetricWrapperBase
+
+from shared.noop_metrics import safe_metric as _get_or_create_metric
 
 # Setup logger for metrics module
 logger = logging.getLogger(__name__)
@@ -29,31 +30,6 @@ if not logger.handlers:
     logger.setLevel(logging.INFO)
 
 # --- Helper Functions ---
-
-
-def _get_or_create_metric(
-    collector_class: type[MetricWrapperBase],
-    name: str,
-    documentation: str,
-    labelnames: tuple = (),
-    buckets: Optional[tuple] = None,
-) -> MetricWrapperBase:
-    """Idempotently create or retrieve a Prometheus metric."""
-    if name in REGISTRY._names_to_collectors:
-        existing_metric = REGISTRY._names_to_collectors[name]
-        if not isinstance(existing_metric, collector_class):
-            logger.warning(
-                f"Metric '{name}' already registered with type {type(existing_metric).__name__}, "
-                f"but requested as {collector_class.__name__}. Reusing existing."
-            )
-        return existing_metric
-    if buckets is not None and collector_class == Histogram:
-        metric = collector_class(
-            name, documentation, labelnames=labelnames, buckets=buckets
-        )
-    else:
-        metric = collector_class(name, documentation, labelnames=labelnames)
-    return metric
 
 
 # Public helper function for creating counters

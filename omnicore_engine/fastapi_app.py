@@ -148,13 +148,7 @@ except ImportError as e:
             f"See DEPENDENCY_GUIDE.md for installation instructions."
         )
         logger.error(error_msg)
-        # In production, we should not start with mock implementations
-        # However, we'll allow the application to start but log a critical error
-        # The health check should catch this and report unhealthy status
-        logger.error(
-            "WARNING: Starting with mock implementations in production mode. "
-            "This is not recommended and may cause unexpected behavior."
-        )
+        raise RuntimeError(error_msg)
 
     ARBITER_AVAILABLE = False
     ARENA_AVAILABLE = False

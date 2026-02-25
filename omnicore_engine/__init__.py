@@ -144,6 +144,8 @@ def __getattr__(name: str) -> Any:
         'database': '.database',
         'message_bus': '.message_bus',
         'engines': '.engines',
+        'metrics': '.metrics',
+        'metrics_utils': '.metrics_utils',
     }
     
     if name in _lazy_modules:
@@ -193,4 +195,7 @@ __all__ = [
     "meta_supervisor",
     "database",
     "message_bus",
+    # Canonical metric module aliases
+    "metrics",
+    "metrics_utils",
 ]

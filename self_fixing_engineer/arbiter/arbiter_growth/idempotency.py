@@ -7,22 +7,16 @@ from typing import Optional, Union
 import redis.asyncio as redis
 from opentelemetry import trace
 from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
-from prometheus_client import REGISTRY, Counter
+from prometheus_client import Counter
 from redis.asyncio.cluster import RedisCluster
 from redis.exceptions import RedisError
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from shared.noop_metrics import safe_metric as _get_or_create_metric
+
 # Configure logging
 logger = logging.getLogger(__name__)
 tracer = get_tracer_safe(__name__)
-
-
-# Helper function for idempotent metric creation
-def _get_or_create_metric(metric_class: type, name: str, doc: str, labelnames: list):
-    """Idempotently create or retrieve a Prometheus metric."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    return metric_class(name, doc, labelnames)
 
 
 # Prometheus metric to track idempotency cache hits and misses.

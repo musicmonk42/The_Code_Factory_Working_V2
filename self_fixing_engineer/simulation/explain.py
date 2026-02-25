@@ -46,6 +46,8 @@ except ImportError:
         "Prometheus client not available. Metrics will not be collected in explain.py."
     )
 
+from shared.noop_metrics import NoopMetric as DummyMetric, safe_metric as get_or_create_metric
+
 # Pydantic for input validation
 try:
     from pydantic import BaseModel, Field, ValidationError, validator
@@ -224,63 +226,6 @@ else:
     _metrics_registry = DummyRegistry()
 
 _metrics_lock = threading.Lock()
-
-
-class DummyMetric:
-    # Add DEFAULT_BUCKETS to match Histogram.DEFAULT_BUCKETS
-    DEFAULT_BUCKETS = (
-        0.005,
-        0.01,
-        0.025,
-        0.05,
-        0.075,
-        0.1,
-        0.25,
-        0.5,
-        0.75,
-        1.0,
-        2.5,
-        5.0,
-        7.5,
-        10.0,
-        float("inf"),
-    )
-
-    def labels(self, **kwargs):
-        return self
-
-    def observe(self, *args):
-        pass
-
-    def inc(self):
-        pass
-
-    def set(self, *args):
-        pass
-
-
-def get_or_create_metric(
-    metric_type, name, documentation, labelnames=None, buckets=None
-):
-    """Get or create a metric, handling both mock and real metric types"""
-    try:
-        with _metrics_lock:
-            if name in _metrics_registry._names_to_collectors:
-                existing_metric = _metrics_registry._names_to_collectors[name]
-                # For mocked metrics, just return the existing one
-                return existing_metric
-
-            # Create new metric
-            if buckets is not None:
-                metric = metric_type(
-                    name, documentation, labelnames or [], buckets=buckets
-                )
-            else:
-                metric = metric_type(name, documentation, labelnames or [])
-            return metric
-    except Exception:
-        # Fallback for testing
-        return DummyMetric()
 
 
 METRICS = {
