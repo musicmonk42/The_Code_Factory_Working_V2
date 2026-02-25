@@ -90,26 +90,6 @@ except ImportError:
     )
 
 
-# DecisionOptimizer and related mocks
-# REMOVED: DecisionOptimizer import and mock
-# try:
-#     from app.ai_assistant.decision_optimizer import DecisionOptimizer, Task, Agent
-# except ImportError:
-#     logger.warning("DecisionOptimizer module not found. Optimization features will be unavailable.")
-#     class DecisionOptimizer:
-#         def __init__(self, *args, **kwargs): pass
-#         async def prioritize_tasks(self, *args, **kwargs): return []
-#         async def allocate_resources(self, *args, **kwargs): return {}
-#         async def explain_decision(self, *args, **kwargs): return "Mock Explanation"
-#         async def load_strategy_plugin(self, *args, **kwargs): pass
-#         async def _log_event(self, *args, **kwargs): pass
-#         async def __aenter__(self): return self
-#         async def __aexit__(self, exc_type, exc_val, exc_tb): pass
-#     class Task:
-#         def __init__(self, *args, **kwargs): pass
-#     class Agent:
-#         def __init__(self, *args, **kwargs): pass
-
 # BenchmarkingEngine — real implementation in omnicore_engine.benchmarking_engine.
 # Fallback stubs are retained so that the module degrades gracefully in
 # minimal environments where the omnicore_engine package is not installed.

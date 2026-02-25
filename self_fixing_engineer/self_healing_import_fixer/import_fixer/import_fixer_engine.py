@@ -64,32 +64,7 @@ try:  # pragma: no cover - presence is env dependent
 except Exception:  # pragma: no cover
     Counter = Histogram = Gauge = None  # type: ignore
 
-
-class _DummyMetric:
-    def labels(self, *_, **__):
-        return self
-
-    def inc(self, *_args, **_kwargs):
-        return None
-
-    def set(self, *_args, **_kwargs):
-        return None
-
-    def observe(self, *_args, **_kwargs):
-        return None
-
-
-def _get_or_create_metric(_cls, *_args, **_kwargs):  # noqa: D401
-    """Return a real Prometheus metric if possible, otherwise a dummy.
-    Tests patch `SIM_MODULE_METRICS` directly, so the concrete type here is
-    irrelevant during testing.
-    """
-    try:
-        if _cls is None:
-            return _DummyMetric()
-        return _cls(*_args, **_kwargs)  # type: ignore[misc]
-    except Exception:
-        return _DummyMetric()
+from shared.noop_metrics import NoopMetric as _DummyMetric, safe_metric as _get_or_create_metric
 
 
 class _AssertableCall:
@@ -143,24 +118,14 @@ SIM_MODULE_METRICS: Dict[str, Any] = {
 # -----------------------------------------------------------------------------
 # Minimal stand-ins (types & helpers) so imports are patchable in tests
 # -----------------------------------------------------------------------------
-@dataclass
-class Message:
-    id: str
-    payload: Any
-    topic: str
-    original_payload: Optional[str] = None
-
-
-@dataclass
-class MessageFilter:
-    headers: Dict[str, str] = field(default_factory=dict)
-
 
 # Import shared implementations from simulation_module instead of duplicating
 try:
     from simulation.simulation_module import (
         CircuitBreaker,
         Database,
+        Message,
+        MessageFilter,
         ShardedMessageBus,
         ExplainableReasonerPlugin,
         QuantumPluginAPI,
@@ -178,6 +143,19 @@ except ImportError as e:
     )
 
     # Fallback implementations if simulation_module is unavailable
+    @dataclass
+    class Message:
+        """Fallback Message dataclass."""
+        id: str
+        payload: Any
+        topic: str
+        original_payload: Optional[str] = None
+
+    @dataclass
+    class MessageFilter:
+        """Fallback MessageFilter dataclass."""
+        headers: Dict[str, str] = field(default_factory=dict)
+
     class CircuitBreaker:
         """Fallback CircuitBreaker - see simulation_module.py for full implementation."""
 

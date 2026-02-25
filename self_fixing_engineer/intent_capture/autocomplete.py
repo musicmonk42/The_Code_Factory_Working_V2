@@ -37,7 +37,7 @@ from self_fixing_engineer.arbiter.otel_config import get_tracer
 from cryptography.fernet import Fernet, InvalidToken
 from langchain_core.language_models.base import BaseLanguageModel
 from opentelemetry import trace
-from prometheus_client import Counter, Gauge, Histogram, start_http_server, REGISTRY
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from rapidfuzz.process import extract
 from redis.exceptions import ConnectionError as RedisConnectionError
 from tenacity import (
@@ -48,19 +48,14 @@ from tenacity import (
 )
 from transformers import pipeline
 
+from shared.noop_metrics import safe_metric as _get_or_create_metric
+
 __version__ = "2.2.0"
 logger = logging.getLogger("autocomplete")
 llm_breaker = CircuitBreaker(fail_max=3, timeout_duration=60)
 
 # Initialize tracer using centralized config
 tracer = get_tracer(__name__)
-
-# Helper function for idempotent metric creation
-def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
-    """Get existing metric or create new one to avoid duplication errors."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    return metric_class(name, documentation, labelnames=labelnames) if labelnames else metric_class(name, documentation)
 
 # Prometheus Metrics - Using idempotent creation to avoid collisions
 COMPLETION_LATENCY_SECONDS = _get_or_create_metric(

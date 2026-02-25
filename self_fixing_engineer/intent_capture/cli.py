@@ -61,18 +61,13 @@ import jwt
 import psutil
 from aiobreaker import CircuitBreaker
 from cachetools import TTLCache
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
+from prometheus_client import Counter, Gauge, Histogram, start_http_server
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-
-def _get_or_create_metric(metric_class, name, documentation, labelnames=()):
-    """Get existing metric or create new one to avoid duplication errors."""
-    if name in REGISTRY._names_to_collectors:
-        return REGISTRY._names_to_collectors[name]
-    return metric_class(name, documentation, labelnames=labelnames) if labelnames else metric_class(name, documentation)
+from shared.noop_metrics import safe_metric as _get_or_create_metric
 
 try:
     import hvac

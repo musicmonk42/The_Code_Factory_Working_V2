@@ -56,6 +56,8 @@ from importlib.metadata import PackageNotFoundError, version
 
 from packaging.version import Version
 
+from shared.noop_metrics import NOOP as _metrics_noop, NoopMetric as _NoopMetric
+
 # --- Optional Rich Library for Enhanced Console Output ---
 try:
     from rich.console import Console
@@ -189,38 +191,7 @@ try:
 except ImportError:
     METRICS_AVAILABLE = False
 
-    class DummyMetric:
-        # Add DEFAULT_BUCKETS to match Histogram.DEFAULT_BUCKETS
-        DEFAULT_BUCKETS = (
-            0.005,
-            0.01,
-            0.025,
-            0.05,
-            0.075,
-            0.1,
-            0.25,
-            0.5,
-            0.75,
-            1.0,
-            2.5,
-            5.0,
-            7.5,
-            10.0,
-            float("inf"),
-        )
-
-        def labels(self, **kwargs):
-            return self
-
-        def observe(self, *args):
-            pass
-
-        def inc(self, *args):
-            pass
-
-        @asynccontextmanager
-        async def time(self):
-            yield
+    DummyMetric = _NoopMetric
 
     test_execution_duration = DummyMetric()
     test_execution_errors = DummyMetric()
@@ -242,15 +213,7 @@ if "METRICS_AVAILABLE" not in globals() or not METRICS_AVAILABLE:
             ["operation", "status"],
         )
     except Exception:
-
-        class _DummyMetric:
-            def labels(self, **kwargs):
-                return self
-
-            def inc(self, *args, **kwargs):
-                pass
-
-        file_operations_total = _DummyMetric()
+        file_operations_total = _metrics_noop  # noqa: F811
 
 # --- Optional tenacity for Retries ---
 try:

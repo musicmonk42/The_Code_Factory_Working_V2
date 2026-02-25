@@ -75,28 +75,7 @@ try:  # pragma: no cover
 except Exception:  # pragma: no cover
     Counter = Histogram = Gauge = None  # type: ignore
 
-
-class _DummyMetric:
-    def labels(self, *_, **__):
-        return self
-
-    def inc(self, *_args, **_kwargs):
-        return None
-
-    def set(self, *_args, **_kwargs):
-        return None
-
-    def observe(self, *_args, **_kwargs):
-        return None
-
-
-def _get_or_create_metric(_cls, *_args, **_kwargs):
-    try:
-        if _cls is None:
-            return _DummyMetric()
-        return _cls(*_args, **_kwargs)  # type: ignore[misc]
-    except Exception:
-        return _DummyMetric()
+from shared.noop_metrics import NoopMetric as _DummyMetric, safe_metric as _get_or_create_metric
 
 
 def _with_labels(metric: Any, **labels: Any) -> Any:

@@ -33,6 +33,8 @@ import backoff
 import psutil
 from opentelemetry import trace
 
+from shared.noop_metrics import NOOP as _metrics_noop
+
 # --- Global OpenTelemetry tracer for external callers (e.g., agents, testgen) ---
 # This provides a stable symbol that other modules can import as:
 #   from runner.runner_logging import tracer
@@ -238,31 +240,12 @@ def _get_metrics():
             }
         except ImportError:
             # Fallback dummy metrics for when runner_metrics is not available
-            class _DummyTimer:
-                """Dummy timer context manager for metrics."""
-                def __enter__(self): return self
-                def __exit__(self, *args): pass
-            
-            class _DummyMetric:
-                """Dummy metric that silently ignores all operations."""
-                def labels(self, *args, **kwargs):
-                    return self
-                def inc(self, *args, **kwargs):
-                    pass
-                def set(self, *args, **kwargs):
-                    pass
-                def observe(self, *args, **kwargs):
-                    pass
-                def time(self):
-                    return _DummyTimer()
-            
-            _dummy = _DummyMetric()
             _METRICS_CACHE = {
-                "ANOMALY_DETECTED_TOTAL": _dummy,
-                "DASHBOARD_QUEUE_SIZE": _dummy,
-                "UTIL_ERRORS": _dummy,
-                "UTIL_LATENCY": _dummy,
-                "UTIL_SELF_HEAL": _dummy,
+                "ANOMALY_DETECTED_TOTAL": _metrics_noop,
+                "DASHBOARD_QUEUE_SIZE": _metrics_noop,
+                "UTIL_ERRORS": _metrics_noop,
+                "UTIL_LATENCY": _metrics_noop,
+                "UTIL_SELF_HEAL": _metrics_noop,
             }
     
     return _METRICS_CACHE
