@@ -1647,7 +1647,13 @@ class WorkflowEngine:
                                 }
                             else:
                                 result["agent_results"]["testgen"] = testgen_result
-                                if testgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                                testgen_status = testgen_result.get("status", "")
+                                testgen_metric = testgen_result.get("final_metric_value", 0)
+                                _below_threshold_zero = (
+                                    testgen_status == "completed_below_threshold"
+                                    and testgen_metric == 0
+                                )
+                                if testgen_status not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value] and not _below_threshold_zero:
                                     result["stages_completed"].append("testgen")
                                     logger.debug(f"[Pipeline] Stage 'testgen' completed for workflow {workflow_id}")
                             
@@ -1668,7 +1674,13 @@ class WorkflowEngine:
                             # Run testgen only
                             testgen_result = await testgen_task
                             result["agent_results"]["testgen"] = testgen_result
-                            if testgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                            testgen_status = testgen_result.get("status", "")
+                            testgen_metric = testgen_result.get("final_metric_value", 0)
+                            _below_threshold_zero = (
+                                testgen_status == "completed_below_threshold"
+                                and testgen_metric == 0
+                            )
+                            if testgen_status not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value] and not _below_threshold_zero:
                                 result["stages_completed"].append("testgen")
                                 logger.debug(f"[Pipeline] Stage 'testgen' completed for workflow {workflow_id}")
                         

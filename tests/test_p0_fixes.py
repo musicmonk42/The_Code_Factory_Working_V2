@@ -47,8 +47,13 @@ pydantic>=2.0.0
 uvicorn>=0.27.0
 """
     result = parse_llm_response(requirements_text, lang="python")
-    assert ERROR_FILENAME in result, "Requirements.txt content should be rejected"
-    assert "recognizable code patterns" in result[ERROR_FILENAME].lower(), "Error message should mention code patterns"
+    assert ERROR_FILENAME in result, "Requirements.txt content should be rejected as invalid Python"
+    # After Fix 8, requirements.txt content is recognised as non-prose (has '>=' markers)
+    # so it reaches Python syntax validation and fails there — either message is acceptable.
+    err_lower = result[ERROR_FILENAME].lower()
+    assert "syntax" in err_lower or "validation" in err_lower or "code patterns" in err_lower, (
+        f"Error message should describe the rejection reason, got: {result[ERROR_FILENAME]!r}"
+    )
     
     # Test 2: Curl commands should be rejected
     curl_text = """curl -X POST http://localhost:8000/endpoint \\
@@ -135,6 +140,100 @@ def test_arbiter_retry_providers():
     # Check default retry_providers
     assert "anthropic" not in settings.retry_providers, "Anthropic should not be in retry_providers"
     assert "google" in settings.retry_providers, "Google should be in retry_providers"
+
+
+def test_engine_testgen_completed_below_threshold_zero_not_completed():
+    """
+    'completed_below_threshold' with final_metric_value=0 must NOT be
+    added to stages_completed (Fix 7).
+
+    The decision logic is intentionally replicated here rather than imported from
+    engine.py because engine.py carries heavy async/framework dependencies that
+    make unit-level import impractical.  The test imports AgentStatus to keep
+    the status literals in sync with the production enum.
+    """
+    # Import AgentStatus to ensure our test values stay in sync with the enum.
+    try:
+        from generator.main.engine import AgentStatus
+        _failed_val = AgentStatus.FAILED.value
+        _skipped_val = AgentStatus.SKIPPED.value
+    except ImportError:
+        # Fallback: match the values declared in engine.py AgentStatus enum
+        _failed_val = "failed"
+        _skipped_val = "skipped"
+
+    def _should_append(status: str, metric: int) -> bool:
+        """Mirror the gate condition applied in engine.py to testgen stage completion."""
+        _below_threshold_zero = (
+            status == "completed_below_threshold" and metric == 0
+        )
+        return status not in [_failed_val, _skipped_val] and not _below_threshold_zero
+
+    # 0% pass rate: should NOT be appended
+    assert not _should_append("completed_below_threshold", 0), \
+        "0% testgen should not be marked completed"
+
+    # Non-zero pass rate: should be appended (partial success)
+    assert _should_append("completed_below_threshold", 50), \
+        "Non-zero testgen should still be counted"
+
+    # Completed normally: should be appended
+    assert _should_append("completed", 100)
+
+    # Failed: should not be appended
+    assert not _should_append(_failed_val, 0)
+
+    # Skipped: should not be appended
+    assert not _should_append(_skipped_val, 0)
+
+
+def test_detect_module_package_collisions_integration():
+    """Integration test for _detect_module_package_collisions (Fix 3)."""
+    import json
+    from generator.agents.codegen_agent.codegen_response_handler import (
+        parse_llm_response, ERROR_FILENAME,
+    )
+
+    # Simulate collision: both routes.py and routes/__init__.py present
+    response = json.dumps({
+        "files": {
+            "main.py": "from app import create_app\napp = create_app()",
+            "app/__init__.py": "from fastapi import FastAPI\ndef create_app(): return FastAPI()",
+            "app/routes.py": "router = None",
+            "app/routes/__init__.py": "from fastapi import APIRouter\nrouter = APIRouter()",
+            "app/routes/health.py": "from . import router",
+        }
+    })
+
+    files = parse_llm_response(response, lang="python")
+    # The bare module file should have been removed
+    assert "app/routes.py" not in files, "Collision: routes.py should be removed"
+    assert "app/routes/__init__.py" in files
+
+
+def test_yaml_and_requirements_preserved_integration():
+    """Integration: YAML files and requirements.txt are not emptied (Fixes 1 & 8)."""
+    import json
+    from generator.agents.codegen_agent.codegen_response_handler import (
+        parse_llm_response, ERROR_FILENAME,
+    )
+
+    response = json.dumps({
+        "files": {
+            "main.py": "print('ok')",
+            "requirements.txt": "fastapi>=0.109.0\npydantic>=2.0.0\n",
+            "k8s/deployment.yaml": (
+                "apiVersion: apps/v1\nkind: Deployment\n"
+                "metadata:\n  name: app\nspec:\n  replicas: 1\n"
+            ),
+        }
+    })
+
+    files = parse_llm_response(response, lang="python")
+    assert "requirements.txt" in files
+    assert "fastapi" in files["requirements.txt"]
+    assert "k8s/deployment.yaml" in files
+    assert "apiVersion" in files["k8s/deployment.yaml"]
 
 
 if __name__ == "__main__":
