@@ -714,6 +714,10 @@ class AuditLogger:
         self.dlt_backend_config = dlt_backend_config or config.DLT_BACKEND_CONFIG
         self._last_entry_hash = "genesis_hash"
         self.degraded_mode = False  # Flag for operating with invalid audit chain
+        # Field names whose values should be redacted in audit entries.
+        # Use AuditUpdateFacade.apply_security_update(redact_fields=[...]) to
+        # add fields here at runtime (e.g., after a PII-redaction policy update).
+        self.redacted_fields: set = set()
 
         os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
         self._io_executor = ThreadPoolExecutor(max_workers=1)
@@ -974,6 +978,14 @@ class AuditLogger:
         event_type = f"{kind}:{name}"
         details = {**detail, "agent_id": agent_id, **kwargs}
         details = {k: sanitize_log(str(v)) for k, v in details.items()}
+        # Apply runtime field redaction (managed via AuditUpdateFacade.apply_security_update).
+        # Only reconstruct the dict when there are actually fields to redact and at least
+        # one matching key exists, to avoid unnecessary allocation in the common case.
+        if self.redacted_fields and self.redacted_fields.intersection(details):
+            details = {
+                k: "[REDACTED]" if k in self.redacted_fields else v
+                for k, v in details.items()
+            }
 
         if compliance_control_id is not None:
             details["compliance_control_id"] = compliance_control_id
@@ -1867,6 +1879,14 @@ class AuditUpdateFacade:
                         extra=log_ctx,
                     )
 
+                if redact_fields:
+                    instance.redacted_fields.update(redact_fields)
+                    logger.info(
+                        f"AuditUpdateFacade [{instance_label}]: "
+                        f"{len(redact_fields)} field(s) added to redaction list.",
+                        extra=log_ctx,
+                    )
+
                 if reset_chain:
                     instance.reset_hash_chain()
                     logger.warning(
@@ -1943,6 +1963,7 @@ class AuditUpdateFacade:
                     "log_path": getattr(instance, "log_path", "unknown"),
                     "signer_count": len(getattr(instance, "signers", [])),
                     "dlt_enabled": getattr(instance, "dlt_backend_enabled", False),
+                    "redacted_field_count": len(getattr(instance, "redacted_fields", set())),
                 }
             )
 
@@ -1950,7 +1971,10 @@ class AuditUpdateFacade:
         if len(details) > 1:
             ref = details[0]
             for d in details[1:]:
-                if d["signer_count"] != ref["signer_count"]:
+                if (
+                    d["signer_count"] != ref["signer_count"]
+                    or d["redacted_field_count"] != ref["redacted_field_count"]
+                ):
                     in_sync = False
                     break
 
@@ -1971,8 +1995,17 @@ class AuditUpdateFacade:
 
         return status
 
-    # Alias for convenience
-    health_check = verify_sync
+    def health_check(self) -> Dict[str, Any]:
+        """
+        Alias for :meth:`verify_sync`.
+
+        Provides a consistent ``health_check()`` interface for integration with
+        health-check frameworks and monitoring dashboards.
+
+        Returns:
+            Same dict as :meth:`verify_sync`.
+        """
+        return self.verify_sync()
 
 
 # Module-level singleton for convenient cross-module access.

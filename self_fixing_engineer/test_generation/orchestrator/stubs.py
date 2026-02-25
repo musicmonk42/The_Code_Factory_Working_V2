@@ -17,8 +17,8 @@ Environment Variables:
     FORCE_PRODUCTION_MODE: Override — "true" forces production mode regardless
 """
 
-import logging
 import os
+from typing import Any, List, Optional, Tuple
 from test_generation.orchestrator.console import log
 
 # Check if we're running in a test or offline environment
@@ -33,9 +33,13 @@ def _is_production() -> bool:
 
     Priority order (highest to lowest):
         1. FORCE_PRODUCTION_MODE=true
-        2. APP_ENV=production or APP_ENV=prod
+        2. APP_ENV (authoritative when set; any non-production value prevents legacy fallback)
         3. PRODUCTION_MODE=true or PRODUCTION_MODE=1
-        4. Legacy ENVIRONMENT=production (for backward compatibility)
+        4. Legacy ENVIRONMENT=production (only consulted when APP_ENV is absent)
+
+    When ``APP_ENV`` is set, its value is treated as authoritative so that
+    ``APP_ENV=development`` cannot be overridden by the legacy ``ENVIRONMENT``
+    variable.
 
     Returns:
         True if the application is running in production mode.
@@ -43,8 +47,11 @@ def _is_production() -> bool:
     if os.environ.get("FORCE_PRODUCTION_MODE", "").lower() == "true":
         return True
     app_env = os.environ.get("APP_ENV", "").lower()
-    if app_env in ("production", "prod"):
-        return True
+    if app_env:
+        # APP_ENV is authoritative: only production/prod means production.
+        # Any other value (development, staging, test) is explicitly non-production
+        # and prevents the legacy ENVIRONMENT fallback from overriding.
+        return app_env in ("production", "prod")
     prod_mode = os.environ.get("PRODUCTION_MODE", "")
     if prod_mode.lower() == "true" or prod_mode == "1":
         return True
@@ -123,7 +130,7 @@ class DummyPolicyEngine:
 
         self.usage_count = 0
 
-    async def should_integrate_test(self, *args, **kwargs):
+    async def should_integrate_test(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
         Stub implementation — deny-by-default in production, allow in dev/test.
 
@@ -141,7 +148,7 @@ class DummyPolicyEngine:
                 f"(call #{self.usage_count}). Raising RuntimeError to prevent "
                 "silent auto-approval of test integrations."
             )
-            log(msg, level="ERROR")
+            log(msg, level="CRITICAL")
             raise RuntimeError(msg)
 
         log(
@@ -150,7 +157,7 @@ class DummyPolicyEngine:
         )
         return True, "Stubbed"
 
-    async def requires_pr_for_integration(self, *args, **kwargs):
+    async def requires_pr_for_integration(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
         Stub implementation — requires PR in production, skips in dev/test.
 
@@ -170,7 +177,7 @@ class DummyPolicyEngine:
                 "DummyPolicyEngine.requires_pr_for_integration called in PRODUCTION. "
                 "Raising RuntimeError — a real PolicyEngine must be configured."
             )
-            log(msg, level="ERROR")
+            log(msg, level="CRITICAL")
             raise RuntimeError(msg)
 
         log("Using DummyPolicyEngine. No PRs are required.", level="DEBUG")
@@ -199,7 +206,7 @@ class DummyEventBus:
         )
         self.published_events = []
 
-    async def publish(self, *args, **kwargs):
+    async def publish(self, *args: Any, **kwargs: Any) -> None:
         """
         Stub implementation that logs but doesn't publish events.
 
@@ -236,7 +243,7 @@ class DummySecurityScanner:
             level="WARNING",
         )
 
-    async def scan_test_file(self, *args, **kwargs):
+    async def scan_test_file(self, *args: Any, **kwargs: Any) -> Tuple[bool, List[Any], str]:
         """
         Stub implementation — raises RuntimeError in production, otherwise
         returns a sentinel 'no issues' tuple.
@@ -258,7 +265,7 @@ class DummySecurityScanner:
                 "Raising RuntimeError to prevent false-negative security results. "
                 "Configure a real SecurityScanner implementation."
             )
-            log(msg, level="ERROR")
+            log(msg, level="CRITICAL")
             raise RuntimeError(msg)
 
         log("Using DummySecurityScanner. No security issues found.", level="DEBUG")
@@ -282,7 +289,7 @@ class DummyKnowledgeGraphClient:
         )
         self.metrics = []
 
-    async def update_module_metrics(self, *args, **kwargs):
+    async def update_module_metrics(self, *args: Any, **kwargs: Any) -> None:
         """
         Stub implementation that logs but doesn't update metrics.
 
@@ -298,7 +305,7 @@ class DummyKnowledgeGraphClient:
 
         if _PRODUCTION:
             log(
-                "CRITICAL: DummyKnowledgeGraphClient used in PRODUCTION!", level="ERROR"
+                "CRITICAL: DummyKnowledgeGraphClient used in PRODUCTION!", level="CRITICAL"
             )
 
 
@@ -320,7 +327,7 @@ class DummyPRCreator:
         self.created_prs = []
         self.created_tickets = []
 
-    async def create_pr(self, *args, **kwargs):
+    async def create_pr(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
         Stub implementation that returns failure — no real PR will be created.
 
@@ -333,12 +340,12 @@ class DummyPRCreator:
             log(
                 "CRITICAL: DummyPRCreator.create_pr called in PRODUCTION! "
                 "No actual PR will be created!",
-                level="ERROR",
+                level="CRITICAL",
             )
 
         return False, ""
 
-    async def create_jira_ticket(self, *args, **kwargs):
+    async def create_jira_ticket(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
         Stub implementation that simulates Jira ticket creation.
 
@@ -358,7 +365,7 @@ class DummyPRCreator:
             log(
                 "CRITICAL: DummyPRCreator.create_jira_ticket called in PRODUCTION! "
                 "No actual ticket will be created!",
-                level="ERROR",
+                level="CRITICAL",
             )
 
         return True, "https://jira.com/stub-ticket"
@@ -380,7 +387,9 @@ class DummyMutationTester:
             level="WARNING",
         )
 
-    async def run_mutations(self, *args, **kwargs):
+    async def run_mutations(
+        self, *args: Any, **kwargs: Any
+    ) -> Tuple[Optional[float], Optional[float], str]:
         """
         Stub implementation that returns a ``None`` sentinel score.
 
@@ -397,7 +406,7 @@ class DummyMutationTester:
             log(
                 "CRITICAL: DummyMutationTester.run_mutations called in PRODUCTION! "
                 "Mutation testing results are not real!",
-                level="ERROR",
+                level="CRITICAL",
             )
 
         return None, None, "Mutation testing unavailable — install mutmut or cosmic-ray"
@@ -419,7 +428,7 @@ class DummyTestEnricher:
             level="WARNING",
         )
 
-    async def enrich_test(self, content, *args, **kwargs):
+    async def enrich_test(self, content: str, *args: Any, **kwargs: Any) -> str:
         """
         Stub implementation that returns content unchanged.
 
@@ -437,7 +446,7 @@ class DummyTestEnricher:
             log(
                 "CRITICAL: DummyTestEnricher.enrich_test called in PRODUCTION! "
                 "Tests will not be enriched!",
-                level="ERROR",
+                level="CRITICAL",
             )
 
         return content
