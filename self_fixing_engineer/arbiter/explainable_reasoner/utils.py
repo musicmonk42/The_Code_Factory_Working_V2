@@ -471,26 +471,5 @@ def rate_limited(
     return decorator
 
 
-def redact_pii(data):
-    """Redact PII from data"""
-    import re
-
-    if isinstance(data, dict):
-        result = {}
-        for k, v in data.items():
-            if isinstance(v, str):
-                # Redact email
-                v = re.sub(
-                    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", v
-                )
-                # Redact phone
-                v = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", v)
-            result[k] = v
-        return result
-    elif isinstance(data, str):
-        data = re.sub(
-            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[EMAIL]", data
-        )
-        data = re.sub(r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b", "[PHONE]", data)
-        return data
-    return data
+# redact_pii — imported from shared to avoid duplicate implementations
+from shared.security.pii_redactor import redact_pii  # noqa: E402

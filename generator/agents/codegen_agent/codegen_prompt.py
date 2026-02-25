@@ -65,24 +65,15 @@ try:
     from ...runner.runner_security_utils import redact_secrets
 except ImportError:
     # Fallback stubs for environments where runner utilities are unavailable
+    from shared.stubs.audit_stubs import log_audit_event  # noqa: F401
+    from shared.stubs.security_stubs import redact_secrets  # noqa: F401
+    from shared.stubs.llm_stubs import count_tokens  # noqa: F401
+
     class DummyAuditLogger:
         def log_action(self, *args, **kwargs):
             logging.warning(
                 "Using dummy log_audit_event as runner utility is unavailable."
             )
-
-    async def log_audit_event(*args, **kwargs):
-        logging.warning("Using dummy log_audit_event as runner utility is unavailable.")
-
-    def redact_secrets(text):
-        logging.warning("Using dummy redact_secrets as runner utility is unavailable.")
-        return text
-
-    def count_tokens(prompt, model_name):
-        logging.warning(
-            "Using dummy count_tokens as runner utility is unavailable. Returning a safe estimate."
-        )
-        return len(prompt) // 4  # Simple char-to-token approximation
 
     # Need a dummy SecretsManager if the primary import fails, otherwise secrets_manager = SecretsManager() will fail
     class SecretsManager:

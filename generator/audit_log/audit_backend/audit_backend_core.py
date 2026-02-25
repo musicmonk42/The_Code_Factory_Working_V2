@@ -61,15 +61,7 @@ except ImportError:
 
 # Define fallback implementations if not imported
 if not _audit_utils_imported or compute_hash is None:
-    import hashlib
-
-    def compute_hash(data: bytes) -> str:
-        """
-        Stable SHA-256 hash used for tamper-evident chaining.
-        """
-        h = hashlib.sha256()
-        h.update(data)
-        return h.hexdigest()
+    from shared.security.hashing import compute_hash  # noqa: E402
 
 # Always define send_alert as a fallback since audit_utils doesn't export it
 async def send_alert(message: str, severity: str = "warning") -> None:

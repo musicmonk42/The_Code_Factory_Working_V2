@@ -127,30 +127,7 @@ def register_decryptor(name: str, func: Callable[..., Any]):
 
 # --- FIX: ADDED MISSING SUMMARIZER REGISTRY ---
 # This is needed by summarize_utils.py
-class Registry:
-    """Generic registry class for features like summarizers."""
-
-    def __init__(self):
-        self._items: Dict[str, Callable[..., Any]] = {}
-
-    def register(self, name: str, item: Callable[..., Any]):
-        self._items[name] = item
-
-    def get(self, name: str) -> Optional[Callable[..., Any]]:
-        return self._items.get(name)
-
-    def clear(self):
-        self._items.clear()
-
-    def get_all(self) -> List[str]:
-        return list(self._items.keys())
-
-    # FIX: Add attribute-style access for convenience
-    def __getitem__(self, key: str) -> Callable[..., Any]:
-        return self._items[key]
-
-    def __setitem__(self, key: str, value: Callable[..., Any]):
-        self._items[key] = value
+from shared.registry import Registry  # noqa: E402
 
 
 SUMMARIZERS = Registry()

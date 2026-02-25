@@ -399,15 +399,25 @@ class CircuitBreaker:
                 self._emit_failure("_instance_")
             raise
 
-        await self.reset()
+        self.reset()
         return result
 
-    async def reset(self) -> None:
-        """Reset the instance-level state to CLOSED (Pattern A).
+    def reset(self) -> None:
+        """Reset the instance-level state to CLOSED.
+
+        This method is synchronous because it performs only in-memory mutations.
+        It is safe to call from ``__init__``, synchronous test setup, or
+        directly from async contexts (no ``await`` required).
 
         Returns
         -------
         None
+
+        Examples
+        --------
+        .. code-block:: python
+
+            cb.reset()   # sync call – safe in __init__ and test setUp
         """
         with self._inst_lock:
             self.state = "CLOSED"

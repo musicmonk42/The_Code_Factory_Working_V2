@@ -505,72 +505,12 @@ provenance_logger = ScalableProvenanceLogger()
 
 
 # --- Core File and Data Operations ---
-def _hash_key(path: str) -> Tuple[int, int]:
-    st = Path(path).stat()
-    return (st.st_mtime_ns, st.st_size)
-
-
-@lru_cache(maxsize=128)
-def _compute_hash_cached(
-    path: str, algo: str, chunk_size: int, mtime_ns: int, size: int
-) -> str:
-    """
-    Compute file hash with caching based on mtime and size.
-
-    Note: Cache is invalidated based on mtime_ns and size. If file permissions change
-    without modifying the file, the cache won't invalidate. This is acceptable as
-    permission errors will be raised and propagated to the caller.
-    """
-    p = Path(path)
-    try:
-        h = hashlib.new(algo)
-        with p.open("rb") as f:
-            for chunk in iter(lambda: f.read(chunk_size), b""):
-                h.update(chunk)
-        return h.hexdigest()
-    except PermissionError:
-        logger.error(f"Permission denied when accessing file: {p}")
-        raise
-    except OSError as e:
-        logger.error(f"An OS error occurred while hashing {p}: {e}")
-        raise
-
-
-def _compute_hash(path: str, algo: str, chunk_size: int) -> str:
-    mtime_ns, size = _hash_key(path)
-    return _compute_hash_cached(path, algo, chunk_size, mtime_ns, size)
-
-
-def hash_file(
-    path: Union[str, Path],
-    algos: Union[str, List[str]] = "sha256",
-    chunk_size: Optional[int] = None,
-) -> Union[str, Dict[str, str]]:
-    hash_counter.inc()
-    if chunk_size is None:
-        chunk_size = DEFAULT_CHUNK_SIZE
-    if not isinstance(chunk_size, int) or chunk_size <= 0:
-        logger.error(f"Invalid chunk_size: {chunk_size}")
-        raise ValueError("chunk_size must be a positive integer")
-    p = sanitize_path(path)
-    if not p.is_file():
-        logger.error(f"File not found: {p}")
-        raise FileNotFoundError(f"File not found: {p}")
-    algorithms = [algos] if isinstance(algos, str) else list(algos)
-    for algo in algorithms:
-        try:
-            hashlib.new(algo)
-        except ValueError as e:
-            logger.error(f"Invalid hashing algorithm: {algo}")
-            raise ValueError(f"Invalid hashing algorithm: {algo}") from e
-    path_str = str(p)
-    if isinstance(algos, str):
-        hash_value = _compute_hash(path_str, algos, chunk_size)
-        logger.info(f"Computed {algos} hash for {p}.")
-        return hash_value
-    result = {algo: _compute_hash(path_str, algo, chunk_size) for algo in algorithms}
-    logger.info(f"Computed multiple hashes for {p}: {list(result.keys())}")
-    return result
+# _hash_key, _compute_hash_cached, and hash_file imported from shared
+from shared.security.hashing import (  # noqa: E402
+    hash_file,
+    _hash_key,
+    _compute_hash_cached,
+)
 
 
 def find_files_by_pattern(root: Union[str, Path], pattern: str) -> List[Path]:

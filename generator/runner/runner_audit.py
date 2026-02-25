@@ -192,8 +192,7 @@ except Exception:
     class CryptoOperationError(Exception):
         pass
 
-    def compute_hash(data: bytes) -> str:
-        return hashlib.sha256(data).hexdigest()
+    from shared.security.hashing import compute_hash  # noqa: E402
 
     async def safe_sign(entry, key_id, prev_hash):
         return base64.b64encode(b"unsigned").decode()
