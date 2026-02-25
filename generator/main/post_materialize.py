@@ -584,9 +584,28 @@ def _scaffold_required_dirs(
                             _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
                     else:
                         _create_if_absent(app_schemas, _APP_SCHEMAS_CONTENT, result, output_dir=output_dir, file_type="schemas_py")
-            # Copy root-level routes.py if present, else use stub
+            # Copy root-level routes.py if present, else use stub.
+            # Skip creating app/routes.py when app/routes/ already exists as a
+            # package directory — Python cannot have both a module file and a
+            # package directory with the same stem (module/package collision).
             app_routes = dir_path / "routes.py"
-            if not app_routes.exists():
+            routes_pkg = dir_path / "routes"
+            if routes_pkg.is_dir():
+                # routes/ package already exists; ensure it has __init__.py
+                routes_init = routes_pkg / "__init__.py"
+                if not routes_init.exists():
+                    _create_if_absent(
+                        routes_init,
+                        _APP_ROUTES_CONTENT,
+                        result,
+                        output_dir=output_dir,
+                        file_type="routes_py",
+                    )
+                    logger.debug(
+                        "%s Created app/routes/__init__.py (routes/ package already present)",
+                        _STAGE,
+                    )
+            elif not app_routes.exists():
                 root_routes = output_dir / "routes.py"
                 if root_routes.exists():
                     try:

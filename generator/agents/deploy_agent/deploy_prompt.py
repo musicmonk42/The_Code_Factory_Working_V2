@@ -960,7 +960,7 @@ class DeployPromptAgent:
             # Create a default example file to prevent empty directory issues
             default_example = {
                 "query": "Generate a basic Docker configuration",
-                "example": "FROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nCMD [\"python\", \"app.py\"]"
+                "example": "FROM python:3.11-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install -r requirements.txt\nCOPY . .\nCMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]"
             }
             default_file = os.path.join(few_shot_dir, "default_docker.json")
             try:
