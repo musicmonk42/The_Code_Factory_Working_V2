@@ -106,9 +106,14 @@ MODEL_MAX_OUTPUT_TOKENS = {
 # --- Multi-Pass Code Generation Constants ---
 # ==============================================================================
 # Threshold: use multi-pass generation when the spec has at least this many API endpoints.
-# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 15).
+# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 25).
 MULTIPASS_ENDPOINT_THRESHOLD: int = int(
-    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "15")
+    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "25")
+)
+# Timeout for the entire pipeline codegen step (seconds).
+# Configurable at runtime via PIPELINE_CODEGEN_TIMEOUT_SECONDS (default: 900s / 15 minutes).
+PIPELINE_CODEGEN_TIMEOUT_SECONDS: int = int(
+    os.environ.get("PIPELINE_CODEGEN_TIMEOUT_SECONDS", "900")
 )
 # Threshold: use multi-pass generation when the spec references at least this many files.
 # Configurable at runtime via CODEGEN_MULTIPASS_FILE_THRESHOLD (default: 20).
@@ -1379,12 +1384,18 @@ if PLUGIN_AVAILABLE:
                                 # NOTE: Using "first" voting strategy because majority voting requires exact
                                 # string matches across providers, which is impossible for code generation.
                                 # Different LLMs produce semantically equivalent but textually different code.
+                                logger.info(
+                                    "[CODEGEN] Multi-pass ensemble heartbeat: pass '%s' LLM call in progress ",
+                                    _group['name'],
+                                )
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
                                         voting_strategy="first",
-                                        timeout_per_provider=180.0,
+                                        timeout_per_provider=float(
+                                            os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300")
+                                        ),
                                     )
                                     _pass_resp = (
                                         _pass_dict["content"]
@@ -1828,12 +1839,18 @@ else:
                                 # NOTE: Using "first" voting strategy because majority voting requires exact
                                 # string matches across providers, which is impossible for code generation.
                                 # Different LLMs produce semantically equivalent but textually different code.
+                                logger.info(
+                                    "[CODEGEN] Multi-pass ensemble heartbeat: pass '%s' LLM call in progress ",
+                                    _group['name'],
+                                )
                                 try:
                                     _pass_dict = await call_ensemble_api(
                                         prompt=_pass_prompt,
                                         models=_ensemble_models,
                                         voting_strategy="first",
-                                        timeout_per_provider=180.0,
+                                        timeout_per_provider=float(
+                                            os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300")
+                                        ),
                                     )
                                     _pass_resp = (
                                         _pass_dict["content"]

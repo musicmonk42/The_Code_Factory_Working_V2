@@ -900,7 +900,7 @@ class LLMClient:
             voting_strategy: How to combine results. ``"majority"`` returns the
                 most-common response; any other value returns the first success.
             timeout_per_provider: Per-provider deadline in seconds.  Defaults to
-                ``ENSEMBLE_PROVIDER_TIMEOUT_SECONDS`` (default 180 s).
+                ``ENSEMBLE_PROVIDER_TIMEOUT_SECONDS`` (default 300 s).
             **kwargs: Additional keyword arguments forwarded to ``call_llm_api``.
 
         Returns:
@@ -923,7 +923,7 @@ class LLMClient:
         effective_timeout: float = (
             timeout_per_provider
             if timeout_per_provider is not None
-            else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "180"))
+            else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300"))
         )
 
         # Snapshot which providers are currently loaded so we can skip ones that

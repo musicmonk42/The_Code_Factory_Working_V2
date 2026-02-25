@@ -386,6 +386,23 @@ class ServerConfig(BaseSettings):
         default_factory=lambda: os.getenv("SENTRY_ENVIRONMENT", os.getenv("APP_ENV", "development")),
         description="Sentry environment tag (defaults to APP_ENV or 'development')",
     )
+
+    # Security Configuration
+    encryption_mode: str = Field(
+        default_factory=lambda: os.getenv("ENCRYPTION_MODE", "local"),
+        description="Encryption mode: local, aws_kms, or azure_keyvault",
+    )
+    suppress_security_warnings: bool = Field(
+        default_factory=lambda: os.getenv("SUPPRESS_SECURITY_WARNINGS", "0").lower() in ("1", "true", "yes"),
+        description="Suppress security posture warnings (useful for development environments)",
+    )
+    plugin_integrity_check_enabled: bool = Field(
+        default_factory=lambda: os.getenv(
+            "PLUGIN_INTEGRITY_CHECK_ENABLED",
+            "true" if os.getenv("APP_ENV") == "production" else "false",
+        ).lower() in ("1", "true", "yes"),
+        description="Enable plugin integrity checks via HASH_MANIFEST (default: false in dev, true in prod)",
+    )
     
     @field_validator("app_env")
     @classmethod

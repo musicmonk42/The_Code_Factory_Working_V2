@@ -1405,15 +1405,18 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
         _security_warnings.append("Audit crypto in DEV mode - not suitable for production")
 
     if _security_warnings:
-        logger.warning("=" * 80)
-        logger.warning("SECURITY POSTURE SUMMARY")
-        logger.warning("=" * 80)
-        for warning in _security_warnings:
-            logger.warning(f"  ⚠ {warning}")
-        logger.warning("")
-        logger.warning("  To resolve, see SECURITY_CONFIGURATION.md")
-        logger.warning("  These are acceptable for development/staging environments.")
-        logger.warning("=" * 80)
+        _suppress = os.getenv("SUPPRESS_SECURITY_WARNINGS", "0").lower() in ("1", "true", "yes")
+        if not _suppress:
+            logger.warning("=" * 80)
+            logger.warning("SECURITY POSTURE SUMMARY")
+            logger.warning("=" * 80)
+            for warning in _security_warnings:
+                logger.warning(f"  ⚠ {warning}")
+            logger.warning("")
+            logger.warning("  To resolve, see SECURITY_CONFIGURATION.md")
+            logger.warning("  These are acceptable for development/staging environments.")
+            logger.warning("  Set SUPPRESS_SECURITY_WARNINGS=1 to silence these in development.")
+            logger.warning("=" * 80)
     
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
@@ -2464,6 +2467,6 @@ if __name__ == "__main__":
         log_level=log_level,
         access_log=True,
         timeout_keep_alive=300,  # 5 minutes for long-running operations
-        timeout_graceful_shutdown=30,  # 30 seconds for graceful shutdown
+        timeout_graceful_shutdown=60,  # 60 seconds for graceful shutdown
         h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )
