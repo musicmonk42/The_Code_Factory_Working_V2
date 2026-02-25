@@ -935,6 +935,14 @@ class LLMClient:
         # were never initialized (avoids hanging on _is_initialized.wait() inside
         # call_llm_api for providers that failed to load).
         available_providers = self.manager.list_providers()
+        logger.info(
+            "[ENSEMBLE] Available providers: %s; requested: %s",
+            available_providers,
+            [m.get("provider", "<inferred>") for m in models],
+        )
+
+        # Pre-flight: fail fast if all providers have open circuit breakers.
+        self._check_ensemble_readiness(models, available_providers=available_providers)
 
         # Build a validated list of (provider, model) pairs and their coroutines.
         # Using an explicit list keeps the error-reporting loop index-aligned with
@@ -1048,6 +1056,27 @@ class LLMClient:
                 "All ensemble calls failed. Attempted %d provider(s): %s"
                 % (len(valid_models), failure_details)
             )
+            # Attempt fallback to single configured provider before giving up
+            _fallback_provider = getattr(self.config, 'llm_provider', None)
+            if _fallback_provider and _fallback_provider in available_providers:
+                logger.warning(
+                    "[ENSEMBLE] %s Attempting fallback to single provider: %s",
+                    error_message, _fallback_provider,
+                )
+                try:
+                    _fb_result = await self.call_llm_api(
+                        prompt=prompt, provider=_fallback_provider, **kwargs
+                    )
+                    if isinstance(_fb_result, dict):
+                        _fb_result = dict(_fb_result)
+                        _fb_result["fallback_used"] = True
+                        _fb_result["skipped_providers"] = skipped_providers
+                        return _fb_result
+                except Exception as _fb_err:
+                    logger.error(
+                        "[ENSEMBLE] Fallback to single provider %s also failed: %s",
+                        _fallback_provider, _fb_err,
+                    )
             logger.error("[ENSEMBLE] %s", error_message)
             raise LLMError(error_message)
 
@@ -1067,6 +1096,47 @@ class LLMClient:
         first_result: Dict[str, Any] = dict(results[0])
         first_result["skipped_providers"] = skipped_providers
         return first_result
+
+    def _check_ensemble_readiness(
+        self,
+        models: List[Dict[str, str]],
+        available_providers: Optional[List[str]] = None,
+    ) -> None:
+        """Pre-flight check: fail fast if all configured providers have open circuit breakers.
+
+        Logs a structured readiness summary before each ensemble call.
+
+        Args:
+            models: List of ``{"provider": ..., "model": ...}`` dicts.
+            available_providers: Optional snapshot of loaded providers (from
+                ``manager.list_providers()``). When ``None``, the list is fetched
+                internally — useful for standalone callers.
+
+        Raises:
+            LLMError: If all available providers have open circuit breakers.
+        """
+        if available_providers is None:
+            available_providers = self.manager.list_providers()
+        healthy: List[str] = []
+        open_breakers: List[str] = []
+        for m in models:
+            provider = m.get("provider") or getattr(self.config, 'llm_provider', 'openai') or 'openai'
+            if provider not in available_providers:
+                continue
+            state = self.circuit_breaker.get_state(provider)
+            if state == "OPEN":
+                open_breakers.append(provider)
+            else:
+                healthy.append(provider)
+        logger.info(
+            "[ENSEMBLE] Provider readiness: healthy=%s, circuit-open=%s",
+            healthy, open_breakers,
+        )
+        if open_breakers and not healthy:
+            raise LLMError(
+                "All ensemble providers have open circuit breakers; failing fast. "
+                "Providers: %s" % open_breakers
+            )
 
     async def health_check(self, provider: Optional[str] = None) -> bool:
         await self._is_initialized.wait()

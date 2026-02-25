@@ -1402,8 +1402,31 @@ if PLUGIN_AVAILABLE:
                                     _pass_duration = time.monotonic() - _pass_start
                                     logger.warning(
                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
-                                        f"{_pass_err}. Continuing with remaining passes."
+                                        f"{_pass_err}. Attempting single-provider fallback."
                                     )
+                                    try:
+                                        _fb_dict = await call_llm_api(
+                                            prompt=_pass_prompt,
+                                            provider=config.backend,
+                                            model=config.model.get(config.backend),
+                                            response_format={"type": "json_object"},
+                                        )
+                                        _fb_resp = (
+                                            _fb_dict["content"]
+                                            if isinstance(_fb_dict, dict) and "content" in _fb_dict
+                                            else str(_fb_dict)
+                                        )
+                                        _pass_files = parse_llm_response(_fb_resp)
+                                        _merged_files.update(_pass_files)
+                                        logger.info(
+                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback succeeded: "
+                                            f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                        )
+                                    except Exception as _fb_err:
+                                        logger.warning(
+                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
+                                            f"{_fb_err}. Continuing with remaining passes."
+                                        )
                             response = {"files": _merged_files}
                             logger.info(
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
@@ -1414,25 +1437,46 @@ if PLUGIN_AVAILABLE:
                             # NOTE: Using "first" voting strategy because majority voting requires exact
                             # string matches across providers, which is impossible for code generation.
                             # Different LLMs produce semantically equivalent but textually different code.
-                            response_dict = await call_ensemble_api(
-                                prompt=prompt,
-                                models=_ensemble_models,
-                                voting_strategy="first",
-                                timeout_per_provider=180.0,
-                            )
-                            response = (
-                                response_dict["content"]
-                                if isinstance(response_dict, dict) and "content" in response_dict
-                                else str(response_dict)
-                            )
-                            logger.info(
-                                "[CODEGEN] LLM ensemble response received",
-                                extra={
-                                    "backend": "ensemble",
-                                    "response_length": len(str(response)),
-                                    "response_preview": str(response)[:200]
-                                }
-                            )
+                            try:
+                                response_dict = await call_ensemble_api(
+                                    prompt=prompt,
+                                    models=_ensemble_models,
+                                    voting_strategy="first",
+                                    timeout_per_provider=180.0,
+                                )
+                                response = (
+                                    response_dict["content"]
+                                    if isinstance(response_dict, dict) and "content" in response_dict
+                                    else str(response_dict)
+                                )
+                                logger.info(
+                                    "[CODEGEN] LLM ensemble response received",
+                                    extra={
+                                        "backend": "ensemble",
+                                        "response_length": len(str(response)),
+                                        "response_preview": str(response)[:200]
+                                    }
+                                )
+                            except Exception as _ensemble_err:
+                                logger.warning(
+                                    "[CODEGEN] Single-pass ensemble failed: %s. Attempting single-provider fallback.",
+                                    _ensemble_err,
+                                )
+                                _fb_dict = await call_llm_api(
+                                    prompt=prompt,
+                                    provider=config.backend,
+                                    model=config.model.get(config.backend),
+                                    response_format={"type": "json_object"},
+                                )
+                                response = (
+                                    _fb_dict["content"]
+                                    if isinstance(_fb_dict, dict) and "content" in _fb_dict
+                                    else str(_fb_dict)
+                                )
+                                logger.info(
+                                    "[CODEGEN] Single-provider fallback succeeded",
+                                    extra={"backend": config.backend, "response_length": len(str(response))}
+                                )
                     else:
                         # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
@@ -1807,8 +1851,31 @@ else:
                                     _pass_duration = time.monotonic() - _pass_start
                                     logger.warning(
                                         f"[CODEGEN] Multi-pass ensemble '{_group['name']}' failed after {_pass_duration:.1f}s: "
-                                        f"{_pass_err}. Continuing with remaining passes."
+                                        f"{_pass_err}. Attempting single-provider fallback."
                                     )
+                                    try:
+                                        _fb_dict = await call_llm_api(
+                                            prompt=_pass_prompt,
+                                            provider=config.backend,
+                                            model=config.model.get(config.backend),
+                                            response_format={"type": "json_object"},
+                                        )
+                                        _fb_resp = (
+                                            _fb_dict["content"]
+                                            if isinstance(_fb_dict, dict) and "content" in _fb_dict
+                                            else str(_fb_dict)
+                                        )
+                                        _pass_files = parse_llm_response(_fb_resp)
+                                        _merged_files.update(_pass_files)
+                                        logger.info(
+                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback succeeded: "
+                                            f"+{len(_pass_files)} files (total={len(_merged_files)})"
+                                        )
+                                    except Exception as _fb_err:
+                                        logger.warning(
+                                            f"[CODEGEN] Multi-pass ensemble '{_group['name']}' fallback also failed: "
+                                            f"{_fb_err}. Continuing with remaining passes."
+                                        )
                             response = {"files": _merged_files}
                             logger.info(
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
@@ -1819,25 +1886,46 @@ else:
                             # NOTE: Using "first" voting strategy because majority voting requires exact
                             # string matches across providers, which is impossible for code generation.
                             # Different LLMs produce semantically equivalent but textually different code.
-                            response_dict = await call_ensemble_api(
-                                prompt=prompt,
-                                models=_ensemble_models,
-                                voting_strategy="first",
-                                timeout_per_provider=180.0,
-                            )
-                            response = (
-                                response_dict["content"]
-                                if isinstance(response_dict, dict) and "content" in response_dict
-                                else str(response_dict)
-                            )
-                            logger.info(
-                                "[CODEGEN] LLM ensemble response received",
-                                extra={
-                                    "backend": "ensemble",
-                                    "response_length": len(str(response)),
-                                    "response_preview": str(response)[:200]
-                                }
-                            )
+                            try:
+                                response_dict = await call_ensemble_api(
+                                    prompt=prompt,
+                                    models=_ensemble_models,
+                                    voting_strategy="first",
+                                    timeout_per_provider=180.0,
+                                )
+                                response = (
+                                    response_dict["content"]
+                                    if isinstance(response_dict, dict) and "content" in response_dict
+                                    else str(response_dict)
+                                )
+                                logger.info(
+                                    "[CODEGEN] LLM ensemble response received",
+                                    extra={
+                                        "backend": "ensemble",
+                                        "response_length": len(str(response)),
+                                        "response_preview": str(response)[:200]
+                                    }
+                                )
+                            except Exception as _ensemble_err:
+                                logger.warning(
+                                    "[CODEGEN] Single-pass ensemble failed: %s. Attempting single-provider fallback.",
+                                    _ensemble_err,
+                                )
+                                _fb_dict = await call_llm_api(
+                                    prompt=prompt,
+                                    provider=config.backend,
+                                    model=config.model.get(config.backend),
+                                    response_format={"type": "json_object"},
+                                )
+                                response = (
+                                    _fb_dict["content"]
+                                    if isinstance(_fb_dict, dict) and "content" in _fb_dict
+                                    else str(_fb_dict)
+                                )
+                                logger.info(
+                                    "[CODEGEN] Single-provider fallback succeeded",
+                                    extra={"backend": config.backend, "response_length": len(str(response))}
+                                )
                     else:
                         # Single call logic (using configured backend) — small spec, no ensemble
                         backend_used = config.backend
