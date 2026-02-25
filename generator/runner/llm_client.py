@@ -501,16 +501,11 @@ class LLMClient:
         
         self._is_initialized.set()
         
-        # Provide clear startup messaging about provider availability
-        if available_providers:
-            logger.info(
-                f"LLMClient initialization complete. Available providers: {', '.join(available_providers)}"
-            )
-        else:
-            logger.warning(
-                "LLMClient initialization complete but NO providers are available. "
-                "Please check API key configuration (OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY/GOOGLE_API_KEY, etc.)"
-            )
+        logger.info(
+            "[LLM] Provider initialization complete. Available: %s, Unavailable: %s",
+            available_providers or "NONE",
+            [p for p in ["openai", "gemini", "grok", "claude", "local"] if p not in available_providers]
+        )
 
     async def count_tokens(self, text: str, model: str) -> int:
         if not HAS_TIKTOKEN:
@@ -1057,19 +1052,22 @@ class LLMClient:
                 % (len(valid_models), failure_details)
             )
             # Attempt fallback to single configured provider before giving up
-            _fallback_provider = getattr(self.config, 'llm_provider', None)
-            if _fallback_provider and _fallback_provider in available_providers:
+            _fallback_provider = getattr(self.config, 'llm_provider', 'openai') or 'openai'
+            _fallback_model = _PROVIDER_DEFAULT_MODELS.get(_fallback_provider, 'gpt-4o')
+            if _fallback_provider in available_providers:
                 logger.warning(
                     "[ENSEMBLE] %s Attempting fallback to single provider: %s",
                     error_message, _fallback_provider,
                 )
                 try:
                     _fb_result = await self.call_llm_api(
-                        prompt=prompt, provider=_fallback_provider, **kwargs
+                        prompt=prompt, provider=_fallback_provider, model=_fallback_model, **kwargs
                     )
                     if isinstance(_fb_result, dict):
                         _fb_result = dict(_fb_result)
                         _fb_result["fallback_used"] = True
+                        _fb_result["ensemble_failed"] = True
+                        _fb_result["failed_providers"] = failed_providers
                         _fb_result["skipped_providers"] = skipped_providers
                         return _fb_result
                 except Exception as _fb_err:
