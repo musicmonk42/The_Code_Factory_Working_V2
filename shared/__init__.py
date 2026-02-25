@@ -228,4 +228,17 @@ __all__ = [
     "BasePluginRegistry",
     "HotReloadableRegistryMixin",
     "DependencyAwareRegistryMixin",
+    # shared.registry
+    "Registry",
+    # shared.circuit_breaker
+    "CircuitBreaker",
+    "get_circuit_breaker",
 ]
+
+# Lazy exports for new consolidated sub-modules (avoids adding heavy imports
+# to the top-level package that previously had zero external dependencies).
+try:
+    from shared.registry import Registry
+    from shared.circuit_breaker import CircuitBreaker, get_circuit_breaker
+except ImportError:  # pragma: no cover
+    pass

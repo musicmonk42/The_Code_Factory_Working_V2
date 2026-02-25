@@ -40,24 +40,7 @@ except ImportError:
     logger.warning(
         "Could not import SUMMARIZERS registry from 'runner'. Defining local registry."
     )
-
-    class Registry:
-        def __init__(self):
-            self._items = {}
-
-        def register(self, name, item):
-            self._items[name] = item
-
-        def get(self, name):
-            return self._items.get(name)
-
-        def clear(self):
-            self._items.clear()
-
-        # [FIX] Add a get_all() method for the ensemble test to work
-        def get_all(self):
-            return self._items.keys()
-
+    from shared.registry import Registry  # noqa: E402
     SUMMARIZERS = Registry()
 # --- END REFACTOR FIX ---
 

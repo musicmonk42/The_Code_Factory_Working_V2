@@ -112,18 +112,12 @@ except ImportError as e:
         "Running in standalone/degraded mode with dummy implementations."
     )
 
-    async def log_audit_event(*args, **kwargs):
-        logging.warning("Audit logging disabled.")
+    from shared.stubs.audit_stubs import log_audit_event  # noqa: F401
+    from shared.stubs.security_stubs import redact_secrets  # noqa: F401
+    from shared.stubs.llm_stubs import count_tokens  # noqa: F401
 
     async def log_action(*args, **kwargs):
         logging.warning("Log action disabled.")
-
-    def redact_secrets(text: str) -> str:
-        return text
-
-    def count_tokens(prompt: str, model_name: str = "default") -> int:
-        # Simple heuristic: ~4 chars/token
-        return max(1, len(prompt) // 4)
 
     async def summarize_text(text: str, max_length: int = 500) -> str:
         return text[:max_length]

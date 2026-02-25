@@ -48,8 +48,7 @@ except ImportError as e:
     # Fallback stubs for degraded / test environments.
     logging.critical(f"CRITIQUE AGENT FAILED TO LOAD RUNNER DEPENDENCIES: {e}")
 
-    async def log_audit_event(*args, **kwargs) -> None:
-        logging.warning("Audit logging disabled.")
+    from shared.stubs.audit_stubs import log_audit_event  # noqa: F401
 
     def scan_for_vulnerabilities(*args, **kwargs):
         return []

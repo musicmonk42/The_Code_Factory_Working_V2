@@ -24,11 +24,8 @@ from typing import Any, Callable, Dict, List, Optional, Union
 try:
     from .audit_utils import compute_hash
 except ImportError:
-    # Fallback definition for environments where audit_utils is not available
-    import hashlib
-
-    def compute_hash(data):
-        return hashlib.sha256(data).hexdigest()
+    # Fallback to shared implementation for environments where audit_utils is unavailable
+    from shared.security.hashing import compute_hash  # noqa: E402
 
 
 # --- END FIX 1 ---

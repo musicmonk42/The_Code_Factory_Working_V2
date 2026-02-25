@@ -350,18 +350,8 @@ class WorkflowOutput(BaseModel):
         return value
 
 
-# PII redaction
-def redact_pii(data: str) -> str:
-    """Redact PII from strings using regex patterns."""
-    patterns = {
-        "EMAIL": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
-        "PHONE": r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}",
-        "SSN": r"\d{3}-\d{2}-\d{4}",
-    }
-    sanitized = data
-    for pii_type, pattern in patterns.items():
-        sanitized = re.sub(pattern, f"[{pii_type}]", sanitized, flags=re.IGNORECASE)
-    return sanitized
+# PII redaction — imported from shared to avoid duplicate implementations
+from shared.security.pii_redactor import redact_pii  # noqa: E402
 
 
 @plugin(

@@ -101,54 +101,7 @@ _FALLBACK_DISABLED_AT: float = 0
 
 
 # --- Utility Functions ---
-def compute_hash(data: bytes) -> str:
-    """
-    Computes the SHA256 hash of the given data.
-    Args:
-        data (bytes): The input data to hash.
-    Returns:
-        str: The SHA256 hash as a hexadecimal string.
-    Raises:
-        TypeError: If data is not bytes.
-    """
-    if not isinstance(data, bytes):
-        logger.error(
-            "TypeError: Data for hashing must be bytes.",
-            extra={"operation": "compute_hash_fail", "reason": "invalid_input_type"},
-        )
-        raise TypeError("Data for hashing must be bytes.")
-    return hashlib.sha256(data).hexdigest()
-
-
-async def stream_compute_hash(data_chunks: AsyncIterable[bytes]) -> str:
-    """
-    Computes the SHA256 hash of a stream of data chunks.
-
-    Args:
-        data_chunks (AsyncIterable[bytes]): An async iterable yielding data chunks.
-
-    Returns:
-        str: The SHA256 hash as a hexadecimal string.
-
-    Raises:
-        TypeError: If data_chunks is not an async iterable.
-    """
-    if not hasattr(data_chunks, "__aiter__"):
-        raise TypeError("data_chunks must be an async iterable.")
-
-    hasher = hashlib.sha256()
-    try:
-        async for chunk in data_chunks:
-            if not isinstance(chunk, bytes):
-                raise TypeError("All chunks yielded by data_chunks must be bytes.")
-            hasher.update(chunk)
-    except Exception as e:
-        logger.error(
-            f"Error while consuming data stream for hashing: {e}", exc_info=True
-        )
-        raise
-
-    return hasher.hexdigest()
+from shared.security.hashing import compute_hash, stream_compute_hash  # noqa: E402
 
 
 # --- Core Cryptographic Operations (using the global provider) ---

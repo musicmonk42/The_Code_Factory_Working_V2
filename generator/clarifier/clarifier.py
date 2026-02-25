@@ -322,26 +322,8 @@ HAS_OPENTELEMETRY = False
 _USING_DUMMY_CLARIFIER_LOGGING = False
 
 
-# Create a wrapper for log_audit_event that maintains backwards compatibility
-# with the original log_action interface
-async def _wrap_log_audit_event(action: str, **kwargs) -> None:
-    """
-    Wrapper that converts legacy log_action calls to log_audit_event format.
-
-    The original log_action interface accepted (action_name, **kwargs).
-    The new log_audit_event requires (action, data_dict).
-    """
-    try:
-        # FIX: Import from runner_audit to avoid circular dependency
-        from runner.runner_audit import log_audit_event
-
-        await log_audit_event(action=action, data=kwargs)
-    except ImportError:
-        # Fallback if runner not available
-        get_logger().debug(f"log_action: {action}, {kwargs}")
-    except Exception as e:
-        # Don't let logging failures crash the application
-        get_logger().warning(f"log_action failed: {e}", extra={"action": action})
+# _wrap_log_audit_event defined once in _audit_compat to avoid duplication
+from ._audit_compat import _wrap_log_audit_event  # noqa: E402
 
 
 try:
@@ -744,133 +726,7 @@ except ValueError:
 
 
 # --- Circuit Breaker ---
-class CircuitBreaker:
-    """Circuit breaker to prevent cascading failures."""
-
-    def __init__(self, threshold: int, timeout: int):
-        self._tripped = False
-        self._trip_time = 0.0
-        self._error_count = 0
-        self._threshold = threshold
-        self._timeout = timeout
-        self.logger = get_logger()
-
-    @property
-    def failure_count(self) -> int:
-        """Public property for accessing failure count (for backward compatibility)."""
-        return self._error_count
-
-    def reset(self):
-        """Reset circuit breaker state (useful for testing)."""
-        self._tripped = False
-        self._trip_time = 0.0
-        self._error_count = 0
-
-    def is_open(self) -> bool:
-        if self._tripped:
-            if (time.time() - self._trip_time) > self._timeout:
-                self.logger.warning(
-                    "Circuit breaker timeout reached. Half-opening circuit.",
-                    extra={"operation": "circuit_breaker_half_open"},
-                )
-                self._tripped = False
-                self._error_count = 0
-                # FIX: Check for running loop before creating task
-                try:
-                    asyncio.get_running_loop()
-                    asyncio.create_task(
-                        log_action("circuit_breaker_event", status="half_open")
-                    )
-                except RuntimeError:
-                    # No event loop - log synchronously
-                    self.logger.debug(
-                        "No event loop available for async logging in is_open"
-                    )
-                return False
-            self.logger.warning(
-                "Circuit breaker is open. Preventing calls.",
-                extra={"operation": "circuit_breaker_open_prevented"},
-            )
-            return True
-        return False
-
-    def record_failure(self, error: Exception):
-        self._error_count += 1
-        if self._error_count >= self._threshold:
-            self._tripped = True
-            self._trip_time = time.time()
-            self.logger.error(
-                f"Circuit breaker tripped after {self._error_count} consecutive errors: {error}",
-                exc_info=True,
-                extra={
-                    "operation": "circuit_breaker_tripped",
-                    "error_type": type(error).__name__,
-                },
-            )
-            CLARIFIER_ERRORS.labels("circuit_breaker_tripped").inc()
-
-            # FIX: Check for running loop before creating task
-            try:
-                asyncio.get_running_loop()
-                asyncio.create_task(
-                    send_alert(
-                        subject="Circuit Breaker Tripped",
-                        message=f"Clarifier circuit breaker tripped! Consecutive errors: {self._error_count}. Last error: {error}",
-                        severity="critical",
-                    )
-                )
-                asyncio.create_task(
-                    log_action(
-                        "circuit_breaker_event",
-                        status="tripped",
-                        error=str(error),
-                        error_count=self._error_count,
-                    )
-                )
-            except RuntimeError:
-                # No event loop - log synchronously
-                self.logger.warning(
-                    "No event loop available for async logging in record_failure (tripped)"
-                )
-        else:
-            self.logger.warning(
-                f"Circuit breaker error count: {self._error_count}/{self._threshold}. Error: {error}",
-                extra={
-                    "operation": "circuit_breaker_error_increment",
-                    "error_type": type(error).__name__,
-                },
-            )
-            # FIX: Same for non-critical errors
-            try:
-                asyncio.get_running_loop()
-                asyncio.create_task(
-                    log_action(
-                        "circuit_breaker_event",
-                        status="error_increment",
-                        error=str(error),
-                        error_count=self._error_count,
-                    )
-                )
-            except RuntimeError:
-                pass  # Silent fail for non-critical logging
-
-    def record_success(self):
-        if self._tripped:
-            self.logger.info(
-                "Circuit breaker closed after successful operation in half-open state.",
-                extra={"operation": "circuit_breaker_closed"},
-            )
-            # FIX: Check for loop
-            try:
-                asyncio.get_running_loop()
-                asyncio.create_task(
-                    log_action("circuit_breaker_event", status="closed_after_success")
-                )
-            except RuntimeError:
-                pass  # Silent fail for non-critical logging
-        self._tripped = False
-        self._error_count = 0
-        self._trip_time = 0.0
+from shared.circuit_breaker import CircuitBreaker  # noqa: E402
 
 
 def get_circuit_breaker() -> CircuitBreaker:
