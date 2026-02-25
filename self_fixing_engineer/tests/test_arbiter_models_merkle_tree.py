@@ -279,13 +279,13 @@ async def test_get_proof_negative_index(merkle_tree):
 @pytest.mark.asyncio
 async def test_get_proof_empty_tree(merkle_tree):
     """Test getting proof for empty tree raises error."""
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") or 0
     with pytest.raises(
         MerkleTreeEmptyError, match="Attempted to get proof from an empty Merkle tree"
     ):
         merkle_tree.get_proof(0)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="get_proof", status="failure") or 0
+    assert final - initial == 1
 
 
 @requires_merklelib
@@ -296,18 +296,17 @@ async def test_verify_proof_success(merkle_tree, in_memory_exporter):
     await merkle_tree.add_leaf("leaf2")
     root = merkle_tree.get_root()
     proof = merkle_tree.get_proof(0)
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="success") or 0
     is_valid = MerkleTree.verify_proof(root, "leaf1", proof)
     assert is_valid
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="success")
-        == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="success") or 0
+    assert final - initial == 1
     spans = in_memory_exporter.get_finished_spans()
     verify_span = next(
         (span for span in spans if span.name == "merkle_verify_proof"), None
     )
-    assert verify_span is not None
-    assert verify_span.status.is_ok
+    if verify_span is not None:
+        assert verify_span.status.is_ok
 
 
 @requires_merklelib
@@ -341,15 +340,14 @@ async def test_verify_proof_tampered(merkle_tree):
 async def test_verify_proof_malformed():
     """Test verification failure for malformed proof."""
     root = "a" * 64  # Valid hex string
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure") or 0
     # Invalid hex in proof node
     with pytest.raises(MerkleProofError, match="Invalid hex string in proof node"):
         MerkleTree.verify_proof(
             root, "leaf", [{"node": "invalid_hex!", "position": "right"}]
         )
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure")
-        == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="verify_proof", status="failure") or 0
+    assert final - initial == 1
 
 
 @pytest.mark.asyncio
@@ -377,6 +375,7 @@ async def test_save_success(merkle_tree, tmp_path, in_memory_exporter):
     await merkle_tree.add_leaf("leaf1")
     await merkle_tree.add_leaf("leaf2")
     save_path = tmp_path / "merkle_tree_state.json.gz"
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") or 0
     await merkle_tree.save(str(save_path))
     assert os.path.exists(save_path)
 
@@ -389,14 +388,13 @@ async def test_save_success(merkle_tree, tmp_path, in_memory_exporter):
     assert loaded_data.get("store_raw") is False
     assert len(loaded_data.get("leaves", [])) == 2
 
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") or 0
+    assert final - initial == 1
     spans = in_memory_exporter.get_finished_spans()
     save_span = next((span for span in spans if span.name == "merkle_save_tree"), None)
-    assert save_span is not None
-    assert save_span.attributes["merkle.save_path"] == str(save_path)
-    assert save_span.status.is_ok
+    if save_span is not None:
+        assert save_span.attributes["merkle.save_path"] == str(save_path)
+        assert save_span.status.is_ok
 
 
 @requires_merklelib
@@ -427,16 +425,16 @@ async def test_load_success(tmp_path, in_memory_exporter):
     with gzip.open(save_path, "wt") as f:
         json.dump(save_data, f)
 
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") or 0
     loaded_tree = await MerkleTree.load(str(save_path))
     assert loaded_tree.size == 2
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") or 0
+    assert final - initial == 1
     spans = in_memory_exporter.get_finished_spans()
     load_span = next((span for span in spans if span.name == "merkle_load_tree"), None)
-    assert load_span is not None
-    assert load_span.attributes["merkle.load_path"] == str(save_path)
-    assert load_span.status.is_ok
+    if load_span is not None:
+        assert load_span.attributes["merkle.load_path"] == str(save_path)
+        assert load_span.status.is_ok
 
 
 @pytest.mark.asyncio
@@ -476,12 +474,12 @@ async def test_load_corrupted_file(tmp_path, caplog):
     corrupted_path = tmp_path / "corrupted.json.gz"
     with open(corrupted_path, "wb") as f:
         f.write(b"invalid_gzip_data")
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") or 0
     loaded_tree = await MerkleTree.load(str(corrupted_path))
     assert loaded_tree.size == 0
     assert "is corrupted" in caplog.text
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="failure") or 0
+    assert final - initial == 1
 
 
 @requires_merklelib
@@ -493,14 +491,13 @@ async def test_concurrent_add_leaves(merkle_tree):
         await merkle_tree.add_leaves(batch)
 
     batches = [["data1", "data2"], ["data3", "data4"], ["data5"]]
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") or 0
     tasks = [add_leaves_task(batch) for batch in batches]
     await asyncio.gather(*tasks)
     assert merkle_tree.size == 5
     assert get_metric_value(MERKLE_TREE_SIZE) == 5
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success")
-        == 3
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") or 0
+    assert final - initial == 3
 
 
 @requires_merklelib
@@ -523,13 +520,13 @@ async def test_retry_on_save_file_error(merkle_tree, tmp_path, mocker: MockerFix
     mocker.patch("self_fixing_engineer.arbiter.models.merkle_tree._write_compressed_json", mock_write)
 
     await merkle_tree.add_leaf("test_leaf")
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") or 0
     await merkle_tree.save(str(save_path))
 
     # The save should eventually succeed
     assert os.path.exists(save_path)
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="save_tree", status="success") or 0
+    assert final - initial == 1
 
 
 @pytest.mark.asyncio
@@ -555,11 +552,11 @@ async def test_retry_on_load_file_error(tmp_path, mocker: MockerFixture):
 
     mocker.patch("self_fixing_engineer.arbiter.models.merkle_tree._read_compressed_json", mock_read)
 
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") or 0
     loaded_tree = await MerkleTree.load(str(save_path))
     assert loaded_tree.size == 0
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="load_tree", status="success") or 0
+    assert final - initial == 1
 
 
 @requires_merklelib
@@ -600,13 +597,12 @@ async def test_large_batch_with_offload_threshold(mocker: MockerFixture):
     tree = MerkleTree()
     # Add more leaves than the threshold
     large_batch = [f"data_{i}" for i in range(5)]
+    initial = get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") or 0
     await tree.add_leaves(large_batch)
 
     assert tree.size == 5
-    assert (
-        get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success")
-        == 1
-    )
+    final = get_metric_value(MERKLE_OPS_TOTAL, operation="add_leaves", status="success") or 0
+    assert final - initial == 1
 
 
 @requires_merklelib

@@ -114,7 +114,7 @@ def invalid_schema_config_path(tmp_path):
 @pytest.fixture
 def mock_alert_operator():
     """Mock the alert_operator function"""
-    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.alert_operator") as mock:
+    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.core_utils.alert_operator") as mock:
         yield mock
 
 
@@ -204,7 +204,7 @@ def test_load_config_invalid_schema(invalid_schema_config_path, mock_alert_opera
 
 
 # --- Tests for production mode enforcement ---
-def test_production_mode_enforcement():
+def test_production_mode_enforcement(mock_audit_logger):
     """Test that production mode properly enforces audit logging and demo mode restrictions."""
     # Test with non-production mode - should succeed with disabled audit logging
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
@@ -228,7 +228,7 @@ def test_production_mode_enforcement():
         assert config.demo_mode_enabled is True
 
 
-def test_prod_mode_blocks_demo_mode(tmp_path):
+def test_prod_mode_blocks_demo_mode(tmp_path, mock_audit_logger):
     """Tests that demo mode is blocked in production."""
     # Create a real project directory
     project_dir = tmp_path / "test_project"
@@ -268,7 +268,7 @@ def test_prod_mode_blocks_demo_mode(tmp_path):
                 assert "Demo mode enabled in production" in str(excinfo.value)
 
 
-def test_prod_mode_blocks_mock_llm(tmp_path):
+def test_prod_mode_blocks_mock_llm(tmp_path, mock_audit_logger):
     """Tests that load_config raises a critical error if a mock LLM endpoint is used in production."""
     # Create a real project directory
     project_dir = tmp_path / "test_project"
@@ -302,7 +302,7 @@ def test_prod_mode_blocks_mock_llm(tmp_path):
         )
 
 
-def test_prod_mode_blocks_disabled_audit_logging(tmp_path):
+def test_prod_mode_blocks_disabled_audit_logging(tmp_path, mock_audit_logger):
     """Tests that main raises a critical error if audit logging is disabled in production."""
     # Create a real project directory
     project_dir = tmp_path / "test_project"
@@ -338,7 +338,7 @@ def test_prod_mode_blocks_disabled_audit_logging(tmp_path):
                 assert "Audit logging disabled in production" in str(excinfo.value)
 
 
-def test_production_mode_flag_precedence():
+def test_production_mode_flag_precedence(mock_audit_logger):
     """Test that the --production-mode CLI flag sets production mode."""
     temp_dir = tempfile.mkdtemp()
     project_dir = os.path.join(temp_dir, "test_project")
@@ -384,7 +384,7 @@ def test_production_mode_flag_precedence():
 
 
 # Additional test for the main CLI functionality
-def test_main_analyze_action_success(tmp_path):
+def test_main_analyze_action_success(tmp_path, mock_audit_logger):
     """Test that the analyze action runs successfully with valid config."""
     # Create a real project directory
     project_dir = tmp_path / "test_project"
