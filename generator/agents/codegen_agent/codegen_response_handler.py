@@ -490,6 +490,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     + "\n".join(f"- {error}" for error in pydantic_errors)
                 )
             }
+        # Ensure missing local module stubs are generated before materializing
+        if lang == "python":
+            ensure_local_module_stubs(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -2446,3 +2449,126 @@ def monitor_and_scan_code(code_files: Dict[str, str]) -> Dict[str, str]:
 # The older helper `_run_sast_tool` and related imports have been intentionally
 # removed. All external security analysis should be funneled through
 # `scan_for_vulnerabilities` provided by the runner layer.
+
+
+def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
+    """Scan generated Python files for local module imports and generate stubs.
+
+    Addresses two related issues:
+    1. Missing modules — if ``routes.py`` imports ``from app.auth import ...``
+       but ``app/auth.py`` does not exist in *code_files*, a stub file is
+       created with the required symbols.
+    2. Missing symbols — if the target module file *does* exist in *code_files*
+       but is missing the imported symbol (class or function), a stub
+       definition is appended to that file.
+
+    Only ``from app.X import ...`` and relative imports (``from . import ...``)
+    are handled; third-party and stdlib imports are ignored.
+
+    Args:
+        code_files: Mapping of relative file paths to source code strings, as
+            returned by :func:`parse_llm_response`.  Modified **in-place** and
+            also returned.
+
+    Returns:
+        The (potentially augmented) *code_files* mapping.
+    """
+    # Collect all "from app.X import A, B, C" style statements across files.
+    # Maps module_path (e.g. "app/auth.py") -> set of required symbol names.
+    required_symbols: Dict[str, set] = {}
+
+    local_import_re = re.compile(
+        r"^\s*from\s+(app(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+|\.(?:[a-zA-Z_][a-zA-Z0-9_]*)?)"
+        r"\s+import\s+(.+)$",
+        re.MULTILINE,
+    )
+
+    for _filename, content in list(code_files.items()):
+        for match in local_import_re.finditer(content):
+            module_str = match.group(1).strip()
+            imports_str = match.group(2).strip()
+
+            # Resolve the module string to a file path.
+            if module_str.startswith("app."):
+                # "app.auth" -> "app/auth.py"
+                module_path = module_str.replace(".", "/") + ".py"
+            else:
+                # Relative import — skip (context-dependent, hard to resolve)
+                continue
+
+            # Parse the imported names (handle "A, B as C, D" forms).
+            symbols: set = set()
+            for part in imports_str.split(","):
+                part = part.strip()
+                # Strip "as alias" suffixes
+                name = part.split(" as ")[0].strip()
+                # Skip star imports
+                if name and name != "*":
+                    symbols.add(name)
+
+            if module_path not in required_symbols:
+                required_symbols[module_path] = set()
+            required_symbols[module_path].update(symbols)
+
+    # For each required module, ensure it exists and contains the symbols.
+    for module_path, symbols in required_symbols.items():
+        if not symbols:
+            continue
+
+        if module_path not in code_files:
+            # Module file is entirely missing — generate a stub.
+            stub_lines = [
+                "# Auto-generated stub — module referenced but not produced by LLM\n",
+                "from typing import Any, Optional\n\n",
+            ]
+            for sym in sorted(symbols):
+                # Heuristic: names starting with uppercase are classes; others are functions.
+                if sym[0].isupper():
+                    stub_lines.append(f"class {sym}:\n    \"\"\"Stub class.\"\"\"\n    pass\n\n\n")
+                else:
+                    stub_lines.append(
+                        f"def {sym}(*args: Any, **kwargs: Any) -> Any:\n"
+                        f"    \"\"\"Stub function.\"\"\"\n"
+                        f"    raise NotImplementedError(\"{sym} is a stub\")\n\n\n"
+                    )
+            code_files[module_path] = "".join(stub_lines)
+            logger.info(
+                "ensure_local_module_stubs: created stub module %s with symbols %s",
+                module_path,
+                sorted(symbols),
+            )
+        else:
+            # Module exists — check for missing symbols and append stubs.
+            existing_content = code_files[module_path]
+            try:
+                tree = ast.parse(existing_content)
+                defined_names = {
+                    node.name
+                    for node in ast.walk(tree)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                }
+            except SyntaxError:
+                defined_names = set()
+
+            missing = symbols - defined_names
+            if missing:
+                appended_lines = ["\n\n# Auto-generated stubs for symbols missing from this module\n"]
+                for sym in sorted(missing):
+                    if sym[0].isupper():
+                        appended_lines.append(
+                            f"\nclass {sym}:\n    \"\"\"Stub class.\"\"\"\n    pass\n"
+                        )
+                    else:
+                        appended_lines.append(
+                            f"\ndef {sym}(*args, **kwargs):\n"
+                            f"    \"\"\"Stub function.\"\"\"\n"
+                            f"    raise NotImplementedError(\"{sym} is a stub\")\n"
+                        )
+                code_files[module_path] = existing_content + "".join(appended_lines)
+                logger.info(
+                    "ensure_local_module_stubs: appended stubs for %s to %s",
+                    sorted(missing),
+                    module_path,
+                )
+
+    return code_files

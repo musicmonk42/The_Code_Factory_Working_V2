@@ -240,6 +240,26 @@ ALEMBIC_STUB_FILES: Dict[str, str] = {
         "    run_migrations_online()\n"
     ),
     "alembic/versions/.gitkeep": "# Placeholder for migration versions\n",
+    "alembic/script.py.mako": (
+        "\"\"\"${message}\n\n"
+        "Revision ID: ${up_revision}\n"
+        "Revises: ${down_revision | comma,n}\n"
+        "Create Date: ${create_date}\n\n"
+        "\"\"\"\n"
+        "from typing import Sequence, Union\n\n"
+        "from alembic import op\n"
+        "import sqlalchemy as sa\n"
+        "${imports if imports else \"\"}\n\n"
+        "# revision identifiers, used by Alembic.\n"
+        "revision: str = ${repr(up_revision)}\n"
+        "down_revision: Union[str, None] = ${repr(down_revision)}\n"
+        "branch_labels: Union[str, Sequence[str], None] = ${repr(branch_labels)}\n"
+        "depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}\n\n\n"
+        "def upgrade() -> None:\n"
+        "    ${upgrades if upgrades else \"pass\"}\n\n\n"
+        "def downgrade() -> None:\n"
+        "    ${downgrades if downgrades else \"pass\"}\n"
+    ),
 }
 
 # =============================================================================
@@ -377,12 +397,22 @@ def post_materialize(
             # ------------------------------------------------------------------
             # Phase 6: Modular app subpackage structure
             # ------------------------------------------------------------------
-            ensure_modular_structure(output_dir, result, spec_structure=spec_structure)
+            try:
+                ensure_modular_structure(output_dir, result, spec_structure=spec_structure)
+            except Exception as mod_exc:  # pylint: disable=broad-except
+                warn = f"ensure_modular_structure error: {mod_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn)
 
             # ------------------------------------------------------------------
             # Phase 7: Alembic scaffolding stubs
             # ------------------------------------------------------------------
-            ensure_alembic_scaffolding(output_dir, result)
+            try:
+                ensure_alembic_scaffolding(output_dir, result)
+            except Exception as alembic_exc:  # pylint: disable=broad-except
+                warn = f"ensure_alembic_scaffolding error: {alembic_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn)
 
             # ------------------------------------------------------------------
             # Finalize
@@ -456,6 +486,8 @@ def ensure_modular_structure(
 
     for subdir in dirs_to_create:
         dir_path = output_dir / Path(subdir)
+        if dir_path.exists() and dir_path.is_file():
+            continue  # Skip - this is a file, not a directory
         dir_path.mkdir(parents=True, exist_ok=True)
         if subdir.startswith("app/") or subdir.startswith("app\\"):
             _create_if_absent(
