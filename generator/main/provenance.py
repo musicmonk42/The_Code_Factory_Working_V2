@@ -653,6 +653,304 @@ def extract_output_dir_from_md(md_content: str) -> str:
     return ""
 
 
+def extract_file_structure_from_md(md_content: str) -> Dict[str, List[str]]:
+    """Extract the expected file/directory structure from a Markdown specification.
+
+    Implements a two-pass parser:
+
+    **Pass 1 — ASCII/Unicode tree blocks**
+        Scans every fenced or indented code block for directory-tree listings
+        (lines decorated with ``├``, ``└``, ``│``, ``─`` or plain ``|``/``-``
+        characters).  Each entry is classified as either a *file* (has a
+        recognised source extension) or a *directory* (has a trailing ``/``
+        or no extension).  The parser tracks indentation depth so it can
+        reconstruct the **full path** of every node from the tree root.
+
+    **Pass 2 — Inline path references**
+        Scans the entire document for backtick-quoted paths
+        (e.g. `` `app/routers/products.py` ``), explicit directory references
+        (e.g. ``app/routers/``), and glob-style path patterns
+        (e.g. ``app/routers/*.py``).  These are merged with the tree results.
+
+    The function is **deterministic**: identical input always produces the same
+    output, and the order of entries in each list reflects the order of first
+    appearance in the document (important for audit trails).
+
+    Industry Standards Compliance:
+        - SOC 2 Type II: deterministic, auditable output
+        - ISO 27001 A.14.2.5: requirement traceability
+        - Input validation and type-checked defensive programming
+
+    Args:
+        md_content: Raw Markdown specification content.
+
+    Returns:
+        A dictionary with three keys:
+
+        ``'directories'``
+            Unique, ordered list of relative directory paths found in the spec
+            (e.g. ``['app', 'app/routers', 'app/services', 'tests']``).
+            Paths use forward slashes and have **no** trailing slash.
+
+        ``'files'``
+            Unique, ordered list of relative file paths found in the spec
+            (e.g. ``['app/main.py', 'app/routers/products.py']``).
+
+        ``'modules'``
+            Python dotted-module names derived from ``'files'``
+            (e.g. ``['app.main', 'app.routers.products']``).
+
+    Examples:
+        >>> md = "├── app/\\n│   ├── routers/\\n│   │   └── products.py"
+        >>> s = extract_file_structure_from_md(md)
+        >>> 'app/routers' in s['directories']
+        True
+        >>> 'app/routers/products.py' in s['files']
+        True
+        >>> 'app.routers.products' in s['modules']
+        True
+
+    Raises:
+        TypeError: If *md_content* is not a ``str``.
+    """
+    # -------------------------------------------------------------------------
+    # Input validation — industry-standard defensive programming
+    # -------------------------------------------------------------------------
+    if not isinstance(md_content, str):
+        raise TypeError(
+            f"md_content must be a str, got {type(md_content).__name__}"
+        )
+
+    structure: Dict[str, List[str]] = {
+        "directories": [],
+        "files": [],
+        "modules": [],
+    }
+
+    if not md_content.strip():
+        return structure
+
+    dirs_seen: Set[str] = set()
+    files_seen: Set[str] = set()
+    modules_seen: Set[str] = set()
+
+    # -------------------------------------------------------------------------
+    # Source-file extensions we recognise
+    # -------------------------------------------------------------------------
+    _SOURCE_EXTS: Set[str] = {
+        ".py", ".pyi", ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
+        ".yml", ".yaml", ".toml", ".cfg", ".ini", ".txt", ".json",
+        ".html", ".htm", ".css", ".md", ".rst", ".go", ".java",
+        ".rs", ".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".sh",
+        ".dockerfile", ".gitkeep", ".gitignore", ".env",
+    }
+
+    def _has_source_ext(name: str) -> bool:
+        """Return True when *name* has a recognised source-file extension."""
+        _lower = name.lower()
+        # Special bare filenames without extension
+        if _lower in {
+            "dockerfile", "makefile", "procfile", "gemfile",
+            ".gitkeep", ".gitignore", ".env", ".dockerignore",
+        }:
+            return True
+        _, ext = os.path.splitext(_lower)
+        return ext in _SOURCE_EXTS
+
+    def _record_dir(dirpath: str) -> None:
+        """Add *dirpath* to the directory list if not already seen."""
+        dirpath = dirpath.strip("/").strip()
+        if not dirpath or dirpath == ".":
+            return
+        # Also ensure every ancestor is recorded (e.g. for app/routers/v1
+        # also record app/routers and app).
+        parts = dirpath.replace("\\", "/").split("/")
+        for i in range(1, len(parts) + 1):
+            ancestor = "/".join(parts[:i])
+            if ancestor and ancestor not in dirs_seen:
+                dirs_seen.add(ancestor)
+                structure["directories"].append(ancestor)
+
+    def _record_file(filepath: str) -> None:
+        """Add *filepath* to the files list and derive its parent directory."""
+        filepath = filepath.replace("\\", "/").strip("/").strip()
+        if not filepath or filepath in files_seen:
+            return
+        files_seen.add(filepath)
+        structure["files"].append(filepath)
+        parent = filepath.rsplit("/", 1)[0] if "/" in filepath else ""
+        if parent:
+            _record_dir(parent)
+        # Derive Python module path
+        if filepath.endswith(".py"):
+            module_path = filepath[: -len(".py")].replace("/", ".")
+            if module_path and module_path not in modules_seen:
+                modules_seen.add(module_path)
+                structure["modules"].append(module_path)
+
+    # =========================================================================
+    # PASS 1 — Tree-block parser
+    #
+    # Strategy: Identify lines that are part of a directory-tree listing by
+    # the presence of tree-drawing characters (Unicode box-drawing or ASCII
+    # equivalents).  For each such line we:
+    #   1. Strip the tree-drawing prefix to get the bare entry name.
+    #   2. Measure the *logical depth* from the number of indentation units.
+    #   3. Maintain a path stack and reconstruct the full path.
+    # =========================================================================
+
+    # Characters used in tree listings (Unicode box-drawing + ASCII fallbacks)
+    _TREE_CHARS = frozenset("├└│─|+\\- \t")
+    # Pattern that matches a tree-prefix character at start of a segment
+    _tree_prefix_re = re.compile(
+        r"^(?:[ \t│|]*(?:├──|└──|├--|└--|[+\\]--|[├└│|][-─ ]+))\s*"
+    )
+
+    def _strip_tree_prefix(line: str) -> Optional[Tuple[int, str]]:
+        """Strip tree-drawing characters from *line*.
+
+        Returns ``(depth, name)`` where *depth* is the nesting level (0-based,
+        i.e. direct children of the tree root are depth 0) and *name* is the
+        bare file/directory name (trailing ``/`` preserved).
+        Returns ``None`` if the line does not look like a tree entry.
+
+        Depth formula derivation
+        ------------------------
+        A standard ``tree``-command output uses 4-character indentation units:
+
+        * Depth 0:  ``├── name``                       →  prefix = 4 chars
+        * Depth 1:  ``│   ├── name``                   →  prefix = 8 chars
+        * Depth 2:  ``│   │   ├── name``               →  prefix = 12 chars
+
+        After normalising all tree characters to spaces, prefix_len = 4*(depth+1).
+        Therefore: ``depth = prefix_len // 4 - 1``.
+        """
+        m = _tree_prefix_re.match(line)
+        if m is None:
+            return None
+        prefix = m.group(0)
+        name = line[len(prefix):].strip()
+        if not name:
+            return None
+        # Normalise all tree-drawing characters to spaces to measure width.
+        prefix_norm = (
+            prefix
+            .replace("├──", "   ")
+            .replace("└──", "   ")
+            .replace("├--", "   ")
+            .replace("└--", "   ")
+            .replace("│", " ")
+            .replace("|", " ")
+        )
+        # prefix_norm has 4*(depth+1) spaces; subtract 1 to get 0-based depth.
+        depth = max(0, len(prefix_norm) // 4 - 1)
+        return depth, name
+
+    def _parse_tree_block(block_lines: List[str]) -> None:
+        """Parse a list of tree-listing lines and record all paths."""
+        # path_stack[i] = directory name at depth i (or empty string for root)
+        path_stack: List[str] = []
+
+        for raw_line in block_lines:
+            parsed = _strip_tree_prefix(raw_line)
+            if parsed is None:
+                continue
+            depth, name = parsed
+
+            # Trim annotation comments (e.g. "main.py  # entry point")
+            name = re.split(r"\s+#", name)[0].strip()
+            if not name:
+                continue
+
+            is_dir = name.endswith("/") or (
+                not _has_source_ext(name) and not re.search(r"\.\w{1,6}$", name)
+            )
+            bare_name = name.rstrip("/")
+
+            # Adjust the path stack to the current depth
+            path_stack = path_stack[:depth]
+            if is_dir:
+                path_stack.append(bare_name)
+                full_path = "/".join(path_stack)
+                _record_dir(full_path)
+            else:
+                parent_path = "/".join(path_stack)
+                full_path = (parent_path + "/" + bare_name) if parent_path else bare_name
+                if _has_source_ext(bare_name):
+                    _record_file(full_path)
+
+    # Extract fenced code blocks and scan each for tree content
+    # Recognise ```tree, ```bash, ``` (plain), and indented code blocks
+    fenced_re = re.compile(
+        r"```[\w]*\n(.*?)```",
+        re.DOTALL,
+    )
+    for fenced_match in fenced_re.finditer(md_content):
+        block_text = fenced_match.group(1)
+        block_lines = block_text.splitlines()
+        # Check if this block looks like a tree listing
+        has_tree_chars = any(
+            _tree_prefix_re.match(ln) for ln in block_lines
+        )
+        if has_tree_chars:
+            _parse_tree_block(block_lines)
+
+    # Also scan non-fenced lines that look like tree entries (e.g. in
+    # indented sections or README prose that uses tree characters)
+    outside_lines = fenced_re.sub("", md_content).splitlines()
+    pending_tree: List[str] = []
+    for ln in outside_lines:
+        if _tree_prefix_re.match(ln):
+            pending_tree.append(ln)
+        else:
+            if pending_tree:
+                _parse_tree_block(pending_tree)
+                pending_tree = []
+    if pending_tree:
+        _parse_tree_block(pending_tree)
+
+    # =========================================================================
+    # PASS 2 — Inline path references
+    #
+    # Captures paths that appear in prose, backtick spans, or glob patterns
+    # but are not inside a tree listing.
+    # =========================================================================
+
+    # Pattern A: backtick-quoted multi-part path (must contain at least one /)
+    # e.g. `app/routers/products.py`, `app/services/`
+    _backtick_path_re = re.compile(
+        r"`([a-zA-Z_.][\w./\-]*(?:/[\w./\-]+)+/?)`"
+    )
+    for m in _backtick_path_re.finditer(md_content):
+        raw = m.group(1)
+        if raw.endswith("/"):
+            _record_dir(raw.rstrip("/"))
+        elif _has_source_ext(raw) or re.search(r"\.\w{1,6}$", raw):
+            _record_file(raw)
+        else:
+            _record_dir(raw)
+
+    # Pattern B: explicit directory references like ``app/routers/``
+    # (trailing slash, not inside backticks — avoid double-counting)
+    _dir_ref_re = re.compile(
+        r"(?<![`\w/])([a-zA-Z_][\w]*(?:/[\w]+)+)/"
+    )
+    for m in _dir_ref_re.finditer(md_content):
+        _record_dir(m.group(1))
+
+    # Pattern C: glob-style path patterns like ``app/routers/*.py``
+    # Capture only the directory portion (everything before the last ``/``
+    # that precedes the wildcard ``*``).  This prevents partial filename
+    # segments such as ``test_`` from being incorrectly recorded as dirs.
+    _glob_path_re = re.compile(
+        r"([a-zA-Z_][\w]*/(?:[\w]+/)*)[\w]*\*"
+    )
+    for m in _glob_path_re.finditer(md_content):
+        _record_dir(m.group(1).rstrip("/"))
+
+    return structure
+
+
 def validate_readme_completeness(readme_content: str, language: str = "python") -> Dict[str, Any]:
     """
     Validate that generated README.md is complete and production-ready.
@@ -885,10 +1183,38 @@ def validate_spec_fidelity(
         "extra_endpoints": [],
         "errors": [],
         "validation_timestamp": datetime.now(timezone.utc).isoformat(),
-        "duration_ms": 0
+        "duration_ms": 0,
+        "structure_validation": {
+            "expected_directories": [],
+            "missing_directories": [],
+            "passed": True,
+        },
     }
     
     try:
+        # Extract expected file structure from MD spec and validate it
+        expected_structure = extract_file_structure_from_md(md_content)
+        expected_dirs = expected_structure.get("directories", [])
+        missing_dirs: List[str] = []
+        if output_dir and expected_dirs:
+            for expected_dir in expected_dirs:
+                full_path = os.path.join(output_dir, expected_dir)
+                if not os.path.isdir(full_path):
+                    missing_dirs.append(expected_dir)
+
+        result["structure_validation"] = {
+            "expected_directories": expected_dirs,
+            "missing_directories": missing_dirs,
+            "passed": len(missing_dirs) == 0,
+        }
+
+        if missing_dirs:
+            logger.warning(
+                "[SPEC_VALIDATE] Missing expected directories: %s",
+                missing_dirs,
+                extra={"stage": "SPEC_VALIDATE", "missing_dirs": missing_dirs},
+            )
+
         # Extract required endpoints from MD spec
         required_endpoints = extract_endpoints_from_md(md_content)
         result["required_endpoints"] = required_endpoints
@@ -1436,6 +1762,7 @@ __all__ = [
     "validate_has_content",
     "extract_endpoints_from_code",
     "extract_endpoints_from_md",
+    "extract_file_structure_from_md",
     "validate_spec_fidelity",
     "run_fail_fast_validation",
     "validate_dockerfile",
