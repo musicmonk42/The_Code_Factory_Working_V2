@@ -169,6 +169,18 @@ STRATEGY_REFRESH_SUCCESS = get_or_create_counter(
     "sfe_decision_optimizer_strategy_refresh_success_total",
     "Successful strategy refreshes",
 )
+CONSTITUTION_CHECKS_TOTAL = get_or_create_counter(
+    "sfe_decision_optimizer_constitution_checks_total",
+    "Total constitution checks in SFE DecisionOptimizer",
+)
+CONSTITUTION_VIOLATIONS_TOTAL = get_or_create_counter(
+    "sfe_decision_optimizer_constitution_violations_total",
+    "Total constitution violations in SFE DecisionOptimizer",
+)
+CONSTITUTION_CHECK_ERRORS_TOTAL = get_or_create_counter(
+    "sfe_decision_optimizer_constitution_check_errors_total",
+    "Total constitution check errors",
+)
 
 
 @dataclass
@@ -641,8 +653,69 @@ class DecisionOptimizer:
                     # Ignore errors on shutdown, e.g., if loop is closed
                     pass
 
+    async def _check_constitution(
+        self, action: str, context: Dict[str, Any]
+    ) -> Tuple[bool, str]:
+        """Check if an action is permitted by the Arbiter constitution.
+
+        Parameters
+        ----------
+        action:
+            The action identifier to evaluate.
+        context:
+            Contextual metadata for the constitution check.
+
+        Returns
+        -------
+        Tuple[bool, str]
+            ``(allowed, reason)`` – ``True`` when the action is permitted.
+        """
+        CONSTITUTION_CHECKS_TOTAL.inc()
+        if not (
+            self.arbiter
+            and hasattr(self.arbiter, "constitution")
+            and self.arbiter.constitution is not None
+        ):
+            return True, "No constitution configured"
+
+        try:
+            allowed, reason = await self.arbiter.constitution.check_action(
+                action, context
+            )
+            if allowed:
+                self.logger.debug(
+                    f'{{"event": "constitution_check_allowed", "action": "{action}", "reason": "{reason}"}}'
+                )
+            else:
+                CONSTITUTION_VIOLATIONS_TOTAL.inc()
+                self.logger.warning(
+                    f'{{"event": "constitution_check_denied", "action": "{action}", "reason": "{reason}"}}'
+                )
+            return allowed, reason
+        except Exception as e:
+            CONSTITUTION_CHECK_ERRORS_TOTAL.inc()
+            self.logger.error(
+                f'{{"event": "constitution_check_error", "action": "{action}", "error": "{e}"}}',
+                exc_info=True,
+            )
+            return False, f"Constitution check error: {e}"
+
     async def process_remediation_proposal(self, proposal: Dict[str, Any]):
         await self._log_event("remediation_proposal_received", proposal)
+
+        allowed, reason = await self._check_constitution(
+            "apply_remediation",
+            {
+                "proposal_type": proposal.get("type"),
+                "risk_level": proposal.get("risk_level"),
+            },
+        )
+        if not allowed:
+            await self._log_event(
+                "remediation_denied_constitution",
+                {"proposal": proposal, "reason": reason},
+            )
+            return
 
         if not self.policy_engine:
             self.logger.warning(
@@ -1400,6 +1473,16 @@ class DecisionOptimizer:
         assignments = {}
 
         try:
+            allowed, reason = await self._check_constitution(
+                "allocate_resources",
+                {
+                    "agent_count": len(agent_pool),
+                    "task_count": len(task_queue),
+                },
+            )
+            if not allowed:
+                raise RuntimeError(f"Constitutional violation: {reason}")
+
             metrics = await get_system_metrics_async()
             if metrics.get("cpu_percent", 0) > 80:
                 await self._log_event(

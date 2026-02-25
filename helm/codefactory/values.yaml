@@ -377,6 +377,21 @@ env:
   # Override if you mount the data volume at a different path.
   META_LEARNING_STATE_PATH: "/app/data/meta_learning_state.json"
 
+  # ============================================
+  # Arbiter Configuration
+  # ============================================
+  # Arbiter world-size: number of virtual agent slots managed by the primary Arbiter.
+  # Increase for larger multi-agent deployments:
+  #   helm upgrade --set env.ARBITER_WORLD_SIZE=20 ...
+  ARBITER_WORLD_SIZE: "10"
+  # Arbiter role: "admin" grants the primary arbiter full policy and governance access.
+  ARBITER_ROLE: "admin"
+  # Absolute path for the encrypted PolicyManager policy file.
+  # MUST point to the data PVC mount so policies survive pod restarts.
+  # Override if the data volume is mounted at a non-default path:
+  #   helm upgrade --set env.POLICY_CONFIG_FILE_PATH=/data/policies.json ...
+  POLICY_CONFIG_FILE_PATH: "/app/data/policies.json"
+
   # SFE Checkpoint Manager Paths (container-friendly defaults)
   # These use relative paths that resolve to /app/logs/checkpoint/ in containers
   # Override if custom paths are needed (e.g., mounted persistent volumes)

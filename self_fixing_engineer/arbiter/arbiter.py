@@ -1653,6 +1653,76 @@ else:
                 logger.error(f"[{name}] Error initializing ArbiterConstitution: {e}", exc_info=True)
                 self.constitution = None
 
+            # ------------------------------------------------------------------ #
+            # PolicyManager → PolicyEngine pipeline with UnifiedPolicyFacade wire
+            # ------------------------------------------------------------------ #
+            try:
+                from self_fixing_engineer.arbiter.policy.policy_manager import PolicyManager
+                from self_fixing_engineer.arbiter.policy.core import (
+                    initialize_policy_engine,
+                    get_policy_engine_instance,
+                )
+                from self_fixing_engineer.arbiter.config import ArbiterConfig as _ArbiterConfig
+
+                _arbiter_cfg = _ArbiterConfig()
+
+                # PolicyManager requires ENCRYPTION_KEY; degrade gracefully without it
+                try:
+                    self.policy_manager: Optional[Any] = PolicyManager(_arbiter_cfg)
+                    logger.info(f"[{name}] PolicyManager initialized with encrypted persistence")
+                except Exception as _pm_err:
+                    logger.warning(
+                        f"[{name}] PolicyManager unavailable ({_pm_err!r}); "
+                        "falling back to file-only policy persistence"
+                    )
+                    self.policy_manager = None
+
+                # Initialize global PolicyEngine singleton, injecting PolicyManager
+                initialize_policy_engine(self, policy_manager=self.policy_manager)
+                self.policy_engine: Optional[Any] = get_policy_engine_instance()
+                logger.info(
+                    f"[{name}] PolicyEngine initialized and registered with UnifiedPolicyFacade"
+                )
+
+                # Register domain-specific engines with the facade so routing is live
+                try:
+                    from self_fixing_engineer.arbiter.policy.facade import (
+                        get_unified_policy_facade,
+                    )
+                    _facade = get_unified_policy_facade()
+
+                    # Simulation engine
+                    if self.simulation_engine and hasattr(self.simulation_engine, "policy_engine"):
+                        _facade.register_engine("simulation", self.simulation_engine.policy_engine)
+                        logger.info(f"[{name}] Simulation PolicyEngine registered with facade")
+
+                    # Test-generation engine
+                    try:
+                        from self_fixing_engineer.test_generation.policy_and_audit import (
+                            PolicyEngine as _TGPolicyEngine,
+                        )
+                        _tg_engine = _TGPolicyEngine()
+                        _facade.register_engine("test_generation", _tg_engine)
+                        logger.info(
+                            f"[{name}] TestGeneration PolicyEngine registered with facade"
+                        )
+                    except Exception as _tg_err:
+                        logger.debug(
+                            f"[{name}] TestGeneration PolicyEngine not registered: {_tg_err}"
+                        )
+                except Exception as _fe:
+                    logger.warning(
+                        f"[{name}] Could not register domain engines with facade: {_fe}"
+                    )
+
+            except Exception as e:
+                logger.error(
+                    f"[{name}] Error initializing PolicyEngine pipeline: {e}",
+                    exc_info=True,
+                )
+                self.policy_manager = None
+                self.policy_engine = None
+
             # Initialize GeneticEvolutionEngine for platform parameter evolution
             try:
                 from self_fixing_engineer.evolution import GeneticEvolutionEngine
@@ -2676,6 +2746,22 @@ else:
             self.personality = self.state_manager.personality
             self.role = self.state_manager.role
             self.agent_type = self.state_manager.agent_type
+
+            # Reload policies from PolicyManager (or file) now that the DB is
+            # healthy and the async event-loop is fully running.  This ensures
+            # the PolicyEngine always starts with the most recent persisted rules.
+            if getattr(self, "policy_engine", None) and hasattr(
+                self.policy_engine, "reload_policies_async"
+            ):
+                try:
+                    await self.policy_engine.reload_policies_async()
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] PolicyEngine policies reloaded from persistent store"
+                    )
+                except Exception as _pe_err:
+                    logging.getLogger(__name__).warning(
+                        f"[{self.name}] PolicyEngine reload failed (non-fatal): {_pe_err}"
+                    )
     
             growth_manager_plugin = (
                 _get_plugin_registry()

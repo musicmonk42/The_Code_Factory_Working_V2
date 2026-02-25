@@ -469,7 +469,7 @@ class BasicDecisionOptimizer:
 
 
 class PolicyEngine:
-    def __init__(self, arbiter_instance: Any, config: ArbiterConfig):
+    def __init__(self, arbiter_instance: Any, config: ArbiterConfig, policy_manager: Optional[Any] = None):
         with tracer.start_as_current_span("policy_engine_init") as span:
             # FIX: Accept both ArbiterConfig and config-like objects with required attributes
             # This allows fallback settings (SimpleNamespace) to work while maintaining type safety
@@ -607,6 +607,8 @@ class PolicyEngine:
             self._trust_score_interval: float = (
                 config.CIRCUIT_BREAKER_MIN_OPERATION_INTERVAL
             )
+
+            self._policy_manager = policy_manager
 
             self._load_policies_from_file()
             self._load_compliance_controls()
@@ -906,10 +908,201 @@ class PolicyEngine:
             self._custom_rules.append(rule_func)
             logger.info(f"Registered custom policy rule: {rule_func.__name__}")
 
-    def reload_policies(self):
-        with self._lock:
-            self._load_policies_from_file()
-            self._load_compliance_controls()
+    def reload_policies(self) -> None:
+        """Reload policies from PolicyManager (preferred) or fall back to file.
+
+        Public API
+        ----------
+        Callers should prefer :meth:`reload_policies_async` when inside an
+        async context.  This sync variant is retained for startup and
+        signal-handler use-cases.
+
+        Metrics
+        -------
+        - ``policy_update_outcomes_total{result}`` – incremented on success/failure
+        - ``policy_file_reloads_total`` / ``policy_last_reload_timestamp_seconds``
+        """
+        with tracer.start_as_current_span(
+            "reload_policies",
+            attributes={"source": "policy_manager" if self._policy_manager else "file"},
+        ) as span:
+            if self._policy_manager:
+                try:
+                    policy_config = self._policy_manager.get_policies()
+                    if policy_config is not None:
+                        with self._lock:
+                            self._policies = policy_config.model_dump()
+                        policy_file_reload_count.inc()
+                        policy_last_reload_timestamp.set(datetime.now().timestamp())
+                        POLICY_UPDATE_OUTCOMES.labels(result="success_policy_manager").inc()
+                        span.set_attribute("source", "policy_manager")
+                        span.set_attribute("status", "success")
+                        logger.info(
+                            '{"event": "reload_policies", "source": "policy_manager", "status": "success"}'
+                        )
+                        return
+                    else:
+                        logger.warning(
+                            '{"event": "reload_policies", "source": "policy_manager", "status": "null_result", '
+                            '"fallback": "file"}'
+                        )
+                except Exception as e:
+                    span.record_exception(e)
+                    POLICY_UPDATE_OUTCOMES.labels(result="policy_manager_error").inc()
+                    logger.warning(
+                        f'{{"event": "reload_policies_pm_error", "error": "{e}", "fallback": "file"}}',
+                        exc_info=True,
+                    )
+
+            # Fallback: load from file
+            try:
+                self._load_policies_from_file()
+                self._load_compliance_controls()
+                policy_file_reload_count.inc()
+                policy_last_reload_timestamp.set(datetime.now().timestamp())
+                POLICY_UPDATE_OUTCOMES.labels(result="success_file").inc()
+                span.set_attribute("source", "file")
+                span.set_attribute("status", "success")
+                logger.info(
+                    '{"event": "reload_policies", "source": "file", "status": "success"}'
+                )
+            except Exception as e:
+                span.record_exception(e)
+                POLICY_UPDATE_OUTCOMES.labels(result="file_error").inc()
+                span.set_attribute("status", "error")
+                logger.error(
+                    f'{{"event": "reload_policies_file_error", "error": "{e}"}}',
+                    exc_info=True,
+                )
+
+    async def reload_policies_async(self) -> None:
+        """Reload policies via PolicyManager (async) when available; falls back to sync.
+
+        Public API
+        ----------
+        Calls ``await policy_manager.load_policies()`` to trigger persistence
+        load (file/db), then updates ``self._policies`` under the thread lock.
+
+        Metrics
+        -------
+        - ``policy_update_outcomes_total{result}``
+        - ``policy_file_reloads_total`` / ``policy_last_reload_timestamp_seconds``
+        """
+        with tracer.start_as_current_span(
+            "reload_policies_async",
+            attributes={"source": "policy_manager" if self._policy_manager else "sync_fallback"},
+        ) as span:
+            if self._policy_manager:
+                try:
+                    await self._policy_manager.load_policies()
+                    with self._lock:
+                        policy_config = self._policy_manager.get_policies()
+                        if policy_config is not None:
+                            self._policies = policy_config.model_dump()
+                    policy_file_reload_count.inc()
+                    policy_last_reload_timestamp.set(datetime.now().timestamp())
+                    POLICY_UPDATE_OUTCOMES.labels(result="success_policy_manager_async").inc()
+                    span.set_attribute("source", "policy_manager")
+                    span.set_attribute("status", "success")
+                    logger.info(
+                        '{"event": "reload_policies_async", "source": "policy_manager", "status": "success"}'
+                    )
+                    return
+                except Exception as e:
+                    span.record_exception(e)
+                    POLICY_UPDATE_OUTCOMES.labels(result="policy_manager_async_error").inc()
+                    logger.warning(
+                        f'{{"event": "reload_policies_async_pm_error", "error": "{e}", "fallback": "sync"}}',
+                        exc_info=True,
+                    )
+
+            # Fallback: delegate to sync reload
+            try:
+                self.reload_policies()
+                span.set_attribute("source", "sync_fallback")
+                span.set_attribute("status", "success")
+            except Exception as e:
+                span.record_exception(e)
+                POLICY_UPDATE_OUTCOMES.labels(result="sync_fallback_error").inc()
+                span.set_attribute("status", "error")
+                logger.error(
+                    f'{{"event": "reload_policies_async_fallback_error", "error": "{e}"}}',
+                    exc_info=True,
+                )
+
+    async def save_policies(self) -> None:
+        """Persist current policies via PolicyManager if available, otherwise write to file.
+
+        Public API
+        ----------
+        Constructs a :class:`PolicyConfig` from ``self._policies`` and calls
+        ``policy_manager.set_policies`` + ``await policy_manager.save_policies()``.
+        Falls back to direct ``aiofiles`` write when no policy_manager is set.
+
+        Metrics
+        -------
+        - ``policy_update_outcomes_total{result}``
+        - ``policy_file_write_latency_seconds`` (when falling back to file)
+        """
+        with tracer.start_as_current_span(
+            "save_policies_via_engine",
+            attributes={"source": "policy_manager" if self._policy_manager else "file"},
+        ) as span:
+            if self._policy_manager:
+                try:
+                    from .policy_manager import PolicyConfig as _PolicyConfig
+                    with self._lock:
+                        snapshot = dict(self._policies)
+                    cfg = _PolicyConfig(**snapshot)
+                    self._policy_manager.set_policies(cfg)
+                    await self._policy_manager.save_policies()
+                    POLICY_UPDATE_OUTCOMES.labels(result="save_success_policy_manager").inc()
+                    span.set_attribute("status", "success")
+                    logger.info(
+                        '{"event": "save_policies", "source": "policy_manager", "status": "success"}'
+                    )
+                    return
+                except Exception as e:
+                    span.record_exception(e)
+                    POLICY_UPDATE_OUTCOMES.labels(result="save_policy_manager_error").inc()
+                    logger.warning(
+                        f'{{"event": "save_policies_pm_error", "error": "{e}", "fallback": "file"}}',
+                        exc_info=True,
+                    )
+
+            # Fallback: async file write
+            if not hasattr(self, "_async_lock"):
+                self._async_lock = asyncio.Lock()
+
+            _write_start = time.monotonic()
+            try:
+                import aiofiles as _aiofiles
+                with self._lock:
+                    payload = json.dumps(self._policies, indent=4)
+                async with self._async_lock:
+                    async with _aiofiles.open(
+                        self.config.POLICY_CONFIG_FILE_PATH, "w", encoding="utf-8"
+                    ) as _f:
+                        await _f.write(payload)
+                _write_elapsed = time.monotonic() - _write_start
+                try:
+                    from .policy_manager import policy_file_write_latency as _pfw_lat
+                    _pfw_lat.labels(operation="save_policies").observe(_write_elapsed)
+                except Exception:
+                    pass
+                POLICY_UPDATE_OUTCOMES.labels(result="save_success_file").inc()
+                span.set_attribute("status", "success")
+                logger.info(
+                    f'{{"event": "save_policies", "source": "file", "path": "{self.config.POLICY_CONFIG_FILE_PATH}", "status": "success"}}'
+                )
+            except Exception as e:
+                span.record_exception(e)
+                POLICY_UPDATE_OUTCOMES.labels(result="save_file_error").inc()
+                span.set_attribute("status", "error")
+                logger.error(
+                    f'{{"event": "save_policies_file_error", "path": "{self.config.POLICY_CONFIG_FILE_PATH}", "error": "{e}"}}',
+                    exc_info=True,
+                )
 
     async def apply_policy_update_from_evolution(
         self, proposed_policies: Dict[str, Any]
@@ -1939,29 +2132,78 @@ _policy_engine_instance: Optional[PolicyEngine] = None
 _policy_engine_lock = threading.Lock()
 
 
-def initialize_policy_engine(arbiter_instance: Any):
-    """Initializes the global PolicyEngine instance."""
+def initialize_policy_engine(
+    arbiter_instance: Any, policy_manager: Optional[Any] = None
+):
+    """Initializes the global PolicyEngine instance.
+
+    Args:
+        arbiter_instance: The Arbiter instance that owns this engine.
+        policy_manager: Optional :class:`PolicyManager` for encrypted, persistent
+            policy storage.  When provided the engine delegates all load/save
+            operations to it instead of reading the JSON file directly.
+
+    Side-effects:
+        Registers the new engine as the "arbiter" domain engine on the
+        :class:`~self_fixing_engineer.arbiter.policy.facade.UnifiedPolicyFacade`
+        global singleton so that all downstream components routing through the
+        facade immediately see the live engine.
+    """
     global _policy_engine_instance
     with tracer.start_as_current_span("initialize_policy_engine") as span:
+        span.set_attribute(
+            "has_policy_manager", policy_manager is not None
+        )
         with _policy_engine_lock:
             try:
                 # Ensure single instance of PolicyEngine
                 if _policy_engine_instance is None:
-                    logger.info("Initializing global PolicyEngine instance...")
-                    # Create PolicyEngine with provided arbiter instance and config
+                    logger.info(
+                        '{"event": "initialize_policy_engine", "status": "starting", '
+                        '"has_policy_manager": %s}',
+                        policy_manager is not None,
+                    )
                     _policy_engine_instance = PolicyEngine(
-                        arbiter_instance, get_config()
+                        arbiter_instance, get_config(), policy_manager=policy_manager
                     )
                     # Start policy refresher task
                     asyncio.create_task(
                         _policy_engine_instance.start_policy_refresher()
                     )
+                    # Register with UnifiedPolicyFacade so all routing goes live
+                    try:
+                        from self_fixing_engineer.arbiter.policy.facade import (
+                            get_unified_policy_facade,
+                        )
+                        get_unified_policy_facade().register_engine(
+                            "arbiter", _policy_engine_instance
+                        )
+                        logger.info(
+                            '{"event": "initialize_policy_engine", '
+                            '"status": "registered_with_facade"}'
+                        )
+                    except Exception as _fe:
+                        logger.warning(
+                            '{"event": "initialize_policy_engine", '
+                            '"status": "facade_registration_failed", "error": "%s"}',
+                            _fe,
+                        )
                     logger.info(
-                        "Global PolicyEngine initialized and refresher started."
+                        '{"event": "initialize_policy_engine", "status": "success"}'
                     )
                     span.set_attribute("init_status", "success")
+                else:
+                    logger.debug(
+                        '{"event": "initialize_policy_engine", '
+                        '"status": "already_initialized"}'
+                    )
+                    span.set_attribute("init_status", "already_initialized")
             except Exception as e:
-                logger.error(f"Failed to initialize PolicyEngine: {e}")
+                logger.error(
+                    '{"event": "initialize_policy_engine", "status": "failed", "error": "%s"}',
+                    e,
+                    exc_info=True,
+                )
                 POLICY_ENGINE_INIT_ERRORS.labels(error_type="init_failed").inc()
                 span.record_exception(e)
                 raise

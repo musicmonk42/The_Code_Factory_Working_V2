@@ -406,7 +406,110 @@ groups:
           action: "Check provider status or switch to fallback provider"
 
   # ===========================================================================
-  # Self-Fixing Engineer Alerts
+  # Arbiter Policy & Governance Alerts
+  # ===========================================================================
+  - name: arbiter_policy
+    interval: 30s
+    rules:
+      - alert: MockPolicyEngineInProduction
+        expr: |
+          increase(facade_routing_errors_total{error_type="no_engine_fail_closed"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: arbiter
+        annotations:
+          summary: "Arbiter policy facade is failing closed — no engine registered"
+          description: >
+            The UnifiedPolicyFacade has no policy engine registered for one or more
+            domains and is returning fail-closed responses. This means the real
+            PolicyEngine was not initialised correctly at startup.
+          runbook_url: "https://runbooks.example.com/ArbiterPolicyFacadeNoEngine"
+          action: >
+            1. Check Arbiter startup logs for PolicyEngine initialisation errors.
+            2. Verify ENCRYPTION_KEY and POLICY_CONFIG_FILE_PATH are set correctly.
+            3. Confirm ARBITER_ROLE and ARBITER_WORLD_SIZE env vars are present.
+            4. Restart the pod if the Arbiter failed to connect to its database.
+
+      - alert: ConstitutionViolationDetected
+        expr: |
+          increase(sfe_decision_optimizer_constitution_violations_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          component: arbiter
+        annotations:
+          summary: "Arbiter constitution violation detected in DecisionOptimizer"
+          description: >
+            The Arbiter DecisionOptimizer rejected {{ $value }} action(s) in the
+            last 5 minutes due to constitutional constraints. This is expected
+            behaviour when governance rules are enforced but may indicate
+            misconfiguration if the rate is unexpectedly high.
+          runbook_url: "https://runbooks.example.com/ConstitutionViolation"
+          action: >
+            Review the ArbiterConstitution rules and the rejected action contexts
+            in the structured audit log (event: remediation_denied_constitution).
+
+      - alert: ConstitutionCheckErrorRate
+        expr: |
+          rate(sfe_decision_optimizer_constitution_check_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: arbiter
+        annotations:
+          summary: "High rate of Arbiter constitution check errors"
+          description: >
+            Constitution checks in the DecisionOptimizer are failing at
+            {{ $value | humanize }} errors/second. The component is falling back
+            to fail-closed behaviour, which may be blocking legitimate operations.
+          runbook_url: "https://runbooks.example.com/ConstitutionCheckError"
+          action: >
+            Check ArbiterConstitution service health and the application error logs
+            for the root cause (e.g. missing arbiter.constitution attribute).
+
+      - alert: PolicyFacadeCheckHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(facade_policy_check_latency_seconds_bucket[5m])
+          ) > 2.0
+        for: 10m
+        labels:
+          severity: warning
+          component: arbiter
+        annotations:
+          summary: "High latency on UnifiedPolicyFacade policy checks"
+          description: >
+            95th-percentile policy check latency via the UnifiedPolicyFacade is
+            {{ $value }}s. Threshold: 2s. This may indicate a slow downstream
+            PolicyEngine (e.g. LLM evaluation timeout) or database contention.
+          runbook_url: "https://runbooks.example.com/PolicyFacadeLatency"
+          action: >
+            1. Check LLM policy evaluation latency (llm_call_latency_seconds).
+            2. Inspect the policy engine logs for slow compliance-control lookups.
+            3. Consider disabling LLM policy evaluation (LLM_POLICY_EVALUATION_ENABLED=false)
+               temporarily while investigating.
+
+      - alert: PolicyManagerPersistenceUnavailable
+        expr: |
+          increase(policy_errors_total{operation="save"}[10m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: arbiter
+        annotations:
+          summary: "PolicyManager is failing to persist policy changes"
+          description: >
+            {{ $value }} policy save operations failed in the last 10 minutes.
+            Policy changes are being held in memory only and will be lost on restart.
+          runbook_url: "https://runbooks.example.com/PolicyManagerPersistence"
+          action: >
+            1. Verify the POLICY_CONFIG_FILE_PATH volume is mounted and writable.
+            2. Check ENCRYPTION_KEY is valid (44-char base64 Fernet key).
+            3. Inspect pod logs for cryptography.fernet errors.
+
+  # ===========================================================================
+  # Self-Fixing Engineer Alerts (existing + extended)
   # ===========================================================================
   - name: self_fixing_engineer
     interval: 30s

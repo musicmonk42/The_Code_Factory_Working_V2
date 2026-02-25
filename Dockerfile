@@ -322,7 +322,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME="/opt/huggingface_cache" \
     CHROMA_CACHE_DIR="/opt/chroma_cache" \
     MPLCONFIGDIR="/tmp/matplotlib" \
-    TLDEXTRACT_CACHE="/tmp/tldextract_cache"
+    TLDEXTRACT_CACHE="/tmp/tldextract_cache" \
+    ARBITER_WORLD_SIZE="10" \
+    ARBITER_ROLE="admin" \
+    POLICY_CONFIG_FILE_PATH="/app/data/policies.json"
     # SENTRY_DSN: Set at deployment time for error tracking
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 

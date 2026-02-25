@@ -1429,8 +1429,63 @@ class PolicyEngine:
             self._pr_cache[cache_key] = (False, reason)
         return False, reason
 
+    async def should_auto_learn(
+        self,
+        domain: str,
+        key: str,
+        user_id: Optional[str],
+        value: Optional[Any] = None,
+    ) -> Tuple[bool, str]:
+        """Facade-compatible adapter for :class:`UnifiedPolicyFacade` routing.
 
-# --- Event Bus ---
+        Maps the common ``should_auto_learn(domain, key, user_id, value)`` call
+        convention used by the facade to this engine's ``should_generate_tests``
+        or ``should_integrate_test`` business methods, depending on the ``key``.
+        Unknown keys are allowed by default (open) to avoid blocking the
+        test-generation pipeline for non-policy-relevant operations.
+
+        Args:
+            domain: Policy domain (e.g. "TestGeneration").
+            key: Action key being checked (e.g. "generate_tests", "integrate_test").
+            user_id: Optional user / agent identifier (unused by this engine).
+            value: Optional dict with context (``file_path``, ``language``, etc.).
+
+        Returns:
+            ``(allowed, reason)`` tuple.
+        """
+        ctx: Dict[str, Any] = {}
+        if isinstance(value, dict):
+            ctx = value
+        elif value is not None:
+            ctx = {"value": value}
+
+        try:
+            if key in ("generate_tests", "should_generate_tests"):
+                return await self.should_generate_tests(
+                    file_path=ctx.get("file_path", "unknown"),
+                    language=ctx.get("language", "python"),
+                    coverage_percentage=float(ctx.get("coverage_percentage", 0.0)),
+                )
+            elif key in ("integrate_test", "should_integrate_test"):
+                return await self.should_integrate_test(
+                    test_file_path=ctx.get("test_file_path", "unknown"),
+                    module_identifier=ctx.get("module_identifier", "unknown"),
+                    language=ctx.get("language", "python"),
+                    test_quality_score=float(ctx.get("test_quality_score", 0.0)),
+                )
+            else:
+                # Unknown key — allow by default (open); caller decides strictness
+                return True, f"TestGeneration policy: key '{key}' not restricted (open)"
+        except Exception as exc:
+            logger.error(
+                "TestGeneration PolicyEngine.should_auto_learn failed for "
+                "domain=%s key=%s: %s",
+                domain,
+                key,
+                exc,
+                exc_info=True,
+            )
+            return False, f"TestGeneration policy check error (fail-closed): {exc}"
 class EventBus:
     """
     Centralized Event Bus for ATCO notifications with real webhook/Slack hooks.

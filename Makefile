@@ -8,7 +8,8 @@
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
-	validate-few-shot mutation-test codegen-multipass-status
+	validate-few-shot mutation-test codegen-multipass-status \
+	test-arbiter-policy test-arbiter-integration
 
 # Default target
 .DEFAULT_GOAL := help
@@ -80,6 +81,24 @@ test-omnicore: ## Run OmniCore Engine tests
 test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd self_fixing_engineer && pytest tests/ -v --tb=short
+
+test-arbiter-policy: ## Run Arbiter policy engine unit tests (PolicyEngine, PolicyManager, facade)
+	@echo "$(BLUE)Running Arbiter policy unit tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \
+		pytest self_fixing_engineer/tests/test_arbiter_policy_core.py \
+		       self_fixing_engineer/tests/test_arbiter_policy_policy_e2e.py \
+		       -v --tb=short
+	@echo "$(GREEN)Arbiter policy unit tests complete!$(NC)"
+
+test-arbiter-integration: ## Run full Arbiter integration tests (PolicyEngine→Facade, Constitution, SFEService)
+	@echo "$(BLUE)Running Arbiter integration tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
+		ARBITER_WORLD_SIZE=2 ARBITER_ROLE=admin \
+		POLICY_CONFIG_FILE_PATH="/tmp/test_policies.json" && \
+		pytest self_fixing_engineer/tests/ tests/test_stubs.py \
+		       -k "arbiter or policy or facade or constitution" \
+		       -v --tb=short
+	@echo "$(GREEN)Arbiter integration tests complete!$(NC)"
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(BLUE)Running tests with coverage...$(NC)"

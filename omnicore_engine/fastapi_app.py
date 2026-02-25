@@ -179,8 +179,24 @@ except ImportError as e:
             async def explain(self, *a, **kw): return {"explanation": "unavailable", "stub_mode": True}
 
         class PolicyEngine:  # type: ignore[no-redef]
-            def __init__(self, *a, **kw): pass
-            async def should_auto_learn(self, *a, **kw): return True, "Mock Policy"
+            def __init__(self, *a, **kw):
+                self._production_mode = (
+                    os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+                    or os.getenv("APP_ENV", "development") == "production"
+                )
+                if self._production_mode:
+                    logger.error(
+                        "CRITICAL: Mock PolicyEngine loaded in PRODUCTION! "
+                        "All policy checks will be DENIED. Configure real PolicyEngine."
+                    )
+
+            async def should_auto_learn(self, *a, **kw):
+                if self._production_mode:
+                    logger.critical(
+                        "Mock PolicyEngine: DENYING request in production mode"
+                    )
+                    return False, "Mock Policy: DENIED in production mode (fail-closed)"
+                return True, "Mock Policy"
 
         class FeedbackManager:  # type: ignore[no-redef]
             def __init__(self, *a, **kw): pass

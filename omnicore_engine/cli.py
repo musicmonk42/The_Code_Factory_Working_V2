@@ -163,10 +163,24 @@ except ImportError:
 
     class PolicyEngine:
         def __init__(self, *args, **kwargs):
-            pass
+            self._production_mode = (
+                os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+                or os.getenv("APP_ENV", "development") == "production"
+            )
+            if self._production_mode:
+                logger.critical(
+                    "CRITICAL: Mock PolicyEngine loaded in PRODUCTION! "
+                    "All policy checks will be DENIED. Configure real PolicyEngine."
+                )
 
         async def should_auto_learn(self, *args, **kwargs):
-            return True, "Mock Policy: Always allowed"
+            if self._production_mode:
+                logger.critical(
+                    "Mock PolicyEngine: DENYING request in production mode"
+                )
+                return False, "Mock Policy: DENIED in production mode (fail-closed)"
+            logger.debug("Mock PolicyEngine: Allowing request in development mode")
+            return True, "Mock Policy: Allowed (development mode only)"
 
 
 # FeedbackManager and FeedbackType from arbiter.feedback

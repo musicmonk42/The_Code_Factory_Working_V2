@@ -4,6 +4,14 @@ from importlib import import_module
 from typing import Any
 
 _LAZY_IMPORTS = {
+    "UnifiedPolicyFacade": (
+        "self_fixing_engineer.arbiter.policy.facade",
+        "UnifiedPolicyFacade",
+    ),
+    "get_unified_policy_facade": (
+        "self_fixing_engineer.arbiter.policy.facade",
+        "get_unified_policy_facade",
+    ),
     "is_llm_policy_circuit_breaker_open": (
         "self_fixing_engineer.arbiter.policy.circuit_breaker",
         "is_llm_policy_circuit_breaker_open",

@@ -97,6 +97,19 @@ services:
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
       - AUDIT_LOG_PATH=/app/audit_trail.log
 
+      # ============================================
+      # Arbiter Configuration
+      # ============================================
+      # Arbiter world-size controls how many virtual agent slots the Arbiter
+      # manages. Increase for larger multi-agent deployments.
+      - ARBITER_WORLD_SIZE=${ARBITER_WORLD_SIZE:-10}
+      # Arbiter role: "admin" for full-access primary arbiter (default).
+      - ARBITER_ROLE=${ARBITER_ROLE:-admin}
+      # Absolute path for the encrypted policy configuration file used by
+      # PolicyManager. Must be on a persistent volume in production.
+      # Defaults to /app/data/policies.json (on the data PVC).
+      - POLICY_CONFIG_FILE_PATH=${POLICY_CONFIG_FILE_PATH:-/app/data/policies.json}
+
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENABLE_STRUCTURED_LOGGING=${ENABLE_STRUCTURED_LOGGING:-0}
