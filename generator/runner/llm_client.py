@@ -84,6 +84,12 @@ if "TOKENIZERS_PARALLELISM" not in os.environ:
 # Reduced retries and increased backoff to prevent rate limit exhaustion
 DEFAULT_MAX_RETRIES = 2  # Reduced from 3 to 2
 BASE_BACKOFF_SECONDS = 2.0  # Increased from 1.0 to 2.0
+# Multiplier applied to per-provider timeout to derive the hard cap on total
+# ensemble wall-clock time.  Can be overridden via the
+# ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER environment variable.
+ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER: float = float(
+    os.getenv("ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER", "1.5")
+)
 
 # Global LLM call budget per job to prevent exhaustion
 # Can be overridden via JOB_LLM_BUDGET environment variable
@@ -874,8 +880,45 @@ class LLMClient:
         timeout_per_provider: Optional[float] = None,
         **kwargs,
     ) -> Dict[str, Any]:
+        """Call multiple LLM providers in parallel and combine their responses.
+
+        Provider availability is checked against the plugin registry before any
+        network I/O is attempted; providers that are not loaded are skipped with a
+        warning rather than being called (which would otherwise hang waiting for an
+        initialization event that never fires).
+
+        Two timeouts are enforced:
+
+        * **Per-provider timeout** (``timeout_per_provider`` / ``ENSEMBLE_PROVIDER_TIMEOUT_SECONDS``
+          env var, default 180 s): each individual provider call is wrapped in
+          ``asyncio.wait_for`` inside ``_call_llm_with_provider_timeout``.
+        * **Total ensemble timeout** (``per_provider × ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER``,
+          configurable via the env var of the same name, default 1.5): hard wall-clock
+          cap on the entire ``asyncio.gather`` to prevent indefinite hangs.
+
+        On total timeout all outstanding :class:`asyncio.Task` objects are cancelled
+        and awaited so that no dangling coroutines remain.
+
+        Args:
+            prompt: Prompt forwarded to every provider.
+            models: List of ``{"provider": ..., "model": ...}`` dicts.
+            voting_strategy: How to combine results. ``"majority"`` returns the
+                most-common response; any other value returns the first success.
+            timeout_per_provider: Per-provider deadline in seconds.  Defaults to
+                ``ENSEMBLE_PROVIDER_TIMEOUT_SECONDS`` (default 180 s).
+            **kwargs: Additional keyword arguments forwarded to ``call_llm_api``.
+
+        Returns:
+            Dict with at minimum ``"content"`` and ``"ensemble_results"`` keys.
+            Also includes ``"skipped_providers"`` listing any providers that were
+            omitted because they were not loaded at call time.
+
+        Raises:
+            LLMError: If no providers are available, if the total ensemble timeout
+                is exceeded, or if every attempted provider fails.
+        """
         await self._is_initialized.wait()
-        results = []
+        results: List[Dict[str, Any]] = []
 
         # Validate models list before processing
         if not models:
@@ -888,12 +931,18 @@ class LLMClient:
             else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "180"))
         )
 
+        # Snapshot which providers are currently loaded so we can skip ones that
+        # were never initialized (avoids hanging on _is_initialized.wait() inside
+        # call_llm_api for providers that failed to load).
+        available_providers = self.manager.list_providers()
+
         # Build a validated list of (provider, model) pairs and their coroutines.
         # Using an explicit list keeps the error-reporting loop index-aligned with
         # task_results, and avoids re-reading the original `models` argument after
         # it may have contained entries with missing fields.
         valid_models: List[Dict[str, str]] = []
-        tasks = []
+        skipped_providers: List[str] = []
+        coroutines = []
 
         for m in models:
             provider = m.get("provider")
@@ -903,18 +952,29 @@ class LLMClient:
             if not provider:
                 provider = getattr(self.config, 'llm_provider', 'openai') or 'openai'
                 logger.info(
-                    f"Model configuration missing 'provider', using default: {provider}"
+                    "[ENSEMBLE] Model configuration missing 'provider', using default: %s",
+                    provider,
                 )
 
             # Skip only if model is missing (provider is now guaranteed)
             if not model:
                 logger.warning(
-                    f"Skipping model configuration with missing 'model' key: {m}"
+                    "[ENSEMBLE] Skipping model configuration with missing 'model' key: %s", m
+                )
+                continue
+
+            # Skip providers that are not loaded/initialized to avoid hangs
+            if provider not in available_providers:
+                skipped_providers.append(provider)
+                logger.warning(
+                    "[ENSEMBLE] Skipping provider '%s' (model=%s): not loaded. "
+                    "Available providers: %s",
+                    provider, model, available_providers,
                 )
                 continue
 
             valid_models.append({"provider": provider, "model": model})
-            tasks.append(
+            coroutines.append(
                 self._call_llm_with_provider_timeout(
                     prompt=prompt,
                     provider=provider,
@@ -924,12 +984,45 @@ class LLMClient:
                 )
             )
 
-        # Ensure at least one valid model exists before proceeding
-        if not tasks:
+        # Ensure at least one valid provider is available before proceeding
+        if not coroutines:
+            if skipped_providers:
+                raise LLMError(
+                    "No available providers for ensemble call; "
+                    "skipped (not loaded): %s. Available providers: %s"
+                    % (skipped_providers, available_providers)
+                )
             raise LLMError("No valid model configurations found in ensemble API call")
 
-        # Run all calls in parallel; individual timeouts are enforced per-task.
-        task_results = await asyncio.gather(*tasks, return_exceptions=True)
+        # Wrap each coroutine in an explicit asyncio.Task so they can be
+        # individually cancelled if the total-ensemble timeout fires.
+        task_objects: List[asyncio.Task] = [
+            asyncio.create_task(coro) for coro in coroutines
+        ]
+
+        # Total ensemble timeout: prevents indefinite hangs when a provider's
+        # per-task asyncio.wait_for fails to trigger (e.g. blocked in __init__).
+        total_timeout = effective_timeout * ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER
+        try:
+            task_results = await asyncio.wait_for(
+                asyncio.gather(*task_objects, return_exceptions=True),
+                timeout=total_timeout,
+            )
+        except asyncio.TimeoutError:
+            # Cancel every outstanding task and drain them to suppress
+            # "Task was destroyed but it is pending!" warnings.
+            for t in task_objects:
+                t.cancel()
+            await asyncio.gather(*task_objects, return_exceptions=True)
+            logger.error(
+                "[ENSEMBLE] Total ensemble timeout exceeded after %.0fs; "
+                "attempted providers: %s",
+                total_timeout,
+                [m["provider"] for m in valid_models],
+            )
+            raise LLMError(
+                "Ensemble timed out after %.0fs (total timeout exceeded)" % total_timeout
+            )
 
         # Track which providers failed and why
         failed_providers = []
@@ -941,17 +1034,21 @@ class LLMClient:
                 provider = valid_models[idx].get("provider", "unknown")
                 model = valid_models[idx].get("model", "unknown")
                 error_msg = str(result)
-                failed_providers.append(f"{provider}/{model}: {error_msg}")
+                failed_providers.append("%s/%s: %s" % (provider, model, error_msg))
                 logger.warning(
-                    f"Ensemble call failed for provider={provider}, model={model}: {result}", 
-                    exc_info=result
+                    "[ENSEMBLE] Provider %s/%s failed: %s",
+                    provider, model, result,
+                    exc_info=result,
                 )
 
         if not results:
             # Provide detailed error message listing all failed providers
             failure_details = "; ".join(failed_providers)
-            error_message = f"All ensemble calls failed. Attempted {len(models)} provider(s): {failure_details}"
-            logger.error(error_message)
+            error_message = (
+                "All ensemble calls failed. Attempted %d provider(s): %s"
+                % (len(valid_models), failure_details)
+            )
+            logger.error("[ENSEMBLE] %s", error_message)
             raise LLMError(error_message)
 
         if voting_strategy == "majority":
@@ -959,9 +1056,17 @@ class LLMClient:
             if not contents:
                 raise LLMError("No content returned from successful ensemble calls")
             most_common = Counter(contents).most_common(1)
-            return {"content": most_common[0][0], "ensemble_results": results}
+            return {
+                "content": most_common[0][0],
+                "ensemble_results": results,
+                "skipped_providers": skipped_providers,
+            }
 
-        return results[0]  # First valid
+        # results only contains Dict entries (guarded by isinstance above), so
+        # spreading results[0] is always safe; we copy to avoid mutating cached data.
+        first_result: Dict[str, Any] = dict(results[0])
+        first_result["skipped_providers"] = skipped_providers
+        return first_result
 
     async def health_check(self, provider: Optional[str] = None) -> bool:
         await self._is_initialized.wait()
