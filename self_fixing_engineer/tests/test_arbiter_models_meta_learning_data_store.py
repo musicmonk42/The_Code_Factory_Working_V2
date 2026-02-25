@@ -101,12 +101,12 @@ def in_memory_exporter():
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     # Temporarily unset OTEL_SDK_DISABLED so TracerProvider.get_tracer() returns
     # a real tracer (CI sets OTEL_SDK_DISABLED=1 which otherwise causes NoOp spans)
-    _disabled = os.environ.pop("OTEL_SDK_DISABLED", None)
+    _original_otel_sdk_disabled = os.environ.pop("OTEL_SDK_DISABLED", None)
     try:
         real_tracer = provider.get_tracer(mlds_module.__name__)
     finally:
-        if _disabled is not None:
-            os.environ["OTEL_SDK_DISABLED"] = _disabled
+        if _original_otel_sdk_disabled is not None:
+            os.environ["OTEL_SDK_DISABLED"] = _original_otel_sdk_disabled
     # Replace the module-level tracer with a real tracer from our provider
     _original_tracer = mlds_module.tracer
     mlds_module.tracer = real_tracer
