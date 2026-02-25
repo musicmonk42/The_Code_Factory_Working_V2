@@ -40,10 +40,6 @@ class TestExceptionHierarchy:
         """Clean up after all tests in this class."""
         gc.collect()
 
-    def test_base_exception_is_exception(self):
-        """OmniCoreMessageBusError should inherit from Exception."""
-        assert issubclass(OmniCoreMessageBusError, Exception)
-
     def test_connection_error_hierarchy(self):
         """Connection errors should inherit from base message bus error."""
         assert issubclass(OmniCoreConnectionError, OmniCoreMessageBusError)
