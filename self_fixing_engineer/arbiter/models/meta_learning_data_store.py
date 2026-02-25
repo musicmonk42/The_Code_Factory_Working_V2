@@ -372,7 +372,6 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "add_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 if isinstance(record, dict):
                     record = MetaLearningRecord(**record)
@@ -397,9 +396,10 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
                     self._store[record.experiment_id] = record
                     MLDS_DATA_SIZE.labels(backend=self._backend_label).inc()
                     logger.info(f"Added meta-learning record: {record.experiment_id}")
-                    span.set_attribute("mlds.experiment_id", record.experiment_id)
-                    MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
-                    return record.experiment_id
+
+                span.set_attribute("mlds.experiment_id", record.experiment_id)
+                MLDS_OPS_TOTAL.labels(operation=op, status="success").inc()
+                return record.experiment_id
             except (
                 ValidationError,
                 MetaLearningDataStoreError,
@@ -425,7 +425,6 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "get_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 async with self._lock:
@@ -473,7 +472,6 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "list_records"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}"):
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 async with self._lock:
                     records = list(self._store.values())
@@ -534,7 +532,6 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "update_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 async with self._lock:
@@ -597,7 +594,6 @@ class InMemoryMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "delete_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 async with self._lock:
@@ -681,7 +677,6 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "add_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 if isinstance(record, dict):
                     record = MetaLearningRecord(**record)
@@ -749,7 +744,6 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "get_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 record_json = await self._redis.hget(self.redis_hash_key, experiment_id)
@@ -803,7 +797,6 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "list_records"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}"):
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             try:
                 all_records_data = await self._redis.hgetall(self.redis_hash_key)
                 records = []
@@ -884,7 +877,6 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "update_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 existing_record_json = await self._redis.hget(
@@ -978,7 +970,6 @@ class RedisMetaLearningDataStore(BaseMetaLearningDataStore):
         op = "delete_record"
         start = time.monotonic()
         with tracer.start_as_current_span(f"meta_learning_{op}") as span:
-            MLDS_OPS_TOTAL.labels(operation=op, status="attempt").inc()
             span.set_attribute("mlds.experiment_id", experiment_id)
             try:
                 result = await self._redis.hdel(self.redis_hash_key, experiment_id)

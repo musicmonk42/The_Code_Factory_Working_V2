@@ -116,13 +116,13 @@ _pattern_lock: threading.Lock = threading.Lock()
 _PATTERNS: Dict[str, _PiiPattern] = {
     "EMAIL": _PiiPattern(
         re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
-        "[REDACTED_EMAIL]",
+        "[EMAIL]",
     ),
     "PHONE": _PiiPattern(
         re.compile(
             r"\b(?:\+?(\d{1,3}))?[-. (]*(\d{3})[-. )]*(\d{3})[-. ]*(\d{4})\b"
         ),
-        "[REDACTED_PHONE]",
+        "[PHONE]",
     ),
     "SSN": _PiiPattern(
         re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
@@ -159,7 +159,7 @@ _PATTERNS: Dict[str, _PiiPattern] = {
 
 _DEFAULT_SENSITIVE_KEYWORDS: Set[str] = {
     "token", "key", "password", "secret", "api_key", "webhook_url",
-    "routing_key", "address", "phone", "email", "ssn", "credit_card",
+    "routing_key", "address", "ssn", "credit_card",
     "account_number", "dob", "username", "ip_address", "geolocation",
     "auth_header", "bearer",
 }

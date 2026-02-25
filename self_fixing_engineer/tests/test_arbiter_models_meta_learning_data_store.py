@@ -90,6 +90,7 @@ def test_tracer():
 @pytest.fixture(scope="function")
 def in_memory_exporter():
     """Create in-memory exporter for tests - function scope for test isolation."""
+    import os
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -98,9 +99,19 @@ def in_memory_exporter():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    # Replace the module-level NoOpTracer with a real tracer from our provider
-    mlds_module.tracer = provider.get_tracer(mlds_module.__name__)
-    return exporter
+    # Temporarily unset OTEL_SDK_DISABLED so TracerProvider.get_tracer() returns
+    # a real tracer (CI sets OTEL_SDK_DISABLED=1 which otherwise causes NoOp spans)
+    _original_otel_sdk_disabled = os.environ.pop("OTEL_SDK_DISABLED", None)
+    try:
+        real_tracer = provider.get_tracer(mlds_module.__name__)
+    finally:
+        if _original_otel_sdk_disabled is not None:
+            os.environ["OTEL_SDK_DISABLED"] = _original_otel_sdk_disabled
+    # Replace the module-level tracer with a real tracer from our provider
+    _original_tracer = mlds_module.tracer
+    mlds_module.tracer = real_tracer
+    yield exporter
+    mlds_module.tracer = _original_tracer
 
 
 

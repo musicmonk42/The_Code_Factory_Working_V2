@@ -216,6 +216,11 @@ tracer = get_tracer(__name__)
 
 _TRUTHY_STRING_VALUES = {"1", "true", "yes"}
 
+# Environments considered non-production (Secrets Manager not enforced)
+_NON_PRODUCTION_ENVS: Final[frozenset] = frozenset(
+    {"development", "dev", "local", "test", "testing"}
+)
+
 
 def _in_test_mode() -> bool:
     return (
@@ -412,7 +417,7 @@ class AuditLedgerClient:
         _cleaned = dlt_type.strip().lower() if isinstance(dlt_type, str) else ""
         self.dlt_type: str = _cleaned or "ethereum"
         self.metric_labels: Dict[str, str] = {
-            "env": os.getenv("APP_ENV", "development"),
+            "env": os.getenv("APP_ENV", os.getenv("ENV", "development")),
             "cluster": os.getenv("CLUSTER_NAME", "default"),
             **(extra_metric_labels or {}),
         }
@@ -496,7 +501,8 @@ class AuditLedgerClient:
 
         # Enforce Secrets Manager in production
         if (
-            self.metric_labels["env"] != "development"
+            not _in_test_mode()
+            and self.metric_labels["env"].lower() not in _NON_PRODUCTION_ENVS
             and os.getenv("USE_SECRETS_MANAGER", "false").lower() != "true"
         ):
             raise DLTError(
