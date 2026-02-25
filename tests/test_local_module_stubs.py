@@ -146,11 +146,11 @@ class TestMissingModule:
         result = stub_fn(dict(files))
         assert _valid_python(result["app/auth.py"]), "generated stub must be valid Python"
 
-    def test_function_stub_raises_not_implemented(self, stub_fn):
+    def test_function_stub_returns_none(self, stub_fn):
         files = {"app/routes.py": "from app.auth import get_current_user\n"}
         result = stub_fn(dict(files))
         code = result["app/auth.py"]
-        assert "NotImplementedError" in code, "function stub must raise NotImplementedError"
+        assert "return None" in code, "function stub must return None (not raise NotImplementedError)"
 
     def test_class_stub_generated_for_uppercase_name(self, stub_fn):
         files = {"app/routes.py": "from app.auth import Role\n"}
@@ -291,14 +291,14 @@ class TestMissingSymbol:
         assert "Any" in stub_section, \
             "appended function stub must use Any type annotation"
 
-    def test_appended_function_raises_not_implemented(self, stub_fn):
+    def test_appended_function_stub_returns_none(self, stub_fn):
         files = {
             "app/routes.py": "from app.db import get_db\n",
             "app/db.py": "engine = None\n",
         }
         result = stub_fn(dict(files))
-        assert "NotImplementedError" in result["app/db.py"], \
-            "appended function stub must raise NotImplementedError"
+        assert "return None" in result["app/db.py"], \
+            "appended function stub must return None (not raise NotImplementedError)"
 
 
 # =============================================================================

@@ -149,11 +149,13 @@ _MULTIPASS_GROUPS = [
         "focus": (
             "Generate ONLY infrastructure and configuration files: "
             "requirements.txt, Dockerfile, docker-compose.yml, .env.example, "
-            "alembic.ini, alembic/env.py, Makefile, pyproject.toml, and similar config files. "
-            "Also generate Kubernetes manifests in k8s/ (e.g. k8s/deployment.yaml, k8s/service.yaml, "
-            "k8s/ingress.yaml, k8s/configmap.yaml) and Helm chart files in helm/ "
-            "(e.g. helm/Chart.yaml, helm/values.yaml, helm/templates/deployment.yaml). "
-            "Do NOT generate Python application code in this pass."
+            "alembic.ini, alembic/env.py, alembic/versions/, Makefile, pyproject.toml. "
+            "ALSO generate Kubernetes manifests: k8s/deployment.yaml, k8s/service.yaml, "
+            "k8s/ingress.yaml, k8s/configmap.yaml, k8s/hpa.yaml. "
+            "ALSO generate Helm chart: helm/Chart.yaml, helm/values.yaml, "
+            "helm/templates/deployment.yaml, helm/templates/service.yaml, "
+            "helm/templates/ingress.yaml, helm/templates/_helpers.tpl. "
+            "Do NOT regenerate core app files or route files."
         ),
     },
 ]
