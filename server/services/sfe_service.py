@@ -4553,6 +4553,20 @@ class SFEService:
 
             await self._arbiter_instance.start_async_services()
 
+            # Explicitly register the arbiter's live PolicyEngine with the
+            # UnifiedPolicyFacade so any component that acquired the facade
+            # before the Arbiter was started now routes to the real engine.
+            try:
+                from self_fixing_engineer.arbiter.policy.facade import get_unified_policy_facade
+                _pe = getattr(self._arbiter_instance, "policy_engine", None)
+                if _pe is not None:
+                    get_unified_policy_facade().register_engine("arbiter", _pe)
+                    logger.info("SFEService: Arbiter PolicyEngine registered with UnifiedPolicyFacade")
+            except Exception as _fe:
+                logger.warning(
+                    f'{{"event": "facade_registration_warning", "error": "{_fe}"}}'
+                )
+
             self._arbiter_running = True
 
             logger.info("Arbiter fully initialized and running")

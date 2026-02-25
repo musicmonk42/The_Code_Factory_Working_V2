@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional, Callable, Tuple
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -501,6 +501,57 @@ class PolicyEngine(PolicyEngineBase):
         """Get policy evaluation statistics."""
         return self.stats.copy()
 
+    async def should_auto_learn(
+        self,
+        domain: str,
+        key: str,
+        user_id: Optional[str],
+        value: Optional[Any] = None,
+    ) -> Tuple[bool, str]:
+        """Facade-compatible adapter that maps to this engine's ``evaluate()`` method.
+
+        Translates the :class:`UnifiedPolicyFacade` ``should_auto_learn`` call
+        convention to the simulation PolicyEngine's context-driven ``evaluate()``,
+        enabling transparent routing from the facade without changing callers.
+
+        Args:
+            domain: Policy domain (e.g. "Simulation").
+            key: Action key being checked (e.g. "spawn_agent").
+            user_id: Optional user / agent identifier.
+            value: Optional additional context payload.
+
+        Returns:
+            ``(allowed, reason)`` tuple – True means the action is permitted.
+        """
+        context: Dict[str, Any] = {
+            "domain": domain,
+            "key": key,
+            "user_id": user_id,
+        }
+        if isinstance(value, dict):
+            context.update(value)
+        elif value is not None:
+            context["value"] = value
+
+        try:
+            allowed = self.evaluate(context)
+            reason = (
+                f"Simulation policy allowed action '{key}' in domain '{domain}'"
+                if allowed
+                else f"Simulation policy denied action '{key}' in domain '{domain}'"
+            )
+            return allowed, reason
+        except Exception as exc:
+            logger.error(
+                "Simulation PolicyEngine.should_auto_learn failed for "
+                "domain=%s key=%s: %s",
+                domain,
+                key,
+                exc,
+                exc_info=True,
+            )
+            return False, f"Simulation policy check error (fail-closed): {exc}"
+
 
 # ============================================================================
 # LLM Factory - Proper Implementation
@@ -828,8 +879,11 @@ def get_meta_learning_instance(*args, **kwargs) -> MetaLearning:
 
 
 def get_policy_engine_instance(*args, **kwargs) -> PolicyEngine:
-    """
-    Get or create the PolicyEngine singleton instance.
+    """Get or create the PolicyEngine singleton instance.
+
+    On first creation the instance is registered as the ``"simulation"`` domain
+    engine on the :class:`~self_fixing_engineer.arbiter.policy.facade.UnifiedPolicyFacade`
+    so that all facade-routed simulation policy checks land here automatically.
 
     Returns:
         PolicyEngine: The singleton instance
@@ -837,6 +891,15 @@ def get_policy_engine_instance(*args, **kwargs) -> PolicyEngine:
     global _policy_engine_instance
     if _policy_engine_instance is None:
         _policy_engine_instance = PolicyEngine(*args, **kwargs)
+        # Register with the global UnifiedPolicyFacade so routing is live
+        try:
+            from self_fixing_engineer.arbiter.policy.facade import get_unified_policy_facade
+            get_unified_policy_facade().register_engine("simulation", _policy_engine_instance)
+            logger.info("Simulation PolicyEngine registered with UnifiedPolicyFacade")
+        except Exception as _fe:
+            logger.warning(
+                "Could not register Simulation PolicyEngine with facade: %s", _fe
+            )
     return _policy_engine_instance
 
 

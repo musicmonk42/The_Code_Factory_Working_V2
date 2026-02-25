@@ -239,20 +239,22 @@ class ArbiterBridge:
     ) -> Tuple[bool, str]:
         """
         Check if an action is allowed by Arbiter policy.
-        
-        This method queries the PolicyEngine to determine if the requested action
-        is permitted based on current policies and context. If the policy check
-        fails or times out, the action is allowed by default (fail-open behavior).
-        
+
+        Routes the check through the :class:`UnifiedPolicyFacade` first so that
+        all Generator domain policy decisions flow through the central routing
+        layer. Falls back to the direct ``self.policy_engine`` when the facade
+        is unavailable, preserving the original fail-open behaviour on timeout
+        or error.
+
         Args:
             action: Action to check (e.g., "orchestrate", "generate_code")
             context: Context dictionary with relevant metadata
-        
+
         Returns:
             Tuple of (allowed: bool, reason: str)
             - allowed: Whether the action is permitted
             - reason: Explanation for the decision
-        
+
         Examples:
             >>> allowed, reason = await bridge.check_policy("generate_code", {"language": "python"})
             >>> if not allowed:
@@ -260,27 +262,45 @@ class ArbiterBridge:
         """
         if not self.enabled:
             return True, "Bridge disabled"
-        
+
         try:
             with BRIDGE_OPERATION_DURATION.labels(operation="check_policy").time() if HAS_PROMETHEUS else _NoOpTimer():
-                allowed, reason = await asyncio.wait_for(
-                    self.policy_engine.should_auto_learn("Generator", action, **context),
-                    timeout=5.0
-                )
-                
+                # Prefer routing through UnifiedPolicyFacade so all Generator
+                # policy decisions are audited and metrics captured centrally.
+                try:
+                    from self_fixing_engineer.arbiter.policy.facade import (
+                        get_unified_policy_facade,
+                    )
+                    facade = get_unified_policy_facade()
+                    allowed, reason = await asyncio.wait_for(
+                        facade.should_auto_learn(
+                            domain="Generator",
+                            key=action,
+                            user_id=context.get("user_id"),
+                            value=context,
+                        ),
+                        timeout=5.0,
+                    )
+                except ImportError:
+                    # Facade not available — fall back to direct engine call
+                    allowed, reason = await asyncio.wait_for(
+                        self.policy_engine.should_auto_learn("Generator", action, **context),
+                        timeout=5.0,
+                    )
+
                 BRIDGE_POLICY_CHECKS.labels(
                     action=action,
                     allowed=str(allowed)
                 ).inc()
-                
+
                 logger.debug(f"Policy check for '{action}': {allowed} - {reason}")
                 return allowed, reason
-        
+
         except asyncio.TimeoutError:
             logger.warning(f"Policy check for '{action}' timed out, allowing by default")
             BRIDGE_POLICY_CHECKS.labels(action=action, allowed="timeout").inc()
             return True, "Policy check timed out (fail-open)"
-        
+
         except Exception as e:
             logger.warning(f"Policy check for '{action}' failed: {e}, allowing by default")
             BRIDGE_POLICY_CHECKS.labels(action=action, allowed="error").inc()

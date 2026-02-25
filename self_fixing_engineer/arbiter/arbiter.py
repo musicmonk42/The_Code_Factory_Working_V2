@@ -2746,6 +2746,22 @@ else:
             self.personality = self.state_manager.personality
             self.role = self.state_manager.role
             self.agent_type = self.state_manager.agent_type
+
+            # Reload policies from PolicyManager (or file) now that the DB is
+            # healthy and the async event-loop is fully running.  This ensures
+            # the PolicyEngine always starts with the most recent persisted rules.
+            if getattr(self, "policy_engine", None) and hasattr(
+                self.policy_engine, "reload_policies_async"
+            ):
+                try:
+                    await self.policy_engine.reload_policies_async()
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] PolicyEngine policies reloaded from persistent store"
+                    )
+                except Exception as _pe_err:
+                    logging.getLogger(__name__).warning(
+                        f"[{self.name}] PolicyEngine reload failed (non-fatal): {_pe_err}"
+                    )
     
             growth_manager_plugin = (
                 _get_plugin_registry()

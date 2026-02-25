@@ -121,6 +121,20 @@ try:
     from .utils import secure_write_file as sanitize_path
     from .utils import validate_and_resolve_path as validate_path
 
+    # Register a shared TestGeneration PolicyEngine instance with the
+    # UnifiedPolicyFacade so facade-routed "test_generation" domain checks
+    # land here automatically. The registration is best-effort and silent on
+    # failure so that the test-generation module continues to work standalone.
+    try:
+        from self_fixing_engineer.arbiter.policy.facade import get_unified_policy_facade as _get_facade
+        _tg_engine_instance = PolicyEngine(policy_config_path=None)
+        _get_facade().register_engine("test_generation", _tg_engine_instance)
+        logger.debug("TestGeneration PolicyEngine registered with UnifiedPolicyFacade")
+    except Exception as _facade_reg_err:
+        logger.debug(
+            "TestGeneration facade registration skipped: %s", _facade_reg_err
+        )
+
     # Core utils version check
     try:
         # Check for presence of __version__ first
