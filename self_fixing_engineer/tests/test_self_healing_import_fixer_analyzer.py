@@ -17,11 +17,20 @@ import yaml
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent.parent))
 
 # Import from the correct location - analyzer.analyzer
+import self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer as analyzer_module
 from self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer import (
     AnalyzerCriticalError,
     load_config,
     main,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_production_mode():
+    """Reset PRODUCTION_MODE after each test to prevent global state pollution."""
+    original = analyzer_module.PRODUCTION_MODE
+    yield
+    analyzer_module.PRODUCTION_MODE = original
 
 
 # Add test fixtures that are missing
@@ -113,7 +122,7 @@ def mock_alert_operator():
 def mock_audit_logger():
     """Mock the audit_logger"""
     mock_logger = MagicMock()
-    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.audit_logger", mock_logger):
+    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.core_audit.audit_logger", mock_logger):
         yield mock_logger
 
 
@@ -235,7 +244,7 @@ def test_prod_mode_blocks_demo_mode(tmp_path):
     config_file.write_text(yaml.dump(config_data))
 
     # Use the --production-mode CLI flag which will make it read from SSM
-    # The updated SSM mock will read from our config file
+    # Mock boto3 to return config data instead of connecting to real AWS SSM
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         cli_args = [
             "analyzer.py",
@@ -246,9 +255,17 @@ def test_prod_mode_blocks_demo_mode(tmp_path):
         ]
 
         with patch("sys.argv", cli_args):
-            with pytest.raises(AnalyzerCriticalError) as excinfo:
-                main(standalone_mode=False)
-            assert "Demo mode enabled in production" in str(excinfo.value)
+            with patch(
+                "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
+            ) as mock_boto3:
+                mock_client = MagicMock()
+                mock_client.get_parameter.return_value = {
+                    "Parameter": {"Value": json.dumps(config_data)}
+                }
+                mock_boto3.client.return_value = mock_client
+                with pytest.raises(AnalyzerCriticalError) as excinfo:
+                    main(standalone_mode=False)
+                assert "Demo mode enabled in production" in str(excinfo.value)
 
 
 def test_prod_mode_blocks_mock_llm(tmp_path):
@@ -266,28 +283,23 @@ def test_prod_mode_blocks_mock_llm(tmp_path):
     }
     config_file.write_text(yaml.dump(config_data))
 
-    # Test in production mode (will load from file even in prod mode for this test)
-    with patch.dict(os.environ, {"PRODUCTION_MODE": "true"}):
-        # Since we're in production mode but loading from a file (not SSM),
-        # we need to mock the file check to pass
-        with patch(
-            "os.path.exists", return_value=False
-        ):  # Make it think file doesn't exist
-            with patch(
-                "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
-            ) as mock_boto3:
-                # Mock SSM to return config with mock endpoint
-                mock_client = MagicMock()
-                mock_client.get_parameter.return_value = {
-                    "Parameter": {"Value": json.dumps(config_data)}
-                }
-                mock_boto3.client.return_value = mock_client
+    # Patch module-level PRODUCTION_MODE to True and mock boto3 for SSM
+    analyzer_module.PRODUCTION_MODE = True
+    with patch(
+        "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
+    ) as mock_boto3:
+        # Mock SSM to return config with mock endpoint
+        mock_client = MagicMock()
+        mock_client.get_parameter.return_value = {
+            "Parameter": {"Value": json.dumps(config_data)}
+        }
+        mock_boto3.client.return_value = mock_client
 
-                with pytest.raises(AnalyzerCriticalError) as excinfo:
-                    load_config(str(config_file))
-                assert "Mock LLM endpoint detected in PRODUCTION_MODE" in str(
-                    excinfo.value
-                )
+        with pytest.raises(AnalyzerCriticalError) as excinfo:
+            load_config(str(config_file))
+        assert "Mock LLM endpoint detected in PRODUCTION_MODE" in str(
+            excinfo.value
+        )
 
 
 def test_prod_mode_blocks_disabled_audit_logging(tmp_path):
@@ -302,7 +314,7 @@ def test_prod_mode_blocks_disabled_audit_logging(tmp_path):
     config_file.write_text(yaml.dump(config_data))
 
     # Use CLI flag to enable production mode
-    # The updated SSM mock will read from our config file
+    # Mock boto3 to return config data instead of connecting to real AWS SSM
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         cli_args = [
             "analyzer.py",
@@ -313,9 +325,17 @@ def test_prod_mode_blocks_disabled_audit_logging(tmp_path):
         ]
 
         with patch("sys.argv", cli_args):
-            with pytest.raises(AnalyzerCriticalError) as excinfo:
-                main(standalone_mode=False)
-            assert "Audit logging disabled in production" in str(excinfo.value)
+            with patch(
+                "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
+            ) as mock_boto3:
+                mock_client = MagicMock()
+                mock_client.get_parameter.return_value = {
+                    "Parameter": {"Value": json.dumps(config_data)}
+                }
+                mock_boto3.client.return_value = mock_client
+                with pytest.raises(AnalyzerCriticalError) as excinfo:
+                    main(standalone_mode=False)
+                assert "Audit logging disabled in production" in str(excinfo.value)
 
 
 def test_production_mode_flag_precedence():
@@ -335,6 +355,7 @@ def test_production_mode_flag_precedence():
         yaml.dump(config_data, f)
 
     # Test with production-mode flag
+    # Mock boto3 to return config data instead of connecting to real AWS SSM
     with patch.dict(os.environ, {"PRODUCTION_MODE": "false"}):
         cli_args = [
             "analyzer.py",
@@ -345,13 +366,21 @@ def test_production_mode_flag_precedence():
         ]
 
         with patch("sys.argv", cli_args):
-            with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
-                with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
-                    # This should run with PRODUCTION_MODE set to True due to CLI flag
-                    try:
-                        main(standalone_mode=False)
-                    except SystemExit as e:
-                        assert e.code == 0
+            with patch(
+                "self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.boto3"
+            ) as mock_boto3:
+                mock_client = MagicMock()
+                mock_client.get_parameter.return_value = {
+                    "Parameter": {"Value": json.dumps(config_data)}
+                }
+                mock_boto3.client.return_value = mock_client
+                with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer._handle_analyze"):
+                    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.asyncio.run"):
+                        # This should run with PRODUCTION_MODE set to True due to CLI flag
+                        try:
+                            main(standalone_mode=False)
+                        except SystemExit as e:
+                            assert e.code == 0
 
 
 # Additional test for the main CLI functionality
