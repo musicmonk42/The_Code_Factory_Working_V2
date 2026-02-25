@@ -412,7 +412,7 @@ class AuditLedgerClient:
         _cleaned = dlt_type.strip().lower() if isinstance(dlt_type, str) else ""
         self.dlt_type: str = _cleaned or "ethereum"
         self.metric_labels: Dict[str, str] = {
-            "env": os.getenv("APP_ENV", "development"),
+            "env": os.getenv("APP_ENV", os.getenv("ENV", "development")),
             "cluster": os.getenv("CLUSTER_NAME", "default"),
             **(extra_metric_labels or {}),
         }
@@ -495,8 +495,10 @@ class AuditLedgerClient:
                 )
 
         # Enforce Secrets Manager in production
+        _NON_PRODUCTION_ENVS = {"development", "dev", "local", "test", "testing"}
         if (
-            self.metric_labels["env"] != "development"
+            not _in_test_mode()
+            and self.metric_labels["env"].lower() not in _NON_PRODUCTION_ENVS
             and os.getenv("USE_SECRETS_MANAGER", "false").lower() != "true"
         ):
             raise DLTError(
