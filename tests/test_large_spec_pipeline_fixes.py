@@ -204,18 +204,21 @@ class TestAutoEnsembleForLargeSpecs:
         )
 
     def test_multi_pass_ensemble_calls_per_group(self):
-        """Each group in multi-pass must use call_ensemble_api (not call_llm_api)."""
+        """Each group in multi-pass must use call_llm_api (not call_ensemble_api) to avoid hanging."""
         src = self._src()
-        # The multi-pass ensemble block calls call_ensemble_api inside a for-loop over _MULTIPASS_GROUPS
+        # The multi-pass block calls call_llm_api inside a for-loop over _MULTIPASS_GROUPS
         assert "Multi-pass ensemble generation: starting" in src, (
             "Multi-pass ensemble start log not found"
         )
         assert "Multi-pass ensemble complete" in src, (
             "Multi-pass ensemble completion log not found"
         )
-        # Verify each pass calls ensemble, not single-LLM
-        assert "_pass_dict = await call_ensemble_api(" in src, (
-            "Multi-pass ensemble should call call_ensemble_api per chunk"
+        # Verify each pass calls single-LLM, not ensemble (avoids hanging on slow/broken providers)
+        assert "_pass_dict = await call_llm_api(" in src, (
+            "Multi-pass generation should call call_llm_api per chunk to avoid ensemble hang"
+        )
+        assert "_pass_dict = await call_ensemble_api(" not in src, (
+            "Multi-pass generation must NOT call call_ensemble_api (causes hanging when providers are slow)"
         )
 
     def test_small_spec_respects_original_config(self):
