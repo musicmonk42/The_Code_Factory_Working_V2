@@ -106,8 +106,12 @@ class TestMetricCreation:
             "test_mismatch", "Test metric", registry=self.test_registry
         )
 
-        with patch("omnicore_engine.metrics.REGISTRY", self.test_registry):
-            with patch("omnicore_engine.metrics.logger") as mock_logger:
+        # Patch prometheus_client.REGISTRY so safe_metric (which imports REGISTRY
+        # directly from prometheus_client) sees the test registry containing the Counter.
+        # Patch shared.noop_metrics.logger since _get_or_create_metric is safe_metric
+        # from that module and uses its own logger, not omnicore_engine.metrics.logger.
+        with patch("prometheus_client.REGISTRY", self.test_registry):
+            with patch("shared.noop_metrics.logger") as mock_logger:
                 # Try to get as Gauge - should warn because metric already exists as Counter
                 result = _get_or_create_metric(Gauge, "test_mismatch", "Test metric")
 
