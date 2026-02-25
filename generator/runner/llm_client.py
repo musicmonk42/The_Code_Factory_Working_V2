@@ -281,103 +281,7 @@ class DistributedRateLimiter:
 
 
 # --- Circuit Breaker ---
-class CircuitBreaker:
-    def __init__(self, failure_threshold: int = 5, timeout: int = 300, recovery_threshold: int = 3):
-        """
-        Initialize circuit breaker with production-grade settings.
-        
-        Args:
-            failure_threshold: Number of failures before circuit opens (default: 5)
-            timeout: Seconds to wait before trying half-open state (default: 300, was 60)
-            recovery_threshold: Number of successful requests in half-open state before closing (default: 3)
-        """
-        self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.recovery_threshold = recovery_threshold
-        self.failure_count: Dict[str, int] = {}
-        self.last_failure: Dict[str, float] = {}
-        self.state: Dict[str, str] = {}
-        self.success_count: Dict[str, int] = {}  # Track successes in half-open state
-
-    def record_failure(self, provider: str):
-        self.failure_count[provider] = self.failure_count.get(provider, 0) + 1
-        self.last_failure[provider] = time.time()
-        
-        # Reset success count on failure
-        self.success_count[provider] = 0
-        
-        if self.failure_count[provider] >= self.failure_threshold:
-            if self.state.get(provider, "CLOSED") != "OPEN":
-                logger.warning(
-                    f"CircuitBreaker: Tripped to OPEN for provider {provider} "
-                    f"(failures: {self.failure_count[provider]}/{self.failure_threshold})"
-                )
-            self.state[provider] = "OPEN"
-            metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(1)
-
-    def record_success(self, provider: str):
-        current_state = self.state.get(provider, "CLOSED")
-        
-        if current_state == "HALF-OPEN":
-            # Track successes in half-open state
-            self.success_count[provider] = self.success_count.get(provider, 0) + 1
-            
-            # Only close circuit after enough successful requests
-            if self.success_count[provider] >= self.recovery_threshold:
-                logger.info(
-                    f"CircuitBreaker: Reset to CLOSED for provider {provider} "
-                    f"(successful requests: {self.success_count[provider]}/{self.recovery_threshold})"
-                )
-                self.failure_count[provider] = 0
-                self.success_count[provider] = 0
-                self.state[provider] = "CLOSED"
-                metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
-            else:
-                logger.debug(
-                    f"CircuitBreaker: Provider {provider} still in HALF-OPEN state "
-                    f"(successful requests: {self.success_count[provider]}/{self.recovery_threshold})"
-                )
-        else:
-            # In CLOSED state, just reset failure count
-            self.failure_count[provider] = 0
-            self.success_count[provider] = 0
-            self.state[provider] = "CLOSED"
-            metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
-
-    async def allow_request(self, provider: str) -> bool:
-        current_state = self.state.get(provider, "CLOSED")
-        
-        if current_state == "CLOSED":
-            return True
-            
-        if current_state == "HALF-OPEN":
-            # Allow limited requests in half-open state
-            return True
-            
-        # State is OPEN - check if timeout has elapsed
-        if time.time() - self.last_failure.get(provider, 0) > self.timeout:
-            self.state[provider] = "HALF-OPEN"
-            self.success_count[provider] = 0  # Reset success counter
-            metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0.5)
-            logger.info(
-                f"CircuitBreaker: State for {provider} is now HALF-OPEN. "
-                f"Allowing trial requests (need {self.recovery_threshold} successes to fully recover)."
-            )
-            return True
-            
-        return False
-    
-    def get_state(self, provider: str) -> str:
-        """Get the current state of the circuit breaker for a provider."""
-        return self.state.get(provider, "CLOSED")
-    
-    def reset(self, provider: str):
-        """Manually reset the circuit breaker for a provider."""
-        self.failure_count[provider] = 0
-        self.success_count[provider] = 0
-        self.state[provider] = "CLOSED"
-        metrics.LLM_CIRCUIT_STATE.labels(provider=provider).set(0)
-        logger.info(f"CircuitBreaker: Manually reset to CLOSED for provider {provider}")
+from shared.circuit_breaker import CircuitBreaker  # noqa: E402
 
 
 # --- Unified LLM Client ---
@@ -447,7 +351,7 @@ class LLMClient:
         self.secrets = SecretsManager()
         self.cache = CacheManager(config.redis_url)
         self.rate_limiter = DistributedRateLimiter(config.redis_url)
-        self.circuit_breaker = CircuitBreaker()
+        self.circuit_breaker = CircuitBreaker(state_metric_gauge=metrics.LLM_CIRCUIT_STATE)
         self._is_initialized = asyncio.Event()
         self._init_task = None
         
@@ -664,7 +568,7 @@ class LLMClient:
                     extra={
                         "provider": provider,
                         "state": circuit_state,
-                        "failure_count": self.circuit_breaker.failure_count.get(provider, 0),
+                        "failure_count": self.circuit_breaker.get_failure_count(provider),
                     }
                 )
                 
@@ -675,7 +579,7 @@ class LLMClient:
                         extra={
                             "provider": provider,
                             "state": self.circuit_breaker.get_state(provider),
-                            "failure_count": self.circuit_breaker.failure_count.get(provider, 0),
+                            "failure_count": self.circuit_breaker.get_failure_count(provider),
                         }
                     )
                     metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
