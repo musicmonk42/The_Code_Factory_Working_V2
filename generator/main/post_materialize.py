@@ -402,7 +402,7 @@ def post_materialize(
             except Exception as mod_exc:  # pylint: disable=broad-except
                 warn = f"ensure_modular_structure error: {mod_exc}"
                 result.warnings.append(warn)
-                logger.warning("%s %s", _STAGE, warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
 
             # ------------------------------------------------------------------
             # Phase 7: Alembic scaffolding stubs
@@ -412,7 +412,7 @@ def post_materialize(
             except Exception as alembic_exc:  # pylint: disable=broad-except
                 warn = f"ensure_alembic_scaffolding error: {alembic_exc}"
                 result.warnings.append(warn)
-                logger.warning("%s %s", _STAGE, warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
 
             # ------------------------------------------------------------------
             # Finalize
@@ -487,7 +487,12 @@ def ensure_modular_structure(
     for subdir in dirs_to_create:
         dir_path = output_dir / Path(subdir)
         if dir_path.exists() and dir_path.is_file():
-            continue  # Skip - this is a file, not a directory
+            logger.debug(
+                "%s Skipping mkdir for %r — path already exists as a file",
+                _STAGE,
+                subdir,
+            )
+            continue
         dir_path.mkdir(parents=True, exist_ok=True)
         if subdir.startswith("app/") or subdir.startswith("app\\"):
             _create_if_absent(

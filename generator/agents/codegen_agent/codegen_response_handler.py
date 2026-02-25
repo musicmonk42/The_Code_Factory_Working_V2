@@ -41,7 +41,7 @@ import subprocess
 import sys
 import tempfile
 from functools import lru_cache
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Set, Tuple, Union
 
 try:
     import yaml
@@ -351,6 +351,15 @@ _FENCE_PATTERN = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# Pre-compiled pattern for matching local "from app.X import ..." statements.
+# Group 1: the dotted module path (e.g. "app.auth")
+# Group 2: the imported names string (e.g. "get_current_user, Role")
+_LOCAL_IMPORT_RE = re.compile(
+    r"^\s*from\s+(app(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+)"
+    r"\s+import\s+(.+)$",
+    re.MULTILINE,
+)
+
 
 def _normalize_file_content(content: str) -> str:
     """
@@ -492,7 +501,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             }
         # Ensure missing local module stubs are generated before materializing
         if lang == "python":
-            ensure_local_module_stubs(fixed_files)
+            fixed_files = ensure_local_module_stubs(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -2455,62 +2464,59 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     """Scan generated Python files for local module imports and generate stubs.
 
     Addresses two related issues:
-    1. Missing modules — if ``routes.py`` imports ``from app.auth import ...``
+
+    1. **Missing modules** — if ``routes.py`` imports ``from app.auth import ...``
        but ``app/auth.py`` does not exist in *code_files*, a stub file is
        created with the required symbols.
-    2. Missing symbols — if the target module file *does* exist in *code_files*
-       but is missing the imported symbol (class or function), a stub
-       definition is appended to that file.
+    2. **Missing symbols** — if the target module file *does* exist in
+       *code_files* but is missing the imported symbol (class or function), a
+       stub definition is appended to that file.
 
-    Only ``from app.X import ...`` and relative imports (``from . import ...``)
-    are handled; third-party and stdlib imports are ignored.
+    Only ``from app.X import ...`` patterns are handled; third-party, stdlib,
+    and relative imports are ignored because their resolution is
+    context-dependent.
+
+    Name classification heuristic
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    An imported name that starts with an uppercase letter is treated as a
+    *class*; otherwise it is treated as a *function*.  Both stubs raise
+    ``NotImplementedError`` so any accidental runtime invocation surfaces
+    immediately rather than returning a silent ``None``.
 
     Args:
         code_files: Mapping of relative file paths to source code strings, as
             returned by :func:`parse_llm_response`.  Modified **in-place** and
-            also returned.
+            also returned so callers can chain the result.
 
     Returns:
         The (potentially augmented) *code_files* mapping.
     """
-    # Collect all "from app.X import A, B, C" style statements across files.
-    # Maps module_path (e.g. "app/auth.py") -> set of required symbol names.
-    required_symbols: Dict[str, set] = {}
-
-    local_import_re = re.compile(
-        r"^\s*from\s+(app(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+|\.(?:[a-zA-Z_][a-zA-Z0-9_]*)?)"
-        r"\s+import\s+(.+)$",
-        re.MULTILINE,
-    )
+    # First pass: collect all required symbols per module path.
+    # Maps "app/auth.py" -> {"get_current_user", "Role", ...}
+    required_symbols: Dict[str, Set[str]] = {}
 
     for _filename, content in list(code_files.items()):
-        for match in local_import_re.finditer(content):
+        for match in _LOCAL_IMPORT_RE.finditer(content):
             module_str = match.group(1).strip()
             imports_str = match.group(2).strip()
 
-            # Resolve the module string to a file path.
-            if module_str.startswith("app."):
-                # "app.auth" -> "app/auth.py"
-                module_path = module_str.replace(".", "/") + ".py"
-            else:
-                # Relative import — skip (context-dependent, hard to resolve)
-                continue
+            # Convert "app.auth" -> "app/auth.py"
+            module_path = module_str.replace(".", "/") + ".py"
 
-            # Parse the imported names (handle "A, B as C, D" forms).
-            symbols: set = set()
+            # Parse imported names, handling "A, B as b, C" forms.
+            # Also skips any token that is not a valid Python identifier
+            # (e.g. the opening "(" of a multi-line parenthesised import).
+            symbols: Set[str] = set()
             for part in imports_str.split(","):
-                part = part.strip()
-                # Strip "as alias" suffixes
                 name = part.split(" as ")[0].strip()
-                # Skip star imports
-                if name and name != "*":
+                if name and name != "*" and name.isidentifier():
                     symbols.add(name)
 
             if module_path not in required_symbols:
                 required_symbols[module_path] = set()
             required_symbols[module_path].update(symbols)
 
-    # For each required module, ensure it exists and contains the symbols.
+    # Second pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
         if not symbols:
             continue
@@ -2519,17 +2525,21 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Module file is entirely missing — generate a stub.
             stub_lines = [
                 "# Auto-generated stub — module referenced but not produced by LLM\n",
-                "from typing import Any, Optional\n\n",
+                "from typing import Any\n\n",
             ]
             for sym in sorted(symbols):
-                # Heuristic: names starting with uppercase are classes; others are functions.
+                # Uppercase initial → class; lowercase initial → function.
                 if sym[0].isupper():
-                    stub_lines.append(f"class {sym}:\n    \"\"\"Stub class.\"\"\"\n    pass\n\n\n")
+                    stub_lines.append(
+                        f"class {sym}:\n"
+                        f'    """Stub class."""\n'
+                        f"    pass\n\n\n"
+                    )
                 else:
                     stub_lines.append(
                         f"def {sym}(*args: Any, **kwargs: Any) -> Any:\n"
-                        f"    \"\"\"Stub function.\"\"\"\n"
-                        f"    raise NotImplementedError(\"{sym} is a stub\")\n\n\n"
+                        f'    """Stub function."""\n'
+                        f'    raise NotImplementedError("{sym} is a stub")\n\n\n'
                     )
             code_files[module_path] = "".join(stub_lines)
             logger.info(
@@ -2538,11 +2548,11 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 sorted(symbols),
             )
         else:
-            # Module exists — check for missing symbols and append stubs.
+            # Module exists — identify and append any missing symbols.
             existing_content = code_files[module_path]
             try:
                 tree = ast.parse(existing_content)
-                defined_names = {
+                defined_names: Set[str] = {
                     node.name
                     for node in ast.walk(tree)
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
@@ -2556,13 +2566,15 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 for sym in sorted(missing):
                     if sym[0].isupper():
                         appended_lines.append(
-                            f"\nclass {sym}:\n    \"\"\"Stub class.\"\"\"\n    pass\n"
+                            f"\nclass {sym}:\n"
+                            f'    """Stub class."""\n'
+                            f"    pass\n"
                         )
                     else:
                         appended_lines.append(
-                            f"\ndef {sym}(*args, **kwargs):\n"
-                            f"    \"\"\"Stub function.\"\"\"\n"
-                            f"    raise NotImplementedError(\"{sym} is a stub\")\n"
+                            f"\ndef {sym}(*args: Any, **kwargs: Any) -> Any:\n"
+                            f'    """Stub function."""\n'
+                            f'    raise NotImplementedError("{sym} is a stub")\n'
                         )
                 code_files[module_path] = existing_content + "".join(appended_lines)
                 logger.info(
