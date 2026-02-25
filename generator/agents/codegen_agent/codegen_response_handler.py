@@ -80,6 +80,17 @@ class SecurityScannerUnavailableError(Exception):
     pass
 
 
+class ProductionReadyValidationError(Exception):
+    """Raised when generated code fails production-ready validation in strict mode.
+
+    This error is raised when ``validate_production_ready`` is called with
+    ``strict=True`` and the generated code contains stub/placeholder implementations
+    that are not suitable for production use.
+    """
+
+    pass
+
+
 # Counter for tracking audit logging failures (for compliance monitoring)
 _AUDIT_LOG_FAILURE_COUNT = 0
 
@@ -1820,7 +1831,7 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     return is_stub, issues if is_stub else []
 
 
-def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
+def validate_production_ready(code_files: Dict[str, str], strict: bool = False) -> Tuple[bool, str]:
     """
     Validate that generated code is production-ready, not just stub/placeholder code.
     
@@ -1832,11 +1843,18 @@ def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
     
     Args:
         code_files: Dictionary mapping filenames to code content
+        strict: When True, raises :exc:`ProductionReadyValidationError` instead of
+            returning ``(False, error_message)`` so callers can treat validation
+            failures as hard pipeline errors.  Defaults to ``False`` to preserve
+            backward-compatible behaviour.
         
     Returns:
         Tuple of (is_valid, error_message):
         - is_valid: True if code appears production-ready
         - error_message: Description of issues if not valid
+
+    Raises:
+        ProductionReadyValidationError: When *strict* is ``True`` and validation fails.
     """
     all_issues = []
     stub_files = []
@@ -1867,6 +1885,8 @@ def validate_production_ready(code_files: Dict[str, str]) -> Tuple[bool, str]:
             "Explicitly request complete implementations without placeholders."
         )
         logger.warning("Production-ready validation failed for %d files", len(stub_files))
+        if strict:
+            raise ProductionReadyValidationError(error_message)
         return False, error_message
     
     logger.info("Production-ready validation passed for %d files", len(code_files))
@@ -2479,6 +2499,22 @@ _VARIABLE_SUFFIXES: Tuple[str, ...] = (
     "_config", "_settings", "_broker", "_bus", "_cache",
 )
 
+# Verb prefixes that indicate a callable (function/method) regardless of suffix.
+# e.g. ``get_db`` looks like a variable due to ``_db`` suffix, but the ``get_``
+# prefix signals it is a getter function.
+_VERB_PREFIXES: Tuple[str, ...] = (
+    "get_", "set_", "create_", "delete_", "update_", "fetch_",
+    "handle_", "process_", "validate_", "check_", "build_", "make_",
+    "run_", "load_", "save_", "send_", "receive_", "parse_", "format_",
+    "compute_", "generate_", "initialize_", "init_", "setup_",
+)
+
+# Known router variable names that should be stubbed as ``APIRouter()`` instances
+# rather than plain ``None`` assignments.
+_ROUTER_VARIABLE_PATTERNS: frozenset = frozenset({
+    "router", "api_router", "app_router", "main_router",
+})
+
 
 def _is_likely_variable(name: str) -> bool:
     """Return ``True`` when *name* looks like a module-level variable, not a callable.
@@ -2487,6 +2523,10 @@ def _is_likely_variable(name: str) -> bool:
     suffixes such as ``_router``, ``_engine``, ``_client``, etc.  When an
     imported name matches one of these patterns it should be stubbed as a simple
     variable assignment rather than a callable stub function.
+
+    Names that start with common verb prefixes (``get_``, ``set_``, ``create_``,
+    etc.) are always treated as callables even when their suffix would otherwise
+    match a variable pattern.
 
     Args:
         name: The imported symbol name to classify.
@@ -2500,12 +2540,17 @@ def _is_likely_variable(name: str) -> bool:
         True
         >>> _is_likely_variable("db_engine")
         True
+        >>> _is_likely_variable("get_db")
+        False
         >>> _is_likely_variable("get_current_user")
         False
         >>> _is_likely_variable("User")
         False
     """
     name_lower = name.lower()
+    # Verb-prefixed names are always callables, never variables.
+    if any(name_lower.startswith(prefix) for prefix in _VERB_PREFIXES):
+        return False
     return any(name_lower.endswith(suffix) for suffix in _VARIABLE_SUFFIXES)
 
 
@@ -2574,18 +2619,34 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
 
         if module_path not in code_files:
             # Module file is entirely missing — generate a stub.
+            # Determine up-front whether any router-pattern symbols are present
+            # so the APIRouter import can be emitted once at the module header.
+            has_router_syms = any(
+                sym.lower() in _ROUTER_VARIABLE_PATTERNS
+                for sym in symbols
+                if not sym[0].isupper()
+            )
             stub_lines = [
                 "# Auto-generated stub — module referenced but not produced by LLM\n",
-                "from typing import Any\n\n",
+                "from typing import Any\n",
             ]
+            if has_router_syms:
+                stub_lines.append("from fastapi import APIRouter as _APIRouter\n")
+            stub_lines.append("\n")
             for sym in sorted(symbols):
-                # Uppercase initial → class; known variable suffixes → variable;
+                # Uppercase initial → class; known router patterns → APIRouter();
+                # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
                     stub_lines.append(
                         f"class {sym}:\n"
                         f'    """Stub class."""\n'
                         f"    pass\n\n\n"
+                    )
+                elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                    # Import already emitted at module header above.
+                    stub_lines.append(
+                        f"{sym} = _APIRouter()  # Stub router — configure routes\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
@@ -2608,23 +2669,47 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             existing_content = code_files[module_path]
             try:
                 tree = ast.parse(existing_content)
+                # Collect names from function/class definitions at any nesting depth.
                 defined_names: Set[str] = {
                     node.name
                     for node in ast.walk(tree)
                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
                 }
+                # Also collect top-level variable assignment names so that existing
+                # module-level variables (e.g. ``db_engine = ...``) are not re-stubbed.
+                for node in ast.iter_child_nodes(tree):
+                    if isinstance(node, ast.Assign):
+                        for target in node.targets:
+                            if isinstance(target, ast.Name):
+                                defined_names.add(target.id)
+                    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                        defined_names.add(node.target.id)
             except SyntaxError:
                 defined_names = set()
 
             missing = symbols - defined_names
             if missing:
+                # Emit the APIRouter import once at the top of the appended block
+                # if any missing symbol needs it.
+                has_router_missing = any(
+                    sym.lower() in _ROUTER_VARIABLE_PATTERNS
+                    for sym in missing
+                    if not sym[0].isupper()
+                )
                 appended_lines = ["\n\n# Auto-generated stubs for symbols missing from this module\n"]
+                if has_router_missing:
+                    appended_lines.append("from fastapi import APIRouter as _APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
                         appended_lines.append(
                             f"\nclass {sym}:\n"
                             f'    """Stub class."""\n'
                             f"    pass\n"
+                        )
+                    elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                        # Import already emitted at block header above.
+                        appended_lines.append(
+                            f"\n{sym} = _APIRouter()  # Stub router — configure routes\n"
                         )
                     elif _is_likely_variable(sym):
                         appended_lines.append(

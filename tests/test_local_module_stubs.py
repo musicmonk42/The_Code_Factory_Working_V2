@@ -146,11 +146,11 @@ class TestMissingModule:
         result = stub_fn(dict(files))
         assert _valid_python(result["app/auth.py"]), "generated stub must be valid Python"
 
-    def test_function_stub_raises_not_implemented(self, stub_fn):
+    def test_function_stub_returns_none(self, stub_fn):
         files = {"app/routes.py": "from app.auth import get_current_user\n"}
         result = stub_fn(dict(files))
         code = result["app/auth.py"]
-        assert "NotImplementedError" in code, "function stub must raise NotImplementedError"
+        assert "return None" in code, "function stub must return None (not raise NotImplementedError)"
 
     def test_class_stub_generated_for_uppercase_name(self, stub_fn):
         files = {"app/routes.py": "from app.auth import Role\n"}
@@ -291,14 +291,14 @@ class TestMissingSymbol:
         assert "Any" in stub_section, \
             "appended function stub must use Any type annotation"
 
-    def test_appended_function_raises_not_implemented(self, stub_fn):
+    def test_appended_function_stub_returns_none(self, stub_fn):
         files = {
             "app/routes.py": "from app.db import get_db\n",
             "app/db.py": "engine = None\n",
         }
         result = stub_fn(dict(files))
-        assert "NotImplementedError" in result["app/db.py"], \
-            "appended function stub must raise NotImplementedError"
+        assert "return None" in result["app/db.py"], \
+            "appended function stub must return None (not raise NotImplementedError)"
 
 
 # =============================================================================
@@ -387,3 +387,78 @@ class TestEdgeCases:
         assert "app/api/v1/users.py" in result, \
             "deeply-nested module path must be resolved correctly"
         assert "class UserService" in result["app/api/v1/users.py"]
+
+
+# =============================================================================
+# TestRouterVariableStubs — Issue 12 (api_router stubbed as APIRouter())
+# =============================================================================
+
+
+class TestRouterVariableStubs:
+    """api_router and router symbols must be stubbed as APIRouter() instances."""
+
+    def test_api_router_stubbed_as_apirouter(self, stub_fn):
+        """api_router in a missing module must be an APIRouter() instance, not None."""
+        files = {"app/routes.py": "from app.routers import api_router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers.py", "")
+        assert "APIRouter" in stub, "api_router stub must use APIRouter()"
+        assert "api_router = None" not in stub, "api_router must not be stubbed as None"
+
+    def test_router_stubbed_as_apirouter(self, stub_fn):
+        """A bare 'router' symbol must also be stubbed as an APIRouter() instance."""
+        files = {"app/routes.py": "from app.api import router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/api.py", "")
+        assert "APIRouter" in stub, "router stub must use APIRouter()"
+
+    def test_new_module_with_two_router_syms_has_single_import(self, stub_fn):
+        """APIRouter must be imported exactly once even when two router symbols appear."""
+        files = {"app/routes.py": "from app.routers import api_router, router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers.py", "")
+        import_count = stub.count("from fastapi import APIRouter")
+        assert import_count == 1, (
+            f"APIRouter import must appear exactly once in new module stub, got {import_count}"
+        )
+        assert _valid_python(stub), "stub with two router symbols must be valid Python"
+
+    def test_append_path_two_router_syms_has_single_import(self, stub_fn):
+        """Appending two router symbols must produce a single APIRouter import."""
+        files = {
+            "app/routes.py": "from app.routers import api_router, router\n",
+            "app/routers.py": "# placeholder\n",
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers.py", "")
+        import_count = stub.count("from fastapi import APIRouter")
+        assert import_count == 1, (
+            f"APIRouter import must appear exactly once in appended stubs, got {import_count}"
+        )
+        assert _valid_python(stub), "file with appended router stubs must be valid Python"
+
+    def test_existing_variable_not_restubbed(self, stub_fn):
+        """A top-level variable already defined in a module must not be re-stubbed."""
+        existing = "db_engine = create_engine(DATABASE_URL)\n"
+        files = {
+            "app/routes.py": "from app.db import db_engine\n",
+            "app/db.py": existing,
+        }
+        result = stub_fn(dict(files))
+        # Content must be unchanged — no stub appended.
+        assert result["app/db.py"] == existing, (
+            "existing top-level variable must not be re-stubbed"
+        )
+
+    def test_router_stub_idempotent_when_called_twice(self, stub_fn):
+        """Calling ensure_local_module_stubs twice on router stubs must not duplicate them."""
+        files = {"app/routes.py": "from app.routers import api_router\n"}
+        result1 = stub_fn(dict(files))
+        result2 = stub_fn(dict(result1))
+        stub = result2["app/routers.py"]
+        # Count assignments to api_router.
+        assign_count = stub.count("api_router =")
+        assert assign_count == 1, (
+            f"api_router must be assigned exactly once after two passes, got {assign_count}"
+        )
+        assert _valid_python(stub), "idempotent router stub must remain valid Python"
