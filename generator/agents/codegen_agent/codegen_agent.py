@@ -106,9 +106,9 @@ MODEL_MAX_OUTPUT_TOKENS = {
 # --- Multi-Pass Code Generation Constants ---
 # ==============================================================================
 # Threshold: use multi-pass generation when the spec has at least this many API endpoints.
-# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 25).
+# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 15).
 MULTIPASS_ENDPOINT_THRESHOLD: int = int(
-    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "25")
+    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "15")
 )
 # Timeout for the entire pipeline codegen step (seconds).
 # Configurable at runtime via PIPELINE_CODEGEN_TIMEOUT_SECONDS (default: 900s / 15 minutes).
@@ -1015,6 +1015,14 @@ def _build_fallback_prompt(requirements: Dict[str, Any], include_frontend: bool 
     constraints = requirements.get("constraints", [])
     md_content = requirements.get("md_content", "") or requirements.get("readme_content", "")
     file_structure = requirements.get("file_structure", [])
+
+    # If file_structure not provided by caller, extract from MD spec (Issue 4 fix)
+    if not file_structure and md_content:
+        from generator.main.provenance import extract_required_files_from_md
+        try:
+            file_structure = extract_required_files_from_md(md_content, target_language=target_language)
+        except Exception as _fs_err:
+            logger.warning(f"Failed to extract file structure from MD content: {_fs_err}")
 
     # Build features section from parsed spec
     features_text = ""

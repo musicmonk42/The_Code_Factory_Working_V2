@@ -316,6 +316,45 @@ def get_users(): pass
             error_path = Path(tmpdir) / "error.txt"
             assert error_path.exists()
 
+    def test_api_version_prefix_normalization(self):
+        """Spec with /api/v1/ prefix matches code implementing routes without prefix."""
+        md = """
+| POST | /api/v1/orders | Create order |
+| GET | /api/v1/products | List products |
+"""
+        files = {
+            "app/main.py": '''
+from fastapi import FastAPI
+app = FastAPI()
+
+@app.post("/orders")
+def create_order(): pass
+
+@app.get("/products")
+def list_products(): pass
+''',
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Expected valid=True when code implements /orders for spec /api/v1/orders, "
+            f"missing: {result['missing_endpoints']}"
+        )
+
+    def test_api_version_prefix_in_both_spec_and_code(self):
+        """Both spec and code using /api/v1/ prefix still passes validation."""
+        md = "POST /api/v1/orders\nGET /api/v1/products\n"
+        files = {
+            "app/main.py": '''
+@app.post("/api/v1/orders")
+def create_order(): pass
+
+@app.get("/api/v1/products")
+def list_products(): pass
+''',
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True
+
 
 class TestValidateDeploymentArtifacts:
     """Test deployment validation."""

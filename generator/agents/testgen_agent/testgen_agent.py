@@ -1741,6 +1741,16 @@ def test_{file_stem}_syntax_error_documentation():
             extra={"run_id": run_id}
         )
         
+        # Generate conftest.py for Python tests to fix import path failures (Issue 2)
+        # This ensures generated tests can be collected by pytest (exit code 0/1, not 2)
+        if language == "python" and any(k.startswith("tests/") for k in basic_tests):
+            if "tests/conftest.py" not in basic_tests:
+                basic_tests["tests/conftest.py"] = (
+                    'import sys\n'
+                    'from pathlib import Path\n'
+                    'sys.path.insert(0, str(Path(__file__).parent.parent))\n'
+                )
+        
         return basic_tests
 
     def _extract_pydantic_model_constraints(self, content: str) -> Dict[str, Dict[str, Any]]:
