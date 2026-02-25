@@ -637,3 +637,101 @@ class TestHeadingCounter:
         )
         assert _count_headings(content) >= 3, \
             f"Rich document must have >= 3 headings; got {_count_headings(content)}"
+
+
+# =============================================================================
+# TestEnsureModularStructureFileSkip — Issue 1 fix
+# =============================================================================
+
+
+class TestEnsureModularStructureFileSkip:
+    """Verify that ensure_modular_structure skips entries that already exist
+    as files (e.g. .env.example) without raising FileExistsError."""
+
+    def test_file_path_does_not_raise(self, pm_module, project_dir):
+        """Calling ensure_modular_structure with a spec that lists a file path
+        must not raise FileExistsError."""
+        # Pre-create a file at the path that the spec would try to mkdir
+        (project_dir / ".env.example").write_text("KEY=value\n", encoding="utf-8")
+        result = pm_module.PostMaterializeResult(output_dir=str(project_dir))
+        spec_structure = {"directories": [".env.example", "app", "app/routers"]}
+        # Must not raise
+        pm_module.ensure_modular_structure(project_dir, result, spec_structure=spec_structure)
+
+    def test_directories_still_created_after_file_skip(self, pm_module, project_dir):
+        """Real directories in the spec are created even when a file entry precedes them."""
+        (project_dir / ".env.example").write_text("KEY=value\n", encoding="utf-8")
+        result = pm_module.PostMaterializeResult(output_dir=str(project_dir))
+        spec_structure = {"directories": [".env.example", "app", "app/routers"]}
+        pm_module.ensure_modular_structure(project_dir, result, spec_structure=spec_structure)
+        assert (project_dir / "app").is_dir(), "app/ directory must be created"
+        assert (project_dir / "app" / "routers").is_dir(), "app/routers/ must be created"
+
+    def test_file_not_converted_to_directory(self, pm_module, project_dir):
+        """The pre-existing file must remain a file after ensure_modular_structure runs."""
+        env_file = project_dir / ".env.example"
+        env_file.write_text("KEY=value\n", encoding="utf-8")
+        result = pm_module.PostMaterializeResult(output_dir=str(project_dir))
+        spec_structure = {"directories": [".env.example"]}
+        pm_module.ensure_modular_structure(project_dir, result, spec_structure=spec_structure)
+        assert env_file.is_file(), ".env.example must still be a file"
+        assert env_file.read_text(encoding="utf-8") == "KEY=value\n", "File content must be unchanged"
+
+    def test_post_materialize_succeeds_with_file_in_spec_dirs(self, pm_module, project_dir):
+        """Full post_materialize run with .env.example in spec must succeed (no exception)."""
+        (project_dir / ".env.example").write_text("SECRET_KEY=test\n", encoding="utf-8")
+        spec_structure = {"directories": [".env.example", "app"]}
+        result = pm_module.post_materialize(project_dir, spec_structure=spec_structure)
+        assert result.success is True, f"post_materialize failed: {result.warnings}"
+
+
+# =============================================================================
+# TestAlembicScaffolding — Issue 5 fix
+# =============================================================================
+
+
+class TestAlembicScaffolding:
+    """Validate ensure_alembic_scaffolding and the ALEMBIC_STUB_FILES constant."""
+
+    def test_script_py_mako_in_stub_files(self, pm_module):
+        """ALEMBIC_STUB_FILES must include the Mako migration template."""
+        assert "alembic/script.py.mako" in pm_module.ALEMBIC_STUB_FILES, \
+            "alembic/script.py.mako must be in ALEMBIC_STUB_FILES"
+
+    def test_all_required_alembic_paths_present(self, pm_module):
+        """All four Alembic paths required by the acceptance criteria must be present."""
+        required = {"alembic.ini", "alembic/env.py", "alembic/versions/.gitkeep", "alembic/script.py.mako"}
+        missing = required - set(pm_module.ALEMBIC_STUB_FILES.keys())
+        assert not missing, f"ALEMBIC_STUB_FILES is missing: {missing}"
+
+    def test_script_py_mako_contains_mako_syntax(self, pm_module):
+        """The Mako template must contain Alembic's standard template placeholders."""
+        content = pm_module.ALEMBIC_STUB_FILES["alembic/script.py.mako"]
+        for placeholder in ("${message}", "${up_revision}", "${down_revision", "upgrade", "downgrade"):
+            assert placeholder in content, f"Mako template missing placeholder: {placeholder!r}"
+
+    def test_alembic_files_created_by_post_materialize(self, pm_module, project_dir):
+        """post_materialize must create all four Alembic paths."""
+        pm_module.post_materialize(project_dir)
+        for rel_path in ("alembic.ini", "alembic/env.py", "alembic/versions/.gitkeep", "alembic/script.py.mako"):
+            assert (project_dir / rel_path).exists(), f"{rel_path} must be created by post_materialize"
+
+    def test_alembic_not_overwritten_when_exists(self, pm_module, project_dir):
+        """Pre-existing alembic.ini must not be overwritten."""
+        alembic_ini = project_dir / "alembic.ini"
+        alembic_ini.write_text("# custom alembic config\n", encoding="utf-8")
+        pm_module.post_materialize(project_dir)
+        assert alembic_ini.read_text(encoding="utf-8") == "# custom alembic config\n", \
+            "Pre-existing alembic.ini must not be overwritten"
+
+    def test_alembic_runs_even_when_modular_structure_would_fail(self, pm_module, project_dir):
+        """Alembic scaffolding must be created even when ensure_modular_structure
+        encounters a file-instead-of-directory condition."""
+        # Simulate a spec that would previously have triggered FileExistsError
+        (project_dir / ".env.example").write_text("KEY=val\n", encoding="utf-8")
+        spec_structure = {"directories": [".env.example", "app"]}
+        result = pm_module.post_materialize(project_dir, spec_structure=spec_structure)
+        assert (project_dir / "alembic.ini").exists(), \
+            "alembic.ini must be created even when spec dirs include file paths"
+        assert (project_dir / "alembic" / "script.py.mako").exists(), \
+            "alembic/script.py.mako must be created even when spec dirs include file paths"
