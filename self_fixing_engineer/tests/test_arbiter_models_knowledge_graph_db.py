@@ -80,6 +80,7 @@ def test_tracer():
 @pytest.fixture(scope="function")
 def in_memory_exporter():
     """Create in-memory exporter for tests - function scope to avoid state leakage between tests."""
+    from opentelemetry import trace
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import SimpleSpanProcessor
     from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -87,9 +88,12 @@ def in_memory_exporter():
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     original_tracer = knowledge_graph_db.tracer
+    original_provider = trace.get_tracer_provider()
+    trace.set_tracer_provider(provider)
     knowledge_graph_db.tracer = provider.get_tracer(__name__)
     yield exporter
     knowledge_graph_db.tracer = original_tracer
+    trace.set_tracer_provider(original_provider)
 
 
 
