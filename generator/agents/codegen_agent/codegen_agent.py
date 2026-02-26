@@ -16,7 +16,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Third-party libraries (MINIMAL SET RETAINED)
 import aiohttp
@@ -296,8 +296,14 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
     are present in each version and appends the missing definitions from the old
     version to the end of the new version.
 
+    Decorator handling: when a function or class has decorators, the source
+    extraction starts from the first decorator's line (``node.decorator_list[0].lineno``)
+    rather than the ``def``/``class`` keyword line, so the full decorated
+    definition is preserved verbatim.
+
     Falls back to returning ``new_content`` unchanged if either version fails
-    AST parsing, so it never blocks generation on a syntax error.
+    AST parsing (e.g. a syntax error in LLM output), so it never blocks
+    generation.
 
     Args:
         old_content: The previously-accumulated file content.
@@ -306,6 +312,7 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
     Returns:
         Merged source string where ``new_content`` is the base and any
         top-level definitions absent from it are appended from ``old_content``.
+        The returned string always ends with a single trailing newline.
     """
     try:
         old_tree = ast.parse(old_content)
@@ -313,9 +320,9 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
     except SyntaxError:
         return new_content
 
-    # Collect names of top-level definitions in both versions.
-    def _top_level_names(tree: ast.AST) -> set:
-        names: set = set()
+    # Collect names of all top-level definitions in a parsed module tree.
+    def _top_level_names(tree: ast.Module) -> Set[str]:
+        names: Set[str] = set()
         for node in ast.iter_child_nodes(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 names.add(node.name)
@@ -334,35 +341,53 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
 
     # Extract the source lines for each missing top-level definition from the
     # old content and append them to the new content.
+    #
+    # Line numbers in the AST are 1-based; ``end_lineno`` (available since
+    # Python 3.8) is inclusive.  Slicing ``old_lines[start:end]`` where
+    # ``start = lineno - 1`` and ``end = end_lineno`` gives the exact lines.
     old_lines = old_content.splitlines(keepends=True)
-    appended: list = []
+    snippets: List[str] = []
     for node in ast.iter_child_nodes(old_tree):
-        name: Optional[str] = None
+        node_name: Optional[str] = None
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            name = node.name
+            node_name = node.name
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id in missing_names:
-                    name = target.id
+                    node_name = target.id
                     break
-        if name and name in missing_names:
-            # ast line numbers are 1-based; end_lineno may be None on older Pythons.
-            start = node.lineno - 1
-            end = getattr(node, "end_lineno", None)
-            if end is not None:
-                snippet = "".join(old_lines[start:end])
-                appended.append(snippet)
 
-    if appended:
-        logger.info(
-            "[CODEGEN] AST merge: appending %d symbol(s) missing from new version: %s",
-            len(missing_names),
-            sorted(missing_names),
+        if node_name is None or node_name not in missing_names:
+            continue
+
+        end_lineno: Optional[int] = getattr(node, "end_lineno", None)
+        if end_lineno is None:
+            # Python < 3.8 fallback: skip this node rather than risk a bad slice.
+            continue
+
+        # For decorated definitions, start from the first decorator's line so
+        # the ``@decorator`` lines are included in the extracted snippet.
+        decorator_list = getattr(node, "decorator_list", [])
+        start_lineno = (
+            decorator_list[0].lineno if decorator_list else node.lineno
         )
-        separator = "\n\n" if not new_content.endswith("\n\n") else ""
-        return new_content + separator + "\n\n".join(appended)
+        snippet = "".join(old_lines[start_lineno - 1 : end_lineno])
+        snippets.append(snippet)
 
-    return new_content
+    if not snippets:
+        return new_content
+
+    logger.info(
+        "[CODEGEN] AST merge: appending %d symbol(s) missing from new version: %s",
+        len(missing_names),
+        sorted(missing_names),
+    )
+
+    # Normalise the base so it ends with exactly one newline, then append each
+    # snippet separated by a blank line (PEP 8: two blank lines between
+    # top-level definitions).
+    base = new_content.rstrip("\n") + "\n"
+    return base + "\n\n" + "\n\n".join(s.rstrip("\n") for s in snippets) + "\n"
 
 
 # ==============================================================================
