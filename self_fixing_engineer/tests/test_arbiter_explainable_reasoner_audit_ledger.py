@@ -491,7 +491,7 @@ async def test_log_event_with_pii_redaction(audit_client):
 
         # Check that PII was redacted
         sent_record = mock_send.call_args[0][0]
-        assert sent_record["details"]["email"] == "[EMAIL]"
+        assert sent_record["details"]["email"] == "[REDACTED]"
         assert sent_record["details"]["phone"] == "[PHONE]"
         assert sent_record["details"]["safe_data"] == "normal text"
 
