@@ -876,95 +876,125 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
 
     # ------------------------------------------------------------------ #
     # 6. Deduplicate function definitions in router files that shadow     #
-    #    imported service names                                           #
+    #    imported service names  (AST-based — robust, no regex heuristics) #
     # ------------------------------------------------------------------ #
-    _import_name_re = re.compile(
-        r'^from\s+\S+\s+import\s+(.+)$', re.MULTILINE
-    )
-    _def_block_re = re.compile(
-        r'^([ \t]*(?:@[^\n]+\n)*[ \t]*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)[^\n]*\n'
-        r'(?:(?:[ \t]+[^\n]*\n|\n))*)',
-        re.MULTILINE,
-    )
-
-    def _collect_imported_names(content: str) -> Set[str]:
-        """Return the set of names imported at the top level of a module."""
-        imported: Set[str] = set()
-        for m in _import_name_re.finditer(content):
-            raw = m.group(1)
-            # Handle parenthesised multi-line imports by stripping parens
-            raw = raw.strip().strip("()")
-            for part in raw.split(","):
-                part = re.sub(r'#.*$', '', part).strip()
-                if not part:
-                    continue
-                # "name as alias" → original name
-                name = part.split()[0]
-                if name and name.isidentifier():
-                    imported.add(name)
-        return imported
-
+    # Use ast.parse() for all structural analysis so that multi-line
+    # parenthesised imports, nested default-argument parentheses, and
+    # decorated function signatures are all handled correctly.  This
+    # mirrors the approach used by _ast_merge_python_files above.
     for path in list(updated.keys()):
         if not _router_path_re.match(path):
             continue
         content = updated[path]
-        imported_names = _collect_imported_names(content)
+
+        # LLM output may be syntactically invalid; skip gracefully.
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+
+        # Collect every name that appears in a top-level ``from … import``
+        # statement, including parenthesised multi-line forms.
+        imported_names: Set[str] = set()
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    imported_names.add(alias.name)
+
         if not imported_names:
             continue
 
-        # Find all top-level function definitions and track duplicates
-        seen_funcs: Dict[str, int] = {}  # name → count of occurrences
-        for m in _def_block_re.finditer(content):
-            fn_name = m.group(2)
-            seen_funcs[fn_name] = seen_funcs.get(fn_name, 0) + 1
+        # Collect top-level function definitions in file order.
+        # Each entry: (name, start_line_0based, end_line_exclusive)
+        # ``start_line`` is decorator-inclusive (matches _ast_merge_python_files).
+        FuncInfo = Tuple[str, int, int]
+        func_defs: List[FuncInfo] = []
+        for node in ast.iter_child_nodes(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            end_ln: Optional[int] = getattr(node, "end_lineno", None)
+            if end_ln is None:
+                continue  # Python < 3.8 safety guard
+            decorator_list = getattr(node, "decorator_list", [])
+            start_1based = (
+                decorator_list[0].lineno if decorator_list else node.lineno
+            )
+            func_defs.append((node.name, start_1based - 1, end_ln))
 
-        # Determine which names need deduplication or renaming
-        duplicate_names = {n for n, cnt in seen_funcs.items() if cnt > 1}
-        shadowing_names = {n for n in seen_funcs if n in imported_names}
+        # Count occurrences to find duplicated names.
+        name_counts: Dict[str, int] = {}
+        for fn_name, _, _ in func_defs:
+            name_counts[fn_name] = name_counts.get(fn_name, 0) + 1
+
+        duplicate_names: Set[str] = {n for n, cnt in name_counts.items() if cnt > 1}
+        # Shadowing: any name that is both defined AND imported (regardless of count)
+        shadowing_names: Set[str] = {
+            fn_name for fn_name, _, _ in func_defs if fn_name in imported_names
+        }
 
         if not duplicate_names and not shadowing_names:
             continue
 
-        new_content = content
+        lines = content.splitlines(keepends=True)
         changed = False
 
-        # Remove all but the first occurrence of duplicate definitions
+        # ── Remove all but the first occurrence of each duplicated name ──
+        # Build the list of (start, end) line-ranges to delete, keeping only
+        # the first occurrence of each duplicated function.  Sort descending
+        # by start so that earlier line-indices remain valid after each deletion.
+        to_delete: List[Tuple[int, int]] = []
         for fn_name in duplicate_names:
-            occurrences = []
-            for m in _def_block_re.finditer(new_content):
-                if m.group(2) == fn_name:
-                    occurrences.append(m)
-            # Keep first, remove the rest
-            for m in reversed(occurrences[1:]):
-                new_content = new_content[:m.start()] + new_content[m.end():]
-                changed = True
-            if changed:
-                logger.info(
-                    "[CODEGEN] _reconcile_app_wiring: removed %d duplicate definition(s) of '%s' in %s",
-                    len(occurrences) - 1,
-                    fn_name,
-                    path,
-                )
-
-        # Rename route handler functions that shadow imported service names
-        # (only single-occurrence definitions that shadow an import)
-        for fn_name in shadowing_names - duplicate_names:
-            new_name = f"{fn_name}_endpoint"
-            new_content = re.sub(
-                r'(?<!\w)(async\s+def\s+)' + re.escape(fn_name) + r'(?=\s*\()',
-                r'\g<1>' + new_name,
-                new_content,
-            )
-            changed = True
+            occurrences = [(s, e) for name, s, e in func_defs if name == fn_name]
+            # occurrences are in file order; keep the first, delete the rest
+            removed_count = len(occurrences) - 1
+            to_delete.extend(occurrences[1:])
             logger.info(
-                "[CODEGEN] _reconcile_app_wiring: renamed '%s' → '%s' in %s to avoid import shadowing",
+                "[CODEGEN] _reconcile_app_wiring: queued removal of %d"
+                " duplicate definition(s) of '%s' in %s",
+                removed_count,
                 fn_name,
-                new_name,
                 path,
             )
 
+        for start, end in sorted(to_delete, key=lambda t: t[0], reverse=True):
+            del lines[start:end]
+            changed = True
+
+        # ── Rename single-occurrence defs that shadow an imported name ──
+        # After deletions the line numbers from the original parse may be
+        # stale, so re-parse the current lines to get accurate positions.
+        rename_candidates = shadowing_names - duplicate_names
+        if rename_candidates:
+            try:
+                tree2 = ast.parse("".join(lines))
+            except SyntaxError:
+                pass  # Renaming skipped; deduplication changes are still saved
+            else:
+                for node in ast.iter_child_nodes(tree2):
+                    if (
+                        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                        and node.name in rename_candidates
+                    ):
+                        new_name = f"{node.name}_endpoint"
+                        def_line_idx = node.lineno - 1
+                        lines[def_line_idx] = re.sub(
+                            r'((?:async\s+)?def\s+)'
+                            + re.escape(node.name)
+                            + r'(?=\s*\()',
+                            r'\g<1>' + new_name,
+                            lines[def_line_idx],
+                        )
+                        changed = True
+                        logger.info(
+                            "[CODEGEN] _reconcile_app_wiring: renamed '%s' → '%s'"
+                            " in %s to avoid import shadowing",
+                            node.name,
+                            new_name,
+                            path,
+                        )
+
         if changed:
-            updated[path] = new_content
+            updated[path] = "".join(lines)
 
     return updated
 

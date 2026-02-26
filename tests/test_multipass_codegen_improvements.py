@@ -4,7 +4,7 @@
 Test Suite — Multi-Pass Codegen Improvements
 =============================================
 
-Validates the five upgrades applied to codegen_agent.py and codegen_prompt.py:
+Validates the upgrades applied to codegen_agent.py and codegen_prompt.py:
 
 Fix 1 — ``_MULTIPASS_GROUPS`` focus strings are now maximally prescriptive:
     Tested via :class:`TestMultipassGroupFocusStrings`.
@@ -19,12 +19,16 @@ Fix 3 — ``_validate_wiring`` upgraded with anchored router-variable regex,
     Tested via :class:`TestValidateWiring`.
 
 Fix 4 — ``_reconcile_app_wiring`` step-5 now handles parenthesised multiline
-    imports, skips class names, and produces richly-documented typed stubs:
+    imports, skips class names, and produces stubs with ``return None``:
     Tested via :class:`TestReconcileAppWiringStep5`.
 
 Fix 5 — ``get_syntax_safety_instructions`` CRITICAL section extended with
     requirements 8–15:
     Tested via :class:`TestSyntaxSafetyInstructionsCriticalSection`.
+
+Fix 6 — ``_reconcile_app_wiring`` step-6 (AST-based) deduplicates router
+    function definitions and renames handlers that shadow imported service names:
+    Tested via :class:`TestReconcileAppWiringStep6`.
 
 Coverage contract
 -----------------
@@ -744,6 +748,184 @@ class TestReconcileAppWiringStep5:
         assert "Protocol" in src
         assert "Literal" in src
         assert "cast" in src
+
+
+# ---------------------------------------------------------------------------
+# Fix 6 — _reconcile_app_wiring step 6 (AST-based deduplication)
+# ---------------------------------------------------------------------------
+
+class TestReconcileAppWiringStep6:
+    """Step-6 of _reconcile_app_wiring: AST-based router deduplication."""
+
+    @pytest.fixture(scope="class")
+    def fn(self):
+        mod = _load_agent_module()
+        return mod._reconcile_app_wiring  # type: ignore[attr-defined]
+
+    # ── helpers ──────────────────────────────────────────────────────────
+
+    def _router_file(self, content: str) -> dict:
+        return {"app/routers/auth.py": content}
+
+    # ── deduplication ────────────────────────────────────────────────────
+
+    def test_duplicate_definition_removed(self, fn):
+        """Second occurrence of a function definition must be dropped."""
+        router = (
+            "from app.services.auth_service import login\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/login')\n"
+            "async def login_endpoint(data: dict):\n"
+            "    return await login(data)\n"
+            "\n"
+            "@router.post('/login2')\n"
+            "async def login_endpoint(data: dict):\n"
+            "    return None\n"
+        )
+        result = fn(self._router_file(router))
+        content = result["app/routers/auth.py"]
+        assert content.count("def login_endpoint") == 1
+        # The first occurrence (with the real implementation) must be kept
+        assert "return await login(data)" in content
+        # The second occurrence must be gone
+        assert content.count("return await login(data)") == 1
+
+    def test_only_first_definition_kept(self, fn):
+        """The first occurrence is preserved; later occurrences are removed."""
+        router = (
+            "from app.services.auth_service import login\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/a')\n"
+            "async def my_handler():\n"
+            "    return 'first'\n"
+            "\n"
+            "@router.post('/b')\n"
+            "async def my_handler():\n"
+            "    return 'second'\n"
+        )
+        result = fn(self._router_file(router))
+        content = result["app/routers/auth.py"]
+        assert "first" in content
+        assert "second" not in content
+
+    def test_no_change_when_no_duplicates(self, fn):
+        """Files with no duplicates and no shadowing must be left untouched."""
+        router = (
+            "from app.services.auth_service import login\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/login')\n"
+            "async def login_endpoint(data: dict):\n"
+            "    return await login(data)\n"
+        )
+        result = fn(self._router_file(router))
+        assert result["app/routers/auth.py"] == router
+
+    # ── shadowing rename ─────────────────────────────────────────────────
+
+    def test_shadowing_function_renamed(self, fn):
+        """A handler whose name shadows an import is renamed to <name>_endpoint."""
+        router = (
+            "from app.services.auth_service import login\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/login')\n"
+            "async def login(data: dict):\n"
+            "    return data\n"
+        )
+        result = fn(self._router_file(router))
+        content = result["app/routers/auth.py"]
+        assert "def login_endpoint" in content
+        # The import statement is untouched
+        assert "from app.services.auth_service import login" in content
+
+    def test_non_shadowing_function_not_renamed(self, fn):
+        """Handler names that don't collide with imports are left alone."""
+        router = (
+            "from app.services.auth_service import login\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/logout')\n"
+            "async def logout_endpoint(data: dict):\n"
+            "    return None\n"
+        )
+        result = fn(self._router_file(router))
+        content = result["app/routers/auth.py"]
+        assert "def logout_endpoint" in content
+        assert "def logout_endpoint_endpoint" not in content
+
+    # ── multi-line parenthesised imports ─────────────────────────────────
+
+    def test_multiline_parenthesised_import_detected(self, fn):
+        """Names in a parenthesised multi-line import must be detected as imported."""
+        router = (
+            "from app.services.auth_service import (\n"
+            "    login,\n"
+            "    logout,\n"
+            ")\n"
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.post('/login')\n"
+            "async def login(data: dict):\n"
+            "    return data\n"
+            "\n"
+            "@router.post('/logout')\n"
+            "async def logout(data: dict):\n"
+            "    return None\n"
+        )
+        result = fn(self._router_file(router))
+        content = result["app/routers/auth.py"]
+        assert "def login_endpoint" in content
+        assert "def logout_endpoint" in content
+
+    # ── syntax-error fallback ────────────────────────────────────────────
+
+    def test_syntax_error_file_skipped_gracefully(self, fn):
+        """A router file with a syntax error must be returned unchanged."""
+        router = "this is not valid python !!!\n"
+        result = fn(self._router_file(router))
+        assert result["app/routers/auth.py"] == router
+
+    # ── non-router files untouched ───────────────────────────────────────
+
+    def test_service_file_not_deduplicated(self, fn):
+        """Step 6 must not touch service files — only app/routers/*.py."""
+        svc = (
+            "async def do_something():\n    return 1\n"
+            "async def do_something():\n    return 2\n"
+        )
+        files = {"app/services/my_svc.py": svc}
+        result = fn(files)
+        assert result["app/services/my_svc.py"] == svc
+
+    # ── source-level assertions ───────────────────────────────────────────
+
+    def test_step6_uses_ast_parse(self):
+        """Step 6 must use ast.parse (not regex) for structural analysis."""
+        src = _read_agent_src()
+        # The implementation must mention ast.parse in the step-6 block
+        step6_idx = src.find("6. Deduplicate function definitions")
+        assert step6_idx != -1, "Step 6 header comment not found"
+        step6_src = src[step6_idx:]
+        assert "ast.parse" in step6_src
+
+    def test_step6_uses_importfrom_node(self):
+        """Step 6 must inspect ast.ImportFrom nodes for imported names."""
+        src = _read_agent_src()
+        assert "ast.ImportFrom" in src
+
+    def test_step6_uses_end_lineno(self):
+        """Step 6 must use end_lineno for accurate block boundaries."""
+        src = _read_agent_src()
+        assert "end_lineno" in src
 
 
 # ---------------------------------------------------------------------------
