@@ -50,6 +50,7 @@ else:
     import os
     import random
     import sys
+    import tempfile
     import time
     import weakref
     from collections import deque
@@ -496,8 +497,62 @@ else:
     
         class CodeAnalyzer:
             pass
+
+    try:
+        from self_fixing_engineer.arbiter.file_provenance import FileProvenanceRegistry
+        _FILE_PROVENANCE_AVAILABLE = True
+    except ImportError as e:
+        logging.debug(f"Optional dependency missing: {e} (FileProvenanceRegistry)")
+        _FILE_PROVENANCE_AVAILABLE = False
+
+        class FileProvenanceRegistry:  # type: ignore[no-redef]
+            """Stub when file_provenance module is unavailable."""
+
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def initialize(self):
+                pass
+
+            async def register_generated_file(self, path, metadata):
+                pass
+
+            async def is_generated(self, path):
+                return False
+
+            async def get_provenance(self, path):
+                return None
+
+            async def list_generated_files(self):
+                return []
+
+            async def mark_validated(self, path):
+                pass
+
+            async def get_generated_files_needing_review(self):
+                return []
     
     
+    # --- OTel tracer for Gap 1/2/3 methods ---
+    try:
+        from self_fixing_engineer.arbiter.otel_config import get_tracer as _get_tracer
+        _ARBITER_OTEL_AVAILABLE = True
+    except ImportError:
+        _ARBITER_OTEL_AVAILABLE = False
+
+        class _NoOpSpan:  # type: ignore[no-redef]
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def set_attribute(self, k, v): pass
+            def record_exception(self, exc): pass
+            def add_event(self, n, a=None): pass
+
+        class _NoOpTracer:  # type: ignore[no-redef]
+            def start_as_current_span(self, name, **kw): return _NoOpSpan()
+
+        def _get_tracer(name=None):  # type: ignore[misc]
+            return _NoOpTracer()
+
     # --- Audit and Error Log Models ---
     class AuditLogModel(Base):
         __tablename__ = "audit_logs"
@@ -1151,11 +1206,20 @@ else:
     db_health_gauge = None
     rl_reward_gauge = None
     crew_agent_events_counter = None
-    
-    
+    # Generator pipeline metrics (Gap 1/2/3)
+    sfe_fix_pipeline_invocations = None
+    sfe_fix_pipeline_duration = None
+    sandbox_validation_counter = None
+    sandbox_validation_duration = None
+    generator_provenance_registrations = None
+
+
     def _init_additional_metrics():
         """Initialize additional Prometheus metrics lazily."""
         global _additional_metrics_initialized, action_counter, energy_gauge, memory_gauge, db_health_gauge, rl_reward_gauge, crew_agent_events_counter
+        global sfe_fix_pipeline_invocations, sfe_fix_pipeline_duration
+        global sandbox_validation_counter, sandbox_validation_duration
+        global generator_provenance_registrations
         if not _additional_metrics_initialized:
             action_counter = get_or_create_counter(
                 "actions_total", "Total actions executed", ("agent", "action")
@@ -1174,6 +1238,32 @@ else:
                 "crew_agent_lifecycle_events_total",
                 "Total crew agent lifecycle events",
                 ("event_type", "agent_name"),
+            )
+            # --- Generator pipeline metrics (Gap 1 / 2 / 3) ---------------
+            sfe_fix_pipeline_invocations = get_or_create_counter(
+                "arbiter_sfe_fix_pipeline_invocations_total",
+                "Total SFE fix-pipeline invocations triggered from generator events",
+                ("context", "outcome"),
+            )
+            sfe_fix_pipeline_duration = get_or_create_histogram(
+                "arbiter_sfe_fix_pipeline_duration_seconds",
+                "Duration of SFE fix-pipeline invocations from generator events",
+                ("context",),
+            )
+            sandbox_validation_counter = get_or_create_counter(
+                "arbiter_sandbox_validation_total",
+                "Total pre-write sandbox validations of generated code",
+                ("language", "result"),
+            )
+            sandbox_validation_duration = get_or_create_histogram(
+                "arbiter_sandbox_validation_duration_seconds",
+                "Duration of pre-write sandbox validation of generated code",
+                ("language",),
+            )
+            generator_provenance_registrations = get_or_create_counter(
+                "arbiter_generator_provenance_registrations_total",
+                "Total file provenance registrations for generator-produced files",
+                ("language",),
             )
             _additional_metrics_initialized = True
     
@@ -1843,6 +1933,22 @@ else:
             # Initialised to None so None-checks are not needed anywhere.
             self._arena_ref: Optional[weakref.ref] = None
 
+            # File provenance registry — tracks which files were produced by the
+            # Generator so that the SFE can prioritise them for quality checks
+            # without touching manually-authored code.
+            try:
+                provenance_path = os.path.join(
+                    self.settings.REPORTS_DIRECTORY, "provenance.json"
+                )
+                self._provenance_registry: FileProvenanceRegistry = FileProvenanceRegistry(
+                    provenance_path=provenance_path
+                )
+            except Exception as _prov_err:
+                logging.getLogger(__name__).warning(
+                    f"[{name}] FileProvenanceRegistry init failed, using stub: {_prov_err}"
+                )
+                self._provenance_registry = FileProvenanceRegistry()
+
             os.makedirs(
                 os.path.join(self.settings.REPORTS_DIRECTORY, "models"), exist_ok=True
             )
@@ -2060,6 +2166,175 @@ else:
                 )
                 await self.db_client.log_error(e, {"agent_name": self.name})
                 return {"status": "error", "error": f"In-process plugin call failed: {e}"}
+
+        async def validate_generated_code_in_sandbox(
+            self, code: str, language: str, metadata: Dict[str, Any]
+        ) -> Dict[str, Any]:
+            """Pre-write sandbox validation of generated code.
+
+            Runs the supplied *code* through the simulation sandbox (if
+            available) and through static analysis via the CodebaseAnalyzer
+            (if available) before the code is persisted to disk.
+
+            This method **must not raise** — all errors degrade gracefully so
+            the generator pipeline is never blocked when the sandbox or static
+            analysis tools are unavailable.
+
+            Args:
+                code: The generated source code to validate.
+                language: Programming language of *code* (e.g. ``"python"``).
+                metadata: Arbitrary metadata dict from the generator event.
+
+            Returns:
+                A dict with keys:
+                ``validated`` (bool), ``issues`` (list), ``sandbox_result`` (dict).
+                ``validated`` is ``True`` when no *critical* issues were found.
+            """
+            _log = logging.getLogger(__name__)
+            _t0 = time.monotonic()
+            _init_additional_metrics()
+            _tracer = _get_tracer(__name__)
+            result: Dict[str, Any] = {
+                "validated": True,
+                "issues": [],
+                "sandbox_result": {},
+            }
+
+            with _tracer.start_as_current_span("arbiter.validate_generated_code_in_sandbox") as span:
+                span.set_attribute("language", language)
+                span.set_attribute("code_length", len(code or ""))
+
+                try:
+                    # --- Simulation sandbox ----------------------------------------
+                    if self.simulation_engine is not None:
+                        try:
+                            sandbox_result = await asyncio.wait_for(
+                                self.simulation_engine.run(
+                                    {"code": code, "language": language, "metadata": metadata},
+                                    {"agent_name": self.name},
+                                ),
+                                timeout=30.0,
+                            )
+                            result["sandbox_result"] = sandbox_result or {}
+                            sandbox_issues = sandbox_result.get("issues", []) if sandbox_result else []
+                            result["issues"].extend(sandbox_issues)
+                            critical_sandbox = [
+                                i for i in sandbox_issues
+                                if i.get("severity") in ("critical", "high")
+                            ]
+                            if critical_sandbox:
+                                result["validated"] = False
+                            _log.info(
+                                "[%s] Sandbox validation: %d issue(s) found for generated code",
+                                self.name, len(sandbox_issues),
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                        except asyncio.TimeoutError:
+                            _log.warning(
+                                "[%s] Sandbox validation timed out; proceeding without result",
+                                self.name,
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            _log.warning(
+                                "[%s] Sandbox validation error (non-blocking): %s",
+                                self.name, exc,
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                    else:
+                        _log.debug(
+                            "[%s] No simulation_engine; skipping sandbox validation",
+                            self.name,
+                            extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                        )
+
+                    # --- Static analysis via CodebaseAnalyzer ----------------------
+                    try:
+                        suffix = f".{language}" if language != "python" else ".py"
+                        with tempfile.NamedTemporaryFile(
+                            mode="w", suffix=suffix, delete=False, encoding="utf-8"
+                        ) as tmp:
+                            tmp.write(code)
+                            tmp_path = tmp.name
+
+                        try:
+                            analyzer = CodeAnalyzer()
+                            if hasattr(analyzer, "analyze_file"):
+                                analysis = await asyncio.wait_for(
+                                    analyzer.analyze_file(tmp_path),
+                                    timeout=20.0,
+                                )
+                            elif hasattr(analyzer, "analyze"):
+                                analysis = await asyncio.wait_for(
+                                    analyzer.analyze(tmp_path),
+                                    timeout=20.0,
+                                )
+                            else:
+                                analysis = {}
+
+                            static_issues = analysis.get("issues", []) if analysis else []
+                            result["issues"].extend(static_issues)
+                            critical_static = [
+                                i for i in static_issues
+                                if i.get("severity") in ("critical", "high")
+                            ]
+                            if critical_static:
+                                result["validated"] = False
+                            _log.info(
+                                "[%s] Static analysis: %d issue(s) found for generated code",
+                                self.name, len(static_issues),
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                        except asyncio.TimeoutError:
+                            _log.warning(
+                                "[%s] Static analysis timed out; proceeding without result",
+                                self.name,
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            _log.warning(
+                                "[%s] Static analysis error (non-blocking): %s",
+                                self.name, exc,
+                                extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                            )
+                        finally:
+                            try:
+                                os.unlink(tmp_path)
+                            except Exception:
+                                pass
+                    except Exception as exc:
+                        span.record_exception(exc)
+                        _log.warning(
+                            "[%s] Could not run static analysis on generated code: %s",
+                            self.name, exc,
+                            extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                        )
+
+                    # --- Emit metrics -------------------------------------------
+                    _duration = time.monotonic() - _t0
+                    _val_label = "passed" if result["validated"] else "failed"
+                    if sandbox_validation_counter is not None:
+                        sandbox_validation_counter.labels(
+                            language=language, result=_val_label
+                        ).inc()
+                    if sandbox_validation_duration is not None:
+                        sandbox_validation_duration.labels(language=language).observe(_duration)
+                    span.set_attribute("validated", result["validated"])
+                    span.set_attribute("issues_count", len(result["issues"]))
+
+                except Exception as top_exc:
+                    span.record_exception(top_exc)
+                    _log.warning(
+                        "[%s] validate_generated_code_in_sandbox unexpected error: %s",
+                        self.name, top_exc,
+                        extra={"component": "arbiter", "operation": "validate_generated_code_in_sandbox"},
+                    )
+                    if sandbox_validation_counter is not None:
+                        sandbox_validation_counter.labels(language=language, result="skipped").inc()
+
+            return result
     
         @property
         def is_alive(self) -> bool:
@@ -4064,194 +4339,556 @@ else:
                     exc_info=True,
                 )
     
-        async def _on_generator_output(self, data: Dict[str, Any]):
-            """Handler for generator_output events - provides full generator integration."""
-            logging.getLogger(__name__).info(
-                f"[{self.name}] Generator output event received"
-            )
-            try:
-                generated_code = data.get("code")
-                language = data.get("language", "python")
-                generator_id = data.get("generator_id")
-                metadata = data.get("metadata", {})
-    
-                # Log the generation
-                self.log_event(f"Code generated by {generator_id}", "generator_output")
-    
-                # Direct generator engine integration
-                if self.generator_engine and hasattr(
-                    self.generator_engine, "process_output"
-                ):
-                    try:
-                        await self.generator_engine.process_output(
-                            generated_code, language, metadata
-                        )
-                        logging.getLogger(__name__).info(
-                            f"[{self.name}] Generator engine processed output successfully"
-                        )
-                    except Exception as e:
-                        logging.getLogger(__name__).error(
-                            f"[{self.name}] Generator engine processing failed: {e}",
-                            exc_info=True,
-                        )
-    
-                # Route to test generation if available
-                if generated_code:
-                    await self.run_test_generation(generated_code, language)
-                    logging.getLogger(__name__).info(
-                        f"[{self.name}] Triggered test generation for generated code"
-                    )
-    
-                # Update knowledge graph with generator output
-                if self.knowledge_graph:
-                    try:
-                        await self.knowledge_graph.add_fact(
-                            "GeneratorOutputs",
-                            generator_id or "unknown",
-                            {
-                                "code": generated_code[:200] if generated_code else None,
-                                "language": language,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                                "metadata": metadata,
-                            },
-                            source=self.name,
-                        )
-                    except Exception as e:
-                        logging.getLogger(__name__).error(
-                            f"[{self.name}] Failed to update knowledge graph: {e}",
-                            exc_info=True,
-                        )
-    
-                # Publish back to OmniCore for workflow tracking
-                await self.publish_to_omnicore(
-                    "generator_output_processed",
-                    {
-                        "generator_id": generator_id,
-                        "arbiter": self.name,
-                        "success": True,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    },
+        async def _on_generator_output(self, data: Dict[str, Any]) -> None:
+            """Handler for generator_output events — full generator integration.
+
+            Registers generated files with the provenance registry (Gap 3),
+            runs pre-write sandbox validation (Gap 2), and routes critical
+            findings to the SFE fix pipeline (Gap 1).
+
+            Args:
+                data: Event payload dict.  Expected keys: ``code``, ``language``,
+                    ``generator_id``, ``metadata``, ``file_paths``, ``workflow_id``.
+            """
+            _log = logging.getLogger(__name__)
+            _init_additional_metrics()
+            _tracer = _get_tracer(__name__)
+
+            with _tracer.start_as_current_span("arbiter._on_generator_output") as span:
+                generator_id: Optional[str] = data.get("generator_id")
+                language: str = data.get("language", "python")
+                span.set_attribute("generator_id", generator_id or "")
+                span.set_attribute("language", language)
+                _log.info(
+                    "[%s] Generator output event received",
+                    self.name,
+                    extra={"component": "arbiter", "operation": "_on_generator_output"},
                 )
-    
-            except Exception as e:
-                logging.getLogger(__name__).error(
-                    f"[{self.name}] Error handling generator_output event: {e}",
-                    exc_info=True,
-                )
-                # Notify OmniCore of processing failure
                 try:
+                    generated_code = data.get("code")
+                    metadata = data.get("metadata", {})
+                    file_paths: List[str] = data.get("file_paths", [])
+                    workflow_id: str = data.get("workflow_id", "")
+
+                    # Log the generation
+                    self.log_event(f"Code generated by {generator_id}", "generator_output")
+
+                    # --- Gap 3: Register generated files with provenance registry ---
+                    provenance_meta = {
+                        "generator_id": generator_id,
+                        "language": language,
+                        "workflow_id": workflow_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "source": "generator",
+                        **{k: v for k, v in metadata.items() if k not in ("code",)},
+                    }
+                    for fp in file_paths:
+                        try:
+                            await self._provenance_registry.register_generated_file(
+                                fp, provenance_meta
+                            )
+                            if generator_provenance_registrations is not None:
+                                generator_provenance_registrations.labels(
+                                    language=language
+                                ).inc()
+                            _log.debug(
+                                "[%s] Registered generated file in provenance: %s",
+                                self.name, fp,
+                                extra={"component": "arbiter", "operation": "_on_generator_output"},
+                            )
+                        except Exception as _prov_err:
+                            span.record_exception(_prov_err)
+                            _log.warning(
+                                "[%s] Provenance registration failed for '%s': %s",
+                                self.name, fp, _prov_err,
+                                extra={"component": "arbiter", "operation": "_on_generator_output"},
+                            )
+
+                    # --- Gap 2: Pre-write sandbox validation ----------------------
+                    validation_result: Dict[str, Any] = {"validated": True, "issues": [], "sandbox_result": {}}
+                    if generated_code:
+                        try:
+                            validation_result = await self.validate_generated_code_in_sandbox(
+                                generated_code, language, metadata
+                            )
+                            _log.info(
+                                "[%s] Pre-write validation: validated=%s, issues=%d",
+                                self.name, validation_result["validated"],
+                                len(validation_result["issues"]),
+                                extra={"component": "arbiter", "operation": "_on_generator_output"},
+                            )
+                        except Exception as _val_err:
+                            span.record_exception(_val_err)
+                            _log.warning(
+                                "[%s] Pre-write validation error (non-blocking): %s",
+                                self.name, _val_err,
+                                extra={"component": "arbiter", "operation": "_on_generator_output"},
+                            )
+
+                        if not validation_result["validated"]:
+                            critical_issues = [
+                                i for i in validation_result["issues"]
+                                if i.get("severity") in ("critical", "high")
+                            ]
+                            _log.warning(
+                                "[%s] Generated code has %d critical/high issue(s) — "
+                                "routing to SFE fix pipeline",
+                                self.name, len(critical_issues),
+                                extra={"component": "arbiter", "operation": "_on_generator_output"},
+                            )
+                            # Publish rejected event
+                            try:
+                                await self.publish_to_omnicore(
+                                    "generator_output_rejected",
+                                    {
+                                        "generator_id": generator_id,
+                                        "arbiter": self.name,
+                                        "reason": "pre_write_validation_failed",
+                                        "issues": critical_issues,
+                                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    },
+                                )
+                            except Exception:
+                                pass
+                            # Route critical issues directly to SFE fix pipeline
+                            await self._invoke_sfe_fix_pipeline(
+                                critical_issues,
+                                job_id=workflow_id or generator_id or "",
+                                context="pre_write_validation",
+                            )
+                            # Skip forwarding to generator engine
+                            return
+
+                    # Attach validation metadata for downstream processing
+                    enriched_metadata = {
+                        **metadata,
+                        "validation": validation_result,
+                        "source": "generator",
+                    }
+
+                    # Direct generator engine integration
+                    if self.generator_engine and hasattr(
+                        self.generator_engine, "process_output"
+                    ):
+                        try:
+                            await self.generator_engine.process_output(
+                                generated_code, language, enriched_metadata
+                            )
+                            _log.info(
+                                f"[{self.name}] Generator engine processed output successfully"
+                            )
+                        except Exception as e:
+                            _log.error(
+                                f"[{self.name}] Generator engine processing failed: {e}",
+                                exc_info=True,
+                            )
+
+                    # --- Gap 1: Route to test generation + auto-link to SFE ------
+                    if generated_code:
+                        test_results = await self.run_test_generation(generated_code, language)
+                        _log.info(
+                            f"[{self.name}] Triggered test generation for generated code"
+                        )
+                        # Auto-link: if tests failed, invoke the SFE fix pipeline
+                        if isinstance(test_results, dict):
+                            failures = test_results.get("failures", [])
+                            if not failures and test_results.get("failed", 0):
+                                # Some endpoints return a count rather than a list
+                                failures = [
+                                    {"error": "test failure", "source": "generator"}
+                                    for _ in range(test_results["failed"])
+                                ]
+                            if failures:
+                                _log.info(
+                                    f"[{self.name}] {len(failures)} test failure(s) found "
+                                    "after test generation — invoking SFE fix pipeline"
+                                )
+                                defects = [
+                                    {
+                                        "type": "test_failure",
+                                        "severity": "high",
+                                        "source": "generator",
+                                        "generator_id": generator_id,
+                                        "error": f.get("error", "test failure"),
+                                        "test_name": f.get("test_name", "unknown"),
+                                    }
+                                    for f in failures
+                                ]
+                                await self._invoke_sfe_fix_pipeline(
+                                    defects,
+                                    job_id=workflow_id or generator_id or "",
+                                    context="post_test_generation",
+                                )
+
+                    # Update knowledge graph with generator output
+                    if self.knowledge_graph:
+                        try:
+                            await self.knowledge_graph.add_fact(
+                                "GeneratorOutputs",
+                                generator_id or "unknown",
+                                {
+                                    "code": generated_code[:200] if generated_code else None,
+                                    "language": language,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "metadata": metadata,
+                                    "validation": validation_result,
+                                    "file_paths": file_paths,
+                                },
+                                source=self.name,
+                            )
+                        except Exception as e:
+                            _log.error(
+                                f"[{self.name}] Failed to update knowledge graph: {e}",
+                                exc_info=True,
+                            )
+
+                    # Publish back to OmniCore for workflow tracking
                     await self.publish_to_omnicore(
-                        "generator_output_failed",
+                        "generator_output_processed",
                         {
-                            "generator_id": data.get("generator_id"),
+                            "generator_id": generator_id,
                             "arbiter": self.name,
-                            "error": str(e),
+                            "success": True,
+                            "validated": validation_result["validated"],
                             "timestamp": datetime.now(timezone.utc).isoformat(),
                         },
                     )
-                except Exception as pub_err:
+
+                except Exception as e:
+                    span.record_exception(e)
                     logging.getLogger(__name__).error(
-                        f"[{self.name}] Failed to publish error notification: {pub_err}",
+                        "[%s] Error handling generator_output event: %s",
+                        self.name, e,
                         exc_info=True,
+                        extra={"component": "arbiter", "operation": "_on_generator_output"},
                     )
-    
-        async def _on_test_results(self, data: Dict[str, Any]):
-            """Handler for test_results events."""
-            logging.getLogger(__name__).info(f"[{self.name}] Test results event received")
-            try:
-                test_id = data.get("test_id")
-                failures = data.get("failures", [])
-                passed = data.get("passed", 0)
-                failed = data.get("failed", 0)
-    
-                # Log results
-                self.log_event(
-                    f"Test results: {passed} passed, {failed} failed", "test_results"
-                )
-    
-                # [GAP #15 FIX] Create real Task objects for test failures
-                if failures and self.decision_optimizer:
-                    # Import Task class from decision_optimizer
-                    from self_fixing_engineer.arbiter.decision_optimizer import Task
-                    
-                    tasks = []
-                    for failure in failures:
-                        test_name = failure.get('test_name', 'unknown_test')
-                        error_message = failure.get('error', 'No error message')
-                        
-                        # Calculate priority based on failure severity
-                        priority = self._calculate_failure_priority(failure)
-                        
-                        # Create Task object
-                        task = Task(
-                            id=str(uuid.uuid4()),
-                            priority=priority,
-                            action_type="fix_test_failure",
-                            risk_level="high" if priority > 8 else "medium",
-                            required_skills={"testing", "debugging", "code_review"},
-                            metadata={
-                                "test_id": test_id,
-                                "test_name": test_name,
-                                "error": error_message,
-                                "failure_data": failure,
-                                "timestamp": datetime.now(timezone.utc).isoformat()
-                            }
-                        )
-                        tasks.append(task)
-                        
-                        logging.getLogger(__name__).info(
-                            f"[{self.name}] Created fix task {task.id} for test failure: {test_name}"
-                        )
-                    
-                    # Prioritize tasks using decision optimizer
+                    # Notify OmniCore of processing failure
                     try:
-                        # prioritize_tasks(agent_pool, task_queue) — pass empty agent pool
-                        # when no agents are available; the optimizer will sort by priority
-                        prioritized_tasks = await self.decision_optimizer.prioritize_tasks(
-                            [], tasks
+                        await self.publish_to_omnicore(
+                            "generator_output_failed",
+                            {
+                                "generator_id": data.get("generator_id"),
+                                "arbiter": self.name,
+                                "error": str(e),
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            },
                         )
-                        logging.getLogger(__name__).info(
-                            f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
-                        )
-                        
-                        # Store prioritized tasks for execution
-                        if not hasattr(self, 'task_queue'):
-                            self.task_queue = []
-                        self.task_queue.extend(prioritized_tasks)
-                        
-                    except Exception as e:
+                    except Exception as pub_err:
                         logging.getLogger(__name__).error(
-                            f"[{self.name}] Error prioritizing tasks: {e}", exc_info=True
+                            "[%s] Failed to publish error notification: %s",
+                            self.name, pub_err,
+                            exc_info=True,
+                            extra={"component": "arbiter", "operation": "_on_generator_output"},
                         )
-                    
-                    # Update knowledge graph with test failure data
-                    if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+
+        async def _invoke_sfe_fix_pipeline(
+            self,
+            defects: List[Dict[str, Any]],
+            job_id: str = "",
+            context: str = "",
+        ) -> List[Dict[str, Any]]:
+            """Invoke the SFE fix pipeline for the supplied *defects*.
+
+            Tries the Arena's ``_run_sfe_fix_pipeline`` first (via the existing
+            ``_arena_ref`` weak reference).  If the arena is unavailable, falls
+            back to constructing an ``SFEService`` directly and running the
+            propose → sandbox-validate → apply pipeline inline.
+
+            Args:
+                defects: List of defect/issue dicts describing the problems to fix.
+                job_id: Job identifier forwarded to the SFE service for correlation.
+                context: Human-readable string describing the calling context
+                    (used in log messages and span attributes).
+
+            Returns:
+                List of fix-result dicts (one per defect), or an empty list on
+                total failure.
+
+            Raises:
+                This method never raises; all errors are absorbed and logged.
+            """
+            _log = logging.getLogger(__name__)
+            _init_additional_metrics()
+            _tracer = _get_tracer(__name__)
+
+            if not defects:
+                return []
+
+            ctx_tag = f"[{context}] " if context else ""
+
+            with _tracer.start_as_current_span("arbiter._invoke_sfe_fix_pipeline") as span:
+                span.set_attribute("defect_count", len(defects))
+                span.set_attribute("job_id", job_id)
+                span.set_attribute("context", context)
+                _t0 = time.monotonic()
+
+                # --- Try via arena reference -----------------------------------
+                arena = self._arena_ref() if self._arena_ref is not None else None
+                if arena is not None and hasattr(arena, "_run_sfe_fix_pipeline"):
+                    try:
+                        fix_results = await arena._run_sfe_fix_pipeline(defects, job_id=job_id)
+                        _duration = time.monotonic() - _t0
+                        if sfe_fix_pipeline_invocations is not None:
+                            sfe_fix_pipeline_invocations.labels(
+                                context=context, outcome="arena"
+                            ).inc()
+                        if sfe_fix_pipeline_duration is not None:
+                            sfe_fix_pipeline_duration.labels(context=context).observe(_duration)
+                        span.set_attribute("pipeline_path", "arena")
+                        _log.info(
+                            "[%s] %sSFE fix pipeline (via arena) completed for %d defect(s)",
+                            self.name, ctx_tag, len(fix_results),
+                            extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
+                        )
+                        return fix_results
+                    except Exception as exc:
+                        span.record_exception(exc)
+                        _log.error(
+                            "[%s] %sSFE fix pipeline (arena) error: %s",
+                            self.name, ctx_tag, exc,
+                            exc_info=True,
+                            extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
+                        )
+                        # Fall through to inline SFEService attempt
+
+                # --- Inline SFEService fallback --------------------------------
+                try:
+                    from server.services.sfe_service import SFEService
+
+                    results: List[Dict[str, Any]] = []
+                    for defect in defects:
+                        error_id = (
+                            defect.get("id")
+                            or defect.get("error_id")
+                            or hashlib.sha256(
+                                json.dumps(defect, sort_keys=True, default=str).encode()
+                            ).hexdigest()[:16]
+                        )
+                        defect_type = defect.get("type", "unknown")
                         try:
-                            await self.knowledge_graph.add_fact(
-                                "TestFailures",
-                                test_id or str(uuid.uuid4()),
-                                {
-                                    "failures": failures,
-                                    "passed": passed,
-                                    "failed": failed,
-                                    "tasks_created": len(tasks),
-                                    "timestamp": datetime.now(timezone.utc).isoformat()
-                                },
-                                source=self.name,
-                                timestamp=datetime.now(timezone.utc).isoformat(),
+                            sfe = SFEService()
+                            proposal = await sfe.propose_fix(error_id)
+                            fix_id = proposal.get("fix_id")
+                            if not fix_id:
+                                results.append(
+                                    {"defect": defect_type, "status": "no_fix_proposed",
+                                     "details": proposal}
+                                )
+                                continue
+                            validation = await sfe.validate_fix_in_sandbox(fix_id, job_id)
+                            if validation.get("status") != "validated":
+                                results.append(
+                                    {"defect": defect_type, "fix_id": fix_id,
+                                     "status": "validation_failed", "details": validation}
+                                )
+                                continue
+                            apply_result = await sfe.apply_fix(fix_id, dry_run=False)
+                            results.append(
+                                {"defect": defect_type, "fix_id": fix_id,
+                                 "status": "applied", "details": apply_result}
                             )
-                            logging.getLogger(__name__).info(
-                                f"[{self.name}] Updated knowledge graph with test failure data"
+                        except Exception as exc:
+                            span.record_exception(exc)
+                            _log.error(
+                                "[%s] %sInline SFE error for '%s': %s",
+                                self.name, ctx_tag, defect_type, exc,
+                                exc_info=True,
+                                extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
                             )
-                        except Exception as e:
-                            logging.getLogger(__name__).warning(
-                                f"[{self.name}] Failed to update knowledge graph: {e}"
+                            results.append(
+                                {"defect": defect_type, "status": "error", "details": str(exc)}
                             )
-                
-            except Exception as e:
-                logging.getLogger(__name__).error(
-                    f"[{self.name}] Error handling test_results event: {e}", exc_info=True
+                    _duration = time.monotonic() - _t0
+                    if sfe_fix_pipeline_invocations is not None:
+                        sfe_fix_pipeline_invocations.labels(
+                            context=context, outcome="inline"
+                        ).inc()
+                    if sfe_fix_pipeline_duration is not None:
+                        sfe_fix_pipeline_duration.labels(context=context).observe(_duration)
+                    span.set_attribute("pipeline_path", "inline")
+                    _log.info(
+                        "[%s] %sInline SFE fix pipeline completed for %d defect(s)",
+                        self.name, ctx_tag, len(results),
+                        extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
+                    )
+                    return results
+                except ImportError as imp_err:
+                    if sfe_fix_pipeline_invocations is not None:
+                        sfe_fix_pipeline_invocations.labels(
+                            context=context, outcome="skipped"
+                        ).inc()
+                    _log.warning(
+                        "[%s] %sSFEService not available, fix pipeline skipped: %s",
+                        self.name, ctx_tag, imp_err,
+                        extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
+                    )
+                    return []
+                except Exception as exc:
+                    span.record_exception(exc)
+                    if sfe_fix_pipeline_invocations is not None:
+                        sfe_fix_pipeline_invocations.labels(
+                            context=context, outcome="error"
+                        ).inc()
+                    _log.error(
+                        "[%s] %sInline SFE fix pipeline error: %s",
+                        self.name, ctx_tag, exc,
+                        exc_info=True,
+                        extra={"component": "arbiter", "operation": "_invoke_sfe_fix_pipeline"},
+                    )
+                    return []
+
+        async def _on_test_results(self, data: Dict[str, Any]) -> None:
+            """Handler for test_results events.
+
+            Routes test failures from generator-produced code to the SFE fix
+            pipeline (Gap 1).  All paths are non-blocking — errors are absorbed
+            so the event loop is never stalled.
+
+            Args:
+                data: Event payload dict.  Expected keys: ``test_id``, ``failures``
+                    (list), ``passed`` (int), ``failed`` (int), ``source`` (str),
+                    ``generator_id`` (str).
+            """
+            _log = logging.getLogger(__name__)
+            _init_additional_metrics()
+            _tracer = _get_tracer(__name__)
+
+            with _tracer.start_as_current_span("arbiter._on_test_results") as span:
+                test_id: Optional[str] = data.get("test_id")
+                source: str = data.get("source", "")
+                failures: List[Dict[str, Any]] = data.get("failures", [])
+                span.set_attribute("test_id", test_id or "")
+                span.set_attribute("source", source)
+                span.set_attribute("failures", len(failures))
+                _log.info(
+                    "[%s] Test results event received",
+                    self.name,
+                    extra={"component": "arbiter", "operation": "_on_test_results"},
                 )
+                try:
+                    passed = data.get("passed", 0)
+                    failed = data.get("failed", 0)
+                    # Check if these results are associated with generator-produced code
+                    generator_id: str = data.get("generator_id", "")
+
+                    # Log results
+                    self.log_event(
+                        f"Test results: {passed} passed, {failed} failed", "test_results"
+                    )
+
+                    # [GAP #1 FIX] Auto-invoke SFE fix pipeline for failures on generated code
+                    if failures and source == "generator":
+                        _log.info(
+                            "[%s] %d test failure(s) on generator code — invoking SFE fix pipeline",
+                            self.name, len(failures),
+                            extra={"component": "arbiter", "operation": "_on_test_results"},
+                        )
+                        defects = [
+                            {
+                                "type": "test_failure",
+                                "severity": "high",
+                                "source": "generator",
+                                "generator_id": generator_id,
+                                "error": f.get("error", "test failure"),
+                                "test_name": f.get("test_name", "unknown"),
+                            }
+                            for f in failures
+                        ]
+                        await self._invoke_sfe_fix_pipeline(
+                            defects,
+                            job_id=generator_id or test_id or "",
+                            context="_on_test_results/generator",
+                        )
+
+                    # [GAP #15 FIX] Create real Task objects for test failures
+                    if failures and self.decision_optimizer:
+                        # Import Task class from decision_optimizer
+                        from self_fixing_engineer.arbiter.decision_optimizer import Task
+                    
+                        tasks = []
+                        for failure in failures:
+                            test_name = failure.get('test_name', 'unknown_test')
+                            error_message = failure.get('error', 'No error message')
+                        
+                            # Calculate priority based on failure severity
+                            priority = self._calculate_failure_priority(failure)
+                        
+                            # Create Task object
+                            task = Task(
+                                id=str(uuid.uuid4()),
+                                priority=priority,
+                                action_type="fix_test_failure",
+                                risk_level="high" if priority > 8 else "medium",
+                                required_skills={"testing", "debugging", "code_review"},
+                                metadata={
+                                    "test_id": test_id,
+                                    "test_name": test_name,
+                                    "error": error_message,
+                                    "failure_data": failure,
+                                    "source": source,
+                                    "timestamp": datetime.now(timezone.utc).isoformat()
+                                }
+                            )
+                            tasks.append(task)
+                        
+                            _log.info(
+                                f"[{self.name}] Created fix task {task.id} for test failure: {test_name}"
+                            )
+                    
+                        # Prioritize tasks using decision optimizer
+                        try:
+                            # prioritize_tasks(agent_pool, task_queue) — pass empty agent pool
+                            # when no agents are available; the optimizer will sort by priority
+                            prioritized_tasks = await self.decision_optimizer.prioritize_tasks(
+                                [], tasks
+                            )
+                            _log.info(
+                                f"[{self.name}] Prioritized {len(prioritized_tasks)} fix tasks"
+                            )
+                        
+                            # Store prioritized tasks for execution
+                            if not hasattr(self, 'task_queue'):
+                                self.task_queue = []
+                            self.task_queue.extend(prioritized_tasks)
+                        
+                        except Exception as e:
+                            _log.error(
+                                f"[{self.name}] Error prioritizing tasks: {e}", exc_info=True
+                            )
+                    
+                        # Update knowledge graph with test failure data
+                        if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                            try:
+                                await self.knowledge_graph.add_fact(
+                                    "TestFailures",
+                                    test_id or str(uuid.uuid4()),
+                                    {
+                                        "failures": failures,
+                                        "passed": passed,
+                                        "failed": failed,
+                                        "tasks_created": len(tasks),
+                                        "source": source,
+                                        "timestamp": datetime.now(timezone.utc).isoformat()
+                                    },
+                                    source=self.name,
+                                    timestamp=datetime.now(timezone.utc).isoformat(),
+                                )
+                                _log.info(
+                                    f"[{self.name}] Updated knowledge graph with test failure data"
+                                )
+                            except Exception as e:
+                                _log.warning(
+                                    f"[{self.name}] Failed to update knowledge graph: {e}"
+                                )
+                
+                except Exception as e:
+                    span.record_exception(e)
+                    logging.getLogger(__name__).error(
+                        "[%s] Error handling test_results event: %s",
+                        self.name, e,
+                        exc_info=True,
+                        extra={"component": "arbiter", "operation": "_on_test_results"},
+                    )
         
         def _calculate_failure_priority(self, failure: Dict[str, Any]) -> float:
             """
