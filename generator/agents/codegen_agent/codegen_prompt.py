@@ -689,6 +689,159 @@ over complex one-liners. Clear, working code is better than clever broken code.
 
 Remember: Syntax errors cause immediate pipeline failures. Take extra care 
 to ensure your code is syntactically valid.
+
+CRITICAL IMPLEMENTATION REQUIREMENTS:
+
+These requirements are NON-NEGOTIABLE. Violations will cause the pipeline to
+fail or produce a non-functional application.
+
+8. REAL IMPLEMENTATION (NO PLACEHOLDERS):
+   ❌ FORBIDDEN patterns — these will cause pipeline failure:
+   - Any function body that is only ``pass`` or ``return []`` or ``return {}``
+   - Comments like ``# Placeholder``, ``# TODO``, ``# Not implemented``, ``# stub``
+   - ``raise NotImplementedError`` in service/router functions
+   - Empty middleware files (only ``__init__.py`` present)
+
+   ✓ REQUIRED patterns:
+   - Every service function MUST contain SQLAlchemy ORM queries:
+     ```python
+     async def get_product(db: AsyncSession, product_id: UUID) -> Product:
+         result = await db.execute(select(Product).where(Product.id == product_id))
+         product = result.scalar_one_or_none()
+         if product is None:
+             raise HTTPException(status_code=404, detail=f"Product {product_id} not found")
+         return product
+     ```
+   - Every router MUST call the corresponding service function with the DB session:
+     ```python
+     @router.get("/{product_id}", response_model=ProductResponse)
+     async def read_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
+         return await product_service.get_product(db, product_id)
+     ```
+
+9. SQLALCHEMY MODELS (EXACT SPEC FIDELITY):
+   - Use the EXACT field names, types, and constraints from the spec — do NOT invent alternatives
+   - Use ``UUID`` (not ``Integer``) for primary keys when the spec says UUID:
+     ```python
+     from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+     from sqlalchemy import UUID as SAUUID
+     import uuid
+
+     class Product(Base):
+         __tablename__ = "products"
+         id: Mapped[uuid.UUID] = mapped_column(SAUUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+         name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+         price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+         created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+     ```
+   - All models MUST inherit from the SAME ``Base = declarative_base()`` in ``app/database.py``
+
+10. PYDANTIC SCHEMA FIDELITY:
+    - Use ``UUID`` (from ``uuid`` module) not ``int`` for ID fields when spec says UUID
+    - Mark fields ``Optional[X]`` ONLY when the spec explicitly says the field is optional
+    - Use ``model_config = ConfigDict(from_attributes=True)`` for all response schemas
+    - Correct pattern:
+      ```python
+      from uuid import UUID
+      from pydantic import BaseModel, ConfigDict, Field
+      class ProductResponse(BaseModel):
+          model_config = ConfigDict(from_attributes=True)
+          id: UUID
+          name: str
+          price: float
+      ```
+
+11. APP WIRING (main.py MUST mount ALL routers):
+    - Every file in ``app/routers/`` MUST be imported and registered:
+      ```python
+      from app.routers.products import router as products_router
+      from app.routers.orders import router as orders_router
+      app = FastAPI()
+      app.include_router(products_router, prefix="/api/v1")
+      app.include_router(orders_router, prefix="/api/v1")
+      ```
+    - Do NOT leave any router unmounted — unmounted routers make ALL their endpoints return 404
+
+12. MIDDLEWARE (working implementations required):
+    - JWT auth middleware example (minimum viable):
+      ```python
+      from starlette.middleware.base import BaseHTTPMiddleware
+      from starlette.requests import Request
+      import jwt  # PyJWT
+      class JWTAuthMiddleware(BaseHTTPMiddleware):
+          async def dispatch(self, request: Request, call_next):
+              token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+              if token:
+                  try:
+                      request.state.user = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+                  except jwt.InvalidTokenError:
+                      from starlette.responses import JSONResponse
+                      return JSONResponse({"detail": "Invalid token"}, status_code=401)
+              return await call_next(request)
+      ```
+
+13. DOCKERFILE (correct entry point):
+    ❌ WRONG: ``CMD ["app.py"]``  or  ``CMD ["python", "main.py"]``
+    ✓ CORRECT:
+    ```dockerfile
+    CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    ```
+    Use a multi-stage build to minimise image size:
+    ```dockerfile
+    FROM python:3.11-slim AS builder
+    WORKDIR /app
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir --user -r requirements.txt
+
+    FROM python:3.11-slim AS runtime
+    WORKDIR /app
+    COPY --from=builder /root/.local /root/.local
+    COPY . .
+    ENV PATH=/root/.local/bin:$PATH
+    CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ```
+
+14. K8S MANIFESTS (probes and resources are mandatory):
+    ❌ MISSING liveness/readiness probes or resource limits will fail production SLAs.
+    ✓ Every Deployment MUST include:
+    ```yaml
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8000
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 8000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      failureThreshold: 3
+    ```
+
+15. HELM TEMPLATES (valid Go template YAML):
+    ❌ WRONG — a JSON blob in a .yaml file:
+    ``{"apiVersion": "apps/v1", "kind": "Deployment"}``
+    ✓ CORRECT — proper Go template YAML:
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: {{ include "chart.fullname" . }}
+      labels:
+        {{- include "chart.labels" . | nindent 4 }}
+    spec:
+      replicas: {{ .Values.replicaCount }}
+    ```
 """
 
 # --- Expanded Best Practices ---
