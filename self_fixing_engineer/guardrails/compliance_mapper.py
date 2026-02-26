@@ -46,18 +46,18 @@ try:
         # Metrics already registered, retrieve them
         from prometheus_client import REGISTRY
 
-        self_healing_compliance_block_total = REGISTRY._collector_to_names.get(
+        self_healing_compliance_block_total = REGISTRY._names_to_collectors.get(
             f"{METRIC_PREFIX}compliance_block_total"
         )
-        self_healing_compliance_gap_alerts_total = REGISTRY._collector_to_names.get(
+        self_healing_compliance_gap_alerts_total = REGISTRY._names_to_collectors.get(
             f"{METRIC_PREFIX}compliance_gap_alerts_total"
         )
         self_healing_compliance_required_controls_not_enforced = (
-            REGISTRY._collector_to_names.get(
+            REGISTRY._names_to_collectors.get(
                 f"{METRIC_PREFIX}compliance_required_controls_not_enforced"
             )
         )
-        self_healing_config_load_failures = REGISTRY._collector_to_names.get(
+        self_healing_config_load_failures = REGISTRY._names_to_collectors.get(
             f"{METRIC_PREFIX}config_load_failures"
         )
 

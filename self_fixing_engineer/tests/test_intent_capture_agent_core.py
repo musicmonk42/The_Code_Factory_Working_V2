@@ -381,7 +381,7 @@ async def test_validate_session_token_revoked(mock_env_vars, mock_redis_client):
 
 
 @pytest.mark.asyncio
-async def test_validate_session_token_invalid(mock_env_vars):
+async def test_validate_session_token_invalid(mock_env_vars, mock_redis_client):
     """Test invalid session token"""
     # Patch jwt in agent_core module with our mock
     with patch("intent_capture.agent_core.jwt", jwt):

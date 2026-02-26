@@ -175,7 +175,7 @@ def test_load_config_valid_json(valid_config_json_path, mock_audit_logger):
     assert mock_audit_logger.log_event.call_count >= 1
 
 
-def test_load_config_invalid_file_path(mock_alert_operator):
+def test_load_config_invalid_file_path(mock_alert_operator, mock_audit_logger):
     """Tests that a non-existent config file raises a critical error."""
     with pytest.raises(AnalyzerCriticalError) as excinfo:
         load_config("/non/existent/path.yaml")
@@ -184,7 +184,7 @@ def test_load_config_invalid_file_path(mock_alert_operator):
     assert mock_alert_operator.call_count >= 1
 
 
-def test_load_config_malformed_file(malformed_config_path, mock_alert_operator):
+def test_load_config_malformed_file(malformed_config_path, mock_alert_operator, mock_audit_logger):
     """Tests that a syntactically incorrect config file raises a critical error."""
     with pytest.raises(AnalyzerCriticalError) as excinfo:
         load_config(malformed_config_path)

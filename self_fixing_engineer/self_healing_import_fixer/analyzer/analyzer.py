@@ -16,6 +16,8 @@ import yaml  # For loading YAML configs
 from botocore.exceptions import ClientError, EndpointConnectionError, NoCredentialsError
 from pydantic import BaseModel, Field, ValidationError
 
+from .core_audit import audit_logger
+
 # --- Global Constants ---
 SERVICE_NAME = "Analyzer"
 VERSION = "1.0.0"
@@ -150,8 +152,6 @@ def load_config(config_path: str) -> AnalyzerConfig:
     """
     Loads the application configuration from a specified path or a centralized service like AWS SSM.
     """
-    from .core_audit import audit_logger
-
     config_data = {}
     try:
         if PRODUCTION_MODE:

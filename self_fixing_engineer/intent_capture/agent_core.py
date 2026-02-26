@@ -154,6 +154,7 @@ except ImportError:
 # Use centralized OpenTelemetry configuration from arbiter
 try:
     from self_fixing_engineer.arbiter.otel_config import get_tracer
+    from opentelemetry import trace
     tracer = get_tracer(__name__)
     OTEL_AVAILABLE = True
 except ImportError:
