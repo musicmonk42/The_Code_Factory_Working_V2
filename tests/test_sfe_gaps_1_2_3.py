@@ -9,6 +9,7 @@ Unit tests for the new Gap 1/2/3 functionality:
 """
 
 import asyncio
+import importlib
 import json
 import os
 import sys
@@ -254,10 +255,6 @@ class TestArbiterBridgePublishEventEnrichment:
 
 def _get_real_arbiter_class():
     """Import the real Arbiter class, bypassing the PYTEST_COLLECTING stub guard."""
-    import importlib
-    import os
-    import sys
-
     saved = os.environ.pop("PYTEST_COLLECTING", None)
     try:
         # Evict cached stub module so we get the real one
@@ -308,7 +305,6 @@ class TestInvokeSfeFixPipeline:
     async def test_uses_arena_when_available(self):
         """Pipeline should prefer arena when _run_sfe_fix_pipeline is available."""
         import weakref
-        from unittest.mock import AsyncMock, MagicMock
 
         ArbiterCls = _get_real_arbiter_class()
         if ArbiterCls is None or not hasattr(ArbiterCls, "_invoke_sfe_fix_pipeline"):
@@ -376,7 +372,6 @@ class TestValidateGeneratedCodeInSandbox:
     @pytest.mark.asyncio
     async def test_marks_invalid_on_critical_issues(self):
         """Simulation engine returning critical issues should set validated=False."""
-        from unittest.mock import AsyncMock, MagicMock
 
         ArbiterCls = _get_real_arbiter_class()
         if ArbiterCls is None or not hasattr(
@@ -401,7 +396,6 @@ class TestValidateGeneratedCodeInSandbox:
     @pytest.mark.asyncio
     async def test_graceful_degradation_on_engine_error(self):
         """Sandbox engine errors should not raise; result should still be returned."""
-        from unittest.mock import AsyncMock, MagicMock
 
         ArbiterCls = _get_real_arbiter_class()
         if ArbiterCls is None or not hasattr(
@@ -434,7 +428,6 @@ class TestOnTestResultsRouting:
     @pytest.mark.asyncio
     async def test_invokes_sfe_on_generator_source_failures(self):
         """Failures with source='generator' should trigger _invoke_sfe_fix_pipeline."""
-        from unittest.mock import patch
 
         ArbiterCls = _get_real_arbiter_class()
         if ArbiterCls is None or not hasattr(ArbiterCls, "_on_test_results"):
