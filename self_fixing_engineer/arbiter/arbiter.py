@@ -3425,22 +3425,19 @@ else:
             self.log_event("Stopping async services", "service_stop")
             if self.crew_manager:
                 try:
-                    for event_name, hooks_list in self.crew_manager._on_event_hooks.items():
-                        self.crew_manager._on_event_hooks[event_name] = [
-                            cb for cb in hooks_list
-                            if cb not in (
-                                self._on_crew_agent_start,
-                                self._on_crew_agent_stop,
-                                self._on_crew_agent_fail,
-                                self._on_crew_heartbeat_missed,
-                            )
-                        ]
+                    for event_name, hook_fn in (
+                        ("on_agent_start", self._on_crew_agent_start),
+                        ("on_agent_stop", self._on_crew_agent_stop),
+                        ("on_agent_fail", self._on_crew_agent_fail),
+                        ("on_agent_heartbeat_missed", self._on_crew_heartbeat_missed),
+                    ):
+                        self.crew_manager.remove_hook(event_name, hook_fn)
                     logging.getLogger(__name__).info(
                         f"[{self.name}] Detached CrewManager event hooks"
                     )
                 except Exception as e:
                     logging.getLogger(__name__).error(
-                        f"[{self.name}] Failed to detach CrewManager hooks: {e}"
+                        f"[{self.name}] Failed to detach CrewManager hooks: {e}", exc_info=True
                     )
             if self.feedback:
                 await self.feedback.disconnect_db()
