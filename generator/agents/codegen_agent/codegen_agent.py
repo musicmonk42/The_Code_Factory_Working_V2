@@ -1316,6 +1316,7 @@ Full Requirements JSON: {json.dumps(requirements, sort_keys=True, default=str)}
 
 2. **IMPLEMENT COMPLETELY**: Generate complete, working code:
    - NO placeholders or TODOs
+   - NO `Depends(...)` with Ellipsis — define stub functions for placeholder dependencies
    - NO incomplete implementations
    - ALL features from requirements must be implemented
    - Proper error handling for all edge cases

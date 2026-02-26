@@ -155,5 +155,51 @@ app = FastAPI()
     assert lines_input == lines_output, "Import fixer modified already-correct code"
 
 
+def test_depends_ellipsis_warning_in_codegen_prompt():
+    """Test that get_syntax_safety_instructions warns against Depends(...) with Ellipsis."""
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_prompt.py'
+    with open(filepath, 'r') as f:
+        content = f.read()
+    assert "Depends(...)" in content, \
+        "Depends(...) Ellipsis warning not found in codegen_prompt.py"
+    assert "Ellipsis" in content, \
+        "Ellipsis explanation not found in codegen_prompt.py"
+    assert "6a." in content, \
+        "Section 6a (FastAPI Dependency Injection) not found in codegen_prompt.py"
+    assert "No `Depends(...)` using Ellipsis literal" in content, \
+        "Pre-generation checklist item for Depends(...) not found in codegen_prompt.py"
+
+
+def test_depends_ellipsis_warning_in_python_template():
+    """Test that python.jinja2 warns against Depends(...) with Ellipsis."""
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'templates' / 'python.jinja2'
+    with open(filepath, 'r') as f:
+        content = f.read()
+    assert "NEVER USE `Depends(...)` WITH ELLIPSIS" in content, \
+        "Depends(...) Ellipsis warning section not found in python.jinja2"
+    assert "Ellipsis is not callable" in content, \
+        "Ellipsis callable explanation not found in python.jinja2"
+    assert "NEVER use `Depends(...)` with Ellipsis literal" in content, \
+        "MANDATORY checklist item for Depends(...) not found in python.jinja2"
+
+
+def test_depends_ellipsis_warning_in_macros_template():
+    """Test that _macros.jinja2 warns against Depends(...) with Ellipsis."""
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'templates' / '_macros.jinja2'
+    with open(filepath, 'r') as f:
+        content = f.read()
+    assert "NEVER use `Depends(...)` (Ellipsis)" in content, \
+        "Depends(...) Ellipsis warning not found in _macros.jinja2"
+
+
+def test_depends_ellipsis_warning_in_fallback_prompt():
+    """Test that codegen_agent.py _build_fallback_prompt warns against Depends(...)."""
+    filepath = PROJECT_ROOT / 'generator' / 'agents' / 'codegen_agent' / 'codegen_agent.py'
+    with open(filepath, 'r') as f:
+        content = f.read()
+    assert "NO `Depends(...)` with Ellipsis" in content, \
+        "Depends(...) warning not found in _build_fallback_prompt in codegen_agent.py"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

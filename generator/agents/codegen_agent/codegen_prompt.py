@@ -658,6 +658,23 @@ The following are MANDATORY checks:
            response = client.post("/echo", json={{"message": "   "}})
            assert response.status_code == 422  # Pydantic validation error → 422, NOT 400
 
+6a. FASTAPI DEPENDENCY INJECTION (CRITICAL - PREVENTS IMPORT CRASH):
+   - NEVER use `Depends(...)` where `...` is the Ellipsis literal
+   - `Ellipsis` is NOT callable — FastAPI calls `inspect.signature()` on it at import time and raises `TypeError`
+   - This crashes the ENTIRE application before any request can be served
+   - When you need a placeholder dependency, ALWAYS define a stub function:
+     * async def get_current_user() -> dict:
+     *     """Placeholder dependency."""
+     *     return {{"sub": "anonymous"}}
+     * 
+     * @router.get("/protected")
+     * async def route(user: dict = Depends(get_current_user)): ...
+   - Every argument to Depends() MUST be one of: a function, a class with __call__, or a lambda
+   - WRONG: Depends(...)   # TypeError: Ellipsis is not callable
+   - WRONG: Depends(None)  # TypeError: None is not callable
+   - CORRECT: Depends(get_current_user)  # Function reference
+   - CORRECT: Depends(lambda: None)      # Lambda
+
 7. PRE-GENERATION CHECKLIST:
    Before submitting your response, mentally verify:
    ☐ All strings are properly quoted
@@ -665,6 +682,7 @@ The following are MANDATORY checks:
    ☐ All brackets/parentheses are balanced
    ☐ Indentation is consistent
    ☐ No obvious syntax errors
+   ☐ No `Depends(...)` using Ellipsis literal — all dependencies are callable
 
 IMPORTANT: If you're unsure about syntax, prefer simpler, more explicit code 
 over complex one-liners. Clear, working code is better than clever broken code.
