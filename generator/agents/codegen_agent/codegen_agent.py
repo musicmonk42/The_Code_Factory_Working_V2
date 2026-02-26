@@ -16,7 +16,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 # Third-party libraries (MINIMAL SET RETAINED)
 import aiohttp
@@ -440,7 +440,7 @@ def _extract_spec_models(requirements: Dict[str, Any]) -> str:
 
     # Deduplicate: normalise runs of whitespace before comparing
     _ws_re = re.compile(r'\s+')
-    seen_normalised: set = set()
+    seen_normalised: Set[str] = set()
     unique: List[str] = []
     for item in extracted:
         key = _ws_re.sub(" ", item)
@@ -559,7 +559,7 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     # Match any function definition (sync or async) at any indentation level
     _func_def_re = re.compile(r'^\s*(?:async\s+)?def\s+\w+\s*\(', re.MULTILINE)
 
-    placeholder_services: List[tuple] = []
+    placeholder_services: List[Tuple[str, float]] = []
     for path, content in normalised.items():
         if not ("app/services/" in path and path.endswith(".py")):
             continue
@@ -795,7 +795,7 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     )
     _func_defined_re = re.compile(r'^[ \t]*(?:async\s+)?def\s+(\w+)\s*\(', re.MULTILINE)
     # Names that are never functions (skip silently)
-    _SKIP_NAMES: frozenset = frozenset({
+    _SKIP_NAMES: FrozenSet[str] = frozenset({
         "TYPE_CHECKING", "Any", "Dict", "List", "Optional", "Tuple",
         "Union", "Set", "Sequence", "Callable", "Awaitable",
     })
@@ -820,7 +820,7 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             continue
 
         # Collect all (module, [names]) pairs from both simple and paren imports
-        import_pairs: List[tuple] = []
+        import_pairs: List[Tuple[str, List[str]]] = []
         for m in _svc_import_simple_re.finditer(content):
             import_pairs.append((m.group(1), _parse_import_names(m.group(2))))
         for m in _svc_import_paren_re.finditer(content):

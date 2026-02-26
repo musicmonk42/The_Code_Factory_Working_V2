@@ -184,7 +184,7 @@ def _install_stubs() -> None:
 _install_stubs()
 
 
-def _load_agent_module():  # type: ignore[return]
+def _load_agent_module() -> types.ModuleType:
     """Load codegen_agent.py bypassing its package __init__."""
     # Use the real dotted name so relative imports resolve correctly.
     pkg_name = "generator.agents.codegen_agent"
@@ -445,7 +445,14 @@ class TestExtractSpecModels:
         src = _read_agent_src()
         assert "_SPEC_MODELS_MAX_CHARS" in src
         assert "_SPEC_MODELS_MIN_SECTION_LEN" in src
-        assert "4000" in src
+
+    def test_spec_models_max_chars_value(self):
+        mod = _load_agent_module()
+        assert mod._SPEC_MODELS_MAX_CHARS == 4000  # type: ignore[attr-defined]
+
+    def test_spec_models_min_section_len_value(self):
+        mod = _load_agent_module()
+        assert mod._SPEC_MODELS_MIN_SECTION_LEN == 30  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------
@@ -581,7 +588,10 @@ class TestValidateWiring:
     def test_threshold_constant_present_in_source(self):
         src = _read_agent_src()
         assert "_PLACEHOLDER_SERVICE_THRESHOLD_PCT" in src
-        assert "50.0" in src
+
+    def test_placeholder_threshold_value(self):
+        mod = _load_agent_module()
+        assert mod._PLACEHOLDER_SERVICE_THRESHOLD_PCT == 50.0  # type: ignore[attr-defined]
 
     def test_todo_comment_counted_as_stub(self, fn):
         svc = (
