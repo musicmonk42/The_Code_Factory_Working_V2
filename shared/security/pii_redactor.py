@@ -161,7 +161,7 @@ _DEFAULT_SENSITIVE_KEYWORDS: Set[str] = {
     "token", "key", "password", "secret", "api_key", "webhook_url",
     "routing_key", "address", "ssn", "credit_card",
     "account_number", "dob", "username", "ip_address", "geolocation",
-    "auth_header", "bearer",
+    "auth_header", "bearer", "email",
 }
 
 
