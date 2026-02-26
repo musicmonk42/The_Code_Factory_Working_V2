@@ -2029,6 +2029,35 @@ class OmniCoreService:
                     "data": {"status": "error", "message": str(e)},
                 }
 
+        # Audit log queries must always use direct dispatch because the message bus
+        # is fire-and-forget with no response channel, so the result would be lost.
+        if payload.get("action") == "query_audit_logs":
+            logger.info(f"Using direct dispatch for audit query job {job_id} targeting {target_module}")
+            try:
+                if target_module == "generator":
+                    result = await self._dispatch_generator_action(job_id, "query_audit_logs", payload)
+                else:
+                    result = await self._dispatch_sfe_action(job_id, "query_audit_logs", payload)
+                return {
+                    "job_id": job_id,
+                    "routed": True,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch",
+                    "data": result,
+                }
+            except Exception as e:
+                logger.error(f"Direct dispatch failed for audit query job {job_id}: {e}", exc_info=True)
+                return {
+                    "job_id": job_id,
+                    "routed": False,
+                    "source": source_module,
+                    "target": target_module,
+                    "transport": "direct_dispatch",
+                    "error": str(e),
+                    "data": {"status": "error", "message": str(e)},
+                }
+
         # Use message bus if available for inter-module communication (PRIORITY 1)
         if self._message_bus and self._omnicore_components_available["message_bus"]:
             try:
@@ -2654,18 +2683,23 @@ class OmniCoreService:
         
         elif action == "query_audit_logs":
             module = payload.get("module", "")
-            # Map logical module name to its audit log file(s)
+            # Map logical module name to its audit log file(s).
+            # Primary paths are where modules actually write; canonical paths are kept as fallbacks.
             if module == "guardrails":
                 log_paths = ["simulation/results/audit_trail.log"]
             elif module == "simulation":
                 log_paths = ["simulation/results/audit_trail.log"]
             elif module == "arbiter":
-                log_paths = ["self_fixing_engineer/arbiter/audit/audit_trail.jsonl",
+                log_paths = ["sfe_bug_manager_audit.log",
+                             "self_fixing_engineer/arbiter/audit/audit_trail.jsonl",
                              "logs/arbiter_audit.jsonl"]
             elif module == "testgen":
-                log_paths = ["logs/testgen_audit.jsonl"]
+                log_paths = ["atco_artifacts/atco_audit.log",
+                             "logs/testgen_audit.jsonl"]
             else:
-                log_paths = ["simulation/results/audit_trail.log",
+                log_paths = ["sfe_bug_manager_audit.log",
+                             "atco_artifacts/atco_audit.log",
+                             "simulation/results/audit_trail.log",
                              "logs/arbiter_audit.jsonl",
                              "logs/testgen_audit.jsonl"]
             return await self._read_audit_logs_from_files(log_paths=log_paths, payload=payload)
