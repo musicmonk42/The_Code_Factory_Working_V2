@@ -794,10 +794,23 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         re.DOTALL,
     )
     _func_defined_re = re.compile(r'^[ \t]*(?:async\s+)?def\s+(\w+)\s*\(', re.MULTILINE)
-    # Names that are never functions (skip silently)
+    # Names that are never functions (skip silently).
+    # Covers all common typing constructs imported from ``typing`` or
+    # ``typing_extensions`` that would never correspond to a service function.
     _SKIP_NAMES: FrozenSet[str] = frozenset({
-        "TYPE_CHECKING", "Any", "Dict", "List", "Optional", "Tuple",
-        "Union", "Set", "Sequence", "Callable", "Awaitable",
+        "TYPE_CHECKING",
+        # Generic containers
+        "Any", "Dict", "FrozenSet", "List", "Optional", "Set",
+        "Sequence", "Tuple", "Type", "Union",
+        # Async types
+        "Awaitable", "AsyncGenerator", "AsyncIterable", "AsyncIterator",
+        "Coroutine", "Generator",
+        # Callable / protocol
+        "Callable", "ClassVar", "Final", "Generic", "Literal",
+        "Protocol", "TypeVar", "cast",
+        # Python 3.10+ union syntax helpers
+        "Never", "NoReturn", "Annotated", "TypeAlias", "TypeGuard",
+        "ParamSpec", "Concatenate", "Unpack", "TypeVarTuple",
     })
 
     def _parse_import_names(raw: str) -> List[str]:

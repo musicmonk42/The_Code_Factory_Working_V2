@@ -781,7 +781,7 @@ fail or produce a non-functional application.
       ```
 
 13. DOCKERFILE (correct entry point):
-    ❌ WRONG: ``CMD ["app.py"]``  or  ``CMD ["python", "main.py"]``
+    ❌ WRONG: ``CMD ["app.py"]`` or ``CMD ["python", "main.py"]``
     ✓ CORRECT:
     ```dockerfile
     CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

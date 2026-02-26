@@ -738,6 +738,11 @@ class TestReconcileAppWiringStep5:
         src = _read_agent_src()
         assert "_SKIP_NAMES" in src
         assert "TYPE_CHECKING" in src
+        # Extended typing-construct coverage
+        assert "TypeVar" in src
+        assert "Protocol" in src
+        assert "Literal" in src
+        assert "cast" in src
 
 
 # ---------------------------------------------------------------------------
