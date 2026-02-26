@@ -229,7 +229,14 @@ PIPELINE_STEP_TIMEOUTS: Dict[str, int] = {
     "testgen": int(os.environ.get("PIPELINE_TESTGEN_TIMEOUT_SECONDS", "300")),
     "deploy": int(os.environ.get("PIPELINE_DEPLOY_TIMEOUT_SECONDS", "300")),
     "docgen": int(os.environ.get("PIPELINE_DOCGEN_TIMEOUT_SECONDS", "300")),
-    "critique": int(os.environ.get("PIPELINE_CRITIQUE_TIMEOUT_SECONDS", "300")),
+    # Support both CRITIQUE_PIPELINE_TIMEOUT_SECONDS and PIPELINE_CRITIQUE_TIMEOUT_SECONDS
+    # for backwards compatibility; default to 300s (5 minutes)
+    "critique": int(
+        os.environ.get(
+            "CRITIQUE_PIPELINE_TIMEOUT_SECONDS",
+            os.environ.get("PIPELINE_CRITIQUE_TIMEOUT_SECONDS", "300"),
+        )
+    ),
     "sfe_analysis": int(os.environ.get("PIPELINE_SFE_TIMEOUT_SECONDS", "600")),
 }
 
@@ -6206,7 +6213,73 @@ class OmniCoreService:
                     
                     issues_fixed = 0
                     remediation_results = []
-                    
+
+                    # ------------------------------------------------------------------
+                    # SFE auto-fix: apply fixes for safe, auto-fixable categories.
+                    # Gated by SFE_AUTO_FIX_ENABLED env var (default: true).
+                    # Auto-fixable categories are those with a high success rate and
+                    # low risk of introducing regressions (style/import issues).
+                    # ------------------------------------------------------------------
+                    _SFE_AUTO_FIX_FALSY = frozenset(("false", "0", "no", "off", "disabled"))
+                    _sfe_auto_fix_enabled = (
+                        os.environ.get("SFE_AUTO_FIX_ENABLED", "true").lower()
+                        not in _SFE_AUTO_FIX_FALSY
+                    )
+                    _AUTO_FIXABLE_TYPES = frozenset(
+                        {"unused_import", "missing_all", "import_order", "type_annotation"}
+                    )
+                    if _sfe_auto_fix_enabled and valid_defects:
+                        _auto_fixable = [
+                            d for d in valid_defects
+                            if d.get("type", "").lower() in _AUTO_FIXABLE_TYPES
+                            or any(
+                                kw in d.get("message", "").lower()
+                                for kw in ("unused import", "missing __all__")
+                            )
+                        ]
+                        if _auto_fixable:
+                            logger.info(
+                                f"[SFE_ANALYSIS] Attempting auto-fix for {len(_auto_fixable)} "
+                                f"auto-fixable issues (job {job_id})"
+                            )
+                            try:
+                                from server.services.sfe_service import SFEService
+                                _sfe_svc = SFEService()
+                                # Populate errors cache so propose_fix can look up issues
+                                _sfe_svc._populate_errors_cache(_auto_fixable, job_id)
+                                for _issue in _auto_fixable:
+                                    _err_id = _issue.get("error_id")
+                                    if not _err_id:
+                                        continue
+                                    try:
+                                        _fix_proposal = await _sfe_svc.propose_fix(_err_id)
+                                        if _fix_proposal.get("confidence", 0.0) >= 0.7:
+                                            _fix_id = _fix_proposal.get("fix_id")
+                                            if _fix_id:
+                                                _apply_result = await _sfe_svc.apply_fix(_fix_id)
+                                                if _apply_result.get("applied"):
+                                                    issues_fixed += 1
+                                                    remediation_results.append({
+                                                        "status": "fixed",
+                                                        "error_id": _err_id,
+                                                        "fix_id": _fix_id,
+                                                        "files_modified": _apply_result.get(
+                                                            "files_modified", []
+                                                        ),
+                                                    })
+                                    except Exception as _fix_err:
+                                        logger.debug(
+                                            f"[SFE_ANALYSIS] Auto-fix skipped for {_err_id}: {_fix_err}"
+                                        )
+                                if issues_fixed:
+                                    logger.info(
+                                        f"[SFE_ANALYSIS] Auto-fixed {issues_fixed} issues for job {job_id}"
+                                    )
+                            except Exception as _sfe_auto_err:
+                                logger.warning(
+                                    f"[SFE_ANALYSIS] SFE auto-fix step failed (non-fatal): {_sfe_auto_err}"
+                                )
+
                     # If critical/high severity issues found, attempt auto-remediation using BugManager
                     # Note: BugManager might not have detect_errors method, so we handle gracefully
                     if critical_high_issues:
@@ -8151,7 +8224,32 @@ class OmniCoreService:
                     "language": detected_language,
                 }
                 logger.info(f"[PIPELINE] Job {job_id} starting step: critique")
-                _critique_timeout = PIPELINE_STEP_TIMEOUTS["critique"]
+                # Dynamic timeout: at least 180 s, plus 5 s per generated file, but
+                # never less than the operator-configured base timeout.
+                _base_critique_timeout = PIPELINE_STEP_TIMEOUTS["critique"]
+                _output_path_obj = Path(codegen_result.get("output_path", "."))
+                _files_dict = codegen_result.get("files", {})
+                if _files_dict:
+                    _critique_file_count = len(_files_dict)
+                elif _output_path_obj.exists():
+                    logger.debug(
+                        f"[PIPELINE] Job {job_id} critique: codegen 'files' dict absent, "
+                        f"falling back to filesystem count in {_output_path_obj}"
+                    )
+                    _critique_file_count = sum(
+                        1 for _ in _output_path_obj.rglob("*") if _.is_file()
+                    )
+                else:
+                    _critique_file_count = 0
+                _critique_timeout = max(
+                    _base_critique_timeout,
+                    180,
+                    30 + 5 * _critique_file_count,
+                )
+                logger.debug(
+                    f"[PIPELINE] Job {job_id} critique timeout: {_critique_timeout}s "
+                    f"(base={_base_critique_timeout}s, files={_critique_file_count})"
+                )
                 try:
                     critique_result = await asyncio.wait_for(
                         self._run_critique(job_id, critique_payload),

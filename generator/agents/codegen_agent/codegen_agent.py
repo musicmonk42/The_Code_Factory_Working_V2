@@ -142,32 +142,50 @@ _MULTIPASS_GROUPS = [
         "name": "core",
         "focus": (
             "Generate ONLY the core application files: "
-            "main.py, app.py, config.py, database.py, db.py, models.py, schemas.py, "
-            "__init__.py files, and any other foundational modules. "
-            "Do NOT generate router, service, test, or infrastructure files in this pass."
+            "main.py, app.py, config.py, database.py, db.py, __init__.py files, "
+            "and any other foundational modules. "
+            "Do NOT generate router, service, model, middleware, test, or infrastructure files in this pass."
+        ),
+    },
+    {
+        "name": "models_and_schemas",
+        "focus": (
+            "Generate ONLY the data model and schema files: "
+            "All SQLAlchemy ORM models (app/models/*.py), all Pydantic schemas (app/schemas.py or app/schemas/*.py), "
+            "database migration files (alembic/env.py, alembic/versions/), "
+            "and any enum or type definition modules. "
+            "Do NOT generate routers, services, middleware, tests, or infrastructure files."
         ),
     },
     {
         "name": "routes_and_services",
         "focus": (
             "Generate ONLY the router/controller and service layer files: "
-            "all files in routers/, api/, services/, controllers/ directories. "
-            "Implement ALL required API endpoints from the specification. "
-            "Do NOT regenerate core app files or infrastructure files."
+            "all route handlers (app/routers/*.py), service modules (app/services/*.py), "
+            "and any utility/helper modules used by routes or services. "
+            "Do NOT generate models, schemas, middleware, test, or infrastructure files in this pass."
+        ),
+    },
+    {
+        "name": "middleware_and_utils",
+        "focus": (
+            "Generate ONLY middleware and utility modules: "
+            "authentication middleware (JWT/OAuth), rate limiting middleware, "
+            "security headers middleware, request ID middleware, logging middleware, "
+            "input sanitization utilities, CSV/file handling utilities, "
+            "and any other cross-cutting concern modules (app/middleware/*.py, app/utils/*.py). "
+            "Do NOT generate models, schemas, routes, services, tests, or infrastructure files."
         ),
     },
     {
         "name": "infrastructure",
         "focus": (
-            "Generate ONLY infrastructure and configuration files: "
-            "requirements.txt, Dockerfile, docker-compose.yml, .env.example, "
-            "alembic.ini, alembic/env.py, alembic/versions/, Makefile, pyproject.toml. "
-            "ALSO generate Kubernetes manifests: k8s/deployment.yaml, k8s/service.yaml, "
-            "k8s/ingress.yaml, k8s/configmap.yaml, k8s/hpa.yaml. "
-            "ALSO generate Helm chart: helm/Chart.yaml, helm/values.yaml, "
-            "helm/templates/deployment.yaml, helm/templates/service.yaml, "
-            "helm/templates/ingress.yaml, helm/templates/_helpers.tpl. "
-            "Do NOT regenerate core app files or route files."
+            "Generate ONLY infrastructure and deployment files: "
+            "Dockerfile, docker-compose.yml, .dockerignore, .env.example, "
+            "Kubernetes manifests (k8s/*.yaml), Helm charts (helm/**), "
+            "CI/CD configs (.github/workflows/*.yml), pyproject.toml, requirements.txt, "
+            "Makefile, and test files (tests/**). "
+            "Do NOT regenerate application source code files."
         ),
     },
 ]
@@ -296,6 +314,202 @@ async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
             pass_name,
             elapsed,
         )
+
+
+def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
+    """Post-ensemble reconciliation: wire discovered routers into main.py (no LLM needed).
+
+    Scans all generated ``app/routers/*.py`` files, rebuilds
+    ``app/routers/__init__.py`` with correct imports, and re-generates
+    ``app/main.py`` to mount every discovered router via
+    ``app.include_router()``.  Also generates stub SQLAlchemy ORM model files
+    for any model classes referenced in schemas but missing from
+    ``app/models/``.
+
+    This function is intentionally pure (no I/O, no LLM calls) so it can
+    always run safely as a post-processing step after multi-pass ensemble
+    generation, even under tight time budgets.
+
+    Args:
+        files: Dict mapping relative file path → file content for all
+               generated files.  Paths are expected to use forward slashes.
+
+    Returns:
+        A new dict with the same entries as ``files`` plus / replacing:
+        - ``app/routers/__init__.py``   (always rebuilt when routers found)
+        - ``app/main.py``               (always rebuilt when routers found)
+        - ``app/models/<name>.py``      (stub added only when absent)
+    """
+    # Normalize all keys to forward-slash separators so matching is consistent
+    # regardless of the operating system the generator runs on.
+    updated: Dict[str, str] = {k.replace("\\", "/"): v for k, v in files.items()}
+
+    # ------------------------------------------------------------------ #
+    # 1. Discover router variables in app/routers/*.py                    #
+    # ------------------------------------------------------------------ #
+    router_modules: List[Dict[str, str]] = []  # [{module, var, prefix}]
+    _router_var_re = re.compile(r'(\w+)\s*=\s*APIRouter\s*\(', re.MULTILINE)
+    _prefix_re = re.compile(r'APIRouter\s*\([^)]*prefix\s*=\s*[\'\"]([^\'\"]+)[\'\"]')
+    _router_path_re = re.compile(r'^app/routers/(?!__init__)[^/]+\.py$')
+
+    for path, content in list(updated.items()):
+        if not _router_path_re.match(path):
+            continue
+        vars_found = _router_var_re.findall(content)
+        if not vars_found:
+            continue
+        router_var = vars_found[0]
+        # Extract prefix from APIRouter() call if present
+        prefix_match = _prefix_re.search(content)
+        prefix = prefix_match.group(1) if prefix_match else ""
+        # Derive importable module name: "app/routers/product.py" → "app.routers.product"
+        module = path.replace("/", ".").removesuffix(".py")
+        router_modules.append({"module": module, "var": router_var, "prefix": prefix})
+
+    if not router_modules:
+        return updated  # Nothing to wire — return unchanged
+
+    # ------------------------------------------------------------------ #
+    # 2. Rebuild app/routers/__init__.py                                  #
+    # ------------------------------------------------------------------ #
+    init_lines = ["# Auto-generated by _reconcile_app_wiring — do not edit manually"]
+    for rm in router_modules:
+        init_lines.append(f"from {rm['module']} import {rm['var']}  # noqa: F401")
+    init_lines.append("")
+    init_lines.append("__all__ = [")
+    for rm in router_modules:
+        init_lines.append('    "' + rm['var'] + '",')  
+    init_lines.append("]")
+    updated["app/routers/__init__.py"] = "\n".join(init_lines) + "\n"
+
+    # ------------------------------------------------------------------ #
+    # 3. Rebuild app/main.py mounting all routers                         #
+    # ------------------------------------------------------------------ #
+    # Preserve any bespoke health/version/ping endpoint handlers from the
+    # previously generated main.py so we don't lose custom logic.
+    existing_main = updated.get("app/main.py", "")
+    extra_routes: List[str] = []
+    # Match decorator + function body for endpoints whose path string contains
+    # a well-known health/version/utility keyword.  We search the raw handler
+    # text (which is Python source), so the path appears as a quoted literal
+    # like "/health" — we match on the slash-prefixed bare path and let the
+    # `in` check find it regardless of surrounding quote style.
+    _handler_re = re.compile(
+        r'(@app\.(?:get|post|put|delete|patch)\s*\([^)]*\)[^\n]*\n'
+        r'(?:(?:async\s+)?def\s+\w+[^\n]*\n(?:[ \t]+[^\n]+\n*)*))',
+        re.MULTILINE,
+    )
+    _keep_paths = ("/health", "/version", "/ping", "/api/v1", "/")
+    for m in _handler_re.finditer(existing_main):
+        handler = m.group(0)
+        if any(kw in handler for kw in _keep_paths):
+            extra_routes.append(handler)
+
+    main_lines = [
+        "# Auto-generated by _reconcile_app_wiring — do not edit manually",
+        "from fastapi import FastAPI",
+        "",
+    ]
+    for rm in router_modules:
+        main_lines.append(f"from {rm['module']} import {rm['var']}")
+    main_lines += [
+        "",
+        "app = FastAPI()",
+        "",
+    ]
+    for rm in router_modules:
+        prefix_kwarg = (', prefix="' + rm['prefix'] + '"') if rm['prefix'] else ""
+        main_lines.append(f"app.include_router({rm['var']}{prefix_kwarg})")
+    if extra_routes:
+        main_lines.append("")
+        main_lines.extend(route.rstrip() for route in extra_routes)
+    main_lines.append("")
+
+    updated["app/main.py"] = "\n".join(main_lines) + "\n"
+
+    # ------------------------------------------------------------------ #
+    # 4. Generate stub ORM model files for classes absent from app/models/ #
+    # ------------------------------------------------------------------ #
+    # Scan schema files for Pydantic model names like ProductCreate,
+    # ProductUpdate, ProductRead, etc. and infer the base model name.
+    _schema_name_re = re.compile(
+        r'\b([A-Z][a-zA-Z]+?)(?:Create|Update|Read|Response|Base|In|Out|Schema)\b'
+    )
+    _model_path_re = re.compile(r'^app/models/(?!__init__)[^/]+\.py$')
+
+    referenced_models: Set[str] = set()
+    for path, content in list(updated.items()):
+        if "schema" in path.lower() or ("model" in path.lower() and not _model_path_re.match(path)):
+            for m in _schema_name_re.finditer(content):
+                referenced_models.add(m.group(1))
+
+    existing_model_classes: Set[str] = set()
+    for path in list(updated.keys()):
+        if _model_path_re.match(path):
+            for m in re.finditer(r'class\s+(\w+)\s*\(', updated[path]):
+                existing_model_classes.add(m.group(1))
+
+    # Try to reuse the project's shared Base so all models belong to the same
+    # metadata graph.  Preference order:
+    #   1. app/database.py exports Base
+    #   2. app/models/__init__.py exports Base
+    #   3. Fall back to a self-contained declarative_base() per stub file
+    #      (sufficient for schema introspection / migrations bootstrap)
+    _shared_base_import: Optional[str] = None
+    if "app/database.py" in updated and "declarative_base" in updated["app/database.py"]:
+        _shared_base_import = "from app.database import Base"
+    elif "app/models/__init__.py" in updated and "declarative_base" in updated.get("app/models/__init__.py", ""):
+        _shared_base_import = "from app.models import Base"
+
+    _stub_header_shared = (
+        "from sqlalchemy import Column, DateTime, Integer, String\n"
+        "{base_import}\n"
+        "from datetime import datetime, timezone\n\n\n"
+    )
+    _stub_header_standalone = (
+        "from sqlalchemy import Column, DateTime, Integer, String\n"
+        "from sqlalchemy.orm import declarative_base\n"
+        "from datetime import datetime, timezone\n\n"
+        "Base = declarative_base()\n\n\n"
+    )
+    _stub_body = (
+        "class {name}(Base):\n"
+        '    __tablename__ = "{table}"\n\n'
+        "    id = Column(Integer, primary_key=True, index=True)\n"
+        "    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))\n"
+        "    updated_at = Column(\n"
+        "        DateTime(timezone=True),\n"
+        "        default=lambda: datetime.now(timezone.utc),\n"
+        "        onupdate=lambda: datetime.now(timezone.utc),\n"
+        "    )\n"
+    )
+
+    for model_name in sorted(referenced_models - existing_model_classes):
+        # Skip very short or clearly non-model names
+        if not model_name or len(model_name) < 3:
+            continue
+        stub_path = f"app/models/{model_name.lower()}.py"
+        if stub_path in updated:
+            continue
+        # CamelCase → snake_case for __tablename__, then simple pluralization.
+        # Note: this covers the most common English nouns adequately for stub
+        # generation; production code should use a proper pluralization library
+        # (e.g. inflect) if irregular plurals are a concern.
+        base_name = re.sub(r"(?<!^)(?=[A-Z])", "_", model_name).lower()
+        if base_name.endswith("y") and not base_name.endswith(("ay", "ey", "iy", "oy", "uy")):
+            table_name = base_name[:-1] + "ies"
+        elif base_name.endswith(("s", "sh", "ch", "x", "z")):
+            table_name = base_name + "es"
+        else:
+            table_name = base_name + "s"
+
+        if _shared_base_import:
+            header = _stub_header_shared.format(base_import=_shared_base_import)
+        else:
+            header = _stub_header_standalone
+        updated[stub_path] = header + _stub_body.format(name=model_name, table=table_name)
+
+    return updated
 
 
 def _ast_merge_python_files(old_content: str, new_content: str) -> str:
@@ -1798,6 +2012,15 @@ if PLUGIN_AVAILABLE:
                                 logger.warning(
                                     f"[CODEGEN] Endpoint coverage check failed (non-fatal): {_ep_check_err}"
                                 )
+                            # ------------------------------------------------------------------
+                            # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
+                            # ------------------------------------------------------------------
+                            try:
+                                _merged_files = _reconcile_app_wiring(_merged_files)
+                                response = {"files": _merged_files}
+                                logger.info("[CODEGEN] Post-ensemble reconciliation completed")
+                            except Exception as _recon_err:
+                                logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
                             # NOTE: Using "first" voting strategy because majority voting requires exact
@@ -2272,6 +2495,15 @@ else:
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
                                 extra={"backend": "ensemble", "response_length": len(str(response))}
                             )
+                            # ------------------------------------------------------------------
+                            # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
+                            # ------------------------------------------------------------------
+                            try:
+                                _merged_files = _reconcile_app_wiring(_merged_files)
+                                response = {"files": _merged_files}
+                                logger.info("[CODEGEN] Post-ensemble reconciliation completed")
+                            except Exception as _recon_err:
+                                logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
                             # NOTE: Using "first" voting strategy because majority voting requires exact
