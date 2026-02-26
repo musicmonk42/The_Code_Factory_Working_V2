@@ -54,6 +54,14 @@ except Exception:
 # --- Setup & Configuration ---
 # P4: Logging - All user actions, errors, and system events must be logged (no sensitive data).
 # Configure logging to output JSON by default
+def _safe_get_username():
+    """Safely retrieve username from Streamlit session state, returning 'anonymous' if unavailable."""
+    try:
+        return st.session_state.get("username", "anonymous")
+    except Exception:
+        return "anonymous"
+
+
 class JsonFormatter(logging.Formatter):
     """Custom JSON formatter for structured logging."""
 
@@ -68,9 +76,7 @@ class JsonFormatter(logging.Formatter):
             "lineno": record.lineno,
             "process": record.process,
             "thread": record.thread,
-            "username": st.session_state.get(
-                "username", "anonymous"
-            ),  # P3: Add user/session to logs
+            "username": _safe_get_username(),  # P3: Add user/session to logs
         }
         if hasattr(record, "exc_info") and record.exc_info:
             log_record["exc_info"] = self.formatException(record.exc_info)
