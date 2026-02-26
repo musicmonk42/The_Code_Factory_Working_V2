@@ -40,32 +40,35 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class _NullMetric:
-    """
-    Very small Prometheus-style metric stub.
+try:  # pragma: no cover
+    from .runner_metrics import UTIL_LATENCY, UTIL_ERRORS, UTIL_SELF_HEAL  # type: ignore
+except Exception:  # pragma: no cover
 
-    Provides labels(...).inc(), labels(...).observe(), labels(...).set()
-    so production can plug in real metrics, while tests and local runs
-    remain lightweight and deterministic.
-    """
+    class _NullMetric:
+        """
+        Very small Prometheus-style metric stub.
 
-    class _Child:
-        def inc(self, *args, **kwargs):
-            return self
+        Provides labels(...).inc(), labels(...).observe(), labels(...).set()
+        so production can plug in real metrics, while tests and local runs
+        remain lightweight and deterministic.
+        """
 
-        def observe(self, *args, **kwargs):
-            return self
+        class _Child:
+            def inc(self, *args, **kwargs):
+                return self
 
-        def set(self, *args, **kwargs):
-            return self
+            def observe(self, *args, **kwargs):
+                return self
 
-    def labels(self, *args, **kwargs):
-        return self._Child()
+            def set(self, *args, **kwargs):
+                return self
 
+        def labels(self, *args, **kwargs):
+            return self._Child()
 
-UTIL_LATENCY = _NullMetric()
-UTIL_ERRORS = _NullMetric()
-UTIL_SELF_HEAL = _NullMetric()
+    UTIL_LATENCY = _NullMetric()
+    UTIL_ERRORS = _NullMetric()
+    UTIL_SELF_HEAL = _NullMetric()
 
 # ---------------------------------------------------------------------------
 # External integration points: error codes, RunnerError, security, telemetry
@@ -75,13 +78,13 @@ UTIL_SELF_HEAL = _NullMetric()
 # Here we wire them defensively so this file is safe in isolation.
 
 try:  # pragma: no cover
-    from runner.errors import RunnerError, error_codes  # type: ignore
+    from .runner_errors import RunnerError, ERROR_CODE_REGISTRY as error_codes  # type: ignore
 except Exception:  # pragma: no cover
 
     class RunnerError(RuntimeError):
-        def __init__(self, code: str, message: str):
-            super().__init__(message)
-            self.error_code = code
+        def __init__(self, error_code: str, detail: str = None, task_id: str = None, cause: Exception = None, **kwargs):
+            super().__init__(detail or error_code)
+            self.error_code = error_code
 
     error_codes: Dict[str, str] = {
         "TEST_EXECUTION_FAILED": "TEST_EXECUTION_FAILED",
@@ -115,18 +118,22 @@ def _noop_add_provenance(
 
 
 try:  # pragma: no cover
-    from runner.observability import (  # type: ignore
-        add_provenance,
-        collect_feedback,
-        detect_anomaly,
-    )
+    from .runner_logging import detect_anomaly  # type: ignore
 except Exception:  # pragma: no cover
     detect_anomaly = _noop_detect_anomaly
-    collect_feedback = _noop_collect_feedback
+
+try:  # pragma: no cover
+    from .runner_logging import add_provenance  # type: ignore
+except Exception:  # pragma: no cover
     add_provenance = _noop_add_provenance
 
 try:  # pragma: no cover
-    from runner.security import decrypt_data, encrypt_data, redact_secrets  # type: ignore
+    from .feedback_handlers import collect_feedback  # type: ignore
+except Exception:  # pragma: no cover
+    collect_feedback = _noop_collect_feedback
+
+try:  # pragma: no cover
+    from .runner_security_utils import redact_secrets, encrypt_data, decrypt_data  # type: ignore
 except Exception:  # pragma: no cover
     redact_secrets = _noop_redact_secrets
 
@@ -325,8 +332,8 @@ BACKENDS: Dict[str, Any] = {}
 config: Any = None
 
 try:  # pragma: no cover
-    from runner import runner_backends  # type: ignore
-    from runner.runner_config import RunnerConfig  # type: ignore
+    from . import runner_backends  # type: ignore
+    from .runner_config import RunnerConfig  # type: ignore
 
     if hasattr(runner_backends, "BACKEND_REGISTRY"):
         BACKENDS = dict(runner_backends.BACKEND_REGISTRY)

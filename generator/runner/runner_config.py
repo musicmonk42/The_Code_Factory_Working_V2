@@ -26,12 +26,15 @@ from .runner_errors import ConfigurationError  # ensure this import exists at to
 
 # --- TESTING Guard ---
 # Guard to prevent watchers from running during test collection/execution
-TESTING = (
-    os.getenv("TESTING") == "1"
-    or "pytest" in sys.modules
-    or os.getenv("PYTEST_CURRENT_TEST") is not None
-    or os.getenv("PYTEST_ADDOPTS") is not None
-)
+try:
+    from . import TESTING
+except ImportError:
+    TESTING = (
+        os.getenv("TESTING") == "1"
+        or "pytest" in sys.modules
+        or os.getenv("PYTEST_CURRENT_TEST") is not None
+        or os.getenv("PYTEST_ADDOPTS") is not None
+    )
 if TESTING:
     logging.warning("TESTING environment detected. Watchers will be disabled.")
 

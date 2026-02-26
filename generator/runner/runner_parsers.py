@@ -37,10 +37,11 @@ from pydantic import (
 logger = logging.getLogger(__name__)
 
 
-class RunnerError(Exception):
-    """Domain-specific error for unrecoverable runner/parser failures."""
-
-    pass
+try:
+    from .runner_errors import RunnerError
+except ImportError:
+    class RunnerError(Exception):
+        pass
 
 
 # --- Constants for metrics and schema output keys ---
