@@ -6990,12 +6990,13 @@ class OmniCoreService:
                             if not val_result.get("valid", True):
                                 validation_errors = val_result.get('errors', [])
                                 
-                                # Check for retriable errors (syntax errors, missing files, or import errors)
+                                # Check for retriable errors (syntax errors, missing files, stub markers, or import errors)
                                 syntax_errors = [e for e in validation_errors if 'syntax' in e.lower() or 'SyntaxError' in e]
                                 missing_files = [e for e in validation_errors if 'missing' in e.lower() and 'required' in e.lower()]
                                 import_errors = [e for e in validation_errors if 'does not import' in e.lower() or 'but does not import' in e.lower()]
+                                stub_errors = [e for e in validation_errors if 'stub marker' in e.lower() or 'stub class' in e.lower()]
                                 
-                                errors_for_retry = syntax_errors + import_errors
+                                errors_for_retry = syntax_errors + import_errors + stub_errors
                                 if missing_files:
                                     error_txt_path = Path(output_path_for_validation) / "error.txt"
                                     if error_txt_path.exists():
@@ -7005,7 +7006,7 @@ class OmniCoreService:
                                         )
                                         errors_for_retry.extend(missing_files)
                                 
-                                if errors_for_retry and codegen_attempt < max_codegen_retries:
+                                if errors_for_retry and codegen_attempt <= max_codegen_retries:
                                     # We have retriable errors and retries left - set up for retry
                                     validation_passed = False
                                     
@@ -7014,6 +7015,8 @@ class OmniCoreService:
                                         error_type = "ImportError"
                                     elif syntax_errors:
                                         error_type = "SyntaxError"
+                                    elif stub_errors:
+                                        error_type = "StubError"
                                     else:
                                         error_type = "ValidationError"
                                     

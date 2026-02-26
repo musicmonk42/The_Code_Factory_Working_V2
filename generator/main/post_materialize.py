@@ -301,6 +301,135 @@ class PostMaterializeResult:
 # =============================================================================
 
 
+def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
+    """Phase 8: Auto-wire router files into app/main.py when missing.
+
+    Scans ``output_dir/app/routers/`` for Python router files and injects
+    ``include_router`` calls into ``app/main.py`` when they are absent.
+
+    The function is idempotent: if ``include_router`` is already present in
+    ``main.py`` (from any router, not just the ones we would wire) it does nothing.
+    Changes are recorded in ``result.files_created`` (the field tracks all files
+    touched by this phase, whether created or modified).
+
+    Args:
+        output_dir: Project root directory (contains ``app/``).
+        result: Mutable result object; modified in-place on success.
+    """
+    routers_dir = output_dir / "app" / "routers"
+    main_py = output_dir / "app" / "main.py"
+
+    if not routers_dir.is_dir() or not main_py.exists():
+        return
+
+    main_content = main_py.read_text(encoding="utf-8")
+    if "include_router" in main_content:
+        return  # Already wired — nothing to do.
+
+    router_modules: List[str] = [
+        f.stem
+        for f in sorted(routers_dir.glob("*.py"))
+        if f.name != "__init__.py"
+    ]
+    if not router_modules:
+        return
+
+    # Build the import and wire-up lines.
+    import_lines = [
+        f"from app.routers.{mod} import router as {mod}_router\n"
+        for mod in router_modules
+    ]
+    wire_lines = [
+        f"app.include_router({mod}_router, prefix=\"/api/v1/{mod}\")\n"
+        for mod in router_modules
+    ]
+
+    lines = main_content.splitlines(keepends=True)
+
+    # ---- Step 1: append imports after the last existing import line ----------
+    # When no imports exist yet (bare file or docstring-only), we place the new
+    # imports after the module docstring (if any) so we never insert before a
+    # `"""…"""` module header or a `# coding:` / `# !` shebang line.
+    last_import_idx: int = -1
+    _in_module_docstring = False
+    _module_docstring_done = False
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        # Skip the module-level docstring (triple-quoted string at the top).
+        if not _module_docstring_done:
+            if not _in_module_docstring:
+                if stripped.startswith('"""') or stripped.startswith("'''"):
+                    # Single-line docstring: '"""..."""'
+                    quote = stripped[:3]
+                    rest = stripped[3:]
+                    if rest.rstrip().endswith(quote) and len(rest.rstrip()) >= 3:
+                        _module_docstring_done = True
+                    else:
+                        _in_module_docstring = True
+                    continue
+                elif stripped.startswith("#") or stripped == "\n" or not stripped:
+                    continue  # comment / blank → still in header region
+                else:
+                    _module_docstring_done = True
+            else:
+                quote = '"""' if '"""' in line else "'''"
+                if quote in line:
+                    _in_module_docstring = False
+                    _module_docstring_done = True
+                continue
+        if stripped.startswith("import ") or stripped.startswith("from "):
+            last_import_idx = i
+
+    if last_import_idx == -1:
+        # No imports found: place after the module header (docstring / comments).
+        insert_at = 0
+        for i, line in enumerate(lines):
+            stripped = line.lstrip()
+            if stripped and not stripped.startswith("#") and not stripped.startswith('"""') and not stripped.startswith("'''"):
+                insert_at = i
+                break
+    else:
+        insert_at = last_import_idx + 1
+
+    for offset, imp_line in enumerate(import_lines):
+        lines.insert(insert_at + offset, imp_line)
+
+    # ---- Step 2: insert include_router calls after app = FastAPI(...) --------
+    # Re-scan after the import insertion.  Handle both single-line and
+    # multi-line FastAPI() constructor calls by tracking open parentheses.
+    app_assign_idx: Optional[int] = None
+    _paren_depth = 0
+    for i, line in enumerate(lines):
+        if app_assign_idx is None and re.search(r"\bapp\s*=", line) and "FastAPI(" in line:
+            app_assign_idx = i
+            _paren_depth = line.count("(") - line.count(")")
+            if _paren_depth <= 0:
+                break  # Single-line constructor — done.
+        elif app_assign_idx is not None and _paren_depth > 0:
+            _paren_depth += line.count("(") - line.count(")")
+            if _paren_depth <= 0:
+                app_assign_idx = i  # Last line of multi-line call.
+                break
+
+    if app_assign_idx is not None:
+        wire_block = "".join(wire_lines)
+        lines.insert(app_assign_idx + 1, wire_block)
+    else:
+        # FastAPI instantiation not found — append at end as a safe fallback.
+        lines.append("\n" + "".join(wire_lines))
+
+    main_py.write_text("".join(lines), encoding="utf-8")
+    rel_path = str(main_py.relative_to(output_dir))
+    result.files_created.append(rel_path)
+    logger.info(
+        "%s Auto-wired %d router(s) into main.py: %s",
+        _STAGE,
+        len(router_modules),
+        router_modules,
+        extra={"output_dir": str(output_dir), "router_modules": router_modules},
+    )
+
+
 def post_materialize(
     output_dir: Path,
     entry_point: Optional[str] = None,
@@ -411,6 +540,16 @@ def post_materialize(
                 ensure_alembic_scaffolding(output_dir, result)
             except Exception as alembic_exc:  # pylint: disable=broad-except
                 warn = f"ensure_alembic_scaffolding error: {alembic_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
+
+            # ------------------------------------------------------------------
+            # Phase 8: Auto-wire routers into main.py
+            # ------------------------------------------------------------------
+            try:
+                _auto_wire_routers(output_dir, result)
+            except Exception as wire_exc:  # pylint: disable=broad-except
+                warn = f"_auto_wire_routers error: {wire_exc}"
                 result.warnings.append(warn)
                 logger.warning("%s %s", _STAGE, warn, exc_info=True)
 

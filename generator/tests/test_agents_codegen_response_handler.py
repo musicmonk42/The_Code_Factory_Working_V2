@@ -912,6 +912,34 @@ def test_ini_file_in_multifile_response_no_syntax_error():
         assert "alembic.ini" not in files[crh.ERROR_FILENAME]
 
 
+def test_tpl_file_skips_python_syntax_validation():
+    """Helm .tpl template files must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("helm/templates/_helpers.tpl") is True
+
+
+def test_jinja2_file_skips_python_syntax_validation():
+    """Jinja2 template files must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("templates/base.j2") is True
+    assert crh._should_skip_syntax_validation("deploy.jinja2") is True
+
+
+def test_ini_cfg_files_skip_validation():
+    """Config files with .ini and .cfg extensions skip validation."""
+    assert crh._should_skip_syntax_validation("alembic.ini") is True
+    assert crh._should_skip_syntax_validation("setup.cfg") is True
+
+
+def test_proto_file_skips_validation():
+    """Protocol buffer files must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("service.proto") is True
+
+
+def test_terraform_file_skips_validation():
+    """Terraform/HCL files must not be validated as Python code."""
+    assert crh._should_skip_syntax_validation("main.tf") is True
+    assert crh._should_skip_syntax_validation("variables.hcl") is True
+
+
 # ==============================================================================
 # Tests for: production-ready validation error file merging
 # ==============================================================================

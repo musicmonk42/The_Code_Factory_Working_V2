@@ -481,6 +481,10 @@ class Database:
         if not db_path or not isinstance(db_path, str):
             raise ValueError("db_path must be a non-empty string")
 
+        # Guard against double initialization (Bug 6 fix)
+        self._initialized: bool = False
+        self._init_lock: asyncio.Lock = asyncio.Lock()
+
         # Load security configuration
         self.security_config = get_security_config()
         # EnterpriseSecurityUtils uses keyword-only args with defaults
@@ -848,6 +852,26 @@ class Database:
         Initialize the database by creating tables and running migrations.
 
         This method delegates to create_tables() to avoid code duplication (Issue #17 fix).
+        Includes an idempotency guard to prevent double initialization (Issue #6 fix).
+
+        Thread-safety: Uses ``asyncio.Lock`` (double-checked locking) so concurrent
+        callers that race on the first ``initialize()`` call each block on the lock;
+        only the winner proceeds, the losers return immediately after the first winner
+        sets ``_initialized = True``.
+        """
+        if self._initialized:
+            logger.info("Database already initialized, skipping duplicate initialization")
+            return
+        async with self._init_lock:
+            if self._initialized:  # Double-check after acquiring lock
+                logger.info("Database already initialized, skipping duplicate initialization")
+                return
+            await self._do_initialize()
+            self._initialized = True
+
+    async def _do_initialize(self) -> None:
+        """
+        Internal initialization logic — called once under the init lock.
         """
         try:
             logger.info("Database component: Starting async initialization...")
