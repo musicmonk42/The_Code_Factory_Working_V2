@@ -62,8 +62,10 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
@@ -264,7 +266,7 @@ class ArbiterBridge:
             return True, "Bridge disabled"
 
         try:
-            with BRIDGE_OPERATION_DURATION.labels(operation="check_policy").time() if HAS_PROMETHEUS else _NoOpTimer():
+            with _timed_operation(BRIDGE_OPERATION_DURATION, "check_policy"):
                 # Prefer routing through UnifiedPolicyFacade so all Generator
                 # policy decisions are audited and metrics captured centrally.
                 try:
@@ -341,8 +343,20 @@ class ArbiterBridge:
                 "source": "generator",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
+
+            # For generator_output events, ensure file_paths provenance metadata
+            # is included so the Arbiter's FileProvenanceRegistry can register them.
+            if event_type == "generator_output":
+                if "file_paths" not in enriched_data:
+                    # Attempt to derive file paths from common payload fields
+                    derived_file_paths: list = []
+                    for field in ("file_path", "output_path", "path"):
+                        if isinstance(data.get(field), str):
+                            derived_file_paths.append(data[field])
+                    enriched_data["file_paths"] = derived_file_paths
+                enriched_data.setdefault("workflow_id", data.get("workflow_id", ""))
             
-            with BRIDGE_OPERATION_DURATION.labels(operation="publish_event").time() if HAS_PROMETHEUS else _NoOpTimer():
+            with _timed_operation(BRIDGE_OPERATION_DURATION, "publish_event"):
                 await asyncio.wait_for(
                     self.message_queue.publish(
                         topic=f"generator.{event_type}",
@@ -409,7 +423,7 @@ class ArbiterBridge:
                 "severity": bug_data.get("severity", "medium")
             }
             
-            with BRIDGE_OPERATION_DURATION.labels(operation="report_bug").time() if HAS_PROMETHEUS else _NoOpTimer():
+            with _timed_operation(BRIDGE_OPERATION_DURATION, "report_bug"):
                 bug_id = await asyncio.wait_for(
                     self.bug_manager.report_bug(enriched_bug_data),
                     timeout=5.0
@@ -469,7 +483,7 @@ class ArbiterBridge:
             return False
         
         try:
-            with BRIDGE_OPERATION_DURATION.labels(operation="update_knowledge").time() if HAS_PROMETHEUS else _NoOpTimer():
+            with _timed_operation(BRIDGE_OPERATION_DURATION, "update_knowledge"):
                 result = await asyncio.wait_for(
                     self.knowledge_graph.add_fact(domain, key, data, source="generator"),
                     timeout=5.0
@@ -551,6 +565,20 @@ class _NoOpTimer:
     
     def time(self):
         return self
+
+
+@contextlib.contextmanager
+def _timed_operation(metric, operation: str):
+    """Safe timing context manager compatible with both real and mocked Prometheus."""
+    t0 = time.monotonic()
+    try:
+        yield
+    finally:
+        elapsed = time.monotonic() - t0
+        try:
+            metric.labels(operation=operation).observe(elapsed)
+        except Exception:
+            pass
 
 
 # Convenience function for creating a bridge instance

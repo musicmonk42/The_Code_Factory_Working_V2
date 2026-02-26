@@ -109,6 +109,10 @@ services:
       # PolicyManager. Must be on a persistent volume in production.
       # Defaults to /app/data/policies.json (on the data PVC).
       - POLICY_CONFIG_FILE_PATH=${POLICY_CONFIG_FILE_PATH:-/app/data/policies.json}
+      # File provenance registry path — records which files were produced by the Generator
+      # pipeline. MUST reside on the platform-data volume so the registry survives
+      # container restarts. Override via .env if the data volume is mounted elsewhere.
+      - ARBITER_PROVENANCE_PATH=${ARBITER_PROVENANCE_PATH:-/app/data/provenance.json}
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}

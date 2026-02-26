@@ -190,6 +190,11 @@ data:
   # MUST resolve to a path on the data PersistentVolumeClaim so policies survive
   # pod restarts and rolling upgrades. Override via kustomize overlays when needed.
   POLICY_CONFIG_FILE_PATH: "/app/data/policies.json"
+  # File provenance registry path — records which files were produced by the Generator
+  # pipeline so the SFE can prioritise generated artefacts for quality checks.
+  # MUST be on the data PVC so the registry survives pod restarts; otherwise the
+  # Arbiter loses track of generator-produced files on every restart.
+  ARBITER_PROVENANCE_PATH: "/app/data/provenance.json"
 
   # SFE Checkpoint Manager uses container-friendly defaults:
   # - CHECKPOINT_AUDIT_LOG_PATH defaults to ./logs/checkpoint/audit.log
