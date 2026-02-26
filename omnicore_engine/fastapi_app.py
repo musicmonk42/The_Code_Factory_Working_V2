@@ -496,6 +496,39 @@ async def lifespan(app: FastAPI):
             if not omnicore_engine.crew_manager:
                 raise RuntimeError("CrewManager not initialized on omnicore_engine.")
 
+            # Load agents from YAML config file if it exists
+            crew_config_path = os.path.join(
+                os.path.dirname(__file__), "..", "self_fixing_engineer", "agent_orchestration", "crew_config.yaml"
+            )
+            if os.path.exists(crew_config_path):
+                try:
+                    import yaml as _yaml
+                    with open(crew_config_path, "r") as _f:
+                        crew_config = _yaml.safe_load(_f)
+                    for agent_def in crew_config.get("agents", []):
+                        agent_name = agent_def.get("name") or agent_def.get("id")
+                        if agent_name and agent_name not in omnicore_engine.crew_manager.agents:
+                            try:
+                                await omnicore_engine.crew_manager.add_agent(
+                                    name=agent_name,
+                                    agent_class="CrewAgentBase",
+                                    config=agent_def.get("config", {}),
+                                    tags=[agent_def.get("agent_type", "ai")],
+                                    metadata={
+                                        "manifest": agent_def.get("manifest"),
+                                        "entrypoint": agent_def.get("entrypoint"),
+                                        "role_ref": agent_def.get("role_ref"),
+                                        "skills_ref": agent_def.get("skills_ref"),
+                                        "compliance_controls": agent_def.get("compliance_controls", []),
+                                    },
+                                    caller_role="system",
+                                )
+                            except Exception as agent_e:
+                                logger.warning(f"Failed to load agent '{agent_name}' from crew_config.yaml: {agent_e}")
+                    logger.info(f"Loaded agents from crew_config.yaml. Total agents: {len(omnicore_engine.crew_manager.agents)}")
+                except Exception as e:
+                    logger.warning(f"Could not load crew_config.yaml: {e}")
+
             # New: Pass the simulation module instance to the Arbiter
             if not omnicore_engine.test_generation_orchestrator:
                 logger.warning(
@@ -558,6 +591,13 @@ async def lifespan(app: FastAPI):
     if simulation_module:
         await simulation_module.shutdown()
         logger.info("UnifiedSimulationModule shutdown complete.")
+
+    if omnicore_engine and omnicore_engine.crew_manager:
+        try:
+            await omnicore_engine.crew_manager.shutdown(caller_role="system")
+            logger.info("CrewManager shutdown complete.")
+        except Exception as e:
+            logger.error(f"CrewManager shutdown failed: {e}")
 
     await omnicore_engine.shutdown()
     if chatbot_arbiter:
