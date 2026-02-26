@@ -52,23 +52,23 @@ class TestModelMaxOutputTokensUpdated:
         return match.group(0)
 
     def test_gpt4o_limit_increased(self):
-        """gpt-4o limit must be raised above the old 16384 ceiling."""
+        """gpt-4o limit must be at least 16384 (the actual API maximum)."""
         raw = self._read_constants()
         match = re.search(r'"gpt-4o"\s*:\s*(\d+)', raw)
         assert match, '"gpt-4o" key missing from MODEL_MAX_OUTPUT_TOKENS'
         limit = int(match.group(1))
-        assert limit > 16384, (
-            f"gpt-4o limit ({limit}) should be greater than old 16384 ceiling"
+        assert limit >= 16384, (
+            f"gpt-4o limit ({limit}) should be at least 16384"
         )
 
     def test_gpt4o_mini_limit_increased(self):
-        """gpt-4o-mini limit must be raised above the old 16384 ceiling."""
+        """gpt-4o-mini limit must be at least 16384 (the actual API maximum)."""
         raw = self._read_constants()
         match = re.search(r'"gpt-4o-mini"\s*:\s*(\d+)', raw)
         assert match, '"gpt-4o-mini" key missing from MODEL_MAX_OUTPUT_TOKENS'
         limit = int(match.group(1))
-        assert limit > 16384, (
-            f"gpt-4o-mini limit ({limit}) should be greater than old 16384 ceiling"
+        assert limit >= 16384, (
+            f"gpt-4o-mini limit ({limit}) should be at least 16384"
         )
 
     def test_new_models_added(self):
