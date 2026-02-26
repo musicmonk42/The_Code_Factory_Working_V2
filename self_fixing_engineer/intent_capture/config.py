@@ -362,7 +362,7 @@ class Config(BaseSettings):
         env_prefix="INTENT_AGENT_", case_sensitive=False, extra="ignore", strict=True
     )
     ENCRYPTION_KEY: SecretStr
-    LLM_API_KEY: SecretStr
+    LLM_API_KEY: Optional[SecretStr] = Field(default=None)
     REDIS_URL: str = Field(
         default="redis://localhost:6379/0", description="Redis URL for caching"
     )

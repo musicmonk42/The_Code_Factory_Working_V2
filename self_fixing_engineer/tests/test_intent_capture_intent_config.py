@@ -287,15 +287,15 @@ def test_llm_api_key_openai_preferred_over_gemini(monkeypatch):
     assert config.LLM_API_KEY.get_secret_value() == "openai-key-value"
 
 
-def test_llm_api_key_no_fallbacks_raises(monkeypatch):
-    """When no LLM key is available at all, ValidationError is raised."""
+def test_llm_api_key_no_fallbacks_is_none(monkeypatch):
+    """When no LLM key is available at all, LLM_API_KEY defaults to None."""
     monkeypatch.delenv("INTENT_AGENT_LLM_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("INTENT_AGENT_ENCRYPTION_KEY", "A" * 32 + "=" * 12)
 
-    with pytest.raises(ValidationError):
-        Config()
+    config = Config()
+    assert config.LLM_API_KEY is None
 
 
 def test_encryption_key_falls_back_to_encryption_key_var(monkeypatch):
