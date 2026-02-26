@@ -11,8 +11,6 @@ Tests verify:
 - Backward compatibility aliases
 """
 
-import gc
-
 import pytest
 
 from omnicore_engine.message_bus.exceptions import (
@@ -34,11 +32,6 @@ from omnicore_engine.message_bus.exceptions import (
 
 class TestExceptionHierarchy:
     """Test exception inheritance and hierarchy."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_connection_error_hierarchy(self):
         """Connection errors should inherit from base message bus error."""
@@ -64,11 +57,6 @@ class TestExceptionHierarchy:
 
 class TestBaseMessageBusError:
     """Test OmniCoreMessageBusError base class."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_simple_message(self):
         """Test basic error with just a message."""
@@ -93,11 +81,6 @@ class TestBaseMessageBusError:
 
 class TestRedisExceptions:
     """Test Redis-specific exceptions."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_redis_connection_error_basic(self):
         """Test RedisConnectionError with basic message."""
@@ -133,11 +116,6 @@ class TestRedisExceptions:
 
 class TestKafkaExceptions:
     """Test Kafka-specific exceptions."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_kafka_connection_error_basic(self):
         """Test KafkaConnectionError with basic message."""
@@ -164,11 +142,6 @@ class TestKafkaExceptions:
 
 class TestCircuitBreakerError:
     """Test CircuitBreakerError."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_circuit_breaker_error_default_state(self):
         """Test CircuitBreakerError with default state."""
@@ -184,11 +157,6 @@ class TestCircuitBreakerError:
 
 class TestRateLimitExceededError:
     """Test RateLimitExceededError."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_rate_limit_error_basic(self):
         """Test RateLimitExceededError with basic message."""
@@ -204,11 +172,6 @@ class TestRateLimitExceededError:
 
 class TestMessageValidationError:
     """Test MessageValidationError."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_validation_error_basic(self):
         """Test MessageValidationError with basic message."""
@@ -225,11 +188,6 @@ class TestMessageValidationError:
 
 class TestDeadLetterQueueError:
     """Test DeadLetterQueueError."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_dlq_error_basic(self):
         """Test DeadLetterQueueError with basic message."""
@@ -246,11 +204,6 @@ class TestDeadLetterQueueError:
 
 class TestEncryptionError:
     """Test EncryptionError."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_encryption_error_encrypt(self):
         """Test EncryptionError for encryption operation."""
@@ -271,11 +224,6 @@ class TestEncryptionError:
 
 class TestExceptionChaining:
     """Test exception chaining with 'from' clause."""
-    
-    @classmethod
-    def teardown_class(cls):
-        """Clean up after all tests in this class."""
-        gc.collect()
 
     def test_chaining_with_from(self):
         """Test that exceptions can be chained properly."""
