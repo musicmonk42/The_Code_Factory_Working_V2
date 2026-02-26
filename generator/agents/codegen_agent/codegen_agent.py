@@ -16,7 +16,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Third-party libraries (MINIMAL SET RETAINED)
 import aiohttp
@@ -284,6 +284,110 @@ async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
             pass_name,
             elapsed,
         )
+
+
+def _ast_merge_python_files(old_content: str, new_content: str) -> str:
+    """Merge two Python source files, preserving symbols from the old version.
+
+    When a later generation pass produces a file that already exists in
+    ``_merged_files``, a blind ``dict.update()`` would discard any class or
+    function definitions that were in the original but omitted from the new
+    version.  This helper uses ``ast.parse()`` to detect which top-level names
+    are present in each version and appends the missing definitions from the old
+    version to the end of the new version.
+
+    Decorator handling: when a function or class has decorators, the source
+    extraction starts from the first decorator's line (``node.decorator_list[0].lineno``)
+    rather than the ``def``/``class`` keyword line, so the full decorated
+    definition is preserved verbatim.
+
+    Falls back to returning ``new_content`` unchanged if either version fails
+    AST parsing (e.g. a syntax error in LLM output), so it never blocks
+    generation.
+
+    Args:
+        old_content: The previously-accumulated file content.
+        new_content: The replacement content produced by the latest pass.
+
+    Returns:
+        Merged source string where ``new_content`` is the base and any
+        top-level definitions absent from it are appended from ``old_content``.
+        The returned string always ends with a single trailing newline.
+    """
+    try:
+        old_tree = ast.parse(old_content)
+        new_tree = ast.parse(new_content)
+    except SyntaxError:
+        return new_content
+
+    # Collect names of all top-level definitions in a parsed module tree.
+    def _top_level_names(tree: ast.Module) -> Set[str]:
+        names: Set[str] = set()
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+        return names
+
+    old_names = _top_level_names(old_tree)
+    new_names = _top_level_names(new_tree)
+    missing_names = old_names - new_names
+
+    if not missing_names:
+        return new_content
+
+    # Extract the source lines for each missing top-level definition from the
+    # old content and append them to the new content.
+    #
+    # Line numbers in the AST are 1-based; ``end_lineno`` (available since
+    # Python 3.8) is inclusive.  Slicing ``old_lines[start:end]`` where
+    # ``start = lineno - 1`` and ``end = end_lineno`` gives the exact lines.
+    old_lines = old_content.splitlines(keepends=True)
+    snippets: List[str] = []
+    for node in ast.iter_child_nodes(old_tree):
+        node_name: Optional[str] = None
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            node_name = node.name
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in missing_names:
+                    node_name = target.id
+                    break
+
+        if node_name is None or node_name not in missing_names:
+            continue
+
+        end_lineno: Optional[int] = getattr(node, "end_lineno", None)
+        if end_lineno is None:
+            # Python < 3.8 fallback: skip this node rather than risk a bad slice.
+            continue
+
+        # For decorated definitions, start from the first decorator's line so
+        # the ``@decorator`` lines are included in the extracted snippet.
+        decorator_list = getattr(node, "decorator_list", [])
+        start_lineno = (
+            decorator_list[0].lineno if decorator_list else node.lineno
+        )
+        snippet = "".join(old_lines[start_lineno - 1 : end_lineno])
+        snippets.append(snippet)
+
+    if not snippets:
+        return new_content
+
+    logger.info(
+        "[CODEGEN] AST merge: appending %d symbol(s) missing from new version: %s",
+        len(missing_names),
+        sorted(missing_names),
+    )
+
+    # Normalise the base so it ends with exactly one newline, then append each
+    # snippet separated by a blank line (PEP 8: two blank lines between
+    # top-level definitions).
+    base = new_content.rstrip("\n") + "\n"
+    return base + "\n\n" + "\n\n".join(s.rstrip("\n") for s in snippets) + "\n"
 
 
 # ==============================================================================
@@ -1544,7 +1648,18 @@ if PLUGIN_AVAILABLE:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
-                                     _merged_files.update(_pass_files)
+                                     # AST-aware merge: preserve symbols from earlier passes when
+                                     # the new pass overwrites an existing Python file.
+                                     for _pf_key, _pf_val in _pass_files.items():
+                                         if (
+                                             _pf_key in _merged_files
+                                             and _pf_key.endswith(".py")
+                                         ):
+                                             _merged_files[_pf_key] = _ast_merge_python_files(
+                                                 _merged_files[_pf_key], _pf_val
+                                             )
+                                         else:
+                                             _merged_files[_pf_key] = _pf_val
                                      # After each pass, rebuild the symbol manifest so later
                                      # passes know what was already defined.
                                      _symbol_manifest = _build_symbol_manifest(_merged_files)
@@ -2002,7 +2117,18 @@ else:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
-                                     _merged_files.update(_pass_files)
+                                     # AST-aware merge: preserve symbols from earlier passes when
+                                     # the new pass overwrites an existing Python file.
+                                     for _pf_key, _pf_val in _pass_files.items():
+                                         if (
+                                             _pf_key in _merged_files
+                                             and _pf_key.endswith(".py")
+                                         ):
+                                             _merged_files[_pf_key] = _ast_merge_python_files(
+                                                 _merged_files[_pf_key], _pf_val
+                                             )
+                                         else:
+                                             _merged_files[_pf_key] = _pf_val
                                      # After each pass, rebuild the symbol manifest so later
                                      # passes know what was already defined.
                                      _symbol_manifest = _build_symbol_manifest(_merged_files)

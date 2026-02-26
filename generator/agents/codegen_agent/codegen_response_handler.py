@@ -380,6 +380,18 @@ _LOCAL_IMPORT_RE = re.compile(
     re.MULTILINE,
 )
 
+# Pre-compiled pattern for "from app import X [as alias], Y [as alias2], ..." statements.
+# This catches attribute-access style imports where the LLM writes
+# ``from app import schemas`` and then uses ``schemas.User``.
+# Group 1: the raw imports string (e.g. "schemas, models as m")
+# NOTE: Multi-line parenthesised forms are deliberately excluded here (the opening
+# ``(`` would be the only captured token and is filtered out by ``isidentifier()``),
+# consistent with the treatment in ``_LOCAL_IMPORT_RE``.
+_APP_SUBMODULE_IMPORT_RE = re.compile(
+    r"^\s*from\s+app\s+import\s+(.+)$",
+    re.MULTILINE,
+)
+
 
 def _normalize_file_content(content: str) -> str:
     """
@@ -522,6 +534,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         # Ensure missing local module stubs are generated before materializing
         if lang == "python":
             fixed_files = ensure_local_module_stubs(fixed_files)
+            # Re-run collision detection after stub generation: stubs may re-introduce
+            # module files that collide with package directories already in code_files.
+            fixed_files = _detect_module_package_collisions(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -2744,9 +2759,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
        *code_files* but is missing the imported symbol (class or function), a
        stub definition is appended to that file.
 
-    Only ``from app.X import ...`` patterns are handled; third-party, stdlib,
-    and relative imports are ignored because their resolution is
-    context-dependent.
+    Import patterns detected
+    ~~~~~~~~~~~~~~~~~~~~~~~~
+    * ``from app.X import A, B`` — handled by :data:`_LOCAL_IMPORT_RE`.
+    * ``from app import X [as alias]`` followed by ``X.A`` / ``alias.A``
+      attribute-access usage — handled by :data:`_APP_SUBMODULE_IMPORT_RE`.
+      The ``as``-alias form (e.g. ``from app import schemas as s``) is fully
+      supported; ``s.User`` correctly maps to ``app/schemas.py``.
+
+    Third-party, stdlib, and relative imports are intentionally ignored because
+    their resolution is context-dependent.
 
     Name classification heuristic
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -2789,6 +2811,43 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             if module_path not in required_symbols:
                 required_symbols[module_path] = set()
             required_symbols[module_path].update(symbols)
+
+        # Attribute-access scanning pass: detect ``from app import schemas [as s]``
+        # followed by attribute-access patterns (``schemas.User`` or ``s.User``) so
+        # that symbols reached via module-attribute syntax are also stubbed.
+        # This is separate from the ``_LOCAL_IMPORT_RE`` scan above (which handles
+        # ``from app.schemas import User``) and runs within the same per-file loop.
+        #
+        # For each matched token we record both the canonical module name (used to
+        # build the ``app/<name>.py`` path) and the local alias actually used in the
+        # source (used for the attribute-access scan).  When no ``as`` clause is
+        # present the alias equals the module name.
+        for mod_match in _APP_SUBMODULE_IMPORT_RE.finditer(content):
+            for part in mod_match.group(1).split(","):
+                token = part.strip()
+                # Handle optional "X as alias" form.
+                as_parts = re.split(r"\bas\b", token, maxsplit=1)
+                module_name = as_parts[0].strip()
+                local_alias = as_parts[1].strip() if len(as_parts) == 2 else module_name
+
+                if not module_name or not module_name.isidentifier():
+                    continue
+                if not local_alias or not local_alias.isidentifier():
+                    local_alias = module_name
+
+                module_path = f"app/{module_name}.py"
+                # Scan the entire file for ``<alias>.SomeName`` accesses.
+                # The word boundary (\b) prevents false matches on longer names
+                # (e.g. ``myschemas.X`` when alias is ``schemas``).
+                attr_pattern = re.compile(
+                    r"\b" + re.escape(local_alias) + r"\.([A-Za-z_]\w*)"
+                )
+                for attr_match in attr_pattern.finditer(content):
+                    symbol = attr_match.group(1)
+                    if symbol.isidentifier():
+                        if module_path not in required_symbols:
+                            required_symbols[module_path] = set()
+                        required_symbols[module_path].add(symbol)
 
     # Second pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
