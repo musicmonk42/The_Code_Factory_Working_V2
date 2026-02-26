@@ -318,6 +318,10 @@ class TestAuditLedgerClientInit:
         mocker.patch.dict(
             os.environ, {"APP_ENV": "production", "USE_SECRETS_MANAGER": "false"}
         )
+        mocker.patch(
+            "self_fixing_engineer.arbiter.models.audit_ledger_client._in_test_mode",
+            return_value=False,
+        )
 
         from self_fixing_engineer.arbiter.models.audit_ledger_client import AuditLedgerClient, DLTError
 

@@ -92,6 +92,7 @@ else:
     from self_fixing_engineer.arbiter.metrics import (
         get_or_create_counter,
         get_or_create_gauge,
+        get_or_create_histogram,
         get_or_create_summary,
     )
     from cryptography.fernet import Fernet

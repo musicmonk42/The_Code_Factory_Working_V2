@@ -1,6 +1,7 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 import asyncio
+import atexit
 import hashlib
 import json
 import logging
@@ -541,6 +542,7 @@ class KafkaAuditStreamer:
                 }
                 
                 self.producer = Producer(config)
+                atexit.register(self._flush_and_close)
                 
                 # Test connection with a single poll
                 try:
@@ -587,6 +589,15 @@ class KafkaAuditStreamer:
                     "reason": "library_not_installed"
                 }
             )
+
+    def _flush_and_close(self):
+        """Flush pending messages and release the producer. Safe to call multiple times."""
+        if self.producer is not None:
+            try:
+                self.producer.flush(timeout=5)
+            except Exception:
+                pass
+            self.producer = None
 
     async def stream_event(self, record: Dict[str, Any]):
         try:
