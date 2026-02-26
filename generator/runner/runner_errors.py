@@ -129,7 +129,7 @@ class RunnerError(Exception):
 
         # --- FIX: AUDIT LOG ---
         try:
-            from .runner_logging import log_action
+            from runner.runner_logging import log_action
 
             log_action(
                 action="error_raised",

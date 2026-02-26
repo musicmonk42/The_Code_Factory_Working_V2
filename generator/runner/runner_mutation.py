@@ -203,7 +203,7 @@ async def _run_subprocess_safe(
             await process.wait()
         logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd_list)}")
         raise TimeoutError(
-            error_codes["TASK_TIMEOUT"],
+            "TASK_TIMEOUT",
             detail=f"Subprocess command timed out after {timeout} seconds.",
             timeout_seconds=timeout,
             cmd=" ".join(cmd_list),
