@@ -96,10 +96,13 @@ ENSEMBLE_TOTAL_TIMEOUT_MULTIPLIER: float = float(
 DEFAULT_JOB_LLM_BUDGET = int(os.getenv("JOB_LLM_BUDGET", "50"))  # Maximum LLM calls per job
 JOB_LLM_CALL_TRACKER: Dict[str, int] = {}  # Track calls per job_id
 
+# Maximum total fallback attempts across all providers to prevent infinite retry loops
+MAX_TOTAL_FALLBACK_ATTEMPTS = int(os.getenv("MAX_LLM_FALLBACK_ATTEMPTS", "6"))
+
 # Provider default models for fallback scenarios
 _PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-4o",
-    "gemini": "gemini-pro",
+    "gemini": "gemini-1.5-flash",  # Changed from "gemini-pro" (deprecated/removed)
     "local": "codellama",
     "grok": "grok-beta",
     "claude": "claude-3-sonnet-20240229",
@@ -685,7 +688,15 @@ class LLMClient:
                         f"Provider {provider} failed with {type(e).__name__}: {e}. "
                         f"Attempting fallback providers: {fallback_providers}"
                     )
+                    last_error: Exception = e
+                    total_fallback_attempts = 0
                     for fallback_provider in fallback_providers:
+                        if total_fallback_attempts >= MAX_TOTAL_FALLBACK_ATTEMPTS:
+                            logger.error(
+                                f"[LLM] Exhausted all {total_fallback_attempts} fallback attempts. "
+                                f"Last error: {last_error}"
+                            )
+                            raise last_error
                         try:
                             # Check if fallback provider is available
                             if await self.circuit_breaker.allow_request(fallback_provider):
@@ -694,6 +705,7 @@ class LLMClient:
                                 # Remap model for fallback provider
                                 fallback_model = self._remap_model_for_provider(model, fallback_provider)
                                 
+                                total_fallback_attempts += 1
                                 # Recursively call with fallback provider and remapped model
                                 return await self.call_llm_api(
                                     prompt=prompt,
@@ -705,9 +717,24 @@ class LLMClient:
                                     **kwargs
                                 )
                         except Exception as fallback_error:
-                            logger.warning(
-                                f"Fallback provider {fallback_provider} also failed: {fallback_error}"
-                            )
+                            last_error = fallback_error
+                            # Skip providers that returned client errors (4xx) — non-retryable
+                            is_client_error = False
+                            if HAS_OPENAI and isinstance(fallback_error, OpenAIError):
+                                is_client_error = getattr(fallback_error, "status_code", 0) in range(400, 500)
+                            else:
+                                # Fall back to checking error string for HTTP 4xx patterns
+                                import re as _re
+                                is_client_error = bool(_re.search(r'\b4\d{2}\b', str(fallback_error)))
+                            if is_client_error:
+                                logger.warning(
+                                    f"Fallback provider {fallback_provider} returned non-retryable error "
+                                    f"(skipping): {fallback_error}"
+                                )
+                            else:
+                                logger.warning(
+                                    f"Fallback provider {fallback_provider} also failed: {fallback_error}"
+                                )
                             continue
                 
                 # No fallback succeeded

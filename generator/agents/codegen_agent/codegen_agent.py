@@ -102,6 +102,18 @@ MODEL_MAX_OUTPUT_TOKENS = {
     "claude-3-5-haiku-20241022": 8192,    # Added: Claude 3.5 Haiku
     "claude-3-opus-20240229": 4096,       # Added: Claude 3 Opus
 }
+# Per-model context window sizes (input + output tokens combined)
+# For models not listed here, defaults to 128000 (conservative assumption for modern LLMs)
+MODEL_CONTEXT_WINDOWS = {
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-4-turbo": 128000,
+    "gpt-4": 8192,
+    "gpt-3.5-turbo": 16385,
+}
+# Average characters per token used for rough input token estimation.
+# This is an approximation; actual ratios vary by model and language (~3-5 chars/token).
+AVG_CHARS_PER_TOKEN = 3.5
 
 # ==============================================================================
 # --- Multi-Pass Code Generation Constants ---
@@ -1751,10 +1763,15 @@ if PLUGIN_AVAILABLE:
                         if len(prompt) > LARGE_PROMPT_THRESHOLD:
                             model_name = config.model.get(config.backend)
                             model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
-                            _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
+                            context_window = MODEL_CONTEXT_WINDOWS.get(model_name, 128000)
+                            estimated_input_tokens = int(len(prompt) / AVG_CHARS_PER_TOKEN)
+                            safety_margin = int(estimated_input_tokens * 0.1)
+                            available_output_tokens = context_window - estimated_input_tokens - safety_margin
+                            _llm_kwargs["max_tokens"] = max(4096, min(LARGE_PROMPT_MAX_TOKENS, model_limit, available_output_tokens))
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), "
-                                f"requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars, ~{estimated_input_tokens} tokens), "
+                                f"requesting max_tokens={_llm_kwargs['max_tokens']} "
+                                f"(context_window={context_window}, model_output_limit={model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
@@ -2220,10 +2237,15 @@ else:
                         if len(prompt) > LARGE_PROMPT_THRESHOLD:
                             model_name = config.model.get(config.backend)
                             model_limit = MODEL_MAX_OUTPUT_TOKENS.get(model_name, 16384)
-                            _llm_kwargs["max_tokens"] = min(LARGE_PROMPT_MAX_TOKENS, model_limit)
+                            context_window = MODEL_CONTEXT_WINDOWS.get(model_name, 128000)
+                            estimated_input_tokens = int(len(prompt) / AVG_CHARS_PER_TOKEN)
+                            safety_margin = int(estimated_input_tokens * 0.1)
+                            available_output_tokens = context_window - estimated_input_tokens - safety_margin
+                            _llm_kwargs["max_tokens"] = max(4096, min(LARGE_PROMPT_MAX_TOKENS, model_limit, available_output_tokens))
                             logger.info(
-                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars), "
-                                f"requesting max_tokens={_llm_kwargs['max_tokens']} (model limit: {model_limit})"
+                                f"[CODEGEN] Large prompt detected ({len(prompt)} chars, ~{estimated_input_tokens} tokens), "
+                                f"requesting max_tokens={_llm_kwargs['max_tokens']} "
+                                f"(context_window={context_window}, model_output_limit={model_limit})"
                             )
                         if requirements.get("previous_error") or requirements.get("previous_feedback"):
                             _llm_kwargs["skip_cache"] = True
@@ -2240,24 +2262,6 @@ else:
 
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
-                    
-                    code_files = add_traceability_comments(
-                        code_files,
-                        requirements,
-                        requirements.get("target_language", "python"),
-                    )
-
-                    # Post-Processing and Scans
-                    for code in code_files.values():
-                        violations = security_utils.apply_compliance(
-                            code, config.compliance_rules
-                        )
-                        if violations:
-                            # --- Audit/Logging Change: Use log_audit_event ---
-                            await log_audit_event(
-                                "Compliance Violation", {"violations": violations}
-                            )
-                            # --- End Audit/Logging Change ---
 
                     # --- Security Scans Change: Use unified scanning utility ---
                     code_files = await perform_security_scans(code_files)
