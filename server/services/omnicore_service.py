@@ -7125,10 +7125,52 @@ class OmniCoreService:
                                     else:
                                         error_type = "ValidationError"
                                     
-                                    previous_error = {
-                                        "error_type": error_type,
-                                        "details": "\n".join(errors_for_retry[:3]),
-                                        "instruction": (
+                                    # Build instruction based on error type
+                                    if error_type == "StubError":
+                                        # Parse stub error messages to extract the specific file paths
+                                        # and symbol names so the LLM receives actionable feedback.
+                                        #
+                                        # Two message formats are produced by validate_generated_project:
+                                        #   "Stub marker '<text>' found in critical file <path>.py"
+                                        #   "Stub class '<Name>' in <path>.py (body is only 'pass')"
+                                        _stub_class_re = re.compile(
+                                            r"[Ss]tub\s+class\s+'(\w+)'\s+in\s+([\w/.\-]+\.py)"
+                                        )
+                                        _stub_marker_re = re.compile(
+                                            r"[Ss]tub\s+marker\s+'[^']+'\s+found\s+in\s+critical\s+file\s+([\w/.\-]+\.py)"
+                                        )
+                                        stub_by_file: dict = {}
+                                        for err in stub_errors:
+                                            class_match = _stub_class_re.search(err)
+                                            marker_match = _stub_marker_re.search(err)
+                                            if class_match:
+                                                file_path = class_match.group(2)
+                                                class_name = class_match.group(1)
+                                                stub_by_file.setdefault(file_path, [])
+                                                stub_by_file[file_path].append(class_name)
+                                            elif marker_match:
+                                                file_path = marker_match.group(1)
+                                                stub_by_file.setdefault(file_path, [])
+                                        stub_detail_lines = [
+                                            "CRITICAL: The following files must have COMPLETE implementations, not stubs:"
+                                        ]
+                                        if stub_by_file:
+                                            for stub_file_path, symbol_names in sorted(stub_by_file.items()):
+                                                if symbol_names:
+                                                    stub_detail_lines.append(
+                                                        f"- {stub_file_path}: {', '.join(sorted(set(symbol_names)))}"
+                                                    )
+                                                else:
+                                                    stub_detail_lines.append(f"- {stub_file_path}")
+                                        else:
+                                            # Fallback: include raw error details when parsing yields no results
+                                            stub_detail_lines.extend(f"- {e}" for e in stub_errors[:5])
+                                        instruction = (
+                                            "\n".join(stub_detail_lines) + "\n"
+                                            "Replace every raise NotImplementedError / pass stub with real business logic."
+                                        )
+                                    else:
+                                        instruction = (
                                             "The previous code generation had validation errors. "
                                             "Please fix these errors and regenerate the code. "
                                             "Pay special attention to:\n"
@@ -7139,6 +7181,11 @@ class OmniCoreService:
                                             "5. Include commas between function arguments and list/dict elements\n"
                                             "6. Ensure all modules used (e.g., time, os, json) are properly imported at the top of the file"
                                         )
+
+                                    previous_error = {
+                                        "error_type": error_type,
+                                        "details": "\n".join(errors_for_retry[:3]),
+                                        "instruction": instruction,
                                     }
                                     
                                     logger.warning(

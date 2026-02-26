@@ -781,6 +781,19 @@ class ImportFixerEngine:
         'Form', 'status', 'WebSocket', 'BackgroundTasks'
     }
 
+    # Common typing module names that must be imported from `typing`
+    TYPING_NAMES = {
+        'Any', 'Dict', 'List', 'Optional', 'Set', 'Tuple', 'Union',
+        'Sequence', 'Mapping', 'Callable', 'Iterable', 'Iterator',
+        'Type', 'ClassVar', 'Literal', 'Annotated', 'FrozenSet',
+        'Deque', 'DefaultDict', 'OrderedDict', 'Counter', 'ChainMap',
+        'NamedTuple', 'TypedDict', 'Protocol', 'TypeVar', 'Generic',
+        'Final', 'Awaitable', 'Coroutine', 'AsyncIterator', 'AsyncIterable',
+        'AsyncGenerator', 'Generator', 'SupportsInt', 'SupportsFloat',
+        'SupportsComplex', 'SupportsBytes', 'SupportsAbs', 'SupportsRound',
+        'IO', 'TextIO', 'BinaryIO', 'Pattern', 'Match',
+    }
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the ImportFixerEngine.
@@ -980,7 +993,13 @@ class ImportFixerEngine:
                 if name in self.FASTAPI_NAMES and name not in imported_names:
                     missing_fastapi.add(name)
 
-            if not missing_stdlib and not missing_fastapi:
+            # Find missing typing imports (use class-level constants)
+            missing_typing = set()
+            for name in used_names:
+                if name in self.TYPING_NAMES and name not in imported_names:
+                    missing_typing.add(name)
+
+            if not missing_stdlib and not missing_fastapi and not missing_typing:
                 # No missing imports detected, but we may have fixed incorrect imports
                 return {
                     "fixed_code": code,
@@ -1048,6 +1067,31 @@ class ImportFixerEngine:
                     new_imports.append(f'from fastapi import {", ".join(sorted(missing_fastapi))}')
                     fixes_applied.append(f"Added missing FastAPI imports: {', '.join(sorted(missing_fastapi))}")
                     self.logger.info(f"Adding FastAPI imports: {', '.join(sorted(missing_fastapi))}")
+
+            # Handle typing imports
+            if missing_typing:
+                # Check if there's already a "from typing import" line
+                typing_import_line_idx = None
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('from typing import'):
+                        typing_import_line_idx = i
+                        break
+
+                if typing_import_line_idx is not None:
+                    # Extend existing import
+                    existing_line = lines[typing_import_line_idx]
+                    match = re.match(r'from typing import (.+)', existing_line)
+                    if match:
+                        existing_imports = {name.strip() for name in match.group(1).split(',') if name.strip()}
+                        all_imports = existing_imports | missing_typing
+                        lines[typing_import_line_idx] = f'from typing import {", ".join(sorted(all_imports))}'
+                        fixes_applied.append(f"Extended typing import with: {', '.join(sorted(missing_typing))}")
+                        self.logger.info(f"Extended typing import with: {', '.join(sorted(missing_typing))}")
+                else:
+                    # Add new typing import
+                    new_imports.append(f'from typing import {", ".join(sorted(missing_typing))}')
+                    fixes_applied.append(f"Added missing typing imports: {', '.join(sorted(missing_typing))}")
+                    self.logger.info(f"Adding typing imports: {', '.join(sorted(missing_typing))}")
 
             # Insert new imports at the appropriate position
             if new_imports:

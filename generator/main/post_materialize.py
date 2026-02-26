@@ -664,14 +664,42 @@ def ensure_alembic_scaffolding(
 
     Writes :data:`ALEMBIC_STUB_FILES` to *output_dir* only when those paths do
     not already exist, so that any richer files produced by the LLM are never
-    overwritten.
+    overwritten.  For ``alembic/env.py`` specifically, if a pre-existing file
+    fails Python syntax validation it is replaced with the known-good template
+    so that downstream migration commands don't crash.
 
     Args:
         output_dir: Project root directory.
         result: Mutable result object updated in-place.
     """
+    import ast as _ast
+
     for rel_path, content in ALEMBIC_STUB_FILES.items():
         full_path = output_dir / Path(rel_path)
+
+        # Special handling for alembic/env.py: validate syntax of any existing
+        # file and fall back to the template when validation fails.
+        if rel_path == "alembic/env.py" and full_path.exists():
+            try:
+                existing_src = full_path.read_text(encoding="utf-8")
+                _ast.parse(existing_src)
+                # Syntax is valid — keep the LLM-generated file as-is.
+                continue
+            except SyntaxError:
+                # Replace the broken file with the known-good template.
+                logger.warning(
+                    "%s alembic/env.py failed syntax validation; replacing with hardcoded template",
+                    _STAGE,
+                )
+                try:
+                    full_path.write_text(content, encoding="utf-8")
+                    result.files_created.append(str(full_path.relative_to(output_dir)))
+                except Exception as write_err:
+                    result.warnings.append(
+                        f"Could not replace invalid alembic/env.py: {write_err}"
+                    )
+                continue
+
         _create_if_absent(
             full_path,
             content,
