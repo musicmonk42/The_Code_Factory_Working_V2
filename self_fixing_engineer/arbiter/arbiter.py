@@ -1150,11 +1150,12 @@ else:
     memory_gauge = None
     db_health_gauge = None
     rl_reward_gauge = None
+    crew_agent_events_counter = None
     
     
     def _init_additional_metrics():
         """Initialize additional Prometheus metrics lazily."""
-        global _additional_metrics_initialized, action_counter, energy_gauge, memory_gauge, db_health_gauge, rl_reward_gauge
+        global _additional_metrics_initialized, action_counter, energy_gauge, memory_gauge, db_health_gauge, rl_reward_gauge, crew_agent_events_counter
         if not _additional_metrics_initialized:
             action_counter = get_or_create_counter(
                 "actions_total", "Total actions executed", ("agent", "action")
@@ -1168,6 +1169,11 @@ else:
             )
             rl_reward_gauge = get_or_create_gauge(
                 "rl_reward", "Reward from RL steps", ("agent",)
+            )
+            crew_agent_events_counter = get_or_create_counter(
+                "crew_agent_lifecycle_events_total",
+                "Total crew agent lifecycle events",
+                ("event_type", "agent_name"),
             )
             _additional_metrics_initialized = True
     
@@ -3417,6 +3423,22 @@ else:
             self.running = False
             logging.getLogger(__name__).info(f"[{self.name}] Stopping async services...")
             self.log_event("Stopping async services", "service_stop")
+            if self.crew_manager:
+                try:
+                    for event_name, hook_fn in (
+                        ("on_agent_start", self._on_crew_agent_start),
+                        ("on_agent_stop", self._on_crew_agent_stop),
+                        ("on_agent_fail", self._on_crew_agent_fail),
+                        ("on_agent_heartbeat_missed", self._on_crew_heartbeat_missed),
+                    ):
+                        self.crew_manager.remove_hook(event_name, hook_fn)
+                    logging.getLogger(__name__).info(
+                        f"[{self.name}] Detached CrewManager event hooks"
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(
+                        f"[{self.name}] Failed to detach CrewManager hooks: {e}", exc_info=True
+                    )
             if self.feedback:
                 await self.feedback.disconnect_db()
             if self.explorer:
@@ -3507,6 +3529,8 @@ else:
         async def _on_crew_agent_start(self, manager, name: str, agent_info: dict, **kwargs):
             """Hook: Called when a crew agent starts."""
             self.log_event(f"Crew agent '{name}' started", "crew_agent_start")
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="start", agent_name=name).inc()
             if self.monitor:
                 self.monitor.log_metric("crew_agent_started", {"agent": name})
             if self.message_queue_service:
@@ -3521,12 +3545,16 @@ else:
         async def _on_crew_agent_stop(self, manager, name: str, agent_info: dict, **kwargs):
             """Hook: Called when a crew agent stops."""
             self.log_event(f"Crew agent '{name}' stopped", "crew_agent_stop")
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="stop", agent_name=name).inc()
             if self.monitor:
                 self.monitor.log_metric("crew_agent_stopped", {"agent": name})
     
         async def _on_crew_agent_fail(self, manager, name: str, agent_info: dict, error=None, **kwargs):
             """Hook: Called when a crew agent fails."""
             self.log_event(f"Crew agent '{name}' failed: {error}", "crew_agent_fail")
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="fail", agent_name=name).inc()
             if self.monitor:
                 self.monitor.log_metric("crew_agent_failed", {"agent": name, "error": str(error)})
             if self.message_queue_service:
@@ -3541,6 +3569,8 @@ else:
         async def _on_crew_heartbeat_missed(self, manager, name: str, agent_info: dict, **kwargs):
             """Hook: Called when a crew agent's heartbeat is missed."""
             self.log_event(f"Crew agent '{name}' heartbeat missed", "crew_heartbeat_missed")
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="heartbeat_missed", agent_name=name).inc()
             if self.monitor:
                 self.monitor.log_metric("crew_heartbeat_missed", {"agent": name})
     

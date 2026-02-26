@@ -483,6 +483,19 @@ class CrewManager:
             self._on_event_hooks[event] = []
         self._on_event_hooks[event].append(cb)
 
+    def remove_hook(self, event: str, cb: Callable[..., Awaitable[None]]) -> None:
+        """
+        Removes a previously registered event hook.
+
+        Args:
+            event: The event name (e.g., 'on_agent_start').
+            cb: The async callback to remove. No-op if not registered.
+        """
+        if event in self._on_event_hooks:
+            self._on_event_hooks[event] = [
+                existing for existing in self._on_event_hooks[event] if existing != cb
+            ]
+
     async def _emit(self, event: str, **kwargs):
         for cb in self._on_event_hooks.get(event, []):
             try:
