@@ -2874,20 +2874,13 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Module file is entirely missing — generate a stub.
             # Determine up-front whether any router-pattern symbols are present
             # so the APIRouter import can be emitted once at the module header.
-            has_router_syms = any(
-                sym.lower() in _ROUTER_VARIABLE_PATTERNS
-                for sym in symbols
-                if not sym[0].isupper()
-            )
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
-            if has_router_syms:
-                stub_lines.append("from fastapi import APIRouter as _APIRouter\n")
             stub_lines.append("\n")
             for sym in sorted(symbols):
-                # Uppercase initial → class; known router patterns → APIRouter();
+                # Uppercase initial → class; known router patterns → None variable;
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
@@ -2897,9 +2890,8 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         f"    pass\n\n\n"
                     )
                 elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
-                    # Import already emitted at module header above.
                     stub_lines.append(
-                        f"{sym} = _APIRouter()  # Router instance — wire routes here\n\n\n"
+                        f"{sym} = None  # Router placeholder — assign actual value\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
@@ -2950,8 +2942,6 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     if not sym[0].isupper()
                 )
                 appended_lines = ["\n\n# Supplemental symbols appended by module-stub pass\n"]
-                if has_router_missing:
-                    appended_lines.append("from fastapi import APIRouter as _APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
                         appended_lines.append(
@@ -2960,9 +2950,8 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f"    pass\n"
                         )
                     elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
-                        # Import already emitted at block header above.
                         appended_lines.append(
-                            f"\n{sym} = _APIRouter()  # Router instance — wire routes here\n"
+                            f"\n{sym} = None  # Router placeholder — assign actual value\n"
                         )
                     elif _is_likely_variable(sym):
                         appended_lines.append(

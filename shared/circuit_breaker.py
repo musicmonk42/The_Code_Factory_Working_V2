@@ -239,6 +239,11 @@ class CircuitBreaker:
         assert cb.failure_count == 0
     """
 
+    # Optional factory: when set, called instead of raising RuntimeError when OPEN.
+    # Signature: (message: str) -> Exception
+    # Can be set by consumers (e.g. process_utils) to raise a domain-specific error.
+    _open_exception_factory = None
+
     def __init__(
         self,
         failure_threshold: int = 5,
@@ -361,7 +366,9 @@ class CircuitBreaker:
         """
         with self._inst_lock:
             if self.state == "OPEN":
-                now = time.monotonic()
+                # time.time() is used here (rather than time.monotonic()) so that
+                # consumers can patch time.time to fast-forward recovery in tests.
+                now = time.time()
                 if now - self.last_failure_time > self.recovery_timeout:
                     self.state = "HALF-OPEN"
                     self._emit_transition("_instance_")
@@ -373,9 +380,11 @@ class CircuitBreaker:
                     logger.warning(
                         "Circuit '%s' is OPEN. Call blocked.", self.name
                     )
-                    raise RuntimeError(
-                        f"Circuit '{self.name}' is OPEN. Execution blocked."
-                    )
+                    _msg = f"Circuit '{self.name}' is OPEN. Execution blocked."
+                    _factory = type(self)._open_exception_factory
+                    if _factory is not None:
+                        raise _factory(_msg)
+                    raise RuntimeError(_msg)
 
         try:
             if asyncio.iscoroutinefunction(func):
@@ -385,7 +394,8 @@ class CircuitBreaker:
         except Exception:
             with self._inst_lock:
                 self.failures += 1
-                self.last_failure_time = time.monotonic()
+                # Use time.time() to match the recovery-check clock (see call()).
+                self.last_failure_time = time.time()
                 if self.failures >= self.failure_threshold:
                     if self.state != "OPEN":
                         self._emit_transition("_instance_")

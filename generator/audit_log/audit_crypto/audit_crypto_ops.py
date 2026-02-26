@@ -101,7 +101,33 @@ _FALLBACK_DISABLED_AT: float = 0
 
 
 # --- Utility Functions ---
-from shared.security.hashing import compute_hash, stream_compute_hash  # noqa: E402
+from shared.security.hashing import compute_hash as _shared_compute_hash, stream_compute_hash as _shared_stream_compute_hash  # noqa: E402
+
+
+def compute_hash(data: bytes) -> str:
+    """Compute SHA-256 hex digest of *data*.
+
+    Raises TypeError with a log entry when *data* is not bytes or bytearray.
+    """
+    if not isinstance(data, (bytes, bytearray)):
+        msg = "Data for hashing must be bytes"
+        logger.error(msg)
+        raise TypeError(msg)
+    return _shared_compute_hash(data)
+
+
+async def stream_compute_hash(data_chunks) -> str:
+    """Compute SHA-256 hex digest over an async iterable of byte chunks.
+
+    Validates that each chunk is bytes or bytearray; raises TypeError otherwise.
+    """
+    import hashlib
+    h = hashlib.new("sha256")
+    async for chunk in data_chunks:
+        if not isinstance(chunk, (bytes, bytearray)):
+            raise TypeError("All chunks yielded by data_chunks must be bytes")
+        h.update(chunk)
+    return h.hexdigest()
 
 
 # --- Core Cryptographic Operations (using the global provider) ---

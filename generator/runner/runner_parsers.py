@@ -611,7 +611,7 @@ async def parse_junit_xml(file_path: Path) -> Dict[str, Any]:
             exc_info=True,
         )
         # Per instruction, raise RunnerError for this specific test case
-        raise RunnerError("XML parsing failed")
+        raise RunnerError(error_code="PARSING_ERROR", detail="XML parsing failed")
     except Exception as e:
         logger.error(
             f"Unexpected error parsing JUnit XML file {file_path}: {e}", exc_info=True
@@ -906,7 +906,7 @@ async def parse_robot_xml(file_path: Path) -> Dict[str, Any]:
             exc_info=True,
         )
         # Per instruction, raise RunnerError for this specific test case (emulating junit_xml fix)
-        raise RunnerError("XML parsing failed")
+        raise RunnerError(error_code="PARSING_ERROR", detail="XML parsing failed")
     except Exception as e:
         logger.error(
             f"Unexpected error parsing Robot Framework XML file {file_path}: {e}",

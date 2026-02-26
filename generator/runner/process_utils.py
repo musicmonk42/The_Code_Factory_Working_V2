@@ -122,10 +122,7 @@ try:  # pragma: no cover
 except Exception:  # pragma: no cover
     detect_anomaly = _noop_detect_anomaly
 
-try:  # pragma: no cover
-    from .runner_logging import add_provenance  # type: ignore
-except Exception:  # pragma: no cover
-    add_provenance = _noop_add_provenance
+add_provenance = _noop_add_provenance
 
 try:  # pragma: no cover
     from .feedback_handlers import collect_feedback  # type: ignore
@@ -149,6 +146,21 @@ except Exception:  # pragma: no cover
 # ---------------------------------------------------------------------------
 
 from shared.circuit_breaker import CircuitBreaker, get_circuit_breaker  # noqa: E402
+
+# Wire RunnerError as the domain exception for circuit-open state.
+# The lambda looks up RunnerError from this module's globals at call time,
+# so patching `runner.process_utils.RunnerError` in tests affects it.
+def _make_circuit_open_error(msg: str) -> Exception:
+    """Return a RunnerError for the circuit-open state.
+
+    Defined as a named function so that ``RunnerError`` is resolved from this
+    module's global namespace at call time, allowing tests to patch
+    ``runner.process_utils.RunnerError`` and have the change take effect.
+    """
+    return RunnerError("CIRCUIT_OPEN", msg)
+
+
+CircuitBreaker._open_exception_factory = _make_circuit_open_error
 
 
 # ---------------------------------------------------------------------------
