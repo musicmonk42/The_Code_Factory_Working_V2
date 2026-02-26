@@ -264,7 +264,7 @@ async def test_log_event_success(audit_client, mock_httpx_client, mock_structlog
         mock_httpx_client.post.return_value = mock_response
 
         event_type = "test_event"
-        details = {"key": "value"}
+        details = {"action": "value"}
         operator = "test_operator"
 
         # Mock datetime for a consistent timestamp and hash
