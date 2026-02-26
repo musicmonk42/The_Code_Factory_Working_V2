@@ -163,6 +163,12 @@ LANGUAGE_DEFAULT_FRAMEWORKS = {
     "rust": "cargo",  # Note: cargo test not yet in FRAMEWORKS
 }
 
+
+async def _parse_mocha_json(path) -> dict:
+    """Async wrapper for Mocha JSON output parser."""
+    return json.loads(path.read_text())
+
+
 # --- Expanded Frameworks with auto-detection logic ---
 # Gold Standard: Ensure parsers are directly callable and return schema objects (via decorators in parsers.py)
 FRAMEWORKS: Dict[str, Dict[str, Any]] = {
@@ -241,9 +247,7 @@ FRAMEWORKS: Dict[str, Dict[str, Any]] = {
             "--require",
             "source-map-support/register",
         ],
-        "parser": lambda path: json.loads(
-            path.read_text()
-        ),  # Mochar is often text based, not specific parser here
+        "parser": _parse_mocha_json,
         "coverage_parser": parse_istanbul_json,
         "output_files": ["results.json", "coverage"],
         "detect": lambda files: "mocha" in files.get("package.json", "")

@@ -5,7 +5,8 @@
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import partial
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -114,7 +115,7 @@ class BatchTaskPayload(BaseModel):
 
     batch_id: str = Field(default_factory=lambda: f"batch_{uuid.uuid4()}")
     tasks: List[TaskPayload] = Field(..., min_length=1)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=partial(datetime.now, timezone.utc))
 
     @model_validator(mode="after")
     def validate_non_empty_tasks(self):

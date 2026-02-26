@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 # For this file, we will define them locally if they can't be imported, to ensure startup.
 try:
     # FIX: Using the requested import structure, assuming success or defined fallback
-    from runner import TESTING  # Assuming TESTING is a global flag from runner.__init__
-    from runner import (
+    from . import TESTING  # Canonical TESTING flag from runner.__init__
+    from . import (
         DECRYPTORS,
         ENCRYPTORS,
         REDACTORS,

@@ -151,8 +151,8 @@ class SecretsManager:
         secret = self.get_secret(secret_name)  # FIX: Use get_secret
         if not secret:
             raise ConfigurationError(
-                f"Missing secret: {secret_name}",
-                detail=f"Environment variable {secret_name} is not set",
+                "MISSING_SECRET",
+                detail=f"Missing secret: Environment variable {secret_name} is not set",
             )
         return secret
 

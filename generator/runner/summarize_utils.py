@@ -11,12 +11,15 @@ from functools import wraps  # [NEW] Added for no-op decorator
 from typing import Any, Callable, Dict, List, Optional
 
 # --- [FIX] Added TESTING flag to prevent ML libs from loading during pytest ---
-TESTING: bool = (
-    os.getenv("TESTING") == "1"
-    or "pytest" in sys.modules
-    or os.getenv("PYTEST_CURRENT_TEST") is not None
-    or os.getenv("PYTEST_ADDOPTS") is not None
-)
+try:
+    from . import TESTING
+except ImportError:
+    TESTING: bool = (
+        os.getenv("TESTING") == "1"
+        or "pytest" in sys.modules
+        or os.getenv("PYTEST_CURRENT_TEST") is not None
+        or os.getenv("PYTEST_ADDOPTS") is not None
+    )
 # --- END FIX ---
 
 from .feedback_handlers import collect_feedback
@@ -66,6 +69,13 @@ def detect_anomaly(*a, **k):
     return False
 
 
+def _format_percentage(value: Any) -> str:
+    """Format a 0–1 float score as a percentage string, or return 'N/A'."""
+    if isinstance(value, (int, float)):
+        return f"{value * 100:.0f}"
+    return "N/A"
+
+
 # --- Plug-in Summarizers ---
 # These functions are registered with the SUMMARIZERS registry.
 
@@ -85,8 +95,10 @@ def code_summary(state: Dict[str, Any], max_length: int = 2000) -> str:
         if "critique_results" in state and state["critique_results"]:
             # Summarize critique results
             critique = state["critique_results"]
+            alignment_str = _format_percentage(critique.get('semantic_alignment_score'))
+            quality_str = _format_percentage(critique.get('test_quality_score'))
             summary_parts.append(
-                f"Critique summary: Alignment={critique.get('semantic_alignment_score', 'N/A')*100}%, Quality={critique.get('test_quality_score', 'N/A')*100}%"
+                f"Critique summary: Alignment={alignment_str}%, Quality={quality_str}%"
             )
             if critique.get("drift_issues"):
                 summary_parts.append(

@@ -72,12 +72,15 @@ except ImportError:
 # Environment / Settings
 # ============================================================================
 
-TESTING = (
-    os.getenv("TESTING") == "1"
-    or "pytest" in sys.modules
-    or os.getenv("PYTEST_CURRENT_TEST") is not None
-    or os.getenv("PYTEST_ADDOPTS") is not None
-)
+try:
+    from . import TESTING
+except ImportError:
+    TESTING = (
+        os.getenv("TESTING") == "1"
+        or "pytest" in sys.modules
+        or os.getenv("PYTEST_CURRENT_TEST") is not None
+        or os.getenv("PYTEST_ADDOPTS") is not None
+    )
 
 # Default plugin directory - use ./plugins if not specified
 DEFAULT_PLUGIN_DIR = os.getenv("PLUGIN_DIR") or os.getenv("LLM_PLUGIN_PLUGIN_DIR") or "./plugins"
@@ -126,7 +129,7 @@ else:
 
 try:
     from prometheus_client import Counter, Gauge
-    from runner.runner_metrics import LLM_PROVIDER_HEALTH as BASE_LLM_PROVIDER_HEALTH
+    from .runner_metrics import LLM_PROVIDER_HEALTH as BASE_LLM_PROVIDER_HEALTH
 except ImportError:
     logger.warning(
         "prometheus_client or runner.runner_metrics not found. Using dummy metrics."

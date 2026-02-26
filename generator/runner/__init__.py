@@ -6,8 +6,11 @@ Centralises registries, OTEL tracer, and re-exports public symbols.
 """
 
 # generator/runner/__init__.py
+import logging
 import os
 import sys
+
+_logger = logging.getLogger(__name__)
 
 # --- Module Aliasing for Backwards Compatibility ---
 # This must be done BEFORE any submodule imports to prevent duplicate module loading.
@@ -155,9 +158,9 @@ try:
     _ensure_submodule_alias("runner_logging")
 except ImportError as _logging_init_err:
     # Log the error but continue - fallback logging will be handled by runner_parsers
-    import logging as _init_logging
-    _init_logging.getLogger(__name__).debug(
-        f"Early runner_logging import failed (fallback logging available): {_logging_init_err}"
+    _logger.debug(
+        "Early runner_logging import failed (fallback logging available): %s",
+        _logging_init_err,
     )
 
 # --- CRITICAL FIX: ALWAYS IMPORT SANDBOX FUNCTIONS ---
@@ -166,15 +169,13 @@ try:
     from .runner_core import run_stress_tests, run_tests_in_sandbox, run_tests
     from .runner_mutation import mutation_test, property_based_test
 except ImportError as e:
-    import logging
-
-    _logger = logging.getLogger(__name__)
-    _logger.error(f"Failed to import sandbox functions from runner_core: {e}")
+    _logger.error("Failed to import sandbox functions from runner_core: %s", e)
 
     # Define fallback stub functions that raise meaningful exceptions
     async def run_tests_in_sandbox(*args, **kwargs):
-        _logger.warning(
-            "run_tests_in_sandbox called but runner_core is not available - raising NotImplementedError"
+        _logger.critical(
+            "run_tests_in_sandbox fallback stub called — runner_core failed to import. "
+            "Check import chain for errors."
         )
         raise NotImplementedError(
             "run_tests_in_sandbox is not available. "
@@ -183,8 +184,9 @@ except ImportError as e:
         )
 
     async def run_stress_tests(*args, **kwargs):
-        _logger.warning(
-            "run_stress_tests called but runner_core is not available - raising NotImplementedError"
+        _logger.critical(
+            "run_stress_tests fallback stub called — runner_core failed to import. "
+            "Check import chain for errors."
         )
         raise NotImplementedError(
             "run_stress_tests is not available. "
@@ -193,8 +195,9 @@ except ImportError as e:
         )
 
     async def run_tests(*args, **kwargs):
-        _logger.warning(
-            "run_tests called but runner_core is not available - raising NotImplementedError"
+        _logger.critical(
+            "run_tests fallback stub called — runner_core failed to import. "
+            "Check import chain for errors."
         )
         raise NotImplementedError(
             "run_tests is not available. "
@@ -203,11 +206,11 @@ except ImportError as e:
         )
 
     async def mutation_test(*args, **kwargs):
-        _logger.warning("mutation_test called but runner_mutation is not available")
+        _logger.critical("mutation_test fallback stub called — runner_mutation failed to import.")
         raise NotImplementedError("mutation_test is not available.")
 
     async def property_based_test(*args, **kwargs):
-        _logger.warning("property_based_test called but runner_mutation is not available")
+        _logger.critical("property_based_test fallback stub called — runner_mutation failed to import.")
         raise NotImplementedError("property_based_test is not available.")
 
 
@@ -254,6 +257,15 @@ except ImportError:
             def set_attribute(self, *args, **kwargs):
                 pass
 
+            def set_status(self, *args, **kwargs):
+                pass
+
+            def record_exception(self, *args, **kwargs):
+                pass
+
+            def end(self, *args, **kwargs):
+                pass
+
             def add_event(self, *args, **kwargs):
                 pass
 
@@ -294,52 +306,79 @@ try:
     # Level 1: No internal runner dependencies (safe to import first)
     from . import alerting as _runner_alerting
     _ensure_submodule_alias("alerting")
+except ImportError as _e:
+    _logger.warning("Failed to import alerting: %s", _e)
 
+try:
     from . import providers as _runner_providers
     _ensure_submodule_alias("providers")
+except ImportError as _e:
+    _logger.warning("Failed to import providers: %s", _e)
 
+try:
     from . import runner_contracts as _runner_contracts
     _ensure_submodule_alias("runner_contracts")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_contracts: %s", _e)
 
+try:
     # Level 2: runner_errors depends on runner_security_utils
     # but runner_security_utils has fallbacks for circular imports
     from . import runner_errors as _runner_errors
     _ensure_submodule_alias("runner_errors")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_errors: %s", _e)
 
+try:
     # Level 3: runner_config depends on runner_errors
     from . import runner_config as _runner_config
     _ensure_submodule_alias("runner_config")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_config: %s", _e)
 
+try:
     # Level 4: runner_logging depends on pydantic (external) only now
     from . import runner_logging as _runner_logging
     _ensure_submodule_alias("runner_logging")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_logging: %s", _e)
 
+try:
     # Level 5: runner_metrics can be imported after runner_logging
     from . import runner_metrics as _runner_metrics
     _ensure_submodule_alias("runner_metrics")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_metrics: %s", _e)
 
+try:
     # Level 6: feedback_handlers may depend on runner_logging
     from . import feedback_handlers as _runner_feedback_handlers
     _ensure_submodule_alias("feedback_handlers")
+except ImportError as _e:
+    _logger.warning("Failed to import feedback_handlers: %s", _e)
 
+try:
     # Level 7: runner_security_utils has function-level imports from runner_logging
     from . import runner_security_utils as _runner_security_utils
     _ensure_submodule_alias("runner_security_utils")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_security_utils: %s", _e)
 
+try:
     # Level 8: runner_core depends on most other modules
     # Import it last to ensure all dependencies are available
     from . import runner_core as _runner_core
     _ensure_submodule_alias("runner_core")
+except ImportError as _e:
+    _logger.warning("Failed to import runner_core: %s", _e)
 
+try:
     # Level 9: language_utils depends on runner_parsers (which is imported by runner_core)
     # Import after runner_core to ensure runner_parsers is available
     from . import language_utils as _runner_language_utils
     _ensure_submodule_alias("language_utils")
-
-except ImportError:
-    # Circular import during initial load - modules will be available later
-    # when accessed directly (e.g., from runner.alerting import send_alert)
-    pass
+except ImportError as _e:
+    _logger.warning("Failed to import language_utils: %s", _e)
 
 # Backwards compatibility aliases so older imports used by tests/clients still work.
 # Allows `from runner.config import ...` to resolve to `runner.runner_config`
