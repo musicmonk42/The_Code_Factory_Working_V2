@@ -197,6 +197,61 @@ def test_auto_wire_records_modified_file(tmp_path: Path) -> None:
     assert "app/main.py" in result.files_created
 
 
+def test_auto_wire_preserves_module_docstring(tmp_path: Path) -> None:
+    """Module docstring must remain the first statement — imports go after it."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "products.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    (app_dir / "main.py").write_text(
+        '"""Application entry point."""\nfrom fastapi import FastAPI\napp = FastAPI()\n'
+    )
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    main_content = (app_dir / "main.py").read_text()
+    assert main_content.split("\n")[0].startswith('"""'), (
+        "module docstring must remain the first line"
+    )
+    assert "include_router" in main_content
+
+
+def test_auto_wire_multiline_fastapi_constructor(tmp_path: Path) -> None:
+    """Wire calls must be placed after the closing parenthesis of a multi-line FastAPI()."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "items.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    (app_dir / "main.py").write_text(
+        "from fastapi import FastAPI\n"
+        "app = FastAPI(\n"
+        "    title='My App',\n"
+        "    version='1.0.0',\n"
+        ")\n"
+    )
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    main_content = (app_dir / "main.py").read_text()
+    assert "include_router" in main_content
+    # Wire call must come after the closing ) of the multi-line FastAPI()
+    closing_paren_pos = main_content.rindex(")\n", 0, main_content.index("include_router"))
+    wire_pos = main_content.index("app.include_router(items_router")
+    assert wire_pos > closing_paren_pos, (
+        "include_router must appear after the closing ) of FastAPI()"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Integration: post_materialize wires routers end-to-end
 # ---------------------------------------------------------------------------
