@@ -42,12 +42,22 @@ if os.getenv("PYTEST_COLLECTING"):
         """Stub for pytest collection"""
         pass
 
+    class AuditLogger:
+        """Stub for pytest collection"""
+
+        @classmethod
+        def from_environment(cls):
+            return cls()
+
+        def log_event(self, event_type: str, details: Any, **kwargs):
+            pass
+
     def run_code_health_simulation():
         """Stub for pytest collection"""
         pass
 
     # Stop here during collection - don't import gymnasium, numpy, matplotlib
-    __all__ = ['ActionType', 'EnvironmentConfig', 'SystemMetrics',
+    __all__ = ['ActionType', 'AuditLogger', 'EnvironmentConfig', 'SystemMetrics',
                'AsyncActionExecutor', 'CodeHealthEnv', 'run_code_health_simulation']
 else:
     # Normal import path with full functionality

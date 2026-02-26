@@ -155,6 +155,7 @@ class TestMeshPolicyLoadSeeding:
         import time as _time
         version = f"{int(_time.time() * 1000)}_1"
         policy_file = tmp_path / f"seeded-pol_v{version}.json"
+        policy_data["version"] = version
         policy_file.write_text(json.dumps({
             "data": json.dumps(policy_data),
             "sig": "",
