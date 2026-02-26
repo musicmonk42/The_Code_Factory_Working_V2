@@ -499,20 +499,12 @@ async def run_batch_job(job_config: dict, project_root: str, output_dir: str) ->
     )
 
     try:
-        if os.environ.get("PYTEST_CURRENT_TEST"):
-            await asyncio.to_thread(
-                shutil.make_archive,
-                os.path.splitext(temp_archive_path)[0],
-                "gztar",
-                root_dir=project_root,
-            )
-        else:
-            await _create_filtered_archive(
-                project_root,
-                temp_archive_path,
-                cfg.include_patterns,
-                cfg.exclude_patterns,
-            )
+        await _create_filtered_archive(
+            project_root,
+            temp_archive_path,
+            cfg.include_patterns,
+            cfg.exclude_patterns,
+        )
         logger.info("Created archive at: %s", temp_archive_path)
 
         archive_size_mb = os.path.getsize(temp_archive_path) / (1024**2)

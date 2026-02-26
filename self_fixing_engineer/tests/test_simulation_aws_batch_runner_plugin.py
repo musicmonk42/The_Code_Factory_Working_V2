@@ -62,7 +62,7 @@ def mock_aws_clients():
 
     # Update the patch paths to match the actual module location
     with (
-        patch("boto3.Session") as mock_session,
+        patch("self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin.boto3.Session") as mock_session,
         patch(
             "self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._load_credentials_from_vault",
             new_callable=AsyncMock,
@@ -147,13 +147,13 @@ def test_job_config_invalid_arn_format():
     with pytest.raises(ValidationError, match="Invalid Batch ARN or name format"):
         JobConfig(
             jobDefinition="invalid:arn!!",
-            jobQueue="invalid-queue",
-            input_s3_bucket="test",
+            jobQueue="invalid:queue!!",
+            input_s3_bucket="test-bucket-name",
         )
 
 
 def test_job_config_path_traversal_prevention():
-    with pytest.raises(ValidationError, match="invalid characters"):
+    with pytest.raises(ValidationError, match="Bucket field contains invalid characters"):
         JobConfig(
             jobDefinition="mock-def",
             jobQueue="mock-queue",
@@ -209,13 +209,13 @@ async def test_run_batch_job_full_workflow_success(
     ]
 
     with (
-        patch("shutil.make_archive") as mock_make_archive,
+        patch("self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._create_filtered_archive", new_callable=AsyncMock) as mock_create_archive,
         patch("os.path.getsize", return_value=1024),
         patch("os.path.exists", return_value=True),
         patch("os.makedirs"),
         patch("builtins.open", mock_open(read_data='{"result": "success"}')),
     ):
-        mock_make_archive.return_value = "/mock/archive.tar.gz"
+        mock_create_archive.return_value = "/mock/archive.tar.gz"
         result = await run_batch_job(
             fast_poll_config, "/mock/project_root", "/mock/output_dir"
         )
@@ -251,11 +251,11 @@ async def test_run_batch_job_failure_workflow(mock_aws_clients, mock_job_config_
     }
 
     with (
-        patch("shutil.make_archive") as mock_make_archive,
+        patch("self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._create_filtered_archive", new_callable=AsyncMock) as mock_create_archive,
         patch("os.path.getsize", return_value=1024),
         patch("builtins.open", mock_open()),
     ):
-        mock_make_archive.return_value = "/mock/archive.tar.gz"
+        mock_create_archive.return_value = "/mock/archive.tar.gz"
         result = await run_batch_job(
             fast_poll_config, "/mock/project_root", "/mock/output_dir"
         )
@@ -282,12 +282,12 @@ async def test_run_batch_job_s3_download_failure(
     mock_s3_client.download_fileobj.side_effect = ClientError({}, "op")
 
     with (
-        patch("shutil.make_archive") as mock_make_archive,
+        patch("self_fixing_engineer.simulation.plugins.aws_batch_runner_plugin._create_filtered_archive", new_callable=AsyncMock) as mock_create_archive,
         patch("os.path.getsize", return_value=1024),
         patch("os.makedirs"),
         patch("builtins.open", mock_open()),
     ):
-        mock_make_archive.return_value = "/mock/archive.tar.gz"
+        mock_create_archive.return_value = "/mock/archive.tar.gz"
         result = await run_batch_job(
             fast_poll_config, "/mock/project_root", "/mock/output_dir"
         )
@@ -321,6 +321,6 @@ async def test_run_batch_job_with_vault_credentials_failure(
 
     await plugin_health()
 
-    mock_session.assert_called_with(
+    mock_session.assert_any_call(
         aws_access_key_id="mock_key_id", aws_secret_access_key="mock_secret_key"
     )

@@ -1250,9 +1250,9 @@ jobs:
           python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
           free -h
 
-      - name: Run self_fixing_engineer tests - Remaining
+      - name: Run self_fixing_engineer tests - Remaining A (agent, envs, guardrails, etc.)
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 45
+        timeout-minutes: 30
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -1265,18 +1265,21 @@ jobs:
           export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
           mkdir -p "${{ runner.temp }}/prometheus_multiproc"
           chmod 777 "${{ runner.temp }}/prometheus_multiproc"
-          
+
           prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
           ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
-          
-          echo "=== Running Remaining Tests ==="
-          timeout --signal=TERM --kill-after=30s 45m python -m pytest \
-            self_fixing_engineer/tests/ \
-            --ignore=self_fixing_engineer/tests/test_arbiter*.py \
-            --ignore=self_fixing_engineer/tests/test_mesh*.py \
-            --ignore=self_fixing_engineer/tests/test_simulation*.py \
-            --ignore=self_fixing_engineer/tests/test_self_healing*.py \
+
+          echo "=== Running Remaining Tests - Batch A ==="
+          timeout --signal=TERM --kill-after=30s 30m python -m pytest \
+            self_fixing_engineer/tests/test_agent_orchestration*.py \
+            self_fixing_engineer/tests/test_envs*.py \
+            self_fixing_engineer/tests/test_evolution.py \
+            self_fixing_engineer/tests/test_graph_rag*.py \
+            self_fixing_engineer/tests/test_guardrails*.py \
+            self_fixing_engineer/tests/test_human_loop*.py \
+            self_fixing_engineer/tests/test_multimodal*.py \
+            self_fixing_engineer/tests/test_sfe_basic.py \
             -v \
             --tb=short \
             -m "not heavy" \
@@ -1287,17 +1290,114 @@ jobs:
             -p no:randomly \
             -p no:cacheprovider \
             --import-mode=importlib \
-            --junitxml=junit-sfe-remaining.xml \
-            > test-output-sfe-remaining.log 2>&1 || {
+            --junitxml=junit-sfe-remaining-a.xml \
+            > test-output-sfe-remaining-a.log 2>&1 || {
             EXIT_CODE=$?
             echo "======================================"
-            echo "Remaining tests failed with exit code $EXIT_CODE"
+            echo "Remaining-A tests failed with exit code $EXIT_CODE"
             echo "======================================"
-            if [ $EXIT_CODE -eq 137 ]; then
-              echo "ERROR: Still hitting OOM - memory exhausted"
-              free -h || true
-            fi
-            tail -100 test-output-sfe-remaining.log || true
+            tail -100 test-output-sfe-remaining-a.log || true
+            exit $EXIT_CODE
+          }
+
+      - name: Force garbage collection before remaining B tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          python -c "import gc; [gc.collect(2) for _ in range(3)]"
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
+          free -h
+
+      - name: Run self_fixing_engineer tests - Remaining B (intent_capture, plugins)
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 30
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
+        run: |
+          set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
+
+          echo "=== Running Remaining Tests - Batch B ==="
+          timeout --signal=TERM --kill-after=30s 30m python -m pytest \
+            self_fixing_engineer/tests/test_intent_capture*.py \
+            self_fixing_engineer/tests/test_plugins*.py \
+            -v \
+            --tb=short \
+            -m "not heavy" \
+            --timeout=300 \
+            --maxfail=10 \
+            --durations=10 \
+            -p no:warnings \
+            -p no:randomly \
+            -p no:cacheprovider \
+            --import-mode=importlib \
+            --junitxml=junit-sfe-remaining-b.xml \
+            > test-output-sfe-remaining-b.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "======================================"
+            echo "Remaining-B tests failed with exit code $EXIT_CODE"
+            echo "======================================"
+            tail -100 test-output-sfe-remaining-b.log || true
+            exit $EXIT_CODE
+          }
+
+      - name: Force garbage collection before remaining C tests
+        if: always() && matrix.module == 'self_fixing_engineer'
+        run: |
+          python -c "import gc; [gc.collect(2) for _ in range(3)]"
+          python -c "import ctypes; ctypes.CDLL(None).malloc_trim(0)" 2>/dev/null || true
+          free -h
+
+      - name: Run self_fixing_engineer tests - Remaining C (test_generation)
+        if: always() && matrix.module == 'self_fixing_engineer'
+        timeout-minutes: 30
+        env:
+          TESTING: "1"
+          PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
+          NLTK_DATA: "$HOME/nltk_data"
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/self_fixing_engineer"
+        run: |
+          set -o pipefail
+          shopt -s expand_aliases
+          alias python=python3
+          export PYTHONPATH="$PWD:$PWD/self_fixing_engineer"
+          mkdir -p "${{ runner.temp }}/prometheus_multiproc"
+          chmod 777 "${{ runner.temp }}/prometheus_multiproc"
+
+          prlimit --cpu=unlimited --pid=$$ 2>/dev/null || true
+          ulimit -t unlimited 2>/dev/null || ulimit -t 7200 || true
+          ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
+
+          echo "=== Running Remaining Tests - Batch C ==="
+          timeout --signal=TERM --kill-after=30s 30m python -m pytest \
+            self_fixing_engineer/tests/test_test_generation*.py \
+            -v \
+            --tb=short \
+            -m "not heavy" \
+            --timeout=300 \
+            --maxfail=10 \
+            --durations=10 \
+            -p no:warnings \
+            -p no:randomly \
+            -p no:cacheprovider \
+            --import-mode=importlib \
+            --junitxml=junit-sfe-remaining-c.xml \
+            > test-output-sfe-remaining-c.log 2>&1 || {
+            EXIT_CODE=$?
+            echo "======================================"
+            echo "Remaining-C tests failed with exit code $EXIT_CODE"
+            echo "======================================"
+            tail -100 test-output-sfe-remaining-c.log || true
             exit $EXIT_CODE
           }
 
