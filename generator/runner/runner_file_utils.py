@@ -1660,6 +1660,7 @@ async def validate_generated_project(
     check_fastapi_endpoints: bool = False,
     expected_endpoints: Optional[List[str]] = None,
     language: Optional[str] = None,
+    check_import_consistency: bool = True,
 ) -> Dict[str, Any]:
     """
     Validate a generated project after materialization.
@@ -1681,6 +1682,8 @@ async def validate_generated_project(
         check_fastapi_endpoints: If True, check for FastAPI endpoint definitions
         expected_endpoints: List of endpoint paths that should be defined
         language: Target language for validation (e.g., 'python', 'typescript', 'javascript', 'java', 'go')
+        check_import_consistency: If True, verify local imports reference existing project files and
+            detect stub classes/placeholder markers in critical modules
     
     Returns:
         Dict with:
@@ -1692,6 +1695,7 @@ async def validate_generated_project(
             - python_files_invalid: int - count of invalid Python files
             - endpoints_found: List[str] - endpoints detected in code
             - endpoints_missing: List[str] - expected endpoints not found
+            - stub_detections: List[str] - stub classes/markers found
             - validation_time_ms: float - time taken for validation
     
     Example:
@@ -1719,6 +1723,7 @@ async def validate_generated_project(
         "python_files_invalid": 0,
         "endpoints_found": [],
         "endpoints_missing": [],
+        "stub_detections": [],
     }
     
     # Check output directory exists
@@ -1965,6 +1970,60 @@ async def validate_generated_project(
             except Exception as e:
                 result["warnings"].append(f"Could not check imports in {py_file.name}: {e}")
     
+    # Stub detection and import consistency checks (Python-specific)
+    STUB_MARKERS = ["# Auto-generated stub", "# Stub", "# TODO: implement"]
+    CRITICAL_MODULE_PATTERNS = ["models/", "services/", "database", "schemas"]
+
+    if check_import_consistency and lang in ("python", "py"):
+        for py_file in python_files:
+            try:
+                content = py_file.read_text(encoding="utf-8")
+                rel_path = str(py_file.relative_to(output_dir))
+                is_critical = any(pattern in rel_path for pattern in CRITICAL_MODULE_PATTERNS)
+                is_init = py_file.name == "__init__.py"
+
+                try:
+                    tree = ast.parse(content)
+                except SyntaxError:
+                    continue
+
+                # Detect stub classes (body is only 'pass')
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ClassDef):
+                        if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                            msg = f"Stub class '{node.name}' in {rel_path} (body is only 'pass')"
+                            result["stub_detections"].append(msg)
+                            if is_critical and not is_init:
+                                result["errors"].append(msg)
+                                result["valid"] = False
+                            else:
+                                result["warnings"].append(msg)
+
+                # Detect stub marker comments in critical files
+                for marker in STUB_MARKERS:
+                    if marker in content and is_critical and not is_init:
+                        msg = f"Stub marker '{marker}' found in critical file {rel_path}"
+                        result["stub_detections"].append(msg)
+                        result["errors"].append(msg)
+                        result["valid"] = False
+
+                # Check local imports reference existing project files (only absolute app.* imports)
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.ImportFrom) and node.module:
+                        module = node.module
+                        if module.startswith("app."):
+                            # Resolve absolute app.* module to file path
+                            module_path = module.replace(".", "/") + ".py"
+                            alt_path = module.replace(".", "/") + "/__init__.py"
+                            if not (output_dir / module_path).exists() and not (output_dir / alt_path).exists():
+                                result["errors"].append(
+                                    f"Import '{module}' in {rel_path} references non-existent local module"
+                                )
+                                result["valid"] = False
+
+            except Exception as e:
+                result["warnings"].append(f"Could not run stub/import checks on {py_file.name}: {e}")
+
     # Check requirements.txt (Python-specific)
     if lang in ("python", "py"):
         requirements_path = output_dir / "requirements.txt"

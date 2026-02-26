@@ -1182,8 +1182,10 @@ def validate_spec_fidelity(
         "missing_endpoints": [],
         "extra_endpoints": [],
         "errors": [],
+        "warnings": [],
         "validation_timestamp": datetime.now(timezone.utc).isoformat(),
         "duration_ms": 0,
+        "router_wiring_check": None,
         "structure_validation": {
             "expected_directories": [],
             "missing_directories": [],
@@ -1286,7 +1288,34 @@ def validate_spec_fidelity(
         if span:
             span.set_attribute("missing_endpoint_count", len(missing))
             span.set_attribute("extra_endpoint_count", len(extra))
-        
+
+        # Check router wiring: routers defined but not included in main.py
+        router_files = [f for f in generated_files if "routers/" in f or "routes/" in f]
+        main_files = [f for f in generated_files if f.endswith("main.py")]
+
+        if router_files and main_files:
+            main_content = generated_files[main_files[0]]
+            included_routers = re.findall(r'include_router\s*\(\s*(\w+)', main_content)
+            router_imports = re.findall(
+                r'from\s+\S+\s+import\s+(\w*[Rr]outer\b)', main_content
+            )
+
+            if not included_routers and not router_imports:
+                wiring_warning = (
+                    f"Router files found ({router_files}) but main.py has no include_router() calls. "
+                    f"API endpoints may not be accessible at runtime."
+                )
+                result["warnings"].append(wiring_warning)
+                logger.warning(
+                    "[SPEC_VALIDATE] %s", wiring_warning,
+                    extra={"stage": "SPEC_VALIDATE", "router_files": router_files},
+                )
+            result["router_wiring_check"] = {
+                "router_files": router_files,
+                "include_router_calls": included_routers,
+                "status": "connected" if (included_routers or router_imports) else "disconnected",
+            }
+
         # Determine validation result
         if missing:
             result["valid"] = False
