@@ -2546,16 +2546,32 @@ def test_{file_stem}_syntax_error_documentation():
                         metric_category = policy.primary_metric.split("_")[0]
                         current_metric_value = validation_report[metric_category]["metrics"][policy.primary_metric]
                     except (KeyError, TypeError):
+                        # For coverage metrics, always prefer the coverage validator's output
+                        # to avoid stress_performance results overriding coverage values.
+                        if policy.primary_metric in ("coverage", "coverage_percentage"):
+                            try:
+                                current_metric_value = validation_report["coverage"]["metrics"]["coverage_percentage"]
+                            except (KeyError, TypeError):
+                                try:
+                                    current_metric_value = validation_report["coverage"]["coverage_percentage"]
+                                except (KeyError, TypeError):
+                                    pass
                         # Fallback: search all categories for the metric
-                        for category, category_data in validation_report.items():
-                            if isinstance(category_data, dict) and "metrics" in category_data:
-                                if policy.primary_metric in category_data["metrics"]:
-                                    current_metric_value = category_data["metrics"][policy.primary_metric]
-                                    break
+                        if current_metric_value == 0.0:
+                            for category, category_data in validation_report.items():
+                                if category == "stress_performance":
+                                    # Do not let stress_performance override coverage metrics
+                                    continue
+                                if isinstance(category_data, dict) and "metrics" in category_data:
+                                    if policy.primary_metric in category_data["metrics"]:
+                                        current_metric_value = category_data["metrics"][policy.primary_metric]
+                                        break
                         if current_metric_value == 0.0:
                             # Last resort: check for coverage_percentage directly in the report
                             if "coverage_percentage" in validation_report:
                                 current_metric_value = validation_report["coverage_percentage"]
+                            elif "coverage_percentage" in validation_report.get("coverage", {}):
+                                current_metric_value = validation_report["coverage"]["coverage_percentage"]
                             else:
                                 logger.warning(
                                     f"Primary metric '{policy.primary_metric}' not found in validation report. Defaulting to 0.",

@@ -1687,6 +1687,21 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                 logger.info(f"[DEPLOY_AGENT] Found plugin for target '{target}': {plugin.name if hasattr(plugin, 'name') else 'unknown'}")
 
                 context = await self.gather_context([])
+
+                # Enrich context with concrete project/repo names so the LLM
+                # generates real values instead of placeholder strings like
+                # 'your_repo' or 'your_org' in CI/CD workflow templates.
+                # Guard against gather_context returning a non-dict (edge case).
+                if not isinstance(context, dict):
+                    context = {}
+                _project_name = (
+                    self.repo_path.name
+                    if hasattr(self, "repo_path") and self.repo_path
+                    else "myapp"
+                )
+                context.setdefault("project_name", _project_name)
+                context.setdefault("org_name", "generated")
+                context.setdefault("repo_name", _project_name)
                 
                 # FIX 6: Record context files count
                 files_list = requirements.get("files", [])
