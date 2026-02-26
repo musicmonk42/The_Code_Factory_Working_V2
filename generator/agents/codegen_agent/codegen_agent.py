@@ -16,7 +16,7 @@ import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 # Third-party libraries (MINIMAL SET RETAINED)
 import aiohttp
@@ -142,47 +142,72 @@ _MULTIPASS_GROUPS = [
         "name": "core",
         "focus": (
             "Generate ONLY the core application files: "
-            "main.py, app.py, config.py, database.py, db.py, __init__.py files, "
+            "main.py (MUST import and mount ALL routers from app/routers/ using app.include_router()), "
+            "app factory setup, config.py, database.py with real SQLAlchemy engine setup, "
+            "ALL model files (e.g. app/models/product.py, app/models/order.py, app/models/user.py, "
+            "app/models/audit.py) with COMPLETE SQLAlchemy model definitions matching the spec's field "
+            "names/types/constraints (use UUID for IDs if spec says UUID, mark fields Optional only if "
+            "spec says optional), schemas.py or app/schemas/*.py with ALL Pydantic schemas matching the "
+            "spec (e.g. Product, Order, User, AuditLog) with proper field types and validators, "
+            "__init__.py files, database migration files (alembic/env.py), "
             "and any other foundational modules. "
-            "Do NOT generate router, service, model, middleware, test, or infrastructure files in this pass."
-        ),
-    },
-    {
-        "name": "models_and_schemas",
-        "focus": (
-            "Generate ONLY the data model and schema files: "
-            "All SQLAlchemy ORM models (app/models/*.py), all Pydantic schemas (app/schemas.py or app/schemas/*.py), "
-            "database migration files (alembic/env.py, alembic/versions/), "
-            "and any enum or type definition modules. "
-            "Do NOT generate routers, services, middleware, tests, or infrastructure files."
+            "SQLAlchemy imports MUST include: "
+            "from sqlalchemy import Column, String, Integer, UUID, DateTime, ForeignKey, Boolean, Numeric "
+            "and from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column. "
+            "Use async SQLAlchemy sessions (async_sessionmaker, AsyncSession) if the spec mentions async "
+            "or high-performance requirements. "
+            "Every model class MUST inherit from a shared Base = declarative_base() defined in app/database.py. "
+            "Alembic migration scripts MUST reference the same Base.metadata. "
+            "Pydantic schemas MUST use model_config = ConfigDict(from_attributes=True) for ORM compatibility. "
+            "Do NOT generate router, service, test, or infrastructure files in this pass. "
+            "Do NOT use placeholder implementations — every model and schema must be fully defined."
         ),
     },
     {
         "name": "routes_and_services",
         "focus": (
-            "Generate ONLY the router/controller and service layer files: "
+            "Generate ONLY the router/controller, service layer, and middleware files: "
             "all route handlers (app/routers/*.py), service modules (app/services/*.py), "
-            "and any utility/helper modules used by routes or services. "
-            "Do NOT generate models, schemas, middleware, test, or infrastructure files in this pass."
-        ),
-    },
-    {
-        "name": "middleware_and_utils",
-        "focus": (
-            "Generate ONLY middleware and utility modules: "
-            "authentication middleware (JWT/OAuth), rate limiting middleware, "
-            "security headers middleware, request ID middleware, logging middleware, "
-            "input sanitization utilities, CSV/file handling utilities, "
+            "ALL middleware files: app/middleware/auth.py for JWT authentication, "
+            "app/middleware/rate_limit.py for rate limiting, "
+            "app/middleware/request_id.py for request ID tracking, "
+            "app/middleware/security_headers.py for security headers, "
             "and any other cross-cutting concern modules (app/middleware/*.py, app/utils/*.py). "
-            "Do NOT generate models, schemas, routes, services, tests, or infrastructure files."
+            "Service layer MUST use the repository pattern or direct SQLAlchemy ORM queries — no raw SQL f-strings. "
+            "Use HTTPException(status_code=404, detail='...') for not-found, 400 for bad request, "
+            "409 for conflict, 422 for validation failures. "
+            "JWT auth middleware MUST validate Authorization: Bearer <token> header, decode using "
+            "python-jose or PyJWT, and return 401 on failure. "
+            "Rate limiting middleware MUST track requests per client IP (using starlette-ratelimit or a "
+            "Redis counter) and return 429 on excess. "
+            "Request-ID middleware MUST attach a UUID to each request via X-Request-ID header (both incoming and outgoing). "
+            "Security headers middleware MUST set: X-Content-Type-Options: nosniff, X-Frame-Options: DENY, "
+            "Strict-Transport-Security, Content-Security-Policy. "
+            "Every service function MUST contain real implementation logic — database queries using "
+            "SQLAlchemy ORM, input validation, error handling with HTTPException, and proper HTTP "
+            "status codes. Do NOT return empty lists or placeholder comments. "
+            "Use the SQLAlchemy models defined in the core pass. "
+            "Every router MUST be properly connected to its service layer. "
+            "All middleware MUST have working implementations, not empty files or pass-through stubs. "
+            "Do NOT generate models, schemas, test, or infrastructure files in this pass."
         ),
     },
     {
         "name": "infrastructure",
         "focus": (
             "Generate ONLY infrastructure and deployment files: "
-            "Dockerfile, docker-compose.yml, .dockerignore, .env.example, "
-            "Kubernetes manifests (k8s/*.yaml), Helm charts (helm/**), "
+            "Dockerfile MUST use multi-stage build: FROM python:3.11-slim AS builder then "
+            "FROM python:3.11-slim AS runtime. "
+            "Dockerfile CMD MUST use 'uvicorn app.main:app' — NOT app.py or any other entry point. "
+            "docker-compose.yml (must be functional), .dockerignore, .env.example, "
+            "K8s Deployment MUST set terminationGracePeriodSeconds: 30, use RollingUpdate strategy. "
+            "K8s liveness probe: httpGet: path: /healthz port: 8000 initialDelaySeconds: 10 periodSeconds: 30. "
+            "K8s readiness probe: httpGet: path: /readyz port: 8000 initialDelaySeconds: 5 periodSeconds: 10. "
+            "K8s resource requests: cpu: 100m memory: 128Mi; limits: cpu: 500m memory: 512Mi. "
+            "Kubernetes manifests (k8s/*.yaml) MUST include liveness/readiness probes (/healthz and "
+            "/readyz), resource requests/limits, and use environment variable references (not hardcoded values). "
+            "Helm values.yaml MUST be populated with sensible defaults for all configurable values. "
+            "Helm charts (helm/**) MUST be valid Go template YAML (not JSON), "
             "CI/CD configs (.github/workflows/*.yml), pyproject.toml, requirements.txt, "
             "Makefile, and test files (tests/**). "
             "Do NOT regenerate application source code files."
@@ -314,6 +339,242 @@ async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
             pass_name,
             elapsed,
         )
+
+
+# Maximum total characters returned to avoid overwhelming the prompt
+_SPEC_MODELS_MAX_CHARS = 4000
+# Minimum section length to be considered meaningful
+_SPEC_MODELS_MIN_SECTION_LEN = 30
+
+def _extract_spec_models(requirements: Dict[str, Any]) -> str:
+    """Extract data model and schema definitions from the README / spec document.
+
+    Parses markdown content looking for:
+
+    * Heading-delimited sections whose titles mention models, schemas, entities,
+      fields, or database structures.
+    * Markdown tables that describe fields (column names, types, constraints).
+    * Fenced code blocks containing class/schema/model definitions.
+
+    The extracted text is injected verbatim into the ``core`` generation pass
+    prompt so the LLM produces SQLAlchemy models and Pydantic schemas that
+    match the spec's field names, types, and constraints exactly, rather than
+    inventing arbitrary structures.
+
+    Args:
+        requirements: The requirements dict.  Uses ``md_content`` when present,
+            falling back to ``description``.
+
+    Returns:
+        A UTF-8 string containing the most relevant model/schema excerpts from
+        the spec, capped at :data:`_SPEC_MODELS_MAX_CHARS` characters to avoid
+        overwhelming the LLM context.  Returns an empty string when no relevant
+        content is found or the input is empty.
+
+    Examples:
+        >>> reqs = {"md_content": "## Data Models\\n| Field | Type |\\n|---|---|\\n| id | UUID |\\n"}
+        >>> result = _extract_spec_models(reqs)
+        >>> "UUID" in result
+        True
+    """
+    md = (requirements.get("md_content") or requirements.get("description") or "").strip()
+    if not md:
+        return ""
+
+    extracted: List[str] = []
+
+    # ------------------------------------------------------------------ #
+    # 1. Heading-delimited model/schema sections                          #
+    # ------------------------------------------------------------------ #
+    # Split the document into sections on any heading (h1–h3).
+    # We look for sections whose heading title mentions domain-model keywords.
+    _heading_split_re = re.compile(r'(?=^#{1,3}[ \t])', re.MULTILINE)
+    _model_heading_re = re.compile(
+        r'^#{1,3}[ \t]+.*?'
+        r'(?:data\s*model|schema|model|entity|entit(?:y|ies)|database|'
+        r'field|attribute|resource|object|struct)',
+        re.IGNORECASE,
+    )
+    sections = _heading_split_re.split(md)
+    for section in sections:
+        first_line = section.split("\n", 1)[0]
+        if _model_heading_re.match(first_line) and len(section.strip()) >= _SPEC_MODELS_MIN_SECTION_LEN:
+            extracted.append(section.strip()[:2000])
+
+    # ------------------------------------------------------------------ #
+    # 2. Markdown field-definition tables                                 #
+    # ------------------------------------------------------------------ #
+    # Match pipe-delimited tables that contain keywords suggesting they
+    # describe entity fields (type, column, id, uuid, optional, required).
+    _table_re = re.compile(
+        r'(?:^|\n)(\|[^\n]+\|\n(?:\|[-:| ]+\|\n)?(?:\|[^\n]+\|\n)+)',
+        re.MULTILINE,
+    )
+    _table_keyword_re = re.compile(
+        r'\b(?:type|field|column|id|uuid|integer|string|float|bool|required|optional|nullable)\b',
+        re.IGNORECASE,
+    )
+    for m in _table_re.finditer(md):
+        table = m.group(1).strip()
+        if _table_keyword_re.search(table) and len(table) >= _SPEC_MODELS_MIN_SECTION_LEN:
+            extracted.append(table[:1000])
+
+    # ------------------------------------------------------------------ #
+    # 3. Fenced code blocks with model/class definitions                  #
+    # ------------------------------------------------------------------ #
+    _code_block_re = re.compile(
+        r'```[ \t]*(?:python|json|yaml|sql|pydantic)?[ \t]*\n(.*?)```',
+        re.DOTALL | re.IGNORECASE,
+    )
+    _code_model_re = re.compile(
+        r'\b(?:class\s+\w|BaseModel|declarative_base|Column|uuid|UUID|Integer|String|Float|Boolean)\b',
+        re.IGNORECASE,
+    )
+    for m in _code_block_re.finditer(md):
+        block = m.group(1).strip()
+        if _code_model_re.search(block) and len(block) >= _SPEC_MODELS_MIN_SECTION_LEN:
+            extracted.append(block[:1500])
+
+    if not extracted:
+        return ""
+
+    # Deduplicate: normalise runs of whitespace before comparing
+    _ws_re = re.compile(r'\s+')
+    seen_normalised: Set[str] = set()
+    unique: List[str] = []
+    for item in extracted:
+        key = _ws_re.sub(" ", item)
+        if key not in seen_normalised:
+            seen_normalised.add(key)
+            unique.append(item)
+
+    # Join and hard-cap to avoid bloating the LLM prompt
+    combined = "\n\n---\n\n".join(unique)
+    return combined[:_SPEC_MODELS_MAX_CHARS]
+
+
+# Percentage of stub-like function bodies above which a service file is flagged
+_PLACEHOLDER_SERVICE_THRESHOLD_PCT = 50.0
+
+def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
+    """Validate that generated files form a coherent, runnable application.
+
+    Performs two categories of checks:
+
+    **Router-wiring check**
+        Scans every ``app/routers/<name>.py`` for an ``APIRouter`` instance
+        variable.  For each router found, checks that ``app/main.py`` (a)
+        imports the variable and (b) calls ``app.include_router(<var>)``.
+        Routers that fail either condition are reported as *unwired*.
+
+    **Placeholder-service check**
+        Scans every ``app/services/<name>.py`` and counts function/method
+        definitions against "stub-like" bodies — functions whose sole
+        effective content is an empty return, ``return []``, ``pass``,
+        ``raise NotImplementedError``, or a ``# Placeholder`` / ``# TODO``
+        comment.  Service files where the ratio of stubs to total functions
+        exceeds :data:`_PLACEHOLDER_SERVICE_THRESHOLD_PCT` percent are
+        reported.
+
+    This function is intentionally pure (no I/O, no LLM calls) so it can
+    be called safely as a fast post-processing step.
+
+    Args:
+        files: Dict mapping relative file paths (forward-slash separators)
+            to their string content, as produced by :func:`parse_llm_response`
+            or the multi-pass merge loop.
+
+    Returns:
+        A dict with the following keys:
+
+        ``"unwired_routers"`` : List[str]
+            Paths of router files whose ``APIRouter`` variable is not mounted
+            in ``app/main.py``.
+
+        ``"placeholder_services"`` : List[Tuple[str, float]]
+            ``(path, pct)`` pairs for service files with a stub ratio above
+            the threshold.  ``pct`` is rounded to one decimal place.
+
+    Examples:
+        >>> files = {
+        ...     "app/routers/products.py": "router = APIRouter()\\n@router.get('/')\\nasync def list_products(): ...",
+        ...     "app/main.py": "from fastapi import FastAPI\\napp = FastAPI()",
+        ... }
+        >>> result = _validate_wiring(files)
+        >>> "app/routers/products.py" in result["unwired_routers"]
+        True
+    """
+    normalised: Dict[str, str] = {k.replace("\\", "/"): v for k, v in files.items()}
+
+    # ------------------------------------------------------------------ #
+    # 1. Router-wiring check                                              #
+    # ------------------------------------------------------------------ #
+    _router_path_re = re.compile(r'^app/routers/(?!__init__)[\w-]+\.py$')
+    # Match ``var_name = APIRouter(`` at module scope (any amount of leading ws)
+    _router_var_re = re.compile(r'^[ \t]*(\w+)\s*=\s*APIRouter\s*\(', re.MULTILINE)
+
+    router_vars: Dict[str, str] = {}  # path -> first router variable name
+    for path, content in normalised.items():
+        if _router_path_re.match(path):
+            m = _router_var_re.search(content)
+            if m:
+                router_vars[path] = m.group(1)
+
+    main_content = normalised.get("app/main.py", "")
+    unwired: List[str] = []
+    for path, var in router_vars.items():
+        # The router must both be imported into main.py AND passed to include_router().
+        # We accept either a direct import of the variable name or an import of the
+        # router module (the reconcile step always does a direct var import).
+        module_stem = path.rsplit("/", 1)[-1].removesuffix(".py")
+        is_imported = (
+            re.search(rf'\bimport\b[^\n]*\b{re.escape(var)}\b', main_content)
+            is not None
+            or re.search(rf'\bimport\b[^\n]*\b{re.escape(module_stem)}\b', main_content)
+            is not None
+        )
+        is_mounted = re.search(
+            rf'\binclude_router\s*\(\s*{re.escape(var)}\b', main_content
+        ) is not None
+        if not is_imported or not is_mounted:
+            unwired.append(path)
+
+    # ------------------------------------------------------------------ #
+    # 2. Placeholder-service check                                        #
+    # ------------------------------------------------------------------ #
+    # Patterns that strongly indicate a stub function body:
+    #   - return []  /  return {}  /  return ()  /  return None  alone on a line
+    #   - bare ``pass`` on its own line
+    #   - raise NotImplementedError (with or without arguments)
+    #   - comment-only body: # Placeholder / # TODO / # FIXME
+    _stub_body_re = re.compile(
+        r'(?:'
+        r'^\s*return\s*(?:\[\s*\]|\{\s*\}|\(\s*\)|None)\s*$'      # empty returns
+        r'|^\s*pass\s*$'                                             # bare pass
+        r'|^\s*raise\s+NotImplementedError\b'                        # NIE
+        r'|^\s*#\s*(?:placeholder|todo|fixme|stub|not\s+implemented)'# comments
+        r')',
+        re.MULTILINE | re.IGNORECASE,
+    )
+    # Match any function definition (sync or async) at any indentation level
+    _func_def_re = re.compile(r'^\s*(?:async\s+)?def\s+\w+\s*\(', re.MULTILINE)
+
+    placeholder_services: List[Tuple[str, float]] = []
+    for path, content in normalised.items():
+        if not ("app/services/" in path and path.endswith(".py")):
+            continue
+        funcs = _func_def_re.findall(content)
+        if not funcs:
+            continue
+        stub_hits = _stub_body_re.findall(content)
+        pct = len(stub_hits) / len(funcs) * 100.0
+        if pct > _PLACEHOLDER_SERVICE_THRESHOLD_PCT:
+            placeholder_services.append((path, round(pct, 1)))
+
+    return {
+        "unwired_routers": sorted(unwired),
+        "placeholder_services": sorted(placeholder_services, key=lambda t: t[0]),
+    }
 
 
 def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
@@ -508,6 +769,108 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         else:
             header = _stub_header_standalone
         updated[stub_path] = header + _stub_body.format(name=model_name, table=table_name)
+
+    # ------------------------------------------------------------------ #
+    # 5. Ensure service imports in routers resolve to existing functions  #
+    # ------------------------------------------------------------------ #
+    # For each router file, extract every "from app.services.X import ..."
+    # statement (including parenthesised multiline imports) and verify that
+    # each imported name is actually defined in the corresponding service file.
+    # When a name is missing, append a properly-typed stub function so the
+    # router can be imported without an ImportError at startup.
+    #
+    # Patterns handled:
+    #   from app.services.product import create_product, list_products
+    #   from app.services.product import (
+    #       create_product,
+    #       list_products,
+    #   )
+    _svc_import_simple_re = re.compile(
+        r'from\s+(app\.services\.[\w]+)\s+import\s+([^(\n][^\n]*)',
+        re.MULTILINE,
+    )
+    _svc_import_paren_re = re.compile(
+        r'from\s+(app\.services\.[\w]+)\s+import\s+\((.*?)\)',
+        re.DOTALL,
+    )
+    _func_defined_re = re.compile(r'^[ \t]*(?:async\s+)?def\s+(\w+)\s*\(', re.MULTILINE)
+    # Names that are never functions (skip silently).
+    # Covers all common typing constructs imported from ``typing`` or
+    # ``typing_extensions`` that would never correspond to a service function.
+    _SKIP_NAMES: FrozenSet[str] = frozenset({
+        "TYPE_CHECKING",
+        # Generic containers
+        "Any", "Dict", "FrozenSet", "List", "Optional", "Set",
+        "Sequence", "Tuple", "Type", "Union",
+        # Async types
+        "Awaitable", "AsyncGenerator", "AsyncIterable", "AsyncIterator",
+        "Coroutine", "Generator",
+        # Callable / protocol
+        "Callable", "ClassVar", "Final", "Generic", "Literal",
+        "Protocol", "TypeVar", "cast",
+        # Python 3.10+ union syntax helpers
+        "Never", "NoReturn", "Annotated", "TypeAlias", "TypeGuard",
+        "ParamSpec", "Concatenate", "Unpack", "TypeVarTuple",
+    })
+
+    def _parse_import_names(raw: str) -> List[str]:
+        """Parse a comma-separated import list, handling aliases and comments."""
+        names: List[str] = []
+        for part in raw.split(","):
+            part = part.strip()
+            # Strip inline comments
+            part = re.sub(r'#.*$', '', part).strip()
+            if not part:
+                continue
+            # "name as alias" → take the original name (we need the source name)
+            name = part.split()[0]
+            if name and name.isidentifier() and name not in _SKIP_NAMES:
+                names.append(name)
+        return names
+
+    for path, content in list(updated.items()):
+        if not _router_path_re.match(path):
+            continue
+
+        # Collect all (module, [names]) pairs from both simple and paren imports
+        import_pairs: List[Tuple[str, List[str]]] = []
+        for m in _svc_import_simple_re.finditer(content):
+            import_pairs.append((m.group(1), _parse_import_names(m.group(2))))
+        for m in _svc_import_paren_re.finditer(content):
+            import_pairs.append((m.group(1), _parse_import_names(m.group(2))))
+
+        for svc_module, imported_names in import_pairs:
+            svc_path = svc_module.replace(".", "/") + ".py"
+            if svc_path not in updated:
+                continue
+            svc_content = updated[svc_path]
+            defined_funcs: Set[str] = set(_func_defined_re.findall(svc_content))
+            missing: List[str] = [
+                n for n in imported_names
+                if n and n not in defined_funcs and not n[0].isupper()  # skip class names
+            ]
+            if not missing:
+                continue
+            stub_lines: List[str] = []
+            for fn in sorted(missing):
+                stub_lines.append(
+                    f"\n\nasync def {fn}(*args: Any, **kwargs: Any) -> None:"
+                    f"\n    \"\"\"Auto-generated stub for ``{fn}``."
+                    f"\n\n    .. warning::\n"
+                    f"        Replace with a real implementation.  This stub raises"
+                    f" :exc:`NotImplementedError` at runtime.\n    \"\"\"\n"
+                    f"    raise NotImplementedError(\n"
+                    f"        \"{fn} has not been implemented yet. \"\n"
+                    f"        \"Replace this stub with real business logic.\"\n"
+                    f"    )\n"
+                )
+            updated[svc_path] = svc_content.rstrip() + "".join(stub_lines) + "\n"
+            logger.info(
+                "[CODEGEN] _reconcile_app_wiring: added %d missing function stub(s) to %s: %s",
+                len(missing),
+                svc_path,
+                missing,
+            )
 
     return updated
 
@@ -1818,6 +2181,12 @@ if PLUGIN_AVAILABLE:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
+                            # Extract spec model definitions once to inject into the core pass.
+                            _spec_models = _extract_spec_models(requirements)
+                            _models_note = (
+                                f"\n\nSpec Data Models (implement these exactly):\n{_spec_models}\n"
+                                if _spec_models else ""
+                            )
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
@@ -1835,8 +2204,11 @@ if PLUGIN_AVAILABLE:
                                 _manifest_note = (
                                     f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
                                 )
+                                # Inject spec model definitions only for the core pass so the LLM
+                                # has explicit field/type information when generating models and schemas.
+                                _core_models_note = _models_note if _group["name"] == "core" else ""
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}{_manifest_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}{_core_models_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -2012,6 +2384,28 @@ if PLUGIN_AVAILABLE:
                                 logger.warning(
                                     f"[CODEGEN] Endpoint coverage check failed (non-fatal): {_ep_check_err}"
                                 )
+                            # ------------------------------------------------------------------
+                            # Wiring validation: log warnings for placeholder services and
+                            # any routers that are not yet mounted in main.py.
+                            # ------------------------------------------------------------------
+                            try:
+                                _wiring = _validate_wiring(_merged_files)
+                                for _svc_path, _pct in _wiring["placeholder_services"]:
+                                    logger.warning(
+                                        "[CODEGEN] Placeholder service detected in %s "
+                                        "(%.0f%% of functions appear to be stubs) — "
+                                        "real ORM logic is required",
+                                        _svc_path,
+                                        _pct,
+                                    )
+                                if _wiring["unwired_routers"]:
+                                    logger.warning(
+                                        "[CODEGEN] Unwired routers detected before reconciliation: %s "
+                                        "— _reconcile_app_wiring will fix these",
+                                        _wiring["unwired_routers"],
+                                    )
+                            except Exception as _val_err:
+                                logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")
                             # ------------------------------------------------------------------
                             # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
                             # ------------------------------------------------------------------
@@ -2402,6 +2796,12 @@ else:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
+                            # Extract spec model definitions once to inject into the core pass.
+                            _spec_models = _extract_spec_models(requirements)
+                            _models_note = (
+                                f"\n\nSpec Data Models (implement these exactly):\n{_spec_models}\n"
+                                if _spec_models else ""
+                            )
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
                             for _group in _MULTIPASS_GROUPS:
@@ -2419,8 +2819,11 @@ else:
                                 _manifest_note = (
                                     f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
                                 )
+                                # Inject spec model definitions only for the core pass so the LLM
+                                # has explicit field/type information when generating models and schemas.
+                                _core_models_note = _models_note if _group["name"] == "core" else ""
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}{_manifest_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}{_core_models_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -2495,6 +2898,28 @@ else:
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
                                 extra={"backend": "ensemble", "response_length": len(str(response))}
                             )
+                            # ------------------------------------------------------------------
+                            # Wiring validation: log warnings for placeholder services and
+                            # any routers that are not yet mounted in main.py.
+                            # ------------------------------------------------------------------
+                            try:
+                                _wiring = _validate_wiring(_merged_files)
+                                for _svc_path, _pct in _wiring["placeholder_services"]:
+                                    logger.warning(
+                                        "[CODEGEN] Placeholder service detected in %s "
+                                        "(%.0f%% of functions appear to be stubs) — "
+                                        "real ORM logic is required",
+                                        _svc_path,
+                                        _pct,
+                                    )
+                                if _wiring["unwired_routers"]:
+                                    logger.warning(
+                                        "[CODEGEN] Unwired routers detected before reconciliation: %s "
+                                        "— _reconcile_app_wiring will fix these",
+                                        _wiring["unwired_routers"],
+                                    )
+                            except Exception as _val_err:
+                                logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")
                             # ------------------------------------------------------------------
                             # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
                             # ------------------------------------------------------------------
