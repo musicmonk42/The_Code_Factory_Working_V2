@@ -301,6 +301,89 @@ class PostMaterializeResult:
 # =============================================================================
 
 
+def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
+    """Phase 8: Auto-wire router files into app/main.py when missing.
+
+    Scans ``output_dir/app/routers/`` for Python router files and injects
+    ``include_router`` calls into ``app/main.py`` when they are absent.
+
+    The function is idempotent: if ``include_router`` is already present in
+    ``main.py`` (from any router, not just the ones we would wire) it does nothing.
+    Changes are recorded in ``result.files_created`` (the field tracks all files
+    touched by this phase, whether created or modified).
+
+    Args:
+        output_dir: Project root directory (contains ``app/``).
+        result: Mutable result object; modified in-place on success.
+    """
+    routers_dir = output_dir / "app" / "routers"
+    main_py = output_dir / "app" / "main.py"
+
+    if not routers_dir.is_dir() or not main_py.exists():
+        return
+
+    main_content = main_py.read_text(encoding="utf-8")
+    if "include_router" in main_content:
+        return  # Already wired — nothing to do.
+
+    router_modules: List[str] = [
+        f.stem
+        for f in sorted(routers_dir.glob("*.py"))
+        if f.name != "__init__.py"
+    ]
+    if not router_modules:
+        return
+
+    # Build the import and wire-up lines.
+    import_lines = [
+        f"from app.routers.{mod} import router as {mod}_router\n"
+        for mod in router_modules
+    ]
+    wire_lines = [
+        f"app.include_router({mod}_router, prefix=\"/api/v1/{mod}\")\n"
+        for mod in router_modules
+    ]
+
+    lines = main_content.splitlines(keepends=True)
+
+    # ---- Step 1: append imports after the last existing import line ----
+    last_import_idx: int = -1
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("import ") or stripped.startswith("from "):
+            last_import_idx = i
+
+    insert_at = last_import_idx + 1  # 0 when no imports found → prepend
+    for offset, imp_line in enumerate(import_lines):
+        lines.insert(insert_at + offset, imp_line)
+
+    # ---- Step 2: insert include_router calls after app = FastAPI(...) ----
+    # Re-scan after the import insertion.
+    app_assign_idx: Optional[int] = None
+    for i, line in enumerate(lines):
+        # Match patterns like: app = FastAPI(...) and app = FastAPI(
+        if "FastAPI(" in line and re.search(r"\bapp\s*=", line):
+            app_assign_idx = i
+
+    if app_assign_idx is not None:
+        wire_block = "".join(wire_lines)
+        lines.insert(app_assign_idx + 1, wire_block)
+    else:
+        # FastAPI instantiation not found — append at end as a safe fallback.
+        lines.append("\n" + "".join(wire_lines))
+
+    main_py.write_text("".join(lines), encoding="utf-8")
+    rel_path = str(main_py.relative_to(output_dir))
+    result.files_created.append(rel_path)
+    logger.info(
+        "%s Auto-wired %d router(s) into main.py: %s",
+        _STAGE,
+        len(router_modules),
+        router_modules,
+        extra={"output_dir": str(output_dir), "router_modules": router_modules},
+    )
+
+
 def post_materialize(
     output_dir: Path,
     entry_point: Optional[str] = None,
@@ -411,6 +494,16 @@ def post_materialize(
                 ensure_alembic_scaffolding(output_dir, result)
             except Exception as alembic_exc:  # pylint: disable=broad-except
                 warn = f"ensure_alembic_scaffolding error: {alembic_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
+
+            # ------------------------------------------------------------------
+            # Phase 8: Auto-wire routers into main.py
+            # ------------------------------------------------------------------
+            try:
+                _auto_wire_routers(output_dir, result)
+            except Exception as wire_exc:  # pylint: disable=broad-except
+                warn = f"_auto_wire_routers error: {wire_exc}"
                 result.warnings.append(warn)
                 logger.warning("%s %s", _STAGE, warn, exc_info=True)
 

@@ -1696,6 +1696,107 @@ if PLUGIN_AVAILABLE:
                                 f"[CODEGEN] Multi-pass ensemble complete: {len(_merged_files)} total files",
                                 extra={"backend": "ensemble", "response_length": len(str(response))}
                             )
+                            # ------------------------------------------------------------------
+                            # Endpoint-coverage supplementary pass (best-effort)
+                            # After the 3 fixed passes, check how many spec endpoints are
+                            # represented in the generated router files.  If any are missing,
+                            # fire one targeted LLM call to fill the gap.
+                            # ------------------------------------------------------------------
+                            try:
+                                _spec_md = (
+                                    requirements.get("md_content", "")
+                                    or requirements.get("description", "")
+                                    or ""
+                                )
+                                _required_eps = set(
+                                    re.findall(
+                                        r'\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b\s+/\S+',
+                                        _spec_md,
+                                        re.IGNORECASE,
+                                    )
+                                )
+                                if _required_eps:
+                                    _router_pattern = re.compile(
+                                        r'@(?:router|app)\.' +
+                                        r'(?:get|post|put|delete|patch|head|options)' +
+                                        r'\s*\(\s*[\'"]([^\'"]+)[\'"]'
+                                        ,
+                                        re.IGNORECASE,
+                                    )
+                                    _implemented_paths: set = set()
+                                    for _rf_content in _merged_files.values():
+                                        for _m in _router_pattern.finditer(_rf_content):
+                                            _implemented_paths.add(_m.group(1))
+                                    _missing_eps = [
+                                        ep for ep in _required_eps
+                                        if not any(
+                                            ep.split(None, 1)[-1].rstrip("/") in p
+                                            for p in _implemented_paths
+                                        )
+                                    ]
+                                    _total = len(_required_eps)
+                                    _covered = _total - len(_missing_eps)
+                                    if _missing_eps:
+                                        logger.info(
+                                            f"[CODEGEN] Endpoint coverage check: {_covered}/{_total} "
+                                            f"endpoints covered — running gap-fill pass for "
+                                            f"{len(_missing_eps)} missing endpoint(s)"
+                                        )
+                                        _gap_prompt = (
+                                            f"{prompt}"
+                                            f"\n\nAlready-generated files (DO NOT regenerate): "
+                                            f"{list(_merged_files.keys())}\n"
+                                            f"\n\n### GENERATION PASS: endpoint_gap_fill ###\n"
+                                            f"The following required endpoints are NOT yet implemented "
+                                            f"in the generated router files.  Generate ONLY the router "
+                                            f"files needed to implement them:\n"
+                                            + "\n".join(f"  - {ep}" for ep in sorted(_missing_eps))
+                                            + "\nReturn a JSON object with a 'files' key."
+                                        )
+                                        _gap_heartbeat = asyncio.create_task(
+                                            _multipass_heartbeat("endpoint_gap_fill")
+                                        )
+                                        try:
+                                            _gap_dict = await call_llm_api(
+                                                prompt=_gap_prompt,
+                                                provider=config.backend,
+                                                model=config.model.get(config.backend),
+                                                response_format={"type": "json_object"},
+                                            )
+                                            _gap_resp = (
+                                                _gap_dict["content"]
+                                                if isinstance(_gap_dict, dict) and "content" in _gap_dict
+                                                else str(_gap_dict)
+                                            )
+                                            _gap_files = parse_llm_response(_gap_resp)
+                                            for _gf_key, _gf_val in _gap_files.items():
+                                                if _gf_key in _merged_files and _gf_key.endswith(".py"):
+                                                    _merged_files[_gf_key] = _ast_merge_python_files(
+                                                        _merged_files[_gf_key], _gf_val
+                                                    )
+                                                else:
+                                                    _merged_files[_gf_key] = _gf_val
+                                            logger.info(
+                                                f"[CODEGEN] Endpoint coverage check: {_covered}/{_total} "
+                                                f"endpoints covered, {len(_missing_eps)} gap-filled"
+                                            )
+                                            response = {"files": _merged_files}
+                                        except Exception as _gap_err:
+                                            logger.warning(
+                                                f"[CODEGEN] Endpoint gap-fill pass failed (non-fatal): {_gap_err}"
+                                            )
+                                        finally:
+                                            _gap_heartbeat.cancel()
+                                            await asyncio.gather(_gap_heartbeat, return_exceptions=True)
+                                    else:
+                                        logger.info(
+                                            f"[CODEGEN] Endpoint coverage check: {_covered}/{_total} "
+                                            f"endpoints covered, 0 gap-filled"
+                                        )
+                            except Exception as _ep_check_err:
+                                logger.warning(
+                                    f"[CODEGEN] Endpoint coverage check failed (non-fatal): {_ep_check_err}"
+                                )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
                             # NOTE: Using "first" voting strategy because majority voting requires exact

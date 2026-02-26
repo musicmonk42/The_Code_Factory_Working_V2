@@ -1329,6 +1329,20 @@ _EXTENSION_TO_LANGUAGE: Dict[str, str] = {
     # INI-style config files (e.g. alembic.ini, setup.cfg)
     "ini": "config",
     "cfg": "config",
+    "conf": "config",
+    "env": "env",
+    # Helm / Jinja2 / generic templates
+    "tpl": "template",
+    "j2": "template",
+    "jinja": "template",
+    "jinja2": "template",
+    # Infrastructure-as-code
+    "hcl": "config",
+    "tf": "config",
+    # Protocol buffers
+    "proto": "config",
+    # Lock files (e.g. poetry.lock, package-lock.json already covered by json)
+    "lock": "config",
 }
 
 # Mapping of well-known extensionless filenames (or dot-files) to their language types.
@@ -1379,6 +1393,8 @@ _NON_CODE_LANGUAGES: frozenset = frozenset({
     "editorconfig",
     "dockerfile", "gitignore", "dockerignore", "env",
     "config", "makefile", "procfile", "shell",
+    # Template languages (Helm .tpl, Jinja2 .j2/.jinja2, etc.)
+    "template",
 })
 
 
@@ -2864,7 +2880,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 if not sym[0].isupper()
             )
             stub_lines = [
-                "# Auto-generated stub — module referenced but not produced by LLM\n",
+                '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
             if has_router_syms:
@@ -2883,16 +2899,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
                     # Import already emitted at module header above.
                     stub_lines.append(
-                        f"{sym} = _APIRouter()  # Stub router — configure routes\n\n\n"
+                        f"{sym} = _APIRouter()  # Router instance — wire routes here\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
-                        f"{sym} = None  # Stub variable — replace with actual instance\n\n\n"
+                        f"{sym} = None  # Placeholder — assign actual value\n\n\n"
                     )
                 else:
                     stub_lines.append(
                         f"def {sym}(*args: Any, **kwargs: Any) -> Any:\n"
-                        f'    """Minimal implementation - replace with actual logic."""\n'
+                        f'    """Placeholder implementation."""\n'
                         f"    return None\n\n\n"
                     )
             code_files[module_path] = "".join(stub_lines)
@@ -2933,7 +2949,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     for sym in missing
                     if not sym[0].isupper()
                 )
-                appended_lines = ["\n\n# Auto-generated stubs for symbols missing from this module\n"]
+                appended_lines = ["\n\n# Supplemental symbols appended by module-stub pass\n"]
                 if has_router_missing:
                     appended_lines.append("from fastapi import APIRouter as _APIRouter\n")
                 for sym in sorted(missing):
@@ -2946,16 +2962,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
                         # Import already emitted at block header above.
                         appended_lines.append(
-                            f"\n{sym} = _APIRouter()  # Stub router — configure routes\n"
+                            f"\n{sym} = _APIRouter()  # Router instance — wire routes here\n"
                         )
                     elif _is_likely_variable(sym):
                         appended_lines.append(
-                            f"\n{sym} = None  # Stub variable — replace with actual instance\n"
+                            f"\n{sym} = None  # Placeholder — assign actual value\n"
                         )
                     else:
                         appended_lines.append(
                             f"\ndef {sym}(*args: Any, **kwargs: Any) -> Any:\n"
-                            f'    """Minimal implementation - replace with actual logic."""\n'
+                            f'    """Placeholder implementation."""\n'
                             f"    return None\n"
                         )
                 code_files[module_path] = existing_content + "".join(appended_lines)
