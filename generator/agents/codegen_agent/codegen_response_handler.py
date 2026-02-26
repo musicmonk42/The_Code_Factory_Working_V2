@@ -522,6 +522,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         # Ensure missing local module stubs are generated before materializing
         if lang == "python":
             fixed_files = ensure_local_module_stubs(fixed_files)
+            # Re-run collision detection after stub generation: stubs may re-introduce
+            # module files that collide with package directories already in code_files.
+            fixed_files = _detect_module_package_collisions(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -2769,6 +2772,12 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     # Maps "app/auth.py" -> {"get_current_user", "Role", ...}
     required_symbols: Dict[str, Set[str]] = {}
 
+    # Regex for "from app import X, Y" patterns (attribute-access style imports)
+    _APP_MODULE_IMPORT_RE = re.compile(
+        r"^\s*from\s+app\s+import\s+(.+)$",
+        re.MULTILINE,
+    )
+
     for _filename, content in list(code_files.items()):
         for match in _LOCAL_IMPORT_RE.finditer(content):
             module_str = match.group(1).strip()
@@ -2790,7 +2799,25 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 required_symbols[module_path] = set()
             required_symbols[module_path].update(symbols)
 
-    # Second pass: ensure every required module+symbol exists in code_files.
+        # Second scanning pass: detect "from app import schemas" followed by
+        # "schemas.User" attribute-access patterns so that symbols accessed via
+        # module-attribute syntax are also stubbed.
+        for mod_match in _APP_MODULE_IMPORT_RE.finditer(content):
+            for part in mod_match.group(1).split(","):
+                module_name = part.split(" as ")[0].strip()
+                if not module_name or not module_name.isidentifier():
+                    continue
+                module_path = f"app/{module_name}.py"
+                # Find all attribute accesses like "module_name.SomeSymbol"
+                attr_re = re.compile(r"\b" + re.escape(module_name) + r"\.([A-Za-z_]\w*)")
+                for attr_match in attr_re.finditer(content):
+                    symbol = attr_match.group(1)
+                    if symbol and symbol.isidentifier():
+                        if module_path not in required_symbols:
+                            required_symbols[module_path] = set()
+                        required_symbols[module_path].add(symbol)
+
+    # Third pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
         if not symbols:
             continue

@@ -1252,6 +1252,8 @@ def validate_spec_fidelity(
             normalized = path.rstrip('/').lower()
             # Strip /api/v{N} prefix so /api/v1/orders and /orders compare as equal
             normalized = re.sub(r'^/api/v\d+', '', normalized)
+            # Normalize path parameters so {id}, {product_id}, {order_id} etc. compare as equal
+            normalized = re.sub(r'\{[^}]+\}', '{_param}', normalized)
             return normalized or '/'
         
         # Build lookup set of found endpoints

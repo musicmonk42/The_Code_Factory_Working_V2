@@ -493,6 +493,19 @@ def ensure_modular_structure(
                 subdir,
             )
             continue
+        # Check for module/package collision: if a .py file with the same stem
+        # already exists, skip directory creation to prevent Python import shadowing.
+        py_file_path = dir_path.with_suffix(".py")
+        if py_file_path.exists() and py_file_path.is_file():
+            logger.warning(
+                "%s Skipping mkdir for %r — %s already exists as a module file. "
+                "Creating a package directory would shadow the module.",
+                _STAGE, subdir, py_file_path.name,
+            )
+            result.warnings.append(
+                f"Skipped directory '{subdir}': '{py_file_path.name}' already exists as a module"
+            )
+            continue
         dir_path.mkdir(parents=True, exist_ok=True)
         if subdir.startswith("app/") or subdir.startswith("app\\"):
             _create_if_absent(
@@ -550,6 +563,19 @@ def _scaffold_required_dirs(
     """
     for dir_name in REQUIRED_DIRS:
         dir_path = output_dir / dir_name
+        # Check for module/package collision: if a .py file with the same stem
+        # already exists, skip directory creation to prevent Python import shadowing.
+        py_file_path = dir_path.with_suffix(".py")
+        if py_file_path.exists() and py_file_path.is_file():
+            logger.warning(
+                "%s Skipping mkdir for %r — %s already exists as a module file. "
+                "Creating a package directory would shadow the module.",
+                _STAGE, dir_name, py_file_path.name,
+            )
+            result.warnings.append(
+                f"Skipped directory '{dir_name}': '{py_file_path.name}' already exists as a module"
+            )
+            continue
         dir_path.mkdir(parents=True, exist_ok=True)
 
         if dir_name == "app":

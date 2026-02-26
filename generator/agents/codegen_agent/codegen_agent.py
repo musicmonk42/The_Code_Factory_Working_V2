@@ -286,6 +286,85 @@ async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
         )
 
 
+def _ast_merge_python_files(old_content: str, new_content: str) -> str:
+    """Merge two Python source files, preserving symbols from the old version.
+
+    When a later generation pass produces a file that already exists in
+    ``_merged_files``, a blind ``dict.update()`` would discard any class or
+    function definitions that were in the original but omitted from the new
+    version.  This helper uses ``ast.parse()`` to detect which top-level names
+    are present in each version and appends the missing definitions from the old
+    version to the end of the new version.
+
+    Falls back to returning ``new_content`` unchanged if either version fails
+    AST parsing, so it never blocks generation on a syntax error.
+
+    Args:
+        old_content: The previously-accumulated file content.
+        new_content: The replacement content produced by the latest pass.
+
+    Returns:
+        Merged source string where ``new_content`` is the base and any
+        top-level definitions absent from it are appended from ``old_content``.
+    """
+    try:
+        old_tree = ast.parse(old_content)
+        new_tree = ast.parse(new_content)
+    except SyntaxError:
+        return new_content
+
+    # Collect names of top-level definitions in both versions.
+    def _top_level_names(tree: ast.AST) -> set:
+        names: set = set()
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                names.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        names.add(target.id)
+        return names
+
+    old_names = _top_level_names(old_tree)
+    new_names = _top_level_names(new_tree)
+    missing_names = old_names - new_names
+
+    if not missing_names:
+        return new_content
+
+    # Extract the source lines for each missing top-level definition from the
+    # old content and append them to the new content.
+    old_lines = old_content.splitlines(keepends=True)
+    appended: list = []
+    for node in ast.iter_child_nodes(old_tree):
+        name: Optional[str] = None
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            name = node.name
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in missing_names:
+                    name = target.id
+                    break
+        if name and name in missing_names:
+            # ast line numbers are 1-based; end_lineno may be None on older Pythons.
+            start = node.lineno - 1
+            end = getattr(node, "end_lineno", None)
+            if end is not None:
+                snippet = "".join(old_lines[start:end])
+                appended.append(snippet)
+
+    if appended:
+        logger.info(
+            "[CODEGEN] AST merge: appending %d symbol(s) missing from new version: %s",
+            len(missing_names),
+            sorted(missing_names),
+        )
+        separator = "\n\n" if not new_content.endswith("\n\n") else ""
+        return new_content + separator + "\n\n".join(appended)
+
+    return new_content
+
+
 # ==============================================================================
 # --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
@@ -1544,7 +1623,18 @@ if PLUGIN_AVAILABLE:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
-                                     _merged_files.update(_pass_files)
+                                     # AST-aware merge: preserve symbols from earlier passes when
+                                     # the new pass overwrites an existing Python file.
+                                     for _pf_key, _pf_val in _pass_files.items():
+                                         if (
+                                             _pf_key in _merged_files
+                                             and _pf_key.endswith(".py")
+                                         ):
+                                             _merged_files[_pf_key] = _ast_merge_python_files(
+                                                 _merged_files[_pf_key], _pf_val
+                                             )
+                                         else:
+                                             _merged_files[_pf_key] = _pf_val
                                      # After each pass, rebuild the symbol manifest so later
                                      # passes know what was already defined.
                                      _symbol_manifest = _build_symbol_manifest(_merged_files)
@@ -2002,7 +2092,18 @@ else:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
-                                     _merged_files.update(_pass_files)
+                                     # AST-aware merge: preserve symbols from earlier passes when
+                                     # the new pass overwrites an existing Python file.
+                                     for _pf_key, _pf_val in _pass_files.items():
+                                         if (
+                                             _pf_key in _merged_files
+                                             and _pf_key.endswith(".py")
+                                         ):
+                                             _merged_files[_pf_key] = _ast_merge_python_files(
+                                                 _merged_files[_pf_key], _pf_val
+                                             )
+                                         else:
+                                             _merged_files[_pf_key] = _pf_val
                                      # After each pass, rebuild the symbol manifest so later
                                      # passes know what was already defined.
                                      _symbol_manifest = _build_symbol_manifest(_merged_files)
