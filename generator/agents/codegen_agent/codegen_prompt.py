@@ -664,7 +664,7 @@ The following are MANDATORY checks:
    - This crashes the ENTIRE application before any request can be served
    - When you need a placeholder dependency, ALWAYS define a stub function:
      * async def get_current_user() -> dict:
-     *     """Placeholder dependency."""
+     *     '''Placeholder dependency.'''
      *     return {{"sub": "anonymous"}}
      * 
      * @router.get("/protected")
