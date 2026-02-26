@@ -633,6 +633,22 @@ def _scaffold_required_dirs(
                 output_dir=output_dir,
                 file_type="init_py",
             )
+            # Ensure conftest.py exists so pytest can import the app package
+            _create_if_absent(
+                dir_path / "conftest.py",
+                (
+                    "import sys\n"
+                    "from pathlib import Path\n"
+                    "\n"
+                    "# Add project root to sys.path so 'from app import ...' works\n"
+                    "_project_root = Path(__file__).resolve().parent.parent\n"
+                    "if str(_project_root) not in sys.path:\n"
+                    "    sys.path.insert(0, str(_project_root))\n"
+                ),
+                result,
+                output_dir=output_dir,
+                file_type="conftest_py",
+            )
 
 
 def _ensure_app_main(

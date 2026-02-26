@@ -178,15 +178,18 @@ try:
     from self_fixing_engineer.arbiter.postgres_client import PostgresClient
 except ImportError:
     class PostgresClient:
-        # In-memory store shared across instances so results persist within a process.
-        _store: dict = {}
+        """Fallback PostgresClient stub when the real module is unavailable.
+
+        Provides in-memory storage so the analyzer can still function,
+        but flags itself as unavailable via _available and check_health().
+        """
 
         def __init__(self, db_url):
             import warnings
             from urllib.parse import urlparse, urlunparse
+            self._available = False
+            self._store = {}  # Instance-level store to prevent cross-contamination
             logger = logging.getLogger(__name__)
-            # Mask password in the DSN to avoid leaking credentials to logs.
-            # Use urllib.parse for robust handling of special characters in passwords.
             try:
                 parsed = urlparse(db_url)
                 if parsed.password:
@@ -207,10 +210,13 @@ except ImportError:
 
         async def connect(self):
             logger = logging.getLogger(__name__)
-            logger.debug("PostgresClient fallback: connect() uses in-memory storage")
+            logger.warning("PostgresClient fallback: connect() is a no-op, using in-memory storage")
 
         async def disconnect(self):
             pass
+
+        async def check_health(self):
+            return {"status": "unavailable", "reason": "asyncpg not installed or postgres_client module not found"}
 
         async def execute(self, query, *args):
             logger = logging.getLogger(__name__)
@@ -223,10 +229,10 @@ except ImportError:
             return None
 
         async def store(self, key, value):
-            PostgresClient._store[key] = value
+            self._store[key] = value
 
         async def retrieve(self, key, default=None):
-            return PostgresClient._store.get(key, default)
+            return self._store.get(key, default)
 
 try:
     from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, registry

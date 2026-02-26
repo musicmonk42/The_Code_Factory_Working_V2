@@ -1748,7 +1748,24 @@ def test_{file_stem}_syntax_error_documentation():
                 basic_tests["tests/conftest.py"] = (
                     'import sys\n'
                     'from pathlib import Path\n'
-                    'sys.path.insert(0, str(Path(__file__).parent.parent))\n'
+                    '\n'
+                    '# Add parent directory to sys.path for package imports\n'
+                    '_test_dir = Path(__file__).parent\n'
+                    '_project_root = _test_dir.parent\n'
+                    'if str(_project_root) not in sys.path:\n'
+                    '    sys.path.insert(0, str(_project_root))\n'
+                    '\n'
+                    '# Also search upward for the directory containing app/ package\n'
+                    '_current = _project_root\n'
+                    'for _ in range(5):  # max 5 levels up\n'
+                    '    if (_current / "app").is_dir():\n'
+                    '        if str(_current) not in sys.path:\n'
+                    '            sys.path.insert(0, str(_current))\n'
+                    '        break\n'
+                    '    _parent = _current.parent\n'
+                    '    if _parent == _current:\n'
+                    '        break\n'
+                    '    _current = _parent\n'
                 )
         
         return basic_tests
