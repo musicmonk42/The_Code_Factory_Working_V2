@@ -342,6 +342,42 @@ pydantic==2.5.0
 python-dotenv==1.0.0
 ```
 
+**⛔ NEVER USE `Depends(...)` WITH ELLIPSIS — CRASHES AT IMPORT TIME ⛔**
+
+```python
+# ❌ WRONG — Ellipsis is not callable, FastAPI crashes with TypeError at import:
+from fastapi import Depends
+
+def get_current_user(token: str = Depends(...)):  # ❌ CRASHES: Ellipsis is not callable
+    pass
+
+# ❌ ALSO WRONG — same crash:
+async def protected_route(user = Depends(...)):  # ❌ CRASHES
+    pass
+
+# ✅ CORRECT — Define a stub function and reference it:
+async def get_current_user() -> dict:
+    """Placeholder dependency — replace with real auth logic."""
+    return {"sub": "anonymous", "role": "guest"}
+
+@router.get("/protected")
+async def protected_route(current_user: dict = Depends(get_current_user)):
+    return {"user": current_user}
+
+# ✅ ALSO CORRECT — Inline lambda for simple cases:
+@router.get("/items")
+async def list_items(db = Depends(lambda: None)):  # Simple no-op dependency
+    pass
+```
+
+**Why this matters:**
+- `...` (Ellipsis) in Python is an object, NOT a callable function
+- `Depends()` requires a callable (function, class, or lambda)
+- FastAPI calls `inspect.signature()` on the dependency at import time
+- `inspect.signature(Ellipsis)` raises `TypeError` immediately
+- This crashes the entire application before any request is served
+- The crash happens during module import, so it cannot be caught by route-level error handling
+
 ### MANDATORY for FastAPI:
 - ✓ Use Pydantic models for ALL request/response validation
 - ✓ Add response_model to ALL endpoints
@@ -358,6 +394,7 @@ python-dotenv==1.0.0
 - ✓ CRITICAL: For BaseHTTPMiddleware, import from starlette: from starlette.middleware.base import BaseHTTPMiddleware (NOT from fastapi.middleware.base)
 - ✓ CRITICAL: BaseHTTPMiddleware requires 'app' as first arg to __init__. Register with app.add_middleware(MyMiddleware) — pass the CLASS. NEVER instantiate middleware directly in tests. Test middleware through TestClient(app).
 - ✓ CRITICAL: When using Pydantic v2, fields declared as `Optional[X]` MUST have a default value (e.g., `Optional[str] = None`). In Pydantic v2, `Optional` only affects the type union, it does NOT make the field optional without a default.
+- ✓ CRITICAL: NEVER use `Depends(...)` with Ellipsis literal — always pass a callable function, class, or lambda to `Depends()`
 - ✓ CRITICAL: NEVER use `@app.on_event('startup')` or `@app.on_event('shutdown')` — these are deprecated in modern FastAPI. Instead, use the `lifespan` context manager pattern:
   ```python
   from contextlib import asynccontextmanager

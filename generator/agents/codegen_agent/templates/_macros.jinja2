@@ -208,6 +208,7 @@ Generating fewer endpoints than listed here will result in automatic rejection.
 - Include OpenAPI tags and descriptions
 - Add example values to schemas
 - FastAPI automatically returns 422 for validation errors when using typed Pydantic parameters
+- **CRITICAL**: NEVER use `Depends(...)` (Ellipsis) — Ellipsis is not callable and crashes FastAPI at import time. Always define a real function and pass it to `Depends()`.
 {% elif framework == "flask" %}
 **Flask Best Practices**:
 - Use Blueprints for organization
