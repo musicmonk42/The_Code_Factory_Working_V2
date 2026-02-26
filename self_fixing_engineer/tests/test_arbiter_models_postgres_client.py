@@ -232,8 +232,9 @@ async def test_initialization_success(pg_client):
 
 
 @pytest.mark.asyncio
-async def test_connect_success(pg_client, in_memory_exporter):
+async def test_connect_success(pg_client, in_memory_exporter, clear_metrics_and_traces):
     """Test successful connection to PostgreSQL."""
+    initial = clear_metrics_and_traces
     await pg_client.connect()
     assert pg_client._pool is not None
     assert not pg_client._is_closed
@@ -245,9 +246,10 @@ async def test_connect_success(pg_client, in_memory_exporter):
             table="n/a",
             status="success",
         )
+        - initial['connect_success']
         == 1
     )
-    assert get_metric_value(DB_CONNECTIONS_CURRENT, db_type="postgresql") == 1
+    assert get_metric_value(DB_CONNECTIONS_CURRENT, db_type="postgresql") - initial['connections_current'] == 1
 
     # Check for spans if available (optional since tracer might already be configured)
     spans = in_memory_exporter.get_finished_spans()
@@ -393,8 +395,9 @@ async def test_ensure_table_exists(pg_client):
 
 
 @pytest.mark.asyncio
-async def test_save_success(pg_client, mocker: MockerFixture):
+async def test_save_success(pg_client, mocker: MockerFixture, clear_metrics_and_traces):
     """Test successful save (UPSERT)."""
+    initial = clear_metrics_and_traces
     await pg_client.connect()
 
     # Mock fetch to return the saved ID
@@ -413,6 +416,7 @@ async def test_save_success(pg_client, mocker: MockerFixture):
             table="feedback",
             status="success",
         )
+        - initial['save_feedback_success']
         == 1
     )
 
