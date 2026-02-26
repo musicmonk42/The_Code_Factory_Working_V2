@@ -169,6 +169,28 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
         "self_fixing_engineer.arbiter.models.audit_ledger_client.AuditLedgerClient", return_value=mock_audit
     )
 
+    # Mock web3 dependencies so AuditLedgerClient.connect() doesn't attempt a real
+    # websocket connection to ws://mock-ledger:8545 (which would time out in CI)
+    mock_web3_instance = mocker.AsyncMock()
+    mock_web3_instance.is_connected = mocker.AsyncMock(return_value=True)
+    mock_web3_instance.eth = mocker.MagicMock()
+    mock_web3_instance.eth.contract = mocker.MagicMock(return_value=mocker.MagicMock())
+    mock_web3_instance.middleware_onion = mocker.MagicMock()
+    mocker.patch(
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWeb3",
+        return_value=mock_web3_instance,
+    )
+    mocker.patch(
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWebsocketProvider",
+    )
+    mocker.patch(
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.Account",
+    )
+    mocker.patch(
+        "self_fixing_engineer.arbiter.models.audit_ledger_client.to_checksum_address",
+        return_value="0xMockContract",
+    )
+
     yield
 
     # Clean up temp directories

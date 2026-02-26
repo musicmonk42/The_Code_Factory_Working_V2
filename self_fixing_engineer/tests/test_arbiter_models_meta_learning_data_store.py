@@ -170,12 +170,12 @@ async def clear_metrics_and_traces(in_memory_exporter):
         MLDS_DATA_SIZE.labels(backend="redis").set(0)
     except:
         pass
-    # Reset counter metrics to avoid cross-test contamination
-    try:
-        MLDS_OPS_TOTAL._metrics.clear()
-    except:
-        pass
-    yield
+    # Capture initial counter values to calculate deltas (counters are global singletons)
+    initial_metrics = {
+        'add_record_success': get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success"),
+        'add_record_failure': get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="failure"),
+    }
+    yield initial_metrics
 
 
 @pytest.mark.asyncio
@@ -191,8 +191,9 @@ async def test_initialization_success(store_type, inmemory_store, redis_store):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("store_type", ["inmemory", "redis"])
-async def test_add_record_success(store_type, inmemory_store, redis_store, in_memory_exporter):
+async def test_add_record_success(store_type, inmemory_store, redis_store, in_memory_exporter, clear_metrics_and_traces):
     """Test successful addition of a record."""
+    initial = clear_metrics_and_traces
     store = inmemory_store if store_type == "inmemory" else redis_store
 
     if store_type == "redis":
@@ -203,7 +204,9 @@ async def test_add_record_success(store_type, inmemory_store, redis_store, in_me
     exp_id = await store.add_record(SAMPLE_RECORD)
     assert exp_id == "test_exp_001"
     assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 1
+        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success")
+        - initial['add_record_success']
+        == 1
     )
     assert get_metric_value(MLDS_DATA_SIZE, backend=store._backend_label) == 1
 
@@ -521,8 +524,9 @@ async def test_redis_connection_failure(redis_store, mocker: MockerFixture):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("store_type", ["inmemory", "redis"])
-async def test_concurrent_add_records(store_type, inmemory_store, redis_store):
+async def test_concurrent_add_records(store_type, inmemory_store, redis_store, clear_metrics_and_traces):
     """Test concurrent addition of records."""
+    initial = clear_metrics_and_traces
     store = inmemory_store if store_type == "inmemory" else redis_store
 
     if store_type == "redis":
@@ -548,7 +552,9 @@ async def test_concurrent_add_records(store_type, inmemory_store, redis_store):
     assert len(exp_ids) == 4
     assert get_metric_value(MLDS_DATA_SIZE, backend=store._backend_label) == 4
     assert (
-        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success") == 4
+        get_metric_value(MLDS_OPS_TOTAL, operation="add_record", status="success")
+        - initial['add_record_success']
+        == 4
     )
 
 
