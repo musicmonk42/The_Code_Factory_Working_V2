@@ -102,7 +102,7 @@ MAX_TOTAL_FALLBACK_ATTEMPTS = int(os.getenv("MAX_LLM_FALLBACK_ATTEMPTS", "6"))
 # Provider default models for fallback scenarios
 _PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-4o",
-    "gemini": "gemini-1.5-flash",  # Changed from "gemini-pro" (deprecated/removed)
+    "gemini": "gemini-2.0-flash",  # Updated from gemini-1.5-flash (removed from API)
     "local": "codellama",
     "grok": "grok-beta",
     "claude": "claude-3-sonnet-20240229",
@@ -722,10 +722,15 @@ class LLMClient:
                             is_client_error = False
                             if HAS_OPENAI and isinstance(fallback_error, OpenAIError):
                                 is_client_error = getattr(fallback_error, "status_code", 0) in range(400, 500)
-                            else:
-                                # Fall back to checking error string for HTTP 4xx patterns
+                            elif HAS_OPENAI and isinstance(getattr(fallback_error, "__cause__", None), OpenAIError):
+                                is_client_error = getattr(fallback_error.__cause__, "status_code", 0) in range(400, 500)
+                            if not is_client_error:
+                                # Also check wrapped LLMError message for 4xx patterns
                                 import re as _re
-                                is_client_error = bool(_re.search(r'\b4\d{2}\b', str(fallback_error)))
+                                _err_str = str(fallback_error)
+                                is_client_error = bool(_re.search(r'\b4\d{2}\b', _err_str)) or any(
+                                    pat in _err_str.lower() for pat in ("invalid_request_error", "not found")
+                                )
                             if is_client_error:
                                 logger.warning(
                                     f"Fallback provider {fallback_provider} returned non-retryable error "

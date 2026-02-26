@@ -91,8 +91,8 @@ LARGE_PROMPT_THRESHOLD = 8000
 LARGE_PROMPT_MAX_TOKENS = 32768
 # Per-model output token limits (completion tokens); used to cap LARGE_PROMPT_MAX_TOKENS
 MODEL_MAX_OUTPUT_TOKENS = {
-    "gpt-4o": 65536,           # Updated: supports up to 65536 output tokens
-    "gpt-4o-mini": 65536,      # Updated: supports up to 65536 output tokens
+    "gpt-4o": 16384,           # GPT-4o actual max completion token limit
+    "gpt-4o-mini": 16384,      # GPT-4o-mini actual max completion token limit
     "gpt-4-turbo": 4096,
     "gpt-4": 8192,
     "gpt-4.5-preview": 16384,  # Added: GPT-4.5-preview

@@ -124,6 +124,10 @@ class OpenAIProvider(LLMProvider):
         if self.custom_headers:
             kwargs["extra_headers"] = self.custom_headers
 
+        # GPT-4o and o-series models require max_completion_tokens instead of max_tokens
+        if "max_tokens" in kwargs and any(m in model for m in ["gpt-4o", "o1", "o3"]):
+            kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+
         # Filter out response_format for models that don't support it
         # Models that support response_format: gpt-4-turbo*, gpt-4o*, gpt-3.5-turbo-1106+
         if "response_format" in kwargs:
