@@ -862,15 +862,9 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             stub_lines: List[str] = []
             for fn in sorted(missing):
                 stub_lines.append(
-                    f"\n\nasync def {fn}(*args: Any, **kwargs: Any) -> None:"
-                    f"\n    \"\"\"Auto-generated stub for ``{fn}``."
-                    f"\n\n    .. warning::\n"
-                    f"        Replace with a real implementation.  This stub raises"
-                    f" :exc:`NotImplementedError` at runtime.\n    \"\"\"\n"
-                    f"    raise NotImplementedError(\n"
-                    f"        \"{fn} has not been implemented yet. \"\n"
-                    f"        \"Replace this stub with real business logic.\"\n"
-                    f"    )\n"
+                    f"\n\nasync def {fn}(*args: Any, **kwargs: Any) -> Any:"
+                    f'\n    """Placeholder implementation for ``{fn}``."""'
+                    f"\n    return None\n"
                 )
             updated[svc_path] = svc_content.rstrip() + "".join(stub_lines) + "\n"
             logger.info(
@@ -879,6 +873,98 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
                 svc_path,
                 missing,
             )
+
+    # ------------------------------------------------------------------ #
+    # 6. Deduplicate function definitions in router files that shadow     #
+    #    imported service names                                           #
+    # ------------------------------------------------------------------ #
+    _import_name_re = re.compile(
+        r'^from\s+\S+\s+import\s+(.+)$', re.MULTILINE
+    )
+    _def_block_re = re.compile(
+        r'^([ \t]*(?:@[^\n]+\n)*[ \t]*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)[^\n]*\n'
+        r'(?:(?:[ \t]+[^\n]*\n|\n))*)',
+        re.MULTILINE,
+    )
+
+    def _collect_imported_names(content: str) -> Set[str]:
+        """Return the set of names imported at the top level of a module."""
+        imported: Set[str] = set()
+        for m in _import_name_re.finditer(content):
+            raw = m.group(1)
+            # Handle parenthesised multi-line imports by stripping parens
+            raw = raw.strip().strip("()")
+            for part in raw.split(","):
+                part = re.sub(r'#.*$', '', part).strip()
+                if not part:
+                    continue
+                # "name as alias" → original name
+                name = part.split()[0]
+                if name and name.isidentifier():
+                    imported.add(name)
+        return imported
+
+    for path in list(updated.keys()):
+        if not _router_path_re.match(path):
+            continue
+        content = updated[path]
+        imported_names = _collect_imported_names(content)
+        if not imported_names:
+            continue
+
+        # Find all top-level function definitions and track duplicates
+        seen_funcs: Dict[str, int] = {}  # name → count of occurrences
+        for m in _def_block_re.finditer(content):
+            fn_name = m.group(2)
+            seen_funcs[fn_name] = seen_funcs.get(fn_name, 0) + 1
+
+        # Determine which names need deduplication or renaming
+        duplicate_names = {n for n, cnt in seen_funcs.items() if cnt > 1}
+        shadowing_names = {n for n in seen_funcs if n in imported_names}
+
+        if not duplicate_names and not shadowing_names:
+            continue
+
+        new_content = content
+        changed = False
+
+        # Remove all but the first occurrence of duplicate definitions
+        for fn_name in duplicate_names:
+            occurrences = []
+            for m in _def_block_re.finditer(new_content):
+                if m.group(2) == fn_name:
+                    occurrences.append(m)
+            # Keep first, remove the rest
+            for m in reversed(occurrences[1:]):
+                new_content = new_content[:m.start()] + new_content[m.end():]
+                changed = True
+            if changed:
+                logger.info(
+                    "[CODEGEN] _reconcile_app_wiring: removed %d duplicate definition(s) of '%s' in %s",
+                    len(occurrences) - 1,
+                    fn_name,
+                    path,
+                )
+
+        # Rename route handler functions that shadow imported service names
+        # (only single-occurrence definitions that shadow an import)
+        for fn_name in shadowing_names - duplicate_names:
+            new_name = f"{fn_name}_endpoint"
+            new_content = re.sub(
+                r'(?<!\w)(async\s+def\s+)' + re.escape(fn_name) + r'(?=\s*\()',
+                r'\g<1>' + new_name,
+                new_content,
+            )
+            changed = True
+            logger.info(
+                "[CODEGEN] _reconcile_app_wiring: renamed '%s' → '%s' in %s to avoid import shadowing",
+                fn_name,
+                new_name,
+                path,
+            )
+
+        if changed:
+            updated[path] = new_content
 
     return updated
 

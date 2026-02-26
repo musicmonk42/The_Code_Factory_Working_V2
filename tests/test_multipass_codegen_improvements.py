@@ -653,7 +653,8 @@ class TestReconcileAppWiringStep5:
         )
         result = fn(files)
         svc = result["app/services/product.py"]
-        assert "NotImplementedError" in svc
+        assert "return None" in svc
+        assert "NotImplementedError" not in svc
 
     def test_stub_has_typed_signature(self, fn):
         files = self._minimal_files(
