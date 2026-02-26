@@ -1936,12 +1936,29 @@ else:
             # File provenance registry — tracks which files were produced by the
             # Generator so that the SFE can prioritise them for quality checks
             # without touching manually-authored code.
+            #
+            # Persistence path resolution (evaluated in priority order):
+            #   1. ARBITER_PROVENANCE_PATH env var — explicit operator override.
+            #      Recommended value for containerised deployments:
+            #        /app/data/provenance.json  (on the persistent data PVC)
+            #   2. <REPORTS_DIRECTORY>/provenance.json — consistent with
+            #      other arbiter artefacts; also operator-configurable.
+            #
+            # NOTE: In Docker / Kubernetes deployments REPORTS_DIRECTORY defaults
+            # to "./reports" → /app/reports which is NOT on a PVC.  Set
+            # ARBITER_PROVENANCE_PATH=/app/data/provenance.json in the deployment
+            # ConfigMap (k8s/base/configmap.yaml) or Helm values to ensure
+            # provenance records survive pod restarts.
             try:
-                provenance_path = os.path.join(
-                    self.settings.REPORTS_DIRECTORY, "provenance.json"
+                provenance_path = os.environ.get(
+                    "ARBITER_PROVENANCE_PATH",
+                    os.path.join(self.settings.REPORTS_DIRECTORY, "provenance.json"),
                 )
                 self._provenance_registry: FileProvenanceRegistry = FileProvenanceRegistry(
                     provenance_path=provenance_path
+                )
+                logging.getLogger(__name__).info(
+                    f"[{name}] FileProvenanceRegistry configured: {provenance_path}"
                 )
             except Exception as _prov_err:
                 logging.getLogger(__name__).warning(

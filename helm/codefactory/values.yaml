@@ -419,6 +419,12 @@ env:
   # Override if the data volume is mounted at a non-default path:
   #   helm upgrade --set env.POLICY_CONFIG_FILE_PATH=/data/policies.json ...
   POLICY_CONFIG_FILE_PATH: "/app/data/policies.json"
+  # File provenance registry path — records which files were produced by the Generator
+  # pipeline so the SFE can prioritise generated artefacts for quality checks.
+  # MUST be on the data PVC so the registry survives pod restarts; otherwise the
+  # Arbiter loses track of generator-produced files on every restart.
+  # Override: helm upgrade --set env.ARBITER_PROVENANCE_PATH=/data/provenance.json ...
+  ARBITER_PROVENANCE_PATH: "/app/data/provenance.json"
 
   # SFE Checkpoint Manager Paths (container-friendly defaults)
   # These use relative paths that resolve to /app/logs/checkpoint/ in containers

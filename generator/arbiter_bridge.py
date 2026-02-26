@@ -349,11 +349,11 @@ class ArbiterBridge:
             if event_type == "generator_output":
                 if "file_paths" not in enriched_data:
                     # Attempt to derive file paths from common payload fields
-                    candidate_paths: list = []
+                    derived_file_paths: list = []
                     for field in ("file_path", "output_path", "path"):
                         if isinstance(data.get(field), str):
-                            candidate_paths.append(data[field])
-                    enriched_data["file_paths"] = candidate_paths
+                            derived_file_paths.append(data[field])
+                    enriched_data["file_paths"] = derived_file_paths
                 enriched_data.setdefault("workflow_id", data.get("workflow_id", ""))
             
             with _timed_operation(BRIDGE_OPERATION_DURATION, "publish_event"):
