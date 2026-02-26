@@ -5904,8 +5904,9 @@ class OmniCoreService:
                 # Initialize critique agent
                 agent = self._critique_class(repo_path=str(repo_path))
                 
-                # Gather code files from code_path
+                # Gather code files from code_path (non-test files only)
                 code_files = {}
+                test_files = {}
                 for pattern in file_patterns:
                     for file_path in repo_path.rglob(pattern):
                         if not any(part.startswith('.') for part in file_path.parts):
@@ -5916,9 +5917,14 @@ class OmniCoreService:
                                 logger.warning(f"[CRITIQUE] File {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
                                 continue
                             try:
-                                code_files[rel_path] = file_path.read_text(encoding="utf-8")
+                                content = file_path.read_text(encoding="utf-8")
                             except Exception as e:
                                 logger.warning(f"Failed to read file {file_path}: {e}")
+                                continue
+                            if "/tests/" in rel_path or rel_path.startswith("tests/"):
+                                test_files[rel_path] = content
+                            else:
+                                code_files[rel_path] = content
                 
                 if not code_files:
                     logger.warning(f"No source files found in {code_path} for critique (language: {detected_language})")
@@ -5930,25 +5936,11 @@ class OmniCoreService:
                         "warning": f"No code files found to critique (language: {detected_language})",
                     }
                 
-                # FIX Problem 1D: Gather test files from tests/ directory
-                test_files = {}
-                tests_dir = repo_path / "tests"
-                if tests_dir.exists():
-                    for pattern in file_patterns:
-                        for file_path in tests_dir.rglob(pattern):
-                            if not any(part.startswith('.') for part in file_path.parts):
-                                try:
-                                    rel_path = str(file_path.resolve().relative_to(repo_path.resolve()))
-                                    test_files[rel_path] = file_path.read_text(encoding="utf-8")
-                                except ValueError as e:
-                                    logger.warning(f"[CRITIQUE] Test file {file_path} is outside repo_path {repo_path}, skipping. Error: {e}")
-                                    continue
-                                except Exception as e:
-                                    logger.warning(f"[CRITIQUE] Failed to read test file {file_path}: {e}")
-                    logger.info(f"[CRITIQUE] Job {job_id} gathered {len(test_files)} test files for critique")
-                else:
-                    logger.info(f"[CRITIQUE] Job {job_id} no tests/ directory found, critique will run without test files")
-                
+                logger.info(
+                    f"[CRITIQUE] Job {job_id} gathered {len(code_files)} code files and "
+                    f"{len(test_files)} test files for critique"
+                )
+
                 # Run critique
                 critique_result = await agent.run(
                     code_files=code_files,

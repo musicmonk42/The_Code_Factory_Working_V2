@@ -878,3 +878,88 @@ class TestValidateGeneratedProject:
         assert "warnings" in data
         assert "validation_time_ms" in data
         assert "timestamp" in data
+
+    @pytest.mark.asyncio
+    async def test_validate_detects_stub_class_in_models(self, project_dir):
+        """Stub class in a models/ directory fails validation."""
+        models_dir = project_dir / "app" / "models"
+        models_dir.mkdir(parents=True)
+        (models_dir / "product.py").write_text("class Product:\n    pass\n")
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        assert result["valid"] is False
+        assert any("Stub class" in e and "Product" in e for e in result["errors"])
+        assert len(result["stub_detections"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_validate_stub_class_in_init_is_only_warning(self, project_dir):
+        """Stub class in __init__.py is a warning, not an error."""
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        (app_dir / "__init__.py").write_text("class _Base:\n    pass\n")
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        # Should be a warning, not an error (so valid stays True for this reason)
+        assert not any("Stub class" in e and "_Base" in e for e in result["errors"])
+        assert any("Stub class" in w and "_Base" in w for w in result["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_validate_detects_auto_generated_stub_marker(self, project_dir):
+        """# Auto-generated stub comment in a critical file fails validation."""
+        services_dir = project_dir / "app" / "services"
+        services_dir.mkdir(parents=True)
+        (services_dir / "product_service.py").write_text(
+            "# Auto-generated stub\ndef get_product(id):\n    return None\n"
+        )
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        assert result["valid"] is False
+        assert any("Auto-generated stub" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_import_consistency_missing_module(self, project_dir):
+        """from app.models.product import Product when the file doesn't exist fails validation."""
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        # main.py imports from a module that doesn't exist
+        (app_dir / "main.py").write_text(
+            "from app.models.product import Product\n\napp = None\n"
+        )
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        assert result["valid"] is False
+        assert any("app.models.product" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_validate_import_consistency_valid_project(self, project_dir):
+        """All local imports resolving to existing files passes validation."""
+        app_dir = project_dir / "app"
+        models_dir = app_dir / "models"
+        models_dir.mkdir(parents=True)
+        # Create the module that will be imported
+        (models_dir / "product.py").write_text(
+            "from pydantic import BaseModel\n\nclass Product(BaseModel):\n    name: str\n"
+        )
+        # main.py imports from an existing local module
+        (app_dir / "main.py").write_text(
+            "from app.models.product import Product\n\napp = None\n"
+        )
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        # No import-consistency errors about app.models.product
+        assert not any("app.models.product" in e for e in result["errors"])

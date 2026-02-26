@@ -355,6 +355,43 @@ def list_products(): pass
         result = validate_spec_fidelity(md, files)
         assert result["valid"] is True
 
+    def test_router_wiring_disconnected_warning(self):
+        """Router files exist but main.py has no include_router() — should warn."""
+        md = "# API\nGET /api/products"
+        files = {
+            "app/routers/products.py": (
+                "@router.get('/api/products')\ndef list_products(): pass\n"
+            ),
+            "app/main.py": (
+                "from fastapi import FastAPI\napp = FastAPI()\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+
+        assert result["router_wiring_check"] is not None
+        assert result["router_wiring_check"]["status"] == "disconnected"
+        assert any("include_router" in w for w in result["warnings"])
+
+    def test_router_wiring_connected_no_warning(self):
+        """Router files exist and main.py includes them — no wiring warning."""
+        md = "# API\nGET /api/products"
+        files = {
+            "app/routers/products.py": (
+                "@router.get('/api/products')\ndef list_products(): pass\n"
+            ),
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers import products_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(products_router)\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+
+        assert result["router_wiring_check"] is not None
+        assert result["router_wiring_check"]["status"] == "connected"
+        assert not any("include_router" in w for w in result["warnings"])
+
 
 class TestValidateDeploymentArtifacts:
     """Test deployment validation."""
