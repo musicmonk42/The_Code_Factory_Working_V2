@@ -306,6 +306,134 @@ class TestOmniCoreServiceIntegration:
         # Verify that the result does NOT have a data key (fire-and-forget for message bus)
         assert "data" not in result
 
+    @pytest.mark.asyncio
+    async def test_route_job_audit_query_sfe_bypasses_message_bus(self):
+        """Test that query_audit_logs for SFE targets uses direct dispatch, not the message bus.
+
+        Fix 1 validation: read-only audit queries must always use direct dispatch
+        because the message bus is fire-and-forget with no response channel; a
+        published message returns no data, so the caller would always receive an
+        empty result.
+        """
+        service = OmniCoreService()
+
+        # Simulate a production environment where the message bus IS available
+        mock_bus = AsyncMock()
+        mock_bus.publish = AsyncMock(return_value=True)
+        service._message_bus = mock_bus
+        service._omnicore_components_available["message_bus"] = True
+
+        sample_logs = [{"event_type": "bug_detection", "timestamp": "2026-01-01T00:00:00Z"}]
+
+        async def mock_dispatch_sfe(job_id, action, payload):
+            return {"logs": sample_logs}
+
+        service._dispatch_sfe_action = mock_dispatch_sfe
+
+        result = await service.route_job(
+            job_id="audit-sfe-123",
+            source_module="api",
+            target_module="sfe",
+            payload={"action": "query_audit_logs", "module": "arbiter", "limit": 10},
+        )
+
+        # Direct dispatch must have been used, not the message bus
+        assert result["routed"] is True
+        assert result["job_id"] == "audit-sfe-123"
+        assert result["transport"] == "direct_dispatch"
+        assert result["target"] == "sfe"
+
+        # The data key must be present and contain the actual logs
+        assert "data" in result
+        assert result["data"]["logs"] == sample_logs
+
+        # Message bus publish must NOT have been called
+        mock_bus.publish.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_route_job_audit_query_handles_dispatch_error(self):
+        """Test that a failing _dispatch_sfe_action returns routed=False with error info.
+
+        Ensures the error-handling branch of the query_audit_logs intercept is
+        exercised and returns the expected shape without raising.
+        """
+        service = OmniCoreService()
+        service._message_bus = None
+        service._omnicore_components_available["message_bus"] = False
+
+        async def failing_dispatch(job_id, action, payload):
+            raise RuntimeError("disk read failure")
+
+        service._dispatch_sfe_action = failing_dispatch
+
+        result = await service.route_job(
+            job_id="audit-err-456",
+            source_module="api",
+            target_module="sfe",
+            payload={"action": "query_audit_logs", "module": "testgen", "limit": 10},
+        )
+
+        assert result["routed"] is False
+        assert result["job_id"] == "audit-err-456"
+        assert result["transport"] == "direct_dispatch"
+        assert "error" in result
+        assert "disk read failure" in result["error"]
+
+    @pytest.mark.asyncio
+    async def test_dispatch_sfe_action_audit_query_arbiter_uses_primary_path(self):
+        """Fix 2 validation: arbiter audit query reads sfe_bug_manager_audit.log first.
+
+        Ensures the primary write path for the Arbiter's AuditLogManager is
+        listed before the legacy canonical paths so that the file reader finds
+        actual log data rather than silently returning an empty list.
+        """
+        service = OmniCoreService()
+
+        captured_paths = []
+
+        async def mock_read(log_paths, payload):
+            captured_paths.extend(log_paths)
+            return {"logs": []}
+
+        service._read_audit_logs_from_files = mock_read
+
+        await service._dispatch_sfe_action(
+            "job-arbiter-1",
+            "query_audit_logs",
+            {"module": "arbiter", "limit": 10},
+        )
+
+        assert captured_paths[0] == "sfe_bug_manager_audit.log", (
+            f"Expected sfe_bug_manager_audit.log as first path, got {captured_paths[0]!r}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_dispatch_sfe_action_audit_query_testgen_uses_primary_path(self):
+        """Fix 2 validation: testgen audit query reads atco_artifacts/atco_audit.log first.
+
+        Ensures the primary write path from _get_audit_log_file() is listed
+        before the legacy canonical path so the reader finds actual log data.
+        """
+        service = OmniCoreService()
+
+        captured_paths = []
+
+        async def mock_read(log_paths, payload):
+            captured_paths.extend(log_paths)
+            return {"logs": []}
+
+        service._read_audit_logs_from_files = mock_read
+
+        await service._dispatch_sfe_action(
+            "job-testgen-2",
+            "query_audit_logs",
+            {"module": "testgen", "limit": 10},
+        )
+
+        assert captured_paths[0] == "atco_artifacts/atco_audit.log", (
+            f"Expected atco_artifacts/atco_audit.log as first path, got {captured_paths[0]!r}"
+        )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

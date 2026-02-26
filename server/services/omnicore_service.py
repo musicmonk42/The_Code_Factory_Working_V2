@@ -2031,13 +2031,11 @@ class OmniCoreService:
 
         # Audit log queries must always use direct dispatch because the message bus
         # is fire-and-forget with no response channel, so the result would be lost.
+        # Note: generator targets are already handled above and never reach this point.
         if payload.get("action") == "query_audit_logs":
             logger.info(f"Using direct dispatch for audit query job {job_id} targeting {target_module}")
             try:
-                if target_module == "generator":
-                    result = await self._dispatch_generator_action(job_id, "query_audit_logs", payload)
-                else:
-                    result = await self._dispatch_sfe_action(job_id, "query_audit_logs", payload)
+                result = await self._dispatch_sfe_action(job_id, "query_audit_logs", payload)
                 return {
                     "job_id": job_id,
                     "routed": True,
