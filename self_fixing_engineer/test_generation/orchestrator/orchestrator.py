@@ -164,7 +164,6 @@ from test_generation.utils import (
 )
 
 from ..compliance_mapper import generate_report as generate_compliance_report
-from .stubs import DummyTestEnricher
 
 
 # --- Backwards-compatible test hook -----------------------------------------
@@ -374,6 +373,7 @@ class GenerationOrchestrator:
                 level="WARNING",
             )
             log(f"Initialization Traceback:\n{traceback.format_exc()}", level="DEBUG")
+            from .stubs import DummyTestEnricher  # Deferred import to avoid triggering _check_stub_usage_safety() at module load
             return DummyTestEnricher()
 
     async def generate_tests_for_targets(
