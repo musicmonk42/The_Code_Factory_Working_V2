@@ -75,7 +75,9 @@ if not logger.handlers:
             sys.stderr.write(
                 "CRITICAL: RabbitMQ plugin file logging failed. Aborting startup.\n"
             )
-            sys.exit(1)
+            raise RuntimeError(
+                f"RabbitMQ plugin file logging failed: {e}"
+            ) from e
 
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -127,7 +129,9 @@ except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for RabbitMQ plugin: {e}. Aborting startup."
     )
-    sys.exit(1)
+    raise ImportError(
+        f"Missing core dependency for RabbitMQ plugin: {e}"
+    ) from e
 
 # --- Dependency Gating ---
 try:
@@ -140,11 +144,16 @@ except ImportError as e:
     alert_operator(
         "CRITICAL: aiormq missing. RabbitMQ plugin aborted.", level="CRITICAL"
     )
-    sys.exit(1)
+    raise ImportError(
+        f"aiormq not found for RabbitMQ plugin: {e}"
+    ) from e
 
 try:
     from pydantic import BaseModel, Field, ValidationError, field_validator
-    from pydantic_core import ValidationInfo
+    try:
+        from pydantic import ValidationInfo
+    except ImportError:
+        from pydantic_core import ValidationInfo
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -153,7 +162,9 @@ except ImportError as e:
     alert_operator(
         "CRITICAL: pydantic missing. RabbitMQ plugin aborted.", level="CRITICAL"
     )
-    sys.exit(1)
+    raise ImportError(
+        f"pydantic or pydantic-settings not found for RabbitMQ plugin: {e}"
+    ) from e
 
 try:
     from prometheus_client import (
@@ -171,7 +182,9 @@ except ImportError as e:
         "CRITICAL: prometheus_client missing. RabbitMQ plugin aborted.",
         level="CRITICAL",
     )
-    sys.exit(1)
+    raise ImportError(
+        f"prometheus_client not found for RabbitMQ plugin: {e}"
+    ) from e
 
 try:
     from aiohttp import web

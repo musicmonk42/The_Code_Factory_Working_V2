@@ -432,7 +432,9 @@ class AuditEvent(BaseModel):
     service_name: str = Field(..., min_length=1)
     timestamp: float = Field(default_factory=time.time, ge=0)
     details: Dict[str, Any] = Field(default_factory=dict)
-    schema_version: int = Field(settings.audit_schema_version, const=True)
+    schema_version: int = Field(
+        default=getattr(settings, 'audit_schema_version', 1),
+    )
 
     @classmethod
     @field_validator("details")
