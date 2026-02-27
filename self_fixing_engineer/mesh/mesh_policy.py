@@ -407,8 +407,11 @@ class MeshPolicyBackend:
                 GRAPH_RAG_AVAILABLE,
             )
             self._graph_reasoner = GraphRAGPolicyReasoner() if GRAPH_RAG_AVAILABLE else None
-        except Exception:
+            if self._graph_reasoner is None:
+                logger.info("GraphRAG policy reasoner unavailable; using flat fallback")
+        except Exception as exc:
             self._graph_reasoner = None
+            logger.warning("GraphRAG policy reasoner initialization failed", error=str(exc))
 
         if backend_type == "local":
             self.local_dir = Path(kwargs.get("local_dir", "policies"))
@@ -742,8 +745,12 @@ class MeshPolicyBackend:
                         if "id" not in policy_dict:
                             policy_dict["id"] = policy_id
                         self._graph_reasoner.add_policy(policy_dict)
-                    except Exception:
-                        pass  # graph seeding is best-effort
+                    except Exception as exc:
+                        logger.debug(
+                            "Graph seeding failed; continuing with cached policy only",
+                            policy_id=policy_id,
+                            error=str(exc),
+                        )
             return policy_data
         except Exception as e:
             await _dlq_policy_op("load", policy_id, e)
@@ -761,8 +768,11 @@ class MeshPolicyBackend:
                 ):
                     # This is plain signed data (not encrypted)
                     return json.loads(test_data["data"])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Signed payload pre-parse failed; falling back to standard processing",
+                    error=str(exc),
+                )
 
             if self.multi_fernet:
                 decrypted_payload = self.multi_fernet.decrypt(data)
@@ -895,6 +905,23 @@ class MeshPolicyBackend:
         # Flat allow/deny fallback — synchronous check against cached policy data.
         cache_key = f"{policy_id}:latest"
         policy_data = self.policy_cache.get(cache_key) or {}
+        if not policy_data and self.backend_type == "local":
+            try:
+                files = list(self.local_dir.glob(f"{policy_id}_v*.json"))
+                if files:
+                    files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                    payload = json.loads(files[0].read_text())
+                    if "data" in payload:
+                        policy_data = json.loads(payload["data"])
+                    else:
+                        policy_data = payload
+                    self.policy_cache[cache_key] = policy_data
+            except Exception as exc:
+                logger.debug(
+                    "Best-effort local fallback policy load failed",
+                    policy_id=policy_id,
+                    error=str(exc),
+                )
         allowed_rules = policy_data.get("allow", [])
         denied_rules = policy_data.get("deny", [])
         allowed = bool(allowed_rules) and not denied_rules

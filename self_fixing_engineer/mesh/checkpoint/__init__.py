@@ -9,6 +9,7 @@ from .checkpoint_exceptions import (
     CheckpointAuditError,
     CheckpointBackendError,
     CheckpointError,
+    CheckpointRetryableError,
     CheckpointValidationError,
 )
 from .checkpoint_manager import (
@@ -35,6 +36,7 @@ __all__ = [
     "CheckpointError",
     "CheckpointAuditError",
     "CheckpointBackendError",
+    "CheckpointRetryableError",
     "CheckpointValidationError",
     # Utils
     "hash_dict",
