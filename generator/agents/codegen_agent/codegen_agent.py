@@ -194,6 +194,8 @@ _MULTIPASS_GROUPS = [
             "Use the SQLAlchemy models defined in the core pass. "
             "Every router MUST be properly connected to its service layer. "
             "All middleware MUST have working implementations, not empty files or pass-through stubs. "
+            "MUST include /healthz endpoint for Kubernetes liveness probes (returns HTTP 200 with {'status': 'ok'}). "
+            "MUST include /readyz endpoint for Kubernetes readiness probes (returns HTTP 200 when app is ready, 503 otherwise). "
             "Do NOT generate models, schemas, test, or infrastructure files in this pass."
         ),
     },

@@ -164,7 +164,6 @@ MODULAR_SUBDIRS: List[str] = [
     "app/middleware",
     "app/utils",
     "app/models",
-    "app/schemas",
 ]
 
 # Alembic stub file contents keyed by relative path
@@ -700,10 +699,27 @@ def ensure_alembic_scaffolding(
                 # Syntax is valid — keep the LLM-generated file as-is.
                 continue
             except SyntaxError:
-                # Replace the broken file with the known-good template.
-                logger.warning(
-                    "%s alembic/env.py failed syntax validation; replacing with hardcoded template",
-                    _STAGE,
+                # Count how many times we've already repaired this file to
+                # detect an LLM that repeatedly generates invalid syntax.
+                _REPAIR_PREFIX = "alembic/env.py failed syntax validation (repair #"
+                prior_repairs = sum(
+                    1 for w in result.warnings if w.startswith(_REPAIR_PREFIX)
+                )
+                if prior_repairs > 0:
+                    logger.error(
+                        "%s alembic/env.py failed syntax validation AGAIN (repair #%d); "
+                        "LLM is repeatedly generating invalid syntax for this file",
+                        _STAGE,
+                        prior_repairs + 1,
+                    )
+                else:
+                    logger.warning(
+                        "%s alembic/env.py failed syntax validation; replacing with hardcoded template",
+                        _STAGE,
+                    )
+                result.warnings.append(
+                    f"alembic/env.py failed syntax validation (repair #{prior_repairs + 1}); "
+                    "replaced with hardcoded template"
                 )
                 try:
                     full_path.write_text(content, encoding="utf-8")
@@ -767,9 +783,16 @@ def _scaffold_required_dirs(
                 output_dir=output_dir,
                 file_type="init_py",
             )
-            # Copy root-level schemas.py if present, else use stub
+            # Copy root-level schemas.py if present, else use stub.
+            # Skip if app/schemas/ already exists as a package directory to
+            # prevent a module/package collision that would break imports.
             app_schemas = dir_path / "schemas.py"
-            if not app_schemas.exists():
+            if (dir_path / "schemas").is_dir():
+                logger.debug(
+                    "%s Skipping app/schemas.py creation — app/schemas/ package directory already exists",
+                    _STAGE,
+                )
+            elif not app_schemas.exists():
                 root_schemas = output_dir / "schemas.py"
                 if root_schemas.exists():
                     try:
@@ -1204,7 +1227,15 @@ _APP_ROUTES_CONTENT: str = (
     "@router.get('/health')\n"
     "async def health() -> dict:\n"
     "    \"\"\"Liveness probe — always returns HTTP 200.\"\"\"\n"
-    "    return {'status': 'ok'}\n"
+    "    return {'status': 'ok'}\n\n\n"
+    "@router.get('/healthz')\n"
+    "async def healthz() -> dict:\n"
+    "    \"\"\"Kubernetes liveness probe — always returns HTTP 200.\"\"\"\n"
+    "    return {'status': 'ok'}\n\n\n"
+    "@router.get('/readyz')\n"
+    "async def readyz() -> dict:\n"
+    "    \"\"\"Kubernetes readiness probe — returns HTTP 200 when app is ready.\"\"\"\n"
+    "    return {'status': 'ready'}\n"
 )
 
 _APP_MAIN_CONTENT: str = (
@@ -1219,5 +1250,13 @@ _APP_MAIN_CONTENT: str = (
     "@app.get('/health')\n"
     "async def health() -> dict:\n"
     "    \"\"\"Liveness probe — always returns HTTP 200.\"\"\"\n"
-    "    return {'status': 'ok'}\n"
+    "    return {'status': 'ok'}\n\n\n"
+    "@app.get('/healthz')\n"
+    "async def healthz() -> dict:\n"
+    "    \"\"\"Kubernetes liveness probe — always returns HTTP 200.\"\"\"\n"
+    "    return {'status': 'ok'}\n\n\n"
+    "@app.get('/readyz')\n"
+    "async def readyz() -> dict:\n"
+    "    \"\"\"Kubernetes readiness probe — returns HTTP 200 when app is ready.\"\"\"\n"
+    "    return {'status': 'ready'}\n"
 )
