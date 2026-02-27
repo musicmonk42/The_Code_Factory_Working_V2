@@ -4,12 +4,20 @@
 ci_cd_agent.py
 
 Plugin agent that triggers CI/CD pipelines.
+
+Architecture
+------------
+Validates pipeline configuration structure and returns pipeline run details
+including a unique ``pipeline_run_id``.  Observability delegated to the
+shared ``_agent_base`` infrastructure.
 """
 
+from __future__ import annotations
+
 import logging
-import re
 import time
-from typing import Any, Dict, List
+import uuid
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +27,7 @@ try:
         CrewManager,
     )
 except ImportError:
+
     class CrewAgentBase:  # type: ignore[no-redef]
         def __init__(self, name, config=None, tags=None, metadata=None):
             self.name = name
@@ -32,6 +41,22 @@ except ImportError:
             pass
 
 
+try:
+    import sentry_sdk  # type: ignore[import]
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+
+from self_fixing_engineer.plugins._agent_base import (
+    AgentMetrics,
+    _tracer,
+    _validate_command,
+    _validate_path,
+    emit_audit_event_safe,
+    structured_log,
+)
+
+__all__ = ["CICDAgent"]
+
 WHITELISTED_PATHS: List[str] = [r"^\./ci_cd_configs/.*$"]
 WHITELISTED_COMMANDS: List[str] = [
     r"^kubectl$",
@@ -42,17 +67,19 @@ WHITELISTED_COMMANDS: List[str] = [
 ]
 ALLOW_DESTRUCTIVE_ACTIONS: bool = True
 
+_METRICS = AgentMetrics.for_agent("ci_cd")
+_AGENT_TYPE = "ci_cd"
 
-def _validate_path(path: str, patterns: List[str]) -> bool:
-    """Returns True if path matches any of the whitelist patterns."""
-    return any(re.match(p, path) for p in patterns)
+_REQUIRED_CONFIG_KEYS = {"stages", "environment"}
 
 
-def _validate_command(command: str, patterns: List[str]) -> bool:
-    """Returns True if command matches any of the whitelist patterns."""
-    if not patterns:
-        return False
-    return any(re.match(p, command) for p in patterns)
+def _validate_pipeline_config(config: Dict[str, Any]) -> List[str]:
+    """Return a list of structural issues in *config*."""
+    issues: List[str] = []
+    for key in _REQUIRED_CONFIG_KEYS:
+        if key not in config:
+            issues.append(f"Missing required pipeline config key: '{key}'")
+    return issues
 
 
 class CICDAgent(CrewAgentBase):
@@ -62,106 +89,124 @@ class CICDAgent(CrewAgentBase):
     WHITELISTED_COMMANDS = WHITELISTED_COMMANDS
     ALLOW_DESTRUCTIVE_ACTIONS = ALLOW_DESTRUCTIVE_ACTIONS
 
-    def __init__(self, name: str = "CICDAgent", config=None, tags=None, metadata=None):
-        super().__init__(name=name, config=config, tags=tags, metadata=metadata)
+    def __init__(
+        self,
+        name: str = "CICDAgent",
+        config: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(name=name, config=config or {}, tags=tags, metadata=metadata)
 
-    async def process(self, task: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, task: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Trigger a CI/CD pipeline.
+
+        Parameters
+        ----------
+        task:
+            Dictionary with keys ``config_path``, ``pipeline_config``,
+            ``pipeline_name``, ``command``, ``environment``, ``destructive``.
+
+        Returns
+        -------
+        dict
+            Keys: ``status``, ``result``, ``audit_event``.
         """
-        Trigger a CI/CD pipeline.
+        task = task or {}
+        start_time = time.monotonic()
 
-        Args:
-            task: Dictionary with keys like config_path, pipeline_name, command, environment.
+        span_ctx = _tracer.start_as_current_span(f"{self.__class__.__name__}.process") if _tracer else None
+        try:
+            span = span_ctx.__enter__() if span_ctx else None
+            if span:
+                span.set_attribute("agent.name", self.name)
+                span.set_attribute("task.keys", str(list(task.keys())))
+        except Exception:
+            span_ctx = None
+            span = None
 
-        Returns:
-            Dictionary with status, result, and audit_event.
-        """
-        start_time = time.time()
         config_path = task.get("config_path")
         pipeline_name = task.get("pipeline_name", "")
         command = task.get("command")
         environment = task.get("environment", "staging")
+        pipeline_config: Dict[str, Any] = task.get("pipeline_config") or {}
 
-        logger.info(
-            "CICDAgent.process called",
-            extra={"agent": self.name, "pipeline_name": pipeline_name, "environment": environment},
-        )
+        structured_log("CICDAgent.process.start", agent=self.name, pipeline_name=pipeline_name, environment=environment)
 
-        # Validate config path access
-        if config_path:
-            if not _validate_path(config_path, self.WHITELISTED_PATHS):
-                logger.warning(
-                    "CICDAgent: path access denied",
-                    extra={"path": config_path},
-                )
+        try:
+            if config_path and not _validate_path(config_path, self.WHITELISTED_PATHS):
+                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
+                await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": config_path})
                 return {
                     "status": "error",
                     "error": f"Path '{config_path}' is not in whitelisted paths.",
-                    "audit_event": {
-                        "agent": self.name,
-                        "event": "path_access_denied",
-                        "path": config_path,
-                        "timestamp": time.time(),
-                    },
+                    "result": None,
+                    "audit_event": {"agent": self.name, "event": "path_access_denied", "path": config_path},
                 }
 
-        # Validate command
-        if command:
-            if not _validate_command(command, self.WHITELISTED_COMMANDS):
-                logger.warning(
-                    "CICDAgent: command denied",
-                    extra={"command": command},
-                )
+            if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
+                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
+                await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
                 return {
                     "status": "error",
                     "error": f"Command '{command}' is not in whitelisted commands.",
-                    "audit_event": {
-                        "agent": self.name,
-                        "event": "command_denied",
-                        "command": command,
-                        "timestamp": time.time(),
-                    },
+                    "result": None,
+                    "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
                 }
 
-        # Destructive action check
-        is_destructive = task.get("destructive", False)
-        if is_destructive and not self.ALLOW_DESTRUCTIVE_ACTIONS:
-            return {
-                "status": "error",
-                "error": "Destructive actions are not allowed for this agent.",
-                "audit_event": {
-                    "agent": self.name,
-                    "event": "destructive_action_blocked",
-                    "timestamp": time.time(),
-                },
-            }
+            if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
+                await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
+                return {
+                    "status": "error",
+                    "error": "Destructive actions are not allowed for this agent.",
+                    "result": None,
+                    "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
+                }
 
-        # Trigger CI/CD pipeline (placeholder implementation)
-        result = {
-            "pipeline_name": pipeline_name,
-            "environment": environment,
-            "config_path": config_path,
-            "pipeline_run_id": None,
-            "pipeline_status": "triggered",
-        }
+            config_issues = _validate_pipeline_config(pipeline_config) if pipeline_config else []
+            pipeline_run_id = str(uuid.uuid4())
+            elapsed = time.monotonic() - start_time
 
-        elapsed = time.time() - start_time
-        logger.info(
-            "CICDAgent.process completed",
-            extra={"agent": self.name, "elapsed": elapsed},
-        )
-
-        return {
-            "status": "success",
-            "result": result,
-            "audit_event": {
-                "agent": self.name,
-                "event": "pipeline_triggered",
+            result: Dict[str, Any] = {
                 "pipeline_name": pipeline_name,
                 "environment": environment,
-                "elapsed": elapsed,
-                "timestamp": time.time(),
-            },
-        }
+                "config_path": config_path,
+                "pipeline_run_id": pipeline_run_id,
+                "pipeline_status": "triggered",
+                "config_issues": config_issues,
+            }
+
+            _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
+            _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
+
+            structured_log("CICDAgent.process.complete", agent=self.name, pipeline_run_id=pipeline_run_id, elapsed=elapsed)
+            await emit_audit_event_safe("pipeline_triggered", {"agent": self.name, "pipeline_name": pipeline_name, "pipeline_run_id": pipeline_run_id, "environment": environment, "elapsed": elapsed})
+
+            return {
+                "status": "success",
+                "result": result,
+                "audit_event": {"agent": self.name, "event": "pipeline_triggered", "pipeline_name": pipeline_name, "pipeline_run_id": pipeline_run_id, "environment": environment, "elapsed": elapsed},
+            }
+
+        except Exception as exc:
+            elapsed = time.monotonic() - start_time
+            if sentry_sdk:
+                sentry_sdk.capture_exception(exc)
+            _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
+            structured_log("CICDAgent.process.error", agent=self.name, error=str(exc))
+            await emit_audit_event_safe("pipeline_error", {"agent": self.name, "error": str(exc)})
+            return {
+                "status": "error",
+                "error": str(exc),
+                "result": None,
+                "audit_event": {"agent": self.name, "event": "pipeline_error", "error": str(exc)},
+            }
+        finally:
+            if span_ctx:
+                try:
+                    span_ctx.__exit__(None, None, None)
+                except Exception:
+                    pass
 
 
 CrewManager.register_agent_class(CICDAgent)
