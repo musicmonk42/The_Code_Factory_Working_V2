@@ -427,6 +427,15 @@ env:
   # Example: helm upgrade --set env.REFACTOR_AGENT_CONFIG=/app/config/refactor_prod.yaml
   REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
 
+  # ============================================
+  # Self-Healing Import Fixer (SHIF) Settings
+  # ============================================
+  # Enable per-operation metrics in the import healer (fixer_dep.py).
+  # Set to "true" to expose files_scanned, fixes_applied, and error counters.
+  # Override per-environment:
+  #   helm upgrade --set env.HEAL_METRICS=true ...
+  HEAL_METRICS: "false"
+
   # Refactor Agent — ConfigDB remote resolution
   # Optional HTTPS endpoint for remote agent role/skill resolution by ConfigDBResolver.
   # Leave empty (default) to use the bundled local YAML (configdb_defaults.yaml).

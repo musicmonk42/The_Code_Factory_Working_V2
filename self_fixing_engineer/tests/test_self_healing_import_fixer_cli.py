@@ -562,6 +562,7 @@ def test_heal_command_dispatches_to_fixer_main_with_correct_args(
         patch(
             "self_healing_import_fixer.cli.heal_entrypoint",
             mock_heal_entrypoint,
+            create=True,
         ),
         patch("self_healing_import_fixer.cli.load_fixer"),
     ):

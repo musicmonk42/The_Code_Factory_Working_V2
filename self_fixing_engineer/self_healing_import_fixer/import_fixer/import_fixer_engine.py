@@ -961,6 +961,50 @@ class ImportFixerEngine:
         self._is_initialized = False
         self.logger.info("ImportFixerEngine shut down.")
 
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Return a health-status report for the engine.
+
+        Called by ``omnicore_engine.engines`` when it registers the engine in
+        the plugin registry and during platform-level liveness checks.
+
+        Returns:
+            A dictionary with at minimum a ``"status"`` key whose value is
+            ``"ok"`` when the engine is operational or ``"unhealthy"`` when
+            it is not.  Additional component-level keys may be present.
+        """
+        report: Dict[str, Any] = {
+            "status": "ok",
+            "initialized": self._is_initialized,
+            "components": {},
+        }
+
+        # Verify the engine has been initialised
+        if not self._is_initialized:
+            report["status"] = "unhealthy"
+            report["components"]["initialization"] = {
+                "status": "error",
+                "message": "Engine has not been initialized. Call initialize() first.",
+            }
+            self.logger.warning("ImportFixerEngine health_check: engine not initialized.")
+            return report
+
+        # Spot-check that AST parsing is functional
+        try:
+            import ast as _ast
+            _ast.parse("import os\n")
+            report["components"]["ast_parsing"] = {"status": "ok"}
+        except Exception as e:  # noqa: BLE001
+            report["status"] = "unhealthy"
+            report["components"]["ast_parsing"] = {
+                "status": "error",
+                "message": str(e),
+            }
+            self.logger.error("ImportFixerEngine health_check: AST parsing failed: %s", e)
+
+        self.logger.debug("ImportFixerEngine health_check: %s", report["status"])
+        return report
+
     def fix_code(
         self,
         code: str,
