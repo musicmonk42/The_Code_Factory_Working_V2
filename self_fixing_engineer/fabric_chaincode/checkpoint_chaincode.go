@@ -5,24 +5,69 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os" // For configurable log levels
+	"log"
+	"os"
 	"regexp"
-	"time"
+	"strconv"
+	"strings"
 
 	"github.com/hyperledger/fabric-chaincode-go/pkg/cid"
-	"github.com/hyperledger/fabric-chaincode-go/shim"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
-	"github.com/hyperledger/fabric-protos-go/msp" // For msp.SerializedIdentity
-	"google.golang.org/protobuf/proto" // For proto.Unmarshal
-	"strconv" // For parsing versions
-	"strings" // For string manipulation
-
-	// External Dependencies for Production Readiness
-	"github.com/avast/retry-go/v4" // P2: Retries for transient errors
+	"github.com/hyperledger/fabric-protos-go/msp"
+	"github.com/golang/protobuf/proto"
 )
 
+// chaincodeLogger is a simple logger wrapper that supports leveled logging.
+type chaincodeLogger struct {
+	inner    *log.Logger
+	minLevel int
+}
+
+const (
+	levelDebug   = 0
+	levelInfo    = 1
+	levelWarning = 2
+	levelError   = 3
+)
+
+func newChaincodeLogger(name string) *chaincodeLogger {
+	return &chaincodeLogger{
+		inner:    log.New(os.Stderr, "["+name+"] ", log.LstdFlags),
+		minLevel: levelInfo,
+	}
+}
+
+func (l *chaincodeLogger) SetLevel(level int) { l.minLevel = level }
+func (l *chaincodeLogger) GetLevel() int      { return l.minLevel }
+
+func (l *chaincodeLogger) Debugf(format string, args ...interface{}) {
+	if l.minLevel <= levelDebug {
+		l.inner.Printf("DEBUG "+format, args...)
+	}
+}
+func (l *chaincodeLogger) Infof(format string, args ...interface{}) {
+	if l.minLevel <= levelInfo {
+		l.inner.Printf("INFO "+format, args...)
+	}
+}
+func (l *chaincodeLogger) Info(args ...interface{}) {
+	if l.minLevel <= levelInfo {
+		l.inner.Print(append([]interface{}{"INFO "}, args...)...)
+	}
+}
+func (l *chaincodeLogger) Warningf(format string, args ...interface{}) {
+	if l.minLevel <= levelWarning {
+		l.inner.Printf("WARN "+format, args...)
+	}
+}
+func (l *chaincodeLogger) Errorf(format string, args ...interface{}) {
+	if l.minLevel <= levelError {
+		l.inner.Printf("ERROR "+format, args...)
+	}
+}
+
 // Define logger for the chaincode
-var logger = shim.NewLogger("CheckpointChaincode")
+var logger = newChaincodeLogger("CheckpointChaincode")
 
 // InitLogger configures the logger level based on an environment variable.
 // Rationale: Allows dynamic tuning of log verbosity without recompiling the chaincode.
@@ -30,15 +75,15 @@ func InitLogger() {
 	logLevel := os.Getenv("CORE_CHAINCODE_LOGGING_SHIM")
 	switch logLevel {
 	case "INFO":
-		logger.SetLevel(shim.LogInfo)
+		logger.SetLevel(levelInfo)
 	case "DEBUG":
-		logger.SetLevel(shim.LogDebug)
+		logger.SetLevel(levelDebug)
 	case "WARNING":
-		logger.SetLevel(shim.LogWarning)
+		logger.SetLevel(levelWarning)
 	case "ERROR":
-		logger.SetLevel(shim.LogError)
+		logger.SetLevel(levelError)
 	default:
-		logger.SetLevel(shim.LogInfo) // Default to INFO
+		logger.SetLevel(levelInfo) // Default to INFO
 	}
 	logger.Info("Logger initialized with level: ", logger.GetLevel())
 }
@@ -87,7 +132,7 @@ const (
 var (
 	nameRegex     = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_-]{1,%d}$", MaxNameLen))
 	hashRegex     = regexp.MustCompile(fmt.Sprintf("^[a-f0-9]{%d}$", SHA256HashLen))
-	offChainRegex = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_.-/]{1,%d}$", MaxOffChainRefLen))
+	offChainRegex = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_.-]{1,%d}(/[a-zA-Z0-9_.-]+)*$", MaxOffChainRefLen))
 )
 
 // InitLedger adds a base set of assets to the ledger during chaincode instantiation.
@@ -183,25 +228,19 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 	if offChainRef != "" && !offChainRegex.MatchString(offChainRef) {
 		return nil, fmt.Errorf("invalid off-chain reference: %s. Contains disallowed characters or is too long (max %d chars)", offChainRef, MaxOffChainRefLen)
 	}
+	if strings.Contains(offChainRef, "..") {
+		return nil, fmt.Errorf("invalid off-chain reference: path traversal sequences not allowed")
+	}
 	// Basic JSON validation for metadataJson
 	if metadataJson != "" && !json.Valid([]byte(metadataJson)) {
 		return nil, fmt.Errorf("invalid metadataJson: not a valid JSON string")
 	}
 
-	// 3. Get current checkpoint state for chaining with retries
+	// 3. Get current checkpoint state for chaining
 	var checkpointStateJSON []byte
-	err := retry.Do(
-		func() error {
-			var getStateErr error
-			checkpointStateJSON, getStateErr = ctx.GetStub().GetState(name)
-			return getStateErr
-		},
-		retry.Attempts(3),
-		retry.Delay(50*time.Millisecond),
-		retry.LastErrorOnly(true),
-	)
+	checkpointStateJSON, err := ctx.GetStub().GetState(name)
 	if err != nil {
-		logger.Errorf("Failed to read checkpoint state for %s from world state after retries: %v", name, err)
+		logger.Errorf("Failed to read checkpoint state for %s from world state: %v", name, err)
 		return nil, fmt.Errorf("failed to read checkpoint state: %v", err)
 	}
 
@@ -226,17 +265,30 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 	}
 
 	// 5. Get client identity for writer field
-	creator, err := ctx.GetStub().GetCreator()
+	creatorBytes, err := ctx.GetStub().GetCreator()
 	if err != nil {
 		logger.Errorf("Failed to get transaction creator for %s: %v", name, err)
 		return nil, fmt.Errorf("failed to get transaction creator identity")
 	}
-	writerID := string(creator.GetId())
+	serializedID := &msp.SerializedIdentity{}
+	if err = proto.Unmarshal(creatorBytes, serializedID); err != nil {
+		logger.Errorf("Failed to deserialize creator identity for %s: %v", name, err)
+		return nil, fmt.Errorf("failed to deserialize creator identity: %w", err)
+	}
+	writerID := serializedID.Mspid
 
 	// 6. Determine new version
 	newVersion := currentCheckpointState.LatestVersion + 1
 
-	// 7. Create new checkpoint entry
+	// 7. Get transaction timestamp (deterministic across endorsing peers)
+	txTimestamp, err := ctx.GetStub().GetTxTimestamp()
+	if err != nil {
+		logger.Errorf("Failed to get transaction timestamp for %s: %v", name, err)
+		return nil, fmt.Errorf("failed to get transaction timestamp: %w", err)
+	}
+	timestamp := txTimestamp.GetSeconds()*1000 + int64(txTimestamp.GetNanos()/1_000_000)
+
+	// 8. Create new checkpoint entry
 	checkpoint := CheckpointEntry{
 		Name:         name,
 		DataHash:     dataHash,
@@ -244,7 +296,7 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 		MetadataJson: metadataJson, // Already validated as JSON string
 		OffChainRef:  offChainRef,  // Already validated
 		TxID:         ctx.GetStub().GetTxID(),
-		Timestamp:    time.Now().UnixMilli(),
+		Timestamp:    timestamp,
 		Version:      newVersion,
 		Writer:       writerID,
 		IsRollback:   false, // This is a regular write
@@ -258,7 +310,7 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 	}
 
 	// Store checkpoint by a composite key to allow retrieval by name and version (Primary Key)
-	primaryCompositeKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%d", newVersion)})
+	primaryCompositeKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", newVersion)})
 	if err != nil {
 		logger.Errorf("Failed to create primary composite key for %s v%d: %v", name, newVersion, err)
 		return nil, fmt.Errorf("failed to create ledger key")
@@ -300,17 +352,17 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 }
 
 // ReadCheckpoint retrieves a checkpoint entry by name and optionally version.
-// If no version is specified, it returns the latest checkpoint.
+// If version is empty string, it returns the latest checkpoint.
 //
 // Parameters:
 //   ctx: The transaction context.
 //   name: The unique name of the checkpoint chain.
-//   version: Optional. The specific version to retrieve. If empty, the latest is returned.
+//   version: The specific version to retrieve. If empty string, the latest is returned.
 //
 // Returns:
 //   *CheckpointEntry: The retrieved checkpoint entry.
 //   error: An error if the checkpoint is not found or retrieval fails.
-func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterface, name string, version ...string) (*CheckpointEntry, error) {
+func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterface, name string, version string) (*CheckpointEntry, error) {
 	logger.Infof("Reading checkpoint for name: %s, version: %v", name, version)
 
 	// 1. RBAC Check
@@ -322,26 +374,35 @@ func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterfa
 	if !nameRegex.MatchString(name) {
 		return nil, fmt.Errorf("invalid checkpoint name: %s", name)
 	}
-	if len(version) > 0 && version[0] != "" {
+	if version != "" {
 		// Basic version string validation (should be a positive integer)
-		if _, err := fmt.Sscanf(version[0], "%d", new(int)); err != nil {
-			return nil, fmt.Errorf("invalid version format: %s. Must be an integer", version[0])
+		if _, err := fmt.Sscanf(version, "%d", new(int)); err != nil {
+			return nil, fmt.Errorf("invalid version format: %s. Must be an integer", version)
 		}
 	}
 
 	var checkpointJSON []byte
 	var err error
 
-	if len(version) > 0 && version[0] != "" {
-		// Read specific version
-		compositeKey, keyErr := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, version[0]})
+	if version != "" {
+		// Read specific version - parse and zero-pad for consistent key format
+		versionInt, parseErr := strconv.Atoi(strings.TrimLeft(version, "0"))
+		if parseErr != nil || versionInt <= 0 {
+			// Handle case where version was all zeros
+			if version == "0" || strings.TrimLeft(version, "0") == "" {
+				versionInt = 0
+			} else {
+				return nil, fmt.Errorf("invalid version format: %s. Must be a positive integer", version)
+			}
+		}
+		compositeKey, keyErr := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", versionInt)})
 		if keyErr != nil {
-			logger.Errorf("Failed to create composite key for %s v%s: %v", name, version[0], keyErr)
+			logger.Errorf("Failed to create composite key for %s v%s: %v", name, version, keyErr)
 			return nil, fmt.Errorf("failed to create ledger key")
 		}
 		checkpointJSON, err = ctx.GetStub().GetState(compositeKey)
 		if err != nil {
-			logger.Errorf("Failed to read specific checkpoint %s v%s from world state: %v", name, version[0], err)
+			logger.Errorf("Failed to read specific checkpoint %s v%s from world state: %v", name, version, err)
 			return nil, fmt.Errorf("failed to retrieve checkpoint")
 		}
 	} else {
@@ -363,7 +424,7 @@ func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterfa
 			return nil, fmt.Errorf("failed to process latest state")
 		}
 
-		compositeKey, keyErr := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%d", checkpointState.LatestVersion)})
+		compositeKey, keyErr := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", checkpointState.LatestVersion)})
 		if keyErr != nil {
 			logger.Errorf("Failed to create composite key for latest version %s v%d: %v", name, checkpointState.LatestVersion, keyErr)
 			return nil, fmt.Errorf("failed to create ledger key for latest version")
@@ -376,14 +437,14 @@ func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterfa
 	}
 
 	if checkpointJSON == nil {
-		logger.Warningf("Checkpoint %s (version %v) does not exist", name, version)
-		return nil, fmt.Errorf("checkpoint %s (version %v) does not exist", name, version)
+		logger.Warningf("Checkpoint %s (version %s) does not exist", name, version)
+		return nil, fmt.Errorf("checkpoint %s (version %s) does not exist", name, version)
 	}
 
 	checkpoint := CheckpointEntry{}
 	err = json.Unmarshal(checkpointJSON, &checkpoint)
 	if err != nil {
-		logger.Errorf("Failed to unmarshal checkpoint JSON for %s v%v: %v", name, version, err)
+		logger.Errorf("Failed to unmarshal checkpoint JSON for %s v%s: %v", name, version, err)
 		return nil, fmt.Errorf("failed to process checkpoint data")
 	}
 
@@ -477,9 +538,19 @@ func (s *SmartContract) ReadCheckpointHistory(ctx contractapi.TransactionContext
 	if startVersion < 0 || endVersion < startVersion {
 		return nil, fmt.Errorf("invalid version range: start version must be non-negative and less than or equal to end version")
 	}
-	
-	// Create iterator to retrieve a range of versions for the checkpoint name
-	resultsIterator, err := ctx.GetStub().GetStateByPartialCompositeKey("Checkpoint", []string{name})
+
+	// Use GetStateByRange with zero-padded keys for proper lexicographic ordering and pagination
+	startKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", startVersion)})
+	if err != nil {
+		logger.Errorf("Failed to create start composite key for history of %s: %v", name, err)
+		return nil, fmt.Errorf("failed to create start key")
+	}
+	endKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", endVersion+1)})
+	if err != nil {
+		logger.Errorf("Failed to create end composite key for history of %s: %v", name, err)
+		return nil, fmt.Errorf("failed to create end key")
+	}
+	resultsIterator, err := ctx.GetStub().GetStateByRange(startKey, endKey)
 	if err != nil {
 		logger.Errorf("Failed to get history iterator for %s: %v", name, err)
 		return nil, fmt.Errorf("failed to retrieve history iterator")
@@ -500,26 +571,56 @@ func (s *SmartContract) ReadCheckpointHistory(ctx contractapi.TransactionContext
 			logger.Errorf("Failed to split composite key: %v", err)
 			return nil, fmt.Errorf("failed to process key during history retrieval")
 		}
-		version, err := strconv.Atoi(compositeKeyParts[1])
+		version, err := strconv.Atoi(strings.TrimLeft(compositeKeyParts[1], "0"))
 		if err != nil {
-			logger.Errorf("Failed to parse version from key: %v", err)
-			return nil, fmt.Errorf("failed to parse version")
-		}
-		
-		// Filter by the requested version range
-		if version >= startVersion && version <= endVersion {
-			var entry CheckpointEntry
-			err = json.Unmarshal(queryResponse.Value, &entry)
-			if err != nil {
-				logger.Errorf("Failed to unmarshal history entry JSON for %s v%d: %v", name, version, err)
-				return nil, fmt.Errorf("failed to process history entry")
+			// Handle the all-zeros case (version 0)
+			if strings.TrimLeft(compositeKeyParts[1], "0") == "" {
+				version = 0
+			} else {
+				logger.Errorf("Failed to parse version from key: %v", err)
+				return nil, fmt.Errorf("failed to parse version")
 			}
-			entries = append(entries, &entry)
 		}
+
+		var entry CheckpointEntry
+		err = json.Unmarshal(queryResponse.Value, &entry)
+		if err != nil {
+			logger.Errorf("Failed to unmarshal history entry JSON for %s v%d: %v", name, version, err)
+			return nil, fmt.Errorf("failed to process history entry")
+		}
+		entries = append(entries, &entry)
 	}
 	
 	logger.Infof("History for checkpoint %s retrieved successfully, found %d entries in range", name, len(entries))
 	return entries, nil
+}
+
+// readCheckpointByHashInternal retrieves a checkpoint by hash without RBAC check.
+// Used internally by RollbackCheckpoint to avoid requiring "reader" role for admins.
+func (s *SmartContract) readCheckpointByHashInternal(ctx contractapi.TransactionContextInterface, name string, dataHash string) (*CheckpointEntry, error) {
+	dataHashIndexKey, err := ctx.GetStub().CreateCompositeKey("DataHashIndex", []string{name, dataHash})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create index key: %w", err)
+	}
+	primaryCompositeKeyBytes, err := ctx.GetStub().GetState(dataHashIndexKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve index entry: %w", err)
+	}
+	if primaryCompositeKeyBytes == nil {
+		return nil, fmt.Errorf("checkpoint with name %s and dataHash %s not found", name, dataHash)
+	}
+	checkpointJSON, err := ctx.GetStub().GetState(string(primaryCompositeKeyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve checkpoint by index: %w", err)
+	}
+	if checkpointJSON == nil {
+		return nil, fmt.Errorf("checkpoint with primary key %s not found (index might be stale)", string(primaryCompositeKeyBytes))
+	}
+	checkpoint := CheckpointEntry{}
+	if err = json.Unmarshal(checkpointJSON, &checkpoint); err != nil {
+		return nil, fmt.Errorf("failed to process checkpoint data from index: %w", err)
+	}
+	return &checkpoint, nil
 }
 
 // RollbackCheckpoint performs a logical rollback by writing a new checkpoint entry
@@ -560,8 +661,8 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 		message = message[:MaxMessageLen] + "..."
 	}
 
-	// 3. Find the target CheckpointEntry by targetHash using the secondary index
-	targetEntry, err := s.ReadCheckpointByHash(ctx, name, targetHash)
+	// 3. Find the target CheckpointEntry by targetHash using the internal helper (skips RBAC)
+	targetEntry, err := s.readCheckpointByHashInternal(ctx, name, targetHash)
 	if err != nil {
 		logger.Errorf("Failed to find target checkpoint for rollback %s hash %s: %v", name, targetHash, err)
 		return nil, fmt.Errorf("failed to find target checkpoint for rollback: %v", err)
@@ -594,12 +695,25 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 
 	// 6. Create a new checkpoint entry that effectively "rolls back"
 	newVersion := currentCheckpointState.LatestVersion + 1
-	clientID, err := ctx.GetStub().GetCreator()
+	creatorBytes, err := ctx.GetStub().GetCreator()
 	if err != nil {
 		logger.Errorf("Failed to get transaction creator for rollback %s: %v", name, err)
 		return nil, fmt.Errorf("failed to get transaction creator identity")
 	}
-	writerID := string(clientID.GetId())
+	rollbackSerializedID := &msp.SerializedIdentity{}
+	if err = proto.Unmarshal(creatorBytes, rollbackSerializedID); err != nil {
+		logger.Errorf("Failed to deserialize creator identity for rollback %s: %v", name, err)
+		return nil, fmt.Errorf("failed to deserialize creator identity: %w", err)
+	}
+	writerID := rollbackSerializedID.Mspid
+
+	// Get transaction timestamp (deterministic across endorsing peers)
+	txTimestamp, err := ctx.GetStub().GetTxTimestamp()
+	if err != nil {
+		logger.Errorf("Failed to get transaction timestamp for rollback %s: %v", name, err)
+		return nil, fmt.Errorf("failed to get transaction timestamp: %w", err)
+	}
+	timestamp := txTimestamp.GetSeconds()*1000 + int64(txTimestamp.GetNanos()/1_000_000)
 
 	// Prepare metadata for the rollback entry (auditable)
 	rollbackMetadata := map[string]interface{}{
@@ -610,7 +724,7 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 		"originalMetadata":      json.RawMessage(targetEntry.MetadataJson), // Store original metadata
 		"message":               message,
 		"rollbackTxId":          ctx.GetStub().GetTxID(), // TxID of this rollback operation
-		"rollbackTimestamp":     time.Now().UnixMilli(),
+		"rollbackTimestamp":     timestamp,
 	}
 	rollbackMetadataJson, err := json.Marshal(rollbackMetadata)
 	if err != nil {
@@ -620,12 +734,12 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 
 	rollbackCheckpoint := CheckpointEntry{
 		Name:         name,
-		DataHash:     targetEntry.DataHash,        // The data hash we are rolling back to
+		DataHash:     targetEntry.DataHash,              // The data hash we are rolling back to
 		PrevHash:     currentCheckpointState.LatestHash, // Previous hash is the one we are rolling back from
-		MetadataJson: string(rollbackMetadataJson), // Enhanced metadata for auditability
-		OffChainRef:  targetEntry.OffChainRef,     // Reference the off-chain payload of the target
+		MetadataJson: string(rollbackMetadataJson),      // Enhanced metadata for auditability
+		OffChainRef:  targetEntry.OffChainRef,           // Reference the off-chain payload of the target
 		TxID:         ctx.GetStub().GetTxID(),
-		Timestamp:    time.Now().UnixMilli(),
+		Timestamp:    timestamp,
 		Version:      newVersion,
 		Writer:       writerID,
 		IsRollback:   true, // Mark this entry as a rollback operation
@@ -637,8 +751,8 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 		return nil, fmt.Errorf("failed to prepare rollback checkpoint data")
 	}
 
-	// 6. Store rollback checkpoint by its new version (Primary Key)
-	primaryCompositeKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%d", newVersion)})
+	// 7. Store rollback checkpoint by its new version (Primary Key)
+	primaryCompositeKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", newVersion)})
 	if err != nil {
 		logger.Errorf("Failed to create primary composite key for rollback %s v%d: %v", name, newVersion, err)
 		return nil, fmt.Errorf("failed to create ledger key for rollback")
@@ -649,20 +763,27 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 		return nil, fmt.Errorf("failed to store rollback checkpoint")
 	}
 
-	// 7. Create Secondary Index for this rollback entry as well
-	// This index points the target hash to the NEW rollback entry's primary key.
+	// 8. Update secondary index only if the hash doesn't already have an entry
+	// Avoids overwriting the original entry's index, which would cause data loss
 	dataHashIndexKey, err := ctx.GetStub().CreateCompositeKey("DataHashIndex", []string{name, targetEntry.DataHash})
 	if err != nil {
 		logger.Errorf("Failed to create dataHash index composite key for rollback %s hash %s: %v", name, targetEntry.DataHash, err)
 		return nil, fmt.Errorf("failed to create index key for rollback")
 	}
-	err = ctx.GetStub().PutState(dataHashIndexKey, []byte(primaryCompositeKey))
+	existingIndex, err := ctx.GetStub().GetState(dataHashIndexKey)
 	if err != nil {
-		logger.Errorf("Failed to put dataHash index for rollback %s hash %s to world state: %v", name, targetEntry.DataHash, err)
-		return nil, fmt.Errorf("failed to store index for rollback")
+		logger.Errorf("Failed to check existing dataHash index for rollback %s hash %s: %v", name, targetEntry.DataHash, err)
+		return nil, fmt.Errorf("failed to check existing index for rollback")
+	}
+	if existingIndex == nil {
+		err = ctx.GetStub().PutState(dataHashIndexKey, []byte(primaryCompositeKey))
+		if err != nil {
+			logger.Errorf("Failed to put dataHash index for rollback %s hash %s to world state: %v", name, targetEntry.DataHash, err)
+			return nil, fmt.Errorf("failed to store index for rollback")
+		}
 	}
 
-	// 8. Update the latest pointers to reflect the new rollback checkpoint
+	// 9. Update the latest pointers to reflect the new rollback checkpoint
 	currentCheckpointState.LatestVersion = newVersion
 	currentCheckpointState.LatestHash = targetEntry.DataHash // The new latest hash is the target hash
 	checkpointStateJSON, err = json.Marshal(currentCheckpointState)

@@ -339,7 +339,7 @@ class Learner:
                         "system",
                     )
                 else:
-                    audit_trail_valid = verify_audit_chain(audit_log_path)
+                    audit_trail_valid, _ = verify_audit_chain(audit_log_path)
                     if audit_trail_valid:
                         logger.info("Audit trail integrity verified successfully.")
                         await self.audit_logger.log_event(

@@ -190,15 +190,17 @@ _base_logger = logging.getLogger(__name__)
 # Use lazy loading to completely avoid circular import issues
 DLT_BACKEND_AVAILABLE = False
 _dlt_client_instance = None
+_dlt_load_attempted = False
 
 
 def _lazy_load_dlt_backend():
     """Lazy load DLT backend to avoid circular imports."""
-    global DLT_BACKEND_AVAILABLE, _dlt_client_instance
+    global DLT_BACKEND_AVAILABLE, _dlt_client_instance, _dlt_load_attempted
 
-    if DLT_BACKEND_AVAILABLE is not False:  # Already attempted
+    if _dlt_load_attempted:
         return DLT_BACKEND_AVAILABLE
 
+    _dlt_load_attempted = True
     try:
         from simulation.plugins.dlt_clients import dlt_base
 
@@ -211,7 +213,7 @@ def _lazy_load_dlt_backend():
         _base_logger.warning(
             f"DLT backend (simulation.plugins.dlt_clients) not found: {e}. DLT integration will be disabled."
         )
-        DLT_BACKEND_AVAILABLE = None  # Mark as attempted but failed
+        DLT_BACKEND_AVAILABLE = False
         return False
 
 
@@ -750,7 +752,7 @@ class AuditLogger:
 
         # e. Run chain verification at startup in production
         if os.environ.get("APP_ENV", "development").lower() == "production":
-            is_valid, failure_index = verify_audit_chain(self.log_path, return_failure_index=True)
+            is_valid, failure_index = verify_audit_chain(self.log_path)
             if not is_valid:
                 # Check if corruption is at entry 0 (first entry) - this suggests a completely corrupted file
                 if failure_index == 0:
@@ -793,7 +795,7 @@ class AuditLogger:
                 self.degraded_mode = False
         else:
             # In non-production environments, still verify chain but only log warnings
-            is_valid, failure_index = verify_audit_chain(self.log_path, return_failure_index=True)
+            is_valid, failure_index = verify_audit_chain(self.log_path)
             if not is_valid:
                 # Also handle corruption at entry 0 in non-production
                 if failure_index == 0:
@@ -1107,6 +1109,7 @@ class AuditLogger:
                         "correlation_id": log_context["correlation_id"],
                         "previous_log_hash": entry["previous_log_hash"],
                         "signatures": entry["signatures"],
+                        "entry_hash": entry_hash,
                     }
                     if compliance_control_id is not None:
                         dlt_payload_metadata["compliance_control_id"] = (
@@ -1115,14 +1118,17 @@ class AuditLogger:
                     if is_compliant is not None:
                         dlt_payload_metadata["is_compliant"] = is_compliant
 
+                    payload_blob_bytes = json.dumps(
+                        entry["details"], default=str, sort_keys=True
+                    ).encode("utf-8")
+                    payload_hash = hashlib.sha256(payload_blob_bytes).hexdigest()
+
                     return await _dlt_client_instance.write_checkpoint(
                         checkpoint_name=f"audit_{entry['event_type']}",
-                        hash=entry_hash,
+                        hash=payload_hash,
                         prev_hash=entry["previous_log_hash"],
                         metadata=dlt_payload_metadata,
-                        payload_blob=json.dumps(entry["details"], default=str).encode(
-                            "utf-8"
-                        ),
+                        payload_blob=payload_blob_bytes,
                         correlation_id=log_context["correlation_id"],
                     )
 
@@ -1332,10 +1338,11 @@ class AuditLogger:
             entry = {
                 "timestamp": current_utc_iso(),
                 "event_type": event_type,
-                "details": {k: sanitize_log(str(v)) for k, v in details.items()},
+                "details": {
+                    **{k: sanitize_log(str(v)) for k, v in details.items()},
+                    "agent_id": agent_id,
+                },
                 "host": socket.gethostname(),
-                "agent_id": agent_id,
-                "correlation_id": correlation_id or str(uuid.uuid4()),
                 "previous_log_hash": previous_log_hash,
             }
 
@@ -1458,22 +1465,18 @@ class AuditLogger:
 # ==============================================================================
 # E. Audit Chain Verification & OpenTelemetry Tracing
 # ==============================================================================
-def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: bool = False):
+def verify_audit_chain(log_path: Optional[str] = None) -> "Tuple[bool, Optional[int]]":
     """
     Verifies the integrity of the audit log chain.
     This function can be called from the CLI for operational verification.
-    
+
     Args:
         log_path: Path to audit log file. Defaults to config.AUDIT_LOG_PATH.
-        return_failure_index: DEPRECATED. For backward compatibility, if False returns bool.
-                             If True, returns (is_valid, failure_index).
-                             This parameter will be removed in a future version.
-                             Use verify_audit_chain_detailed() for detailed results.
-    
+
     Returns:
-        bool or tuple: If return_failure_index is False, returns bool indicating validity (deprecated).
-                      If return_failure_index is True, returns (is_valid, failure_index).
-                      failure_index is the entry number where verification failed, or None if valid.
+        Tuple[bool, Optional[int]]: (is_valid, failure_index).
+            is_valid is True if the chain is intact, False otherwise.
+            failure_index is the entry number where verification failed, or None if valid.
     """
     path = log_path or config.AUDIT_LOG_PATH
     log_context_base = {"context": "verification"}
@@ -1482,9 +1485,7 @@ def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: boo
             f"Audit log file not found at {path}. Chain considered valid (empty).",
             extra=log_context_base,
         )
-        if return_failure_index:
-            return True, None
-        return True
+        return True, None
 
     last_hash_in_chain = "genesis_hash"
     is_valid = True
@@ -1557,48 +1558,19 @@ def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: boo
                                 break
 
                             if entry.get("previous_log_hash") != last_hash_in_chain:
-                                # Check if this might be due to infrastructure issues
-                                event_type = entry.get("event_type", "")
-                                message = str(entry.get("message", ""))
-                                metadata = str(entry.get("metadata", ""))
-                                
-                                # Look for infrastructure error patterns
-                                infra_patterns = [
-                                    "database", "timeout", "connection", "asyncpg",
-                                    "postgresql", "network", "unreachable", "refused", "unavailable"
-                                ]
-                                entry_text = f"{event_type} {message} {metadata}".lower()
-                                is_infra_issue = any(pattern in entry_text for pattern in infra_patterns)
-                                
-                                if is_infra_issue:
-                                    logger.warning(
-                                        f"Hash chain discontinuity at entry {i} likely due to infrastructure issue. "
-                                        f"Expected '{last_hash_in_chain[:10]}', got '{entry.get('previous_log_hash', '')[:10]}'. "
-                                        f"Context: {event_type} - {message[:100]}. "
-                                        f"This is NOT considered a security breach.",
-                                        extra=log_context,
+                                logger.error(
+                                    f"Chain broken at entry {i}. Prev hash mismatch. Expected '{last_hash_in_chain[:10]}', got '{entry.get('previous_log_hash', '')[:10]}'.",
+                                    extra=log_context,
+                                )
+                                is_valid = False
+                                failure_index = i
+                                span.set_status(
+                                    Status(
+                                        StatusCode.ERROR,
+                                        description="Previous hash mismatch",
                                     )
-                                    span.set_status(
-                                        Status(
-                                            StatusCode.OK,
-                                            description="Infrastructure-related hash chain gap",
-                                        )
-                                    )
-                                    # Continue processing instead of breaking
-                                else:
-                                    logger.error(
-                                        f"Chain broken at entry {i}. Prev hash mismatch. Expected '{last_hash_in_chain[:10]}', got '{entry.get('previous_log_hash', '')[:10]}'.",
-                                        extra=log_context,
-                                    )
-                                    is_valid = False
-                                    failure_index = i
-                                    span.set_status(
-                                        Status(
-                                            StatusCode.ERROR,
-                                            description="Previous hash mismatch",
-                                        )
-                                    )
-                                    break
+                                )
+                                break
 
                             if entry.get("signatures") and CRYPTO_AVAILABLE:
                                 if not PUBLIC_KEY_STORE:
@@ -1694,9 +1666,7 @@ def verify_audit_chain(log_path: Optional[str] = None, return_failure_index: boo
             extra=log_context_base,
         )
 
-    if return_failure_index:
-        return is_valid, failure_index
-    return is_valid
+    return is_valid, failure_index
 
 
 async def audit_log_event_async(
@@ -2033,7 +2003,7 @@ def main_cli():
     )
     args = parser.parse_args()
 
-    is_valid = verify_audit_chain(args.log_path)
+    is_valid, _ = verify_audit_chain(args.log_path)
 
     if args.json_output:
         print(json.dumps({"valid": is_valid, "path": args.log_path}))
@@ -2106,7 +2076,8 @@ if __name__ == "__main__":
                 print(line.strip())
 
         print("\nTest 1 Verification:")
-        if verify_audit_chain(test_log_path):
+        is_valid_t1, _ = verify_audit_chain(test_log_path)
+        if is_valid_t1:
             print("Test 1 PASSED: Local audit chain verified successfully.")
         else:
             print("Test 1 FAILED: Local audit chain verification failed.")
@@ -2218,7 +2189,8 @@ if __name__ == "__main__":
                 await asyncio.sleep(1)
 
                 print("\nTest 2 Verification (Local Chain):")
-                if verify_audit_chain(test_dlt_log_path):
+                is_valid_t2, _ = verify_audit_chain(test_dlt_log_path)
+                if is_valid_t2:
                     print(
                         "Test 2 PASSED: Local audit chain (with DLT attempts) verified successfully."
                     )
