@@ -259,6 +259,13 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
 # Use RUNNER_CONFIG_PATH environment variable at runtime to specify custom config location
 COPY . /app
 
+# Create a read-only snapshot of default data files at /app/data-bundled so the
+# seed-data init-container (Kubernetes) can copy them to the writable data PVC on
+# first boot without the PVC mount shadowing the originals.
+RUN mkdir -p /app/data-bundled && \
+    cp /app/data/policies.json /app/data-bundled/policies.json 2>/dev/null || true && \
+    [ -f /app/data/provenance.json ] && cp /app/data/provenance.json /app/data-bundled/provenance.json 2>/dev/null || true
+
 # Verify the shared package is importable (catches missing PYTHONPATH or misplaced files early)
 # This must run AFTER 'COPY . /app' so that shared/ is present in the image
 RUN python -c "import sys; sys.path.insert(0, '/app'); from shared.noop_metrics import safe_metric; print('✓ shared.noop_metrics is importable')"

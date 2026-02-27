@@ -383,7 +383,7 @@ env:
   USE_KAFKA_INGESTION: "false"
   USE_KAFKA_AUDIT: "false"
   
-  ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
+  ENABLE_CITUS: "1"  # Distributed PostgreSQL sharding via Citus
 
   # Blockchain/DLT Configuration
   # DLT backend type used by audit_log.py and (via initialize_dlt_backend) dlt_backend.py.
@@ -392,6 +392,21 @@ env:
   #   helm upgrade --set env.DLT_TYPE=evm ...
   # DLT_HMAC_KEY must be provided via codefactory-secrets Kubernetes Secret in production.
   DLT_TYPE: "fabric"
+
+  # S3 off-chain blob storage (used by S3OffChainClient when DLT_TYPE=fabric)
+  # Override: helm upgrade --set env.S3_BUCKET_NAME=my-bucket ...
+  S3_BUCKET_NAME: "codefactory-dlt-offchain"
+  S3_REGION: "us-east-1"
+  # Enable AES-256-GCM client-side encryption; requires dlt-encryption-key secret.
+  DLT_ENCRYPT_AT_REST: "true"
+
+  # Hyperledger Fabric DLT client (used when DLT_TYPE=fabric)
+  # Override per environment: helm upgrade --set env.FABRIC_CHANNEL=my-channel ...
+  FABRIC_CHANNEL: "codefactory-channel"
+  FABRIC_CHAINCODE: "codefactory-cc"
+  FABRIC_ORG: "Org1"
+  FABRIC_USER: "Admin"
+  FABRIC_NETWORK_PROFILE: "/app/data/fabric/connection-profile.json"
 
   # ML/NLP Data Paths
   # NLTK data directory (accessible by appuser in Docker runtime)
@@ -555,7 +570,22 @@ secrets:
     rabbitmqUrlSecretName: "codefactory-secrets"
     rabbitmqUrlSecretKey: "rabbitmq-url"
 
-# Redis subchart configuration
+  # DLT / off-chain storage secrets
+  # These are optional — leave the secret values empty to disable.
+  dlt:
+    # HMAC-SHA256 signing key for checkpoint integrity (dlt_backend, S3 client, Fabric client).
+    # Generate: openssl rand -hex 32
+    hmacKeySecretName: "codefactory-secrets"
+    hmacKeySecretKey: "dlt-hmac-key"
+    # AES-256-GCM client-side encryption key (required when DLT_ENCRYPT_AT_REST=true).
+    # Generate: python -c "import os; print(os.urandom(32).hex())"
+    encryptionKeySecretName: "codefactory-secrets"
+    encryptionKeySecretKey: "dlt-encryption-key"
+    # AWS credentials for S3 off-chain blob storage (optional — prefer IAM instance profile).
+    awsAccessKeyIdSecretName: "codefactory-secrets"
+    awsAccessKeyIdSecretKey: "aws-access-key-id"
+    awsSecretAccessKeySecretName: "codefactory-secrets"
+    awsSecretAccessKeySecretKey: "aws-secret-access-key"
 redis:
   enabled: true
   architecture: standalone

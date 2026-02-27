@@ -187,6 +187,26 @@ services:
       # Redirects the local JSON store onto the persistent data volume so dev
       # checkpoint data survives container restarts.
       - DLT_DEV_STORAGE_DIR=/app/data/dlt_dev_storage
+      # DLT HMAC signing key for checkpoint integrity (dlt_backend + off-chain clients).
+      # Generate: openssl rand -hex 32
+      - DLT_HMAC_KEY=${DLT_HMAC_KEY:-dev-dlt-hmac-key-not-for-production}
+      # AES-256-GCM client-side encryption key for S3 off-chain blobs (64 hex chars = 32 bytes).
+      # Required when DLT_ENCRYPT_AT_REST=true.
+      - DLT_ENCRYPTION_KEY=${DLT_ENCRYPTION_KEY:-}
+      # Enable client-side AES-256-GCM encryption of off-chain blobs before upload.
+      - DLT_ENCRYPT_AT_REST=${DLT_ENCRYPT_AT_REST:-false}
+      # S3 off-chain blob storage (used when DLT_TYPE=fabric and PRODUCTION_MODE=true).
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-codefactory-dlt-offchain-dev}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      # AWS credentials for S3 (omit to use IAM instance profile / localstack in dev).
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Hyperledger Fabric DLT client configuration (used when DLT_TYPE=fabric).
+      - FABRIC_CHANNEL=${FABRIC_CHANNEL:-codefactory-channel}
+      - FABRIC_CHAINCODE=${FABRIC_CHAINCODE:-codefactory-cc}
+      - FABRIC_ORG=${FABRIC_ORG:-Org1}
+      - FABRIC_USER=${FABRIC_USER:-Admin}
+      - FABRIC_NETWORK_PROFILE=${FABRIC_NETWORK_PROFILE:-/app/data/fabric/connection-profile.json}
       # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
       - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
       # Clarifier WebSocket session timeout (seconds)

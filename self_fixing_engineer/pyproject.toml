@@ -122,6 +122,11 @@ docs = [
     "sphinx>=7.4.0",
     "sphinx-rtd-theme>=2.0.0"
 ]
+dlt-fabric = [
+    # Hyperledger Fabric DLT client — required by dlt_fabric_clients.FabricClientWrapper
+    # when DLT_TYPE=fabric and PRODUCTION_MODE=true.
+    "hfc>=1.0"
+]
 
 [project.urls]
 Homepage = "https://github.com/your-org/self_fixing_engineer"

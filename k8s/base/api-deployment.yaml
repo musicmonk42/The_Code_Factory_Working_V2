@@ -65,6 +65,37 @@ spec:
             capabilities:
               drop:
                 - ALL
+        # Seed the data PVC with bundled default files on first boot.
+        # The PVC mounts at /app/data and shadows the image's /app/data directory,
+        # so any files that must survive pod restarts (policies.json, provenance.json)
+        # need to be copied here if they are not already present.
+        - name: seed-data
+          image: ghcr.io/musicmonk42/codefactory:latest
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c']
+          args:
+            - |
+              set -e
+              DATA_DIR=/app/data
+              BUNDLED_DIR=/app/data-bundled
+              echo "Seeding data PVC from bundled defaults..."
+              for f in policies.json provenance.json; do
+                if [ ! -f "$DATA_DIR/$f" ] && [ -f "$BUNDLED_DIR/$f" ]; then
+                  cp "$BUNDLED_DIR/$f" "$DATA_DIR/$f"
+                  echo "Seeded $f"
+                fi
+              done
+              echo "Data seeding complete."
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: codefactory
           image: ghcr.io/musicmonk42/codefactory:latest
@@ -236,6 +267,34 @@ spec:
                 secretKeyRef:
                   name: codefactory-secrets
                   key: rabbitmq-url
+                  optional: true
+
+            # ---- DLT / off-chain storage secrets ----
+            - name: DLT_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: dlt-hmac-key
+                  optional: true
+            - name: DLT_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: dlt-encryption-key
+                  optional: true
+            # AWS credentials for S3 off-chain storage.
+            # Omit (leave secret value empty) to use the pod's IAM instance profile instead.
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: aws-access-key-id
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: aws-secret-access-key
                   optional: true
           startupProbe:
             httpGet:

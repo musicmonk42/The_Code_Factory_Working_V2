@@ -22,7 +22,9 @@ try:
         ConsoleSpanExporter()
     )  # For dev/local. In prod, use a real exporter (e.g., OTLP)
     _tracer_provider.add_span_processor(_span_processor)
-    trace.set_tracer_provider(_tracer_provider)
+    # Only set the global provider when no SDK provider has been configured yet.
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(_tracer_provider)
     _tracer = trace.get_tracer(__name__)
 except ImportError:
     # Fallback for systems without OpenTelemetry
@@ -51,6 +53,13 @@ except ImportError:
 
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
 
 # --- Logging Setup ---
 logger = logging.getLogger("pubsub_audit_plugin")
@@ -504,7 +513,7 @@ class CircuitBreaker:
 
 
 # ---- 5. The Divine Pub/Sub Gateway (with Production Hardening) ----
-class PubSubGateway:
+class PubSubGateway(PluginBase):
     """A highly resilient, performant, and observable Google Cloud Pub/Sub publisher."""
 
     def __init__(self, settings: PubSubSettings, metrics: PubSubMetrics):
@@ -684,6 +693,30 @@ class PubSubGateway:
 
         logger.info("Pub/Sub Gateway shutdown complete.")
         audit_logger.log_event("pubsub_gateway_shutdown_complete", status="success")
+
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration is completed in __init__."""
+
+    async def start(self) -> None:
+        """Delegate to startup()."""
+        await self.startup()
+
+    async def stop(self) -> None:
+        """Delegate to shutdown()."""
+        await self.shutdown()
+
+    async def health_check(self) -> bool:
+        """Return True when worker tasks are alive."""
+        return bool(self._worker_tasks) and all(
+            not t.done() for t in self._worker_tasks
+        )
+
+    async def get_capabilities(self) -> List[str]:
+        return ["pubsub_event_publishing", "async_audit_sink", "batched_delivery"]
 
     def publish(self, event_name: str, service_name: str, details: Dict[str, Any]):
         """Validates and enqueues an event for publishing. Returns instantly."""

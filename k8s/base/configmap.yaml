@@ -127,7 +127,7 @@ data:
   USE_KAFKA_INGESTION: "false"
   USE_KAFKA_AUDIT: "false"
   
-  ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
+  ENABLE_CITUS: "1"  # Distributed PostgreSQL sharding via Citus
 
   # ============================================
   # Blockchain/DLT Configuration
@@ -137,6 +137,25 @@ data:
   # RB-5: "evm"/"ethereum" are fully supported — override via kustomize overlays when needed.
   # DLT_HMAC_KEY must be provided via codefactory-secrets Secret in production.
   DLT_TYPE: "fabric"
+
+  # S3 off-chain blob storage (used by S3OffChainClient when DLT_TYPE=fabric)
+  # Bucket must exist and the pod's IAM role (or AWS_ACCESS_KEY_ID secret) must have
+  # s3:GetObject / s3:PutObject / s3:HeadBucket permissions.
+  S3_BUCKET_NAME: "codefactory-dlt-offchain"
+  S3_REGION: "us-east-1"
+  # Enable AES-256-GCM client-side encryption of blobs before upload.
+  # Requires DLT_ENCRYPTION_KEY in codefactory-secrets (64-char hex / 32 bytes).
+  DLT_ENCRYPT_AT_REST: "true"
+
+  # Hyperledger Fabric DLT client (used by FabricClientWrapper when DLT_TYPE=fabric)
+  # Override per environment via kustomize patches or helm --set.
+  FABRIC_CHANNEL: "codefactory-channel"
+  FABRIC_CHAINCODE: "codefactory-cc"
+  FABRIC_ORG: "Org1"
+  FABRIC_USER: "Admin"
+  # Path inside the container — mount the connection profile via a Secret volume or
+  # bake it into a custom image layer for air-gapped deployments.
+  FABRIC_NETWORK_PROFILE: "/app/data/fabric/connection-profile.json"
 
   # ============================================
   # ML/NLP Data Paths

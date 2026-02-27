@@ -79,6 +79,13 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
+
 
 # --- Custom Exceptions ---
 class AnalyzerCriticalError(Exception):
@@ -1080,7 +1087,7 @@ async def _dlt_backend_impl(
         raise NotImplementedError(f"DLT backend op '{op}'")
 
 
-class CheckpointManager:
+class CheckpointManager(PluginBase):
     _backends = {}
     enable_hash_chain = True
     state_schema = None
@@ -1112,6 +1119,55 @@ class CheckpointManager:
 
     async def diff(self, name, v1, v2):
         return await self._backends[self.backend](self, "diff", name, v1, v2)
+
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """Initialise DLT backend clients using the current DLT_BACKEND_CONFIG."""
+        global DLT_BACKEND_CONFIG
+        if DLT_BACKEND_CONFIG:
+            await initialize_dlt_backend(DLT_BACKEND_CONFIG)
+            logger.info("CheckpointManager: DLT backend clients initialised.")
+
+    async def start(self) -> None:
+        """Begin active processing; verifies that off-chain and ledger clients are healthy."""
+        if off_chain_client is not None:
+            result = await off_chain_client.health_check()
+            if not result.get("status"):
+                logger.warning("CheckpointManager.start: off-chain client unhealthy: %s", result)
+        if fabric_client is not None:
+            result = await fabric_client.health_check()
+            if not result.get("status"):
+                logger.warning("CheckpointManager.start: fabric client unhealthy: %s", result)
+        logger.info("CheckpointManager started.")
+
+    async def stop(self) -> None:
+        """Release client connections gracefully."""
+        global off_chain_client, fabric_client
+        if off_chain_client is not None:
+            await off_chain_client.close()
+            off_chain_client = None
+        if fabric_client is not None:
+            await fabric_client.close()
+            fabric_client = None
+        logger.info("CheckpointManager stopped.")
+
+    async def health_check(self) -> bool:
+        """Return True when all configured backend clients are healthy."""
+        if off_chain_client is not None:
+            result = await off_chain_client.health_check()
+            if not result.get("status"):
+                return False
+        if fabric_client is not None:
+            result = await fabric_client.health_check()
+            if not result.get("status"):
+                return False
+        return True
+
+    async def get_capabilities(self) -> List[str]:
+        return ["dlt_checkpoint", "state_versioning", "rollback", "hash_chain"]
 
 
 def _deep_diff(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Tuple[Any, Any]]:

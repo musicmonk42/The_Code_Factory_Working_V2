@@ -234,9 +234,27 @@ services:
       - ENABLE_EXPERIMENTAL_EVOLUTION=false
       # DLT backend type (RB-5: evm/ethereum now fully supported in dlt_backend.py).
       - DLT_TYPE=${DLT_TYPE:-fabric}
-
-      # ============================================
-      # Worker Configuration
+      # DLT HMAC signing key for checkpoint integrity (dlt_backend + off-chain clients).
+      # REQUIRED in production. Generate: openssl rand -hex 32
+      - DLT_HMAC_KEY=${DLT_HMAC_KEY}
+      # AES-256-GCM client-side encryption key for S3 off-chain blobs (64 hex chars = 32 bytes).
+      # REQUIRED in production when DLT_ENCRYPT_AT_REST=true.
+      # Generate: python -c "import os; print(os.urandom(32).hex())"
+      - DLT_ENCRYPTION_KEY=${DLT_ENCRYPTION_KEY}
+      # Enable client-side AES-256-GCM encryption of off-chain blobs before upload.
+      - DLT_ENCRYPT_AT_REST=${DLT_ENCRYPT_AT_REST:-true}
+      # S3 off-chain blob storage (used by S3OffChainClient when DLT_TYPE=fabric).
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_REGION=${S3_REGION:-us-east-1}
+      # AWS credentials (omit to use the task's IAM role — strongly preferred in production).
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      # Hyperledger Fabric DLT client configuration (used when DLT_TYPE=fabric).
+      - FABRIC_CHANNEL=${FABRIC_CHANNEL:-codefactory-channel}
+      - FABRIC_CHAINCODE=${FABRIC_CHAINCODE:-codefactory-cc}
+      - FABRIC_ORG=${FABRIC_ORG:-Org1}
+      - FABRIC_USER=${FABRIC_USER:-Admin}
+      - FABRIC_NETWORK_PROFILE=${FABRIC_NETWORK_PROFILE:-/app/data/fabric/connection-profile.json}
       # ============================================
       # Single worker mode - FastAPI is async and multiple workers cause job sync issues
       - WORKER_COUNT=${WORKER_COUNT:-1}

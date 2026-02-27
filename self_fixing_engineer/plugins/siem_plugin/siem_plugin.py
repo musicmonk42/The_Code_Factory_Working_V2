@@ -17,7 +17,7 @@ import time
 from collections import deque
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
+from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Optional, Protocol
 
 import aiofiles
 import aiohttp
@@ -68,6 +68,13 @@ from self_fixing_engineer.exceptions import AnalyzerCriticalError
 
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
+
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
 
 # --- Core Integrations (shared for all plugins/gateways) ---
 try:
@@ -220,7 +227,9 @@ try:
         )
     )
     trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    trace.set_tracer_provider(trace_provider)
+    # Only set the global provider when no SDK provider has been configured yet.
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(trace_provider)
     set_global_textmap(TraceContextTextMapPropagator())
     tracer = trace.get_tracer(__name__)
     OPENTELEMETRY_AVAILABLE = True
@@ -482,10 +491,10 @@ class SIEMEvent(BaseModel):
     signature: str = ""
     enqueue_time: float = 0.0
 
-    SENSITIVE_KEYS = re.compile(
+    SENSITIVE_KEYS: ClassVar[re.Pattern] = re.compile(
         r".*(password|secret|key|token|pii|ssn|credit_card).*", re.IGNORECASE
     )
-    SENSITIVE_PATTERNS = [
+    SENSITIVE_PATTERNS: ClassVar[List[re.Pattern]] = [
         re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
         re.compile(r"\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b"),
         re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
@@ -1362,7 +1371,7 @@ class SIEMGateway:
             await asyncio.sleep(30)
 
 
-class SIEMGatewayManager:
+class SIEMGatewayManager(PluginBase):
     def __init__(
         self,
         settings: SIEMGatewaySettings,
@@ -1434,6 +1443,29 @@ class SIEMGatewayManager:
             await asyncio.gather(*(gw.shutdown() for gw in self._gateways.values()))
 
         main_logger.info("SIEM Gateway Manager shut down.")
+
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration is completed in __init__."""
+
+    async def start(self) -> None:
+        """Delegate to startup()."""
+        await self.startup()
+
+    async def stop(self) -> None:
+        """Delegate to shutdown()."""
+        await self.shutdown()
+
+    async def health_check(self) -> bool:
+        """Return True when at least one child gateway is running."""
+        async with self._lock:
+            return bool(self._gateways)
+
+    async def get_capabilities(self) -> List[str]:
+        return ["siem_event_forwarding", "splunk_hec", "security_audit_sink"]
 
     def load_serializers_from_plugins(self, group="siem_gateway.serializers"):
         try:

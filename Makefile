@@ -134,7 +134,13 @@ test-evolution: ## Run Genetic Algorithm / Evolution Engine tests (EV-2, EV-3, I
 test-dlt: ## Run DLT backend tests (RB-5 EVM support, IB-1 checkpoint bridge, SEC-1 HMAC)
 	@echo "$(BLUE)Running DLT backend tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
-		DLT_TYPE=fabric PRODUCTION_MODE=0 && \
+		DLT_TYPE=fabric PRODUCTION_MODE=0 \
+		DLT_HMAC_KEY="dev-dlt-hmac-key-not-for-production" \
+		DLT_ENCRYPTION_KEY="" DLT_ENCRYPT_AT_REST=false \
+		S3_BUCKET_NAME="codefactory-dlt-offchain-dev" S3_REGION="us-east-1" \
+		FABRIC_CHANNEL="codefactory-channel" FABRIC_CHAINCODE="codefactory-cc" \
+		FABRIC_ORG="Org1" FABRIC_USER="Admin" \
+		FABRIC_NETWORK_PROFILE="/tmp/fabric-connection-profile.json" && \
 		pytest -k "dlt or checkpoint_manager or hmac or dlt_backend" -v --tb=short
 	@echo "$(GREEN)DLT backend tests complete!$(NC)"
 

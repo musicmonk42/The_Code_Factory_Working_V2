@@ -101,8 +101,36 @@ spec:
               drop:
               - ALL
         {{- end }}
-      containers:
-        - name: {{ .Chart.Name }}
+        # Seed the data PVC with bundled default files on first boot.
+        # Copies policies.json and provenance.json from /app/data-bundled (baked into the image)
+        # to the writable data PVC (/app/data) if the files are not already present.
+        - name: seed-data
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['sh', '-c']
+          args:
+            - |
+              set -e
+              DATA_DIR=/app/data
+              BUNDLED_DIR=/app/data-bundled
+              echo "Seeding data PVC from bundled defaults..."
+              for f in policies.json provenance.json; do
+                if [ ! -f "$DATA_DIR/$f" ] && [ -f "$BUNDLED_DIR/$f" ]; then
+                  cp "$BUNDLED_DIR/$f" "$DATA_DIR/$f"
+                  echo "Seeded $f"
+                fi
+              done
+              echo "Data seeding complete."
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podSecurityContext.runAsUser }}
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: {{ include "codefactory.image" . }}
@@ -236,6 +264,33 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.secrets.security.encryptionKeySecretName }}
                   key: private-key-password
+                  optional: true
+
+            {{- /* ---- DLT / off-chain storage secrets ---- */}}
+            - name: DLT_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.dlt.hmacKeySecretName }}
+                  key: {{ .Values.secrets.dlt.hmacKeySecretKey }}
+                  optional: true
+            - name: DLT_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.dlt.encryptionKeySecretName }}
+                  key: {{ .Values.secrets.dlt.encryptionKeySecretKey }}
+                  optional: true
+            # AWS credentials for S3 off-chain storage (optional — prefer IAM instance profile).
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.dlt.awsAccessKeyIdSecretName }}
+                  key: {{ .Values.secrets.dlt.awsAccessKeyIdSecretKey }}
+                  optional: true
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.dlt.awsSecretAccessKeySecretName }}
+                  key: {{ .Values.secrets.dlt.awsSecretAccessKeySecretKey }}
                   optional: true
           {{- with .Values.startupProbe }}
           startupProbe:

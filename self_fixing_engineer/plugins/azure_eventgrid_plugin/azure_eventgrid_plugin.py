@@ -71,6 +71,13 @@ from plugins.core_secrets import SECRETS_MANAGER
 from plugins.core_utils import alert_operator
 from plugins.core_utils import scrub_secrets as scrub_sensitive_data
 
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
+
 # --- OpenTelemetry/Tracing (REQUIRED in prod) ---
 try:
     from opentelemetry import trace
@@ -175,7 +182,7 @@ PLUGIN_MANIFEST = {
 }
 
 
-class AzureEventGridAuditHook:
+class AzureEventGridAuditHook(PluginBase):
     """
     World-class async Azure Event Grid audit/event hook for CheckpointManager and distributed systems.
     """
@@ -392,6 +399,34 @@ class AzureEventGridAuditHook:
         audit_logger.log_event(
             "eventgrid_hook_shutdown_complete", plugin=PLUGIN_MANIFEST["name"]
         )
+
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration and session setup happen in __init__."""
+
+    async def start(self) -> None:
+        """Ensure the background batch-sender task is running."""
+        if not self._sender_task or self._sender_task.done():
+            self._shutdown_event.clear()
+            self._sender_task = asyncio.create_task(self._batch_sender())
+            logger.info("AzureEventGridAuditHook started (batch-sender task created).")
+
+    async def stop(self) -> None:
+        """Gracefully drain the event queue and shut down."""
+        await self.close()
+
+    async def health_check(self) -> bool:
+        """Return True when the sender task is alive and the queue is not stalled."""
+        if self._shutdown_event.is_set():
+            return False
+        task_ok = self._sender_task is not None and not self._sender_task.done()
+        return task_ok
+
+    async def get_capabilities(self) -> List[str]:
+        return ["azure_event_grid_audit", "event_streaming", "compliance_logging"]
 
     async def audit_hook(
         self, event: str, details: dict, event_id: Optional[str] = None
