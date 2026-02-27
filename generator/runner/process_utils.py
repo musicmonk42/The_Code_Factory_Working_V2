@@ -268,7 +268,7 @@ async def subprocess_wrapper(
             )
         finally:
             elapsed = max(time.time() - start, 0.0)
-            UTIL_LATENCY.labels("subprocess_wrapper").observe(elapsed)
+            UTIL_LATENCY.labels(func="subprocess_wrapper", status="success").observe(elapsed)
 
     return await breaker.call(_invoke)
 

@@ -2092,10 +2092,21 @@ def _validate_dockerfile_framework(output_dir: Path, project_type: Optional[str]
         # Explicit project type takes precedence.
         is_fastapi = project_type in {"fastapi_service", "fastapi"}
     else:
-        # Auto-detect from Dockerfile content and project structure.
+        # Auto-detect from Dockerfile content, requirements.txt, and the
+        # presence of a FastAPI application file anywhere in the project tree.
+        def _file_mentions_fastapi(path: Path) -> bool:
+            """Return True if *path* exists and contains the word 'fastapi'."""
+            try:
+                return "fastapi" in path.read_text(encoding="utf-8").lower()
+            except (OSError, UnicodeDecodeError):
+                return False
+
         is_fastapi = (
             "fastapi" in content.lower()
             or (output_dir / "app" / "main.py").is_file()
+            or (output_dir / "main.py").is_file()
+            or _file_mentions_fastapi(output_dir / "requirements.txt")
+            or _file_mentions_fastapi(output_dir / "pyproject.toml")
         )
 
     if not is_fastapi:

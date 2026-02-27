@@ -392,6 +392,78 @@ def list_products(): pass
         assert result["router_wiring_check"]["status"] == "connected"
         assert not any("include_router" in w for w in result["warnings"])
 
+    def test_include_router_prefix_reconciliation_resolves_full_paths(self):
+        """Endpoints declared in router files are matched against spec when the
+        router is wired via ``include_router(..., prefix=...)`` in main.py.
+
+        Background
+        ----------
+        A FastAPI router file typically contains route decorators using only
+        the *sub-path*, e.g. ``@router.get("/stats")``.  The prefix
+        ``/api/v1/orders`` is supplied by the ``include_router`` call in
+        ``app/main.py``.  Per-file endpoint extraction therefore yields
+        ``/stats``, not the full ``/api/v1/orders/stats`` that the spec
+        requires.
+
+        The reconciliation pass must detect the ``include_router`` prefix and
+        reconstruct the fully-qualified path so that spec validation passes.
+        """
+        md = "- GET /api/v1/orders/stats\n- GET /api/v1/orders/{id}\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers.orders import router as orders_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(orders_router, prefix=\"/api/v1/orders\")\n"
+            ),
+            "app/routers/orders.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/stats')\n"
+                "def orders_stats(): pass\n\n"
+                "@router.get('/{id}')\n"
+                "def get_order(id: int): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+
+        assert result["valid"] is True, (
+            f"Expected valid=True after prefix reconciliation, "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == [], (
+            "No endpoints should be missing after include_router prefix is resolved"
+        )
+
+    def test_include_router_prefix_double_prefix_not_duplicated(self):
+        """When a route already carries the full path (including API version),
+        the reconciliation pass must not double-count it so validation still
+        passes even if the route path and the include_router prefix overlap."""
+        md = "GET /api/v1/version\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers.system import router as system_router\n"
+                "app = FastAPI()\n"
+                "@app.get('/api/v1/version')\n"
+                "def version(): return {'version': '1.0'}\n"
+                "app.include_router(system_router, prefix=\"/api/v1/system\")\n"
+            ),
+            "app/routers/system.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/health')\n"
+                "def health(): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+
+        # /api/v1/version is directly in main.py, so it must be found.
+        assert result["valid"] is True, (
+            f"GET /api/v1/version in main.py must be found; "
+            f"missing: {result['missing_endpoints']}"
+        )
+
 
 class TestValidateDeploymentArtifacts:
     """Test deployment validation."""
