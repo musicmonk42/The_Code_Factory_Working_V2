@@ -116,6 +116,16 @@ try:
 except ImportError:
     HAS_MATERIALIZER = False
 
+# Import stub retry hint helper for Issue 1 — stub file prompt augmentation
+try:
+    from generator.agents.codegen_agent.codegen_response_handler import (
+        build_stub_retry_prompt_hint as _build_stub_retry_prompt_hint,
+    )
+    HAS_STUB_RETRY_HINT = True
+except ImportError:
+    HAS_STUB_RETRY_HINT = False
+    _build_stub_retry_prompt_hint = None  # type: ignore[assignment]
+
 # Import DeployAgent for deployment artifact generation
 try:
     from generator.agents.deploy_agent.deploy_agent import DeployAgent
@@ -1407,6 +1417,11 @@ class WorkflowEngine:
                                             f"You MUST implement these missing endpoints: {missing_ep_labels}. "
                                             f"Focus ONLY on the missing functionality."
                                         )
+                                        # Include stub file hints if any stubs remain in the generated files
+                                        if HAS_STUB_RETRY_HINT and _build_stub_retry_prompt_hint:
+                                            _stub_hint = _build_stub_retry_prompt_hint(codegen_files)
+                                            if _stub_hint:
+                                                previous_feedback += f"\n\n{_stub_hint}"
                                         logger.warning(
                                             f"[STAGE:SPEC_VALIDATE] Spec fidelity failed on iteration "
                                             f"{iteration_num}/{max_iterations}. Missing {len(missing)} endpoint(s). "

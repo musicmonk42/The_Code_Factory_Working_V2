@@ -36,6 +36,8 @@ _SLACK_WEBHOOK = re.compile(r"https://hooks\.slack\.com/[^ \t\r\n]+", re.I)
 _API_KEY = re.compile(r"\b(?:sk|pk)_[A-Za-z0-9]{16,}\b")
 _AWS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
 _GCP_KEY = re.compile(r"AIza[0-9A-Za-z\-_]{35}")
+_GITHUB_PAT = re.compile(r"\bghp_[A-Za-z0-9]{36,}\b")
+_GITLAB_PAT = re.compile(r"\bglpat-[A-Za-z0-9\-_]{20,}\b")
 _PRIVATE_KEY_BLOCK = re.compile(
     r"-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----.+?-----END (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----",
     re.S,
@@ -53,6 +55,8 @@ def _scrub_str(s: str) -> str:
     s = _API_KEY.sub("***REDACTED***", s)
     s = _AWS_KEY.sub("***REDACTED***", s)
     s = _GCP_KEY.sub("***REDACTED***", s)
+    s = _GITHUB_PAT.sub("***REDACTED***", s)
+    s = _GITLAB_PAT.sub("***REDACTED***", s)
     return s
 
 
@@ -612,3 +616,27 @@ def get_alert_operator() -> AlertOperator:
 def send_alert(*args, **kwargs):
     """Stub: send an alert/notification."""
     return None
+
+
+def alert_operator(message: str, level: str = "CRITICAL") -> None:
+    """
+    Module-level convenience function to send an operator alert.
+
+    Delegates to the AlertOperator singleton. This is the public API
+    that plugins should use to send alerts.
+
+    Args:
+        message: The alert message.
+        level: The alert severity level (e.g., 'CRITICAL', 'ERROR', 'WARNING', 'INFO').
+    """
+    try:
+        get_alert_operator().alert(message, level)
+    except Exception as e:
+        # Fallback to basic logging if AlertOperator fails to initialize
+        logging.getLogger(__name__).error(
+            f"[ALERT FALLBACK - {level}] {message} (AlertOperator error: {e})"
+        )
+
+
+# Alias for backward compatibility - plugins import scrub_secrets
+scrub_secrets = scrub

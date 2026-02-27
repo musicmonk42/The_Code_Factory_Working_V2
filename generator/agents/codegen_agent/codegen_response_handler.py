@@ -1762,6 +1762,10 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
     
     lang_l = (lang or "").lower()
 
+    # __init__.py files are allowed to be empty — they're Python package markers
+    if filename.endswith("__init__.py") and not code.strip():
+        return True, ""
+
     # Validate that code is not empty
     if not code.strip():
         logger.warning("Empty code block for %s; treating as error.", filename)
@@ -2071,6 +2075,10 @@ def validate_production_ready(code_files: Dict[str, str], strict: bool = False) 
     for filename, content in code_files.items():
         # Skip error files
         if filename == ERROR_FILENAME:
+            continue
+
+        # Skip __init__.py files — they're legitimately empty or minimal
+        if filename.endswith("__init__.py"):
             continue
             
         is_stub, issues = _detect_stub_patterns(content, filename)
@@ -2835,7 +2843,15 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
 
     Returns:
         The (potentially augmented) *code_files* mapping.
+
+    Side-effect:
+        Sets the ``_stub_files_created`` attribute on the returned dict to the
+        ``set`` of file paths that were created or augmented as stubs during
+        this call.  Callers can inspect this set to decide whether a retry
+        prompt should list the stub files that need real implementations.
     """
+    # Track which files are created/modified as stubs during this call
+    stub_files_created: Set[str] = set()
     # First pass: collect all required symbols per module path.
     # Maps "app/auth.py" -> {"get_current_user", "Role", ...}
     required_symbols: Dict[str, Set[str]] = {}
@@ -2942,6 +2958,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         f"    return None\n\n\n"
                     )
             code_files[module_path] = "".join(stub_lines)
+            stub_files_created.add(module_path)
             logger.info(
                 "ensure_local_module_stubs: created stub module %s with symbols %s",
                 module_path,
@@ -3004,10 +3021,88 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f"    return None\n"
                         )
                 code_files[module_path] = existing_content + "".join(appended_lines)
+                stub_files_created.add(module_path)
                 logger.info(
                     "ensure_local_module_stubs: appended stubs for %s to %s",
                     sorted(missing),
                     module_path,
                 )
 
+    if stub_files_created:
+        logger.info(
+            "ensure_local_module_stubs: %d stub file(s) created/modified: %s",
+            len(stub_files_created),
+            sorted(stub_files_created),
+        )
     return code_files
+
+
+# Marker present in the docstring header of every auto-generated stub module.
+_STUB_MODULE_MARKER = "Generated module — replace with actual implementation."
+
+
+def get_stub_files(code_files: Dict[str, str]) -> Set[str]:
+    """Return the set of stub files present in *code_files*.
+
+    A file is considered a stub when its content contains the canonical stub
+    module header emitted by :func:`ensure_local_module_stubs`.
+
+    Args:
+        code_files: Mapping of filename → source code.
+
+    Returns:
+        Set of filenames whose content identifies them as auto-generated stubs.
+    """
+    return {
+        path
+        for path, content in code_files.items()
+        if _STUB_MODULE_MARKER in content
+    }
+
+
+def build_stub_retry_prompt_hint(code_files: Dict[str, str]) -> str:
+    """Build a prompt hint listing stub files that need real implementations.
+
+    Scans *code_files* for auto-generated stubs (files containing the stub
+    module header) and returns a formatted string suitable for inclusion in a
+    retry LLM prompt.  Returns an empty string when no stubs are detected.
+
+    Args:
+        code_files: Mapping of filename → source code.
+
+    Returns:
+        A formatted hint string listing stub files and the symbols they export,
+        or ``""`` if no stubs are detected.
+    """
+    stub_files = get_stub_files(code_files)
+    if not stub_files:
+        return ""
+
+    lines = [
+        "IMPORTANT: The following files are placeholder stubs that MUST be replaced "
+        "with real implementations:",
+    ]
+    for path in sorted(stub_files):
+        content = code_files[path]
+        # Extract exported symbol names from the stub content
+        try:
+            tree = ast.parse(content)
+            symbols = [
+                node.name
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            ]
+            # Also include top-level variable assignments
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            symbols.append(target.id)
+        except SyntaxError:
+            symbols = []
+        sym_list = ", ".join(sorted(set(symbols))) if symbols else "(unknown symbols)"
+        lines.append(f"  - {path}: must export {sym_list}")
+    lines.append(
+        "Generate complete, production-ready implementations for each stub file listed above."
+    )
+    return "\n".join(lines)

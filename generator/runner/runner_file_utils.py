@@ -1850,7 +1850,10 @@ async def validate_generated_project(
         else:
             # Check file is not empty
             if file_path.stat().st_size == 0:
-                if required_file in CRITICAL_REQUIRED_FILES:
+                if required_file.endswith("__init__.py"):
+                    # Empty __init__.py files are valid Python package markers
+                    pass  # Not an error
+                elif required_file in CRITICAL_REQUIRED_FILES:
                     result["valid"] = False
                     result["errors"].append(f"Required file is empty: {required_file}")
                 elif required_file == ".env.example":

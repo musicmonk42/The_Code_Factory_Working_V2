@@ -36,8 +36,8 @@ class NonCriticalError(Exception):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
-    from core_audit import audit_logger
-    from core_utils import alert_operator, scrub_secrets
+    from plugins.core_audit import audit_logger
+    from plugins.core_utils import alert_operator, scrub_secrets
 except ImportError:
     logger.warning(
         "core_utils or core_audit not found. Plugin functionality will be limited."

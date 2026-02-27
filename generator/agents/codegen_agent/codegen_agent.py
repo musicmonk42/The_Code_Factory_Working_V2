@@ -43,7 +43,12 @@ except ImportError:
 
 # Internal imports
 from .codegen_prompt import build_code_generation_prompt
-from .codegen_response_handler import add_traceability_comments, parse_llm_response
+from .codegen_response_handler import (
+    add_traceability_comments,
+    build_stub_retry_prompt_hint,
+    _detect_module_package_collisions,
+    parse_llm_response,
+)
 
 # --- REMOVED OBSOLETE IMPORT: from .codegen_llm_call import CacheManager ---
 
@@ -604,6 +609,10 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     # Normalize all keys to forward-slash separators so matching is consistent
     # regardless of the operating system the generator runs on.
     updated: Dict[str, str] = {k.replace("\\", "/"): v for k, v in files.items()}
+
+    # Resolve any module/package collisions before wiring to avoid processing
+    # both a bare module file and its package directory simultaneously.
+    updated = _detect_module_package_collisions(updated)
 
     # ------------------------------------------------------------------ #
     # 1. Discover router variables in app/routers/*.py or app/routes/*.py #
@@ -2511,10 +2520,12 @@ if PLUGIN_AVAILABLE:
                                             _gap_files = parse_llm_response(_gap_resp)
                                             for _gf_key, _gf_val in _gap_files.items():
                                                 if _gf_key in _merged_files and _gf_key.endswith(".py"):
+                                                    # Additive merge: preserve existing endpoints, add new ones
                                                     _merged_files[_gf_key] = _ast_merge_python_files(
                                                         _merged_files[_gf_key], _gf_val
                                                     )
-                                                else:
+                                                elif _gf_key not in _merged_files:
+                                                    # New file -- add it (never overwrite existing non-Python files)
                                                     _merged_files[_gf_key] = _gf_val
                                             logger.info(
                                                 f"[CODEGEN] Endpoint coverage check: {_covered}/{_total} "

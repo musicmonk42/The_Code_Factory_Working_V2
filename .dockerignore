@@ -35,6 +35,7 @@ demo_output/
 *.db-shm
 *.db-wal
 chroma_db/
+dlt_dev_storage/
 audit*.json
 *_log.json
 test_metrics_snapshot.json
