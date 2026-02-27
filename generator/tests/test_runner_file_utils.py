@@ -963,3 +963,434 @@ class TestValidateGeneratedProject:
 
         # No import-consistency errors about app.models.product
         assert not any("app.models.product" in e for e in result["errors"])
+
+
+# --------------------------------------------------------------------------- #
+# Tests for new structural validation helpers
+# --------------------------------------------------------------------------- #
+_rfu = pytest.importorskip(
+    "runner.runner_file_utils",
+    reason="runner.runner_file_utils required for structural validation tests",
+)
+_validate_async_sync_compatibility = _rfu._validate_async_sync_compatibility
+_validate_dependency_injection = _rfu._validate_dependency_injection
+_validate_middleware_applied = _rfu._validate_middleware_applied
+_validate_k8s_manifests = _rfu._validate_k8s_manifests
+_validate_dockerfile_framework = _rfu._validate_dockerfile_framework
+
+
+class TestValidateAsyncSyncCompatibility:
+    """Tests for _validate_async_sync_compatibility."""
+
+    def test_no_files_returns_no_errors(self, tmp_path):
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert errors == []
+
+    def test_async_engine_with_sync_session_flagged(self, tmp_path):
+        db_file = tmp_path / "database.py"
+        db_file.write_text(
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+        )
+        svc_file = tmp_path / "product_service.py"
+        svc_file.write_text(
+            "from sqlalchemy.orm import Session\n\n"
+            "def list_products(session: Session):\n"
+            "    return session.query('Product').all()\n"
+        )
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert len(errors) > 0
+        assert "async" in errors[0].lower() or "sync" in errors[0].lower()
+
+    def test_pure_async_project_no_errors(self, tmp_path):
+        db_file = tmp_path / "database.py"
+        db_file.write_text(
+            "from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+        )
+        svc_file = tmp_path / "product_service.py"
+        svc_file.write_text(
+            "from sqlalchemy.ext.asyncio import AsyncSession\n\n"
+            "async def list_products(session: AsyncSession):\n"
+            "    result = await session.execute(select(Product))\n"
+            "    return result.scalars().all()\n"
+        )
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert errors == []
+
+    def test_pure_sync_project_no_errors(self, tmp_path):
+        svc_file = tmp_path / "product_service.py"
+        svc_file.write_text(
+            "from sqlalchemy.orm import Session\n\n"
+            "def list_products(session: Session):\n"
+            "    return session.query('Product').all()\n"
+        )
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert errors == []
+
+
+class TestValidateDependencyInjection:
+    """Tests for _validate_dependency_injection."""
+
+    def test_no_services_dir_returns_no_warnings(self, tmp_path):
+        warnings = _validate_dependency_injection(tmp_path)
+        assert warnings == []
+
+    def test_router_missing_session_arg_flagged(self, tmp_path):
+        svc_dir = tmp_path / "app" / "services"
+        svc_dir.mkdir(parents=True)
+        (svc_dir / "product_service.py").write_text(
+            "async def list_products(session, skip=0, limit=10):\n"
+            "    return []\n"
+        )
+        router_dir = tmp_path / "app" / "routers"
+        router_dir.mkdir(parents=True)
+        (router_dir / "products.py").write_text(
+            "from app.services.product_service import list_products\n\n"
+            "async def get_products():\n"
+            "    return await list_products()\n"
+        )
+        warnings = _validate_dependency_injection(tmp_path)
+        assert len(warnings) > 0
+        assert "list_products" in warnings[0]
+
+    def test_router_with_depends_not_flagged(self, tmp_path):
+        svc_dir = tmp_path / "app" / "services"
+        svc_dir.mkdir(parents=True)
+        (svc_dir / "product_service.py").write_text(
+            "async def list_products(session, skip=0, limit=10):\n"
+            "    return []\n"
+        )
+        router_dir = tmp_path / "app" / "routers"
+        router_dir.mkdir(parents=True)
+        (router_dir / "products.py").write_text(
+            "from fastapi import Depends\n"
+            "from app.services.product_service import list_products\n\n"
+            "async def get_products(session=Depends(get_db)):\n"
+            "    return await list_products(session)\n"
+        )
+        warnings = _validate_dependency_injection(tmp_path)
+        assert warnings == []
+
+
+class TestValidateMiddlewareApplied:
+    """Tests for _validate_middleware_applied."""
+
+    def test_no_middleware_dir_returns_no_warnings(self, tmp_path):
+        warnings = _validate_middleware_applied(tmp_path)
+        assert warnings == []
+
+    def test_middleware_files_without_add_middleware_flagged(self, tmp_path):
+        mw_dir = tmp_path / "app" / "middleware"
+        mw_dir.mkdir(parents=True)
+        (mw_dir / "security_headers.py").write_text(
+            "class SecurityHeadersMiddleware:\n    pass\n"
+        )
+        app_dir = tmp_path / "app"
+        (app_dir / "main.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+        )
+        warnings = _validate_middleware_applied(tmp_path)
+        assert len(warnings) > 0
+        assert "middleware" in warnings[0].lower()
+
+    def test_middleware_with_add_middleware_not_flagged(self, tmp_path):
+        mw_dir = tmp_path / "app" / "middleware"
+        mw_dir.mkdir(parents=True)
+        (mw_dir / "security_headers.py").write_text(
+            "class SecurityHeadersMiddleware:\n    pass\n"
+        )
+        app_dir = tmp_path / "app"
+        (app_dir / "main.py").write_text(
+            "from fastapi import FastAPI\n"
+            "from app.middleware.security_headers import SecurityHeadersMiddleware\n"
+            "app = FastAPI()\n"
+            "app.add_middleware(SecurityHeadersMiddleware)\n"
+        )
+        warnings = _validate_middleware_applied(tmp_path)
+        assert warnings == []
+
+
+class TestValidateK8sManifests:
+    """Tests for _validate_k8s_manifests."""
+
+    def test_no_k8s_dir_returns_no_errors(self, tmp_path):
+        errors = _validate_k8s_manifests(tmp_path)
+        assert errors == []
+
+    def test_deployment_missing_selector_match_labels_flagged(self, tmp_path):
+        k8s_dir = tmp_path / "k8s"
+        k8s_dir.mkdir()
+        (k8s_dir / "deployment.yaml").write_text(
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: my-app\n"
+            "spec:\n"
+            "  replicas: 1\n"
+            "  template:\n"
+            "    metadata:\n"
+            "      labels:\n"
+            "        app: my-app\n"
+            "    spec:\n"
+            "      containers:\n"
+            "      - name: my-app\n"
+            "        image: my-app:latest\n"
+        )
+        errors = _validate_k8s_manifests(tmp_path)
+        assert len(errors) > 0
+        assert "matchLabels" in errors[0]
+
+    def test_valid_deployment_with_match_labels_no_errors(self, tmp_path):
+        k8s_dir = tmp_path / "k8s"
+        k8s_dir.mkdir()
+        (k8s_dir / "deployment.yaml").write_text(
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: my-app\n"
+            "spec:\n"
+            "  replicas: 1\n"
+            "  selector:\n"
+            "    matchLabels:\n"
+            "      app: my-app\n"
+            "  template:\n"
+            "    metadata:\n"
+            "      labels:\n"
+            "        app: my-app\n"
+            "    spec:\n"
+            "      containers:\n"
+            "      - name: my-app\n"
+            "        image: my-app:latest\n"
+        )
+        errors = _validate_k8s_manifests(tmp_path)
+        assert errors == []
+
+    def test_json_blob_in_yaml_file_flagged(self, tmp_path):
+        k8s_dir = tmp_path / "k8s"
+        k8s_dir.mkdir()
+        (k8s_dir / "bad.yaml").write_text(
+            '{"apiVersion": "apps/v1", "kind": "Deployment", "metadata": {"name": "x"}}\n'
+        )
+        errors = _validate_k8s_manifests(tmp_path)
+        assert len(errors) > 0
+        assert "JSON" in errors[0]
+
+
+class TestValidateDockerfileFramework:
+    """Tests for _validate_dockerfile_framework."""
+
+    def test_no_dockerfile_returns_no_errors(self, tmp_path):
+        errors = _validate_dockerfile_framework(tmp_path)
+        assert errors == []
+
+    def test_flask_env_in_fastapi_dockerfile_flagged(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text(
+            "FROM python:3.11-slim\n"
+            "ENV FLASK_APP=run.py\n"
+            "ENV FLASK_ENV=production\n"
+            "CMD [\"gunicorn\", \"app:app\"]\n"
+        )
+        # Simulate fastapi project
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        (app_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+        errors = _validate_dockerfile_framework(tmp_path)
+        assert any("FLASK_APP" in e for e in errors)
+        assert any("FLASK_ENV" in e for e in errors)
+
+    def test_gunicorn_without_uvicorn_worker_flagged(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text(
+            "FROM python:3.11-slim\n"
+            "RUN pip install fastapi gunicorn\n"
+            "CMD [\"gunicorn\", \"-w\", \"4\", \"app.main:app\"]\n"
+        )
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        (app_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+        errors = _validate_dockerfile_framework(tmp_path)
+        assert any("UvicornWorker" in e for e in errors)
+
+    def test_uvicorn_dockerfile_no_errors(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text(
+            "FROM python:3.11-slim\n"
+            "RUN pip install fastapi uvicorn\n"
+            'CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]\n'
+        )
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        (app_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+        errors = _validate_dockerfile_framework(tmp_path)
+        assert errors == []
+
+    def test_gunicorn_with_uvicorn_worker_no_errors(self, tmp_path):
+        (tmp_path / "Dockerfile").write_text(
+            "FROM python:3.11-slim\n"
+            "RUN pip install fastapi gunicorn uvicorn\n"
+            'CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app"]\n'
+        )
+        app_dir = tmp_path / "app"
+        app_dir.mkdir()
+        (app_dir / "main.py").write_text("from fastapi import FastAPI\napp = FastAPI()\n")
+        errors = _validate_dockerfile_framework(tmp_path)
+        assert errors == []
+
+
+class TestDetectStubPatternsEnhanced:
+    """Tests for enhanced _detect_stub_patterns in codegen_response_handler."""
+
+    @pytest.fixture(autouse=True)
+    def import_handler(self):
+        crh = pytest.importorskip(
+            "agents.codegen_agent.codegen_response_handler",
+            reason="codegen_response_handler required",
+        )
+        self._detect_stub_patterns = crh._detect_stub_patterns
+
+    def test_empty_class_body_with_pass_detected(self):
+        code = (
+            "from pydantic import BaseModel\n\n"
+            "class Product(BaseModel):\n"
+            "    pass\n\n"
+            "class Order(BaseModel):\n"
+            "    pass\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "models.py")
+        assert is_stub is True
+        assert any("pass" in i.lower() or "stub" in i.lower() for i in issues)
+
+    def test_empty_class_body_with_ellipsis_detected(self):
+        code = (
+            "class ProductService:\n"
+            "    ...\n\n"
+            "class OrderService:\n"
+            "    ...\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "services.py")
+        assert is_stub is True
+
+    def test_pass_only_method_detected(self):
+        code = (
+            "class ProductService:\n"
+            "    def list_products(self, session):\n"
+            "        pass\n\n"
+            "    def get_product(self, session, product_id):\n"
+            "        pass\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "product_service.py")
+        assert is_stub is True
+
+    def test_generated_module_comment_detected(self):
+        code = (
+            "# Generated module — replace with actual implementation\n\n"
+            "def do_something():\n"
+            "    pass\n\n"
+            "def do_another():\n"
+            "    pass\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "service.py")
+        assert is_stub is True
+
+    def test_non_code_file_skipped(self):
+        code = "# TODO: write docs\n# TODO: add more\n"
+        is_stub, issues = self._detect_stub_patterns(code, "README.md")
+        assert is_stub is False
+
+    def test_real_implementation_not_flagged(self):
+        code = (
+            "from sqlalchemy.ext.asyncio import AsyncSession\n\n"
+            "async def list_products(session: AsyncSession, skip: int = 0, limit: int = 10):\n"
+            "    result = await session.execute(select(Product).offset(skip).limit(limit))\n"
+            "    return result.scalars().all()\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "product_service.py")
+        assert is_stub is False
+
+
+class TestIntegrationNewValidations:
+    """Integration tests for new validations wired into validate_generated_project."""
+
+    @pytest.fixture
+    def project_dir(self, tmp_path):
+        proj = tmp_path / "project"
+        proj.mkdir()
+        return proj
+
+    @pytest.mark.asyncio
+    async def test_async_sync_incompatibility_fails_validation(self, project_dir):
+        (project_dir / "main.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+        )
+        (project_dir / "requirements.txt").write_text("fastapi\nuvicorn\n")
+        (project_dir / "database.py").write_text(
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+        )
+        (project_dir / "product_service.py").write_text(
+            "from sqlalchemy.orm import Session\n\n"
+            "def list_products(session: Session):\n"
+            "    return session.query('Product').all()\n"
+        )
+        result = await validate_generated_project(project_dir)
+        assert result["valid"] is False
+        assert any("async" in e.lower() or "sync" in e.lower() for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_dockerfile_flask_env_fails_validation(self, project_dir):
+        (project_dir / "main.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+        )
+        (project_dir / "requirements.txt").write_text("fastapi\nuvicorn\n")
+        (project_dir / "Dockerfile").write_text(
+            "FROM python:3.11-slim\n"
+            "ENV FLASK_APP=run.py\n"
+            'CMD ["gunicorn", "-k", "uvicorn.workers.UvicornWorker", "app.main:app"]\n'
+        )
+        result = await validate_generated_project(project_dir)
+        assert result["valid"] is False
+        assert any("FLASK_APP" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_k8s_missing_selector_fails_validation(self, project_dir):
+        (project_dir / "main.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+        )
+        (project_dir / "requirements.txt").write_text("fastapi\nuvicorn\n")
+        k8s_dir = project_dir / "k8s"
+        k8s_dir.mkdir()
+        (k8s_dir / "deployment.yaml").write_text(
+            "apiVersion: apps/v1\n"
+            "kind: Deployment\n"
+            "metadata:\n"
+            "  name: my-app\n"
+            "spec:\n"
+            "  replicas: 1\n"
+            "  template:\n"
+            "    metadata:\n"
+            "      labels:\n"
+            "        app: my-app\n"
+            "    spec:\n"
+            "      containers:\n"
+            "      - name: my-app\n"
+            "        image: my-app:latest\n"
+        )
+        result = await validate_generated_project(project_dir)
+        assert result["valid"] is False
+        assert any("matchLabels" in e for e in result["errors"])
+
+    @pytest.mark.asyncio
+    async def test_middleware_unapplied_produces_warning(self, project_dir):
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        (project_dir / "main.py").write_text("print('hello')")
+        (app_dir / "main.py").write_text(
+            "from fastapi import FastAPI\napp = FastAPI()\n"
+        )
+        (project_dir / "requirements.txt").write_text("fastapi\nuvicorn\n")
+        mw_dir = app_dir / "middleware"
+        mw_dir.mkdir()
+        (mw_dir / "security_headers.py").write_text(
+            "class SecurityHeadersMiddleware:\n    pass\n"
+        )
+        result = await validate_generated_project(project_dir)
+        assert any("middleware" in w.lower() for w in result["warnings"])

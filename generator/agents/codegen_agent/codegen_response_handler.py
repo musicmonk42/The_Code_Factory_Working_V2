@@ -2364,6 +2364,12 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
         (r'\bXXX\b', "Contains XXX comment"),
         (r'^\s*#\s*NOT(?:_|\s+)IMPLEMENTED\s*$', "Contains NOT_IMPLEMENTED marker"),
         (r'\braise\s+NotImplementedError', "Raises NotImplementedError (stub)"),
+        # Generated module placeholder comments (match both em-dash and hyphen variants)
+        (
+            r'#\s*Generated\s+module\s*[-\u2014]+\s*replace\s+with\s+actual',
+            "Contains generated module placeholder comment",
+        ),
+        (r'#\s*Replace\s+with\s+(actual|real)\s+implementation', "Contains replace-with-implementation comment"),
     ]
     
     code_lower = code.lower()
@@ -2375,6 +2381,45 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
         if matches:
             issues.append(f"{description} (found {len(matches)} occurrence(s))")
             stub_count += len(matches)
+    
+    # AST-based detection for Python files: empty class bodies and pass/ellipsis-only methods
+    if filename.lower().endswith('.py'):
+        try:
+            import ast as _ast
+            tree = _ast.parse(code)
+            
+            _STUB_BODY_TYPES = (_ast.Pass, _ast.Expr)
+
+            def _body_is_stub(body: list) -> bool:
+                """Return True if a function/class body contains only pass, ..., or a docstring."""
+                if not body:
+                    return True
+                non_doc = []
+                for node in body:
+                    if isinstance(node, _ast.Pass):
+                        non_doc.append(node)
+                    elif isinstance(node, _ast.Expr) and isinstance(node.value, _ast.Constant):
+                        # Could be a docstring (str) or Ellipsis literal
+                        if node.value.value is ...:
+                            non_doc.append(node)
+                        # pure string-only bodies (docstring with no other code) are stubs too
+                        elif isinstance(node.value.value, str):
+                            non_doc.append(node)
+                    else:
+                        return False
+                return len(non_doc) == len(body)
+
+            for node in _ast.walk(tree):
+                if isinstance(node, _ast.ClassDef):
+                    if _body_is_stub(node.body):
+                        issues.append(f"Empty class body: '{node.name}' (body is only pass/...)")
+                        stub_count += 1
+                elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                    if _body_is_stub(node.body):
+                        issues.append(f"Stub method/function: '{node.name}' (body is only pass/...)")
+                        stub_count += 1
+        except SyntaxError:
+            pass  # Syntax errors are caught elsewhere
     
     # CHANGED: Only flag as stub if multiple strong indicators present
     # Single pass statement or short code is OK for utilities and tests
