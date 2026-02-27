@@ -439,7 +439,15 @@ else:
                     logger.error(f"Failed to get metrics: {e}")
                     # Return degraded metrics on error
                     return SystemMetrics(pass_rate=0.0, latency=1.0, alert_ratio=1.0)
-    
+
+        def get_current_metrics(self) -> SystemMetrics:
+            """Public accessor for the current system metrics (see _get_current_metrics).
+
+            Callers (e.g. the SFE router and the Arbiter's evolution engine) should use
+            this method rather than the private ``_get_current_metrics``.
+            """
+            return self._get_current_metrics()
+
         def _apply_action_wrapper(self, action: int) -> Dict[str, Any]:
             """Wrapper to handle both sync and async apply_action functions"""
             try:
@@ -462,8 +470,15 @@ else:
     
             return remaining <= 0, max(0, remaining)
     
-        def step(self, action: int) -> Tuple[np.ndarray, float, bool, Dict[str, Any]]:
-            """Execute one step in the environment with thread safety"""
+        def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+            """Execute one step in the environment with thread safety.
+
+            Returns a Gymnasium >= 0.26 five-tuple:
+            ``(observation, reward, terminated, truncated, info)``.
+
+            ``terminated`` is True when a natural episode end condition is met.
+            ``truncated`` is always False because this environment has no external time-limit wrapper.
+            """
             with self._state_lock:
                 # Validate action
                 if action not in self.action_map:
@@ -531,7 +546,7 @@ else:
                         f"Step {self.steps}: Action={action_name}, Reward={reward:.2f}, State={self.state.round(2).tolist()}"
                     )
     
-                return self.state, reward, self.done, info
+                return self.state, reward, self.done, False, info
     
         def _check_and_handle_rollback(
             self, current_action: int
@@ -1185,7 +1200,7 @@ else:
             else:
                 action = ActionType.NOOP.value
     
-            observation, reward, done, info = env.step(action)
+            observation, reward, done, _truncated, info = env.step(action)
             total_reward += reward
             step_count += 1
     

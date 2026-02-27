@@ -1,3 +1,5 @@
+//go:build integration
+
 // Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 // checkpoint_chaincode_integration_test.go
@@ -10,6 +12,7 @@
 package main_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -21,14 +24,14 @@ import (
 
 // Test constants (match unit tests)
 const (
-	channelName      = "mychannel"
-	chaincodeName    = "checkpoint"
-	testName         = "test_checkpoint"
-	testDataHash     = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-	testPrevHash     = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-	testMetadata     = `{"key":"value"}`
-	testOffChainRef  = "s3://bucket/key"
-	testMessage      = "Rollback test message"
+	channelName     = "mychannel"
+	chaincodeName   = "checkpoint"
+	testName        = "test_checkpoint"
+	testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+	testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // Valid SHA256 (64 hex chars)
+	testMetadata    = `{"key":"value"}`
+	testOffChainRef = "s3://bucket/key"
+	testMessage     = "Rollback test message"
 )
 
 // Setup gateway connection

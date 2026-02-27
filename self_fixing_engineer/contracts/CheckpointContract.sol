@@ -6,8 +6,54 @@ pragma solidity 0.8.21;
 // The contract now relies on standard string and abi encoding functions.
 // If you're using OpenZeppelin, the `Strings` library is included for `toString` and `toHexString`
 // which can be useful for external libraries or off-chain tools.
-// The internal `Strings` library below is for demonstration and self-containment only;
+// The internal `Bytes` library below is for demonstration and self-containment only;
 // a production contract should import and use battle-hardened, audited libraries.
+
+// CS-1: Library defined at file scope — Solidity 0.8 does not allow library definitions
+// inside a contract body. Moving it here fixes the ParserError on compilation.
+/**
+ * @dev Library for safe bytes-to-string conversions.
+ */
+library Bytes {
+    function toString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) {
+            return "0";
+        }
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+
+    function toHexString(bytes32 value) internal pure returns (string memory) {
+        bytes memory buffer = new bytes(64);
+        uint256 temp = uint256(value);
+        for (uint256 i = 0; i < 32; i++) {
+            buffer[63 - 2 * i] = toAsciiChar(uint8(temp & 0xF));
+            temp >>= 4;
+            buffer[63 - 2 * i - 1] = toAsciiChar(uint8(temp & 0xF));
+            temp >>= 4;
+        }
+        return string(buffer);
+    }
+
+    function toAsciiChar(uint8 value) internal pure returns (bytes1) {
+        if (value < 10) {
+            return bytes1(uint8(48 + value));
+        } else {
+            return bytes1(uint8(87 + value));
+        }
+    }
+}
 
 /**
  * @title CheckpointContract
@@ -23,25 +69,28 @@ pragma solidity 0.8.21;
  * -   **Auditability**: Events provide a clear, auditable trail of actions[cite: 6].
  * -   **Immutability**: Once a checkpoint is recorded, its hash and details are immutable on-chain[cite: 7].
  * -   **Logical Rollback**: Rollbacks are recorded as new transactions, preserving full history[cite: 8].
- * -   **Access Control**: This contract includes an `onlyOwner` modifier for critical functions to restrict access to a trusted entity, which is mandatory for production SaaS[cite: 9].
- * -   **String Normalization**: Clients should normalize checkpoint names (e.g., lowercase) before sending to the contract for consistent lookups[cite: 11].
- * -   **Chain Growth**: Every state change (save, rollback) adds a new entry[cite: 12]. For very long-lived
- * checkpoint chains, consider off-chain indexing for historical lookups beyond the latest[cite: 13].
- *
- * @custom:testing-strategy
- * -   Test all functions with valid and invalid inputs.
- * -   Test edge cases: first checkpoint (genesis), rolling back to a hash that doesn't exist,
- * rolling back to the current latest hash, and rolling back to a hash that has been
- * written multiple times.
+ * @custom:testing
+ * -   Test `writeCheckpoint` with valid and invalid inputs (e.g., mismatched `prevHash`)[cite: 9].
+ * -   Test `getLatestCheckpoint` before and after writes[cite: 10].
+ * -   Test `getCheckpointByVersion` for both existing and non-existing versions[cite: 11].
+ * -   Test `getCheckpointByHash` for both existing and non-existing hashes[cite: 12].
+ * -   Test `rollbackCheckpoint` to a valid target and to a non-existent target[cite: 13].
  * -   Test unauthorized access attempts on protected functions (`writeCheckpoint`, `rollbackCheckpoint`).
- *
- * @custom:deployment-strategy
- * -   Use a deployment script (e.g., Hardhat, Truffle) to deploy this contract.
- * -   For upgradability, use a proxy pattern (e.g., OpenZeppelin Upgrades) and document the upgrade path.
  */
 contract CheckpointContract {
+    using Bytes for uint256;
+    using Bytes for bytes32;
+
     // Defines a mapping from an address to an address.
     address private owner;
+
+    // CS-2: Monotonically incrementing version counter -- using block.number caused
+    // silent overwrites when writeCheckpoint and rollbackCheckpoint were called in the
+    // same block. A dedicated counter guarantees uniqueness regardless of block timing.
+    uint256 private _checkpointVersionCounter;
+
+    // Maximum length for rollback message bytes (CS-4)
+    uint256 private constant MAX_ROLLBACK_MESSAGE_LENGTH = 256;
 
     // A. Security Audit & Access Control: Add a constructor to set the owner.
     constructor() {
@@ -60,16 +109,16 @@ contract CheckpointContract {
         bytes32 prevHash; // Hash of the previous checkpoint in the chain [cite: 16]
         string metadataJson; // JSON string of arbitrary metadata (e.g., agent_id, timestamp) [cite: 17]
         string offChainRef; // Reference to the off-chain storage location (e.g., S3 key, IPFS CID) [cite: 18]
-        uint256 version; // Block number at which this checkpoint was recorded [cite: 19]
+        uint256 version; // Version counter at which this checkpoint was recorded [cite: 19]
         address writer; // Address of the entity that wrote this checkpoint (indexed in event, not struct) [cite: 20]
         uint256 timestamp; // Block timestamp when this checkpoint was recorded [cite: 21]
     }
 
-    // Mapping from checkpoint name => version (block number) => CheckpointEntry
+    // Mapping from checkpoint name => version => CheckpointEntry
     mapping(string => mapping(uint256 => CheckpointEntry)) public checkpointsByVersion;
-    // Mapping from checkpoint name => latest version (block number)
+    // Mapping from checkpoint name => latest version
     mapping(string => uint256) public latestCheckpointVersion;
-    // Mapping from checkpoint name => hash => version (block number) for quick lookup by hash
+    // Mapping from checkpoint name => hash => version for quick lookup by hash
     mapping(string => mapping(bytes32 => uint256)) public checkpointHashToVersion;
     // Mapping from checkpoint name => latest hash
     mapping(string => bytes32) public latestCheckpointHash;
@@ -84,10 +133,11 @@ contract CheckpointContract {
         address writer,
         uint256 timestamp
     );
+
     event CheckpointRolledBack(
         string indexed name,
         bytes32 indexed targetHash, // The hash of the state being rolled back to [cite: 27]
-        uint256 indexed newVersion, // The block number of this rollback transaction [cite: 28]
+        uint256 indexed newVersion, // The version counter of this rollback transaction [cite: 28]
         address roller,
         uint256 timestamp,
         string message
@@ -110,7 +160,9 @@ contract CheckpointContract {
         string calldata metadataJson,
         string calldata offChainRef
     ) external onlyOwner { // A. Security Audit: Add onlyOwner access control
-        uint256 currentBlockNumber = block.number;
+        // CS-2: use a monotonically increasing counter to avoid same-block overwrites
+        _checkpointVersionCounter++;
+        uint256 currentVersion = _checkpointVersionCounter;
 
         bytes32 existingLatestHash = latestCheckpointHash[name];
         require(existingLatestHash == prevHash || (existingLatestHash == bytes32(0) && prevHash == bytes32(0)),
@@ -121,23 +173,23 @@ contract CheckpointContract {
         require(bytes(metadataJson).length < 2048, "Metadata JSON is too large.");
         require(bytes(offChainRef).length < 256, "Off-chain reference is too large.");
 
-        checkpointsByVersion[name][currentBlockNumber] = CheckpointEntry({
+        checkpointsByVersion[name][currentVersion] = CheckpointEntry({
             dataHash: dataHash,
             prevHash: prevHash,
             metadataJson: metadataJson,
             offChainRef: offChainRef,
-            version: currentBlockNumber,
+            version: currentVersion,
             writer: msg.sender,
             timestamp: block.timestamp
         });
 
-        latestCheckpointVersion[name] = currentBlockNumber;
-        checkpointHashToVersion[name][dataHash] = currentBlockNumber;
+        latestCheckpointVersion[name] = currentVersion;
+        checkpointHashToVersion[name][dataHash] = currentVersion;
         latestCheckpointHash[name] = dataHash;
 
         emit CheckpointWritten(
             name,
-            uint256(currentBlockNumber),
+            uint256(currentVersion),
             dataHash,
             prevHash,
             offChainRef,
@@ -153,18 +205,26 @@ contract CheckpointContract {
      * @return prevHash The hash of the checkpoint before the latest.
      * @return metadataJson The JSON metadata of the latest checkpoint.
      * @return offChainRef The off-chain reference of the latest checkpoint.
-     * @return version The block number of the latest checkpoint.
+     * @return version The version of the latest checkpoint.
      * @return writer The address of the writer of the latest checkpoint.
      * @return timestamp The timestamp of the latest checkpoint.
      */
     function getLatestCheckpoint(string calldata name)
         external
         view
-        returns (bytes32, bytes32, string memory, string memory, uint256, address, uint256)
+        returns (
+            bytes32 dataHash,
+            bytes32 prevHash,
+            string memory metadataJson,
+            string memory offChainRef,
+            uint256 version,
+            address writer,
+            uint256 timestamp
+        )
     {
-        uint256 latestVer = latestCheckpointVersion[name];
-        require(latestVer != 0, "Checkpoint not found for this name or chain is empty.");
-        CheckpointEntry storage entry = checkpointsByVersion[name][latestVer];
+        uint256 latestVersion = latestCheckpointVersion[name];
+        require(latestVersion != 0, "No checkpoints found for this name.");
+        CheckpointEntry storage entry = checkpointsByVersion[name][latestVersion];
         return (
             entry.dataHash,
             entry.prevHash,
@@ -177,49 +237,67 @@ contract CheckpointContract {
     }
 
     /**
-     * @dev Retrieves a specific checkpoint entry by its name and version (block number).
-     * @param name The unique name of the checkpoint chain[cite: 56].
-     * @param version The block number at which the checkpoint was recorded[cite: 57].
-     * @return dataHash, prevHash, metadataJson, offChainRef, version, writer, timestamp
+     * @dev Retrieves a specific checkpoint entry by its name and version.
+     * @param name The unique name of the checkpoint chain.
+     * @param version The version of the checkpoint to retrieve.
+     * @return dataHash The hash of the data payload at that version.
+     * @return prevHash The hash of the previous checkpoint.
+     * @return metadataJson The JSON metadata at that version.
+     * @return offChainRef The off-chain reference at that version.
+     * @return writer The address of the writer at that version.
+     * @return timestamp The timestamp at that version.
      */
-    function readCheckpoint(string calldata name, uint256 version)
+    function getCheckpointByVersion(string calldata name, uint256 version)
         external
         view
-        returns (bytes32, bytes32, string memory, string memory, uint256, address, uint256)
+        returns (
+            bytes32 dataHash,
+            bytes32 prevHash,
+            string memory metadataJson,
+            string memory offChainRef,
+            address writer,
+            uint256 timestamp
+        )
     {
-        require(checkpointsByVersion[name][version].version != 0, "Checkpoint version not found for this name.");
         CheckpointEntry storage entry = checkpointsByVersion[name][version];
+        require(entry.version != 0, "Checkpoint not found for this version.");
         return (
             entry.dataHash,
             entry.prevHash,
             entry.metadataJson,
             entry.offChainRef,
-            entry.version,
             entry.writer,
             entry.timestamp
         );
     }
 
     /**
-     * @dev Retrieves a specific checkpoint entry by its dataHash.
-     * This is useful for verifying hashes directly or finding older states[cite: 61].
-     * Note: If the same hash is written multiple times (e.g., via rollbacks),
-     * this function returns the details of the *latest* entry associated with that hash[cite: 63].
-     * @param name The unique name of the checkpoint chain[cite: 64].
-     * @param dataHash The cryptographic hash of the data for the desired checkpoint[cite: 66].
-     * @return dataHash, prevHash, metadataJson, offChainRef, version, writer, timestamp
+     * @dev Retrieves a specific checkpoint entry by its data hash.
+     * @param name The unique name of the checkpoint chain.
+     * @param dataHash The data hash of the checkpoint to retrieve.
+     * @return prevHash The hash of the previous checkpoint.
+     * @return metadataJson The JSON metadata.
+     * @return offChainRef The off-chain reference.
+     * @return version The version at which this checkpoint was stored.
+     * @return writer The address of the writer.
+     * @return timestamp The timestamp.
      */
     function getCheckpointByHash(string calldata name, bytes32 dataHash)
         external
         view
-        returns (bytes32, bytes32, string memory, string memory, uint256, address, uint256)
+        returns (
+            bytes32 prevHash,
+            string memory metadataJson,
+            string memory offChainRef,
+            uint256 version,
+            address writer,
+            uint256 timestamp
+        )
     {
-        uint256 version = checkpointHashToVersion[name][dataHash];
-        require(version != 0, "Checkpoint with this hash not found for this name.");
-        
-        CheckpointEntry storage entry = checkpointsByVersion[name][version];
+        uint256 ver = checkpointHashToVersion[name][dataHash];
+        require(ver != 0, "Checkpoint not found for this hash.");
+        CheckpointEntry storage entry = checkpointsByVersion[name][ver];
         return (
-            entry.dataHash,
             entry.prevHash,
             entry.metadataJson,
             entry.offChainRef,
@@ -230,27 +308,32 @@ contract CheckpointContract {
     }
 
     /**
-     * @dev Performs a "logical" rollback by creating a new checkpoint entry
-     * that points to an *older*, previously committed data hash.
-     * This maintains an unbroken chain of records on the DLT,
-     * while establishing a new "latest" state that effectively rolls back[cite: 71].
-     * @param name The unique name of the checkpoint chain[cite: 73].
-     * @param targetHash The dataHash of the checkpoint entry to logically roll back to[cite: 74].
-     * @param message A message describing the rollback reason.
+     * @dev Performs a logical rollback to a previously stored checkpoint.
+     * A new checkpoint entry is recorded pointing to the target state.
+     * @param name The unique name of the checkpoint chain.
+     * @param targetHash The hash of the checkpoint state to roll back to.
+     * @param message A human-readable message describing the reason for rollback.
      */
     function rollbackCheckpoint(
         string calldata name,
         bytes32 targetHash,
         string calldata message
     ) external onlyOwner { // A. Security Audit: Add onlyOwner access control
+        // CS-4: Validate message length to prevent JSON injection via unbounded input
+        require(bytes(message).length > 0, "Rollback message cannot be empty.");
+        require(bytes(message).length < MAX_ROLLBACK_MESSAGE_LENGTH, "Rollback message is too large.");
+
         uint256 targetVersion = checkpointHashToVersion[name][targetHash];
         require(targetVersion != 0, "Target hash for rollback not found for this name.");
         CheckpointEntry storage targetEntry = checkpointsByVersion[name][targetVersion];
         bytes32 currentLatestHash = latestCheckpointHash[name];
-        uint256 newVersion = block.number;
-        
+
         require(targetEntry.version <= latestCheckpointVersion[name], "Cannot rollback to a future version.");
-        
+
+        // CS-2: Use incrementing counter rather than block.number
+        _checkpointVersionCounter++;
+        uint256 newVersion = _checkpointVersionCounter;
+
         string memory rollbackMetadataJson = string(abi.encodePacked(
             "{\"action\":\"rollback\",",
             "\"rolledBackFromHash\":\"0x", Bytes.toHexString(currentLatestHash), "\",",
@@ -270,7 +353,7 @@ contract CheckpointContract {
             writer: msg.sender,
             timestamp: block.timestamp
         });
-        
+
         latestCheckpointVersion[name] = newVersion;
         checkpointHashToVersion[name][targetEntry.dataHash] = newVersion;
         latestCheckpointHash[name] = targetEntry.dataHash;
@@ -283,51 +366,5 @@ contract CheckpointContract {
             block.timestamp,
             message
         );
-    }
-
-    /**
-     * @dev Library for safe bytes to string conversions.
-     * This library is self-contained for the demo, but in a production environment,
-     * it's highly recommended to use an audited library like OpenZeppelin's `Strings.sol`.
-     */
-    library Bytes {
-        function toString(uint256 value) internal pure returns (string memory) {
-            if (value == 0) {
-                return "0";
-            }
-            uint256 temp = value;
-            uint256 digits;
-            while (temp != 0) {
-                digits++;
-                temp /= 10;
-            }
-            bytes memory buffer = new bytes(digits);
-            while (value != 0) {
-                digits--;
-                buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-                value /= 10;
-            }
-            return string(buffer);
-        }
-
-        function toHexString(bytes32 value) internal pure returns (string memory) {
-            bytes memory buffer = new bytes(64);
-            uint256 temp = uint256(value);
-            for (uint256 i = 0; i < 32; i++) {
-                buffer[63 - 2 * i] = toAsciiChar(uint8(temp & 0xF));
-                temp >>= 4;
-                buffer[63 - 2 * i - 1] = toAsciiChar(uint8(temp & 0xF));
-                temp >>= 4;
-            }
-            return string(buffer);
-        }
-
-        function toAsciiChar(uint8 value) internal pure returns (bytes1) {
-            if (value < 10) {
-                return bytes1(uint8(48 + value));
-            } else {
-                return bytes1(uint8(87 + value));
-            }
-        }
     }
 }

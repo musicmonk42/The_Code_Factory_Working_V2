@@ -302,8 +302,13 @@ env:
   # Example: "http://prometheus-operated.monitoring.svc.cluster.local:9090"
   PROMETHEUS_URL: ""
 
-  # Feature 5: Genetic Evolution Engine population size
+  # Feature 5: Genetic Evolution Engine
+  # Population size: genomes per generation. Increase for broader search.
   EVOLUTION_POPULATION_SIZE: "10"
+  # Number of GA generations per run (IB-2: now read from env in arbiter.py).
+  # Default 5 keeps cycles fast; increase for production tuning:
+  #   helm upgrade --set env.EVOLUTION_GENERATIONS=10 ...
+  EVOLUTION_GENERATIONS: "5"
 
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
@@ -365,6 +370,14 @@ env:
   USE_KAFKA_AUDIT: "false"
   
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
+
+  # Blockchain/DLT Configuration
+  # DLT backend type used by audit_log.py and (via initialize_dlt_backend) dlt_backend.py.
+  # Options: simple (dev/in-memory), fabric (Hyperledger Fabric), evm or ethereum (EVM chains).
+  # RB-5: "evm"/"ethereum" are fully supported — override per-cluster when using EVM:
+  #   helm upgrade --set env.DLT_TYPE=evm ...
+  # DLT_HMAC_KEY must be provided via codefactory-secrets Kubernetes Secret in production.
+  DLT_TYPE: "fabric"
 
   # ML/NLP Data Paths
   # NLTK data directory (accessible by appuser in Docker runtime)

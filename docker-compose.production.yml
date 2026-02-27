@@ -215,6 +215,15 @@ services:
       - POLICY_CONFIG_FILE_PATH=${POLICY_CONFIG_FILE_PATH:-/app/data/policies.json}
 
       # ============================================
+      # Genetic Evolution Engine (Feature 5)
+      # ============================================
+      # IB-2: arbiter.py now reads these env vars to configure evolve_configs() calls.
+      - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
+      - EVOLUTION_GENERATIONS=${EVOLUTION_GENERATIONS:-5}
+      # DLT backend type (RB-5: evm/ethereum now fully supported in dlt_backend.py).
+      - DLT_TYPE=${DLT_TYPE:-fabric}
+
+      # ============================================
       # Worker Configuration
       # ============================================
       # Single worker mode - FastAPI is async and multiple workers cause job sync issues

@@ -1,3 +1,5 @@
+//go:build !integration
+
 // Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 // checkpoint_chaincode_test.go
@@ -26,29 +28,27 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	"github.com/avast/retry-go/v4"
+	. "main" // Adjust if package name differs
 )
-
-// Import the chaincode
-import . "main"  // Adjust if package name differs
 
 // Test constants
 const (
-	testName         = "test_checkpoint"
-	testDataHash     = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"  // Valid SHA256
-	testPrevHash     = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890"      // Valid SHA256
-	testMetadata     = `{"key":"value"}`
-	testOffChainRef  = "s3://bucket/key"
-	testInvalidName  = "@invalid@"
-	testInvalidHash  = "short"
-	testMessage      = "Rollback test message"
-	testMSPID        = "Org1MSP"
-	testTxID         = "test_tx_id"
-	testTimestamp    = 1627849200000  // Unix timestamp in ms
+	testName        = "test_checkpoint"
+	testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" // Valid SHA256 (64 hex chars)
+	testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // Valid SHA256 (64 hex chars)
+	testMetadata    = `{"key":"value"}`
+	testOffChainRef = "s3://bucket/key"
+	testInvalidName = "@invalid@"
+	testInvalidHash = "short"
+	testMessage     = "Rollback test message"
+	testMSPID       = "Org1MSP"
+	testTxID        = "test_tx_id"
+	testTimestamp   = 1627849200000 // Unix timestamp in ms
 )
 
-// Setup mock context with creator MSP
-func setupMockContext(t *testing.T) *mocks.TransactionContext {
+// setupMockContext creates a mock TransactionContext for testing.
+// Accepts testing.TB so it works for both *testing.T and *testing.B benchmarks.
+func setupMockContext(t testing.TB) *mocks.TransactionContext {
 	ctx := new(mocks.TransactionContext)
 	stub := new(mocks.ChaincodeStub)
 	ctx.GetStubReturns(stub)
