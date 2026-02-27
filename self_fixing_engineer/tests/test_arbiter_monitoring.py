@@ -189,8 +189,8 @@ def test_write_to_file_jsonl(monitor, tmp_log_file):
     with open(tmp_log_file, "r") as f:
         lines = f.readlines()
     assert len(lines) == 2
-    assert json.loads(lines[0])["type"] == "test1"
-    assert json.loads(lines[1])["type"] == "test2"
+    assert json.loads(lines[0])['type'] == 'test1'
+    assert json.loads(lines[1])['type'] == 'test2'
 
 
 def test_write_to_file_json(monitor, tmp_log_file):
@@ -258,6 +258,7 @@ def test_search_filtered(monitor):
     assert len(results) == 1
     assert results[0]["type"] == "include"
 
+
 @pytest.mark.asyncio
 async def test_export_log_jsonl(monitor, tmp_path):
     export_path = tmp_path / "export.jsonl"
@@ -267,17 +268,24 @@ async def test_export_log_jsonl(monitor, tmp_path):
     # We need to mock aiofiles for the actual test if it was mocked away
     # in another test module, otherwise the test fails with
     # "'MagicMock' object does not support the asynchronous context manager protocol"
-    mock_open = AsyncMock()
-    # Create a mock file object that returns itself for async context manager
-    mock_file = AsyncMock()
-    mock_open.return_value = mock_file
-    mock_file.__aenter__.return_value = mock_file
+    
+    # Create an asynchronous mock for aiofiles.open
+    class AsyncFileMock:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+        async def write(self, data):
+            pass
+            
+    mock_open = MagicMock(return_value=AsyncFileMock())
     
     with patch("self_fixing_engineer.arbiter.monitoring.aiofiles.open", new=mock_open):
         await monitor.export_log(export_path, LogFormat.JSONL)
         
     # Check that export was attempted (since we mocked open, the file won't exist)
     mock_open.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_export_log_invalid_format(monitor, tmp_path):
@@ -286,16 +294,20 @@ async def test_export_log_invalid_format(monitor, tmp_path):
     with pytest.raises(ValueError, match="Unknown export format"):
         await monitor.export_log(tmp_path / "export", invalid_format)
 
+
 @pytest.mark.asyncio
 async def test_export_log_error(monitor, tmp_path, caplog):
     # Test that the function handles and logs errors properly
     monitor.log_action({"type": "test"})
 
-    # Create a mock that raises an error when trying to open the file
-    # Ensure it supports the asynchronous context manager protocol by mocking `__aenter__` and `__aexit__`
-    mock_open = AsyncMock()
-    mock_open.return_value.__aenter__.side_effect = OSError("Permission denied")
-    mock_open.return_value.__aexit__.return_value = False
+    # Create an asynchronous mock for aiofiles.open that raises an OSError
+    class AsyncFileMockError:
+        async def __aenter__(self):
+            raise OSError("Permission denied")
+        async def __aexit__(self, exc_type, exc, tb):
+            pass
+            
+    mock_open = MagicMock(return_value=AsyncFileMockError())
 
     with patch("self_fixing_engineer.arbiter.monitoring.aiofiles.open", new=mock_open):
         # The function should raise the OSError after logging it
@@ -304,6 +316,7 @@ async def test_export_log_error(monitor, tmp_path, caplog):
 
     # Check that the error was logged
     assert any("Failed to export log" in record.message for record in caplog.records)
+
 
 @pytest.mark.slow
 def test_high_volume_logging(monitor):
