@@ -57,7 +57,13 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 # --- FIX 1: Import the class, not the method ---
-from .deploy_prompt import DeployPromptAgent
+# Safe import: fall back to the stub from __init__ when heavy deps (torch/transformers) are absent
+try:
+    from .deploy_prompt import DeployPromptAgent
+    _DEPLOY_PROMPT_AGENT_AVAILABLE = True
+except (ImportError, OSError):
+    from . import DeployPromptAgent  # type: ignore[attr-defined]  # stub class
+    _DEPLOY_PROMPT_AGENT_AVAILABLE = False
 
 # --- FIX: Import HandlerRegistry to instantiate it ---
 from .deploy_response_handler import HandlerRegistry, handle_deploy_response
@@ -709,6 +715,11 @@ class DeployAgent:
             logger.info(f"DeployAgent: Using project-level few-shot examples at {few_shot_dir}")
         
         try:
+            if not _DEPLOY_PROMPT_AGENT_AVAILABLE:
+                raise ImportError(
+                    "DeployPromptAgent (prompt-based generation) is unavailable due to missing "
+                    "heavy dependencies (torch/transformers). Using template-based fallback."
+                )
             self.prompt_agent_instance = DeployPromptAgent(
                 few_shot_dir=str(few_shot_dir), 
                 template_dir=str(template_dir)

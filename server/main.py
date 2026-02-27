@@ -26,9 +26,11 @@ coordination layer for centralized control and monitoring.
 import os
 import sys
 import warnings
-warnings.filterwarnings("ignore", message=r".*'aifc' is deprecated.*", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=r".*'audioop' is deprecated.*", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=r".*'crypt' is deprecated.*", category=DeprecationWarning)
+# Suppress ALL known Python 3.13 deprecation warnings BEFORE any other imports
+# Use module=r".*" to catch them regardless of which module triggers the import
+warnings.filterwarnings("ignore", message=r".*'crypt'.*deprecated.*", category=DeprecationWarning, module=r".*")
+warnings.filterwarnings("ignore", message=r".*'aifc'.*deprecated.*", category=DeprecationWarning, module=r".*")
+warnings.filterwarnings("ignore", message=r".*'audioop'.*deprecated.*", category=DeprecationWarning, module=r".*")
 
 # --- PRODUCTION MODE CONFIGURATION START ---
 # Detect if we're running in a test environment BEFORE setting production defaults

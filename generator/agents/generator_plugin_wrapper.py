@@ -224,9 +224,12 @@ class AgentUnavailableError(GeneratorPluginError):
 # These utilities ensure fail-fast behavior for missing critical agents
 
 # Define which agents are required vs optional for the workflow
-REQUIRED_AGENTS = frozenset(
-    {"codegen_agent", "critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"}
-)
+# Hard-required agents: their absence is a fatal ConfigurationError
+HARD_REQUIRED_AGENTS = frozenset({"codegen_agent"})
+# Soft-required agents: their absence triggers a warning but the workflow continues
+SOFT_REQUIRED_AGENTS = frozenset({"critique_agent", "testgen_agent", "deploy_agent", "docgen_agent"})
+# Combined set for backward compatibility
+REQUIRED_AGENTS = HARD_REQUIRED_AGENTS | SOFT_REQUIRED_AGENTS
 OPTIONAL_AGENTS = frozenset({"clarifier"})
 
 
@@ -259,39 +262,58 @@ def validate_required_agents(registry: object) -> dict:
     This function should be called during workflow initialization to ensure
     fail-fast behavior rather than discovering missing agents mid-workflow.
 
+    Hard-required agents (codegen_agent) raise ConfigurationError if missing.
+    Soft-required agents log warnings but allow the workflow to proceed.
+
     Args:
         registry: The plugin registry to check for agents.
 
     Returns:
-        A dict mapping agent names to their callables.
+        A dict mapping agent names to their callables (includes all available agents).
 
     Raises:
-        ConfigurationError: If any required agent is missing.
+        ConfigurationError: If hard-required agents (codegen_agent) are missing.
     """
-    # Handle None registry case
+    # Handle None registry case: only fatal if hard-required agents can't be checked
     if registry is None:
         raise ConfigurationError(
-            f"Plugin registry is not available. Cannot validate required agents: {', '.join(sorted(REQUIRED_AGENTS))}. "
+            f"Plugin registry is not available. Cannot validate required agents: {', '.join(sorted(HARD_REQUIRED_AGENTS))}. "
             f"This typically indicates that the plugin system (OmniCore) failed to initialize. "
             f"Please check the server logs for import errors or missing dependencies."
         )
-    
-    missing_agents = []
+
+    hard_missing = []
+    soft_missing = []
     agents = {}
 
-    for agent_name in REQUIRED_AGENTS:
+    for agent_name in HARD_REQUIRED_AGENTS:
         agent = registry.get(agent_name)
         if agent is None:
-            missing_agents.append(agent_name)
+            hard_missing.append(agent_name)
         else:
             agents[agent_name] = agent
 
-    if missing_agents:
+    for agent_name in SOFT_REQUIRED_AGENTS:
+        agent = registry.get(agent_name)
+        if agent is None:
+            soft_missing.append(agent_name)
+        else:
+            agents[agent_name] = agent
+
+    if soft_missing:
+        logger.warning(
+            f"Some workflow agents are unavailable and their stages will be skipped: "
+            f"{', '.join(sorted(soft_missing))}. "
+            f"Workflow will continue with available agents. "
+            f"Check agent initialization logs and ensure all dependencies are installed."
+        )
+
+    if hard_missing:
         raise ConfigurationError(
-            f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(missing_agents))}. "
+            f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(hard_missing))}. "
             f"The generator workflow cannot execute without these agents. "
             f"Please check agent initialization logs and ensure all dependencies are properly installed. "
-            f"Required agents: {', '.join(sorted(REQUIRED_AGENTS))}"
+            f"Hard-required agents: {', '.join(sorted(HARD_REQUIRED_AGENTS))}"
         )
 
     return agents
@@ -554,118 +576,161 @@ async def run_generator_workflow(
                     except Exception as e:
                         logger.warning(f"Failed to publish codegen event: {e}")
 
-            # --- 3. Critique Stage (Required) ---
-            critiquer = validated_agents["critique_agent"]
-            with workflow_latency.labels(
-                stage="critique", correlation_id=correlation_id
-            ).time():
-                critique_result = await critiquer(
-                    code_files=workflow_state["code_files"],
-                    test_files={},  # No tests yet
-                    requirements=workflow_state["requirements"],
-                    state_summary="Post-generation critique",
-                    config=workflow_state["config"],
+            # --- 3. Critique Stage (Soft-required) ---
+            critiquer = validated_agents.get("critique_agent")
+            if critiquer is None:
+                logger.warning(
+                    f"Critique agent not available, skipping critique stage "
+                    f"[Correlation ID: {correlation_id}]"
                 )
-                workflow_state["critique_results"] = critique_result
-                logger.info(
-                    f"Critique stage complete [Correlation ID: {correlation_id}]"
+            else:
+              try:
+                with workflow_latency.labels(
+                    stage="critique", correlation_id=correlation_id
+                ).time():
+                    critique_result = await critiquer(
+                        code_files=workflow_state["code_files"],
+                        test_files={},  # No tests yet
+                        requirements=workflow_state["requirements"],
+                        state_summary="Post-generation critique",
+                        config=workflow_state["config"],
+                    )
+                    workflow_state["critique_results"] = critique_result
+                    logger.info(
+                        f"Critique stage complete [Correlation ID: {correlation_id}]"
+                    )
+                    
+                    # [ARBITER] Publish critique results event
+                    if bridge:
+                        try:
+                            await bridge.publish_event(
+                                "critique_results",
+                                {
+                                    "correlation_id": correlation_id,
+                                    "stage": "critique",
+                                    "lint_issues": len(critique_result.get("lint_errors", [])),
+                                    "vulnerabilities": len(critique_result.get("vulnerabilities", [])),
+                                    "fixes_applied": critique_result.get("fixes_applied", False)
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to publish critique event: {e}")
+              except Exception as e:
+                logger.warning(
+                    f"Critique stage failed, skipping [Correlation ID: {correlation_id}]: {e}"
                 )
-                
-                # [ARBITER] Publish critique results event
-                if bridge:
-                    try:
-                        await bridge.publish_event(
-                            "critique_results",
-                            {
-                                "correlation_id": correlation_id,
-                                "stage": "critique",
-                                "lint_issues": len(critique_result.get("lint_errors", [])),
-                                "vulnerabilities": len(critique_result.get("vulnerabilities", [])),
-                                "fixes_applied": critique_result.get("fixes_applied", False)
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to publish critique event: {e}")
 
-            # --- 4. Test Generation Stage (Required) ---
-            testgen = validated_agents["testgen_agent"]
-            with workflow_latency.labels(
-                stage="testgen", correlation_id=correlation_id
-            ).time():
-                test_result = await testgen(
-                    code_files=workflow_state["code_files"],
-                    requirements=workflow_state["requirements"],
+            # --- 4. Test Generation Stage (Soft-required) ---
+            testgen = validated_agents.get("testgen_agent")
+            if testgen is None:
+                logger.warning(
+                    f"Testgen agent not available, skipping test generation stage "
+                    f"[Correlation ID: {correlation_id}]"
                 )
-                workflow_state["test_files"] = test_result
-                logger.info(
-                    f"Test generation stage complete [Correlation ID: {correlation_id}]"
+            else:
+              try:
+                with workflow_latency.labels(
+                    stage="testgen", correlation_id=correlation_id
+                ).time():
+                    test_result = await testgen(
+                        code_files=workflow_state["code_files"],
+                        requirements=workflow_state["requirements"],
+                    )
+                    workflow_state["test_files"] = test_result
+                    logger.info(
+                        f"Test generation stage complete [Correlation ID: {correlation_id}]"
+                    )
+                    
+                    # [ARBITER] Publish test results event
+                    if bridge:
+                        try:
+                            await bridge.publish_event(
+                                "test_results",
+                                {
+                                    "correlation_id": correlation_id,
+                                    "stage": "testgen",
+                                    "tests_generated": len(test_result),
+                                    "test_files": list(test_result.keys())[:5]  # First 5 test files
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to publish test results event: {e}")
+              except Exception as e:
+                logger.warning(
+                    f"Test generation stage failed, skipping [Correlation ID: {correlation_id}]: {e}"
                 )
-                
-                # [ARBITER] Publish test results event
-                if bridge:
-                    try:
-                        await bridge.publish_event(
-                            "test_results",
-                            {
-                                "correlation_id": correlation_id,
-                                "stage": "testgen",
-                                "tests_generated": len(test_result),
-                                "test_files": list(test_result.keys())[:5]  # First 5 test files
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to publish test results event: {e}")
 
-            # --- 5. Deployment Artifact Generation Stage (Required) ---
-            deployer = validated_agents["deploy_agent"]
-            
-            # FIX: Get deployment targets from config with proper default including kubernetes
-            # Production logs show deploy_all(['docker', 'kubernetes', 'helm']) is expected
-            deployment_targets = config.get('deployment_targets', ['docker', 'kubernetes', 'helm'])
-            
-            with workflow_latency.labels(
-                stage="deploy", correlation_id=correlation_id
-            ).time():
-                deploy_result = await deployer(
-                    repo_path=workflow_state["repo_path"],
-                    target_files=list(workflow_state["code_files"].keys()),
-                    targets=deployment_targets,
-                    instructions="Generate standard deployment artifacts for a web service.",
+            # --- 5. Deployment Artifact Generation Stage (Soft-required) ---
+            deployer = validated_agents.get("deploy_agent")
+            if deployer is None:
+                logger.warning(
+                    f"Deploy agent not available, skipping deployment stage "
+                    f"[Correlation ID: {correlation_id}]"
                 )
-                workflow_state["deployment_artifacts"] = deploy_result
-                logger.info(
-                    f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}] "
-                    f"with targets: {deployment_targets}"
-                )
+            else:
+              try:
+                # FIX: Get deployment targets from config with proper default including kubernetes
+                # Production logs show deploy_all(['docker', 'kubernetes', 'helm']) is expected
+                deployment_targets = config.get('deployment_targets', ['docker', 'kubernetes', 'helm'])
                 
-                # [ARBITER] Publish deploy artifacts event
-                if bridge:
-                    try:
-                        await bridge.publish_event(
-                            "deploy_artifacts",
-                            {
-                                "correlation_id": correlation_id,
-                                "stage": "deploy",
-                                "artifacts_generated": len(deploy_result.get("configs", {})),
-                                "targets": deployment_targets  # FIX: Use actual targets, not hardcoded
-                            }
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to publish deploy artifacts event: {e}")
-
-            # --- 6. Documentation Generation Stage (Required) ---
-            docgen = validated_agents["docgen_agent"]
-            with workflow_latency.labels(
-                stage="docgen", correlation_id=correlation_id
-            ).time():
-                docs_result = await docgen(
-                    repo_path=workflow_state["repo_path"],
-                    target_files=list(workflow_state["code_files"].keys()),
-                    doc_type="sphinx",
+                with workflow_latency.labels(
+                    stage="deploy", correlation_id=correlation_id
+                ).time():
+                    deploy_result = await deployer(
+                        repo_path=workflow_state["repo_path"],
+                        target_files=list(workflow_state["code_files"].keys()),
+                        targets=deployment_targets,
+                        instructions="Generate standard deployment artifacts for a web service.",
+                    )
+                    workflow_state["deployment_artifacts"] = deploy_result
+                    logger.info(
+                        f"Deployment artifact generation stage complete [Correlation ID: {correlation_id}] "
+                        f"with targets: {deployment_targets}"
+                    )
+                    
+                    # [ARBITER] Publish deploy artifacts event
+                    if bridge:
+                        try:
+                            await bridge.publish_event(
+                                "deploy_artifacts",
+                                {
+                                    "correlation_id": correlation_id,
+                                    "stage": "deploy",
+                                    "artifacts_generated": len(deploy_result.get("configs", {})),
+                                    "targets": deployment_targets  # FIX: Use actual targets, not hardcoded
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to publish deploy artifacts event: {e}")
+              except Exception as e:
+                logger.warning(
+                    f"Deployment stage failed, skipping [Correlation ID: {correlation_id}]: {e}"
                 )
-                workflow_state["documentation"] = docs_result
-                logger.info(
-                    f"Documentation generation stage complete [Correlation ID: {correlation_id}]"
+
+            # --- 6. Documentation Generation Stage (Soft-required) ---
+            docgen = validated_agents.get("docgen_agent")
+            if docgen is None:
+                logger.warning(
+                    f"Docgen agent not available, skipping documentation stage "
+                    f"[Correlation ID: {correlation_id}]"
+                )
+            else:
+              try:
+                with workflow_latency.labels(
+                    stage="docgen", correlation_id=correlation_id
+                ).time():
+                    docs_result = await docgen(
+                        repo_path=workflow_state["repo_path"],
+                        target_files=list(workflow_state["code_files"].keys()),
+                        doc_type="sphinx",
+                    )
+                    workflow_state["documentation"] = docs_result
+                    logger.info(
+                        f"Documentation generation stage complete [Correlation ID: {correlation_id}]"
+                    )
+              except Exception as e:
+                logger.warning(
+                    f"Documentation stage failed, skipping [Correlation ID: {correlation_id}]: {e}"
                 )
 
             workflow_success.labels(correlation_id=correlation_id).inc()
@@ -836,5 +901,7 @@ __all__ = [
     "validate_agent_available",
     "validate_required_agents",
     "REQUIRED_AGENTS",
+    "HARD_REQUIRED_AGENTS",
+    "SOFT_REQUIRED_AGENTS",
     "OPTIONAL_AGENTS",
 ]

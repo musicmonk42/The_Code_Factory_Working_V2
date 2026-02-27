@@ -49,7 +49,16 @@ try:
     _DEPLOY_PROMPT_AVAILABLE = True
 except (ImportError, OSError):
     # OSError catches DLL initialization failures on Windows
-    pass
+    # Create a lightweight stub so code that checks DeployPromptAgent is not None
+    # gets a clear error at instantiation time rather than a silent NoneType failure.
+    class DeployPromptAgent:  # type: ignore[no-redef]
+        """Stub raised when heavy ML dependencies (torch/transformers) are unavailable."""
+
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "DeployPromptAgent requires 'torch' and 'transformers' which are not installed. "
+                "Install the optional ML dependencies or use template-based deployment generation."
+            )
 
 # Try to import deploy_agent
 try:
