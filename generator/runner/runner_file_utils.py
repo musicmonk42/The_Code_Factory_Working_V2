@@ -1653,82 +1653,148 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
 
 
 def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
-    """Detect mixed async/sync SQLAlchemy usage across project files.
+    """Detect incompatible mixing of async and sync SQLAlchemy usage across a project.
 
-    Returns a list of error strings (empty list means no issues found).
+    Scans every ``*.py`` file under *output_dir* and flags the combination of:
+
+    * An async engine/session factory (``create_async_engine``,
+      ``async_sessionmaker``) configured in one file, **and**
+    * Synchronous ORM access patterns (``from sqlalchemy.orm import Session``,
+      a ``session: Session`` type annotation, or a ``session.query(…)`` call)
+      in another file.
+
+    These patterns are fundamentally incompatible: an async engine requires
+    ``AsyncSession`` and ``await session.execute(…)``; mixing the two will
+    cause ``MissingGreenlet`` or ``RuntimeError`` at runtime.
+
+    Args:
+        output_dir: Root directory of the generated project to inspect.
+
+    Returns:
+        A list of actionable error strings.  Empty list indicates no
+        incompatibility was detected.
     """
     import ast as _ast
 
     errors: List[str] = []
     python_files = list(output_dir.rglob("*.py"))
 
-    has_async_engine = False
-    async_engine_file = ""
-    sync_session_files: List[str] = []
+    # Collect files that configure an async engine.
+    async_engine_files: List[str] = []
+    # Collect files that use synchronous ORM patterns.
+    sync_orm_files: List[str] = []
+
+    # Pre-compiled patterns for performance on large projects.
+    _sync_session_import_re = re.compile(
+        r"from\s+sqlalchemy\.orm\s+import\b[^\n]*\bSession\b"
+    )
+    _sync_annotation_re = re.compile(r":\s*Session\b")
+    _sync_query_re = re.compile(r"\bsession\.query\s*\(")
 
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
-            rel = str(py_file.relative_to(output_dir))
-            # Detect async engine setup
-            if "create_async_engine" in content or "async_sessionmaker" in content:
-                has_async_engine = True
-                async_engine_file = rel
-            # Detect sync ORM usage (sync Session type hint or session.query())
-            if ("from sqlalchemy.orm import Session" in content or
-                    re.search(r":\s*Session\b", content) or
-                    re.search(r"\bsession\.query\s*\(", content)):
-                sync_session_files.append(rel)
-        except Exception:
-            pass
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.debug("async/sync check: skipping unreadable file %s: %s", py_file, exc)
+            continue
 
-    if has_async_engine and sync_session_files:
+        rel = str(py_file.relative_to(output_dir))
+
+        if "create_async_engine" in content or "async_sessionmaker" in content:
+            async_engine_files.append(rel)
+
+        if (
+            _sync_session_import_re.search(content)
+            or _sync_annotation_re.search(content)
+            or _sync_query_re.search(content)
+        ):
+            sync_orm_files.append(rel)
+
+    if async_engine_files and sync_orm_files:
+        async_list = ", ".join(f"'{f}'" for f in async_engine_files)
+        sync_list = ", ".join(f"'{f}'" for f in sync_orm_files)
         errors.append(
-            f"Async SQLAlchemy engine configured in '{async_engine_file}' but sync "
-            f"Session/session.query() used in: {', '.join(sync_session_files)}. "
-            "Use AsyncSession and await session.execute() instead of session.query()."
+            f"Async SQLAlchemy engine/session configured in {async_list} but synchronous "
+            f"Session / session.query() used in {sync_list}. "
+            "Replace synchronous patterns with AsyncSession and "
+            "'await session.execute(select(...))' to avoid MissingGreenlet errors at runtime."
         )
 
     return errors
 
 
 def _validate_dependency_injection(output_dir: Path) -> List[str]:
-    """Detect router→service calls that are missing required session/db arguments.
+    """Detect router→service calls where required ``session``/``db`` arguments are omitted.
 
-    Looks for service functions that declare a ``session`` or ``db`` parameter
-    and checks that call sites in router files pass that argument (or use
-    ``Depends()``).
+    Performs two-pass static analysis:
 
-    Returns a list of warning strings (empty list means no issues found).
+    1. **Service discovery** – parses every ``*.py`` file under a recognised
+       services directory and records the names and parameter lists of
+       functions that declare a ``session`` or ``db`` parameter.
+    2. **Router scan** – parses router/route files and inspects every
+       ``ast.Call`` node.  When a call targets a known service function and
+       neither passes the session positionally nor as a keyword argument, and
+       the containing file does not use ``Depends()``, a warning is emitted.
+
+    ``self`` and ``cls`` are automatically excluded from positional-parameter
+    index calculations so instance/class methods are handled correctly.
+
+    Args:
+        output_dir: Root directory of the generated project to inspect.
+
+    Returns:
+        A list of human-readable warning strings.  Empty list means no
+        missing-injection issues were detected.
     """
     import ast as _ast
 
     warnings_out: List[str] = []
 
-    # Collect service functions that require a session/db parameter
-    services_dir = output_dir / "app" / "services"
-    if not services_dir.exists():
-        services_dir = output_dir / "services"
-    if not services_dir.exists():
+    # ------------------------------------------------------------------
+    # Step 1 – Discover service functions that require a DB session.
+    # ------------------------------------------------------------------
+    services_dir: Optional[Path] = None
+    for candidate in (
+        output_dir / "app" / "services",
+        output_dir / "services",
+    ):
+        if candidate.is_dir():
+            services_dir = candidate
+            break
+
+    if services_dir is None:
         return []
 
-    service_funcs: Dict[str, List[str]] = {}  # func_name -> param names
-    for svc_file in services_dir.rglob("*.py"):
+    # Maps function name → ordered list of non-self/cls parameter names.
+    service_funcs: Dict[str, List[str]] = {}
+
+    for svc_file in sorted(services_dir.rglob("*.py")):
         try:
-            tree = _ast.parse(svc_file.read_text(encoding="utf-8"))
-            for node in _ast.walk(tree):
-                if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                    params = [a.arg for a in node.args.args]
-                    if any(p in ("session", "db") for p in params):
-                        service_funcs[node.name] = params
-        except Exception:
-            pass
+            source = svc_file.read_text(encoding="utf-8")
+            tree = _ast.parse(source, filename=str(svc_file))
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+            logger.debug("DI check: skipping unreadable/unparseable %s: %s", svc_file, exc)
+            continue
+
+        for node in _ast.walk(tree):
+            if not isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                continue
+            # Exclude self/cls from the effective parameter list so that
+            # positional index calculations are correct at the call site.
+            all_params = [a.arg for a in node.args.args]
+            effective_params = [p for p in all_params if p not in {"self", "cls"}]
+            if any(p in {"session", "db"} for p in effective_params):
+                service_funcs[node.name] = effective_params
 
     if not service_funcs:
         return []
 
-    # Scan router files for calls to these service functions
-    router_dirs = [
+    # ------------------------------------------------------------------
+    # Step 2 – Scan router/route files for bare calls to service functions.
+    # ------------------------------------------------------------------
+    seen_warnings: set = set()  # Deduplication key: (rel_path, func_name)
+
+    router_search_dirs: List[Path] = [
         output_dir / "app" / "routers",
         output_dir / "app" / "routes",
         output_dir / "routers",
@@ -1736,77 +1802,102 @@ def _validate_dependency_injection(output_dir: Path) -> List[str]:
         output_dir / "app",
     ]
     router_files: List[Path] = []
-    for rd in router_dirs:
-        if rd.is_dir():
-            router_files.extend(rd.rglob("*.py"))
-        elif rd.with_suffix(".py").exists():
-            router_files.append(rd.with_suffix(".py"))
+    for rdir in router_search_dirs:
+        if rdir.is_dir():
+            router_files.extend(sorted(rdir.rglob("*.py")))
+
+    # Deduplicate (a file may appear via multiple search paths).
+    router_files = list(dict.fromkeys(router_files))
 
     for rfile in router_files:
         try:
             content = rfile.read_text(encoding="utf-8")
-            tree = _ast.parse(content)
-            rel = str(rfile.relative_to(output_dir))
-            for node in _ast.walk(tree):
-                if isinstance(node, _ast.Call):
-                    func_name = None
-                    if isinstance(node.func, _ast.Name):
-                        func_name = node.func.id
-                    elif isinstance(node.func, _ast.Attribute):
-                        func_name = node.func.attr
-                    if func_name and func_name in service_funcs:
-                        call_kwarg_names = {kw.arg for kw in node.keywords}
-                        call_positional_count = len(node.args)
-                        required_params = service_funcs[func_name]
-                        session_param_idx = next(
-                            (i for i, p in enumerate(required_params) if p in ("session", "db")),
-                            None,
-                        )
-                        if session_param_idx is not None:
-                            # Check whether session is passed positionally or as keyword
-                            passed_positionally = call_positional_count > session_param_idx
-                            passed_as_kwarg = "session" in call_kwarg_names or "db" in call_kwarg_names
-                            # Check if router function uses Depends() for this service
-                            has_depends = "Depends(" in content
-                            if not passed_positionally and not passed_as_kwarg and not has_depends:
-                                warnings_out.append(
-                                    f"Router '{rel}' calls '{func_name}' without "
-                                    f"required session/db argument and no Depends() detected."
-                                )
-        except Exception:
-            pass
+            tree = _ast.parse(content, filename=str(rfile))
+        except (OSError, UnicodeDecodeError, SyntaxError) as exc:
+            logger.debug("DI check: skipping unreadable/unparseable %s: %s", rfile, exc)
+            continue
+
+        rel = str(rfile.relative_to(output_dir))
+        # A file that uses FastAPI's Depends() is assumed to wire sessions
+        # correctly via the dependency injection framework.
+        file_uses_depends = "Depends(" in content
+
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.Call):
+                continue
+
+            func_name: Optional[str] = None
+            if isinstance(node.func, _ast.Name):
+                func_name = node.func.id
+            elif isinstance(node.func, _ast.Attribute):
+                func_name = node.func.attr
+
+            if func_name not in service_funcs:
+                continue
+
+            dedup_key = (rel, func_name)
+            if dedup_key in seen_warnings:
+                continue
+
+            effective_params = service_funcs[func_name]
+            session_idx = next(
+                (i for i, p in enumerate(effective_params) if p in {"session", "db"}),
+                None,
+            )
+            if session_idx is None:
+                continue  # Shouldn't happen given how service_funcs was built.
+
+            positional_count = len(node.args)
+            kw_names = {kw.arg for kw in node.keywords}
+            passed_positionally = positional_count > session_idx
+            passed_as_kwarg = bool(kw_names & {"session", "db"})
+
+            if not passed_positionally and not passed_as_kwarg and not file_uses_depends:
+                seen_warnings.add(dedup_key)
+                warnings_out.append(
+                    f"Router '{rel}' calls service function '{func_name}()' without "
+                    f"passing the required 'session'/'db' argument, and no FastAPI "
+                    f"Depends() injection is present in this file.  "
+                    f"Add 'session: AsyncSession = Depends(get_db)' to the route "
+                    f"signature and forward it to the service call."
+                )
 
     return warnings_out
 
 
 def _validate_middleware_applied(output_dir: Path) -> List[str]:
-    """Check that middleware files in app/middleware/ are actually applied in main.py.
+    """Warn when middleware files exist in ``app/middleware/`` but are not applied.
 
-    Returns a list of warning strings.
+    Checks whether ``app.add_middleware()`` is called in the project's
+    ``main.py`` (or ``app/main.py``) and whether each middleware module is
+    referenced (by stem name) in that file.
+
+    Args:
+        output_dir: Root directory of the generated project to inspect.
+
+    Returns:
+        A list of warning strings.  Empty list means either no middleware
+        directory exists or all discovered middleware files are applied.
     """
     middleware_dir = output_dir / "app" / "middleware"
-    if not middleware_dir.exists():
+    if not middleware_dir.is_dir():
         return []
 
-    middleware_files = [
-        f for f in middleware_dir.glob("*.py")
-        if f.name != "__init__.py"
-    ]
+    middleware_files = sorted(
+        f for f in middleware_dir.glob("*.py") if f.name != "__init__.py"
+    )
     if not middleware_files:
         return []
 
-    main_candidates = [
-        output_dir / "app" / "main.py",
-        output_dir / "main.py",
-    ]
+    # Read the project's main application file.
     main_content = ""
-    for mc in main_candidates:
-        if mc.exists():
+    for candidate in (output_dir / "app" / "main.py", output_dir / "main.py"):
+        if candidate.is_file():
             try:
-                main_content = mc.read_text(encoding="utf-8")
-            except Exception:
-                pass
-            break
+                main_content = candidate.read_text(encoding="utf-8")
+                break
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.debug("middleware check: cannot read %s: %s", candidate, exc)
 
     if not main_content:
         return []
@@ -1814,30 +1905,56 @@ def _validate_middleware_applied(output_dir: Path) -> List[str]:
     warnings_out: List[str] = []
 
     if "add_middleware" not in main_content:
-        # add_middleware is completely absent — report once
+        # No add_middleware call at all — report once instead of once-per-file.
+        mw_names = ", ".join(f.name for f in middleware_files)
         warnings_out.append(
-            f"Middleware files exist in 'app/middleware/' but "
-            f"'app.add_middleware()' not found in main.py — middleware may not be applied."
+            f"Middleware file(s) [{mw_names}] exist in 'app/middleware/' but "
+            f"'app.add_middleware()' is absent from main.py. "
+            "Register each middleware class with 'app.add_middleware(ClassName)' "
+            "to ensure they are active at runtime."
         )
         return warnings_out
 
-    # add_middleware exists but specific middleware files may not be referenced
+    # add_middleware is present; verify each middleware module is referenced.
     for mf in middleware_files:
-        stem = mf.stem
-        # Allow for common naming conventions (CamelCase / snake_case variants)
-        if stem not in main_content and stem.replace("_", "") not in main_content.lower():
+        stem = mf.stem  # e.g. "security_headers"
+        # Accept snake_case, camelCase, and PascalCase references.
+        stem_variants = {stem, stem.replace("_", ""), stem.replace("_", "").lower()}
+        if not any(v in main_content for v in stem_variants) and not any(
+            v in main_content.lower() for v in stem_variants
+        ):
             warnings_out.append(
-                f"Middleware file 'app/middleware/{mf.name}' exists but does not "
-                f"appear to be imported or applied in main.py."
+                f"Middleware file 'app/middleware/{mf.name}' exists but its module "
+                f"does not appear to be imported or referenced in main.py. "
+                "Ensure the class is imported and registered with 'app.add_middleware()'."
             )
 
     return warnings_out
 
 
 def _validate_k8s_manifests(output_dir: Path) -> List[str]:
-    """Validate structural correctness of Kubernetes manifest files.
+    """Validate structural correctness of Kubernetes manifest YAML files.
 
-    Returns a list of error strings.
+    Scans well-known Kubernetes manifest directories (``k8s/``,
+    ``kubernetes/``, ``deploy/``, ``helm/``) and checks each ``*.yaml`` /
+    ``*.yml`` file for:
+
+    * **JSON blobs** disguised as YAML (a common LLM hallucination).
+    * **Invalid YAML** that cannot be parsed by ``yaml.safe_load_all``.
+    * **Missing ``spec.selector.matchLabels``** in ``apps/v1 Deployment``,
+      ``apps/v1 StatefulSet``, and ``apps/v1 DaemonSet`` manifests (required
+      by the Kubernetes API server since ``apps/v1`` graduated).
+
+    Helm template files (containing ``{{ }}`` Jinja-style directives) are
+    intentionally skipped during YAML parsing because they are not valid
+    YAML until rendered.
+
+    Args:
+        output_dir: Root directory of the generated project to inspect.
+
+    Returns:
+        A list of actionable error strings.  Empty list means no structural
+        issues were detected.
     """
     errors: List[str] = []
 
@@ -1849,68 +1966,114 @@ def _validate_k8s_manifests(output_dir: Path) -> List[str]:
     ]
     yaml_files: List[Path] = []
     for d in k8s_dirs:
-        if d.exists():
-            yaml_files.extend(d.rglob("*.yaml"))
-            yaml_files.extend(d.rglob("*.yml"))
+        if d.is_dir():
+            yaml_files.extend(sorted(d.rglob("*.yaml")))
+            yaml_files.extend(sorted(d.rglob("*.yml")))
+
+    # Kinds that require spec.selector.matchLabels in apps/v1
+    _SELECTOR_REQUIRED_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet"})
 
     for yf in yaml_files:
         try:
             content = yf.read_text(encoding="utf-8")
-            rel = str(yf.relative_to(output_dir))
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.debug("K8s check: skipping unreadable %s: %s", yf, exc)
+            continue
 
-            # Detect Helm template files that contain JSON blobs
-            if "{{" not in content:
-                # Not a Helm template — check for JSON blobs
-                if re.search(r'^\s*\{', content, re.MULTILINE) and re.search(r'"[^"]+"\s*:', content):
+        rel = str(yf.relative_to(output_dir))
+
+        # Skip Helm templates — they contain Go/Jinja template directives
+        # that make the file invalid YAML until rendered by `helm template`.
+        is_helm_template = "{{" in content
+        if is_helm_template:
+            logger.debug("K8s check: skipping Helm template %s", rel)
+            continue
+
+        # Detect JSON blobs written into YAML files.
+        # Heuristic: content begins with '{' and contains at least one
+        # JSON-style "key": value pair.
+        stripped_content = content.lstrip()
+        if stripped_content.startswith("{") and re.search(r'"[^"]+"\s*:', stripped_content):
+            errors.append(
+                f"K8s manifest '{rel}' appears to contain a raw JSON object rather "
+                f"than valid YAML. Regenerate as proper YAML."
+            )
+            # Don't attempt to parse JSON as YAML; move on.
+            continue
+
+        # Parse YAML and validate each document.
+        try:
+            docs = [d for d in yaml.safe_load_all(content) if d is not None]
+        except yaml.YAMLError as ye:
+            errors.append(
+                f"K8s manifest '{rel}' is not valid YAML: {ye}"
+            )
+            continue
+
+        for doc in docs:
+            if not isinstance(doc, dict):
+                continue
+
+            kind: str = doc.get("kind", "") or ""
+            api_version: str = doc.get("apiVersion", "") or ""
+
+            if kind in _SELECTOR_REQUIRED_KINDS and "apps/" in api_version:
+                spec: Dict[str, Any] = doc.get("spec") or {}
+                selector: Dict[str, Any] = spec.get("selector") or {}
+                if not selector.get("matchLabels"):
                     errors.append(
-                        f"K8s manifest '{rel}' appears to contain JSON instead of valid YAML."
+                        f"K8s {kind} manifest in '{rel}' is missing the required "
+                        f"'spec.selector.matchLabels' field (required by the "
+                        f"'{api_version}' API). "
+                        "Add a 'selector.matchLabels' block that matches the "
+                        "pod template labels."
                     )
-
-            # Parse YAML (skip Helm templates with {{ }} as they're not parseable)
-            if "{{" not in content:
-                try:
-                    docs = list(yaml.safe_load_all(content))
-                except Exception as ye:
-                    errors.append(f"K8s manifest '{rel}' is not valid YAML: {ye}")
-                    continue
-
-                for doc in docs:
-                    if not isinstance(doc, dict):
-                        continue
-                    kind = doc.get("kind", "")
-                    api_version = doc.get("apiVersion", "")
-                    if kind == "Deployment" and "apps" in api_version:
-                        spec = doc.get("spec", {}) or {}
-                        selector = spec.get("selector", {}) or {}
-                        if not selector.get("matchLabels"):
-                            errors.append(
-                                f"K8s Deployment in '{rel}' is missing required "
-                                f"'spec.selector.matchLabels' field."
-                            )
-        except Exception as e:
-            logger.debug(f"Could not validate K8s manifest {yf}: {e}")
 
     return errors
 
 
 def _validate_dockerfile_framework(output_dir: Path, project_type: Optional[str] = None) -> List[str]:
-    """Validate that the Dockerfile is compatible with the project framework.
+    """Validate that the Dockerfile is compatible with the detected project framework.
 
-    For FastAPI projects, checks that Flask env vars are absent and an
-    ASGI-compatible server (uvicorn / UvicornWorker) is configured.
+    For FastAPI (ASGI) projects this check verifies:
 
-    Returns a list of error strings.
+    * No ``FLASK_APP`` or ``FLASK_ENV`` environment variables are set (these
+      are WSGI-specific and have no effect on FastAPI, but indicate the
+      Dockerfile was generated for the wrong framework).
+    * The container start command uses an ASGI-compatible server: either
+      ``uvicorn`` directly or ``gunicorn`` with
+      ``-k uvicorn.workers.UvicornWorker``.
+
+    Project-type detection heuristics (in priority order):
+
+    1. Explicit ``project_type`` argument (``"fastapi_service"`` /
+       ``"fastapi"`` → FastAPI; anything else → skip).
+    2. ``fastapi`` keyword in the Dockerfile content (e.g. ``pip install
+       fastapi``).
+    3. Presence of ``app/main.py`` in the project tree.
+
+    Multi-stage Dockerfiles are handled correctly: only lines that are **not**
+    ``pip install`` / ``apt-get install`` invocations are examined for the
+    ``gunicorn`` command check.
+
+    Args:
+        output_dir: Root directory of the generated project to inspect.
+        project_type: Optional explicit project type string.  When provided,
+            it overrides the auto-detection heuristics.
+
+    Returns:
+        A list of actionable error strings.  Empty list indicates no
+        framework-compatibility issues were detected.
     """
     errors: List[str] = []
 
-    dockerfile_candidates = [
+    dockerfile: Optional[Path] = None
+    for candidate in (
         output_dir / "Dockerfile",
         output_dir / "docker" / "Dockerfile",
-    ]
-    dockerfile: Optional[Path] = None
-    for dc in dockerfile_candidates:
-        if dc.exists():
-            dockerfile = dc
+    ):
+        if candidate.is_file():
+            dockerfile = candidate
             break
 
     if dockerfile is None:
@@ -1918,59 +2081,72 @@ def _validate_dockerfile_framework(output_dir: Path, project_type: Optional[str]
 
     try:
         content = dockerfile.read_text(encoding="utf-8")
-    except Exception:
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Dockerfile check: cannot read %s: %s", dockerfile, exc)
         return []
 
-    is_fastapi_project = (
-        project_type in (None, "fastapi_service", "fastapi")
-        or "fastapi" in content.lower()
-        or (output_dir / "app" / "main.py").exists()
+    # ------------------------------------------------------------------
+    # Determine whether this is a FastAPI project.
+    # ------------------------------------------------------------------
+    if project_type is not None:
+        # Explicit project type takes precedence.
+        is_fastapi = project_type in {"fastapi_service", "fastapi"}
+    else:
+        # Auto-detect from Dockerfile content and project structure.
+        is_fastapi = (
+            "fastapi" in content.lower()
+            or (output_dir / "app" / "main.py").is_file()
+        )
+
+    if not is_fastapi:
+        return []
+
+    # ------------------------------------------------------------------
+    # Check 1 – Flask environment variables must not be present.
+    # ------------------------------------------------------------------
+    for flask_var in ("FLASK_APP", "FLASK_ENV"):
+        if re.search(rf"\bENV\s+{flask_var}\b|\b{flask_var}\s*=", content):
+            errors.append(
+                f"Dockerfile sets the {flask_var} environment variable, which is "
+                f"WSGI-specific and has no effect on FastAPI. "
+                f"Remove {flask_var} and configure uvicorn/gunicorn directly."
+            )
+
+    # ------------------------------------------------------------------
+    # Check 2 – Verify ASGI-compatible server command.
+    # Lines that are part of package installation (pip/apt) are excluded.
+    # ------------------------------------------------------------------
+    has_uvicorn_cmd = False
+    gunicorn_cmd_line: Optional[str] = None
+
+    _install_line_re = re.compile(
+        r"^\s*(?:RUN\s+)?(?:pip3?\s+install|apt(?:-get)?\s+install)", re.IGNORECASE
     )
 
-    if not is_fastapi_project:
-        return []
-
-    # Check for Flask env vars in a FastAPI project
-    if "FLASK_APP" in content:
-        errors.append(
-            "Dockerfile sets FLASK_APP environment variable but project appears to be FastAPI. "
-            "Remove FLASK_APP and use uvicorn instead."
-        )
-    if "FLASK_ENV" in content:
-        errors.append(
-            "Dockerfile sets FLASK_ENV environment variable but project appears to be FastAPI. "
-            "Remove FLASK_ENV and configure uvicorn directly."
-        )
-
-    # Check that an ASGI-compatible server is used
-    has_uvicorn = "uvicorn" in content.lower()
-    has_uvicorn_worker = "UvicornWorker" in content or "uvicorn.workers" in content
-    has_asgi = has_uvicorn or has_uvicorn_worker
-
-    # Check for incompatible sync gunicorn (without UvicornWorker)
-    # Only match gunicorn used as a server command (CMD/ENTRYPOINT/exec), not in pip install
-    gunicorn_cmd = None
     for line in content.splitlines():
-        stripped = line.strip()
-        # Skip pip install lines
-        if "pip install" in stripped or "pip3 install" in stripped:
+        if _install_line_re.match(line):
             continue
-        # Match CMD/ENTRYPOINT/RUN lines that invoke gunicorn
-        if re.search(r'\bgunicorn\b', stripped):
-            gunicorn_cmd = stripped
-            break
+        if re.search(r"\buvicorn\b", line, re.IGNORECASE):
+            has_uvicorn_cmd = True
+        if re.search(r"\bgunicorn\b", line) and gunicorn_cmd_line is None:
+            gunicorn_cmd_line = line.strip()
 
-    if gunicorn_cmd:
-        if "UvicornWorker" not in gunicorn_cmd and "uvicorn.workers" not in gunicorn_cmd:
+    if gunicorn_cmd_line:
+        if "UvicornWorker" not in gunicorn_cmd_line and "uvicorn.workers" not in gunicorn_cmd_line:
             errors.append(
-                f"Dockerfile uses gunicorn without UvicornWorker for a FastAPI project "
-                f"('{gunicorn_cmd}'). "
-                "Use '-k uvicorn.workers.UvicornWorker' for ASGI compatibility."
+                f"Dockerfile invokes gunicorn without the UvicornWorker: "
+                f"'{gunicorn_cmd_line}'. "
+                "FastAPI requires an ASGI worker. "
+                "Use '-k uvicorn.workers.UvicornWorker' or switch to uvicorn directly: "
+                "'CMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8000\"]'."
             )
-    elif not has_asgi:
+    elif not has_uvicorn_cmd:
         errors.append(
-            "Dockerfile for FastAPI project does not use uvicorn or UvicornWorker. "
-            "Add 'CMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\"]' or equivalent."
+            "Dockerfile for a FastAPI project does not configure an ASGI-compatible "
+            "server command. "
+            "Add a CMD or ENTRYPOINT that invokes uvicorn (e.g. "
+            "'CMD [\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\"]') "
+            "or gunicorn with UvicornWorker."
         )
 
     return errors
