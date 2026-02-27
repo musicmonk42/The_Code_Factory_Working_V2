@@ -150,3 +150,42 @@ def get_timestamp():
         # May have minor whitespace differences but should be functionally identical
         assert "import time" in result["fixed_code"]
         assert "from fastapi import FastAPI" in result["fixed_code"]
+
+
+class TestThirdPartyImportErrorGuard:
+    """Tests for the _is_third_party_import_error() guard in omnicore_service."""
+
+    def test_helper_function_exists_in_source(self):
+        """Verify _is_third_party_import_error is defined in omnicore_service.py."""
+        omnicore_file = Path("server/services/omnicore_service.py")
+        assert omnicore_file.exists()
+        content = omnicore_file.read_text()
+        assert "def _is_third_party_import_error" in content, \
+            "_is_third_party_import_error should be defined in omnicore_service.py"
+
+    def test_third_party_detection_logic_correct(self):
+        """Verify the detection logic correctly identifies third-party errors."""
+        omnicore_file = Path("server/services/omnicore_service.py")
+        content = omnicore_file.read_text()
+        # Should use regex to extract module name from error string
+        assert "No module named" in content, \
+            "Should check for 'No module named' in error detection"
+        # Should check against project-local prefixes
+        assert "_LOCAL_PREFIXES" in content, \
+            "Should define _LOCAL_PREFIXES for local module detection"
+
+    def test_importfixer_guard_present(self):
+        """Verify the ImportFixer guard code is present in omnicore_service.py."""
+        omnicore_file = Path("server/services/omnicore_service.py")
+        content = omnicore_file.read_text()
+        assert "_is_third_party_import_error" in content, \
+            "Guard function should be referenced in the service"
+        assert "Skipping ImportFixer" in content, \
+            "Guard should log 'Skipping ImportFixer' when third-party errors detected"
+
+    def test_importfixer_guard_uses_all_check(self):
+        """Verify the guard uses all() to check if ALL errors are third-party."""
+        omnicore_file = Path("server/services/omnicore_service.py")
+        content = omnicore_file.read_text()
+        assert "all(_is_third_party_import_error(e) for e in" in content, \
+            "Guard should use all() to check if all errors are third-party"

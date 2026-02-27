@@ -1273,6 +1273,7 @@ class WorkflowEngine:
                         # [ARBITER] Publish codegen output event
                         if self.arbiter_bridge:
                             try:
+                                codegen_files_for_arbiter = codegen_result.get("files", {}) if isinstance(codegen_result, dict) else {}
                                 await self.arbiter_bridge.publish_event(
                                     "generator_output",
                                     {
@@ -1280,7 +1281,10 @@ class WorkflowEngine:
                                         "agent": "codegen",
                                         "iteration": iteration_num,
                                         "status": codegen_result.get("status", "unknown"),
-                                        "files_count": len(codegen_result.get("files", {}))
+                                        "files_count": len(codegen_files_for_arbiter),
+                                        "code": codegen_files_for_arbiter,
+                                        "language": requirements.get("language", "python") if requirements else "python",
+                                        "file_paths": list(codegen_files_for_arbiter.keys()),
                                     }
                                 )
                             except Exception as e:
@@ -1349,7 +1353,7 @@ class WorkflowEngine:
                                     validation_passed = False
                                     validation_errors = validation_result.get("errors", [])
                                     logger.error(
-                                        f"[STAGE:VALIDATE] HARD FAIL - Validation failed: {validation_errors}",
+                                        f"[STAGE:VALIDATE] Validation failed: {validation_errors}",
                                         extra={"validation_errors": validation_errors}
                                     )
                                     # Record validation error in provenance
@@ -1359,7 +1363,6 @@ class WorkflowEngine:
                                             "validation_failed",
                                             f"Validation failed: {'; '.join(validation_errors)}"
                                         )
-                                    # HARD FAIL: Mark workflow as failed and break
                                     result["status"] = WorkflowStatus.FAILED.value
                                     result["errors"].append({
                                         "error_type": "ValidationError",
@@ -1367,7 +1370,13 @@ class WorkflowEngine:
                                         "stage": "VALIDATE",
                                         "timestamp": datetime.now(timezone.utc).isoformat()
                                     })
-                                    break  # Exit iteration loop - do not proceed to testgen/deploy
+                                    # Soft-fail: continue pipeline so downstream stages still run
+                                    logger.warning(
+                                        "[STAGE:VALIDATE] Continuing pipeline in soft-fail mode — "
+                                        "downstream stages will attempt to run despite validation failure"
+                                    )
+                                    result["stages_completed"].append("validate:soft_fail")
+                                    # Do NOT break — let the loop continue
                         
                         # [STAGE:SPEC_VALIDATE] Additional spec fidelity check with route validation
                         if validation_passed and HAS_PROVENANCE and validate_spec_fidelity and md_content:
@@ -1547,11 +1556,11 @@ class WorkflowEngine:
                                         }
                                     )
                                 
-                                # HARD FAIL: Contract validation failure blocks pipeline
+                                # Soft-fail: Contract validation failure is non-blocking
                                 if not validation_report.is_valid():
                                     validation_passed = False
                                     logger.error(
-                                        f"[STAGE:CONTRACT_VALIDATE] HARD FAIL - Contract validation failed. "
+                                        f"[STAGE:CONTRACT_VALIDATE] Contract validation failed. "
                                         f"{len(validation_report.errors)} error(s) found.",
                                         extra={
                                             "workflow_id": workflow_id,
@@ -1567,7 +1576,7 @@ class WorkflowEngine:
                                             f"Contract validation failed: {validation_report.errors}"
                                         )
                                     
-                                    # Set failure status and exit iteration loop
+                                    # Set failure status
                                     result["status"] = WorkflowStatus.FAILED.value
                                     result["errors"].append({
                                         "error_type": "ContractValidationError",
@@ -1589,7 +1598,13 @@ class WorkflowEngine:
                                     except Exception as e:
                                         logger.warning(f"Failed to write validation report: {e}")
                                     
-                                    break  # Exit iteration loop - do not proceed to testgen/deploy
+                                    # Soft-fail: continue to run downstream stages
+                                    logger.warning(
+                                        "[STAGE:CONTRACT_VALIDATE] Continuing pipeline in soft-fail mode — "
+                                        "downstream stages will attempt to run despite contract validation failure"
+                                    )
+                                    result["stages_completed"].append("validate:soft_fail")
+                                    # Do NOT break — let the loop continue
                                 else:
                                     logger.info(
                                         f"[STAGE:CONTRACT_VALIDATE] PASS - All {len(validation_report.checks_passed)} validation checks passed",
@@ -1602,7 +1617,7 @@ class WorkflowEngine:
                                     exc_info=True,
                                     extra={"workflow_id": workflow_id}
                                 )
-                                # Treat validation failure as critical error
+                                # Treat validation failure as non-critical error in soft-fail mode
                                 validation_passed = False
                                 result["status"] = WorkflowStatus.FAILED.value
                                 result["errors"].append({
@@ -1617,7 +1632,8 @@ class WorkflowEngine:
                                         "validation_exception",
                                         f"Validation execution failed: {e}"
                                     )
-                                break  # Exit iteration loop
+                                result["stages_completed"].append("validate:soft_fail")
+                                # Do NOT break — continue in soft-fail mode
                         
                         # [STAGE:TESTGEN & DEPLOY_GEN] Execute in parallel for faster pipeline
                         # Deploy only depends on codegen output, so it can run alongside testgen

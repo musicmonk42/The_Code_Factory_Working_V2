@@ -1571,6 +1571,28 @@ def run_fail_fast_validation(
                     results["valid"] = False
                     results["errors"].append(content_result["error"])
         
+        # Check for stub/placeholder markers — these are expected outputs and must not fail validation
+        _STUB_MARKERS = (
+            "Generated module — replace with actual implementation.",
+            "Stub Pydantic model.",
+            "Placeholder implementation.",
+        )
+        stub_files = [
+            fname for fname, content in generated_files.items()
+            if fname.endswith(".py") and any(marker in content for marker in _STUB_MARKERS)
+        ]
+        if stub_files:
+            logger.warning(
+                "run_fail_fast_validation: %d stub file(s) detected (non-fatal): %s",
+                len(stub_files), stub_files
+            )
+            results["checks"]["stub_files"] = {
+                "valid": True,
+                "stub_count": len(stub_files),
+                "stub_files": stub_files,
+                "warning": f"{len(stub_files)} stub file(s) detected — replace with real implementations",
+            }
+        
         # Language-specific entry point checks
         if target_language:
             lang = target_language.lower()

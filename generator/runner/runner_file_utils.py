@@ -2485,13 +2485,58 @@ async def validate_generated_project(
                 )
                 if proc.returncode != 0:
                     import_error = (proc.stderr or proc.stdout).strip()
-                    result["errors"].append(
-                        f"Cold-start import check failed for '{entry_module}': {import_error}"
-                    )
-                    result["valid"] = False
-                    logger.error(
-                        "Cold-start import check failed for '%s': %s", entry_module, import_error
-                    )
+                    # Distinguish third-party package errors from project-local errors
+                    if "ModuleNotFoundError: No module named" in import_error:
+                        # Extract the missing module name
+                        _match = __import__("re").search(
+                            r"No module named '([^']+)'", import_error
+                        )
+                        missing_mod = _match.group(1).split(".")[0] if _match else ""
+                        # Check if it's a project-local module (starts with app., tests., or
+                        # matches a top-level package in the generated files)
+                        _local_top_level = {
+                            p.split("/")[0].replace(".py", "")
+                            for p in result.get("files_checked", [])
+                        }
+                        _local_top_level.update({"app", "tests", entry_module.split(".")[0]})
+                        if missing_mod and missing_mod not in _local_top_level:
+                            # Third-party package not installed in validation env — WARNING only
+                            result["warnings"].append(
+                                f"Cold-start import check: third-party package '{missing_mod}' "
+                                f"not installed in validation environment (non-fatal): {import_error}"
+                            )
+                            logger.warning(
+                                "Cold-start import check: third-party package '%s' not available "
+                                "in validation subprocess (non-fatal). Add to requirements.txt.",
+                                missing_mod
+                            )
+                        else:
+                            # Project-local import error — hard failure
+                            result["errors"].append(
+                                f"Cold-start import check failed for '{entry_module}': {import_error}"
+                            )
+                            result["valid"] = False
+                            logger.error(
+                                "Cold-start import check failed for '%s': %s", entry_module, import_error
+                            )
+                    elif "SyntaxError" in import_error:
+                        # Syntax errors are always hard failures
+                        result["errors"].append(
+                            f"Cold-start import check failed for '{entry_module}': {import_error}"
+                        )
+                        result["valid"] = False
+                        logger.error(
+                            "Cold-start import check failed for '%s': %s", entry_module, import_error
+                        )
+                    else:
+                        # Other import errors (e.g., circular imports) — hard failure
+                        result["errors"].append(
+                            f"Cold-start import check failed for '{entry_module}': {import_error}"
+                        )
+                        result["valid"] = False
+                        logger.error(
+                            "Cold-start import check failed for '%s': %s", entry_module, import_error
+                        )
                 else:
                     logger.debug("Cold-start import check passed for '%s'", entry_module)
             except subprocess.TimeoutExpired:

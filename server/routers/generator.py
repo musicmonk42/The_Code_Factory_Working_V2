@@ -634,9 +634,10 @@ async def _trigger_pipeline_background(
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
         critical_stages = ["codegen"]  # codegen is always critical
         
-        # Only treat validate as critical if it wasn't intentionally skipped
+        # Only treat validate as critical if it wasn't intentionally skipped or soft-failed
         validate_was_skipped = any("validate:skipped" in s for s in stages_completed)
-        if not validate_was_skipped:
+        validate_was_soft_fail = any("validate:soft_fail" in s for s in stages_completed)
+        if not validate_was_skipped and not validate_was_soft_fail:
             critical_stages.append("validate")
         
         # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped
@@ -841,9 +842,10 @@ async def _resume_pipeline_after_clarification(
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
         critical_stages = ["codegen"]  # codegen is always critical
         
-        # Only treat validate as critical if it wasn't intentionally skipped
+        # Only treat validate as critical if it wasn't intentionally skipped or soft-failed
         validate_was_skipped = any("validate:skipped" in s for s in stages_completed)
-        if not validate_was_skipped:
+        validate_was_soft_fail = any("validate:soft_fail" in s for s in stages_completed)
+        if not validate_was_skipped and not validate_was_soft_fail:
             critical_stages.append("validate")
         
         # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped

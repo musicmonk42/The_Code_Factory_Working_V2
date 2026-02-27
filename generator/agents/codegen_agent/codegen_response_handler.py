@@ -305,6 +305,109 @@ MAX_FAILED_FILES_ABSOLUTE = 5
 # Timeout (seconds) for the cold-start subprocess import check.
 COLD_START_IMPORT_TIMEOUT_SECONDS = 10
 
+# ==============================================================================
+# --- Banned/Hallucinated Import Handling ---
+# ==============================================================================
+
+# Imports that are known LLM hallucinations — map to their correct alternatives.
+BANNED_IMPORTS: Dict[str, str] = {
+    "asyncstdlib": "functools",  # LLM hallucinates this; use functools instead
+    "async_lru": "functools",    # Often hallucinated
+    "aioredis": "redis.asyncio", # Deprecated, use redis.asyncio
+}
+
+# Richer metadata about known-bad packages (for code replacement logic).
+KNOWN_HALLUCINATED_PACKAGES: Dict[str, Dict[str, str]] = {
+    "asyncstdlib": {
+        "replacement_module": "functools",
+        "replacement_import": "from functools import lru_cache",
+        "reason": "LLM hallucinates asyncstdlib; functools.lru_cache works for sync caching",
+    },
+    "aioredis": {
+        "replacement_module": "redis.asyncio",
+        "replacement_import": "from redis.asyncio import Redis",
+        "reason": "aioredis is deprecated; use redis.asyncio instead",
+    },
+}
+
+# Mapping from Python import names to their canonical PyPI package names.
+_MODULE_TO_PYPI: Dict[str, str] = {
+    "jose": "python-jose",
+    "PIL": "Pillow",
+    "cv2": "opencv-python",
+    "sklearn": "scikit-learn",
+    "yaml": "PyYAML",
+    "dotenv": "python-dotenv",
+    "jwt": "PyJWT",
+    "asyncstdlib": "asyncstdlib",
+    "aiofiles": "aiofiles",
+    "aiohttp": "aiohttp",
+    "fastapi": "fastapi",
+    "uvicorn": "uvicorn",
+    "sqlalchemy": "sqlalchemy",
+    "alembic": "alembic",
+    "pydantic": "pydantic",
+    "pydantic_settings": "pydantic-settings",
+    "httpx": "httpx",
+    "requests": "requests",
+    "redis": "redis",
+    "celery": "celery",
+    "boto3": "boto3",
+    "botocore": "botocore",
+    "cryptography": "cryptography",
+    "passlib": "passlib",
+    "bcrypt": "bcrypt",
+    "email_validator": "email-validator",
+    "starlette": "starlette",
+    "databases": "databases",
+    "aiosqlite": "aiosqlite",
+    "asyncpg": "asyncpg",
+    "psycopg2": "psycopg2-binary",
+    "pymongo": "pymongo",
+    "motor": "motor",
+    "elasticsearch": "elasticsearch",
+    "stripe": "stripe",
+    "sendgrid": "sendgrid",
+    "twilio": "twilio",
+    "sentry_sdk": "sentry-sdk",
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "numpy": "numpy",
+    "pandas": "pandas",
+    "scipy": "scipy",
+    "matplotlib": "matplotlib",
+    "seaborn": "seaborn",
+    "torch": "torch",
+    "tensorflow": "tensorflow",
+    "transformers": "transformers",
+    "pytest": "pytest",
+    "click": "click",
+    "rich": "rich",
+    "loguru": "loguru",
+    "tenacity": "tenacity",
+    "multipart": "python-multipart",
+    "python_multipart": "python-multipart",
+    "magic": "python-magic",
+    "toml": "toml",
+    "decouple": "python-decouple",
+    "tortoise": "tortoise-orm",
+    "ormar": "ormar",
+    "beanie": "beanie",
+    "pika": "pika",
+    "confluent_kafka": "confluent-kafka",
+    "kafka": "kafka-python",
+    "nats": "nats-py",
+    "prometheus_client": "prometheus-client",
+    "opentelemetry": "opentelemetry-sdk",
+    "grpc": "grpcio",
+    "paramiko": "paramiko",
+    "fabric": "fabric",
+    "celery": "celery",
+    "dramatiq": "dramatiq",
+    "rq": "rq",
+    "apscheduler": "apscheduler",
+}
+
 # Common LLM response prefixes that should be stripped before JSON parsing
 # Includes variations with/without newlines and mixed casing (e.g. "json\n{...}", "json {...")
 LLM_RESPONSE_PREFIXES = [
@@ -457,7 +560,222 @@ def _is_tool_available(tool: str) -> bool:
 # ==============================================================================
 
 
-def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
+def remove_dead_imports(code: str, filename: str = "") -> str:
+    """Remove unused/dead import statements from Python source code.
+
+    Parses the code with AST, identifies all imported names, then checks which
+    names are actually referenced in the code body.  Import statements where
+    NONE of the imported names are referenced are removed.
+
+    Banned/hallucinated imports are automatically replaced with their known-good
+    alternatives before the dead-import check (see :data:`BANNED_IMPORTS`).
+
+    Args:
+        code: Python source code to clean.
+        filename: Source filename used in log messages (optional).
+
+    Returns:
+        Cleaned source code with unused/banned imports removed or replaced.
+    """
+    if not code or not code.strip():
+        return code
+
+    # Only process Python files
+    if filename and not filename.endswith(".py"):
+        return code
+
+    # --- Step 1: Replace banned imports with their known-good alternatives ---
+    lines = code.splitlines(keepends=True)
+    replaced_lines: List[str] = []
+    for line in lines:
+        replaced = False
+        for banned_mod, replacement_mod in BANNED_IMPORTS.items():
+            # Match "import banned_mod" or "from banned_mod import ..."
+            if re.match(rf"^\s*(from\s+{re.escape(banned_mod)}\s+import|import\s+{re.escape(banned_mod)})", line):
+                meta = KNOWN_HALLUCINATED_PACKAGES.get(banned_mod)
+                if meta:
+                    replacement_line = meta["replacement_import"] + "\n"
+                    logger.warning(
+                        "Replaced banned import '%s' with '%s' in %s: %s",
+                        banned_mod, replacement_mod, filename or "<unknown>", meta["reason"]
+                    )
+                    replaced_lines.append(replacement_line)
+                else:
+                    logger.warning(
+                        "Removed banned import '%s' from %s", banned_mod, filename or "<unknown>"
+                    )
+                replaced = True
+                break
+        if not replaced:
+            replaced_lines.append(line)
+    code = "".join(replaced_lines)
+
+    # --- Step 2: Remove dead imports (imported but never used) ---
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        # If parsing fails after replacement, return as-is
+        return code
+
+    # Collect all imported names with their source line numbers
+    import_nodes: List[Tuple[ast.stmt, List[str]]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = [alias.asname if alias.asname else alias.name.split(".")[0]
+                     for alias in node.names]
+            import_nodes.append((node, names))
+        elif isinstance(node, ast.ImportFrom):
+            names = [alias.asname if alias.asname else alias.name
+                     for alias in node.names
+                     if alias.name != "*"]
+            if names:
+                import_nodes.append((node, names))
+
+    if not import_nodes:
+        return code
+
+    # Collect all names used in the rest of the code (non-import nodes)
+    used_names: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            used_names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            # Track the root name (e.g., "os" in "os.path.join")
+            cur = node
+            while isinstance(cur, ast.Attribute):
+                cur = cur.value
+            if isinstance(cur, ast.Name):
+                used_names.add(cur.id)
+
+    # Determine which import lines to remove
+    lines_to_remove: Set[int] = set()
+    for node, imported_names in import_nodes:
+        # Check if ANY of the imported names are used
+        if not any(name in used_names for name in imported_names):
+            # None of the imported names are used — mark for removal
+            import_line = ast.get_source_segment(code, node) or ""
+            logger.warning(
+                "Removed unused import '%s' from %s",
+                import_line.strip(), filename or "<unknown>"
+            )
+            # Mark the line range for removal (AST uses 1-based line numbers)
+            for lineno in range(node.lineno, node.end_lineno + 1):
+                lines_to_remove.add(lineno)
+
+    if not lines_to_remove:
+        return code
+
+    # Rebuild code without the removed import lines
+    code_lines = code.splitlines(keepends=True)
+    cleaned_lines = [
+        line for i, line in enumerate(code_lines, start=1)
+        if i not in lines_to_remove
+    ]
+    return "".join(cleaned_lines)
+
+
+def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
+    """Extract third-party imports from generated Python files and populate requirements.txt.
+
+    Scans all ``.py`` files in *files* using AST parsing to identify imported
+    top-level package names.  Stdlib and project-local imports are filtered out.
+    The remainder are mapped to their canonical PyPI names via
+    :data:`_MODULE_TO_PYPI` and merged into ``requirements.txt`` (preserving
+    any packages that already appear there).
+
+    Args:
+        files: Dictionary mapping filenames to file contents.
+
+    Returns:
+        Updated *files* dict with a populated/merged ``requirements.txt``.
+    """
+    # Determine project-local package prefixes from the file map
+    local_prefixes: Set[str] = {"app", "tests", "test"}
+    for path in files:
+        # Top-level directory names are treated as project-local
+        parts = path.replace("\\", "/").split("/")
+        if len(parts) > 1 and parts[0]:
+            local_prefixes.add(parts[0])
+        # Also treat the stem of a root .py file as local (e.g. main.py → main)
+        if len(parts) == 1 and path.endswith(".py"):
+            local_prefixes.add(path[:-3])
+
+    # Determine stdlib modules
+    if hasattr(sys, "stdlib_module_names"):
+        stdlib_modules: Set[str] = set(sys.stdlib_module_names)  # type: ignore[attr-defined]
+    else:  # Python < 3.10 fallback
+        stdlib_modules = {
+            "abc", "ast", "asyncio", "base64", "collections", "contextlib",
+            "copy", "csv", "datetime", "decimal", "email", "enum", "functools",
+            "gc", "glob", "gzip", "hashlib", "hmac", "html", "http", "importlib",
+            "inspect", "io", "itertools", "json", "logging", "math", "os",
+            "pathlib", "pickle", "platform", "pprint", "queue", "random", "re",
+            "secrets", "shutil", "signal", "socket", "sqlite3", "ssl", "stat",
+            "string", "struct", "subprocess", "sys", "tempfile", "threading",
+            "time", "traceback", "types", "typing", "unittest", "urllib",
+            "uuid", "warnings", "weakref", "xml", "zipfile", "zlib",
+        }
+
+    # Collect third-party imports from all Python files
+    third_party: Set[str] = set()
+    for filename, content in files.items():
+        if not filename.endswith(".py") or not content.strip():
+            continue
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top = alias.name.split(".")[0]
+                    if top and top not in stdlib_modules and top not in local_prefixes:
+                        third_party.add(top)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    top = node.module.split(".")[0]
+                    if top and top not in stdlib_modules and top not in local_prefixes:
+                        third_party.add(top)
+
+    if not third_party:
+        return files
+
+    # Map import names to PyPI package names
+    pypi_packages: Set[str] = set()
+    for mod in third_party:
+        pypi_name = _MODULE_TO_PYPI.get(mod, mod)
+        pypi_packages.add(pypi_name)
+
+    # Load existing requirements.txt content
+    existing_reqs = files.get("requirements.txt", "")
+    existing_lines = [
+        line.strip() for line in existing_reqs.splitlines() if line.strip()
+    ]
+    # Build a set of already-declared package names (lowercase, strip version specs)
+    def _pkg_name(req: str) -> str:
+        return re.split(r"[><=!;\[]", req)[0].strip().lower()
+
+    existing_pkg_names = {_pkg_name(line) for line in existing_lines}
+
+    # Add missing packages
+    new_packages = sorted(
+        pkg for pkg in pypi_packages
+        if _pkg_name(pkg) not in existing_pkg_names
+    )
+    if not new_packages:
+        return files
+
+    merged = existing_lines + new_packages
+    result = dict(files)
+    result["requirements.txt"] = "\n".join(merged) + "\n"
+    logger.info(
+        "extract_and_populate_requirements: added %d package(s) to requirements.txt: %s",
+        len(new_packages), new_packages
+    )
+    return result
+
+
+
     """
     Parses the LLM response, handling both multi-file JSON and single-file code.
 
@@ -537,6 +855,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             # Re-run collision detection after stub generation: stubs may re-introduce
             # module files that collide with package directories already in code_files.
             fixed_files = _detect_module_package_collisions(fixed_files)
+        # Populate requirements.txt with any third-party imports found in the generated code
+        fixed_files = extract_and_populate_requirements(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -620,7 +940,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 validation_result = validate_and_repair_syntax(cleaned, lang, filename)
 
                 if validation_result['valid']:
-                    code_files[filename] = validation_result['code']
+                    # Remove dead/banned imports before storing the file
+                    cleaned_code = remove_dead_imports(validation_result['code'], filename)
+                    code_files[filename] = cleaned_code
                     
                     # Log if auto-repair was used
                     if validation_result['auto_repaired']:
@@ -735,7 +1057,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     validation_result = validate_and_repair_syntax(cleaned, file_lang, filename)
 
                     if validation_result['valid']:
-                        code_files[filename] = validation_result['code']
+                        # Remove dead/banned imports before storing the file
+                        cleaned_code = remove_dead_imports(validation_result['code'], filename)
+                        code_files[filename] = cleaned_code
                         
                         # Log if auto-repair was used
                         if validation_result['auto_repaired']:
@@ -2532,6 +2856,8 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
             "auto_fix_pydantic_v1_imports: created requirements.txt with pydantic-settings"
         )
 
+    # Populate requirements.txt with third-party imports extracted from generated code
+    fixed_files = extract_and_populate_requirements(fixed_files)
     return fixed_files
 
 

@@ -1184,3 +1184,192 @@ def test_ensure_local_module_stubs_suffixed_router_gets_apirouter():
     assert "products_router = None" not in stub, (
         "products_router must not be stubbed as None"
     )
+
+
+# ==============================================================================
+# --- Tests for extract_and_populate_requirements ---
+# ==============================================================================
+
+
+class TestExtractAndPopulateRequirements:
+    """Tests for extract_and_populate_requirements()."""
+
+    def test_extracts_fastapi(self):
+        """Verify fastapi import is extracted and added to requirements.txt."""
+        files = {
+            "main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        assert "requirements.txt" in result
+        assert "fastapi" in result["requirements.txt"]
+
+    def test_extracts_sqlalchemy_and_jose(self):
+        """Verify sqlalchemy and python-jose are extracted."""
+        files = {
+            "app/db.py": "from sqlalchemy import create_engine\n",
+            "app/auth.py": "from jose import jwt\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result.get("requirements.txt", "")
+        assert "sqlalchemy" in reqs
+        assert "python-jose" in reqs
+
+    def test_merges_with_existing_requirements(self):
+        """Verify existing requirements.txt content is preserved."""
+        files = {
+            "main.py": "import httpx\n",
+            "requirements.txt": "pydantic-settings>=2.0.0\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result["requirements.txt"]
+        assert "pydantic-settings>=2.0.0" in reqs
+        assert "httpx" in reqs
+
+    def test_does_not_duplicate_existing_packages(self):
+        """Verify packages already in requirements.txt are not duplicated."""
+        files = {
+            "main.py": "from fastapi import FastAPI\n",
+            "requirements.txt": "fastapi>=0.100.0\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result["requirements.txt"]
+        # fastapi should appear only once
+        assert reqs.lower().count("fastapi") == 1
+
+    def test_filters_stdlib_modules(self):
+        """Verify stdlib modules are not added to requirements.txt."""
+        files = {
+            "main.py": "import os\nimport json\nimport sys\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        # Should not add requirements.txt if all imports are stdlib
+        reqs = result.get("requirements.txt", "")
+        assert "os" not in reqs.split("\n")
+        assert "json" not in reqs.split("\n")
+        assert "sys" not in reqs.split("\n")
+
+    def test_filters_project_local_imports(self):
+        """Verify project-local app. imports are not added to requirements.txt."""
+        files = {
+            "app/main.py": "from app.services import auth\nfrom app.models import User\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result.get("requirements.txt", "")
+        assert "app" not in reqs.split("\n")
+
+    def test_maps_module_to_pypi_name(self):
+        """Verify import name to PyPI package name mapping works."""
+        files = {
+            "app/auth.py": "from jose import jwt\nfrom PIL import Image\nimport yaml\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result.get("requirements.txt", "")
+        assert "python-jose" in reqs
+        assert "Pillow" in reqs
+        assert "PyYAML" in reqs
+
+    def test_non_python_files_are_ignored(self):
+        """Verify non-.py files don't affect requirements extraction."""
+        files = {
+            "README.md": "# This uses fastapi",
+            "Dockerfile": "FROM python:3.11",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        # No Python files to scan, so no new packages should be added
+        assert result == files or "requirements.txt" not in result or not result.get("requirements.txt", "").strip()
+
+    def test_extracts_pydantic_settings(self):
+        """Verify pydantic_settings import is mapped to pydantic-settings."""
+        files = {
+            "config.py": "from pydantic_settings import BaseSettings\n",
+        }
+        result = crh.extract_and_populate_requirements(files)
+        reqs = result.get("requirements.txt", "")
+        assert "pydantic-settings" in reqs
+
+
+# ==============================================================================
+# --- Tests for remove_dead_imports ---
+# ==============================================================================
+
+
+class TestRemoveDeadImports:
+    """Tests for remove_dead_imports()."""
+
+    def test_removes_unused_import(self):
+        """Verify an import that is never used is removed."""
+        code = "import os\nimport json\n\ndef greet():\n    return 'hello'\n"
+        result = crh.remove_dead_imports(code, "test.py")
+        # os and json are unused, should be removed
+        assert "import os" not in result
+        assert "import json" not in result
+
+    def test_keeps_used_import(self):
+        """Verify an import that IS used is kept."""
+        code = "import os\n\ndef get_cwd():\n    return os.getcwd()\n"
+        result = crh.remove_dead_imports(code, "test.py")
+        assert "import os" in result
+
+    def test_keeps_partially_used_import(self):
+        """Verify from-import is kept when at least one name is used."""
+        code = "from typing import List, Dict\n\ndef foo(x: List[int]) -> None:\n    pass\n"
+        result = crh.remove_dead_imports(code, "test.py")
+        # List is used, so the import should remain
+        assert "from typing import" in result
+
+    def test_replaces_banned_asyncstdlib_import(self):
+        """Verify asyncstdlib import is replaced with functools alternative."""
+        code = "from asyncstdlib import lru_cache\n\n@lru_cache\ndef expensive():\n    return 42\n"
+        result = crh.remove_dead_imports(code, "auth_service.py")
+        assert "asyncstdlib" not in result
+        assert "functools" in result
+
+    def test_replaces_banned_aioredis_import(self):
+        """Verify aioredis import is replaced with redis.asyncio alternative."""
+        code = "import aioredis\n\nasync def connect():\n    return await aioredis.create_redis_pool('redis://localhost')\n"
+        result = crh.remove_dead_imports(code, "redis_client.py")
+        assert "aioredis" not in result
+
+    def test_non_python_file_unchanged(self):
+        """Verify non-.py files are returned unchanged."""
+        code = "from fastapi import FastAPI\n"
+        result = crh.remove_dead_imports(code, "template.html")
+        assert result == code
+
+    def test_handles_syntax_error_gracefully(self):
+        """Verify files with syntax errors are returned unchanged."""
+        code = "def : invalid syntax\n"
+        result = crh.remove_dead_imports(code, "broken.py")
+        assert result == code
+
+    def test_empty_code_unchanged(self):
+        """Verify empty code is returned unchanged."""
+        assert crh.remove_dead_imports("", "test.py") == ""
+
+
+# ==============================================================================
+# --- Tests for KNOWN_HALLUCINATED_PACKAGES constant ---
+# ==============================================================================
+
+
+class TestKnownHallucinatedPackages:
+    """Tests for the KNOWN_HALLUCINATED_PACKAGES constant."""
+
+    def test_asyncstdlib_is_known(self):
+        """Verify asyncstdlib is in the known hallucinated packages dict."""
+        assert "asyncstdlib" in crh.KNOWN_HALLUCINATED_PACKAGES
+
+    def test_aioredis_is_known(self):
+        """Verify aioredis is in the known hallucinated packages dict."""
+        assert "aioredis" in crh.KNOWN_HALLUCINATED_PACKAGES
+
+    def test_each_entry_has_required_fields(self):
+        """Verify each entry has required metadata fields."""
+        required_fields = {"replacement_module", "replacement_import", "reason"}
+        for pkg, meta in crh.KNOWN_HALLUCINATED_PACKAGES.items():
+            missing = required_fields - set(meta.keys())
+            assert not missing, f"Package '{pkg}' is missing fields: {missing}"
+
+    def test_asyncstdlib_replacement_is_functools(self):
+        """Verify asyncstdlib replacement module is functools."""
+        assert crh.KNOWN_HALLUCINATED_PACKAGES["asyncstdlib"]["replacement_module"] == "functools"

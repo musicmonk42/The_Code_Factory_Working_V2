@@ -183,3 +183,49 @@ class TestImportFixerTestFileIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSoftFailValidation:
+    """Tests for the soft-fail validation mode changes in the pipeline."""
+
+    def test_engine_does_not_break_on_validate_failure(self):
+        """Verify engine.py no longer breaks on STAGE:VALIDATE failure."""
+        engine_file = Path("generator/main/engine.py")
+        assert engine_file.exists()
+        content = engine_file.read_text()
+        # The hard-fail break should be replaced with soft-fail continuation
+        assert "validate:soft_fail" in content, \
+            "engine.py should use 'validate:soft_fail' instead of breaking"
+        # Should NOT have 'HARD FAIL' in the validate stage section
+        assert "HARD FAIL - Validation failed" not in content, \
+            "engine.py should not have HARD FAIL message for validation"
+
+    def test_engine_contract_validate_soft_fail(self):
+        """Verify CONTRACT_VALIDATE stage also uses soft-fail mode."""
+        engine_file = Path("generator/main/engine.py")
+        content = engine_file.read_text()
+        # Contract validate should also append validate:soft_fail
+        lines = content.split('\n')
+        soft_fail_count = sum(1 for line in lines if 'validate:soft_fail' in line)
+        assert soft_fail_count >= 2, \
+            "Both VALIDATE and CONTRACT_VALIDATE stages should use soft-fail"
+
+    def test_generator_router_recognizes_soft_fail(self):
+        """Verify generator.py router treats validate:soft_fail as non-blocking."""
+        generator_file = Path("server/routers/generator.py")
+        assert generator_file.exists()
+        content = generator_file.read_text()
+        assert "validate_was_soft_fail" in content, \
+            "generator.py should recognize validate:soft_fail as non-blocking"
+        assert "validate:soft_fail" in content, \
+            "generator.py should check for 'validate:soft_fail' in stages_completed"
+
+    def test_arbiter_bridge_includes_code_in_event(self):
+        """Verify engine.py arbiter bridge event now includes actual code."""
+        engine_file = Path("generator/main/engine.py")
+        content = engine_file.read_text()
+        assert '"code": codegen_files_for_arbiter' in content or \
+               "'code': codegen_files_for_arbiter" in content, \
+            "Arbiter bridge event should include generated code"
+        assert '"file_paths"' in content or "'file_paths'" in content, \
+            "Arbiter bridge event should include file paths"
