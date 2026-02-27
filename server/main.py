@@ -705,7 +705,27 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             exc_info=True,
             extra={"plugin": "generator_plugin_wrapper", "error_type": type(e).__name__}
         )
-    
+
+    # ========================================================================
+    # INTEGRATION PLUGIN REGISTRATION
+    # ========================================================================
+    # Register all production integration plugins (Kafka, PagerDuty, Pub/Sub,
+    # RabbitMQ, SIEM, Slack, SNS, Azure EventGrid, DLT) with the plugin
+    # registry so that list_plugins() / get_plugin_for_task() / discover()
+    # can find them.  Each plugin is fault-isolated; a missing optional
+    # dependency for one plugin never blocks the others.
+    # ========================================================================
+    try:
+        from self_fixing_engineer.plugins.plugin_loader import initialize_all_plugins
+        await initialize_all_plugins()
+        logger.info("✓ Integration plugins registered via plugin_loader")
+    except Exception as e:
+        logger.warning(
+            "Integration plugin registration failed: %s",
+            e,
+            exc_info=True,
+        )
+
     # FIX: If routers failed to load synchronously, retry in background
     if not routers_ok:
         logger.info("=" * 80)

@@ -36,6 +36,8 @@ _SLACK_WEBHOOK = re.compile(r"https://hooks\.slack\.com/[^ \t\r\n]+", re.I)
 _API_KEY = re.compile(r"\b(?:sk|pk)_[A-Za-z0-9]{16,}\b")
 _AWS_KEY = re.compile(r"\bAKIA[0-9A-Z]{16}\b")
 _GCP_KEY = re.compile(r"AIza[0-9A-Za-z\-_]{35}")
+_GITHUB_PAT = re.compile(r"\bghp_[A-Za-z0-9]{36,}\b")
+_GITLAB_PAT = re.compile(r"\bglpat-[A-Za-z0-9\-_]{20,}\b")
 _PRIVATE_KEY_BLOCK = re.compile(
     r"-----BEGIN (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----.+?-----END (?:RSA|EC|OPENSSH|PGP) PRIVATE KEY-----",
     re.S,
@@ -53,6 +55,8 @@ def _scrub_str(s: str) -> str:
     s = _API_KEY.sub("***REDACTED***", s)
     s = _AWS_KEY.sub("***REDACTED***", s)
     s = _GCP_KEY.sub("***REDACTED***", s)
+    s = _GITHUB_PAT.sub("***REDACTED***", s)
+    s = _GITLAB_PAT.sub("***REDACTED***", s)
     return s
 
 

@@ -37,7 +37,7 @@ patches:
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: 2Gi
 
-  # Enable debug logging
+  # Enable debug logging and dev-mode DLT storage path
   - target:
       kind: ConfigMap
       name: codefactory-config
@@ -48,6 +48,9 @@ patches:
       - op: replace
         path: /data/APP_ENV
         value: development
+      - op: add
+        path: /data/DLT_DEV_STORAGE_DIR
+        value: /app/data/dlt_dev_storage
 
 labels:
   - pairs:

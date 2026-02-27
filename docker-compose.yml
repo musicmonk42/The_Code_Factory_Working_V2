@@ -171,6 +171,10 @@ services:
       # Options: simple (dev), fabric (Hyperledger Fabric), evm/ethereum (EVM chains).
       # RB-5: evm/ethereum support added to dlt_backend.py; IB-1: dlt/evm added to checkpoint_manager.
       - DLT_TYPE=${DLT_TYPE:-fabric}
+      # Dev-mode file-backed DLT storage root (PRODUCTION_MODE=0 only).
+      # Redirects the local JSON store onto the persistent data volume so dev
+      # checkpoint data survives container restarts.
+      - DLT_DEV_STORAGE_DIR=/app/data/dlt_dev_storage
       # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
       - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
       # Clarifier WebSocket session timeout (seconds)

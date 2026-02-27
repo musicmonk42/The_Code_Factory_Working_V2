@@ -41,6 +41,9 @@ except ImportError:
         def __exit__(self, exc_type, exc_val, exc_tb):
             pass
 
+        def set_attribute(self, *args):
+            pass
+
         def set_status(self, *args):
             pass
 
@@ -373,28 +376,7 @@ class RabbitMQSettings(BaseSettings):
 
 
 # Instantiate settings globally (this will trigger validation at startup)
-try:
-    settings = RabbitMQSettings()
-except ValidationError as e:
-    logger.critical(
-        f"CRITICAL: RabbitMQSettings validation failed: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        f"CRITICAL: RabbitMQSettings validation failed: {e}. Aborting.",
-        level="CRITICAL",
-    )
-    sys.exit(1)
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Unexpected error loading RabbitMQSettings: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        f"CRITICAL: Unexpected error loading RabbitMQSettings: {e}. Aborting.",
-        level="CRITICAL",
-    )
-    sys.exit(1)
+settings: Optional["RabbitMQSettings"] = None
 
 
 # ---- 2. Granular, Labeled Metrics (REQUIRED) ----
@@ -445,19 +427,7 @@ class RabbitMQMetrics:
 
 
 _metrics_registry_instance = CollectorRegistry()
-try:
-    metrics = RabbitMQMetrics(_metrics_registry_instance)
-    logger.info("Prometheus metrics initialized.")
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        "CRITICAL: Prometheus metrics initialization failed. RabbitMQ plugin aborted.",
-        level="CRITICAL",
-    )
-    sys.exit(1)
+metrics: Optional["RabbitMQMetrics"] = None
 
 
 # ---- 3. Validated Event Schema (REQUIRED) ----
@@ -997,7 +967,46 @@ class RabbitMQGateway:
         await self.shutdown()
 
 
-rabbitmq_gateway = RabbitMQGateway(settings, metrics)
+rabbitmq_gateway: Optional[RabbitMQGateway] = None
+
+
+async def initialize() -> None:
+    """Initialize settings, metrics, and gateway. Call before use."""
+    global rabbitmq_gateway, settings, metrics
+    try:
+        settings = RabbitMQSettings()
+    except ValidationError as e:
+        logger.critical(
+            f"CRITICAL: RabbitMQSettings validation failed: {e}. Aborting startup.",
+            exc_info=True,
+        )
+        alert_operator(
+            f"CRITICAL: RabbitMQSettings validation failed: {e}. Aborting.",
+            level="CRITICAL",
+        )
+        sys.exit(1)
+    try:
+        metrics = RabbitMQMetrics(_metrics_registry_instance)
+        logger.info("Prometheus metrics initialized.")
+    except Exception as e:
+        logger.critical(
+            f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
+            exc_info=True,
+        )
+        alert_operator(
+            "CRITICAL: Prometheus metrics initialization failed. RabbitMQ plugin aborted.",
+            level="CRITICAL",
+        )
+        sys.exit(1)
+    rabbitmq_gateway = RabbitMQGateway(settings, metrics)
+
+
+async def shutdown() -> None:
+    """Shut down the gateway and release resources."""
+    global rabbitmq_gateway
+    if rabbitmq_gateway is not None:
+        await rabbitmq_gateway.shutdown()
+        rabbitmq_gateway = None
 
 
 async def run_health_check_server():
@@ -1029,6 +1038,7 @@ async def run_health_check_server():
 if not PRODUCTION_MODE:
 
     async def app_lifecycle():
+        await initialize()
         health_server_task = None
         if web:
             health_server_task = asyncio.create_task(run_health_check_server())

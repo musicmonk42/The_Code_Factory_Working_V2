@@ -240,28 +240,7 @@ class PagerDutySettings(BaseSettings):
 
 
 # Instantiate settings globally (this will trigger validation at startup)
-try:
-    settings = PagerDutySettings()
-except ValidationError as e:
-    logger.critical(
-        f"CRITICAL: PagerDutySettings validation failed: {e}. Aborting startup.",
-        extra={"validation_errors": e.errors()},
-    )
-    alert_operator(
-        f"CRITICAL: PagerDutySettings validation failed: {e}. Aborting.",
-        level="CRITICAL",
-    )
-    raise StartupCriticalError("PagerDutySettings validation failed.")
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Unexpected error loading PagerDutySettings: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        f"CRITICAL: Unexpected error loading PagerDutySettings: {e}. Aborting.",
-        level="CRITICAL",
-    )
-    raise StartupCriticalError("Unexpected error loading PagerDutySettings.")
+settings: Optional["PagerDutySettings"] = None
 
 
 # ---- 2. Gold Standard: Structured, Machine-Readable Logging ----
@@ -322,19 +301,7 @@ class PagerDutyMetrics:
 
 
 # Use the default Prometheus registry
-try:
-    metrics = PagerDutyMetrics(REGISTRY)
-    logger.info("Prometheus metrics initialized on the default registry.")
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        "CRITICAL: Prometheus metrics initialization failed. PagerDuty plugin aborted.",
-        level="CRITICAL",
-    )
-    raise StartupCriticalError("Failed to initialize Prometheus metrics.")
+metrics: Optional["PagerDutyMetrics"] = None
 
 
 # ---- 4. Gold Standard: Rich & Validated API Schemas (REQUIRED) ----
@@ -830,7 +797,7 @@ class PagerDutyGateway:
                 self.metrics.EVENTS_QUEUED.labels(
                     severity=request.payload.severity
                 ).inc()
-            await self._event_queue.put(request)
+            self._event_queue.put_nowait(request)
             self.metrics.QUEUE_SIZE.set(self._event_queue.qsize())
         except asyncio.QueueFull:
             self.metrics.EVENTS_DROPPED.inc()
@@ -949,13 +916,55 @@ class PagerDutyGateway:
         await self._enqueue_request(request)
 
 
-pd_settings = settings
-pd_metrics = metrics
-pagerduty_gateway = PagerDutyGateway(pd_settings, pd_metrics)
+pd_settings: Optional[PagerDutySettings] = None
+pd_metrics: Optional[PagerDutyMetrics] = None
+pagerduty_gateway: Optional[PagerDutyGateway] = None
+
+
+async def initialize() -> None:
+    """Initialize settings, metrics, and gateway. Call before use."""
+    global pd_settings, pd_metrics, pagerduty_gateway, settings, metrics
+    try:
+        settings = PagerDutySettings()
+    except ValidationError as e:
+        logger.critical(
+            f"CRITICAL: PagerDutySettings validation failed: {e}. Aborting startup.",
+            extra={"validation_errors": e.errors()},
+        )
+        alert_operator(
+            f"CRITICAL: PagerDutySettings validation failed: {e}. Aborting.",
+            level="CRITICAL",
+        )
+        raise StartupCriticalError("PagerDutySettings validation failed.")
+    try:
+        metrics = PagerDutyMetrics(REGISTRY)
+        logger.info("Prometheus metrics initialized on the default registry.")
+    except Exception as e:
+        logger.critical(
+            f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
+            exc_info=True,
+        )
+        alert_operator(
+            "CRITICAL: Prometheus metrics initialization failed. PagerDuty plugin aborted.",
+            level="CRITICAL",
+        )
+        raise StartupCriticalError("Failed to initialize Prometheus metrics.")
+    pd_settings = settings
+    pd_metrics = metrics
+    pagerduty_gateway = PagerDutyGateway(pd_settings, pd_metrics)
+
+
+async def shutdown() -> None:
+    """Shut down the gateway and release resources."""
+    global pagerduty_gateway
+    if pagerduty_gateway is not None:
+        await pagerduty_gateway.shutdown()
+        pagerduty_gateway = None
 
 if not PRODUCTION_MODE:
 
     async def app_lifecycle():
+        await initialize()
         await get_redis_client()
         await pagerduty_gateway.startup()
         try:

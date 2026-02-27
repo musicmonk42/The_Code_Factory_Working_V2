@@ -38,6 +38,9 @@ except ImportError:
         def __exit__(self, exc_type, exc_val, exc_tb):
             pass
 
+        def set_attribute(self, *args):
+            pass
+
         def set_status(self, *args):
             pass
 
@@ -367,27 +370,7 @@ class PubSubSettings(BaseSettings):
 
 
 # Instantiate settings globally (this will trigger validation at startup)
-try:
-    settings = PubSubSettings()
-except ValidationError as e:
-    logger.critical(
-        f"CRITICAL: PubSubSettings validation failed: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        f"CRITICAL: PubSubSettings validation failed: {e}. Aborting.", level="CRITICAL"
-    )
-    sys.exit(1)
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Unexpected error loading PubSubSettings: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        f"CRITICAL: Unexpected error loading PubSubSettings: {e}. Aborting.",
-        level="CRITICAL",
-    )
-    sys.exit(1)
+settings: Optional["PubSubSettings"] = None
 
 
 # ---- 2. Granular, Labeled Metrics (REQUIRED) ----
@@ -439,19 +422,7 @@ class PubSubMetrics:
 
 # Instantiate metrics globally
 _metrics_registry_instance = CollectorRegistry()
-try:
-    metrics = PubSubMetrics(_metrics_registry_instance)
-    logger.info("Prometheus metrics initialized.")
-except Exception as e:
-    logger.critical(
-        f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
-        exc_info=True,
-    )
-    alert_operator(
-        "CRITICAL: Prometheus metrics initialization failed. Pub/Sub plugin aborted.",
-        level="CRITICAL",
-    )
-    sys.exit(1)
+metrics: Optional["PubSubMetrics"] = None
 
 
 # ---- 3. Validated Event Schema (REQUIRED) ----
@@ -949,7 +920,45 @@ class PubSubGateway:
         await self.shutdown()
 
 
-pubsub_gateway = PubSubGateway(settings, metrics)
+pubsub_gateway: Optional[PubSubGateway] = None
+
+
+async def initialize() -> None:
+    """Initialize settings, metrics, and gateway. Call before use."""
+    global pubsub_gateway, settings, metrics
+    try:
+        settings = PubSubSettings()
+    except ValidationError as e:
+        logger.critical(
+            f"CRITICAL: PubSubSettings validation failed: {e}. Aborting startup.",
+            exc_info=True,
+        )
+        alert_operator(
+            f"CRITICAL: PubSubSettings validation failed: {e}. Aborting.", level="CRITICAL"
+        )
+        sys.exit(1)
+    try:
+        metrics = PubSubMetrics(_metrics_registry_instance)
+        logger.info("Prometheus metrics initialized.")
+    except Exception as e:
+        logger.critical(
+            f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.",
+            exc_info=True,
+        )
+        alert_operator(
+            "CRITICAL: Prometheus metrics initialization failed. Pub/Sub plugin aborted.",
+            level="CRITICAL",
+        )
+        sys.exit(1)
+    pubsub_gateway = PubSubGateway(settings, metrics)
+
+
+async def shutdown() -> None:
+    """Shut down the gateway and release resources."""
+    global pubsub_gateway
+    if pubsub_gateway is not None:
+        await pubsub_gateway.shutdown()
+        pubsub_gateway = None
 
 # --- Health Check Endpoint for Kubernetes ---
 try:
@@ -982,6 +991,7 @@ except ImportError:
 if not PRODUCTION_MODE:
 
     async def app_lifecycle():
+        await initialize()
         health_server_task = None
         if web:
             health_server_task = asyncio.create_task(run_health_check_server())
