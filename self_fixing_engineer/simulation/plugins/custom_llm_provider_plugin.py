@@ -969,12 +969,15 @@ class CustomLLMProvider:
                 response.raise_for_status()
                 return await response.json()
 
-    async def _make_streaming_request(self, messages: List[Any]) -> Any:
-        """Execute a streaming chat-completions request and return the open response.
+    async def _make_streaming_request(
+        self, messages: List[Any]
+    ) -> "tuple[aiohttp.ClientSession, aiohttp.ClientResponse]":
+        """Execute a streaming chat-completions request.
 
-        The caller is responsible for iterating the SSE stream and closing
-        the response.  The :class:`aiohttp.ClientSession` lifetime is managed
-        by the caller via the returned response object's context.
+        Returns the ``(session, response)`` pair so the caller can guarantee
+        proper teardown of both objects even under ``asyncio.CancelledError``
+        or other exceptions.  The caller **must** call ``await session.close()``
+        (e.g. in a ``try/finally`` block) after consuming the response stream.
 
         Parameters
         ----------
@@ -983,9 +986,9 @@ class CustomLLMProvider:
 
         Returns
         -------
-        aiohttp.ClientResponse
-            An open streaming response.  The caller must await its content
-            and handle closure.
+        tuple[aiohttp.ClientSession, aiohttp.ClientResponse]
+            ``(session, response)`` where *response* is an open streaming
+            response.  Both must be closed by the caller.
 
         Raises
         ------
@@ -1018,16 +1021,14 @@ class CustomLLMProvider:
             total=self.config.timeout,
             connect=min(10, self.config.timeout),
         )
-        # A new session is created per streaming call; the caller is expected
-        # to consume and close the response promptly.
         session = aiohttp.ClientSession(timeout=timeout)
-        response = await session.post(endpoint, json=payload, headers=headers)
         try:
+            response = await session.post(endpoint, json=payload, headers=headers)
             response.raise_for_status()
+            return session, response
         except Exception:
             await session.close()
             raise
-        return response
 
     async def _get_fallback_provider(self) -> Optional["CustomLLMProvider"]:
         return None
@@ -1099,29 +1100,32 @@ class CustomLLMProvider:
             )
 
     async def _astream(self, messages: List[Any]) -> AsyncGenerator[str, None]:
-        response = await self._make_streaming_request(messages)
-
-        if hasattr(response, "__aiter__"):
-            async for chunk in response:
-                normalized = _normalize_text_chunk(chunk)
-                # Skip if chunk is str and normalization didn't change it (malformed json)
-                if isinstance(chunk, str) and normalized == chunk:
-                    continue
-                yield normalized
-            return
-
-        for attr in ["content_iter", "aiter", "stream"]:
-            if hasattr(response, attr):
-                async for chunk in getattr(response, attr):
+        session, response = await self._make_streaming_request(messages)
+        try:
+            if hasattr(response, "__aiter__"):
+                async for chunk in response:
                     normalized = _normalize_text_chunk(chunk)
+                    # Skip if chunk is str and normalization didn't change it (malformed json)
                     if isinstance(chunk, str) and normalized == chunk:
                         continue
                     yield normalized
                 return
 
-        normalized = _normalize_text_chunk(response)
-        if not (isinstance(response, str) and normalized == response):
-            yield normalized
+            for attr in ["content_iter", "aiter", "stream"]:
+                if hasattr(response, attr):
+                    async for chunk in getattr(response, attr):
+                        normalized = _normalize_text_chunk(chunk)
+                        if isinstance(chunk, str) and normalized == chunk:
+                            continue
+                        yield normalized
+                    return
+
+            normalized = _normalize_text_chunk(response)
+            if not (isinstance(response, str) and normalized == response):
+                yield normalized
+        finally:
+            response.close()
+            await session.close()
 
     @classmethod
     async def _get_cached_vault_key(

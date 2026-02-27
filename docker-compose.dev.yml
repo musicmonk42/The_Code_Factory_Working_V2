@@ -29,5 +29,7 @@ services:
       - DEV_MODE=1
       - APP_ENV=development
       - LOG_LEVEL=DEBUG
+      # Enable experimental evolution engine in development (safe — PRODUCTION_MODE is not set).
+      - ENABLE_EXPERIMENTAL_EVOLUTION=true
 
 volumes: {}

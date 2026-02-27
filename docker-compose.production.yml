@@ -227,6 +227,10 @@ services:
       # IB-2: arbiter.py now reads these env vars to configure evolve_configs() calls.
       - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
       - EVOLUTION_GENERATIONS=${EVOLUTION_GENERATIONS:-5}
+      # Guard for the experimental SelfEvolutionEngine: must be "true" to allow
+      # SelfEvolutionEngine.start() when PRODUCTION_MODE=1.  Always "false" in
+      # production unless the evolution subsystem has passed full QA sign-off.
+      - ENABLE_EXPERIMENTAL_EVOLUTION=false
       # DLT backend type (RB-5: evm/ethereum now fully supported in dlt_backend.py).
       - DLT_TYPE=${DLT_TYPE:-fabric}
 

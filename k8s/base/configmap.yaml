@@ -290,6 +290,12 @@ data:
   # Default 5 keeps runs fast; increase for production tuning.
   EVOLUTION_GENERATIONS: "5"
 
+  # Guard for the experimental SelfEvolutionEngine.
+  # Set to "true" ONLY after the evolution subsystem has passed full QA sign-off
+  # and when PRODUCTION_MODE=1.  "false" is the safe default for all environments.
+  # Override per-cluster: kubectl set env deployment/codefactory ENABLE_EXPERIMENTAL_EVOLUTION=true
+  ENABLE_EXPERIMENTAL_EVOLUTION: "false"
+
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds, default = 3600)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
 
