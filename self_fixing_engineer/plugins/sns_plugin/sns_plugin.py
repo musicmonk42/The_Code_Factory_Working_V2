@@ -12,7 +12,7 @@ import re
 import socket
 import ssl
 import sys
-import tempfile
+import tempfile  # Used in the dead-letter fallback directory handler (PermissionError path)
 import time
 import uuid
 from collections import deque
@@ -1637,7 +1637,7 @@ class SNSGatewayManager(PluginBase):
     async def get_capabilities(self) -> List[str]:
         return ["sns_notification", "push_delivery", "topic_fan_out"]
 
-
+    async def _log_admin_action(self, action: str, details: Dict[str, Any]):
         if self._admin_audit_log:
             log_entry = json.dumps(
                 {"timestamp": time.time(), "action": action, **details}

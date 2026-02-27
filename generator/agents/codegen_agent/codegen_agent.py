@@ -1071,11 +1071,17 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
                         else part.split('.')[0]
                     )
             for m in re.finditer(
-                r'^\s*from\s+\S+\s+import\s+\(?(.+?)\)?$', content, re.MULTILINE
+                # Match `from module import name1, name2` on a single line OR
+                # `from module import (\n    name1,\n    name2,\n)` spanning
+                # multiple lines.  The inner group captures everything between
+                # `import` and the optional closing `)`.
+                r'^\s*from\s+\S+\s+import\s+\(([^)]*)\)|^\s*from\s+\S+\s+import\s+(.+)',
+                content, re.MULTILINE,
             ):
-                for part in m.group(1).split(','):
+                raw = m.group(1) if m.group(1) is not None else m.group(2)
+                for part in raw.split(','):
                     part = part.strip().rstrip(')')
-                    if not part or part == '*':
+                    if not part or part == '*' or part.startswith('#'):
                         continue
                     defined_names.add(
                         part.split(' as ')[-1].strip() if ' as ' in part else part

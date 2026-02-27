@@ -549,7 +549,7 @@ class PagerDutyGateway(PluginBase):
     async def get_capabilities(self) -> List[str]:
         return ["incident_alerting", "on_call_routing", "event_deduplication"]
 
-
+    async def _get_session(self) -> aiohttp.ClientSession:
         async with self._session_lock:
             if self._session is None or self._session.closed:
                 timeout = aiohttp.ClientTimeout(

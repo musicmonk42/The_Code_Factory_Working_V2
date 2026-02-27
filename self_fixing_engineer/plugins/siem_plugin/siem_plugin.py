@@ -1467,7 +1467,7 @@ class SIEMGatewayManager(PluginBase):
     async def get_capabilities(self) -> List[str]:
         return ["siem_event_forwarding", "splunk_hec", "security_audit_sink"]
 
-
+    def load_serializers_from_plugins(self, group="siem_gateway.serializers"):
         try:
             for entry_point in importlib.metadata.entry_points(group=group):
                 try:

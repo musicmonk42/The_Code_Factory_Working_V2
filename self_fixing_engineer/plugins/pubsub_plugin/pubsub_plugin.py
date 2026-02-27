@@ -718,7 +718,7 @@ class PubSubGateway(PluginBase):
     async def get_capabilities(self) -> List[str]:
         return ["pubsub_event_publishing", "async_audit_sink", "batched_delivery"]
 
-
+    def publish(self, event_name: str, service_name: str, details: Dict[str, Any]):
         """Validates and enqueues an event for publishing. Returns instantly."""
         try:
             event = AuditEvent(
