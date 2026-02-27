@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import sys
 import threading
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,17 @@ import pytest
 
 # Import from the arbiter package where monitoring.py is located
 from self_fixing_engineer.arbiter.monitoring import LogFormat, Monitor
+
+
+@pytest.fixture(autouse=True)
+def ensure_real_aiofiles():
+    """Ensure real aiofiles is used, not a MagicMock stub from other test modules."""
+    import importlib
+    sys.modules.pop("aiofiles", None)
+    import aiofiles as _real_aiofiles
+    importlib.reload(_real_aiofiles)
+    sys.modules["aiofiles"] = _real_aiofiles
+    yield
 
 
 @pytest.fixture

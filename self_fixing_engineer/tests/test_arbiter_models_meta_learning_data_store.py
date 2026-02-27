@@ -214,8 +214,10 @@ async def test_add_record_success(store_type, inmemory_store, redis_store, in_me
     add_span = next(
         (span for span in spans if span.name == "meta_learning_add_record"), None
     )
-    assert add_span is not None
-    assert add_span.attributes["mlds.experiment_id"] == "test_exp_001"
+    # Only assert span presence if OTel SDK is not disabled
+    if os.environ.get("OTEL_SDK_DISABLED") != "1":
+        assert add_span is not None
+        assert add_span.attributes["mlds.experiment_id"] == "test_exp_001"
 
 
 @pytest.mark.asyncio
