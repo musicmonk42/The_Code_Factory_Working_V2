@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
@@ -137,10 +138,15 @@ class ComplianceEnforcementError(Exception):
                 f"ACTION_BLOCKED_BY_COMPLIANCE: Action '{action_name}' blocked by control '{control_tag}': {message}"
             )
         )
+        # Always log synchronously for audit trail, even without event loop
+        _audit_log_gap(
+            f"ACTION BLOCKED: {action_name} by control {control_tag}: {message}",
+            {"action_name": action_name, "control_tag": control_tag, "message": message},
+        )
+        # Attempt async audit as well
         try:
-            # Try to get a running event loop; if there is one, schedule the async task
-            asyncio.get_running_loop()  # Verify loop exists
-            asyncio.create_task(
+            loop = asyncio.get_running_loop()
+            loop.create_task(
                 _log_to_central_audit(
                     "action_blocked",
                     {
@@ -151,9 +157,8 @@ class ComplianceEnforcementError(Exception):
                 )
             )
         except RuntimeError:
-            # No running event loop - just log without the async audit
             logger.debug(
-                "No running event loop; skipping async audit log for action blocked."
+                "No running event loop; async audit skipped (sync audit already recorded)."
             )
 
 
@@ -170,6 +175,45 @@ class ComplianceEnforcementError(Exception):
 # Get module logger - follows Python logging best practices.
 # Do NOT call basicConfig() at module level to avoid duplicate logs.
 logger = logging.getLogger(__name__)
+
+# Module-level singletons for Arbiter services to avoid creating new instances per call.
+# Locks ensure thread-safe initialization under concurrent access.
+_kg_instance = None
+_bug_manager_instance = None
+_kg_lock = threading.Lock()
+_bug_manager_lock = threading.Lock()
+
+
+def _get_knowledge_graph():
+    """Return a cached KnowledgeGraph instance, importing and initialising lazily (thread-safe)."""
+    global _kg_instance
+    if _kg_instance is None:
+        with _kg_lock:
+            if _kg_instance is None:
+                try:
+                    from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+                    _kg_instance = KnowledgeGraph()
+                except ImportError:
+                    logger.debug("KnowledgeGraph not available for compliance reporting")
+                except Exception as e:
+                    logger.warning(f"KnowledgeGraph initialisation failed: {e}")
+    return _kg_instance
+
+
+def _get_bug_manager():
+    """Return a cached BugManager instance, importing and initialising lazily (thread-safe)."""
+    global _bug_manager_instance
+    if _bug_manager_instance is None:
+        with _bug_manager_lock:
+            if _bug_manager_instance is None:
+                try:
+                    from self_fixing_engineer.arbiter.bug_manager import BugManager
+                    _bug_manager_instance = BugManager()
+                except ImportError:
+                    logger.debug("BugManager not available for compliance reporting")
+                except Exception as e:
+                    logger.warning(f"BugManager initialisation failed: {e}")
+    return _bug_manager_instance
 
 DEFAULT_CREW_CONFIG_PATH = os.path.join(
     os.path.dirname(__file__), "../../agent_orchestration/crew_config.yaml"
@@ -405,42 +449,28 @@ def _audit_log_gap(message: str, details: Optional[Dict[str, Any]] = None):
 def _publish_compliance_to_arbiter(compliance_map: Dict[str, Dict[str, Any]], coverage_gaps: Dict[str, List[str]]):
     """
     [GAP #5 FIX] Publish compliance check results to Arbiter services.
-    
+
     This function attempts to:
     1. Update KnowledgeGraph with compliance status
     2. Report compliance gaps to BugManager
     3. Trigger policy auto-remediation events
-    
+
     Gracefully degrades if Arbiter services are unavailable.
+    Uses module-level singletons to avoid creating new instances per call.
     """
     try:
-        # Try to import Arbiter services
-        try:
-            from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
-            kg_available = True
-        except ImportError:
-            kg_available = False
-            logger.debug("KnowledgeGraph not available for compliance reporting")
-        
-        try:
-            from self_fixing_engineer.arbiter.bug_manager import BugManager
-            bug_manager_available = True
-        except ImportError:
-            bug_manager_available = False
-            logger.debug("BugManager not available for compliance reporting")
-        
         # Try to get running event loop
         try:
             asyncio.get_running_loop()
         except RuntimeError:
             logger.debug("No running event loop, cannot publish to Arbiter")
             return
-        
+
         async def _publish_async():
-            # Update knowledge graph with compliance status
-            if kg_available:
+            # Update knowledge graph with compliance status using singleton
+            kg = _get_knowledge_graph()
+            if kg is not None:
                 try:
-                    kg = KnowledgeGraph()
                     await kg.add_fact(
                         "ComplianceCheckResults",
                         f"compliance_check_{datetime.datetime.now().isoformat()}",
@@ -457,11 +487,11 @@ def _publish_compliance_to_arbiter(compliance_map: Dict[str, Dict[str, Any]], co
                     logger.info("Published compliance results to KnowledgeGraph")
                 except Exception as e:
                     logger.debug(f"Failed to update KnowledgeGraph: {e}")
-            
-            # Report critical compliance gaps to BugManager
-            if bug_manager_available and coverage_gaps["required_but_not_enforced"]:
+
+            # Report critical compliance gaps to BugManager using singleton
+            bug_manager = _get_bug_manager()
+            if bug_manager is not None and coverage_gaps["required_but_not_enforced"]:
                 try:
-                    bug_manager = BugManager()
                     for control_id in coverage_gaps["required_but_not_enforced"]:
                         status = compliance_map.get(control_id, {}).get("status", "unknown")
                         await bug_manager.report_bug(
@@ -479,10 +509,10 @@ def _publish_compliance_to_arbiter(compliance_map: Dict[str, Dict[str, Any]], co
                     logger.info(f"Reported {len(coverage_gaps['required_but_not_enforced'])} compliance gaps to BugManager")
                 except Exception as e:
                     logger.debug(f"Failed to report to BugManager: {e}")
-        
+
         # Schedule the async task
         asyncio.create_task(_publish_async())
-        
+
     except Exception as e:
         logger.debug(f"Error publishing compliance to Arbiter: {e}")
 

@@ -182,7 +182,7 @@ async def test_audit_chain_creation(temp_config_and_log, monkeypatch):
     )
 
     # Verify the chain is valid
-    is_valid = audit_log.verify_audit_chain(log_path)
+    is_valid, _ = audit_log.verify_audit_chain(log_path)
     assert is_valid
 
     # Close the logger

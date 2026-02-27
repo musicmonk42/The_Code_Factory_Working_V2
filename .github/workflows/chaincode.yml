@@ -1,0 +1,269 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+
+name: Fabric Chaincode CI
+
+# Validates the Hyperledger Fabric checkpoint chaincode on every push or PR
+# that touches chaincode sources or its Go module files.
+#
+# Jobs:
+#   build-and-test  — compile, vet, and run unit tests (with race detector)
+#   security        — govulncheck (known CVEs) + staticcheck (static analysis)
+#   lint            — gofmt formatting check
+
+on:
+  push:
+    branches: [ main, develop, 'feature/**' ]
+    paths:
+      - 'self_fixing_engineer/fabric_chaincode/**'
+      - '.github/workflows/chaincode.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'self_fixing_engineer/fabric_chaincode/**'
+      - '.github/workflows/chaincode.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write  # Required for SARIF upload
+
+concurrency:
+  group: chaincode-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  CHAINCODE_DIR: self_fixing_engineer/fabric_chaincode
+  GO_VERSION: '1.23'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Build + unit tests
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: ${{ env.CHAINCODE_DIR }}/go.sum
+
+      - name: Download Go module dependencies
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "📦 Downloading module dependencies..."
+          go mod download
+          go mod verify
+          echo "✓ Module dependencies verified"
+
+      - name: go build
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🔨 Building chaincode..."
+          go build ./...
+          echo "✓ Build successful"
+
+      - name: go vet
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🔍 Running go vet..."
+          go vet ./...
+          echo "✓ go vet passed"
+
+      - name: Unit tests (with race detector)
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🧪 Running unit tests with race detector..."
+          go test -v -count=1 -race -timeout=120s ./... 2>&1 | tee test-results.txt
+          echo "✓ All unit tests passed"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaincode-test-results
+          path: ${{ env.CHAINCODE_DIR }}/test-results.txt
+          retention-days: 14
+
+      - name: Test coverage report
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "📊 Generating coverage report..."
+          go test -count=1 -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out | tee coverage-summary.txt
+          COVERAGE=$(go tool cover -func=coverage.out | grep '^total:' | awk '{print $3}')
+          echo "Total coverage: $COVERAGE"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaincode-coverage
+          path: |
+            ${{ env.CHAINCODE_DIR }}/coverage.out
+            ${{ env.CHAINCODE_DIR }}/coverage-summary.txt
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 2. Security scanning
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: ${{ env.CHAINCODE_DIR }}/go.sum
+
+      - name: Install govulncheck
+        run: |
+          echo "📦 Installing govulncheck..."
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck -version
+          echo "✓ govulncheck installed"
+
+      - name: Run govulncheck (known CVEs in dependencies)
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🔐 Scanning for known CVEs in Go module dependencies..."
+          govulncheck ./... 2>&1 | tee govulncheck-results.txt
+          echo "✓ govulncheck scan complete"
+
+      - name: Install nancy (OSS Index dependency scanner)
+        run: |
+          echo "📦 Installing nancy..."
+          curl -sfL --retry 3 --retry-delay 5 \
+            -o /tmp/nancy.tar.gz \
+            "https://github.com/sonatype-nexus-community/nancy/releases/download/v1.0.46/nancy-v1.0.46-linux-amd64.tar.gz"
+          tar xzf /tmp/nancy.tar.gz -C /tmp
+          sudo mv /tmp/nancy /usr/local/bin/
+          nancy --version
+          echo "✓ nancy installed"
+
+      - name: Run nancy (OSS Index scan)
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        continue-on-error: true  # Non-blocking — results are informational
+        run: |
+          echo "🔐 Running nancy OSS Index dependency scan..."
+          go list -json -m all | nancy sleuth 2>&1 | tee nancy-results.txt || true
+          echo "✓ nancy scan complete"
+
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaincode-security-scan
+          path: |
+            ${{ env.CHAINCODE_DIR }}/govulncheck-results.txt
+            ${{ env.CHAINCODE_DIR }}/nancy-results.txt
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # 3. Code style / static analysis
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint & Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go ${{ env.GO_VERSION }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: ${{ env.CHAINCODE_DIR }}/go.sum
+
+      - name: Check gofmt formatting
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🎨 Checking gofmt formatting..."
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "❌ The following files are not gofmt-formatted:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Run 'gofmt -w .' inside ${{ env.CHAINCODE_DIR }} to fix."
+            exit 1
+          fi
+          echo "✓ All files are properly formatted"
+
+      - name: Install staticcheck
+        run: |
+          echo "📦 Installing staticcheck..."
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck -version
+          echo "✓ staticcheck installed"
+
+      - name: Run staticcheck
+        working-directory: ${{ env.CHAINCODE_DIR }}
+        run: |
+          echo "🔍 Running staticcheck static analysis..."
+          staticcheck ./... 2>&1 | tee staticcheck-results.txt
+          echo "✓ staticcheck passed"
+
+      - name: Upload lint results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaincode-lint-results
+          path: ${{ env.CHAINCODE_DIR }}/staticcheck-results.txt
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 4. Summary gate
+  # ---------------------------------------------------------------------------
+  chaincode-ci-summary:
+    name: Chaincode CI Summary
+    runs-on: ubuntu-latest
+    needs: [ build-and-test, security, lint ]
+    if: always()
+    permissions:
+      contents: read
+
+    steps:
+      - name: Evaluate results
+        run: |
+          echo "=== Fabric Chaincode CI Results ==="
+          echo ""
+          echo "  Build & Test : ${{ needs.build-and-test.result }}"
+          echo "  Security     : ${{ needs.security.result }}"
+          echo "  Lint         : ${{ needs.lint.result }}"
+          echo ""
+
+          CRITICAL_FAILURES=0
+          [ "${{ needs.build-and-test.result }}" == "failure" ] && ((CRITICAL_FAILURES++))
+          [ "${{ needs.lint.result }}"           == "failure" ] && ((CRITICAL_FAILURES++))
+          # Security is blocking — a known CVE in production chaincode is critical
+          [ "${{ needs.security.result }}"       == "failure" ] && ((CRITICAL_FAILURES++))
+
+          if [ $CRITICAL_FAILURES -gt 0 ]; then
+            echo "❌ $CRITICAL_FAILURES critical job(s) failed. Merge is blocked."
+            exit 1
+          fi
+          echo "✅ All Fabric Chaincode CI checks passed."

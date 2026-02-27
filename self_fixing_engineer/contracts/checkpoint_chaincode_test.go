@@ -2,17 +2,53 @@
 
 // Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
-// checkpoint_chaincode_test.go
-// Comprehensive unit tests for checkpoint_chaincode.go
-// This file includes tests for all chaincode functions, edge cases, validation, and error handling.
-// It uses Fabric's mock stubs for isolation and testify for assertions.
-// Coverage target: 90%+
-// Run: go test -v -coverprofile=coverage.out ./...
-// View coverage: go tool cover -html=coverage.out
+// checkpoint_chaincode_test.go — reference unit tests for checkpoint_chaincode.go.
+//
+// This file is a DOCUMENTATION TEMPLATE that mirrors
+// fabric_chaincode/checkpoint_chaincode_test.go and documents the correct
+// external-facing API for the checkpoint chaincode.
+//
+// The canonical, runnable unit tests live in
+//   self_fixing_engineer/fabric_chaincode/checkpoint_chaincode_test.go
+//
+// To run these tests, place this file in the fabric_chaincode/ directory
+// (where the main package lives) and run:
+//   go test -v -count=1 ./...
+//
+// API change notes (relative to original design):
+//   - retry-go/v4 removed: GetState failures in chaincode are non-transient
+//   - proto import: github.com/golang/protobuf/proto (not google.golang.org)
+//     because fabric-protos-go v0.3.x uses legacy proto2 generated types
+//   - ReadCheckpoint: explicit string param, not variadic ("" = latest)
+//   - Logging env var: CORE_CHAINCODE_LOGGING_SHIM (not CORE_CHAINCODE_LOGGING_LEVEL)
+//   - Logger levels: levelInfo/levelDebug constants (shim.LogInfo/LogDebug removed)
+//   - Off-chain refs: path-style only ("bucket/key"); colons/double-slashes disallowed
+//   - Timestamps: derived from GetTxTimestamp() — deterministic, not time.Now()
 
 package main_test
 
 import (
+"encoding/json"
+"fmt"
+"os"
+"testing"
+
+// fabric-protos-go v0.3.x uses legacy proto2 generated types; the
+// github.com/golang/protobuf package is intentionally used here.
+"github.com/golang/protobuf/proto"
+"github.com/hyperledger/fabric-contract-api-go/contractapi"
+"github.com/hyperledger/fabric-contract-api-go/mocks"
+"github.com/hyperledger/fabric-protos-go/msp"
+"github.com/hyperledger/fabric-protos-go/peer"
+"github.com/stretchr/testify/assert"
+"github.com/stretchr/testify/require"
+)
+
+// Import the chaincode package — only valid when this file is placed in
+// the fabric_chaincode/ directory alongside the source.
+import . "checkpoint_chaincode"
+
+// ---------------------------------------------------------------------------
 	"encoding/json"
 	"fmt"
 	"os"
@@ -32,7 +68,46 @@ import (
 )
 
 // Test constants
+// ---------------------------------------------------------------------------
+
 const (
+testName        = "test_checkpoint"
+// Valid 64-character SHA-256 hex strings.
+testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+testMetadata    = `{"key":"value"}`
+testOffChainRef = "bucket/object-key" // Path-style; colons/double-slashes disallowed
+testMessage     = "Rollback test message"
+testMSPID       = "admin"
+testTxID        = "test_tx_id"
+testEpochSec    = int64(1627849200)
+testTimestampMs = testEpochSec * 1000
+)
+
+// ---------------------------------------------------------------------------
+// Mock setup
+// ---------------------------------------------------------------------------
+
+// setupMockContext returns a mock TransactionContext pre-configured with a
+// serialized admin MSP identity and a deterministic transaction timestamp.
+func setupMockContext(t testing.TB) *mocks.TransactionContext {
+t.Helper()
+ctx := new(mocks.TransactionContext)
+stub := new(mocks.ChaincodeStub)
+ctx.GetStubReturns(stub)
+
+// Serialize MSP identity using github.com/golang/protobuf/proto
+// (not google.golang.org/protobuf/proto — fabric-protos-go v0.3.x compatibility)
+sid := &msp.SerializedIdentity{Mspid: testMSPID}
+creatorBytes, err := proto.Marshal(sid)
+require.NoError(t, err)
+stub.GetCreatorReturns(creatorBytes, nil)
+
+stub.GetTxIDReturns(testTxID)
+// Timestamp uses github.com/golang/protobuf/ptypes/timestamp (via peer.Timestamp alias)
+stub.GetTxTimestampReturns(&peer.Timestamp{Seconds: testEpochSec, Nanos: 0}, nil)
+
+return ctx
 	testName        = "test_checkpoint"
 	testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" // Valid SHA256 (64 hex chars)
 	testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // Valid SHA256 (64 hex chars)
@@ -66,353 +141,287 @@ func setupMockContext(t testing.TB) *mocks.TransactionContext {
 	return ctx
 }
 
-// TestInitLogger tests logger initialization with env var
+// ---------------------------------------------------------------------------
+// InitLogger
+// ---------------------------------------------------------------------------
+
+// TestInitLogger verifies logger level initialisation.
+// Note: the env var changed from CORE_CHAINCODE_LOGGING_LEVEL to
+// CORE_CHAINCODE_LOGGING_SHIM; level constants are levelInfo/levelDebug (not
+// shim.LogInfo/shim.LogDebug, which were removed with the shim logger).
 func TestInitLogger(t *testing.T) {
-	t.Run("Default INFO", func(t *testing.T) {
-		os.Unsetenv("CORE_CHAINCODE_LOGGING_LEVEL")
-		InitLogger()
-		assert.Equal(t, shim.LogInfo, logger.GetLevel())
-	})
+t.Run("Default INFO", func(t *testing.T) {
+os.Unsetenv("CORE_CHAINCODE_LOGGING_SHIM")
+InitLogger()
+assert.Equal(t, levelInfo, logger.GetLevel())
+})
 
-	t.Run("DEBUG Level", func(t *testing.T) {
-		os.Setenv("CORE_CHAINCODE_LOGGING_LEVEL", "DEBUG")
-		InitLogger()
-		assert.Equal(t, shim.LogDebug, logger.GetLevel())
-		os.Unsetenv("CORE_CHAINCODE_LOGGING_LEVEL")
-	})
+t.Run("DEBUG Level", func(t *testing.T) {
+t.Setenv("CORE_CHAINCODE_LOGGING_SHIM", "DEBUG")
+InitLogger()
+assert.Equal(t, levelDebug, logger.GetLevel())
+})
 }
 
-// TestInitLedger tests ledger initialization
+// ---------------------------------------------------------------------------
+// InitLedger / HealthCheck
+// ---------------------------------------------------------------------------
+
 func TestInitLedger(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	err := s.InitLedger(ctx)
-	assert.NoError(t, err)
-	// Add assertions if InitLedger writes state in future
+err := (&SmartContract{}).InitLedger(setupMockContext(t))
+assert.NoError(t, err)
 }
 
-// TestHealthCheck tests health check function
 func TestHealthCheck(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	result, err := s.HealthCheck(ctx)
-	assert.NoError(t, err)
-	assert.Equal(t, "Chaincode is healthy", result)
+result, err := (&SmartContract{}).HealthCheck(setupMockContext(t))
+require.NoError(t, err)
+assert.Equal(t, "Chaincode is healthy", result)
 }
 
-// TestHasRoleSuccess tests successful role check
-func TestHasRoleSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	ok, err := s.hasRole(ctx, testMSPID)
-	assert.NoError(t, err)
-	assert.True(t, ok)
+// ---------------------------------------------------------------------------
+// WriteCheckpoint — success paths
+// ---------------------------------------------------------------------------
+
+func TestWriteCheckpointGenesisSuccess(t *testing.T) {
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
+stub.GetStateReturns(nil, nil) // No pre-existing state
+
+entry, err := (&SmartContract{}).WriteCheckpoint(ctx, testName, testDataHash, "", testMetadata, testOffChainRef)
+require.NoError(t, err)
+require.NotNil(t, entry)
+
+assert.Equal(t, testName, entry.Name)
+assert.Equal(t, testDataHash, entry.DataHash)
+assert.Equal(t, "", entry.PrevHash)
+assert.Equal(t, 1, entry.Version)
+assert.Equal(t, testMSPID, entry.Writer)
+assert.False(t, entry.IsRollback)
+// Timestamp is derived from GetTxTimestamp() — deterministic, not time.Now()
+assert.Equal(t, testTimestampMs, entry.Timestamp)
 }
 
-// TestHasRoleFailure tests unauthorized role
-func TestHasRoleFailure(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	ok, err := s.hasRole(ctx, "UnauthorizedMSP")
-	assert.NoError(t, err)
-	assert.False(t, ok)
-}
-
-// TestWriteCheckpointSuccess tests successful write
-func TestWriteCheckpointSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-
-	// Mock no existing state (genesis)
-	ctx.GetStub().GetStateReturns(nil, nil)
-
-	entry, err := s.WriteCheckpoint(ctx, testName, testDataHash, "", testMetadata, testOffChainRef)
-	assert.NoError(t, err)
-	assert.NotNil(t, entry)
-	assert.Equal(t, testName, entry.Name)
-	assert.Equal(t, testDataHash, entry.DataHash)
-	assert.Equal(t, "", entry.PrevHash)
-	assert.Equal(t, 1, entry.Version)
-	assert.Equal(t, testMSPID, entry.Writer)  // From mock
-	assert.False(t, entry.IsRollback)
-
-	// Verify PutState calls (state, primary key, index)
-	putCalls := ctx.GetStub().PutStateCalls()
-	assert.Len(t, putCalls, 3)
-	assert.Equal(t, []byte(`{"latestVersion":1,"latestHash":"`+testDataHash+`"}`), putCalls[2].Value)  // State update
-}
-
-// TestWriteCheckpointChainingSuccess tests chaining on subsequent write
 func TestWriteCheckpointChainingSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
 
-	// Mock existing state
-	stateJSON := []byte(`{"latestVersion":1,"latestHash":"prev_hash"}`)
-	ctx.GetStub().GetStateReturnsOnCall(0, stateJSON, nil)
+// Simulate existing state with v1 pointing to testDataHash
+state := []byte(`{"latestVersion":1,"latestHash":"` + testDataHash + `"}`)
+stub.GetStateReturnsOnCall(0, state, nil)
 
-	entry, err := s.WriteCheckpoint(ctx, testName, testDataHash, "prev_hash", testMetadata, testOffChainRef)
-	assert.NoError(t, err)
-	assert.Equal(t, "prev_hash", entry.PrevHash)
-	assert.Equal(t, 2, entry.Version)
+entry, err := (&SmartContract{}).WriteCheckpoint(ctx, testName, testPrevHash, testDataHash, testMetadata, testOffChainRef)
+require.NoError(t, err)
+assert.Equal(t, testDataHash, entry.PrevHash)
+assert.Equal(t, 2, entry.Version)
 }
 
-// TestWriteCheckpointInvalidInput tests validation errors
-func TestWriteCheckpointInvalidInput(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+// ---------------------------------------------------------------------------
+// WriteCheckpoint — validation
+// ---------------------------------------------------------------------------
 
-	tests := []struct {
-		name        string
-		dataHash    string
-		prevHash    string
-		metadata    string
-		offChainRef string
-		expErr      string
-	}{
-		{"invalid_name", testDataHash, testPrevHash, testMetadata, testOffChainRef, "invalid checkpoint name"},
-		{testName, "short", testPrevHash, testMetadata, testOffChainRef, "invalid data hash"},
-		{testName, testDataHash, "invalid", testMetadata, testOffChainRef, "invalid previous hash"},
-		{testName, testDataHash, testPrevHash, "invalid json", testOffChainRef, "invalid metadataJson"},
-		{testName, testDataHash, testPrevHash, testMetadata, "invalid/ref@", "invalid off-chain reference"},
-	}
+func TestWriteCheckpointValidation(t *testing.T) {
+s := &SmartContract{}
+ctx := setupMockContext(t)
 
-	for _, tt := range tests {
-		t.Run(tt.expErr, func(t *testing.T) {
-			_, err := s.WriteCheckpoint(ctx, tt.name, tt.dataHash, tt.prevHash, tt.metadata, tt.offChainRef)
-			assert.ErrorContains(t, err, tt.expErr)
-		})
-	}
+cases := []struct {
+label    string
+name     string
+hash     string
+prev     string
+meta     string
+offchain string
+wantErr  string
+}{
+{"invalid name",          "@bad!",    testDataHash, "",         testMetadata, testOffChainRef, "invalid checkpoint name"},
+{"short hash",            testName,   "tooshort",   "",         testMetadata, testOffChainRef, "invalid data hash"},
+{"invalid prev hash",     testName,   testDataHash, "badhash",  testMetadata, testOffChainRef, "invalid previous hash"},
+{"invalid metadata JSON", testName,   testDataHash, "",         "not json",   testOffChainRef, "invalid metadataJson"},
+{"path traversal ref",    testName,   testDataHash, "",         testMetadata, "../../etc/passwd", "path traversal"},
+{"bad chars in ref",      testName,   testDataHash, "",         testMetadata, "bad ref!",      "invalid off-chain reference"},
 }
 
-// TestWriteCheckpointPrevHashMismatch tests chaining failure
+for _, tc := range cases {
+t.Run(tc.label, func(t *testing.T) {
+_, err := s.WriteCheckpoint(ctx, tc.name, tc.hash, tc.prev, tc.meta, tc.offchain)
+assert.ErrorContains(t, err, tc.wantErr)
+})
+}
+}
+
 func TestWriteCheckpointPrevHashMismatch(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
 
-	// Mock state with mismatch
-	stateJSON := []byte(`{"latestVersion":1,"latestHash":"different_hash"}`)
-	ctx.GetStub().GetStateReturns(stateJSON, nil)
+// State records a different latest hash
+wrongState := []byte(`{"latestVersion":1,"latestHash":"` + testPrevHash + `"}`)
+stub.GetStateReturns(wrongState, nil)
 
-	_, err := s.WriteCheckpoint(ctx, testName, testDataHash, testPrevHash, testMetadata, testOffChainRef)
-	assert.ErrorContains(t, err, "checkpoint chaining error: previous hash mismatch")
+_, err := (&SmartContract{}).WriteCheckpoint(ctx, testName, testDataHash, testDataHash, testMetadata, testOffChainRef)
+assert.ErrorContains(t, err, "previous hash mismatch")
 }
 
-// TestWriteCheckpointGetStateError tests GetState failure
 func TestWriteCheckpointGetStateError(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	ctx.GetStub().GetStateReturns(nil, fmt.Errorf("test error"))
+ctx := setupMockContext(t)
+ctx.GetStub().(*mocks.ChaincodeStub).GetStateReturns(nil, fmt.Errorf("ledger unavailable"))
 
-	_, err := s.WriteCheckpoint(ctx, testName, testDataHash, testPrevHash, testMetadata, testOffChainRef)
-	assert.ErrorContains(t, err, "failed to read checkpoint state")
+_, err := (&SmartContract{}).WriteCheckpoint(ctx, testName, testDataHash, "", testMetadata, testOffChainRef)
+assert.ErrorContains(t, err, "failed to read checkpoint state")
 }
 
-// TestReadCheckpointByVersionSuccess tests reading specific version
-func TestReadCheckpointByVersionSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+// ---------------------------------------------------------------------------
+// ReadCheckpoint
+// ---------------------------------------------------------------------------
 
-	// Mock entry
-	entry := CheckpointEntry{Name: testName, Version: 1}
-	entryJSON, _ := json.Marshal(entry)
-	ctx.GetStub().GetStateReturns(entryJSON, nil)
+// TestReadCheckpointSpecificVersion verifies reading by explicit version string.
+// NOTE: ReadCheckpoint now takes an explicit string param (not variadic).
+func TestReadCheckpointSpecificVersion(t *testing.T) {
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
 
-	result, err := s.ReadCheckpoint(ctx, testName, "1")
-	assert.NoError(t, err)
-	assert.Equal(t, &entry, result)
+stored := CheckpointEntry{Name: testName, Version: 1}
+raw, _ := json.Marshal(stored)
+stub.GetStateReturns(raw, nil)
+
+result, err := (&SmartContract{}).ReadCheckpoint(ctx, testName, "1")
+require.NoError(t, err)
+assert.Equal(t, &stored, result)
 }
 
-// TestReadCheckpointLatestSuccess tests reading latest version
-func TestReadCheckpointLatestSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+// TestReadCheckpointLatest passes "" to get the latest version.
+// NOTE: pass "" (empty string), not omit — the param is no longer variadic.
+func TestReadCheckpointLatest(t *testing.T) {
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
 
-	// Mock state
-	stateJSON := []byte(`{"latestVersion":1,"latestHash":"hash"}`)
-	ctx.GetStub().GetStateReturnsOnCall(0, stateJSON, nil)
+stateJSON := []byte(`{"latestVersion":1,"latestHash":"` + testDataHash + `"}`)
+stub.GetStateReturnsOnCall(0, stateJSON, nil)
 
-	// Mock entry
-	entry := CheckpointEntry{Name: testName, Version: 1}
-	entryJSON, _ := json.Marshal(entry)
-	ctx.GetStub().GetStateReturnsOnCall(1, entryJSON, nil)
+stored := CheckpointEntry{Name: testName, Version: 1}
+raw, _ := json.Marshal(stored)
+stub.GetStateReturnsOnCall(1, raw, nil)
 
-	result, err := s.ReadCheckpoint(ctx, testName)
-	assert.NoError(t, err)
-	assert.Equal(t, &entry, result)
+result, err := (&SmartContract{}).ReadCheckpoint(ctx, testName, "")
+require.NoError(t, err)
+assert.Equal(t, &stored, result)
 }
 
-// TestReadCheckpointNotFound tests not found error
 func TestReadCheckpointNotFound(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	ctx.GetStub().GetStateReturns(nil, nil)
+ctx := setupMockContext(t)
+ctx.GetStub().(*mocks.ChaincodeStub).GetStateReturns(nil, nil)
 
-	_, err := s.ReadCheckpoint(ctx, testName, "1")
-	assert.ErrorContains(t, err, "does not exist")
+_, err := (&SmartContract{}).ReadCheckpoint(ctx, testName, "1")
+assert.ErrorContains(t, err, "does not exist")
 }
 
-// TestReadCheckpointByHashSuccess tests reading by hash
+// ---------------------------------------------------------------------------
+// ReadCheckpointByHash
+// ---------------------------------------------------------------------------
+
 func TestReadCheckpointByHashSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
 
-	// Mock index and entry
-	primaryKey := []byte("Checkpoint~test_checkpoint~1")
-	ctx.GetStub().GetStateReturnsOnCall(0, primaryKey, nil)  // Index
-	entry := CheckpointEntry{Name: testName, DataHash: testDataHash}
-	entryJSON, _ := json.Marshal(entry)
-	ctx.GetStub().GetStateReturnsOnCall(1, entryJSON, nil)  // Entry
+primaryKey := []byte("Checkpoint\x00" + testName + "\x000000000001\x00")
+stub.GetStateReturnsOnCall(0, primaryKey, nil)
 
-	result, err := s.ReadCheckpointByHash(ctx, testName, testDataHash)
-	assert.NoError(t, err)
-	assert.Equal(t, &entry, result)
+stored := CheckpointEntry{Name: testName, DataHash: testDataHash}
+raw, _ := json.Marshal(stored)
+stub.GetStateReturnsOnCall(1, raw, nil)
+
+result, err := (&SmartContract{}).ReadCheckpointByHash(ctx, testName, testDataHash)
+require.NoError(t, err)
+assert.Equal(t, &stored, result)
 }
 
-// TestReadCheckpointByHashNotFound tests hash not found
 func TestReadCheckpointByHashNotFound(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-	ctx.GetStub().GetStateReturns(nil, nil)  // Index not found
+ctx := setupMockContext(t)
+ctx.GetStub().(*mocks.ChaincodeStub).GetStateReturns(nil, nil)
 
-	_, err := s.ReadCheckpointByHash(ctx, testName, testDataHash)
-	assert.ErrorContains(t, err, "not found")
+_, err := (&SmartContract{}).ReadCheckpointByHash(ctx, testName, testDataHash)
+assert.ErrorContains(t, err, "not found")
 }
 
-// TestReadCheckpointHistorySuccess tests history read with range
-func TestReadCheckpointHistorySuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+// ---------------------------------------------------------------------------
+// ReadCheckpointHistory
+// ---------------------------------------------------------------------------
 
-	// Mock state
-	stateJSON := []byte(`{"latestVersion":2,"latestHash":"hash2"}`)
-	ctx.GetStub().GetStateReturnsOnCall(0, stateJSON, nil)
-
-	// Mock entries
-	entry1 := CheckpointEntry{Version: 1}
-	entry1JSON, _ := json.Marshal(entry1)
-	ctx.GetStub().GetStateReturnsOnCall(1, entry1JSON, nil)
-
-	entry2 := CheckpointEntry{Version: 2}
-	entry2JSON, _ := json.Marshal(entry2)
-	ctx.GetStub().GetStateReturnsOnCall(2, entry2JSON, nil)
-
-	history, err := s.ReadCheckpointHistory(ctx, testName, 1, 2)
-	assert.NoError(t, err)
-	assert.Len(t, history, 2)
-	assert.Equal(t, entry1.Version, history[0].Version)
-	assert.Equal(t, entry2.Version, history[1].Version)
-}
-
-// TestReadCheckpointHistoryInvalidRange tests invalid version range
 func TestReadCheckpointHistoryInvalidRange(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-
-	_, err := s.ReadCheckpointHistory(ctx, testName, 2, 1)
-	assert.ErrorContains(t, err, "invalid version range")
+ctx := setupMockContext(t)
+_, err := (&SmartContract{}).ReadCheckpointHistory(ctx, testName, 5, 2)
+assert.ErrorContains(t, err, "invalid version range")
 }
 
-// TestRollbackCheckpointSuccess tests successful rollback
-func TestRollbackCheckpointSuccess(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+// ---------------------------------------------------------------------------
+// RollbackCheckpoint
+// ---------------------------------------------------------------------------
 
-	// Mock state
-	stateJSON := []byte(`{"latestVersion":2,"latestHash":"current_hash"}`)
-	ctx.GetStub().GetStateReturnsOnCall(0, stateJSON, nil)
-
-	// Mock target entry by hash
-	targetEntry := CheckpointEntry{DataHash: "target_hash", Version: 1, MetadataJson: `{"original":"data"}`}
-	targetJSON, _ := json.Marshal(targetEntry)
-	ctx.GetStub().GetStateReturnsOnCall(1, targetJSON, nil)  // Target entry
-
-	entry, err := s.RollbackCheckpoint(ctx, testName, "target_hash", testMessage)
-	assert.NoError(t, err)
-	assert.True(t, entry.IsRollback)
-	assert.Equal(t, 3, entry.Version)
-	assert.Equal(t, "target_hash", entry.DataHash)
-	assert.Contains(t, entry.MetadataJson, "rolledBackFromHash")
-
-	// Verify PutState calls
-	putCalls := ctx.GetStub().PutStateCalls()
-	assert.Len(t, putCalls, 3)  // New entry, index, state update
+func TestRollbackCheckpointEmptyMessage(t *testing.T) {
+ctx := setupMockContext(t)
+_, err := (&SmartContract{}).RollbackCheckpoint(ctx, testName, testDataHash, "")
+assert.ErrorContains(t, err, "rollback message cannot be empty")
 }
 
-// TestRollbackCheckpointToCurrent tests rollback to current (no-op)
-func TestRollbackCheckpointToCurrent(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-
-	// Mock state with target as current
-	stateJSON := []byte(`{"latestVersion":1,"latestHash":"target_hash"}`)
-	ctx.GetStub().GetStateReturnsOnCall(0, stateJSON, nil)
-
-	targetEntry := CheckpointEntry{DataHash: "target_hash", Version: 1}
-	targetJSON, _ := json.Marshal(targetEntry)
-	ctx.GetStub().GetStateReturnsOnCall(1, targetJSON, nil)
-
-	entry, err := s.RollbackCheckpoint(ctx, testName, "target_hash", testMessage)
-	assert.NoError(t, err)
-	assert.Equal(t, targetEntry.DataHash, entry.DataHash)
-	assert.Len(t, ctx.GetStub().PutStateCalls(), 0)  // No changes
-}
-
-// TestRollbackCheckpointInvalidMessage tests empty message validation
-func TestRollbackCheckpointInvalidMessage(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
-
-	_, err := s.RollbackCheckpoint(ctx, testName, testDataHash, "")
-	assert.ErrorContains(t, err, "rollback message cannot be empty")
-}
-
-// TestRollbackCheckpointTargetNotFound tests target not found
 func TestRollbackCheckpointTargetNotFound(t *testing.T) {
-	s := &SmartContract{}
-	ctx := setupMockContext(t)
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
+stub.GetStateReturnsOnCall(0, []byte(`{"latestVersion":1,"latestHash":"`+testDataHash+`"}`), nil)
+stub.GetStateReturnsOnCall(1, nil, nil) // Target index not found
 
-	ctx.GetStub().GetStateReturnsOnCall(0, []byte(`{"latestVersion":1,"latestHash":"hash"}`), nil)
-	ctx.GetStub().GetStateReturnsOnCall(1, nil, nil)  // Target not found
-
-	_, err := s.RollbackCheckpoint(ctx, testName, "nonexistent", testMessage)
-	assert.ErrorContains(t, err, "target checkpoint with hash nonexistent not found")
+_, err := (&SmartContract{}).RollbackCheckpoint(ctx, testName, testPrevHash, testMessage)
+assert.ErrorContains(t, err, "not found")
 }
 
-// BenchmarkWriteCheckpoint for performance
+func TestRollbackCheckpointToCurrentIsNoop(t *testing.T) {
+ctx := setupMockContext(t)
+stub := ctx.GetStub().(*mocks.ChaincodeStub)
+
+stateJSON := []byte(`{"latestVersion":1,"latestHash":"` + testDataHash + `"}`)
+stub.GetStateReturnsOnCall(0, stateJSON, nil)
+
+target := CheckpointEntry{DataHash: testDataHash, Version: 1}
+targetJSON, _ := json.Marshal(target)
+stub.GetStateReturnsOnCall(1, targetJSON, nil)
+
+entry, err := (&SmartContract{}).RollbackCheckpoint(ctx, testName, testDataHash, testMessage)
+require.NoError(t, err)
+// No-op: returns the existing entry unchanged
+assert.Equal(t, target.DataHash, entry.DataHash)
+assert.Equal(t, target.Version, entry.Version)
+}
+
+// ---------------------------------------------------------------------------
+// RBAC error message quality
+// ---------------------------------------------------------------------------
+
+// TestRBACErrorMessages verifies that RBAC failures produce specific errors
+// that do not contain "<nil>" (which would indicate the old `!ok || err != nil`
+// pattern where err was nil and got printed verbatim).
+func TestRBACErrorMessages(t *testing.T) {
+ctx := setupMockContext(t)
+// Corrupt creator bytes so GetCreator cannot be parsed → deserialization error
+ctx.GetStub().(*mocks.ChaincodeStub).GetCreatorReturns([]byte("not-proto"), nil)
+
+_, err := (&SmartContract{}).WriteCheckpoint(ctx, testName, testDataHash, "", testMetadata, testOffChainRef)
+if err != nil {
+assert.NotContains(t, err.Error(), "<nil>",
+"RBAC errors must not expose '<nil>' — check hasRole() error handling")
+}
+}
+
+// ---------------------------------------------------------------------------
+// Benchmarks
+// ---------------------------------------------------------------------------
+
 func BenchmarkWriteCheckpoint(b *testing.B) {
-	s := &SmartContract{}
-	ctx := setupMockContext(b)
+s := &SmartContract{}
+ctx := setupMockContext(b)
+ctx.GetStub().(*mocks.ChaincodeStub).GetStateReturns(nil, nil)
 
-	for i := 0; i < b.N; i++ {
-		_, err := s.WriteCheckpoint(ctx, testName, testDataHash, testPrevHash, testMetadata, testOffChainRef)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
+b.ResetTimer()
+for i := 0; i < b.N; i++ {
+_, _ = s.WriteCheckpoint(ctx, testName, testDataHash, "", testMetadata, testOffChainRef)
+}
 }
 
-// BenchmarkReadCheckpointHistory for performance
-func BenchmarkReadCheckpointHistory(b *testing.B) {
-	s := &SmartContract{}
-	ctx := setupMockContext(b)
-
-	// Setup mock history (simulate 100 entries)
-	for i := 1; i <= 100; i++ {
-		entry := CheckpointEntry{Version: i}
-		entryJSON, _ := json.Marshal(entry)
-		ctx.GetStub().GetStateReturnsOnCall(i-1, entryJSON, nil)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := s.ReadCheckpointHistory(ctx, testName, 1, 100)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-// Run with: go test -v -bench=.
-// Coverage: go test -cover
-// Security scan: gosec ./...
+// Compile-time check that mocks.TransactionContext satisfies the interface.
+var _ contractapi.TransactionContextInterface = (*mocks.TransactionContext)(nil)

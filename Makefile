@@ -9,6 +9,8 @@
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
+	test-arbiter-policy test-arbiter-integration \
+	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
 	test-arbiter-policy test-arbiter-integration test-evolution test-dlt
 
 # Default target
@@ -567,6 +569,59 @@ deploy-production: ## Deploy to production environment
 	@echo "$(GREEN)Deployed to production!$(NC)"
 
 # =============================================================================
+# Fabric Chaincode
+# =============================================================================
+
+CHAINCODE_DIR := self_fixing_engineer/fabric_chaincode
+
+chaincode-build: ## Build the Fabric checkpoint chaincode (verifies compilation)
+	@echo "$(BLUE)Building Fabric checkpoint chaincode...$(NC)"
+	@command -v go >/dev/null 2>&1 || { echo "$(RED)ERROR: 'go' not found — install Go 1.23+$(NC)"; exit 1; }
+	cd $(CHAINCODE_DIR) && go build ./...
+	@echo "$(GREEN)Chaincode build successful.$(NC)"
+
+chaincode-test: ## Run unit tests for the Fabric checkpoint chaincode
+	@echo "$(BLUE)Running chaincode unit tests...$(NC)"
+	@command -v go >/dev/null 2>&1 || { echo "$(RED)ERROR: 'go' not found — install Go 1.23+$(NC)"; exit 1; }
+	cd $(CHAINCODE_DIR) && go test -v -count=1 -race ./...
+	@echo "$(GREEN)Chaincode unit tests passed.$(NC)"
+
+chaincode-coverage: ## Run chaincode tests with HTML coverage report
+	@echo "$(BLUE)Running chaincode tests with coverage...$(NC)"
+	@command -v go >/dev/null 2>&1 || { echo "$(RED)ERROR: 'go' not found — install Go 1.23+$(NC)"; exit 1; }
+	cd $(CHAINCODE_DIR) && \
+		go test -v -count=1 -coverprofile=coverage.out ./... && \
+		go tool cover -html=coverage.out -o coverage.html
+	@echo "$(GREEN)Coverage report: $(CHAINCODE_DIR)/coverage.html$(NC)"
+
+chaincode-vet: ## Run go vet on the chaincode
+	@echo "$(BLUE)Running go vet on chaincode...$(NC)"
+	@command -v go >/dev/null 2>&1 || { echo "$(RED)ERROR: 'go' not found — install Go 1.23+$(NC)"; exit 1; }
+	cd $(CHAINCODE_DIR) && go vet ./...
+	@echo "$(GREEN)go vet passed with no issues.$(NC)"
+
+chaincode-lint: ## Run staticcheck + govulncheck on the chaincode
+	@echo "$(BLUE)Linting chaincode (staticcheck + govulncheck)...$(NC)"
+	@command -v go >/dev/null 2>&1 || { echo "$(RED)ERROR: 'go' not found — install Go 1.23+$(NC)"; exit 1; }
+	@command -v staticcheck >/dev/null 2>&1 || { \
+		echo "$(YELLOW)staticcheck not found — installing...$(NC)"; \
+		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+	}
+	@command -v govulncheck >/dev/null 2>&1 || { \
+		echo "$(YELLOW)govulncheck not found — installing...$(NC)"; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	}
+	cd $(CHAINCODE_DIR) && staticcheck ./...
+	cd $(CHAINCODE_DIR) && govulncheck ./...
+	@echo "$(GREEN)Chaincode lint and vulnerability scan passed.$(NC)"
+
+chaincode-clean: ## Remove chaincode build artifacts and coverage files
+	@echo "$(BLUE)Cleaning chaincode artifacts...$(NC)"
+	rm -f $(CHAINCODE_DIR)/coverage.out $(CHAINCODE_DIR)/coverage.html
+	rm -f $(CHAINCODE_DIR)/checkpoint_chaincode
+	@echo "$(GREEN)Chaincode artifacts removed.$(NC)"
+
+# =============================================================================
 # Cleanup
 # =============================================================================
 
@@ -582,6 +637,7 @@ clean: ## Clean up generated files and caches
 	find . -type f -name "*~" -delete 2>/dev/null || true
 	rm -rf htmlcov/ .coverage coverage.xml
 	rm -rf dist/ build/
+	$(MAKE) chaincode-clean 2>/dev/null || true
 	@echo "$(GREEN)Cleanup complete!$(NC)"
 
 clean-all: clean docker-clean db-reset docs-clean ## Deep clean (removes Docker resources, databases, and doc build output)

@@ -209,10 +209,8 @@ async def test_verify_audit_chain(temp_log_path, mock_env):
     logger = audit_log.AuditLogger(log_path=temp_log_path)
     await logger.add_entry("system", "test1", {"msg": "test1"}, "test_agent")
     await logger.add_entry("system", "test2", {"msg": "test2"}, "test_agent")
-    is_valid = audit_log.verify_audit_chain(temp_log_path)
+    is_valid, _ = audit_log.verify_audit_chain(temp_log_path)
     assert is_valid
-
-
 @pytest.mark.asyncio
 async def test_verify_audit_chain_corrupted(temp_log_path, mock_env):
     """Test verifying corrupted audit chain."""
@@ -220,7 +218,7 @@ async def test_verify_audit_chain_corrupted(temp_log_path, mock_env):
     await logger.add_entry("system", "test", {"msg": "test"}, "test_agent")
     with open(temp_log_path, "a") as f:
         f.write("corrupted_line\n")
-    is_valid = audit_log.verify_audit_chain(temp_log_path)
+    is_valid, _ = audit_log.verify_audit_chain(temp_log_path)
     assert not is_valid
 
 
@@ -248,7 +246,7 @@ async def test_concurrent_add_entry(temp_log_path, mock_env):
 
     tasks = [add_test_entry(i) for i in range(10)]  # Reduced from 50 for faster tests
     await asyncio.gather(*tasks)
-    assert audit_log.verify_audit_chain(temp_log_path)
+    assert audit_log.verify_audit_chain(temp_log_path)[0]
 
 
 @pytest.mark.asyncio
@@ -341,7 +339,7 @@ async def test_verify_audit_chain_missing_pub_key(temp_log_path, mock_env, monke
 
     # If there are no signatures or only non-signed signatures, chain should be valid
     # If there are signed signatures but no public keys, it should be invalid
-    is_valid = audit_log.verify_audit_chain(temp_log_path)
+    is_valid, _ = audit_log.verify_audit_chain(temp_log_path)
 
     # The test expectation depends on whether signatures were added
     # If entry has signatures with status "signed", verification should fail without public keys
