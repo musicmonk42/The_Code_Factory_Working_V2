@@ -81,16 +81,21 @@ def setup_paths(verbose: bool = False) -> List[str]:
 
     # ------------------------------------------------------------------
     # Step 2: Add per-component sub-directories for legacy-style imports.
+    #
+    # These are appended (not prepended) so that the project root added in
+    # Step 1 is always searched first.  This prevents component-local
+    # sub-packages (e.g. ``self_fixing_engineer/shared/``) from shadowing
+    # top-level packages such as ``shared/`` that live under PROJECT_ROOT.
     # ------------------------------------------------------------------
     for component_name, component_path in COMPONENT_PATHS.items():
         if component_path.exists():
             path_str = str(component_path)
             if path_str not in sys.path:
-                sys.path.insert(0, path_str)
+                sys.path.append(path_str)
                 added_paths.append(path_str)
                 if verbose:
                     print(
-                        f"[path_setup] Added {component_name} to sys.path: {path_str}"
+                        f"[path_setup] Appended {component_name} to sys.path: {path_str}"
                     )
             else:
                 if verbose:
