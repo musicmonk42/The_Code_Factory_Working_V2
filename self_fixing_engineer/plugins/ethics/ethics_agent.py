@@ -14,6 +14,7 @@ Observability delegated to the shared ``_agent_base`` infrastructure.
 
 from __future__ import annotations
 
+import ast
 import logging
 import re
 import time
@@ -78,8 +79,16 @@ def _scan_compliance(source: str) -> List[str]:
         violations.append(f"Potential hardcoded secret near: {match.group()[:40]!r}")
     for match in _EVAL_PATTERN.finditer(source):
         violations.append("Unsafe eval() call detected")
-    if "try" not in source and "except" not in source and len(source) > 100:
-        violations.append("No error handling (try/except) found in non-trivial source")
+    # Use AST-based analysis to detect missing error handling — avoids false
+    # positives from the keywords appearing in comments or docstrings.
+    if len(source) > 100:
+        try:
+            tree = ast.parse(source)
+            has_try = any(isinstance(node, ast.Try) for node in ast.walk(tree))
+            if not has_try:
+                violations.append("No error handling (try/except) found in non-trivial source")
+        except SyntaxError:
+            violations.append("Syntax error — compliance scan incomplete")
     return violations
 
 

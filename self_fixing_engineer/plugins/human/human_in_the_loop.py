@@ -73,12 +73,24 @@ _SLA_HOURS: Dict[str, int] = {
     "low": 72,
 }
 
+# Thread-safe escalation queue counter for stable ordering within a process.
+_queue_counter_lock = __import__("threading").Lock()
+_queue_counter: int = 0
+
+
+def _next_queue_position() -> int:
+    """Return the next monotonically-increasing escalation queue position."""
+    global _queue_counter
+    with _queue_counter_lock:
+        _queue_counter += 1
+        return _queue_counter
+
 
 def _compute_sla_deadline(priority: str) -> str:
     """Return an ISO-8601 deadline string for the given *priority*."""
     hours = _SLA_HOURS.get(priority.lower(), 24)
-    deadline = datetime.datetime.utcnow() + datetime.timedelta(hours=hours)
-    return deadline.isoformat() + "Z"
+    deadline = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=hours)
+    return deadline.isoformat()
 
 
 class HumanInTheLoop(CrewAgentBase):
@@ -172,7 +184,7 @@ class HumanInTheLoop(CrewAgentBase):
                 "reason": reason,
                 "priority": priority,
                 "sla_deadline": sla_deadline,
-                "queue_position": 1,
+                "queue_position": _next_queue_position(),
                 "context": context,
                 "escalation_path": escalation_path,
                 "human_response": None,
