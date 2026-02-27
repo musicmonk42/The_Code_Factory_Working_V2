@@ -107,23 +107,25 @@ from .checkpoint_utils import scrub_data
 
 # ---- Module-level Setup ----
 
-# Configure structured logging with a rotating file handler to prevent log file bloat
-log_handler = RotatingFileHandler(
-    "exceptions.log", maxBytes=10 * 1024 * 1024, backupCount=5
-)  # 10MB per file, 5 backups
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    logger_factory=structlog.stdlib.LoggerFactory(),
-    wrapper_class=structlog.stdlib.BoundLogger,
-    cache_logger_on_first_use=True,
-)
-root_logger = logging.getLogger()
-root_logger.addHandler(log_handler)
-root_logger.setLevel(logging.INFO)
+# Configure structured logging only when explicitly requested.
+# This prevents import-time global logging side effects in host applications.
+if os.environ.get("CHECKPOINT_EXCEPTIONS_CONFIGURE_LOGGING", "false").lower() == "true":
+    log_handler = RotatingFileHandler(
+        "exceptions.log", maxBytes=10 * 1024 * 1024, backupCount=5
+    )  # 10MB per file, 5 backups
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.JSONRenderer(),
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+    root_logger = logging.getLogger()
+    root_logger.addHandler(log_handler)
+    root_logger.setLevel(logging.INFO)
 logger = structlog.get_logger(__name__)
 audit_logger = structlog.get_logger("audit")  # Add audit logger
 

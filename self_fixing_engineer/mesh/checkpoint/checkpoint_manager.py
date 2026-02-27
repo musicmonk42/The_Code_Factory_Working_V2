@@ -597,6 +597,7 @@ class CheckpointManager:
         self._prev_hashes: Dict[str, str] = {}
         self._closed = False
         self._initialized = False
+        self._maintenance_task: Optional[asyncio.Task] = None
 
         # Compliance tracking
         self._operation_id = None
@@ -680,44 +681,23 @@ class CheckpointManager:
         """Initialize the backend registry with all supported backends."""
         from . import checkpoint_backends
 
+        async def _backend_dispatch(manager, operation: str, *args, **kwargs):
+            handler = await checkpoint_backends.get_backend_handler(
+                manager.backend_type, operation
+            )
+            return await handler(manager, *args, **kwargs)
+
         # Import backend implementations
         self._backends = {
             "local": self._local_backend_operations,
-            "s3": (
-                checkpoint_backends.s3_save
-                if hasattr(checkpoint_backends, "s3_save")
-                else None
-            ),
-            "redis": (
-                checkpoint_backends.redis_save
-                if hasattr(checkpoint_backends, "redis_save")
-                else None
-            ),
-            "postgres": (
-                checkpoint_backends.postgres_save
-                if hasattr(checkpoint_backends, "postgres_save")
-                else None
-            ),
-            "gcs": (
-                checkpoint_backends.gcs_storage
-                if hasattr(checkpoint_backends, "gcs_storage")
-                else None
-            ),
-            "azure": (
-                checkpoint_backends.BlobServiceClient
-                if hasattr(checkpoint_backends, "BlobServiceClient")
-                else None
-            ),
-            "minio": (
-                checkpoint_backends.Minio
-                if hasattr(checkpoint_backends, "Minio")
-                else None
-            ),
-            "etcd": (
-                checkpoint_backends.etcd3
-                if hasattr(checkpoint_backends, "etcd3")
-                else None
-            ),
+            "s3": _backend_dispatch,
+            "redis": _backend_dispatch,
+            "postgres": _backend_dispatch,
+            # Initialization support exists, but checkpoint operations are not yet implemented.
+            "gcs": None,
+            "azure": None,
+            "minio": None,
+            "etcd": None,
         }
 
         # IB-1: Register the DLT plugin backend so callers using backend_type="dlt"
@@ -749,7 +729,9 @@ class CheckpointManager:
                 await self._load_metadata()
 
                 # Start background tasks
-                asyncio.create_task(self._background_maintenance())
+                self._maintenance_task = asyncio.create_task(
+                    self._background_maintenance()
+                )
 
                 self._initialized = True
 
@@ -779,10 +761,9 @@ class CheckpointManager:
                     "s3",
                     "redis",
                     "postgres",
-                    "gcs",
-                    "azure",
-                    "minio",
-                    "etcd",
+                    "dlt",
+                    "fabric",
+                    "evm",
                 ]
                 available_backends = [
                     k for k, v in self._backends.items() if v is not None
@@ -832,6 +813,8 @@ class CheckpointManager:
                 if hasattr(self, "_cache_l1"):
                     # TTLCache handles expiration automatically
                     pass
+                if hasattr(self, "_metadata_cache") and len(self._metadata_cache) > 1000:
+                    self._metadata_cache.clear()
 
                 # DLQ processing
                 if self.enable_dlq_rotation:
@@ -841,6 +824,8 @@ class CheckpointManager:
                 await asyncio.sleep(300)  # 5 minutes
 
             except Exception as e:
+                if isinstance(e, asyncio.CancelledError):
+                    raise
                 logger.error(f"Background maintenance error: {e}")
                 await asyncio.sleep(60)  # Retry after 1 minute
 
@@ -1479,18 +1464,36 @@ class CheckpointManager:
             self._closed = True
 
             # Flush any pending operations
-            # (Implementation depends on backend)
+            await asyncio.sleep(0)
+
+            if self._maintenance_task:
+                self._maintenance_task.cancel()
+                try:
+                    await self._maintenance_task
+                except asyncio.CancelledError:
+                    pass
+                self._maintenance_task = None
 
             # Close backend connections
             if self._backend_client:
                 # Backend-specific cleanup
-                pass
+                close_fn = getattr(self._backend_client, "close", None)
+                if close_fn:
+                    maybe_awaitable = close_fn()
+                    if asyncio.iscoroutine(maybe_awaitable):
+                        await maybe_awaitable
+
+            if self.backend_type != "local":
+                from . import checkpoint_backends
+
+                await checkpoint_backends.registry.close(self.backend_type)
 
             audit_logger.log(
                 "checkpoint_manager_closed",
                 {"session_id": self._session_id, "backend": self.backend_type},
             )
 
+            self._initialized = False
             logger.info("CheckpointManager closed successfully")
 
         except Exception as e:
@@ -1534,9 +1537,52 @@ class CheckpointManager:
 
     async def _get_checkpoint_metadata(self, name: str) -> Dict[str, Any]:
         """Get metadata for a checkpoint without loading full state."""
-        # Implementation depends on backend
-        # For now, return empty metadata
-        return {}
+        try:
+            if self.backend_type == "local":
+                checkpoint_dir = Path(Environment.CHECKPOINT_DIR) / name
+                if not checkpoint_dir.exists():
+                    return {}
+
+                files = checkpoint_dir.glob("checkpoint_v*.json*")
+                version_files = []
+                for file_path in files:
+                    match = re.search(r"_v(\d+)", file_path.name)
+                    if match:
+                        version_files.append((int(match.group(1)), file_path))
+
+                if not version_files:
+                    return {}
+
+                version_files.sort(key=lambda x: x[0], reverse=True)
+                checkpoint_file = version_files[0][1]
+
+                if AIOFILES_AVAILABLE:
+                    async with aiofiles.open(checkpoint_file, "rb") as f:
+                        data_bytes = await f.read()
+                else:
+                    with open(checkpoint_file, "rb") as f:
+                        data_bytes = f.read()
+
+                if ".enc" in checkpoint_file.suffixes and self.multi_fernet:
+                    data_bytes = self.multi_fernet.decrypt(data_bytes)
+
+                if ".gz" in checkpoint_file.suffixes:
+                    checkpoint_data = decompress_json(data_bytes)
+                else:
+                    checkpoint_data = json.loads(data_bytes)
+
+                return checkpoint_data.get("metadata", {})
+
+            backend_fn = self._backends.get(self.backend_type)
+            if not backend_fn:
+                return {}
+
+            payload = await backend_fn(self, "load", name, None, auto_heal=False)
+            if isinstance(payload, dict):
+                return payload.get("metadata", {})
+            return {}
+        except Exception:
+            return {}
 
     async def _write_to_dlq(self, entry: Dict[str, Any]) -> None:
         """Write failed operation to dead letter queue."""
@@ -1556,8 +1602,54 @@ class CheckpointManager:
 
     async def _process_dlq(self) -> None:
         """Process dead letter queue entries."""
-        # Implementation for DLQ processing
-        pass
+        dlq_path = Path(Environment.DLQ_PATH)
+        if not dlq_path.exists():
+            return
+
+        remaining_entries: List[Dict[str, Any]] = []
+
+        try:
+            if AIOFILES_AVAILABLE:
+                async with aiofiles.open(dlq_path, "r") as f:
+                    lines = await f.readlines()
+            else:
+                with open(dlq_path, "r") as f:
+                    lines = f.readlines()
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    if entry.get("operation") == "save" and entry.get("name"):
+                        await self.save(
+                            entry["name"],
+                            entry.get("state", {}),
+                            metadata={"dlq_replay": True},
+                            user="dlq_replay",
+                        )
+                    else:
+                        remaining_entries.append(entry)
+                except Exception:
+                    try:
+                        remaining_entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+
+            if remaining_entries:
+                if AIOFILES_AVAILABLE:
+                    async with aiofiles.open(dlq_path, "w") as f:
+                        for entry in remaining_entries:
+                            await f.write(json.dumps(entry) + "\n")
+                else:
+                    with open(dlq_path, "w") as f:
+                        for entry in remaining_entries:
+                            f.write(json.dumps(entry) + "\n")
+            else:
+                dlq_path.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"Failed to process DLQ entries: {e}")
 
     # ---- Local Backend Implementation ----
 

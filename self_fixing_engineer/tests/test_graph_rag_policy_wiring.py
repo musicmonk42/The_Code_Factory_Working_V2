@@ -169,3 +169,31 @@ class TestMeshPolicyLoadSeeding:
             mock_reasoner.add_policy.assert_called_once()
             call_args = mock_reasoner.add_policy.call_args[0][0]
             assert call_args.get("id") == "seeded-pol"
+
+
+class TestGraphRAGExplanationHook:
+    def test_explanation_enricher_callback(self):
+        from self_fixing_engineer.mesh.graph_rag_policy import GraphRAGPolicyReasoner
+
+        GraphRAGPolicyReasoner.set_explanation_enricher(lambda text: f"ENRICHED: {text}")
+        try:
+            enriched = GraphRAGPolicyReasoner._enrich_explanation_llm("base")
+            assert enriched == "ENRICHED: base"
+        finally:
+            GraphRAGPolicyReasoner.set_explanation_enricher(None)
+
+    def test_mesh_policy_fallback_loads_local_policy_without_prior_async_load(self, tmp_path):
+        import json
+        import time as _time
+
+        from self_fixing_engineer.mesh.mesh_policy import MeshPolicyBackend
+
+        backend = MeshPolicyBackend(backend_type="local", local_dir=str(tmp_path))
+        backend._graph_reasoner = None
+
+        version = f"{int(_time.time() * 1000)}_1"
+        policy_file = tmp_path / f"lazy-pol_v{version}.json"
+        policy_file.write_text(json.dumps({"data": json.dumps({"allow": ["read"], "deny": []})}))
+
+        result = backend.evaluate_policy("lazy-pol")
+        assert result["allowed"] is True

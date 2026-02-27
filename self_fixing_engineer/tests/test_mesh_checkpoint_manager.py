@@ -298,6 +298,57 @@ class TestCoreOperations:
         assert diff["modified"]["b"]["new"] == 3
 
 
+class TestRegressionFixes:
+    """Regression tests for recently fixed checkpoint manager edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_checkpoint_metadata_returns_latest_metadata(self, manager):
+        name = "metadata_checkpoint"
+        await manager.save(name, {"value": 1}, metadata={"source": "unit-test"})
+
+        metadata = await manager._get_checkpoint_metadata(name)
+
+        assert metadata.get("hash") == manager._prev_hashes[name]
+        assert metadata.get("source") == "unit-test"
+
+    @pytest.mark.asyncio
+    async def test_process_dlq_replays_save_entries(self, manager):
+        dlq_path = Path(TEST_DIR) / "dlq.jsonl"
+        replayable = {"operation": "save", "name": "dlq_cp", "state": {"k": "v"}}
+        non_replayable = {"operation": "load", "name": "keep_me"}
+        dlq_path.write_text(
+            json.dumps(replayable) + "\n" + json.dumps(non_replayable) + "\n"
+        )
+
+        with patch.object(manager, "save", new=AsyncMock(return_value="hash")) as save_mock:
+            await manager._process_dlq()
+
+        save_mock.assert_awaited_once_with(
+            "dlq_cp",
+            {"k": "v"},
+            metadata={"dlq_replay": True},
+            user="dlq_replay",
+        )
+        remaining = [json.loads(line) for line in dlq_path.read_text().splitlines()]
+        assert remaining == [non_replayable]
+
+    @pytest.mark.asyncio
+    async def test_close_cancels_background_task_and_closes_backend_registry(self):
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
+
+        mgr = CheckpointManager(backend_type="s3")
+        mgr._maintenance_task = asyncio.create_task(asyncio.sleep(60))
+
+        with patch(
+            "self_fixing_engineer.mesh.checkpoint.checkpoint_backends.registry.close",
+            new=AsyncMock(),
+        ) as close_mock:
+            await mgr.close()
+
+        assert mgr._maintenance_task is None
+        close_mock.assert_awaited_once_with("s3")
+
+
 # ---- Security Tests ----
 
 

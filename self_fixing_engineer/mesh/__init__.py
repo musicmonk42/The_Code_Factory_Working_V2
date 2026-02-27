@@ -10,7 +10,15 @@ __version__ = "1.0.0"
 from . import event_bus, mesh_adapter, mesh_policy
 
 # Import checkpoint components
-from .checkpoint import CheckpointManager, checkpoint_manager
+from .checkpoint import (
+    CheckpointManager,
+    Environment,
+    checkpoint_session,
+    get_checkpoint_manager,
+)
+
+# Backward-compatible alias: was previously exporting a module object.
+checkpoint_manager = get_checkpoint_manager
 
 # Import GraphRAG policy reasoning engine
 try:
@@ -30,6 +38,9 @@ __all__ = [
     "mesh_policy",
     "checkpoint_manager",
     "CheckpointManager",
+    "get_checkpoint_manager",
+    "checkpoint_session",
+    "Environment",
     "GraphRAGPolicyReasoner",
     "PolicyDecision",
     "PolicyNode",

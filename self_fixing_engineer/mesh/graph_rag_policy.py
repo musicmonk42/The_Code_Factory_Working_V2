@@ -66,11 +66,12 @@ Industry Standards Applied
 
 import enum
 import logging
+import os
 import re
 import threading
 import time
 from collections import deque
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 # ---------------------------------------------------------------------------
 # Conditional imports with graceful fallbacks
@@ -501,10 +502,23 @@ class GraphRAGPolicyReasoner:
         """Optional LLM enrichment hook.
 
         Returns the input unchanged when no LLM backend is configured.
-        Subclasses or future integrations can override this to call an
-        LLM for richer natural-language explanations.
+        Applications can register an enricher callback via
+        ``GraphRAGPolicyReasoner.set_explanation_enricher``.
         """
+        if GraphRAGPolicyReasoner._explanation_enricher:
+            try:
+                return GraphRAGPolicyReasoner._explanation_enricher(explanation)
+            except Exception:
+                logger.warning("Explanation enricher failed; using base explanation")
+        prefix = os.environ.get("GRAPH_RAG_EXPLANATION_PREFIX")
+        if prefix:
+            return f"{prefix}{explanation}"
         return explanation
+
+    @classmethod
+    def set_explanation_enricher(cls, callback: Optional[Callable[[str], str]]) -> None:
+        """Register a callback used by ``_enrich_explanation_llm``."""
+        cls._explanation_enricher = callback
 
     # -- dunder ------------------------------------------------------------
 
@@ -534,3 +548,4 @@ def _record_eval_metric(policy_id: str, decision: str, start: float) -> None:
     """Emit Prometheus counter + histogram observations."""
     POLICY_EVAL_TOTAL.labels(policy_id=policy_id, decision=decision).inc()
     POLICY_EVAL_DURATION.observe(time.monotonic() - start)
+    _explanation_enricher: Optional[Callable[[str], str]] = None
