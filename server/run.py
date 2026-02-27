@@ -145,7 +145,7 @@ def main():
         log_level=args.log_level,
         access_log=True,
         timeout_keep_alive=300,  # 5 minutes for long-running operations (pipeline, codegen)
-        timeout_graceful_shutdown=45,  # 45 seconds - gives more time to persist job states before force-kill
+        timeout_graceful_shutdown=30,  # 30 seconds - Railway force-kills after its own grace period; keep shorter to exit cleanly
         h11_max_incomplete_event_size=16 * 1024 * 1024,  # 16MB for large responses
     )
 

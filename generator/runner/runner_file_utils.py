@@ -1354,9 +1354,9 @@ async def materialize_file_map(
     
     # Process each file with comprehensive validation
     for relative_path, content in file_map.items():
-        # Skip error.txt - it's metadata, not a generated file
-        if relative_path == "error.txt":
-            logger.debug("Skipping error.txt metadata file")
+        # Skip error metadata keys - they are not generated files
+        if relative_path == "error.txt" or relative_path == "__syntax_errors__":
+            logger.debug("Skipping error metadata key: %s", relative_path)
             continue
         
         # Comprehensive security validation

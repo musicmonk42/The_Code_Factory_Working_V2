@@ -1626,31 +1626,31 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Code Factory API Server")
     logger.info("=" * 60)
 
-    # Phase 1: cancel active pipeline tasks so in-flight pipelines are
-    # stopped before we persist their FAILED status to the database.
-    logger.info("[shutdown 1/3] Cancelling active pipeline tasks...")
+    # Phase 1: persist in-flight job state FIRST so jobs are always marked as
+    # FAILED before any other cleanup runs. This ensures Railway SIGTERM cycles
+    # don't leave jobs in a non-terminal state even if later phases take too long.
+    logger.info("[shutdown 1/3] Persisting in-flight job state...")
+    await _protect_running_jobs_on_shutdown()
+    logger.info(
+        "[shutdown 1/3] Job state persisted (%.1fs elapsed)",
+        time.monotonic() - _shutdown_start,
+    )
+
+    # Phase 2: cancel active pipeline tasks so in-flight pipelines are stopped.
+    logger.info("[shutdown 2/3] Cancelling active pipeline tasks...")
     try:
         from server.routers.generator import cancel_all_pipeline_tasks
         await cancel_all_pipeline_tasks()
         logger.info(
-            "[shutdown 1/3] Pipeline tasks cancelled (%.1fs elapsed)",
+            "[shutdown 2/3] Pipeline tasks cancelled (%.1fs elapsed)",
             time.monotonic() - _shutdown_start,
         )
     except Exception as e:
         logger.warning(
-            "[shutdown 1/3] Error cancelling pipeline tasks: %s (%.1fs elapsed)",
+            "[shutdown 2/3] Error cancelling pipeline tasks: %s (%.1fs elapsed)",
             e,
             time.monotonic() - _shutdown_start,
         )
-
-    # Phase 2: persist in-flight job state so jobs can be resubmitted
-    # after the container restarts.
-    logger.info("[shutdown 2/3] Persisting in-flight job state...")
-    await _protect_running_jobs_on_shutdown()
-    logger.info(
-        "[shutdown 2/3] Job state persisted (%.1fs elapsed)",
-        time.monotonic() - _shutdown_start,
-    )
 
     # Phase 3: release background tasks and shared resources.
     logger.info("[shutdown 3/3] Releasing background tasks and resources...")

@@ -294,7 +294,7 @@ def is_audit_logging_available() -> bool:
 # ==============================================================================
 
 DEFAULT_FILENAME = "main.py"
-ERROR_FILENAME = "error.txt"
+ERROR_FILENAME = "__syntax_errors__"
 
 # Maximum fraction of files that may fail validation before a high-rejection-rate
 # warning is emitted to the pipeline.  Also triggers when the absolute count
