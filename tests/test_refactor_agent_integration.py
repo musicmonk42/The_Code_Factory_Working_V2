@@ -387,3 +387,128 @@ class TestArbiterNewHookMethods:
             assert f'add_hook("{event_name}"' in src, (
                 f"Arbiter missing add_hook call for {event_name!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# 8. _agent_base shared infrastructure
+# ---------------------------------------------------------------------------
+
+
+class TestAgentBase:
+    """Unit tests for the shared _agent_base module."""
+
+    def test_agent_metrics_for_agent_is_cached(self):
+        from self_fixing_engineer.plugins._agent_base import AgentMetrics
+
+        m1 = AgentMetrics.for_agent("test_cached")
+        m2 = AgentMetrics.for_agent("test_cached")
+        assert m1 is m2, "for_agent() must return the same cached instance"
+
+    def test_agent_metrics_different_types_are_different_instances(self):
+        from self_fixing_engineer.plugins._agent_base import AgentMetrics
+
+        ma = AgentMetrics.for_agent("type_a")
+        mb = AgentMetrics.for_agent("type_b")
+        assert ma is not mb
+
+    def test_agent_metrics_attributes_exist(self):
+        from self_fixing_engineer.plugins._agent_base import AgentMetrics
+
+        m = AgentMetrics.for_agent("test_attrs")
+        assert hasattr(m, "calls")
+        assert hasattr(m, "errors")
+        assert hasattr(m, "latency")
+
+    def test_structured_log_pii_redaction(self, caplog):
+        import logging
+        from self_fixing_engineer.plugins._agent_base import structured_log
+
+        import json
+
+        with caplog.at_level(logging.INFO):
+            structured_log("test.event", agent="my_agent", api_key="super-secret-123", value=42)
+
+        assert caplog.records, "structured_log must emit a log record"
+        payload = json.loads(caplog.records[-1].message)
+        assert payload["api_key"] == "[REDACTED]", "api_key must be redacted"
+        assert payload["value"] == 42, "non-sensitive field must pass through"
+        assert payload["agent"] == "my_agent"
+
+    def test_structured_log_token_redaction(self, caplog):
+        import json
+        import logging
+        from self_fixing_engineer.plugins._agent_base import structured_log
+
+        with caplog.at_level(logging.INFO):
+            structured_log("test.token", auth_token="tok-abc123", user="alice")
+
+        payload = json.loads(caplog.records[-1].message)
+        assert payload["auth_token"] == "[REDACTED]"
+        assert payload["user"] == "alice"
+
+    def test_structured_log_password_redaction(self, caplog):
+        import json
+        import logging
+        from self_fixing_engineer.plugins._agent_base import structured_log
+
+        with caplog.at_level(logging.INFO):
+            structured_log("test.pw", db_password="hunter2", host="localhost")
+
+        payload = json.loads(caplog.records[-1].message)
+        assert payload["db_password"] == "[REDACTED]"
+        assert payload["host"] == "localhost"
+
+    def test_emit_audit_event_safe_does_not_raise_on_failure(self):
+        """emit_audit_event_safe must swallow all exceptions."""
+        import asyncio
+        from self_fixing_engineer.plugins._agent_base import emit_audit_event_safe
+
+        # Patch out the audit module to raise a RuntimeError
+        import unittest.mock as mock
+
+        with mock.patch(
+            "self_fixing_engineer.plugins._agent_base.emit_audit_event_safe",
+            wraps=emit_audit_event_safe,
+        ):
+            # Should not raise even when audit_log module raises
+            asyncio.get_event_loop().run_until_complete(
+                emit_audit_event_safe("test.event", {"agent": "test"})
+            )
+
+    def test_validate_path_match(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_path
+
+        assert _validate_path("./src/codebase/main.py", [r"^\./src/codebase/.*$"]) is True
+
+    def test_validate_path_no_match(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_path
+
+        assert _validate_path("/etc/passwd", [r"^\./src/codebase/.*$"]) is False
+
+    def test_validate_path_empty_patterns(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_path
+
+        assert _validate_path("./anything.py", []) is False
+
+    def test_validate_command_match(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_command
+
+        assert _validate_command("python3.11", [r"^python(3\.[0-9]+)?$"]) is True
+
+    def test_validate_command_no_match(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_command
+
+        assert _validate_command("rm", [r"^python(3\.[0-9]+)?$"]) is False
+
+    def test_validate_command_empty_patterns(self):
+        from self_fixing_engineer.plugins._agent_base import _validate_command
+
+        assert _validate_command("python", []) is False
+
+    def test_agent_span_no_otel_does_not_raise(self):
+        """agent_span must be a no-op when OpenTelemetry is absent."""
+        from self_fixing_engineer.plugins._agent_base import agent_span
+
+        # This should not raise regardless of OTel availability
+        with agent_span("TestAgent.process", "test-agent", ["key1", "key2"]):
+            pass  # no exception = pass

@@ -84,7 +84,7 @@ test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd self_fixing_engineer && pytest tests/ -v --tb=short
 
-test-plugin-agents: ## Run plugin agent integration tests (refactor, healer, judge, ethics, simulation, ci_cd, human, oracle)
+test-plugin-agents: ## Run plugin agent integration tests (all 8 agents: refactor, healer, judge, ethics, simulation, ci_cd, human, oracle) + _agent_base unit tests
 	@echo "$(BLUE)Running plugin agent integration tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \
 		pytest tests/test_refactor_agent_integration.py -v --tb=short
