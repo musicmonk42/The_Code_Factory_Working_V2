@@ -2003,7 +2003,7 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
         (r'\bTODO\b', "Contains TODO comment"),
         (r'\bFIXME\b', "Contains FIXME comment"),
         (r'\bXXX\b', "Contains XXX comment"),
-        (r'\bNOT(?:_|\s+)IMPLEMENTED\b', "Contains NOT_IMPLEMENTED marker"),
+        (r'^\s*#\s*NOT(?:_|\s+)IMPLEMENTED\s*$', "Contains NOT_IMPLEMENTED marker"),
         (r'\braise\s+NotImplementedError', "Raises NotImplementedError (stub)"),
     ]
     
@@ -2012,7 +2012,7 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     # Count stub indicators
     stub_count = 0
     for pattern, description in STUB_PATTERNS:
-        matches = re.findall(pattern, code, re.IGNORECASE)
+        matches = re.findall(pattern, code, re.IGNORECASE | re.MULTILINE)
         if matches:
             issues.append(f"{description} (found {len(matches)} occurrence(s))")
             stub_count += len(matches)
