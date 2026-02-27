@@ -341,6 +341,11 @@ env:
   # Enable plugin integrity checks via HASH_MANIFEST.
   # Default "false"; set to "true" in production overlays together with HASH_MANIFEST.
   PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
+
+  # HashiCorp Vault JWT path (intent_capture/api.py, cli.py) - Bug 17 fix
+  # Both API and CLI now use the same path so tokens are cross-compatible.
+  # Override: helm upgrade --set env.JWT_VAULT_PATH=secrets/data/my-jwt ...
+  JWT_VAULT_PATH: "secrets/data/jwt"
   
   # Kafka Configuration: Multiple variables for component compatibility
   # Different components check different variable names due to evolution of codebase:
@@ -489,6 +494,14 @@ secrets:
     # Optional: KMS key ID for AWS KMS audit crypto
     kmsKeyIdSecretName: "codefactory-secrets"
     kmsKeyIdSecretKey: "kms-key-id"
+    # CLI WebSocket JWT secret (intent_capture/cli.py) - Bug 4 fix
+    # REQUIRED in production; cli.py emits a fatal warning if the insecure default is used
+    cliJwtSecretName: "codefactory-secrets"
+    cliJwtSecretKey: "cli-jwt-secret"
+    # RabbitMQ URL for task queuing (intent_capture/api.py, cli.py) - Bug 10 fix
+    # Only required when USE_QUEUE=true
+    rabbitmqUrlSecretName: "codefactory-secrets"
+    rabbitmqUrlSecretKey: "rabbitmq-url"
 
 # Redis subchart configuration
 redis:

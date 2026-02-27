@@ -133,6 +133,27 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Module-level in-memory state backend for internal engine use (no JWT validation needed)
+try:
+    from .agent_core import StateBackend as _StateBackend
+
+    class _InMemoryBackend(_StateBackend):
+        """Simple in-memory state backend for engine-internal agent creation."""
+
+        def __init__(self):
+            self._store = {}
+
+        async def load_state(self, sid):
+            return self._store.get(sid)
+
+        async def save_state(self, sid, state):
+            self._store[sid] = state
+
+    _INMEMORY_BACKEND_AVAILABLE = True
+except ImportError:
+    _InMemoryBackend = None
+    _INMEMORY_BACKEND_AVAILABLE = False
+
 
 @contextmanager
 def _trace_operation(operation_name: str, attributes: Optional[Dict[str, Any]] = None):
@@ -626,22 +647,15 @@ class IntentCaptureEngine:
             return self._agent_cache[session_token]
 
         # Create agent directly without JWT validation (internal engine use)
-        from .agent_core import CollaborativeAgent, StateBackend
+        from .agent_core import CollaborativeAgent
 
         llm_config = self.llm_config or {"provider": "openai", "model": "gpt-4"}
         state_backend = self.session_backend
         if state_backend is None:
-            class InMemoryBackend(StateBackend):
-                def __init__(self):
-                    self._store = {}
-
-                async def load_state(self, sid):
-                    return self._store.get(sid)
-
-                async def save_state(self, sid, state):
-                    self._store[sid] = state
-
-            state_backend = InMemoryBackend()
+            if _INMEMORY_BACKEND_AVAILABLE:
+                state_backend = _InMemoryBackend()
+            else:
+                raise RuntimeError("No state backend provided and agent_core is unavailable")
 
         agent = await CollaborativeAgent.create(
             agent_id=session_token,

@@ -176,6 +176,17 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
 
       # ============================================
+      # Intent Capture Module (Bug fixes: #4, #10, #17)
+      # ============================================
+      # CLI WebSocket collaboration JWT secret (intent_capture/cli.py)
+      # REQUIRED in production — generate with: openssl rand -hex 32
+      - CLI_JWT_SECRET=${CLI_JWT_SECRET:?CLI_JWT_SECRET is required in production}
+      # Vault KV v2 path for the JWT_SECRET shared by API and CLI (Bug 17)
+      - JWT_VAULT_PATH=${JWT_VAULT_PATH:-secrets/data/jwt}
+      # RabbitMQ URL for task queuing — only needed when USE_QUEUE=true
+      - RABBITMQ_URL=${RABBITMQ_URL:-}
+
+      # ============================================
       # Logging Configuration
       # ============================================
       - LOG_LEVEL=INFO

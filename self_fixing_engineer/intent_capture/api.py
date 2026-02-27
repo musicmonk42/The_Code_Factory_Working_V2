@@ -547,19 +547,20 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=504, detail="Prediction timed out")
 
     # UPGRADE: GDPR/CCPA Data Pruning Endpoint - [Date: August 19, 2025]
+    from .session import prune_old_sessions as _session_prune_old_sessions
+
     @app.post(
         "/prune_sessions",
         status_code=204,
         tags=["Compliance"],
         summary="Prune user data based on retention policy",
     )
-    async def prune_old_sessions_endpoint(current_user: dict = Depends(get_current_user)):
+    async def prune_old_sessions(current_user: dict = Depends(get_current_user)):
         if not current_user.get("consent_prune", False):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "User has not consented to data pruning."
             )
-        from .session import prune_old_sessions as _prune_old_sessions
-        pruned_count = await _prune_old_sessions()
+        pruned_count = await _session_prune_old_sessions()
         logger.info(
             f"Data pruning completed for user {current_user.get('sub')}: {pruned_count} sessions pruned."
         )
