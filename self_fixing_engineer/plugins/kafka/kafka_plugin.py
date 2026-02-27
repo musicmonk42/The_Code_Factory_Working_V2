@@ -626,7 +626,7 @@ class KafkaAuditPlugin(PluginBase):
         """Return True when the plugin is started and the producer is connected."""
         return self._started and (self.config.dev_dry_run or self._producer is not None)
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["kafka_audit_sink", "event_streaming", "dead_letter_queue"]
 
     async def enqueue_event(

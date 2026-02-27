@@ -425,7 +425,7 @@ class AzureEventGridAuditHook(PluginBase):
         task_ok = self._sender_task is not None and not self._sender_task.done()
         return task_ok
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["azure_event_grid_audit", "event_streaming", "compliance_logging"]
 
     async def audit_hook(

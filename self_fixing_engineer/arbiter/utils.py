@@ -329,7 +329,7 @@ class UtilsPlugin(PluginBase):
         """Mandatory PluginBase method."""
         return True  # Always healthy as it's a utility collection
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         """Mandatory PluginBase method."""
         return [
             "random_chance",

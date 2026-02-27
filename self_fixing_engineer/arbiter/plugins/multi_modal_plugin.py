@@ -633,7 +633,7 @@ class MultiModalPlugin:
             logger.error(f"MultiModalPlugin health check failed: {e}", exc_info=True)
             return False
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         """Returns a list of the plugin's capabilities."""
         capabilities = ["multimodal_processing"]
         if self.config.image_processing.enabled:

@@ -978,7 +978,7 @@ else:
             """Stop the plugin."""
             pass
     
-        async def get_capabilities(self) -> List[str]:
+        async def get_capabilities(self) -> list[str]:
             """Get plugin capabilities."""
             return ["explain", "reason"]
     
@@ -1054,7 +1054,7 @@ else:
             """Check plugin health."""
             return True
     
-        async def get_capabilities(self) -> List[str]:
+        async def get_capabilities(self) -> list[str]:
             """Get plugin capabilities."""
             return ["skill_acquisition", "performance_tracking"]
     

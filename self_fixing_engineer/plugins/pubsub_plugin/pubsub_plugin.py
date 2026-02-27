@@ -715,7 +715,7 @@ class PubSubGateway(PluginBase):
             not t.done() for t in self._worker_tasks
         )
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["pubsub_event_publishing", "async_audit_sink", "batched_delivery"]
 
     def publish(self, event_name: str, service_name: str, details: Dict[str, Any]):

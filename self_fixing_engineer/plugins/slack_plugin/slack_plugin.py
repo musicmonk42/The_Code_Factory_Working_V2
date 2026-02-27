@@ -1601,7 +1601,7 @@ class SlackGatewayManager(PluginBase):
         async with self._lock:
             return bool(self._gateways)
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["slack_notification", "alert_routing", "webhook_delivery"]
 
     async def _load_sequence_counters(self):
