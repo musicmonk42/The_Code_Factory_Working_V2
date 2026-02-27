@@ -268,12 +268,23 @@ except ImportError:
                 async def add_fact(self, *args, **kwargs): logger.debug("Mock KnowledgeGraph: add_fact called.")
 
 
-from omnicore_engine.metrics import (
-    AUDIT_DB_ERRORS,
-    AUDIT_DB_OPERATIONS,
-    DB_ERRORS,
-    DB_OPERATIONS,
-)
+try:
+    from omnicore_engine.metrics import (
+        AUDIT_DB_ERRORS,
+        AUDIT_DB_OPERATIONS,
+        DB_ERRORS,
+        DB_OPERATIONS,
+    )
+except ModuleNotFoundError:
+    import sys as _sys
+    import os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))))
+    from omnicore_engine.metrics import (
+        AUDIT_DB_ERRORS,
+        AUDIT_DB_OPERATIONS,
+        DB_ERRORS,
+        DB_OPERATIONS,
+    )
 
 # Local metrics for merged functionalities
 DB_OPERATIONS_LOCAL = get_or_create_counter_local(
