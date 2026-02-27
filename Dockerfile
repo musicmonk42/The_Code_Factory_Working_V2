@@ -305,6 +305,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # ENCRYPTION_MODE: Encryption backend — local | aws_kms | azure_keyvault (see SECURITY_CONFIGURATION.md).
 # SUPPRESS_SECURITY_WARNINGS: Set to "1" in development to silence security-posture log warnings.
 # PLUGIN_INTEGRITY_CHECK_ENABLED: Enable plugin hash verification via HASH_MANIFEST.
+# SENTRY_ENVIRONMENT: Sentry environment tag (production/staging/development). Override at runtime.
+# REFACTOR_AGENT_CONFIG: Path to refactor agent YAML config. Defaults to bundled file.
+# CONFIGDB_REMOTE_ENDPOINT: Optional HTTPS endpoint for ConfigDB remote resolution (empty = local YAML).
+# CONFIGDB_ALLOWED_HOSTS: Comma-separated allowlist of hostnames for CONFIGDB_REMOTE_ENDPOINT (SSRF guard).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
@@ -338,8 +342,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD="25" \
     ENCRYPTION_MODE="local" \
     SUPPRESS_SECURITY_WARNINGS="0" \
-    PLUGIN_INTEGRITY_CHECK_ENABLED="false"
-    # SENTRY_DSN / SENTRY_ENVIRONMENT: Set at deployment time for error tracking.
+    PLUGIN_INTEGRITY_CHECK_ENABLED="false" \
+    SENTRY_ENVIRONMENT="production" \
+    REFACTOR_AGENT_CONFIG="/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml" \
+    CONFIGDB_REMOTE_ENDPOINT="" \
+    CONFIGDB_ALLOWED_HOSTS=""
+    # SENTRY_DSN: Set at deployment time — never bake into the image.
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 
 # Optional: curl for debugging and healthchecks

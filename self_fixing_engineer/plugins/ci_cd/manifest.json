@@ -1,0 +1,17 @@
+{
+  "name": "CICDAgent",
+  "version": "1.0.0",
+  "description": "Plugin agent that triggers CI/CD pipelines.",
+  "entrypoint": "self_fixing_engineer/plugins/ci_cd/ci_cd_agent.py",
+  "agent_type": "plugin",
+  "criticality": "high",
+  "permissions": {
+    "whitelisted_paths": ["^\\./ci_cd_configs/.*$"],
+    "whitelisted_commands": ["^kubectl$", "^aws$", "^gcloud$", "^az$", "^jenkins-cli$"],
+    "allow_destructive_actions": true
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml"]
+  }
+}

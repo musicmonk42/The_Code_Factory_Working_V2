@@ -11,7 +11,7 @@
 	validate-few-shot mutation-test codegen-multipass-status \
 	test-arbiter-policy test-arbiter-integration \
 	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
-	test-arbiter-policy test-arbiter-integration test-evolution test-dlt
+	test-arbiter-policy test-arbiter-integration test-evolution test-dlt test-plugin-agents
 
 # Default target
 .DEFAULT_GOAL := help
@@ -83,6 +83,12 @@ test-omnicore: ## Run OmniCore Engine tests
 test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd self_fixing_engineer && pytest tests/ -v --tb=short
+
+test-plugin-agents: ## Run plugin agent integration tests (all 8 agents: refactor, healer, judge, ethics, simulation, ci_cd, human, oracle) + _agent_base unit tests
+	@echo "$(BLUE)Running plugin agent integration tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \
+		pytest tests/test_refactor_agent_integration.py -v --tb=short
+	@echo "$(GREEN)Plugin agent integration tests complete!$(NC)"
 
 test-arbiter-policy: ## Run Arbiter policy engine unit tests (PolicyEngine, PolicyManager, facade)
 	@echo "$(BLUE)Running Arbiter policy unit tests...$(NC)"

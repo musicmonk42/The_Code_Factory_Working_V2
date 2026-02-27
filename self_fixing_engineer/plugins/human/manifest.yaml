@@ -1,0 +1,16 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+name: HumanInTheLoop
+version: "1.0.0"
+description: "Human escalation node. Mission-critical. No commands allowed."
+entrypoint: self_fixing_engineer/plugins/human/human_in_the_loop.py
+agent_type: human
+criticality: mission-critical
+permissions:
+  whitelisted_paths:
+    - "^\\./escalations/.*$"
+  whitelisted_commands: []
+  allow_destructive_actions: false
+dependencies:
+  python: ">=3.10"
+  packages:
+    - pyyaml

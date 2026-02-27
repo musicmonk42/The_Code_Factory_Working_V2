@@ -1,0 +1,17 @@
+{
+  "name": "OracleAgent",
+  "version": "1.0.0",
+  "description": "Oracle agent for world-event awareness. Read-only. No filesystem or command access.",
+  "entrypoint": "self_fixing_engineer/plugins/oracle/oracle_agent.py",
+  "agent_type": "oracle",
+  "criticality": "medium",
+  "permissions": {
+    "whitelisted_paths": [],
+    "whitelisted_commands": [],
+    "allow_destructive_actions": false
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml"]
+  }
+}

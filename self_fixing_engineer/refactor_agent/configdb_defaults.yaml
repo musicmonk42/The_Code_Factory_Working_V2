@@ -1,0 +1,167 @@
+# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
+# configdb_defaults.yaml — default roles and skills for all agents
+
+roles:
+  refactor:
+    name: Refactor Agent
+    description: "Performs code refactoring using AST analysis and LLM suggestions."
+    permissions:
+      allow_destructive_actions: true
+      whitelisted_paths:
+        - "^\\./src/codebase/.*$"
+        - "^\\./tests/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+        - "^git$"
+        - "^pytest(-cov)?$"
+        - "^ruff$"
+
+  judge:
+    name: Judge Agent
+    description: "Evaluates code quality and produces scores and feedback. Read-only."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths:
+        - "^\\./reports/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+
+  healer:
+    name: Healer Agent
+    description: "Mission-critical agent for self-healing and auto-fix operations."
+    permissions:
+      allow_destructive_actions: true
+      whitelisted_paths:
+        - "^\\./src/codebase/.*$"
+        - "^\\./tests/.*$"
+        - "^\\./config/auto_fixes/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+        - "^git$"
+        - "^pip$"
+        - "^ruff$"
+        - "^black$"
+        - "^mypy$"
+        - "^bandit$"
+        - "^pytest$"
+
+  ethics:
+    name: Ethics Sentinel
+    description: "AI agent for ethical and compliance review. Read-only."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths:
+        - "^\\./policies/.*$"
+        - "^\\./audit_logs/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+
+  simulation:
+    name: Simulation Orchestrator
+    description: "AI agent for simulation orchestration. Read-only."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths:
+        - "^\\./simulations/.*$"
+        - "^\\./data/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+
+  ci_cd:
+    name: CI/CD Trigger
+    description: "Plugin agent that triggers CI/CD pipelines."
+    permissions:
+      allow_destructive_actions: true
+      whitelisted_paths:
+        - "^\\./ci_cd_configs/.*$"
+      whitelisted_commands:
+        - "^kubectl$"
+        - "^aws$"
+        - "^gcloud$"
+        - "^az$"
+        - "^jenkins-cli$"
+
+  human:
+    name: Human Escalation Node
+    description: "Human-in-the-loop escalation node. Mission-critical."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths:
+        - "^\\./escalations/.*$"
+      whitelisted_commands: []
+
+  oracle:
+    name: Oracle Agent
+    description: "Oracle agent for world-event awareness. No filesystem or command access."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths: []
+      whitelisted_commands: []
+
+  intent_capture:
+    name: Intent Capture Agent
+    description: "AI agent that captures and refines user intent into structured specs."
+    permissions:
+      allow_destructive_actions: false
+      whitelisted_paths:
+        - "^\\./requirements/.*$"
+        - "^\\./specs/.*$"
+        - "^\\./sessions/.*$"
+      whitelisted_commands:
+        - "^python(3\\.[0-9]+)?$"
+
+skills:
+  refactor:
+    - ast_analysis
+    - llm_suggestions
+    - code_transformation
+    - diff_generation
+    - rollback
+
+  judge:
+    - code_quality_scoring
+    - lint_analysis
+    - security_scan
+    - report_generation
+
+  healer:
+    - auto_fix
+    - dependency_resolution
+    - test_repair
+    - import_fix
+    - rollback
+
+  ethics:
+    - compliance_review
+    - policy_enforcement
+    - audit_logging
+    - risk_assessment
+
+  simulation:
+    - scenario_generation
+    - monte_carlo
+    - chaos_testing
+    - load_simulation
+
+  ci_cd:
+    - pipeline_trigger
+    - deployment_orchestration
+    - rollback
+    - environment_management
+
+  human:
+    - escalation
+    - manual_review
+    - approval_workflow
+
+  oracle:
+    - world_event_monitoring
+    - external_data_ingestion
+    - anomaly_detection
+    - feed_aggregation
+
+  intent_capture:
+    - intent_parsing
+    - spec_generation
+    - clarification_loop
+    - session_management

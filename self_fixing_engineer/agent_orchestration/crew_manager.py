@@ -331,8 +331,17 @@ class CrewManager:
             "on_agent_start": [],
             "on_agent_stop": [],
             "on_agent_fail": [],
+            "on_agent_failure": [],  # alias used in YAML event_hooks
             "on_agent_heartbeat_missed": [],
+            "on_artifact_created": [],
+            "on_score_below_threshold": [],
+            "on_pipeline_blocked": [],
+            "on_swarm_disagreement": [],
+            "on_learning_opportunity": [],
+            "on_world_event": [],
         }
+        # Security metadata per agent: whitelisted_paths, whitelisted_commands, etc.
+        self._agent_security: Dict[str, Dict[str, Any]] = {}
         self._heartbeat_monitor_task: Optional[asyncio.Task] = None
         if sandbox_runner is not None:
             self._sandbox_runner = sandbox_runner
@@ -387,6 +396,46 @@ class CrewManager:
 
         manager = cls(**manager_kwargs)
 
+        # Wire event hooks from YAML to ServiceRouter if event_hooks section exists
+        event_hooks_cfg = config_data.get("event_hooks", {})
+        if event_hooks_cfg:
+            try:
+                from self_fixing_engineer.refactor_agent.service_router import (
+                    ServiceRouter,
+                )
+
+                router = ServiceRouter()
+                # Store the router on the manager so an Arbiter can later call
+                # manager.service_router.bind_arbiter(arbiter) to upgrade
+                # escalation handlers to use the live Arbiter subsystems.
+                manager.service_router = router
+
+                def _make_hook(uri: str):
+                    async def _hook(mgr, **kwargs):  # noqa: ANN001
+                        await router.dispatch(uri, kwargs)
+
+                    return _hook
+
+                for event_name, service_uri in event_hooks_cfg.items():
+                    if isinstance(service_uri, str) and service_uri.startswith(
+                        "service://"
+                    ):
+                        if event_name not in manager._on_event_hooks:
+                            manager._on_event_hooks[event_name] = []
+                        manager._on_event_hooks[event_name].append(
+                            _make_hook(service_uri)
+                        )
+                        structured_log(
+                            "event_hook_wired",
+                            event=event_name,
+                            uri=service_uri,
+                        )
+            except ImportError as exc:
+                logger.warning("Could not wire event hooks from YAML: %s", exc)
+
+        # Load global compliance controls
+        global_compliance = config_data.get("compliance_controls", {})
+
         for agent_def in config_data.get("agents", []):
             agent_name = agent_def.get("name") or agent_def.get("id")
             if not agent_name:
@@ -403,13 +452,50 @@ class CrewManager:
             if agent_def.get("id"):
                 tags.append(agent_def["id"])
 
+            # Parse security / sandboxing fields from YAML
+            criticality = agent_def.get("criticality", "medium")
+            allow_destructive = agent_def.get("allow_destructive_actions", False)
+            whitelisted_paths = agent_def.get("whitelisted_paths", [])
+            whitelisted_commands = agent_def.get("whitelisted_commands", [])
+            is_dev_mode = agent_def.get("is_dev_mode_agent", False)
+
             metadata = {
                 "manifest": agent_def.get("manifest"),
                 "entrypoint": agent_def.get("entrypoint"),
                 "role_ref": agent_def.get("role_ref"),
                 "skills_ref": agent_def.get("skills_ref"),
                 "compliance_controls": agent_def.get("compliance_controls", []),
+                "criticality": criticality,
+                "allow_destructive_actions": allow_destructive,
+                "whitelisted_paths": whitelisted_paths,
+                "whitelisted_commands": whitelisted_commands,
+                "is_dev_mode_agent": is_dev_mode,
             }
+
+            # Compliance check: verify required controls are enforced before loading
+            agent_controls = agent_def.get("compliance_controls", [])
+            compliance_ok = ComplianceChecker.check_agent_compliance(
+                agent_name, agent_controls, global_compliance
+            )
+            if not compliance_ok:
+                logger.warning(
+                    "Agent '%s' failed compliance check; loading with warning",
+                    agent_name,
+                )
+
+            # Attempt to dynamically import entrypoint module so its agent class
+            # registers itself via CrewManager.register_agent_class()
+            entrypoint = agent_def.get("entrypoint")
+            if entrypoint:
+                try:
+                    _load_entrypoint(entrypoint)
+                except Exception as exc:
+                    logger.debug(
+                        "Could not load entrypoint '%s' for agent '%s': %s",
+                        entrypoint,
+                        agent_name,
+                        exc,
+                    )
 
             # Use CrewAgentBase if no specific class is registered
             agent_class_name = "CrewAgentBase"
@@ -428,6 +514,14 @@ class CrewManager:
                     metadata=metadata,
                     caller_role=caller_role,
                 )
+                # Store security metadata for runtime validation
+                manager._agent_security[agent_name] = {
+                    "allow_destructive_actions": allow_destructive,
+                    "whitelisted_paths": whitelisted_paths,
+                    "whitelisted_commands": whitelisted_commands,
+                    "criticality": criticality,
+                    "is_dev_mode_agent": is_dev_mode,
+                }
                 structured_log("agent_loaded_from_yaml", agent=agent_name, type=agent_type)
             except Exception as e:
                 logger.error(f"Failed to load agent '{agent_name}' from YAML: {e}")
@@ -502,6 +596,13 @@ class CrewManager:
                 await cb(self, **kwargs)
             except Exception as e:
                 logger.error(f"CrewManager event hook '{event}' failed: {e}")
+        # Fire alias: on_agent_fail also triggers on_agent_failure (YAML alias)
+        if event == "on_agent_fail":
+            for cb in self._on_event_hooks.get("on_agent_failure", []):
+                try:
+                    await cb(self, **kwargs)
+                except Exception as e:
+                    logger.error(f"CrewManager event hook 'on_agent_failure' (alias) failed: {e}")
 
     async def _maybe_audit(self, event: str, details: Dict[str, Any]) -> None:
         # F. Error Handling: Audit hooks should never bring down the process
@@ -1798,6 +1899,163 @@ class CrewManager:
 
         except Exception as e:
             logger.warning(f"Error during orphaned sandbox cleanup: {e}", exc_info=True)
+
+    def _validate_path_access(self, agent_name: str, path: str) -> bool:
+        """
+        Check if an agent is allowed to access the given path.
+
+        Args:
+            agent_name: The name of the agent.
+            path: The file path to validate.
+
+        Returns:
+            True if the path matches any whitelisted pattern, False otherwise.
+            If no security metadata is registered for the agent, returns True.
+        """
+        security = self._agent_security.get(agent_name)
+        if security is None:
+            return True
+        patterns = security.get("whitelisted_paths", [])
+        if not patterns:
+            return True
+        return any(re.match(p, path) for p in patterns)
+
+    def _validate_command(self, agent_name: str, command: str) -> bool:
+        """
+        Check if an agent is allowed to execute the given command.
+
+        Args:
+            agent_name: The name of the agent.
+            command: The command string to validate.
+
+        Returns:
+            True if the command matches any whitelisted pattern, False otherwise.
+            If no security metadata is registered for the agent, returns True.
+        """
+        security = self._agent_security.get(agent_name)
+        if security is None:
+            return True
+        patterns = security.get("whitelisted_commands", [])
+        if not patterns:
+            # Empty list means no commands are allowed (not unset)
+            return False
+        return any(re.match(p, command) for p in patterns)
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_entrypoint(entrypoint: str) -> None:
+    """
+    Dynamically import a Python module from an entrypoint path so that it
+    can register its agent class(es) via CrewManager.register_agent_class().
+
+    Args:
+        entrypoint: A file path such as
+            ``self_fixing_engineer/plugins/refactor/smart_refactor_agent.py``
+            or a dotted module name such as
+            ``self_fixing_engineer.plugins.refactor.smart_refactor_agent``.
+
+    Raises:
+        ImportError: If the module cannot be imported.
+        FileNotFoundError: If the file path does not exist.
+    """
+    import importlib
+    import importlib.util
+    import os
+    import sys
+
+    if entrypoint.endswith(".py"):
+        # Convert path to module name
+        module_path = os.path.abspath(entrypoint)
+        if not os.path.exists(module_path):
+            # Try relative to the repo root (walk up sys.path entries)
+            for sp in sys.path:
+                candidate = os.path.join(sp, entrypoint)
+                if os.path.exists(candidate):
+                    module_path = candidate
+                    break
+            else:
+                raise FileNotFoundError(f"Entrypoint not found: {entrypoint!r}")
+        module_name = (
+            entrypoint.replace("/", ".").replace("\\", ".").removesuffix(".py")
+        )
+        spec = importlib.util.spec_from_file_location(module_name, module_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot create module spec for {module_path!r}")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault(module_name, mod)
+        spec.loader.exec_module(mod)
+    else:
+        importlib.import_module(entrypoint)
+
+
+class ComplianceChecker:
+    """
+    Validates agent operations against NIST 800-53 compliance controls.
+
+    Usage::
+
+        ok = ComplianceChecker.check_agent_compliance(
+            "my_agent",
+            agent_controls=[{"id": "AC-6", "status": "enforced"}],
+            global_controls={"AC-6": {"required": True, "status": "enforced"}},
+        )
+    """
+
+    @staticmethod
+    def check_agent_compliance(
+        agent_name: str,
+        agent_controls: list,
+        global_controls: Dict[str, Any],
+    ) -> bool:
+        """
+        Verify that all required controls defined globally have status 'enforced'
+        for the given agent.
+
+        Args:
+            agent_name: Name of the agent (used for logging).
+            agent_controls: List of ``{"id": ..., "status": ...}`` dicts from
+                            the agent's YAML definition.
+            global_controls: Mapping of control-id → control dict (from the
+                             ``compliance_controls`` top-level YAML section).
+
+        Returns:
+            True if all required controls pass, False otherwise.
+        """
+        # Build a lookup of this agent's control statuses
+        agent_control_map: Dict[str, str] = {
+            item["id"]: item.get("status", "not_implemented")
+            for item in agent_controls
+            if isinstance(item, dict) and "id" in item
+        }
+
+        all_ok = True
+        for ctrl_id, ctrl_def in global_controls.items():
+            if not isinstance(ctrl_def, dict):
+                continue
+            if not ctrl_def.get("required", False):
+                continue
+            agent_status = agent_control_map.get(ctrl_id)
+            if agent_status not in ("enforced", "partially_enforced"):
+                logger.warning(
+                    "ComplianceChecker: agent '%s' does not satisfy required "
+                    "control %s (status=%s)",
+                    agent_name,
+                    ctrl_id,
+                    agent_status,
+                )
+                all_ok = False
+            else:
+                logger.debug(
+                    "ComplianceChecker: agent '%s' satisfies control %s",
+                    agent_name,
+                    ctrl_id,
+                )
+
+        return all_ok
 
 
 # Example agent subclass for testing/demo (only used for class registration)

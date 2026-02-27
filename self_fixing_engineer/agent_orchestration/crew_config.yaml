@@ -127,7 +127,7 @@ agents:
   - id: refactor
     name: refactor_agent
     manifest: plugins/refactor/manifest.json
-    entrypoint: plugins/refactor/smart_refactor_agent.py
+    entrypoint: self_fixing_engineer/plugins/refactor/smart_refactor_agent.py
     agent_type: ai
     role_ref: configdb://roles/refactor
     skills_ref: configdb://skills/refactor
@@ -140,7 +140,7 @@ agents:
   - id: judge
     name: judge_agent
     manifest: plugins/judge/manifest.json
-    entrypoint: plugins/judge/judge_agent.py
+    entrypoint: self_fixing_engineer/plugins/judge/judge_agent.py
     agent_type: ai
     role_ref: configdb://roles/judge
     skills_ref: configdb://skills/judge
@@ -153,7 +153,7 @@ agents:
   - id: healer
     name: healer_agent
     manifest: plugins/healer/manifest.json
-    entrypoint: plugins/healer/healer_agent.py
+    entrypoint: self_fixing_engineer/plugins/healer/healer_agent.py
     agent_type: ai
     role_ref: configdb://roles/healer
     skills_ref: configdb://skills/healer
@@ -166,7 +166,7 @@ agents:
   - id: ethics
     name: ethics_sentinel
     manifest: plugins/ethics/manifest.json
-    entrypoint: plugins/ethics/ethics_agent.py
+    entrypoint: self_fixing_engineer/plugins/ethics/ethics_agent.py
     agent_type: ai
     role_ref: configdb://roles/ethics
     skills_ref: configdb://skills/ethics
@@ -179,7 +179,7 @@ agents:
   - id: simulation
     name: simulation_orchestrator
     manifest: plugins/simulation/manifest.json
-    entrypoint: plugins/simulation/simulation_agent.py
+    entrypoint: self_fixing_engineer/plugins/simulation/simulation_agent.py
     agent_type: ai
     role_ref: configdb://roles/simulation
     skills_ref: configdb://skills/simulation
@@ -192,7 +192,7 @@ agents:
   - id: ci_cd
     name: ci_cd_trigger
     manifest: plugins/ci_cd/manifest.json
-    entrypoint: plugins/ci_cd/ci_cd_agent.py
+    entrypoint: self_fixing_engineer/plugins/ci_cd/ci_cd_agent.py
     agent_type: plugin
     role_ref: configdb://roles/ci_cd
     skills_ref: configdb://skills/ci_cd
@@ -205,7 +205,7 @@ agents:
   - id: human
     name: human_escalation_node
     manifest: plugins/human/manifest.yaml
-    entrypoint: plugins/human/human_in_the_loop.py
+    entrypoint: self_fixing_engineer/plugins/human/human_in_the_loop.py
     agent_type: human
     role_ref: configdb://roles/human
     skills_ref: configdb://skills/human
@@ -220,7 +220,7 @@ agents:
   - id: oracle
     name: oracle_agent
     manifest: plugins/oracle/manifest.json
-    entrypoint: plugins/oracle/oracle_agent.py
+    entrypoint: self_fixing_engineer/plugins/oracle/oracle_agent.py
     agent_type: oracle
     role_ref: configdb://roles/oracle
     skills_ref: configdb://skills/oracle
@@ -233,7 +233,7 @@ agents:
   - id: ingest1
     name: ingest_agent
     manifest: plugins/ingest/manifest.json
-    entrypoint: plugins/ingest/ingest_agent.py
+    entrypoint: self_fixing_engineer/plugins/ingest/ingest_agent.py
     agent_type: plugin
     role_ref: configdb://roles/ingest
     skills_ref: configdb://skills/ingest
@@ -246,7 +246,7 @@ agents:
   - id: workerA
     name: worker_agent_a
     manifest: plugins/worker/manifest.json
-    entrypoint: plugins/worker/worker_agent.py
+    entrypoint: self_fixing_engineer/plugins/worker/worker_agent.py
     agent_type: ai
     role_ref: configdb://roles/worker
     skills_ref: configdb://skills/worker

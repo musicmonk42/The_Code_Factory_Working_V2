@@ -95,6 +95,11 @@ services:
 
       # Self-Fixing Engineer
       - CREW_CONFIG_PATH=/app/self_fixing_engineer/crew_config.yaml
+      # Refactor Agent config override (defaults to bundled refactor_agent.yaml)
+      - REFACTOR_AGENT_CONFIG=${REFACTOR_AGENT_CONFIG:-/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml}
+      # ConfigDB remote resolution (leave empty to use bundled local YAML)
+      - CONFIGDB_REMOTE_ENDPOINT=${CONFIGDB_REMOTE_ENDPOINT:-}
+      - CONFIGDB_ALLOWED_HOSTS=${CONFIGDB_ALLOWED_HOSTS:-}
       - AUDIT_LOG_PATH=/app/audit_trail.log
 
       # ============================================
@@ -135,6 +140,8 @@ services:
 
       # Sentry Error Tracking (Optional - auto-enabled when SENTRY_DSN is set)
       - SENTRY_DSN=${SENTRY_DSN:-}
+      # Sentry environment tag for event classification (production/staging/development)
+      - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-development}
 
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port

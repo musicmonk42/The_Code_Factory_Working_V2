@@ -1,0 +1,30 @@
+{
+  "name": "HealerAgent",
+  "version": "1.0.0",
+  "description": "Mission-critical AI agent for self-healing and auto-fix operations.",
+  "entrypoint": "self_fixing_engineer/plugins/healer/healer_agent.py",
+  "agent_type": "ai",
+  "criticality": "mission-critical",
+  "permissions": {
+    "whitelisted_paths": [
+      "^\\./src/codebase/.*$",
+      "^\\./tests/.*$",
+      "^\\./config/auto_fixes/.*$"
+    ],
+    "whitelisted_commands": [
+      "^python(3\\.[0-9]+)?$",
+      "^git$",
+      "^pip$",
+      "^ruff$",
+      "^black$",
+      "^mypy$",
+      "^bandit$",
+      "^pytest$"
+    ],
+    "allow_destructive_actions": true
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml", "ruff", "black", "mypy", "bandit", "pytest"]
+  }
+}
