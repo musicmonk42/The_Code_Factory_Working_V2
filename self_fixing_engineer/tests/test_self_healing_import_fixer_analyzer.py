@@ -122,7 +122,8 @@ def mock_alert_operator():
 def mock_audit_logger():
     """Mock the audit_logger"""
     mock_logger = MagicMock()
-    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.core_audit.audit_logger", mock_logger):
+    with patch("self_fixing_engineer.self_healing_import_fixer.analyzer.core_audit.audit_logger", mock_logger), \
+         patch("self_fixing_engineer.self_healing_import_fixer.analyzer.analyzer.audit_logger", mock_logger):
         yield mock_logger
 
 
