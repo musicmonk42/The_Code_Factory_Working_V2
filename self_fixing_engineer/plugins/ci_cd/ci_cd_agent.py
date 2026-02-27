@@ -96,7 +96,7 @@ class CICDAgent(CrewAgentBase):
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        super().__init__(name=name, config=config or {}, tags=tags, metadata=metadata)
+        super().__init__(name=name, config=config, tags=tags, metadata=metadata)
 
     async def process(self, task: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Trigger a CI/CD pipeline.
