@@ -305,6 +305,34 @@ MAX_FAILED_FILES_ABSOLUTE = 5
 # Timeout (seconds) for the cold-start subprocess import check.
 COLD_START_IMPORT_TIMEOUT_SECONDS = 10
 
+# File extensions that should skip Python syntax validation in multi-file responses.
+# These are non-code files that are valid artifacts but not Python source.
+_SKIP_PYTHON_VALIDATION_EXTENSIONS: frozenset = frozenset({
+    '.txt', '.md', '.markdown', '.yaml', '.yml', '.json', '.toml', '.cfg', '.ini',
+    '.env', '.sh', '.bash', '.sql', '.html', '.css', '.xml', '.csv', '.lock',
+    '.dockerfile', '.gitignore', '.dockerignore', '.editorconfig',
+})
+
+# Well-known filenames without extensions that should also skip Python syntax validation.
+_SKIP_VALIDATION_FILENAMES: frozenset = frozenset({
+    'Dockerfile', 'Makefile', 'Procfile', 'Vagrantfile', '.gitignore',
+    '.dockerignore', '.editorconfig', 'LICENSE', 'CHANGELOG',
+})
+
+
+def _is_non_python_artifact(filename: str, lang: str) -> bool:
+    """Return True when *filename* should skip Python syntax validation.
+
+    Only applies when the project language is ``"python"`` – for other
+    project languages the multi-file loop already infers per-file language
+    via :func:`_infer_language_from_filename`, so no extra guard is needed.
+    """
+    if lang != "python":
+        return False
+    base = os.path.basename(filename)
+    _, ext = os.path.splitext(base)
+    return ext.lower() in _SKIP_PYTHON_VALIDATION_EXTENSIONS or base in _SKIP_VALIDATION_FILENAMES
+
 # ==============================================================================
 # --- Banned/Hallucinated Import Handling ---
 # ==============================================================================
@@ -933,8 +961,11 @@ def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
                 # Content is already per-file extracted from JSON — skip _clean_code_block()
                 # to preserve YAML, requirements.txt, Helm templates, etc.
                 cleaned = _normalize_file_content(content)
-                
-                # Use validate_and_repair_syntax instead of _validate_syntax
+
+                # Skip Python syntax validation for known non-code file types
+                if _is_non_python_artifact(filename, lang):
+                    code_files[filename] = cleaned
+                    continue
                 validation_result = validate_and_repair_syntax(cleaned, lang, filename)
 
                 if validation_result['valid']:
@@ -1047,7 +1078,12 @@ def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
                     # Content is already per-file extracted from JSON — skip _clean_code_block()
                     # to preserve YAML, requirements.txt, Helm templates, etc.
                     cleaned = _normalize_file_content(content)
-                    
+
+                    # Skip Python syntax validation for known non-code file types
+                    if _is_non_python_artifact(filename, lang):
+                        code_files[filename] = cleaned
+                        continue
+
                     # Infer per-file language from extension instead of using project-level lang
                     file_lang = _infer_language_from_filename(filename, default_lang=lang)
                     

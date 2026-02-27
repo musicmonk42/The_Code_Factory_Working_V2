@@ -26,6 +26,9 @@ coordination layer for centralized control and monitoring.
 import os
 import sys
 import warnings
+warnings.filterwarnings("ignore", message=r".*'aifc' is deprecated.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=r".*'audioop' is deprecated.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=r".*'crypt' is deprecated.*", category=DeprecationWarning)
 
 # --- PRODUCTION MODE CONFIGURATION START ---
 # Detect if we're running in a test environment BEFORE setting production defaults

@@ -1537,6 +1537,7 @@ class OmniCoreService:
         
         # DON'T call _load_agents() here to avoid circular imports
         self._agents_loaded = False  # Track if agents have been loaded
+        self._agent_loading_error: Optional[str] = None  # Capture any agent loading error
         
         # Initialize OmniCore integrations
         self._init_omnicore_components()
@@ -1778,8 +1779,13 @@ class OmniCoreService:
         """Lazy-load agents on first use to avoid circular imports."""
         if not self._agents_loaded:
             logger.info("Loading agents on demand...")
-            self._load_agents()
-            self._agents_loaded = True
+            try:
+                self._load_agents()
+                self._agents_loaded = True
+            except Exception as exc:
+                self._agent_loading_error = str(exc)
+                logger.error("Agent loading failed: %s", exc, exc_info=True)
+                return
             
             # Log initialization status after loading
             available = [k for k, v in self.agents_available.items() if v]
@@ -2351,11 +2357,12 @@ class OmniCoreService:
         # Re-check after potential sync or lazy loading
         if not self._agents_loaded:
             # Return structured retryable error following industry-standard error response format
+            error_detail = f": {self._agent_loading_error}" if self._agent_loading_error else ""
             error_response = {
                 "status": "error",
                 "job_id": job_id,
                 "action": action,
-                "message": "Agents are still loading. Please retry in a few seconds.",
+                "message": f"Code generation agents are still loading{error_detail}. Please retry in a few seconds.",
                 "retry": True,
                 "error_code": "AGENTS_NOT_READY",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
