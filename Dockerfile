@@ -311,6 +311,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # CONFIGDB_ALLOWED_HOSTS: Comma-separated allowlist of hostnames for CONFIGDB_REMOTE_ENDPOINT (SSRF guard).
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH="/app" \
     PATH="/opt/venv/bin:${PATH}" \
     APP_STARTUP=1 \
     SKIP_IMPORT_TIME_VALIDATION=1 \
