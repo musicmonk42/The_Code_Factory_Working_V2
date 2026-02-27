@@ -786,3 +786,85 @@ class TestStubMethodInjection:
         assert "async def validate_order" in stub, (
             "validate_order must be async because it is awaited in checkout.py"
         )
+
+    def test_dunder_attributes_are_not_injected(self, stub_fn):
+        """Dunder attributes (__class__, __dict__, etc.) must never become method stubs.
+
+        Injecting a ``def __class__(self)`` stub would shadow Python's built-in
+        descriptor and break isinstance() checks at runtime.
+        """
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "auth_service = AuthService()\n"
+                # These dunder accesses must be silently ignored by the third pass.
+                "x = auth_service.__class__\n"
+                "y = auth_service.__dict__\n"
+                "z = auth_service.__module__\n"
+                # A real method that SHOULD be injected.
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        assert "def __class__" not in stub, "dunder __class__ must NOT be injected"
+        assert "def __dict__" not in stub, "dunder __dict__ must NOT be injected"
+        assert "def __module__" not in stub, "dunder __module__ must NOT be injected"
+        # The real method should still be injected.
+        assert "def get_current_user" in stub, (
+            "get_current_user must still be injected alongside filtered dunders"
+        )
+
+    def test_injected_methods_use_single_blank_line_separator(self, stub_fn):
+        """Methods injected into a stub class must be separated by exactly one blank line.
+
+        PEP 8 §E303 requires at most two blank lines inside a class; one blank
+        line between method definitions is the conventional standard.
+        """
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def login(d=Depends(auth_service.login)): ...\n"
+                "async def logout(d=Depends(auth_service.logout)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        # Two consecutive ``raise NotImplementedError`` lines followed by two blank
+        # lines (before the next ``def``) would indicate PEP 8 E303.
+        # Strip trailing whitespace so end-of-file newlines don't trigger a false positive.
+        stub_body = stub.rstrip("\n")
+        assert "\n\n\n" not in stub_body, (
+            "methods inside a stub class must not be separated by two blank lines"
+        )
+        assert _valid_python(stub), "stub with PEP-8 spacing must be valid Python"
+
+    def test_third_pass_is_non_fatal_on_corrupt_content(self, stub_fn):
+        """If the third pass encounters an unexpected error it must not discard code_files.
+
+        The stub dict produced by the first two passes must always be returned
+        intact, even if the method-injection regex scan fails on unusual input.
+        """
+        # Simulate a stub file that is syntactically unusual (but still valid Python)
+        # so that the stub class regex won't match — injection silently skips.
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+            # Override the stub with unusual whitespace that the regex won't match;
+            # ensure_local_module_stubs must still return this file unchanged.
+            "app/services/auth.py": (
+                'class AuthService:\n'
+                '    """Custom docstring — not the stub marker."""\n'
+                '    pass\n'
+            ),
+        }
+        result = stub_fn(dict(files))
+        # The class file must still be present (not discarded by a crash).
+        assert "app/services/auth.py" in result, (
+            "code_files must be returned intact even when injection finds no match"
+        )
