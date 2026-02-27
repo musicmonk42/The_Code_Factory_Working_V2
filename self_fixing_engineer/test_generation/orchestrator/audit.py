@@ -9,7 +9,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union
 
 # Always read config at runtime so monkeypatches (AUDIT_LOG_FILE) take effect.
@@ -95,7 +95,7 @@ async def audit_event(
 
     payload["run_id"] = run_id
     payload["timestamp"] = int(time.time())
-    payload["timestamp_iso"] = datetime.utcnow().isoformat() + "Z"
+    payload["timestamp_iso"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     # Try arbiter first (if present)
     if AUDIT_LOGGER_AVAILABLE and arbiter_audit is not None:

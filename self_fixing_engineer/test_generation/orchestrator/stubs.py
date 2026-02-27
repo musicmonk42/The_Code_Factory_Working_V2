@@ -343,7 +343,7 @@ class DummyPRCreator:
                 level="CRITICAL",
             )
 
-        return False, ""
+        return False, "Stub mode — not available"
 
     async def create_jira_ticket(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
@@ -389,7 +389,7 @@ class DummyMutationTester:
 
     async def run_mutations(
         self, *args: Any, **kwargs: Any
-    ) -> Tuple[Optional[float], Optional[float], str]:
+    ) -> Tuple[float, float, str]:
         """
         Stub implementation that returns a ``None`` sentinel score.
 
@@ -409,7 +409,7 @@ class DummyMutationTester:
                 level="CRITICAL",
             )
 
-        return None, None, "Mutation testing unavailable — install mutmut or cosmic-ray"
+        return 0.0, 0.0, "Mutation testing unavailable — install mutmut or cosmic-ray"
 
 
 class DummyTestEnricher:

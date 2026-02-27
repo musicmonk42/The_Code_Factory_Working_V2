@@ -619,45 +619,4 @@ def _summarize_feedback_cached(
     }
 
 
-# Test snippet for verification
-async def test_io_utils():
-    from test_generation.orchestrator.audit import audit_event
-
-    try:
-        # Test append_to_feedback_log
-        test_data = {"execution_status": "PASS", "final_scores": {"coverage": 95.0}}
-        test_file = "test_feedback.jsonl"
-
-        # Cleanup any previous test file
-        if os.path.exists(test_file):
-            os.remove(test_file)
-
-        await append_to_feedback_log(test_file, test_data)
-
-        # Test summarize_feedback
-        summary = await summarize_feedback(test_file)
-        assert summary["total_runs"] == 1, "Feedback summary failed"
-        assert summary["status_counts"]["PASS"] == 1, "Status count incorrect"
-        assert summary["avg_coverage"] == 95.0, "Average coverage incorrect"
-
-        # Test validate_relative_path
-        safe_path = validate_relative_path("atco_artifacts/test.txt")
-        assert "atco_artifacts" in safe_path, "Path validation failed"
-
-        await audit_event("io_utils_test_success", {"test": "io_utils"}, critical=False)
-    except Exception as e:
-        await audit_event("io_utils_test_failed", {"error": str(e)}, critical=True)
-        raise
-    finally:
-        # Final cleanup
-        if os.path.exists("test_feedback.jsonl"):
-            os.remove("test_feedback.jsonl")
-        if os.path.exists("test_feedback.jsonl.lock"):
-            os.remove("test_feedback.jsonl.lock")
-        if os.path.exists("atco_artifacts/test.txt"):
-            os.remove("atco_artifacts/test.txt")
-        if os.path.exists("atco_artifacts"):
-            shutil.rmtree("atco_artifacts")
-
-
 # Completed for syntactic validity.

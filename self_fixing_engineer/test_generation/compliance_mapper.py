@@ -28,6 +28,7 @@ import logging
 import os
 import re
 import sys
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, nullcontext
@@ -89,7 +90,7 @@ except ImportError:
         """A data model for a compliance violation."""
 
         file_path: Path
-        framework: Any
+        framework: "ComplianceFramework"
         issue_type: str
         description: str
         severity: str = "low"
@@ -426,16 +427,17 @@ else:
 file_cache: Dict[str, str] = {}
 
 
-class ComplianceRule:
+class ComplianceRule(ABC):
     """Abstract base class for compliance rules."""
 
     frameworks: List[ComplianceFramework] = []
 
+    @abstractmethod
     async def check(
         self, file_path: Path, content: str, config: ComplianceConfig
     ) -> List[ComplianceIssue]:
         """Checks a file's content for compliance issues."""
-        raise NotImplementedError
+        ...
 
 
 class GDPRDataProtectionRule(ComplianceRule):

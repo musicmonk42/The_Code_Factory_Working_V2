@@ -50,7 +50,6 @@ logger = logging.getLogger(__name__)
 # Expose arbiter.audit_log under the test_generation.audit_log path
 try:
     arbiter_audit_log = importlib.import_module("arbiter.audit_log")
-    sys.modules[__name__ + ".audit_log"] = arbiter_audit_log
     from self_fixing_engineer.arbiter.audit_log import audit_logger
 except Exception as e:
     logger.debug(
@@ -68,47 +67,22 @@ except Exception as e:
 
     audit_logger = types.SimpleNamespace(log_event=_stub_log_event)
 
-# Inject a synthetic submodule for `test_generation.audit_log` to expose `AuditLogger`
+# Inject a single synthetic submodule for `test_generation.audit_log` that exposes
+# both `audit_logger` and `AuditLogger` — replaces any earlier injection.
 try:
     from .policy_and_audit import AuditLogger as _AuditLogger
 
     _audit_mod = types.ModuleType(__name__ + ".audit_log")
+    _audit_mod.audit_logger = audit_logger  # from arbiter or stub above
     _audit_mod.AuditLogger = _AuditLogger
     sys.modules[__name__ + ".audit_log"] = _audit_mod
 except ImportError as e:
     logger.debug(f"Failed to create synthetic audit_log submodule: {e}")
 
 
-# Define stubs for testing purposes (only used if imports fail)
-class PathError(ValueError):
-    pass
-
-
-class BackendRegistry:
-    pass
-
-
-class PolicyEngine:
-    pass
-
-
-class EventBus:
-    pass
-
-
 # Don't initialize onboard-related attributes at module level
 # They will be loaded lazily via __getattr__ when first accessed
 main_runner_logger = None
-
-# test helper: make unittest.mock.patch available as a builtin for the test suite
-try:
-    import builtins as _b
-    from unittest.mock import patch as _patch
-
-    if not hasattr(_b, "patch"):
-        _b.patch = _patch
-except Exception:
-    pass
 
 # Correctly handle the import of internal and external dependencies
 try:
@@ -161,6 +135,18 @@ try:
 
 except ImportError as e:
     logger.debug(f"Failed to import a core component: {e}; using stubs for testing.")
+    # Define stubs only as fallbacks when real imports are unavailable
+    class PathError(ValueError):
+        pass
+
+    class BackendRegistry:
+        pass
+
+    class PolicyEngine:
+        pass
+
+    class EventBus:
+        pass
 
 
 def validate_project_root(project_root_str: str):

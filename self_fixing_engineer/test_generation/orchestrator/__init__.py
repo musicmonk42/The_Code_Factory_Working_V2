@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import warnings
 from typing import TYPE_CHECKING
 
@@ -27,19 +28,19 @@ except ImportError as e:
         "Some functionality may be disabled."
     )
 
-    # Define dummy functions to prevent NameError
-    def sanitize_path(*args, **kwargs):
-        raise NotImplementedError(
-            "sanitize_path is not available due to import failure."
-        )
-
-    def validate_path(*args, **kwargs):
-        raise NotImplementedError(
-            "validate_path is not available due to import failure."
-        )
-
     class PathError(Exception):
         pass
+
+    # Provide minimal real implementations using os.path for containment check
+    def sanitize_path(path: str, root: str) -> str:
+        abs_root = os.path.abspath(root)
+        abs_path = os.path.abspath(os.path.join(root, path))
+        if not abs_path.startswith(abs_root + os.sep) and abs_path != abs_root:
+            raise PathError(f"Path '{path}' escapes root '{root}'")
+        return abs_path
+
+    def validate_path(path: str, root: str) -> str:
+        return sanitize_path(path, root)
 
 
 # Import and alias the GenerationOrchestrator as TestGenerationOrchestrator
