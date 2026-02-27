@@ -656,7 +656,7 @@ class TestSecurity:
 
         # Add new key (rotation)
         new_key = Fernet.generate_key().decode()
-        existing_keys = os.environ.get("MESH_ENCRYPTION_KEY", ",".join(TEST_KEYS))
+        existing_keys = os.environ["MESH_ENCRYPTION_KEY"]
         os.environ["MESH_ENCRYPTION_KEY"] = f"{new_key},{existing_keys}"
 
         # Reinitialize encryption
