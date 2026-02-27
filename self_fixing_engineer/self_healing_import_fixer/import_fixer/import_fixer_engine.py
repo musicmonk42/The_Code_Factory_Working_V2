@@ -21,8 +21,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import sys
+import tempfile
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -1397,35 +1399,72 @@ class ImportFixerEngine:
         """
         Fix import errors in a file.
 
+        Reads the file, applies :meth:`fix_code` to detect and insert missing
+        imports, then writes the result back to disk using an atomic rename so
+        that a partial write can never corrupt the original file.
+
+        Both the read and the write are dispatched via
+        :func:`asyncio.to_thread` to avoid blocking the event loop on large
+        files.
+
         Args:
-            file_path: Path to the Python file to fix.
-            dry_run: If True, return what would be fixed without writing.
+            file_path: Absolute or relative path to the Python file to fix.
+            dry_run: When ``True``, return the fixed code string without
+                writing any changes to disk.  The original file is left
+                untouched.
 
         Returns:
-            The fixed code as a string.
+            The fixed source code as a string.  If no fixes were necessary the
+            original source code is returned unchanged.
 
         Raises:
-            FileNotFoundError: If the file does not exist.
-            RuntimeError: If fixing fails.
+            FileNotFoundError: If ``file_path`` does not exist at call time.
+            RuntimeError: If :meth:`fix_code` reports a failure (i.e. returns
+                ``status == 'error'``).
+            OSError: If the atomic write-back fails (e.g. due to permissions
+                or a full disk). The original file is guaranteed to be intact
+                in this case because the rename is the last operation.
         """
-        import os
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"File not found: {file_path}")
+        abs_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found: {abs_path}")
 
-        with open(file_path, 'r', encoding='utf-8') as f:
-            code = f.read()
+        # --- Non-blocking read ---
+        code: str = await asyncio.to_thread(
+            Path(abs_path).read_text, "utf-8"
+        )
 
-        result = self.fix_code(code, file_path=file_path, dry_run=dry_run)
+        result = self.fix_code(code, file_path=abs_path, dry_run=dry_run)
 
-        if result['status'] == 'error':
-            raise RuntimeError(result['message'])
+        if result["status"] == "error":
+            raise RuntimeError(result["message"])
 
-        fixed_code = result['fixed_code']
+        fixed_code: str = result["fixed_code"]
 
-        if not dry_run and result['fixes_applied']:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(fixed_code)
-            self.logger.info(f"Fixed {len(result['fixes_applied'])} imports in {file_path}")
+        if not dry_run and result["fixes_applied"]:
+            # --- Atomic write-back (temp file + os.replace) ---
+            def _atomic_write(path: str, data: str) -> None:
+                parent = os.path.dirname(path) or "."
+                fd, tmp_path = tempfile.mkstemp(
+                    dir=parent, suffix=".tmp", prefix=".fixer_"
+                )
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        fh.write(data)
+                    os.replace(tmp_path, path)
+                except BaseException:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+
+            await asyncio.to_thread(_atomic_write, abs_path, fixed_code)
+            self.logger.info(
+                "Fixed %d imports in %s",
+                len(result["fixes_applied"]),
+                abs_path,
+            )
 
         return fixed_code
 
