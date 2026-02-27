@@ -213,6 +213,24 @@ spec:
                   name: codefactory-secrets
                   key: private-key-password
                   optional: true
+
+            # CLI WebSocket JWT secret (intent_capture/cli.py) - Bug 4 fix
+            # REQUIRED in production; CLI raises a fatal warning if the insecure default is used
+            - name: CLI_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: cli-jwt-secret
+                  optional: true
+
+            # RabbitMQ URL for task queuing (intent_capture/api.py, cli.py) - Bug 10 fix
+            # Only required when USE_QUEUE=true
+            - name: RABBITMQ_URL
+              valueFrom:
+                secretKeyRef:
+                  name: codefactory-secrets
+                  key: rabbitmq-url
+                  optional: true
           startupProbe:
             httpGet:
               path: /ready

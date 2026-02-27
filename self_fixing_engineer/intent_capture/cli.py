@@ -147,7 +147,7 @@ TOKEN_USAGE = _get_or_create_metric(
 command_cache = TTLCache(maxsize=128, ttl=300)
 
 # UPGRADE: Vault for JWT_SECRET - [Date: August 19, 2025]
-JWT_SECRET = None
+JWT_SECRET = os.getenv("CLI_JWT_SECRET", "default-insecure-secret-key-for-dev")
 
 
 def fetch_jwt_from_vault() -> Optional[str]:
@@ -157,7 +157,7 @@ def fetch_jwt_from_vault() -> Optional[str]:
         client = hvac.Client(url=os.getenv("VAULT_URL"), token=os.getenv("VAULT_TOKEN"))
         if client.is_authenticated():
             secret = client.secrets.kv.v2.read_secret_version(
-                path="secret/data/cli/jwt"
+                path=os.getenv("JWT_VAULT_PATH", "secrets/data/jwt")
             )
             logger.info("Fetched JWT_SECRET from Vault.")
             return secret["data"]["data"]["JWT_SECRET"]
@@ -210,17 +210,16 @@ class CollabServer:
         except jwt.PyJWTError:
             return False
 
-    # UPGRADE: Retry WebSocket connections - [Date: August 19, 2025]
-    @contextlib.asynccontextmanager
-    async def _network_guard(self):
-        for attempt in range(3):
+    async def _with_network_retry(self, coro_factory, max_retries=3):
+        """Retry helper for WebSocket operations to avoid multi-yield asynccontextmanager issue."""
+        for attempt in range(max_retries):
             try:
-                yield
-                return
+                return await coro_factory()
             except ConnectionClosed as e:
-                logger.warning(f"WebSocket connection attempt {attempt+1} failed: {e}")
+                logger.warning(f"WebSocket attempt {attempt+1} failed: {e}")
+                if attempt == max_retries - 1:
+                    raise
                 await asyncio.sleep(2)
-        raise ConnectionClosed(1006, "Max retries reached")
 
     async def handle_client(self, websocket, path):
         try:
@@ -258,7 +257,7 @@ class CollabServer:
         )
         logger.info(f"Collaboration server started on ws://{self.host}:{self.port}")
         token = jwt.encode(
-            {"exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)},
+            {"exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)},
             JWT_SECRET,
             algorithm="HS512",
         )

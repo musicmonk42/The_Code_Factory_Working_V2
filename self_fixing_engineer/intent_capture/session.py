@@ -174,6 +174,13 @@ def _get_config():
                 )
                 _FERNET_INSTANCE = None
 
+        if _FERNET_INSTANCE is None:
+            logger.warning(
+                "Session encryption is DISABLED. Set INTENT_AGENT_ENCRYPTION_KEY "
+                "environment variable to enable encryption. "
+                "This is NOT acceptable for production deployments."
+            )
+
         return {
             "storage_root": session_storage_root,
             "max_history_size": session_max_history_size,
@@ -321,7 +328,7 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
     P1: Security - Encrypt sensitive parts of the state.
     P5: Observability - Metrics for save operations.
     """
-    SESSION_SAVE_ATTEMPTS.inc(session_name=session_name)
+    SESSION_SAVE_ATTEMPTS.labels(session_name=session_name).inc()
     start_time = time.perf_counter()
 
     try:
@@ -353,8 +360,8 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
         )
 
         latency = time.perf_counter() - start_time
-        SESSION_SAVE_LATENCY.observe(
-            {"session_name": session_name}, latency
+        SESSION_SAVE_LATENCY.labels(session_name=session_name).observe(
+            latency
         )  # Updated for Prometheus client
         log_action(
             "session_saved",
@@ -368,7 +375,7 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
         logger.info(f"Session '{session_name}' saved to {session_path}.")
         return True
     except (ValidationError, ValueError) as e:
-        SESSION_ERRORS.inc(session_name=session_name, error_type="validation_error")
+        SESSION_ERRORS.labels(session_name=session_name, error_type="validation_error").inc()
         logger.error(
             f"Session data validation failed for '{session_name}': {e}. Save aborted."
         )
@@ -382,7 +389,7 @@ async def save_session(session_name: str, session_data: Dict[str, Any]) -> bool:
         )
         return False
     except Exception as e:
-        SESSION_ERRORS.inc(session_name=session_name, error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name=session_name, error_type=type(e).__name__).inc()
         logger.error(f"Failed to save session '{session_name}': {e}.", exc_info=True)
         log_action(
             "session_save_failed",
@@ -397,7 +404,7 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
     P1: Security - Decrypt encrypted parts of the state.
     P5: Observability - Metrics for load operations.
     """
-    SESSION_LOAD_ATTEMPTS.inc(session_name=session_name)
+    SESSION_LOAD_ATTEMPTS.labels(session_name=session_name).inc()
     start_time = time.perf_counter()
 
     try:
@@ -424,9 +431,9 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
                         f"Failed to decrypt memory for session {session_name}: {e}. Data might be corrupted.",
                         exc_info=True,
                     )
-                    SESSION_ERRORS.inc(
+                    SESSION_ERRORS.labels(
                         session_name=session_name, error_type="decryption_failed"
-                    )
+                    ).inc()
                     return None  # Fail to load if decryption fails
             else:
                 logger.warning(
@@ -444,8 +451,8 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
         )
 
         latency = time.perf_counter() - start_time
-        SESSION_LOAD_LATENCY.observe(
-            {"session_name": session_name}, latency
+        SESSION_LOAD_LATENCY.labels(session_name=session_name).observe(
+            latency
         )  # Updated for Prometheus client
         log_action(
             "session_loaded",
@@ -469,7 +476,7 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
         )
         return None
     except ValidationError as e:
-        SESSION_ERRORS.inc(session_name=session_name, error_type="validation_error")
+        SESSION_ERRORS.labels(session_name=session_name, error_type="validation_error").inc()
         logger.error(
             f"Session data validation failed for loaded session '{session_name}': {e}. Data might be corrupted or outdated."
         )
@@ -483,7 +490,7 @@ async def load_session(session_name: str) -> Optional[Dict[str, Any]]:
         )
         return None
     except Exception as e:
-        SESSION_ERRORS.inc(session_name=session_name, error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name=session_name, error_type=type(e).__name__).inc()
         logger.error(f"Failed to load session '{session_name}': {e}.", exc_info=True)
         log_action(
             "session_load_failed",
@@ -510,7 +517,7 @@ async def list_sessions() -> List[str]:
                     sessions.append(os.path.splitext(filename)[0])
         log_action("list_sessions", {"count": len(sessions), "status": "success"})
     except Exception as e:
-        SESSION_ERRORS.inc(error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name="unknown", error_type=type(e).__name__).inc()
         logger.error(f"Failed to list sessions: {e}.", exc_info=True)
         log_action("list_sessions", {"status": "failed", "error": str(e)})
     return sorted(sessions)
@@ -549,7 +556,7 @@ async def export_spec(
         logger.info(f"Spec exported successfully to {output_path}.")
         return True
     except Exception as e:
-        SESSION_ERRORS.inc(error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name="unknown", error_type=type(e).__name__).inc()
         logger.error(f"Failed to export spec: {e}.", exc_info=True)
         log_action("spec_export_failed", {"path": output_path, "error": str(e)})
         return False
@@ -586,14 +593,14 @@ async def save_session_history(
         logger.info(f"History for session '{session_name}' saved to {history_path}.")
         return True
     except (ValueError, ValidationError) as e:
-        SESSION_ERRORS.inc(error_type="validation_error")
+        SESSION_ERRORS.labels(session_name=session_name, error_type="validation_error").inc()
         logger.error(
             f"History data validation failed for '{session_name}': {e}. Save aborted.",
             exc_info=True,
         )
         return False
     except Exception as e:
-        SESSION_ERRORS.inc(error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name=session_name, error_type=type(e).__name__).inc()
         logger.error(
             f"Failed to save history for session '{session_name}': {e}.", exc_info=True
         )
@@ -641,7 +648,7 @@ async def load_session_history(session_name: str) -> List[Dict[str, Any]]:
         )
         return []
     except Exception as e:
-        SESSION_ERRORS.inc(error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name=session_name, error_type=type(e).__name__).inc()
         logger.error(
             f"Failed to load history for session '{session_name}': {e}.", exc_info=True
         )
@@ -663,7 +670,7 @@ async def delete_session(session_name: str) -> bool:
         history_path = _get_history_path(session_name)
     except ValueError as e:
         logger.error(f"Invalid session name '{session_name}': {e}")
-        SESSION_ERRORS.inc(session_name=session_name, error_type="invalid_session_name")
+        SESSION_ERRORS.labels(session_name=session_name, error_type="invalid_session_name").inc()
         return False
 
     config_params = _get_config()
@@ -730,7 +737,7 @@ async def delete_session(session_name: str) -> bool:
         )
         return True
     except Exception as e:
-        SESSION_ERRORS.inc(session_name=session_name, error_type=type(e).__name__)
+        SESSION_ERRORS.labels(session_name=session_name, error_type=type(e).__name__).inc()
         logger.error(f"Failed to delete session '{session_name}': {e}.", exc_info=True)
         log_action(
             "session_delete_failed", {"session_id": session_name, "error": str(e)}
@@ -832,9 +839,9 @@ async def prune_old_sessions(max_age_days: Optional[int] = None) -> int:
                     f"Error processing session '{session_name}' for pruning: {e}",
                     exc_info=True,
                 )
-                SESSION_ERRORS.inc(
+                SESSION_ERRORS.labels(
                     session_name=session_name, error_type="prune_processing_error"
-                )
+                ).inc()
 
     latency = time.perf_counter() - start_time
     SESSION_PRUNE_LATENCY_SECONDS.observe(latency)

@@ -290,3 +290,11 @@ data:
   # Enable plugin integrity checks via HASH_MANIFEST.
   # Default: "false" in dev/staging, "true" in production (override in production overlay).
   PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
+
+  # ============================================
+  # HashiCorp Vault JWT Path (intent_capture/api.py, cli.py) - Bug 17 fix
+  # ============================================
+  # Vault KV v2 path for the JWT_SECRET used by both API and CLI.
+  # Both modules now share this path so tokens are cross-compatible.
+  # Override only if your Vault layout differs from the default.
+  JWT_VAULT_PATH: "secrets/data/jwt"

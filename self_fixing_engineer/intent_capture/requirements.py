@@ -124,28 +124,19 @@ except ImportError:
     ML_MODEL_LOAD_LATENCY_SECONDS = None
 
 # P5: Observability: OpenTelemetry Tracing
-# Install with 'pip install opentelemetry-sdk==1.36.0'
+# Use the centralized tracer like other modules to avoid overwriting global TracerProvider
 try:
-    from opentelemetry import trace
-    from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+    tracer = get_tracer(__name__)
     OPENTELEMETRY_AVAILABLE = True
-    # Initialize OpenTelemetry
-    resource = Resource(attributes={SERVICE_NAME: "requirements-module"})
-    trace_provider = TracerProvider(resource=resource)
-    trace_provider.add_span_processor(
-        BatchSpanProcessor(ConsoleSpanExporter())
-    )  # Use ConsoleSpanExporter for local debugging
-    trace.set_tracer_provider(trace_provider)
-    # Fixed: Use correct number of arguments for get_tracer()
-    tracer = trace.get_tracer(
-        instrumenting_module_name=__name__, instrumenting_library_version=__version__
-    )
 except ImportError:
-    tracer = None
-    OPENTELEMETRY_AVAILABLE = False
+    try:
+        from opentelemetry import trace
+        tracer = trace.get_tracer(__name__)
+        OPENTELEMETRY_AVAILABLE = True
+    except ImportError:
+        tracer = None
+        OPENTELEMETRY_AVAILABLE = False
 
 # --- Production-Ready Dependency Documentation & Imports ---
 # --- Database Dependencies (required for DB-backed checklists) ---
