@@ -616,3 +616,27 @@ def get_alert_operator() -> AlertOperator:
 def send_alert(*args, **kwargs):
     """Stub: send an alert/notification."""
     return None
+
+
+def alert_operator(message: str, level: str = "CRITICAL") -> None:
+    """
+    Module-level convenience function to send an operator alert.
+
+    Delegates to the AlertOperator singleton. This is the public API
+    that plugins should use to send alerts.
+
+    Args:
+        message: The alert message.
+        level: The alert severity level (e.g., 'CRITICAL', 'ERROR', 'WARNING', 'INFO').
+    """
+    try:
+        get_alert_operator().alert(message, level)
+    except Exception as e:
+        # Fallback to basic logging if AlertOperator fails to initialize
+        logging.getLogger(__name__).error(
+            f"[ALERT FALLBACK - {level}] {message} (AlertOperator error: {e})"
+        )
+
+
+# Alias for backward compatibility - plugins import scrub_secrets
+scrub_secrets = scrub
