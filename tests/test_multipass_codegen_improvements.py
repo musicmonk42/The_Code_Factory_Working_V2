@@ -1018,3 +1018,84 @@ class TestSyntaxSafetyInstructionsCriticalSection:
         src = self._src()
         for n in range(8, 16):
             assert f"{n}." in src, f"Requirement {n}. not found in codegen_prompt.py"
+
+
+# ---------------------------------------------------------------------------
+# Fix 7 — app/routes/ directory discovery in _reconcile_app_wiring and
+#          _validate_wiring (Bug 1 & Bug 2)
+# ---------------------------------------------------------------------------
+
+
+class TestRoutesDirectoryDiscovery:
+    """_reconcile_app_wiring and _validate_wiring must detect app/routes/ files."""
+
+    @pytest.fixture(scope="class")
+    def reconcile_fn(self):
+        mod = _load_agent_module()
+        return mod._reconcile_app_wiring  # type: ignore[attr-defined]
+
+    @pytest.fixture(scope="class")
+    def validate_fn(self):
+        mod = _load_agent_module()
+        return mod._validate_wiring  # type: ignore[attr-defined]
+
+    def test_reconcile_discovers_routes_directory(self, reconcile_fn):
+        """_reconcile_app_wiring must find routers in app/routes/ as well as app/routers/."""
+        files = {
+            "app/routes/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/products')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = reconcile_fn(files)
+        main_content = result.get("app/main.py", "")
+        assert "from app.routes.products import" in main_content, (
+            "_reconcile_app_wiring must import routers discovered in app/routes/"
+        )
+        assert "include_router" in main_content, (
+            "_reconcile_app_wiring must wire routers discovered in app/routes/"
+        )
+        # The __init__.py must be created in the correct directory, not app/routers/
+        assert "app/routes/__init__.py" in result, (
+            "_reconcile_app_wiring must create app/routes/__init__.py, not app/routers/__init__.py"
+        )
+        assert "app/routers/__init__.py" not in result, (
+            "_reconcile_app_wiring must not create app/routers/__init__.py when using app/routes/"
+        )
+
+    def test_validate_wiring_finds_routes_directory(self, validate_fn):
+        """_validate_wiring must detect unwired routers in app/routes/ directory."""
+        files = {
+            "app/routes/products.py": (
+                "router = APIRouter()\n"
+                "@router.get('/products')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = validate_fn(files)
+        assert "app/routes/products.py" in result["unwired_routers"], (
+            "_validate_wiring must flag unwired routers in app/routes/"
+        )
+
+    def test_validate_wiring_routes_dir_wired_not_flagged(self, validate_fn):
+        """_validate_wiring must not flag app/routes/ routers that are properly wired."""
+        files = {
+            "app/routes/products.py": (
+                "router = APIRouter()\n"
+                "@router.get('/products')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": (
+                "from app.routes.products import router\n"
+                "app = FastAPI()\n"
+                "app.include_router(router)\n"
+            ),
+        }
+        result = validate_fn(files)
+        assert "app/routes/products.py" not in result["unwired_routers"], (
+            "_validate_wiring must not flag already-wired routers in app/routes/"
+        )

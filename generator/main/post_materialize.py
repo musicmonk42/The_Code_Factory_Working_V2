@@ -304,11 +304,13 @@ class PostMaterializeResult:
 def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
     """Phase 8: Auto-wire router files into app/main.py when missing.
 
-    Scans ``output_dir/app/routers/`` for Python router files and injects
-    ``include_router`` calls into ``app/main.py`` when they are absent.
+    Scans ``output_dir/app/routers/`` (and ``output_dir/app/routes/`` as a
+    fallback) for Python router files and injects ``include_router`` calls into
+    ``app/main.py`` when they are absent.
 
-    The function is idempotent: if ``include_router`` is already present in
-    ``main.py`` (from any router, not just the ones we would wire) it does nothing.
+    The function is idempotent: it checks per-module whether the specific
+    module-level import is already present in ``main.py`` and only wires the
+    modules that are not yet imported.
     Changes are recorded in ``result.files_created`` (the field tracks all files
     touched by this phase, whether created or modified).
 
@@ -317,14 +319,16 @@ def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
         result: Mutable result object; modified in-place on success.
     """
     routers_dir = output_dir / "app" / "routers"
+    if not routers_dir.is_dir():
+        # Fall back to app/routes/ — a common FastAPI convention alongside app/routers/.
+        routers_dir = output_dir / "app" / "routes"
     main_py = output_dir / "app" / "main.py"
 
+    # Return early when neither directory exists or main.py is absent.
     if not routers_dir.is_dir() or not main_py.exists():
         return
 
     main_content = main_py.read_text(encoding="utf-8")
-    if "include_router" in main_content:
-        return  # Already wired — nothing to do.
 
     router_modules: List[str] = [
         f.stem
@@ -334,14 +338,24 @@ def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
     if not router_modules:
         return
 
+    dir_name = routers_dir.name  # "routers" or "routes"
+
+    # Only wire modules not yet imported from this specific directory.
+    unwired_modules = [
+        mod for mod in router_modules
+        if f"from app.{dir_name}.{mod} import" not in main_content
+    ]
+    if not unwired_modules:
+        return  # All discovered routers are already wired — nothing to do.
+
     # Build the import and wire-up lines.
     import_lines = [
-        f"from app.routers.{mod} import router as {mod}_router\n"
-        for mod in router_modules
+        f"from app.{dir_name}.{mod} import router as {mod}_router\n"
+        for mod in unwired_modules
     ]
     wire_lines = [
         f"app.include_router({mod}_router, prefix=\"/api/v1/{mod}\")\n"
-        for mod in router_modules
+        for mod in unwired_modules
     ]
 
     lines = main_content.splitlines(keepends=True)
@@ -424,9 +438,9 @@ def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
     logger.info(
         "%s Auto-wired %d router(s) into main.py: %s",
         _STAGE,
-        len(router_modules),
-        router_modules,
-        extra={"output_dir": str(output_dir), "router_modules": router_modules},
+        len(unwired_modules),
+        unwired_modules,
+        extra={"output_dir": str(output_dir), "router_modules": unwired_modules},
     )
 
 

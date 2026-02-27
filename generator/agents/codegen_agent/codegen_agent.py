@@ -509,7 +509,7 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     # ------------------------------------------------------------------ #
     # 1. Router-wiring check                                              #
     # ------------------------------------------------------------------ #
-    _router_path_re = re.compile(r'^app/routers/(?!__init__)[\w-]+\.py$')
+    _router_path_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[\w-]+\.py$')
     # Match ``var_name = APIRouter(`` at module scope (any amount of leading ws)
     _router_var_re = re.compile(r'^[ \t]*(\w+)\s*=\s*APIRouter\s*\(', re.MULTILINE)
 
@@ -606,12 +606,12 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     updated: Dict[str, str] = {k.replace("\\", "/"): v for k, v in files.items()}
 
     # ------------------------------------------------------------------ #
-    # 1. Discover router variables in app/routers/*.py                    #
+    # 1. Discover router variables in app/routers/*.py or app/routes/*.py #
     # ------------------------------------------------------------------ #
     router_modules: List[Dict[str, str]] = []  # [{module, var, prefix}]
     _router_var_re = re.compile(r'(\w+)\s*=\s*APIRouter\s*\(', re.MULTILINE)
     _prefix_re = re.compile(r'APIRouter\s*\([^)]*prefix\s*=\s*[\'\"]([^\'\"]+)[\'\"]')
-    _router_path_re = re.compile(r'^app/routers/(?!__init__)[^/]+\.py$')
+    _router_path_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
 
     for path, content in list(updated.items()):
         if not _router_path_re.match(path):
@@ -623,16 +623,27 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         # Extract prefix from APIRouter() call if present
         prefix_match = _prefix_re.search(content)
         prefix = prefix_match.group(1) if prefix_match else ""
-        # Derive importable module name: "app/routers/product.py" → "app.routers.product"
+        # Derive importable module name:
+        # "app/routers/product.py" → "app.routers.product"
+        # "app/routes/product.py"  → "app.routes.product"
         module = path.replace("/", ".").removesuffix(".py")
-        router_modules.append({"module": module, "var": router_var, "prefix": prefix})
+        # Capture the directory name ("routers" or "routes") for init-file path.
+        # Path guaranteed by regex to be "app/{routers|routes}/<file>.py".
+        router_dir = path.split("/")[1]  # segment index 1: "routers" or "routes"
+        router_modules.append(
+            {"module": module, "var": router_var, "prefix": prefix, "router_dir": router_dir}
+        )
 
     if not router_modules:
         return updated  # Nothing to wire — return unchanged
 
     # ------------------------------------------------------------------ #
-    # 2. Rebuild app/routers/__init__.py                                  #
+    # 2. Rebuild the router package __init__.py                           #
     # ------------------------------------------------------------------ #
+    # All discovered routers share the same parent directory; derive it
+    # from the first entry (mixed-directory projects are not supported).
+    router_dir_name = router_modules[0]["router_dir"]  # "routers" or "routes"
+
     # Derive a unique alias for each router based on its module file stem so
     # that multiple routers can coexist without shadowing each other.
     for rm in router_modules:
@@ -649,7 +660,7 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     for rm in router_modules:
         init_lines.append('    "' + rm['alias'] + '",')
     init_lines.append("]")
-    updated["app/routers/__init__.py"] = "\n".join(init_lines) + "\n"
+    updated[f"app/{router_dir_name}/__init__.py"] = "\n".join(init_lines) + "\n"
 
     # ------------------------------------------------------------------ #
     # 3. Rebuild app/main.py mounting all routers                         #

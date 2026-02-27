@@ -1162,3 +1162,25 @@ def test_validation_summary_not_treated_as_code_file():
     assert crh.ERROR_FILENAME not in files or "__validation_summary__" not in files.get(
         crh.ERROR_FILENAME, ""
     )
+
+
+def test_ensure_local_module_stubs_suffixed_router_gets_apirouter():
+    """ensure_local_module_stubs must stub products_router as APIRouter(), not None.
+
+    Verifies Bug 3 fix: any symbol whose name ends with ``_router`` (e.g.
+    ``products_router``, ``orders_router``) must be stubbed as an
+    ``APIRouter()`` instance with the FastAPI import emitted, instead of
+    being assigned ``None``.
+    """
+    files = {"app/main.py": "from app.routers.products import products_router\n"}
+    result = crh.ensure_local_module_stubs(dict(files))
+    stub = result.get("app/routers/products.py", "")
+    assert "from fastapi import APIRouter" in stub, (
+        "stub for products_router must include 'from fastapi import APIRouter'"
+    )
+    assert "products_router = APIRouter()" in stub, (
+        "products_router must be stubbed as APIRouter(), not None"
+    )
+    assert "products_router = None" not in stub, (
+        "products_router must not be stubbed as None"
+    )

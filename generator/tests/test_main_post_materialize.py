@@ -279,3 +279,59 @@ def test_post_materialize_auto_wire_routers_integration(tmp_path: Path) -> None:
     main_content = (app_dir / "main.py").read_text()
     assert "include_router" in main_content
     assert result.success
+
+
+def test_auto_wire_routers_from_routes_dir(tmp_path: Path) -> None:
+    """_auto_wire_routers must wire routers from app/routes/ when app/routers/ is absent."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routes_dir = app_dir / "routes"
+    routes_dir.mkdir()
+    (routes_dir / "__init__.py").write_text("")
+    (routes_dir / "products.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+        "@router.get('/products')\ndef list_products(): pass\n"
+    )
+    (app_dir / "main.py").write_text(
+        "from fastapi import FastAPI\napp = FastAPI()\n"
+    )
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    main_content = (app_dir / "main.py").read_text()
+    assert "include_router" in main_content
+    assert "from app.routes.products import router as products_router" in main_content
+    assert 'app.include_router(products_router, prefix="/api/v1/products")' in main_content
+
+
+def test_auto_wire_not_skipped_when_stubs_are_none(tmp_path: Path) -> None:
+    """_auto_wire_routers must wire modules not yet imported via the per-module path.
+
+    Even when 'include_router' is already present in main.py (from an old stub
+    that imported a None value), routers that are not yet imported from their
+    specific module path should still be wired.
+    """
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "products.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+        "@router.get('/products')\ndef list_products(): pass\n"
+    )
+    # main.py has include_router but imports from a stub package (not module-specific path)
+    (app_dir / "main.py").write_text(
+        "from fastapi import FastAPI\n"
+        "from app.routers import products_router\n"
+        "app = FastAPI()\n"
+        "app.include_router(products_router, prefix='/api/v1')\n"
+    )
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    main_content = (app_dir / "main.py").read_text()
+    # The per-module import must now be injected.
+    assert "from app.routers.products import router as products_router" in main_content
