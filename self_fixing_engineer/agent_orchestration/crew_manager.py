@@ -405,6 +405,10 @@ class CrewManager:
                 )
 
                 router = ServiceRouter()
+                # Store the router on the manager so an Arbiter can later call
+                # manager.service_router.bind_arbiter(arbiter) to upgrade
+                # escalation handlers to use the live Arbiter subsystems.
+                manager.service_router = router
 
                 def _make_hook(uri: str):
                     async def _hook(mgr, **kwargs):  # noqa: ANN001
@@ -592,6 +596,13 @@ class CrewManager:
                 await cb(self, **kwargs)
             except Exception as e:
                 logger.error(f"CrewManager event hook '{event}' failed: {e}")
+        # Fire alias: on_agent_fail also triggers on_agent_failure (YAML alias)
+        if event == "on_agent_fail":
+            for cb in self._on_event_hooks.get("on_agent_failure", []):
+                try:
+                    await cb(self, **kwargs)
+                except Exception as e:
+                    logger.error(f"CrewManager event hook 'on_agent_failure' (alias) failed: {e}")
 
     async def _maybe_audit(self, event: str, details: Dict[str, Any]) -> None:
         # F. Error Handling: Audit hooks should never bring down the process

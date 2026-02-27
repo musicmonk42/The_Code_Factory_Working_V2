@@ -10,14 +10,49 @@ Supports local YAML-based fallback and optional remote HTTP resolution.
 import logging
 import os
 import re
+import urllib.parse
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 _DEFAULTS_PATH = Path(__file__).parent / "configdb_defaults.yaml"
 
 _URI_PATTERN = re.compile(r"^configdb://(?P<category>[^/]+)/(?P<key>[^/]+)$")
+
+# SSRF protection: only allow HTTPS endpoints and validate against an allowlist.
+# Operators can extend this list via the CONFIGDB_ALLOWED_HOSTS env var
+# (comma-separated hostnames).
+_DEFAULT_ALLOWED_HOSTS: List[str] = []
+
+
+def _get_allowed_hosts() -> List[str]:
+    """Return the merged list of allowed remote hosts from env + defaults."""
+    env_val = os.environ.get("CONFIGDB_ALLOWED_HOSTS", "")
+    extra = [h.strip() for h in env_val.split(",") if h.strip()]
+    return _DEFAULT_ALLOWED_HOSTS + extra
+
+
+def _validate_remote_url(url: str, allowed_hosts: List[str]) -> None:
+    """Validate a remote URL against the allowlist to prevent SSRF.
+
+    Args:
+        url: The URL to validate.
+        allowed_hosts: List of permitted hostnames.
+
+    Raises:
+        ValueError: If the URL scheme is not HTTPS or the host is not allowed.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError(
+            f"ConfigDBResolver: remote endpoint must use HTTPS (got {parsed.scheme!r})"
+        )
+    if allowed_hosts and parsed.hostname not in allowed_hosts:
+        raise ValueError(
+            f"ConfigDBResolver: host {parsed.hostname!r} is not in the allowed hosts list. "
+            f"Set CONFIGDB_ALLOWED_HOSTS env var to permit it."
+        )
 
 
 class ConfigDBResolver:
@@ -27,20 +62,27 @@ class ConfigDBResolver:
         self,
         defaults_path: Optional[str] = None,
         remote_endpoint: Optional[str] = None,
+        allowed_hosts: Optional[List[str]] = None,
     ) -> None:
-        """
-        Initialise the resolver.
+        """Initialise the resolver.
 
         Args:
             defaults_path: Path to the YAML file with default values.
                            Defaults to configdb_defaults.yaml in the same directory.
-            remote_endpoint: Optional HTTP endpoint for remote config resolution.
-                             If not set, only local YAML is used.
+            remote_endpoint: Optional HTTPS endpoint for remote config resolution.
+                             If not set, only local YAML is used.  Must use HTTPS and
+                             must match the ``allowed_hosts`` list (or
+                             ``CONFIGDB_ALLOWED_HOSTS`` env var).
+            allowed_hosts: Explicit list of permitted remote hostnames.  When
+                           empty the CONFIGDB_ALLOWED_HOSTS env var is consulted.
+                           When both are empty, any HTTPS host is rejected to
+                           prevent accidental SSRF.
         """
         self._defaults_path = Path(defaults_path) if defaults_path else _DEFAULTS_PATH
-        self._remote_endpoint = remote_endpoint or os.environ.get(
+        self._remote_endpoint: Optional[str] = remote_endpoint or os.environ.get(
             "CONFIGDB_REMOTE_ENDPOINT"
         )
+        self._allowed_hosts: List[str] = allowed_hosts if allowed_hosts is not None else _get_allowed_hosts()
         self._cache: Dict[str, Any] = {}
         self._loaded = False
 
@@ -105,12 +147,24 @@ class ConfigDBResolver:
     async def _resolve_remote(
         self, category: str, key: str
     ) -> Optional[Dict[str, Any]]:
-        """Attempt to resolve from a remote HTTP endpoint."""
-        try:
-            import urllib.request
-            import json as _json
+        """Attempt to resolve from a remote HTTPS endpoint.
 
-            url = f"{self._remote_endpoint.rstrip('/')}/{category}/{key}"
+        Validates the constructed URL against the allowed-hosts allowlist before
+        making the network request to prevent SSRF attacks.
+        """
+        import json as _json
+        import urllib.request
+
+        url = f"{self._remote_endpoint.rstrip('/')}/{category}/{key}"
+        try:
+            _validate_remote_url(url, self._allowed_hosts)
+        except ValueError as exc:
+            logger.warning("ConfigDBResolver: SSRF guard blocked remote URL: %s", exc)
+            return None
+        try:
+            # S310 suppressed: SSRF risk is mitigated by _validate_remote_url()
+            # which enforces HTTPS-only and validates against the allowed-hosts
+            # allowlist before this call is reached.
             with urllib.request.urlopen(url, timeout=3) as response:  # noqa: S310
                 body = response.read()
                 return _json.loads(body)

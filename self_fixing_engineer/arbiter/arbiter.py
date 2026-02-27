@@ -1930,7 +1930,29 @@ else:
                 self.crew_manager.add_hook("on_agent_start", self._on_crew_agent_start)
                 self.crew_manager.add_hook("on_agent_stop", self._on_crew_agent_stop)
                 self.crew_manager.add_hook("on_agent_fail", self._on_crew_agent_fail)
+                self.crew_manager.add_hook("on_agent_failure", self._on_crew_agent_fail)
                 self.crew_manager.add_hook("on_agent_heartbeat_missed", self._on_crew_heartbeat_missed)
+                # Wire extended YAML event hooks
+                self.crew_manager.add_hook("on_artifact_created", self._on_crew_artifact_created)
+                self.crew_manager.add_hook("on_score_below_threshold", self._on_crew_score_below_threshold)
+                self.crew_manager.add_hook("on_pipeline_blocked", self._on_crew_pipeline_blocked)
+                self.crew_manager.add_hook("on_swarm_disagreement", self._on_crew_swarm_disagreement)
+                self.crew_manager.add_hook("on_learning_opportunity", self._on_crew_learning_opportunity)
+                self.crew_manager.add_hook("on_world_event", self._on_crew_world_event)
+                # If the CrewManager was loaded from a YAML with event_hooks, its
+                # ServiceRouter is now available.  Bind this Arbiter to it so that
+                # escalation handlers can call human_in_loop / audit subsystems.
+                service_router = getattr(self.crew_manager, "service_router", None)
+                if service_router is not None:
+                    try:
+                        service_router.bind_arbiter(self)
+                        logging.getLogger(__name__).info(
+                            f"[{self.name}] ServiceRouter bound to Arbiter for escalation routing"
+                        )
+                    except Exception as _sr_exc:
+                        logging.getLogger(__name__).warning(
+                            f"[{self.name}] Could not bind Arbiter to ServiceRouter: {_sr_exc}"
+                        )
             else:
                 logging.getLogger(__name__).warning(
                     f"[{self.name}] No CrewManager provided. Agent orchestration features will be limited."
@@ -3706,7 +3728,14 @@ else:
                         ("on_agent_start", self._on_crew_agent_start),
                         ("on_agent_stop", self._on_crew_agent_stop),
                         ("on_agent_fail", self._on_crew_agent_fail),
+                        ("on_agent_failure", self._on_crew_agent_fail),
                         ("on_agent_heartbeat_missed", self._on_crew_heartbeat_missed),
+                        ("on_artifact_created", self._on_crew_artifact_created),
+                        ("on_score_below_threshold", self._on_crew_score_below_threshold),
+                        ("on_pipeline_blocked", self._on_crew_pipeline_blocked),
+                        ("on_swarm_disagreement", self._on_crew_swarm_disagreement),
+                        ("on_learning_opportunity", self._on_crew_learning_opportunity),
+                        ("on_world_event", self._on_crew_world_event),
                     ):
                         self.crew_manager.remove_hook(event_name, hook_fn)
                     logging.getLogger(__name__).info(
@@ -3850,6 +3879,173 @@ else:
                 crew_agent_events_counter.labels(event_type="heartbeat_missed", agent_name=name).inc()
             if self.monitor:
                 self.monitor.log_metric("crew_heartbeat_missed", {"agent": name})
+
+        async def _on_crew_artifact_created(self, manager, name: str = "", artifact: Optional[Dict[str, Any]] = None, **kwargs):
+            """Hook: Called when a crew agent produces an artifact.
+
+            Logs the provenance event via the audit trail and publishes an
+            ``artifact_created`` event on OmniCore so that downstream consumers
+            (dashboards, CI/CD pipelines, knowledge-base indexers) can react.
+            """
+            artifact = artifact or kwargs
+            self.log_event(
+                f"Crew agent '{name}' produced artifact: {artifact.get('artifact_key', artifact)}",
+                "crew_artifact_created",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="artifact_created", agent_name=name).inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_artifact_created", {"agent": name, "artifact": artifact})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_artifact_lifecycle",
+                        {"event": "artifact_created", "agent": name, "artifact": artifact, "arbiter": self.name},
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish artifact_created event: {e}")
+
+        async def _on_crew_score_below_threshold(self, manager, name: str = "", score: float = 0.0, threshold: float = 0.0, **kwargs):
+            """Hook: Called when a crew agent's output score falls below threshold.
+
+            Triggers human-in-the-loop review if the HITL subsystem is configured,
+            mirroring the same escalation path used for policy violations.
+            """
+            self.log_event(
+                f"Crew agent '{name}' score {score} below threshold {threshold}",
+                "crew_score_below_threshold",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="score_below_threshold", agent_name=name).inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_score_below_threshold", {"agent": name, "score": score, "threshold": threshold})
+            if self.human_in_loop:
+                try:
+                    await self.human_in_loop.request_approval({
+                        "issue": f"Agent '{name}' quality score {score} is below threshold {threshold}",
+                        "agent": name,
+                        "score": score,
+                        "threshold": threshold,
+                        "arbiter": self.name,
+                    })
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to escalate score_below_threshold to human: {e}")
+
+        async def _on_crew_pipeline_blocked(self, manager, name: str = "", reason: str = "", **kwargs):
+            """Hook: Called when a crew agent's CI/CD pipeline is blocked.
+
+            Escalates to human-in-the-loop and emits a ``pipeline_blocked`` OmniCore event.
+            """
+            self.log_event(
+                f"Crew agent '{name}' pipeline blocked: {reason}",
+                "crew_pipeline_blocked",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="pipeline_blocked", agent_name=name).inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_pipeline_blocked", {"agent": name, "reason": reason})
+            if self.human_in_loop:
+                try:
+                    await self.human_in_loop.request_approval({
+                        "issue": f"CI/CD pipeline blocked for agent '{name}': {reason}",
+                        "agent": name,
+                        "reason": reason,
+                        "arbiter": self.name,
+                    })
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to escalate pipeline_blocked to human: {e}")
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_pipeline_lifecycle",
+                        {"event": "pipeline_blocked", "agent": name, "reason": reason, "arbiter": self.name},
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish pipeline_blocked event: {e}")
+
+        async def _on_crew_swarm_disagreement(self, manager, agents: list = None, topic: str = "", **kwargs):
+            """Hook: Called when swarm agents disagree (consensus failure).
+
+            Logs the disagreement and emits a ``swarm_disagreement`` event.  The
+            Arbiter may later trigger a consensus round via its growth-manager or
+            by forwarding to the oracle agent.
+            """
+            agents = agents or []
+            self.log_event(
+                f"Swarm disagreement on '{topic}' among agents {agents}",
+                "crew_swarm_disagreement",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="swarm_disagreement", agent_name="swarm").inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_swarm_disagreement", {"topic": topic, "agents": agents})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_swarm_lifecycle",
+                        {"event": "swarm_disagreement", "agents": agents, "topic": topic, "arbiter": self.name},
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish swarm_disagreement event: {e}")
+
+        async def _on_crew_learning_opportunity(self, manager, name: str = "", learning: Optional[Dict[str, Any]] = None, **kwargs):
+            """Hook: Called when a crew agent identifies a learning opportunity.
+
+            Forwards the learning payload to the Arbiter's learner subsystem and
+            publishes a ``learning_opportunity`` event to the knowledge graph.
+            """
+            learning = learning or kwargs
+            self.log_event(
+                f"Crew agent '{name}' identified learning opportunity: {list(learning.keys())}",
+                "crew_learning_opportunity",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="learning_opportunity", agent_name=name).inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_learning_opportunity", {"agent": name})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_knowledge_lifecycle",
+                        {"event": "learning_opportunity", "agent": name, "learning": learning, "arbiter": self.name},
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish learning_opportunity event: {e}")
+
+        async def _on_crew_world_event(self, manager, event_type: str = "", data: Optional[Dict[str, Any]] = None, **kwargs):
+            """Hook: Called when the oracle agent detects a world event.
+
+            Forwards the event to the Arbiter's monitor, publishes it on OmniCore,
+            and optionally escalates to the human-in-the-loop if the event is
+            marked critical.
+            """
+            data = data or kwargs
+            self.log_event(
+                f"World event detected by oracle: {event_type}",
+                "crew_world_event",
+            )
+            if crew_agent_events_counter is not None:
+                crew_agent_events_counter.labels(event_type="world_event", agent_name="oracle").inc()
+            if self.monitor:
+                self.monitor.log_metric("crew_world_event", {"event_type": event_type, "data": data})
+            if self.message_queue_service:
+                try:
+                    await self.message_queue_service.publish(
+                        "crew_oracle_lifecycle",
+                        {"event": "world_event", "event_type": event_type, "data": data, "arbiter": self.name},
+                    )
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to publish world_event: {e}")
+            if data.get("critical") and self.human_in_loop:
+                try:
+                    await self.human_in_loop.request_approval({
+                        "issue": f"Critical world event detected: {event_type}",
+                        "event_type": event_type,
+                        "data": data,
+                        "arbiter": self.name,
+                    })
+                except Exception as e:
+                    logging.getLogger(__name__).error(f"Failed to escalate critical world_event to human: {e}")
     
         async def get_crew_status(self) -> Dict[str, Any]:
             """Returns the current status of all managed crew agents."""

@@ -102,6 +102,21 @@ class PlugInKind(str, Enum):
     SINK = "sink"
     INTEGRATION = "integration"
 
+    # --- Refactor Crew agent kinds ------------------------------------------
+    # These correspond to the agents defined in refactor_agent.yaml /
+    # crew_config.yaml and are used to categorise them in the plugin registry
+    # so that the Arbiter and OmniCore can route tasks and telemetry correctly.
+    REFACTOR_AGENT = "refactor_agent"
+    CODE_HEALER = "code_healer"
+    JUDGE_AGENT = "judge_agent"
+    ETHICS_SENTINEL = "ethics_sentinel"
+    ORACLE_AGENT = "oracle_agent"
+    CI_CD_TRIGGER = "ci_cd_trigger"
+    SIMULATION_ORCHESTRATOR = "simulation_orchestrator"
+    HUMAN_IN_THE_LOOP_AGENT = "human_in_the_loop_agent"
+    SWARM_AGENT = "swarm_agent"
+    CREW_AGENT = "crew_agent"
+
 
 # ---------------------------------------------------------------------------
 # PluginBase — lifecycle contract for class-based plugins
