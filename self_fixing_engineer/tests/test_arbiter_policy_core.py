@@ -38,7 +38,10 @@ except ImportError:
 # ============= MOCK SETUP BEFORE IMPORTS =============
 # This MUST happen before importing the module under test
 
-# Create mock modules
+# Create mock modules - save originals so we can restore after import
+_original_llm_client = sys.modules.get("self_fixing_engineer.arbiter.plugins.llm_client")
+_original_circuit_breaker = sys.modules.get("self_fixing_engineer.arbiter.policy.circuit_breaker")
+
 sys.modules["self_fixing_engineer.arbiter.plugins.llm_client"] = MagicMock()
 sys.modules["self_fixing_engineer.arbiter.policy.circuit_breaker"] = MagicMock()
 
@@ -139,6 +142,18 @@ from self_fixing_engineer.arbiter.policy.core import (
     reset_policy_engine,
 )
 
+# Restore original modules to prevent cross-test contamination
+# The core module has already captured its references to the mocked modules
+if _original_circuit_breaker is not None:
+    sys.modules["self_fixing_engineer.arbiter.policy.circuit_breaker"] = _original_circuit_breaker
+else:
+    sys.modules.pop("self_fixing_engineer.arbiter.policy.circuit_breaker", None)
+
+if _original_llm_client is not None:
+    sys.modules["self_fixing_engineer.arbiter.plugins.llm_client"] = _original_llm_client
+else:
+    sys.modules.pop("self_fixing_engineer.arbiter.plugins.llm_client", None)
+
 # ============= HELPER FUNCTIONS =============
 
 
@@ -163,12 +178,18 @@ def create_mock_enforce_compliance():
 @pytest.fixture(autouse=True)
 async def cleanup():
     """Ensures clean state before and after each test."""
-    await reset_policy_engine()
+    try:
+        await reset_policy_engine()
+    except RuntimeError:
+        pass
     yield
     # Ensure all tasks are cleaned up
-    await reset_policy_engine()
-    # Give asyncio time to clean up
-    await asyncio.sleep(0.1)
+    try:
+        await reset_policy_engine()
+        # Give asyncio time to clean up
+        await asyncio.sleep(0.1)
+    except RuntimeError:
+        pass
     gc.collect()
 
 
