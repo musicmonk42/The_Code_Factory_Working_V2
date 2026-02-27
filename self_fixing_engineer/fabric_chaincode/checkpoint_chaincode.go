@@ -14,6 +14,9 @@ import (
 	"github.com/hyperledger/fabric-chaincode-go/pkg/cid"
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 	"github.com/hyperledger/fabric-protos-go/msp"
+	// fabric-protos-go v0.3.x generates legacy proto2 types (XXX_ fields) that satisfy
+	// the github.com/golang/protobuf interface, not the newer google.golang.org/protobuf
+	// interface. Using the legacy package is intentional and required for compatibility.
 	"github.com/golang/protobuf/proto"
 )
 
@@ -52,7 +55,7 @@ func (l *chaincodeLogger) Infof(format string, args ...interface{}) {
 }
 func (l *chaincodeLogger) Info(args ...interface{}) {
 	if l.minLevel <= levelInfo {
-		l.inner.Print(append([]interface{}{"INFO "}, args...)...)
+		l.inner.Printf("INFO %s", fmt.Sprint(args...))
 	}
 }
 func (l *chaincodeLogger) Warningf(format string, args ...interface{}) {
@@ -130,9 +133,10 @@ const (
 )
 
 var (
-	nameRegex     = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_-]{1,%d}$", MaxNameLen))
-	hashRegex     = regexp.MustCompile(fmt.Sprintf("^[a-f0-9]{%d}$", SHA256HashLen))
-	offChainRegex = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_.-]{1,%d}(/[a-zA-Z0-9_.-]+)*$", MaxOffChainRefLen))
+	nameRegex = regexp.MustCompile(fmt.Sprintf("^[a-zA-Z0-9_-]{1,%d}$", MaxNameLen))
+	hashRegex = regexp.MustCompile(fmt.Sprintf("^[a-f0-9]{%d}$", SHA256HashLen))
+	// offChainRegex validates path segment characters; total length is enforced separately.
+	offChainRegex = regexp.MustCompile(`^[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)*$`)
 )
 
 // InitLedger adds a base set of assets to the ledger during chaincode instantiation.
@@ -211,8 +215,10 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 	logger.Infof("Writing checkpoint for name: %s, dataHash: %s", name, dataHash)
 
 	// 1. RBAC Check
-	if ok, err := s.hasRole(ctx, "admin"); !ok || err != nil {
-		return nil, fmt.Errorf("unauthorized to write checkpoint: %v", err)
+	if ok, err := s.hasRole(ctx, "admin"); err != nil {
+		return nil, fmt.Errorf("failed to check authorization: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("unauthorized: caller does not have the required 'admin' role")
 	}
 
 	// 2. Input Validation
@@ -225,11 +231,16 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 	if prevHash != "" && !hashRegex.MatchString(prevHash) {
 		return nil, fmt.Errorf("invalid previous hash: %s. Must be a %d-character SHA256 hex string or empty", prevHash, SHA256HashLen)
 	}
-	if offChainRef != "" && !offChainRegex.MatchString(offChainRef) {
-		return nil, fmt.Errorf("invalid off-chain reference: %s. Contains disallowed characters or is too long (max %d chars)", offChainRef, MaxOffChainRefLen)
-	}
-	if strings.Contains(offChainRef, "..") {
-		return nil, fmt.Errorf("invalid off-chain reference: path traversal sequences not allowed")
+	if offChainRef != "" {
+		if len(offChainRef) > MaxOffChainRefLen {
+			return nil, fmt.Errorf("invalid off-chain reference: exceeds maximum length of %d chars", MaxOffChainRefLen)
+		}
+		if !offChainRegex.MatchString(offChainRef) {
+			return nil, fmt.Errorf("invalid off-chain reference: %s. Contains disallowed characters", offChainRef)
+		}
+		if strings.Contains(offChainRef, "..") {
+			return nil, fmt.Errorf("invalid off-chain reference: path traversal sequences not allowed")
+		}
 	}
 	// Basic JSON validation for metadataJson
 	if metadataJson != "" && !json.Valid([]byte(metadataJson)) {
@@ -302,14 +313,13 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 		IsRollback:   false, // This is a regular write
 	}
 
-	// 8. Marshal and put checkpoint entry to ledger
+	// 9. Marshal and store checkpoint entry to ledger (Primary Key)
 	checkpointJSON, err := json.Marshal(checkpoint)
 	if err != nil {
 		logger.Errorf("Failed to marshal checkpoint object for %s: %v", name, err)
 		return nil, fmt.Errorf("failed to prepare checkpoint data")
 	}
 
-	// Store checkpoint by a composite key to allow retrieval by name and version (Primary Key)
 	primaryCompositeKey, err := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", newVersion)})
 	if err != nil {
 		logger.Errorf("Failed to create primary composite key for %s v%d: %v", name, newVersion, err)
@@ -321,7 +331,7 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 		return nil, fmt.Errorf("failed to store checkpoint")
 	}
 
-	// 9. Create Secondary Index for DataHash lookup: "DataHashIndex"~name~dataHash -> primaryCompositeKey
+	// 10. Create Secondary Index for DataHash lookup: "DataHashIndex"~name~dataHash -> primaryCompositeKey
 	dataHashIndexKey, err := ctx.GetStub().CreateCompositeKey("DataHashIndex", []string{name, dataHash})
 	if err != nil {
 		logger.Errorf("Failed to create dataHash index composite key for %s hash %s: %v", name, dataHash, err)
@@ -333,7 +343,7 @@ func (s *SmartContract) WriteCheckpoint(ctx contractapi.TransactionContextInterf
 		return nil, fmt.Errorf("failed to store index")
 	}
 
-	// 10. Update checkpoint state (latest version and hash)
+	// 11. Update checkpoint state (latest version and hash)
 	currentCheckpointState.LatestVersion = newVersion
 	currentCheckpointState.LatestHash = dataHash
 	checkpointStateJSON, err = json.Marshal(currentCheckpointState)
@@ -366,8 +376,10 @@ func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterfa
 	logger.Infof("Reading checkpoint for name: %s, version: %v", name, version)
 
 	// 1. RBAC Check
-	if ok, err := s.hasRole(ctx, "reader"); !ok || err != nil {
-		return nil, fmt.Errorf("unauthorized to read checkpoint: %v", err)
+	if ok, err := s.hasRole(ctx, "reader"); err != nil {
+		return nil, fmt.Errorf("failed to check authorization: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("unauthorized: caller does not have the required 'reader' role")
 	}
 
 	// 2. Input Validation for name
@@ -385,15 +397,14 @@ func (s *SmartContract) ReadCheckpoint(ctx contractapi.TransactionContextInterfa
 	var err error
 
 	if version != "" {
-		// Read specific version - parse and zero-pad for consistent key format
-		versionInt, parseErr := strconv.Atoi(strings.TrimLeft(version, "0"))
-		if parseErr != nil || versionInt <= 0 {
-			// Handle case where version was all zeros
-			if version == "0" || strings.TrimLeft(version, "0") == "" {
-				versionInt = 0
-			} else {
-				return nil, fmt.Errorf("invalid version format: %s. Must be a positive integer", version)
-			}
+		// Parse and zero-pad for consistent key format; handle leading-zero inputs gracefully
+		trimmed := strings.TrimLeft(version, "0")
+		if trimmed == "" {
+			trimmed = "0"
+		}
+		versionInt, parseErr := strconv.Atoi(trimmed)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid version format: %s. Must be a non-negative integer", version)
 		}
 		compositeKey, keyErr := ctx.GetStub().CreateCompositeKey("Checkpoint", []string{name, fmt.Sprintf("%010d", versionInt)})
 		if keyErr != nil {
@@ -467,8 +478,10 @@ func (s *SmartContract) ReadCheckpointByHash(ctx contractapi.TransactionContextI
 	logger.Infof("Reading checkpoint for name: %s, dataHash: %s using index", name, dataHash)
 
 	// 1. RBAC Check
-	if ok, err := s.hasRole(ctx, "reader"); !ok || err != nil {
-		return nil, fmt.Errorf("unauthorized to read checkpoint: %v", err)
+	if ok, err := s.hasRole(ctx, "reader"); err != nil {
+		return nil, fmt.Errorf("failed to check authorization: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("unauthorized: caller does not have the required 'reader' role")
 	}
 
 	// 2. Input Validation
@@ -527,8 +540,10 @@ func (s *SmartContract) ReadCheckpointHistory(ctx contractapi.TransactionContext
 	logger.Infof("Reading history for checkpoint: %s from version %d to %d", name, startVersion, endVersion)
 
 	// 1. RBAC Check
-	if ok, err := s.hasRole(ctx, "auditor"); !ok || err != nil {
-		return nil, fmt.Errorf("unauthorized to read history: %v", err)
+	if ok, err := s.hasRole(ctx, "auditor"); err != nil {
+		return nil, fmt.Errorf("failed to check authorization: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("unauthorized: caller does not have the required 'auditor' role")
 	}
 
 	// 2. Input Validation
@@ -559,33 +574,15 @@ func (s *SmartContract) ReadCheckpointHistory(ctx contractapi.TransactionContext
 
 	var entries []*CheckpointEntry
 	for resultsIterator.HasNext() {
-		queryResponse, err := resultsIterator.Next()
-		if err != nil {
-			logger.Errorf("Error during history iteration for %s: %v", name, err)
+		queryResponse, iterErr := resultsIterator.Next()
+		if iterErr != nil {
+			logger.Errorf("Error during history iteration for %s: %v", name, iterErr)
 			return nil, fmt.Errorf("error during history iteration")
 		}
 
-		// Split composite key to extract the version
-		_, compositeKeyParts, err := ctx.GetStub().SplitCompositeKey(queryResponse.Key)
-		if err != nil {
-			logger.Errorf("Failed to split composite key: %v", err)
-			return nil, fmt.Errorf("failed to process key during history retrieval")
-		}
-		version, err := strconv.Atoi(strings.TrimLeft(compositeKeyParts[1], "0"))
-		if err != nil {
-			// Handle the all-zeros case (version 0)
-			if strings.TrimLeft(compositeKeyParts[1], "0") == "" {
-				version = 0
-			} else {
-				logger.Errorf("Failed to parse version from key: %v", err)
-				return nil, fmt.Errorf("failed to parse version")
-			}
-		}
-
 		var entry CheckpointEntry
-		err = json.Unmarshal(queryResponse.Value, &entry)
-		if err != nil {
-			logger.Errorf("Failed to unmarshal history entry JSON for %s v%d: %v", name, version, err)
+		if unmarshalErr := json.Unmarshal(queryResponse.Value, &entry); unmarshalErr != nil {
+			logger.Errorf("Failed to unmarshal history entry JSON for %s: %v", name, unmarshalErr)
 			return nil, fmt.Errorf("failed to process history entry")
 		}
 		entries = append(entries, &entry)
@@ -642,8 +639,10 @@ func (s *SmartContract) RollbackCheckpoint(ctx contractapi.TransactionContextInt
 	logger.Infof("Rolling back checkpoint %s to targetHash: %s", name, targetHash)
 
 	// 1. RBAC Check
-	if ok, err := s.hasRole(ctx, "admin"); !ok || err != nil {
-		return nil, fmt.Errorf("unauthorized to rollback checkpoint: %v", err)
+	if ok, err := s.hasRole(ctx, "admin"); err != nil {
+		return nil, fmt.Errorf("failed to check authorization: %w", err)
+	} else if !ok {
+		return nil, fmt.Errorf("unauthorized: caller does not have the required 'admin' role")
 	}
 
 	// 2. Input Validation

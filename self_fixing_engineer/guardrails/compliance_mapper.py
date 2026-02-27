@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sys
+import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
@@ -175,32 +176,43 @@ class ComplianceEnforcementError(Exception):
 # Do NOT call basicConfig() at module level to avoid duplicate logs.
 logger = logging.getLogger(__name__)
 
-# Module-level singletons for Arbiter services to avoid creating new instances per call
+# Module-level singletons for Arbiter services to avoid creating new instances per call.
+# Locks ensure thread-safe initialization under concurrent access.
 _kg_instance = None
 _bug_manager_instance = None
+_kg_lock = threading.Lock()
+_bug_manager_lock = threading.Lock()
 
 
 def _get_knowledge_graph():
-    """Return a cached KnowledgeGraph instance, importing lazily."""
+    """Return a cached KnowledgeGraph instance, importing and initialising lazily (thread-safe)."""
     global _kg_instance
     if _kg_instance is None:
-        try:
-            from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
-            _kg_instance = KnowledgeGraph()
-        except ImportError:
-            pass
+        with _kg_lock:
+            if _kg_instance is None:
+                try:
+                    from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+                    _kg_instance = KnowledgeGraph()
+                except ImportError:
+                    logger.debug("KnowledgeGraph not available for compliance reporting")
+                except Exception as e:
+                    logger.warning(f"KnowledgeGraph initialisation failed: {e}")
     return _kg_instance
 
 
 def _get_bug_manager():
-    """Return a cached BugManager instance, importing lazily."""
+    """Return a cached BugManager instance, importing and initialising lazily (thread-safe)."""
     global _bug_manager_instance
     if _bug_manager_instance is None:
-        try:
-            from self_fixing_engineer.arbiter.bug_manager import BugManager
-            _bug_manager_instance = BugManager()
-        except ImportError:
-            pass
+        with _bug_manager_lock:
+            if _bug_manager_instance is None:
+                try:
+                    from self_fixing_engineer.arbiter.bug_manager import BugManager
+                    _bug_manager_instance = BugManager()
+                except ImportError:
+                    logger.debug("BugManager not available for compliance reporting")
+                except Exception as e:
+                    logger.warning(f"BugManager initialisation failed: {e}")
     return _bug_manager_instance
 
 DEFAULT_CREW_CONFIG_PATH = os.path.join(

@@ -191,30 +191,36 @@ _base_logger = logging.getLogger(__name__)
 DLT_BACKEND_AVAILABLE = False
 _dlt_client_instance = None
 _dlt_load_attempted = False
+_dlt_load_lock = threading.Lock()
 
 
 def _lazy_load_dlt_backend():
-    """Lazy load DLT backend to avoid circular imports."""
+    """Lazy load DLT backend to avoid circular imports (thread-safe double-checked locking)."""
     global DLT_BACKEND_AVAILABLE, _dlt_client_instance, _dlt_load_attempted
 
     if _dlt_load_attempted:
         return DLT_BACKEND_AVAILABLE
 
-    _dlt_load_attempted = True
-    try:
-        from simulation.plugins.dlt_clients import dlt_base
+    with _dlt_load_lock:
+        # Re-check inside lock to avoid race on first load
+        if _dlt_load_attempted:
+            return DLT_BACKEND_AVAILABLE
 
-        # Store reference for future use
-        globals()["_dlt_base_module"] = dlt_base
-        DLT_BACKEND_AVAILABLE = True
-        _dlt_client_instance = dlt_base._dlt_client_instance
-        return True
-    except ImportError as e:
-        _base_logger.warning(
-            f"DLT backend (simulation.plugins.dlt_clients) not found: {e}. DLT integration will be disabled."
-        )
-        DLT_BACKEND_AVAILABLE = False
-        return False
+        _dlt_load_attempted = True
+        try:
+            from simulation.plugins.dlt_clients import dlt_base
+
+            # Store reference for future use
+            globals()["_dlt_base_module"] = dlt_base
+            DLT_BACKEND_AVAILABLE = True
+            _dlt_client_instance = dlt_base._dlt_client_instance
+            return True
+        except ImportError as e:
+            _base_logger.warning(
+                f"DLT backend (simulation.plugins.dlt_clients) not found: {e}. DLT integration will be disabled."
+            )
+            DLT_BACKEND_AVAILABLE = False
+            return False
 
 
 async def initialize_dlt_backend_clients(config):
@@ -1350,23 +1356,24 @@ class AuditLogger:
             entry_hash = hash_entry(entry, self.hash_algo)
             entry["hash"] = entry_hash
 
+            # Always initialize signatures list for schema consistency with add_entry()
+            entry["signatures"] = []
+
             # Sign entry if signers are available
             if self.signers and CRYPTO_AVAILABLE:
-                signatures = []
                 for private_key in self.signers:
                     try:
                         # Ed25519 sign method only takes the data (removed RSA PSS padding parameters)
                         sig = private_key.sign(entry_hash.encode("utf-8"))
 
-                        # Generate a key_id from the public key bytes using SHA256 hash for Ed25519
-                        # (Ed25519 doesn't have public_numbers() like RSA keys)
+                        # Generate a full 64-char key_id (consistent with add_entry())
                         public_key_bytes = private_key.public_key().public_bytes(
                             encoding=serialization.Encoding.Raw,
                             format=serialization.PublicFormat.Raw,
                         )
-                        key_id = hashlib.sha256(public_key_bytes).hexdigest()[:16]
+                        key_id = hashlib.sha256(public_key_bytes).hexdigest()
 
-                        signatures.append(
+                        entry["signatures"].append(
                             {
                                 "signature": base64.b64encode(sig).decode("utf-8"),
                                 "key_id": key_id,
@@ -1376,17 +1383,12 @@ class AuditLogger:
                     except Exception as e:
                         logger.error(f"Failed to sign audit entry: {e}")
 
-                if signatures:
-                    entry["signatures"] = signatures
-
             # Update last hash
             _last_hashes[agent_id] = entry_hash
 
-        # Write to file
+        # Write to file using the same locking strategy as add_entry()
         try:
-            with open(self.log_path, "a") as f:
-                json.dump(entry, f)
-                f.write("\n")
+            self._sync_file_write(self.log_path, entry, {"context": "log_event"})
         except Exception as e:
             logger.error(f"Could not write audit log: {e}")
 
