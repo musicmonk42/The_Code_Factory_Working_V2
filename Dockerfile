@@ -255,6 +255,10 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
 # Use RUNNER_CONFIG_PATH environment variable at runtime to specify custom config location
 COPY . /app
 
+# Verify the shared package is importable (catches missing PYTHONPATH or misplaced files early)
+# This must run AFTER 'COPY . /app' so that shared/ is present in the image
+RUN python -c "import sys; sys.path.insert(0, '/app'); from shared.noop_metrics import safe_metric; print('✓ shared.noop_metrics is importable')"
+
 ###############################################
 # Runtime stage: minimal image, non-root user
 ###############################################

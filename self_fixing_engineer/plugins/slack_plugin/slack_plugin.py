@@ -131,9 +131,10 @@ except ImportError:
 class AuditJsonFormatter(jsonlogger.JsonFormatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._hmac_key = SECRETS_MANAGER.get_secret(
+        _hmac_key_value = SECRETS_MANAGER.get_secret(
             "SLACK_AUDIT_LOG_HMAC_KEY", required=PROD_MODE
-        ).encode()
+        )
+        self._hmac_key = _hmac_key_value.encode() if _hmac_key_value is not None else None
 
     def add_fields(self, log_record, message_dict):
         super().add_fields(log_record, message_dict)
@@ -143,9 +144,12 @@ class AuditJsonFormatter(jsonlogger.JsonFormatter):
 
         payload = {k: v for k, v in log_record.items() if k not in ["signature"]}
         payload_str = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-        signature = hmac.new(
-            self._hmac_key, payload_str.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        if self._hmac_key is not None:
+            signature = hmac.new(
+                self._hmac_key, payload_str.encode("utf-8"), hashlib.sha256
+            ).hexdigest()
+        else:
+            signature = ""
         log_record["signature"] = signature
 
 
@@ -690,9 +694,10 @@ class PersistentWALQueue(EventQueue):
         self._max_log_size = 10 * 1024 * 1024
         self._log_rotation_interval = 86400
         self._last_rotation_time = time.time()
-        self._hmac_key = SECRETS_MANAGER.get_secret(
+        _hmac_key_value = SECRETS_MANAGER.get_secret(
             "SLACK_WAL_HMAC_KEY", required=PROD_MODE
-        ).encode()
+        )
+        self._hmac_key = _hmac_key_value.encode() if _hmac_key_value is not None else None
 
         if not os.path.exists(self._dir):
             os.makedirs(self._dir, exist_ok=True)
@@ -722,7 +727,7 @@ class PersistentWALQueue(EventQueue):
                         if line.strip():
                             try:
                                 sig, data = line.strip().split(":", 1)
-                                if not hmac.compare_digest(
+                                if self._hmac_key is not None and not hmac.compare_digest(
                                     sig,
                                     hmac.new(
                                         self._hmac_key,
@@ -774,8 +779,11 @@ class PersistentWALQueue(EventQueue):
 
     def _create_signature(self, event: SlackEvent) -> str:
         canonical_event = f"{event.sequence_id}|{event.event_name}|{json.dumps(event.details, sort_keys=True)}"
+        signing_secret = SECRETS_MANAGER.get_secret("SLACK_GATEWAY_SIGNING_SECRET")
+        if signing_secret is None:
+            return ""
         return hmac.new(
-            SECRETS_MANAGER.get_secret("SLACK_GATEWAY_SIGNING_SECRET").encode(),
+            signing_secret.encode(),
             canonical_event.encode(),
             hashlib.sha256,
         ).hexdigest()
@@ -810,7 +818,7 @@ class PersistentWALQueue(EventQueue):
             if self._cipher:
                 line = self._cipher.encrypt(line)
 
-            signature = hmac.new(self._hmac_key, line, hashlib.sha256).hexdigest()
+            signature = hmac.new(self._hmac_key, line, hashlib.sha256).hexdigest() if self._hmac_key is not None else ""
             await self._current_write_log.write(
                 f"{signature}:{line.decode()}\n".encode()
             )
@@ -1729,11 +1737,14 @@ class SlackGatewayManager:
             await self._save_sequence_counter(target_name, seq_id)
 
         canonical_event = f"{seq_id}|{event_name}|{json.dumps(details, sort_keys=True)}"
-        signature = hmac.new(
-            self.settings.signing_secret.encode(),
-            canonical_event.encode(),
-            hashlib.sha256,
-        ).hexdigest()
+        if self.settings.signing_secret is not None:
+            signature = hmac.new(
+                self.settings.signing_secret.encode(),
+                canonical_event.encode(),
+                hashlib.sha256,
+            ).hexdigest()
+        else:
+            signature = ""
 
         trace_context = kwargs.get("trace_context", {})
         if TraceContextTextMapPropagator and OPENTELEMETRY_AVAILABLE:

@@ -34,6 +34,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+# Import path_setup to ensure all component paths (including shared/) are in sys.path
+# This must happen before uvicorn.run() so that worker processes inherit the correct path
+import path_setup  # noqa: F401
+
 import uvicorn
 
 logger = logging.getLogger(__name__)

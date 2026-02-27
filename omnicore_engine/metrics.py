@@ -15,7 +15,13 @@ from typing import Any, Dict, Optional, Union
 
 from prometheus_client import REGISTRY, Counter, Gauge, Histogram, start_http_server
 
-from shared.noop_metrics import safe_metric as _get_or_create_metric
+try:
+    from shared.noop_metrics import safe_metric as _get_or_create_metric
+except ModuleNotFoundError:
+    import sys as _sys
+    import os as _os
+    _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+    from shared.noop_metrics import safe_metric as _get_or_create_metric
 
 # Setup logger for metrics module
 logger = logging.getLogger(__name__)
