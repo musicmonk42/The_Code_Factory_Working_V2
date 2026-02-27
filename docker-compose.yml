@@ -238,7 +238,7 @@ services:
       # SECURITY: Set GRAFANA_PASSWORD in your environment before running.
       # Generate with: openssl rand -base64 32
       # Never use the default "admin" password in shared or exposed environments.
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required - generate with: openssl rand -base64 32}
+      - "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?GRAFANA_PASSWORD is required - generate with: openssl rand -base64 32}"
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
