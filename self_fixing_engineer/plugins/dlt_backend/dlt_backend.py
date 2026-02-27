@@ -28,6 +28,7 @@ import traceback
 import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import redis.asyncio as redis
@@ -356,18 +357,17 @@ except ImportError as e:
 
             async def save_blob(self, checkpoint_name, blob, correlation_id=None):
                 blob_id = str(uuid.uuid4())
-                filename = os.path.join(self._storage_dir, f"{blob_id}.json")
-                data = {"checkpoint_name": checkpoint_name, "blob": blob if isinstance(blob, (str, dict, list)) else blob.decode("utf-8", errors="replace")}
-                await asyncio.to_thread(
-                    lambda: open(filename, "w").write(json.dumps(data))
-                )
+                filepath = Path(self._storage_dir) / f"{blob_id}.json"
+                blob_value = blob if isinstance(blob, (str, dict, list)) else blob.decode("utf-8", errors="replace")
+                data = {"checkpoint_name": checkpoint_name, "blob": blob_value}
+                await asyncio.to_thread(filepath.write_text, json.dumps(data))
                 return blob_id
 
             async def get_blob(self, off_chain_id, correlation_id=None):
-                filename = os.path.join(self._storage_dir, f"{off_chain_id}.json")
-                if not os.path.exists(filename):
+                filepath = Path(self._storage_dir) / f"{off_chain_id}.json"
+                if not filepath.exists():
                     raise FileNotFoundError(f"Dev blob {off_chain_id} not found.")
-                raw = await asyncio.to_thread(lambda: open(filename).read())
+                raw = await asyncio.to_thread(filepath.read_text)
                 return json.loads(raw).get("blob")
 
             async def health_check(self, correlation_id=None):
@@ -410,7 +410,7 @@ except ImportError as e:
                 )
 
             def _version_file(self, name, version):
-                return os.path.join(self._ledger_dir, f"{name}_v{version}.json")
+                return Path(self._ledger_dir) / f"{name}_v{version}.json"
 
             async def write_checkpoint(
                 self,
@@ -435,10 +435,8 @@ except ImportError as e:
                     "tx_id": tx_id,
                     "version": version,
                 }
-                filename = self._version_file(checkpoint_name, version)
-                await asyncio.to_thread(
-                    lambda: open(filename, "w").write(json.dumps(entry))
-                )
+                filepath = self._version_file(checkpoint_name, version)
+                await asyncio.to_thread(filepath.write_text, json.dumps(entry))
                 return tx_id, off_chain_id, version
 
             async def _latest_version(self, name):
@@ -459,10 +457,10 @@ except ImportError as e:
                     version = await self._latest_version(name)
                 if version == 0:
                     raise FileNotFoundError(f"Dev checkpoint {name} not found.")
-                filename = self._version_file(name, version)
-                if not os.path.exists(filename):
+                filepath = self._version_file(name, version)
+                if not filepath.exists():
                     raise FileNotFoundError(f"Dev checkpoint {name} v{version} not found.")
-                raw = await asyncio.to_thread(lambda: open(filename).read())
+                raw = await asyncio.to_thread(filepath.read_text)
                 entry = json.loads(raw)
                 payload_blob = await self.off_chain_client.get_blob(entry["off_chain_ref"])
                 return {"metadata": entry, "payload_blob": payload_blob, "tx_id": entry["tx_id"]}
@@ -476,9 +474,9 @@ except ImportError as e:
                 latest = await self._latest_version(name)
                 target_entry = None
                 for v in range(1, latest + 1):
-                    filename = self._version_file(name, v)
-                    if os.path.exists(filename):
-                        raw = await asyncio.to_thread(lambda fn=filename: open(fn).read())
+                    filepath = self._version_file(name, v)
+                    if filepath.exists():
+                        raw = await asyncio.to_thread(filepath.read_text)
                         e = json.loads(raw)
                         if e.get("hash") == rollback_hash:
                             target_entry = e
@@ -498,10 +496,8 @@ except ImportError as e:
                     "version": new_version,
                     "rollback_of_version": target_entry["version"],
                 }
-                filename = self._version_file(name, new_version)
-                await asyncio.to_thread(
-                    lambda: open(filename, "w").write(json.dumps(new_entry))
-                )
+                filepath = self._version_file(name, new_version)
+                await asyncio.to_thread(filepath.write_text, json.dumps(new_entry))
                 return new_entry
 
             async def health_check(self, correlation_id=None):
