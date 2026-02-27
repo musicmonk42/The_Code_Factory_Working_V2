@@ -53,10 +53,10 @@ except ImportError:
 
     class StateGraph:
         def __init__(self, *args, **kwargs):
-            pass
+            self._nodes = {}
 
         def add_node(self, name, node):
-            pass
+            self._nodes[name] = node
 
         def add_edge(self, start, end):
             pass
@@ -68,7 +68,8 @@ except ImportError:
             pass
 
         def compile(self, *args, **kwargs):
-            return self
+            logger.warning("StateGraph stub: LangGraph not installed. Falling back to FallbackGraph.")
+            return FallbackGraph(list(self._nodes.values()))
 
         async def ainvoke(self, state, config):
             raise NotImplementedError(
@@ -131,9 +132,10 @@ class FallbackGraph:
                     state = await step(state)
                 else:
                     state = step(state)
-            except Exception:
+            except Exception as e:
                 if func_to_check.__name__ == "planner_agent":
-                    return {}
+                    logger.error("FallbackGraph: planner_agent failed: %s", e, exc_info=True)
+                    return {"error": str(e), "status": "planner_failed"}
                 raise
 
             if func_to_check.__name__ == "planner_agent":

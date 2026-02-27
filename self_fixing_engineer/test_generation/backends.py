@@ -139,7 +139,10 @@ except ImportError:
 
     class _StubAsyncFile:
         def __init__(self, path, mode="r", encoding="utf-8"):
-            self._f = open(path, mode, encoding=encoding)
+            if "b" in mode:
+                self._f = open(path, mode)
+            else:
+                self._f = open(path, mode, encoding=encoding)
 
         async def __aenter__(self):
             return self
@@ -157,8 +160,6 @@ except ImportError:
     class aiofiles:  # type: ignore
         @staticmethod
         def open(path, mode="r", encoding="utf-8"):
-            if "b" in mode:
-                raise NotImplementedError("Binary mode not supported by stub aiofiles")
             return _StubAsyncFile(path, mode, encoding)
 
 
@@ -172,11 +173,6 @@ async def _log_event_safe(event_type, details, *, critical=False):
             await audit_logger.log_event(event_type, details, critical=critical)
         except Exception:
             logger.debug("audit log failed", exc_info=True)
-
-
-# Global Configuration (placeholder for an injected configuration object)
-CONFIG: Dict[str, Any] = {}
-PROJECT_ROOT: str = "."
 
 
 @dataclass(frozen=True)
@@ -973,10 +969,6 @@ class DiffblueBackend:
         self.config = new_config
         logger.info("DiffblueBackend config reloaded.")
 
-    def _deterministic_chance(self, key: str) -> float:
-        h = hashlib.sha256(key.encode("utf-8")).digest()
-        return int.from_bytes(h[:8], "big") / float(1 << 64)
-
     async def generate_tests(
         self, target_class_name: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
@@ -987,68 +979,56 @@ class DiffblueBackend:
         timeout = int(params.get("timeout", _get_timeout(self.config, "diffblue", 180)))
         correlation_id = params.get("correlation_id", "N/A")
 
-        fail_rate = 0.0
-        try:
-            fail_rate = float(
-                self.config.get("simulated_failure_rates", {}).get("diffblue", 0.0)
-            )
-        except Exception:
-            fail_rate = 0.0
-
         test_name = f"{target_class_name.replace('.', os.sep)}ATCOTest.java"
         dest_rel = os.path.join(output_path_relative, test_name).replace(os.sep, "/")
         dest_abs = os.path.join(self.project_root, dest_rel)
         os.makedirs(os.path.dirname(dest_abs), exist_ok=True)
 
+        # Check if dcover CLI is available
+        dcover_path = shutil.which("dcover")
+        if dcover_path is None:
+            logger.error(
+                "Diffblue Cover (dcover) is not installed or not on PATH. "
+                "Install Diffblue Cover to use DiffblueBackend."
+            )
+            return False, "Diffblue Cover not installed", None
+
         logger.info(
-            "Diffblue: Simulating generation for '%s' [Correlation ID: %s, Attempt: %s]",
+            "Diffblue: Generating tests for '%s' via dcover [Correlation ID: %s]",
             target_class_name,
             correlation_id,
-            params.get("retry_count", 0) + 1,
         )
 
         try:
-            await asyncio.wait_for(asyncio.sleep(0.01), timeout=timeout)
-        except asyncio.TimeoutError:
-            return False, "timed out", None
+            proc = await asyncio.create_subprocess_exec(
+                dcover_path,
+                "create",
+                "--class", target_class_name,
+                "--output-dir", os.path.dirname(dest_abs),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.project_root,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()  # drain pipes after kill
+                return False, "timed out", None
         except asyncio.CancelledError:
             raise
+        except Exception as exc:
+            logger.error("Diffblue dcover invocation failed: %s", exc)
+            return False, str(exc), None
 
-        # After respecting the timeout window, allow tests to simulate failure
-        # via monkeypatching random.random. This ensures the timeout test wins
-        # when asyncio.sleep is patched to raise TimeoutError.
-        if fail_rate > 0.0:
-            try:
-                if random.random() < fail_rate:
-                    log_msg = f"Diffblue: Simulated failure for '{target_class_name}'"
-                    logging.warning(log_msg)
-                    return False, "Simulated Diffblue Cover generation error", None
-            except Exception:
-                pass
+        if proc.returncode != 0:
+            err_msg = stderr.decode("utf-8", errors="replace").strip()
+            logger.warning("dcover exited with code %s: %s", proc.returncode, err_msg)
+            return False, err_msg or "dcover failed", None
 
-        chance = self._deterministic_chance(target_class_name)
-        if fail_rate >= 1.0 or chance < fail_rate:
-            err = "Simulated Diffblue Cover generation error"
-            logger.warning("Diffblue: Simulated failure for '%s'", target_class_name)
-            return False, err, None
-
-        content = f"""// Generated by ATCO (Diffblue Backend)
-// For class: {target_class_name}
-// Timestamp: {datetime.now().isoformat()}
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-class {target_class_name.replace('.', '')}ATCOTest {{
-    @Test
-    void testBasicFunctionality() {{
-        assertTrue(true);
-    }}
-}}
-"""
-        tmp_path = dest_abs + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(tmp_path, dest_abs)
+        if not os.path.exists(dest_abs):
+            logger.warning("dcover succeeded but output file not found: %s", dest_abs)
+            return False, "Output file not generated by dcover", None
 
         return True, "", dest_rel.replace(os.sep, "/")
 

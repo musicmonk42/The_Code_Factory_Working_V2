@@ -229,9 +229,10 @@ async def _run_reporting(
         # Continue: we still attempt reports to surface artifacts when possible.
 
     try:
+        reporter = HTMLReporter(project_root, cfg.sarif_export_dir or "atco_artifacts/html_reports")
         _ = await _maybe_await(
-            HTMLReporter.generate_html_report(
-                "sarif", "html", {"files": generated_paths}
+            reporter.generate_html_report(
+                {"files": generated_paths}, policy_engine=None
             )
         )
     except Exception as exc:

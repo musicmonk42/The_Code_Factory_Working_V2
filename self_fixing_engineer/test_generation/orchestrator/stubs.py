@@ -343,7 +343,7 @@ class DummyPRCreator:
                 level="CRITICAL",
             )
 
-        return False, ""
+        return False, "Stub mode — not available"
 
     async def create_jira_ticket(self, *args: Any, **kwargs: Any) -> Tuple[bool, str]:
         """
@@ -389,16 +389,18 @@ class DummyMutationTester:
 
     async def run_mutations(
         self, *args: Any, **kwargs: Any
-    ) -> Tuple[Optional[float], Optional[float], str]:
+    ) -> Tuple[float, float, str]:
         """
-        Stub implementation that returns a ``None`` sentinel score.
+        Stub implementation that returns zero sentinel scores.
 
-        Callers must treat ``(None, None, …)`` as "skipped" rather than
+        Callers must treat ``(0.0, 0.0, …)`` as "skipped" rather than
         "failed" so that CI quality gates are not triggered by a missing
         mutation-testing tool.
 
         Returns:
-            tuple: (None, None, message) — callers should skip mutation gate
+            tuple: ``(0.0, 0.0, message)`` — callers should skip the
+                mutation gate when the score is ``0.0`` and the message
+                indicates unavailability.
         """
         log("Using DummyMutationTester. Mutation testing unavailable (stub mode).", level="DEBUG")
 
@@ -409,7 +411,7 @@ class DummyMutationTester:
                 level="CRITICAL",
             )
 
-        return None, None, "Mutation testing unavailable — install mutmut or cosmic-ray"
+        return 0.0, 0.0, "Mutation testing unavailable — install mutmut or cosmic-ray"
 
 
 class DummyTestEnricher:

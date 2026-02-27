@@ -3,7 +3,7 @@
 # Code Factory Platform Makefile
 # This file provides convenient commands for development, testing, and deployment
 
-.PHONY: help install install-dev install-ai test lint format clean docker-build docker-build-ai docker-up docker-down deploy-staging deploy-production \
+.PHONY: help install install-dev install-ai install-mutation-tools test lint format clean docker-build docker-build-ai docker-up docker-down deploy-staging deploy-production \
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
@@ -52,6 +52,14 @@ install-ai: ## Install optional Tier-1 AI capability dependencies (qiskit, nengo
 	pip install -r requirements-ai.txt
 	@echo "$(GREEN)Optional AI dependencies installed!$(NC)"
 	@echo "$(YELLOW)Set INSTALL_AI_DEPS=1 when building Docker images to include these deps.$(NC)"
+
+install-mutation-tools: ## Install mutation testing tools used by MutationTester (mutmut or cosmic-ray)
+	@echo "$(BLUE)Installing mutation testing tools...$(NC)"
+	@echo "$(YELLOW)MutationTester will automatically use mutmut if installed, or cosmic-ray as a fallback.$(NC)"
+	pip install --upgrade pip
+	pip install mutmut
+	@echo "$(GREEN)mutmut installed. Run 'make mutation-test' to execute mutation tests.$(NC)"
+	@echo "$(YELLOW)Optional: install cosmic-ray as an alternative: pip install cosmic-ray$(NC)"
 
 # =============================================================================
 # Testing

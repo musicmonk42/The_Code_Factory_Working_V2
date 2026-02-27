@@ -203,6 +203,8 @@ env:
   APP_STARTUP: "1"
   SKIP_IMPORT_TIME_VALIDATION: "1"
   SPACY_WARNING_IGNORE: "W007"
+  # Ensure all sub-packages (self_fixing_engineer, test_generation, etc.) are importable
+  PYTHONPATH: "/app"
 
   # Performance optimizations
   PARALLEL_AGENT_LOADING: "1"
