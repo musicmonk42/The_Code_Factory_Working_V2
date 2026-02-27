@@ -83,7 +83,7 @@ class HealerAgent(CrewAgentBase):
             Dictionary with status, result, and audit_event.
         """
         start_time = time.time()
-        target_path = task.get("target_path", ".")
+        target_path = task.get("target_path", "")
         command = task.get("command")
         fix_type = task.get("fix_type", "auto")
 
@@ -93,7 +93,7 @@ class HealerAgent(CrewAgentBase):
         )
 
         # Validate path access
-        if target_path and target_path != ".":
+        if target_path:
             if not _validate_path(target_path, self.WHITELISTED_PATHS):
                 logger.warning(
                     "HealerAgent: path access denied",

@@ -75,7 +75,7 @@ class SmartRefactorAgent(CrewAgentBase):
             Dictionary with status, result, and audit_event.
         """
         start_time = time.time()
-        codebase_path = task.get("codebase_path", ".")
+        codebase_path = task.get("codebase_path", "")
         command = task.get("command")
 
         logger.info(
@@ -84,7 +84,7 @@ class SmartRefactorAgent(CrewAgentBase):
         )
 
         # Validate path access
-        if codebase_path and codebase_path != ".":
+        if codebase_path:
             if not _validate_path(codebase_path, self.WHITELISTED_PATHS):
                 logger.warning(
                     "SmartRefactorAgent: path access denied",
