@@ -55,35 +55,8 @@ if sys.version_info < REQUIRED_PYTHON:
     )
     sys.exit(1)
 
-# --- Robust import context for both package and "file-loaded" execution ---
-import sys
-
-
-def _bootstrap_import_paths():
-    """
-    Ensure we can import sibling packages whether this file is executed as part of the
-    installed package (self_healing_import_fixer) or loaded directly via spec_from_file_location.
-    """
-    here = Path(__file__).resolve()
-    # Potential roots that might contain our subpackages
-    candidates = [
-        here.parent,  # .../self_healing_import_fixer/
-        here.parent.parent,  # .../ (repo root that contains self_healing_import_fixer/)
-    ]
-    for c in candidates:
-        # If the conventional package layout exists, prefer that
-        if (c / "self_healing_import_fixer" / "import_fixer").exists() and str(
-            c
-        ) not in sys.path:
-            sys.path.insert(0, str(c))
-            break
-        # Or if running from within the package dir already (no outer package folder)
-        if (c / "import_fixer").exists() and str(c) not in sys.path:
-            sys.path.insert(0, str(c))
-            break
-
-
-_bootstrap_import_paths()
+# Path setup is handled by the package __init__.py (self_healing_import_fixer/__init__.py).
+# Do not duplicate sys.path manipulation here.
 
 # Now import compat/core modules with fallbacks for both contexts
 try:

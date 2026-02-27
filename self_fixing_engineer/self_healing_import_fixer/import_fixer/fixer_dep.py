@@ -67,24 +67,19 @@ logger = logging.getLogger(__name__)
 # --- Centralized Utilities (replacing placeholders) ---
 _core_utils_loaded = False
 try:
-    from self_fixing_engineer.self_healing_import_fixer.analyzer.core_audit import (
-        audit_logger,
-    )
-    from self_fixing_engineer.self_healing_import_fixer.analyzer.core_utils import (
+    from .compat_core import (
         alert_operator,
+        audit_logger,
         scrub_secrets,
     )
-
     _core_utils_loaded = True
 except ImportError:
-    # Fallback to relative import for when running within the package
     try:
-        from self_healing_import_fixer.analyzer.core_audit import audit_logger
-        from self_healing_import_fixer.analyzer.core_utils import (
+        from self_healing_import_fixer.import_fixer.compat_core import (
             alert_operator,
+            audit_logger,
             scrub_secrets,
         )
-
         _core_utils_loaded = True
     except ImportError as inner_e:
         logger.warning(f"Core utilities not loaded (optional): {inner_e}.")

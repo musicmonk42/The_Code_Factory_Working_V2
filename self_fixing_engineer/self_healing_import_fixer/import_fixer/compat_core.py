@@ -31,15 +31,8 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
-from unittest.mock import MagicMock
-
-# --- Path Setup for Analyzer Module ---
-# The analyzer package is located in the self_healing_import_fixer directory.
-# We need to add it to sys.path to allow imports like "from analyzer.core_utils import ..."
-# This must happen early, before any code tries to use find_spec("analyzer.*").
-_self_healing_import_fixer_dir = str(Path(__file__).resolve().parent.parent)
-if _self_healing_import_fixer_dir not in sys.path:
-    sys.path.insert(0, _self_healing_import_fixer_dir)
+# Path setup is handled by the package __init__.py (self_healing_import_fixer/__init__.py).
+# Do not manipulate sys.path here to avoid duplicate entries and order-dependent behavior.
 
 # POSIX-only: guard resource import for Windows
 try:
@@ -701,7 +694,9 @@ def get_telemetry_tracer(_name: str = __name__):
 
 
 def get_audit_logger():
-    return audit_logger
+    if "audit_logger" in globals() and audit_logger is not None:
+        return audit_logger
+    return _fallback_audit_logger_instance
 
 
 # JSON logger (structured)
@@ -1126,7 +1121,12 @@ def _sign_log_entry(entry: dict) -> str:
         return json.dumps(entry, sort_keys=True)
     _SIGNING_REENTRANT = True
     try:
-        secret = SECRETS_MANAGER.get_secret("AUDIT_LOG_HMAC_KEY", required=False)
+        sm = (
+            SECRETS_MANAGER
+            if "SECRETS_MANAGER" in globals() and SECRETS_MANAGER is not None
+            else _fallback_secrets_manager_instance
+        )
+        secret = sm.get_secret("AUDIT_LOG_HMAC_KEY", required=False)
         if not secret:
             return json.dumps(entry, sort_keys=True)
         sig = hmac.new(
@@ -1291,28 +1291,41 @@ def _get_alert_operator() -> Callable:
 
 
 # --- Core Initialization Logic ---
-# Only register mock modules if the real ones are not available
-# This prevents breaking tests that need to import the real modules
+# Only register stub modules if the real ones are not available.
+# Stubs use deterministic no-op implementations (no MagicMock) consistent
+# with the _FallbackAuditLogger, _FallbackSecretsManager, and
+# _fallback_alert_operator patterns already defined above.
 import importlib.util as _importlib_util
 
 if _importlib_util.find_spec("analyzer.core_utils") is None:
-    class MockAnalyzerCoreUtils:
-        alert_operator = MagicMock()
-        scrub_secrets = MagicMock(side_effect=lambda x: x)
-        # Add commonly expected attributes for compatibility
-        SERVICE_NAME = "mock_service"
-    sys.modules["analyzer.core_utils"] = MockAnalyzerCoreUtils
+    class _StubAnalyzerCoreUtils:
+        SERVICE_NAME = "stub_service"
+
+        @staticmethod
+        def alert_operator(msg: str, level: str = "WARNING") -> None:
+            _fallback_alert_operator(msg, level)
+
+        @staticmethod
+        def scrub_secrets(x):
+            return x
+
+    sys.modules["analyzer.core_utils"] = _StubAnalyzerCoreUtils  # type: ignore[assignment]
 
 if _importlib_util.find_spec("analyzer.core_audit") is None:
-    class MockAnalyzerCoreAudit:
-        get_audit_logger = MagicMock(return_value=MagicMock())
-        audit_logger = MagicMock()
-    sys.modules["analyzer.core_audit"] = MockAnalyzerCoreAudit
+    class _StubAnalyzerCoreAudit:
+        audit_logger = _fallback_audit_logger_instance
+
+        @staticmethod
+        def get_audit_logger():
+            return _fallback_audit_logger_instance
+
+    sys.modules["analyzer.core_audit"] = _StubAnalyzerCoreAudit  # type: ignore[assignment]
 
 if _importlib_util.find_spec("analyzer.core_secrets") is None:
-    class MockAnalyzerCoreSecrets:
-        SECRETS_MANAGER = MagicMock()
-    sys.modules["analyzer.core_secrets"] = MockAnalyzerCoreSecrets
+    class _StubAnalyzerCoreSecrets:
+        SECRETS_MANAGER = _fallback_secrets_manager_instance
+
+    sys.modules["analyzer.core_secrets"] = _StubAnalyzerCoreSecrets  # type: ignore[assignment]
 
 
 # STARTUP OPTIMIZATION: Reduced retry attempts from 3 to 2 and wait times from min=2,max=10
@@ -1609,12 +1622,12 @@ def get_core_dependencies() -> Dict[str, Any]:
 def load_analyzer(module_path: str) -> Any:
     """
     Loads an analyzer module from the given path.
-    Falls back to a no-op mock if not available.
+    Returns None if the module is not available.
     """
     try:
         return importlib.import_module(module_path)
     except ImportError:
-        return MagicMock()
+        return None
 
 
 try:
