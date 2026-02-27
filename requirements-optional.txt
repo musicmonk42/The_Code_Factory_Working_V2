@@ -120,6 +120,15 @@ libvirt-python>=10.0.0
 # Already covered by azure-identity
 
 # =============================================================================
+# Hyperledger Fabric DLT client
+# =============================================================================
+# Required by self_fixing_engineer/plugins/dlt_backend/dlt_fabric_clients.py
+# (FabricClientWrapper) when DLT_TYPE=fabric and PRODUCTION_MODE=true.
+# The dev file-backed stub is used automatically when this package is absent.
+# Install: pip install hfc
+hfc>=1.0
+
+# =============================================================================
 # Notes
 # =============================================================================
 # 1. Most commonly used dependencies are already in requirements.txt
