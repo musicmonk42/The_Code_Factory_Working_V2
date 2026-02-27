@@ -498,14 +498,14 @@ async def _inc_counter(counter, **labels):
     if PROMETHEUS_ASYNC_AVAILABLE:
         await counter.labels(**labels).inc()
     else:
-        counter.labels(**labels).inc()
+        await asyncio.to_thread(lambda: counter.labels(**labels).inc())
 
 
 async def _set_gauge(gauge, value):
     if PROMETHEUS_ASYNC_AVAILABLE:
         await gauge.set(value)
     else:
-        gauge.set(value)
+        await asyncio.to_thread(lambda: gauge.set(value))
 
 
 def _observe_histogram(histogram, value):

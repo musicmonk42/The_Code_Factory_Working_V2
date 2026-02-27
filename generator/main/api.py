@@ -70,7 +70,7 @@ try:
         text,
     )
     from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
-    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import declarative_base
     from sqlalchemy.orm import Session, sessionmaker
 
     _FASTAPI_AVAILABLE = True

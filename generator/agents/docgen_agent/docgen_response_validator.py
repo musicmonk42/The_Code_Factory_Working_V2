@@ -1007,7 +1007,10 @@ class ResponseValidator:
             try:
                 self.sentiment_analyzer = SentimentIntensityAnalyzer()
             except Exception as e2:
-                logger.warning(f"NLTK setup failed, sentiment analysis unavailable: {e2}")
+                logger.warning(
+                    f"NLTK setup failed, VADER lexicon unavailable: {e2}. "
+                    "Sentiment analysis disabled; neutral score (0.0 compound) will be used."
+                )
                 self.sentiment_analyzer = None
 
     def assess_quality(self, content: str) -> Dict[str, float]:

@@ -81,7 +81,10 @@ except ImportError:
             pass
 
         def run(self, *args, **kwargs):
-            pass
+            raise NotImplementedError(
+                "TUI is unavailable: 'textual' package is not installed. "
+                "Install it with: pip install textual"
+            )
 
         def query_one(self, *args, **kwargs):
             return self

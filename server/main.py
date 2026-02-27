@@ -122,6 +122,8 @@ os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
 warnings.filterwarnings("ignore", message=r"^'crypt' is deprecated and slated for removal", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=r"^'aifc' is deprecated and slated for removal", category=DeprecationWarning)
 warnings.filterwarnings("ignore", message=r"^'audioop' is deprecated and slated for removal", category=DeprecationWarning)
+# Suppress NumPy internal API deprecation warning from older transitive dependencies (e.g. faiss-cpu)
+warnings.filterwarnings("ignore", message=r"numpy\.core\._multiarray_umath is deprecated")
 
 # Import path_setup first to ensure all component paths are in sys.path
 import path_setup  # noqa: F401
@@ -151,6 +153,7 @@ from typing import Any, Dict, List, Optional
 _startup_start_time = time.monotonic()
 _startup_errors: List[str] = []
 _startup_warnings: List[str] = []
+_sentry_dsn_missing: bool = False  # Set during startup; exposed via /health and /ready
 
 
 def _verify_critical_import(module_name: str, package_name: str, description: str) -> bool:
@@ -1286,12 +1289,18 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     # P2 FIX: Warn if Sentry is not configured in production
     sentry_dsn = os.getenv("SENTRY_DSN")
     if _is_production and not sentry_dsn:
-        logger.warning("=" * 80)
-        logger.warning("⚠ SENTRY NOT CONFIGURED IN PRODUCTION")
-        logger.warning("  Error tracking is disabled. Set SENTRY_DSN environment variable to enable.")
-        logger.warning("  Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>")
-        logger.warning("  Without Sentry, production errors will only be visible in container logs.")
-        logger.warning("=" * 80)
+        global _sentry_dsn_missing
+        _sentry_dsn_missing = True
+        import json
+        logger.warning(
+            json.dumps({
+                "event": "SENTRY_DSN_MISSING",
+                "severity": "WARNING",
+                "message": "Sentry not configured in production. Error tracking disabled.",
+                "remediation": "Set SENTRY_DSN environment variable to enable error tracking.",
+                "impact": "Production errors will only be visible in container logs.",
+            })
+        )
     elif sentry_dsn:
         # Initialize Sentry SDK when DSN is provided
         try:
@@ -1917,10 +1926,13 @@ async def health_check() -> HealthResponse:
     Use /ready for readiness checks (when agents/dependencies must be loaded).
     """
     # Return success immediately - don't check anything
+    components: Dict[str, str] = {"api": "healthy"}
+    if _sentry_dsn_missing:
+        components["sentry_dsn_missing"] = "true"
     return HealthResponse(
         status="healthy",
         version=__version__,
-        components={"api": "healthy"},
+        components=components,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -1934,10 +1946,13 @@ async def api_health_check() -> HealthResponse:
     
     This is an alias for /health to support frontend requests to /api/health.
     """
+    components: Dict[str, str] = {"api": "healthy"}
+    if _sentry_dsn_missing:
+        components["sentry_dsn_missing"] = "true"
     return HealthResponse(
         status="healthy",
         version=__version__,
-        components={"api": "healthy"},
+        components=components,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
 
@@ -2023,6 +2038,8 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     checks = {
         "api_available": "pass",
     }
+    if _sentry_dsn_missing:
+        checks["sentry_dsn_missing"] = "true"
     ready = True
     status_text = "ready"
     

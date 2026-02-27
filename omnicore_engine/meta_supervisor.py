@@ -2531,7 +2531,7 @@ if __name__ == "__main__":
                 async_sessionmaker,
                 create_async_engine,
             )
-            from sqlalchemy.ext.declarative import declarative_base
+            from sqlalchemy.orm import declarative_base
 
             Base = declarative_base()  # Define Base for mock DB
 

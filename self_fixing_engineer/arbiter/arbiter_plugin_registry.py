@@ -783,10 +783,12 @@ class PluginRegistry(DependencyAwareRegistryMixin, BasePluginRegistry):
                         "Registration will proceed but lifecycle methods may not be available."
                     )
             else:
-                # An instance was passed — check isinstance
+                # An instance was passed — check isinstance; warn but allow registration
+                # (consistent with class-based check above which also only warns)
                 if not isinstance(instance, PluginBase):
-                    raise TypeError(
-                        f"Plugin instance [{kind.value}:{name}] must inherit from PluginBase."
+                    logger.warning(
+                        f"Plugin instance [{kind.value}:{name}] does not inherit from PluginBase. "
+                        "Registration will proceed but lifecycle methods may not be available."
                     )
 
             existing_meta = self.get_metadata(kind, name)
