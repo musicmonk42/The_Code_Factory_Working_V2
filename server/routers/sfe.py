@@ -1431,6 +1431,10 @@ _RL_METRICS_FIELDS = (
     "complexity",
     "generation_success_rate",
     "critique_score",
+    # IB-6/EV-5: add missing observation dimensions so /v1/rl/status returns complete state
+    "latency",
+    "alert_ratio",
+    "test_coverage_delta",
 )
 # _RL_ACTION_MAP is defined at module top — imported from code_health_env or
 # initialised from the local fallback.  Do NOT redefine it here.
@@ -1540,12 +1544,20 @@ async def rl_step(
 
         # Determine action_id: prefer explicit action, fall back to policy sample, then noop
         if action_name:
-            if action_name not in _RL_ACTION_MAP:
+            # IB-6: accept both string names ("run_tests") and integer IDs (5)
+            if isinstance(action_name, int) or (isinstance(action_name, str) and action_name.isdigit()):
+                action_id = int(action_name)
+                action_name = next(
+                    (k for k, v in _RL_ACTION_MAP.items() if v == action_id),
+                    f"action_{action_id}",
+                )
+            elif action_name not in _RL_ACTION_MAP:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Unknown action '{action_name}'. Valid actions: {sorted(_RL_ACTION_MAP)}",
                 )
-            action_id = _RL_ACTION_MAP[action_name]
+            else:
+                action_id = _RL_ACTION_MAP[action_name]
         elif hasattr(code_health_env, "action_space"):
             try:
                 action_id = int(code_health_env.action_space.sample())

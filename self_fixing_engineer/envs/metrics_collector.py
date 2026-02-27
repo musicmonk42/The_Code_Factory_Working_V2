@@ -256,8 +256,6 @@ class PlatformMetricsCollector:
 
     def _merge_metrics(self, results: List[Any]) -> Any:
         """Merge collected metric dicts into a SystemMetrics-compatible object."""
-        from types import SimpleNamespace
-
         merged: Dict[str, float] = {
             "pass_rate": 0.0,
             "code_coverage": 0.0,
@@ -266,6 +264,7 @@ class PlatformMetricsCollector:
             "critique_score": 0.0,
             "alert_ratio": 0.0,
             "latency": 0.0,
+            "test_coverage_delta": 0.0,
         }
 
         for result in results:
@@ -274,7 +273,25 @@ class PlatformMetricsCollector:
             elif isinstance(result, Exception):
                 logger.debug(f"Metrics collection error (ignored): {result}")
 
-        metrics = SimpleNamespace(**merged)
+        # Return a real SystemMetrics object for CodeHealthEnv compatibility (RB-2).
+        # CodeHealthEnv._get_current_metrics() requires SystemMetrics or array;
+        # SimpleNamespace triggers the ValueError branch and degrades every RL step.
+        try:
+            from self_fixing_engineer.envs.code_health_env import SystemMetrics
+            metrics = SystemMetrics(
+                pass_rate=float(merged.get("pass_rate", 0.0)),
+                latency=float(merged.get("latency", 0.0)),
+                alert_ratio=float(merged.get("alert_ratio", 0.0)),
+                code_coverage=float(merged.get("code_coverage", 0.0)),
+                complexity=float(merged.get("complexity", 0.5)),
+                generation_success_rate=float(merged.get("generation_success_rate", 0.0)),
+                critique_score=float(merged.get("critique_score", 0.0)),
+                test_coverage_delta=float(merged.get("test_coverage_delta", 0.0)),
+            )
+        except ImportError:
+            from types import SimpleNamespace
+            metrics = SimpleNamespace(**merged)
+
         logger.info(
             f"PlatformMetricsCollector: pass_rate={merged['pass_rate']:.3f}, "
             f"coverage={merged['code_coverage']:.3f}, "

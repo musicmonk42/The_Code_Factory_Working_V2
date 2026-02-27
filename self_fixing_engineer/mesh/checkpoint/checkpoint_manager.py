@@ -471,6 +471,55 @@ else:
     circuit_breakers = {}
 
 
+# ---- IB-1: DLT backend bridge ----
+# Produce a backend function (matching the mesh backend signature) that delegates
+# to the DLT plugin's CheckpointManager. This bridges the two incompatible classes
+# without requiring a common base or changing either class's public API.
+def _make_dlt_backend_fn():
+    """Return a backend callable compatible with the mesh CheckpointManager registry."""
+
+    async def _dlt_backend(
+        mesh_manager,
+        operation: str,
+        name: str,
+        state_or_version=None,
+        metadata=None,
+        *,
+        user=None,
+        **kwargs,
+    ):
+        """Thin adapter from the mesh backend protocol to DLT plugin CheckpointManager."""
+        try:
+            from self_fixing_engineer.plugins.dlt_backend.dlt_backend import (
+                CheckpointManager as DltCheckpointManager,
+            )
+        except ImportError as exc:
+            raise NotImplementedError(
+                f"DLT backend not available: {exc}. "
+                "Ensure self_fixing_engineer.plugins.dlt_backend is installed."
+            ) from exc
+
+        dlt_mgr = DltCheckpointManager(backend="dlt")
+
+        if operation == "save":
+            return await dlt_mgr.save(name, state_or_version, metadata or {})
+        elif operation == "load":
+            return await dlt_mgr.load(name, version=state_or_version)
+        elif operation == "rollback":
+            return await dlt_mgr.rollback(name, state_or_version)
+        elif operation in ("list_versions", "available"):
+            return []
+        elif operation == "diff":
+            v1, v2 = state_or_version, metadata
+            return await dlt_mgr.diff(name, v1, v2)
+        else:
+            raise NotImplementedError(
+                f"DLT bridge does not implement operation '{operation}'."
+            )
+
+    return _dlt_backend
+
+
 # ---- Main CheckpointManager Class ----
 class CheckpointManager:
     """
@@ -670,6 +719,13 @@ class CheckpointManager:
                 else None
             ),
         }
+
+        # IB-1: Register the DLT plugin backend so callers using backend_type="dlt"
+        # (or "fabric"/"evm") get the full DLT-backed CheckpointManager from
+        # plugins/dlt_backend instead of silently getting NotImplementedError.
+        self._backends["dlt"] = _make_dlt_backend_fn()
+        self._backends["fabric"] = self._backends["dlt"]
+        self._backends["evm"] = self._backends["dlt"]
 
     async def initialize(self) -> None:
         """

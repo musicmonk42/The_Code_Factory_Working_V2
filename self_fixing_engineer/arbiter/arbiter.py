@@ -362,23 +362,31 @@ else:
         return get_registry()
     
     
+    # IB-3: Try fully-qualified path first, fall back to relative for environments
+    # where self_fixing_engineer/ is the Python root.
     try:
-        from envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
-    
+        from self_fixing_engineer.envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
         ENVS_AVAILABLE = True
-    except ImportError as e:
-        ENVS_AVAILABLE = False
-        logging.debug(f"Optional dependency missing: {e} (envs)")
-        BaseCodeHealthEnv = object
+    except ImportError:
+        try:
+            from envs.code_health_env import CodeHealthEnv as BaseCodeHealthEnv
+            ENVS_AVAILABLE = True
+        except ImportError as e:
+            ENVS_AVAILABLE = False
+            logging.debug(f"Optional dependency missing: {e} (envs)")
+            BaseCodeHealthEnv = object
 
     try:
-        from envs.evolution import evolve_configs
-    except ImportError as e:
-        logging.debug(f"Optional dependency missing: {e} (evolution)")
-    
-        def evolve_configs(*args, **kwargs):
-            logging.debug("evolve_configs called but evolution module not available")
-            return None
+        from self_fixing_engineer.envs.evolution import evolve_configs
+    except ImportError:
+        try:
+            from envs.evolution import evolve_configs
+        except ImportError as e:
+            logging.debug(f"Optional dependency missing: {e} (evolution)")
+
+            def evolve_configs(*args, **kwargs):
+                logging.debug("evolve_configs called but evolution module not available")
+                return None
     
     
     try:
@@ -1735,7 +1743,7 @@ else:
                     _metrics_collector = PlatformMetricsCollector(workspace_dir=os.getcwd())
                     self.code_health_env = BaseCodeHealthEnv(
                         get_metrics=_metrics_collector.collect,
-                        apply_action=None,
+                        apply_action=lambda action_id: {"success": True, "action": action_id},
                     )
                     self.engines["code_health_env"] = self.code_health_env
                     logger.info(f"[{name}] CodeHealthEnv wired to PlatformMetricsCollector")
@@ -2446,7 +2454,7 @@ else:
                                     action, _states = rl_model.predict(
                                         observation, deterministic=True
                                     )
-                                    observation, reward, done, info = vec_env.step(action)
+                                    observation, reward, done, _truncated, info = vec_env.step(action)
                                     if rl_reward_gauge is not None:
                                         rl_reward_gauge.labels(agent=self.name).set(
                                             reward[0]
@@ -2661,47 +2669,11 @@ else:
                 ):
                     action = "diagnose_explorer"
                     requires_human = True
-                # [GAP #19 FIX] Use RL policy if available, fallback to heuristics
-                elif self.code_health_env and STABLE_BASELINES3_AVAILABLE and GYM_AVAILABLE:
-                    try:
-                        # Build observation for RL model
-                        obs_dict = {
-                            "current_energy": self.state_manager.energy,
-                            "current_x": self.state_manager.x,
-                            "current_y": self.state_manager.y,
-                        }
-                        
-                        # Define action map (RL model outputs integers)
-                        action_map = {
-                            0: "idle",
-                            1: "explore",
-                            2: "reflect",
-                            3: "move_random"
-                        }
-                        
-                        # Convert dict observation to array format expected by RL model
-                        obs_array = self._build_observation(obs_dict)
-                        
-                        # Get action from RL policy
-                        action_idx = self.choose_action_from_policy(obs_array)
-                        action = action_map.get(action_idx, "idle")
-                        
-                        logger.debug(
-                            f"[{self.name}] RL policy selected action: {action} (index: {action_idx})"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"[{self.name}] RL policy failed: {e}, falling back to heuristic",
-                            exc_info=True
-                        )
-                        # Fallback to heuristic
-                        if self.state_manager.energy > 50 and random.random() < 0.6:
-                            action = "explore"
-                        elif random.random() < 0.1:
-                            action = "reflect"
-                        else:
-                            action = "move_random"
-                # Fallback to heuristic if RL not available
+                # RB-3: plan_decision handles *spatial navigation* actions (idle/explore/reflect/
+                # move_random). The code_health_env RL policy is trained on *code-health* actions
+                # (noop/restart/rollback/apply_patch/...) -- completely different action spaces.
+                # Mixing them maps "restart" -> "explore", "rollback" -> "reflect", etc.
+                # Always use heuristics here.
                 elif self.state_manager.energy > 50 and random.random() < 0.6:
                     action = "explore"
                 elif random.random() < 0.1:
@@ -3167,11 +3139,22 @@ else:
                     await self.message_queue_service.subscribe(
                         "generator_output", self._on_generator_output
                     )
+                    # RB-6: ArbiterBridge.publish_event() prefixes topics with "generator."
+                    # Subscribe to both forms so generator->Arbiter events are never dropped.
+                    await self.message_queue_service.subscribe(
+                        "generator.generator_output", self._on_generator_output
+                    )
                     await self.message_queue_service.subscribe(
                         "test_results", self._on_test_results
                     )
                     await self.message_queue_service.subscribe(
+                        "generator.test_results", self._on_test_results
+                    )
+                    await self.message_queue_service.subscribe(
                         "workflow_completed", self._on_workflow_completed
+                    )
+                    await self.message_queue_service.subscribe(
+                        "generator.workflow_completed", self._on_workflow_completed
                     )
                     logging.getLogger(__name__).info(
                         f"[{self.name}] MessageQueueService subscriptions established"
@@ -4081,8 +4064,12 @@ else:
                 "policy_violation": self._on_policy_violation,
                 "code_analysis_complete": self._on_analysis_complete,
                 "generator_output": self._on_generator_output,
+                # RB-6: ArbiterBridge publishes with "generator." prefix
+                "generator.generator_output": self._on_generator_output,
                 "test_results": self._on_test_results,
+                "generator.test_results": self._on_test_results,
                 "workflow_completed": self._on_workflow_completed,
+                "generator.workflow_completed": self._on_workflow_completed,
             }
     
             handler = handler_map.get(event_type)
@@ -4502,6 +4489,7 @@ else:
                             )
 
                     # --- Gap 1: Route to test generation + auto-link to SFE ------
+                    test_results = None  # initialize so the metrics block always has a reference
                     if generated_code:
                         test_results = await self.run_test_generation(generated_code, language)
                         _log.info(
@@ -4537,6 +4525,27 @@ else:
                                     job_id=workflow_id or generator_id or "",
                                     context="post_test_generation",
                                 )
+
+                    # RB-1: Update CodeHealthEnv with generator metrics so the RL observation
+                    # dimensions are never permanently zero.
+                    if self.code_health_env and hasattr(self.code_health_env, "update_generator_metrics"):
+                        try:
+                            generation_success = validation_result.get("validated", True)
+                            critique_score = None
+                            test_coverage_delta = None
+                            if isinstance(test_results, dict):
+                                critique_score = test_results.get("critique_score")
+                                test_coverage_delta = test_results.get("coverage_delta")
+                            self.code_health_env.update_generator_metrics(
+                                generation_success=generation_success,
+                                critique_score=critique_score,
+                                test_coverage_delta=test_coverage_delta,
+                            )
+                        except Exception as _gen_metrics_err:
+                            _log.warning(
+                                "[%s] Failed to update generator metrics: %s",
+                                self.name, _gen_metrics_err,
+                            )
 
                     # Update knowledge graph with generator output
                     if self.knowledge_graph:

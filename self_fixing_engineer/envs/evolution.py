@@ -51,6 +51,7 @@ if os.getenv("PYTEST_COLLECTING"):
 else:
     # Normal import path with full functionality
     import hashlib
+    import itertools
     import json
     import logging
     import pickle
@@ -68,6 +69,10 @@ else:
     # Get module logger - follows Python logging best practices.
     # Do NOT call basicConfig() at module level to avoid duplicate logs.
     logger = logging.getLogger(__name__)
+
+    # Monotonically increasing counter for unique DEAP class names.
+    # Using id(self) is fragile: GC-reused addresses cause name collisions.
+    _DEAP_COUNTER = itertools.count()
 
     # Try to import DEAP
     try:
@@ -343,8 +348,8 @@ else:
     
             # Use actual config space if available
             if hasattr(self, "config_space") and self.config_space:
-                # Validate individual length before mapping
-                expected_gene_count = len(self.config_space.parameters)
+                # Validate individual length before mapping (EV-3: use gene_count not len(params))
+                expected_gene_count = self.config_space.gene_count
                 if len(individual) < expected_gene_count:
                     logger.warning(
                         f"Individual has {len(individual)} genes but expected {expected_gene_count}. "
@@ -352,37 +357,51 @@ else:
                     )
     
                 for param_name, param_info in self.config_space.parameters.items():
+                    count = param_info.get("count", 1)
+                    param_type = param_info["type"]
+
+                    # EV-3: Expand multi-gene boolean parameters (e.g. feature_flags count=3)
+                    if count > 1 and param_type == "bool":
+                        flags = []
+                        for _c in range(count):
+                            if gene_idx >= len(individual):
+                                flags.append(True)
+                            else:
+                                gene = np.clip(individual[gene_idx], 0.0, 1.0)
+                                flags.append(bool(gene > 0.5))
+                            gene_idx += 1
+                        config[param_name] = flags
+                        continue
+
                     if gene_idx >= len(individual):
                         # Use default value or midpoint for missing genes
                         min_val = param_info["min"]
                         max_val = param_info["max"]
-                        param_type = param_info["type"]
-    
+
                         if param_type == "int":
                             config[param_name] = int((min_val + max_val) / 2)
                         elif param_type == "bool":
                             config[param_name] = True
                         else:  # float
                             config[param_name] = (min_val + max_val) / 2.0
-    
+
                         logger.warning(
                             f"Using default value for missing gene: {param_name}"
                         )
                         gene_idx += 1
                         continue
-    
+
                     gene = np.clip(individual[gene_idx], 0.0, 1.0)
                     min_val = param_info["min"]
                     max_val = param_info["max"]
-                    param_type = param_info["type"]
-    
+
                     if param_type == "int":
                         config[param_name] = int(min_val + gene * (max_val - min_val))
                     elif param_type == "bool":
-                        config[param_name] = gene > 0.5
+                        config[param_name] = bool(gene > 0.5)
                     else:  # float
                         config[param_name] = min_val + gene * (max_val - min_val)
-    
+
                     gene_idx += 1
             else:
                 # Fallback to default mapping
@@ -466,8 +485,9 @@ else:
     
         def _setup_deap(self):
             """Set up DEAP components without global pollution"""
-            # Create unique class names to avoid conflicts
-            self._creator_id = id(self)
+            # Use a monotonically increasing counter instead of id(self) to avoid
+            # name collisions when Python reuses memory addresses after GC (EV-2).
+            self._creator_id = next(_DEAP_COUNTER)
             fitness_name = f"FitnessMax_{self._creator_id}"
             individual_name = f"Individual_{self._creator_id}"
     
@@ -708,14 +728,22 @@ else:
             logger.info(f"Checkpoint saved to {filepath}")
     
         def load_checkpoint(self, filepath: str):
-            """Load optimizer state from file"""
+            """Load optimizer state from file.
+
+            WARNING: Uses pickle deserialization. Only load checkpoint files from
+            trusted sources. Untrusted pickle data can execute arbitrary code.
+            """
+            filepath = os.path.realpath(filepath)
+            if not os.path.isfile(filepath):
+                raise FileNotFoundError(f"Checkpoint file not found: {filepath}")
+
             with open(filepath, "rb") as f:
-                checkpoint = pickle.load(f)
-    
+                checkpoint = pickle.load(f)  # nosec B301 — trusted internal checkpoints only
+
             self.best_individual = checkpoint["best_individual"]
             self.best_fitness = checkpoint["best_fitness"]
             self.evolution_history = checkpoint["evolution_history"]
-    
+
             logger.info(f"Checkpoint loaded from {filepath}")
     
         def __del__(self):
@@ -736,23 +764,41 @@ else:
                 logger.debug(f"Error cleaning up DEAP creator classes: {e}")
     
     
-    def evolve_configs(configs):
+    def evolve_configs(configs=None, *, audit_logger=None, generations=None, pop_size=None, **kwargs):
         """
         Wrapper function to evolve configurations.
-        This bridges the gap between the old API and the new GeneticOptimizer class.
+
+        Accepts both old API (positional ``configs`` dict) and new keyword-argument API
+        used by the Arbiter::
+
+            evolve_configs(audit_logger=..., generations=5, pop_size=10)
+
+        Args:
+            configs: Optional dict with ``config_space``/``evolution_config`` keys (old API).
+            audit_logger: Audit logger passed through to ``GeneticOptimizer.evolve()``.
+            generations: Override for ``EvolutionConfig.generations``.
+            pop_size: Override for ``EvolutionConfig.population_size``.
+            **kwargs: Reserved; currently unused.
+
+        Returns:
+            Best configuration dict found by the GA, or ``None`` on failure.
         """
-        optimizer = GeneticOptimizer()
-    
-        # If configs is a dict, use it to set up the optimizer
+        evolution_config_overrides: Dict[str, Any] = {}
+        if generations is not None:
+            evolution_config_overrides["generations"] = generations
+        if pop_size is not None:
+            evolution_config_overrides["population_size"] = pop_size
+
+        evo_config = EvolutionConfig(**evolution_config_overrides) if evolution_config_overrides else None
+        optimizer = GeneticOptimizer(evolution_config=evo_config)
+
         if isinstance(configs, dict):
             if "config_space" in configs:
                 optimizer.config_space = configs["config_space"]
             if "evolution_config" in configs:
                 optimizer.evolution_config = configs["evolution_config"]
-    
-        # Run evolution and return the best configuration
-        best_config = optimizer.evolve(verbose=False)
-        return best_config
+
+        return optimizer.evolve(test_function=None, audit_logger=audit_logger, verbose=False)
     
     
     def run_test_evaluation(config: Dict[str, Any]) -> Dict[str, float]:
@@ -857,62 +903,62 @@ else:
             if os.environ.get("SANDBOXED_TEST_RUNNER") != "1":
                 print("Error: Must be run in sandboxed environment", file=sys.stderr)
                 sys.exit(1)
-    
+
             try:
                 # Read configuration from stdin (more secure than command line)
                 config_json = sys.stdin.read()
                 config = json.loads(config_json)
-    
+
                 # Run test evaluation
                 metrics = run_test_evaluation(config)
-    
+
                 # Output metrics as JSON
                 print(json.dumps(metrics))
                 sys.exit(0)
-    
+
             except Exception as e:
                 print(f"Test evaluation failed: {e}", file=sys.stderr)
                 sys.exit(1)
 
-    elif os.environ.get("SANDBOXED_EVOLUTION") == "1":
-        # Run in sandboxed mode
-        logging.basicConfig(
-            level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-        )
-        run_evolution_demonstration()
+        elif os.environ.get("SANDBOXED_EVOLUTION") == "1":
+            # Run in sandboxed mode
+            logging.basicConfig(
+                level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+            )
+            run_evolution_demonstration()
 
-    else:
-        # Launch sandboxed process
-        env = os.environ.copy()
-        env["SANDBOXED_EVOLUTION"] = "1"
+        else:
+            # Launch sandboxed process
+            env = os.environ.copy()
+            env["SANDBOXED_EVOLUTION"] = "1"
 
-        print(
-            f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Launching sandboxed evolution process..."
-        )
-
-        try:
-            proc = subprocess.Popen(
-                [sys.executable, __file__],
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+            print(
+                f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] Launching sandboxed evolution process..."
             )
 
-            # Stream output
-            for line in proc.stdout:
-                print(line, end="")
+            try:
+                proc = subprocess.Popen(
+                    [sys.executable, __file__],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
 
-            proc.wait()
-
-            if proc.returncode != 0:
-                print(f"\n[ERROR] Process exited with code: {proc.returncode}")
-                for line in proc.stderr:
+                # Stream output
+                for line in proc.stdout:
                     print(line, end="")
 
-        except KeyboardInterrupt:
-            print("\n[INFO] Evolution interrupted by user")
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception as e:
-            print(f"[ERROR] Failed to launch process: {e}")
+                proc.wait()
+
+                if proc.returncode != 0:
+                    print(f"\n[ERROR] Process exited with code: {proc.returncode}")
+                    for line in proc.stderr:
+                        print(line, end="")
+
+            except KeyboardInterrupt:
+                print("\n[INFO] Evolution interrupted by user")
+                proc.terminate()
+                proc.wait(timeout=5)
+            except Exception as e:
+                print(f"[ERROR] Failed to launch process: {e}")
