@@ -505,3 +505,128 @@ class TestRouterVariableStubs:
         assert "def create_router" in stub, (
             "create_router must be stubbed as a function"
         )
+
+
+# =============================================================================
+# TestIssue2EmptyInitPy — empty __init__.py files must pass validation
+# =============================================================================
+
+
+class TestIssue2EmptyInitPy:
+    """Issue 2: empty __init__.py files are valid Python package markers."""
+
+    def test_validate_syntax_allows_empty_init_py(self, crh):
+        """Empty __init__.py must pass _validate_syntax without error."""
+        valid, msg = crh._validate_syntax("", "python", "app/__init__.py")
+        assert valid is True, f"Empty __init__.py must pass validation, got msg={msg!r}"
+        assert msg == "", f"Empty __init__.py must not produce error message, got {msg!r}"
+
+    def test_validate_syntax_allows_empty_nested_init_py(self, crh):
+        """Empty __init__.py in a nested package must also pass."""
+        valid, msg = crh._validate_syntax("", "python", "app/models/__init__.py")
+        assert valid is True, "Empty nested __init__.py must pass _validate_syntax"
+
+    def test_validate_syntax_still_rejects_empty_non_init(self, crh):
+        """Empty non-__init__.py Python files must still be rejected."""
+        valid, msg = crh._validate_syntax("", "python", "app/main.py")
+        assert valid is False, "Empty non-__init__.py must still fail _validate_syntax"
+
+    def test_validate_production_ready_skips_init_py(self, crh):
+        """validate_production_ready must skip __init__.py files entirely."""
+        files = {
+            "app/__init__.py": "",                 # empty -- must not trigger stub check
+            "app/models/__init__.py": "",
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        valid, msg = crh.validate_production_ready(files)
+        assert valid is True, (
+            f"validate_production_ready must not fail on empty __init__.py files, msg={msg!r}"
+        )
+
+
+# =============================================================================
+# TestIssue1StubTracking — get_stub_files and build_stub_retry_prompt_hint
+# =============================================================================
+
+
+class TestIssue1StubTracking:
+    """Issue 1: stub files can be detected and surfaced as a retry hint."""
+
+    def test_get_stub_files_detects_auto_generated_stub(self, crh):
+        """get_stub_files must detect a file containing the canonical stub marker."""
+        stub_content = (
+            '"""Generated module — replace with actual implementation."""\n'
+            "from typing import Any\n"
+            "def get_db(*args: Any, **kwargs: Any) -> Any:\n"
+            '    """Placeholder implementation."""\n'
+            "    return None\n"
+        )
+        files = {
+            "app/db.py": stub_content,
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        stubs = crh.get_stub_files(files)
+        assert "app/db.py" in stubs, "get_stub_files must detect stub in app/db.py"
+        assert "app/main.py" not in stubs, "app/main.py must not be detected as stub"
+
+    def test_get_stub_files_empty_when_no_stubs(self, crh):
+        """get_stub_files returns empty set when no stubs are present."""
+        files = {"app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"}
+        assert crh.get_stub_files(files) == set()
+
+    def test_build_stub_retry_prompt_hint_returns_hint(self, crh):
+        """build_stub_retry_prompt_hint returns a non-empty hint when stubs exist."""
+        stub_content = (
+            '"""Generated module — replace with actual implementation."""\n'
+            "from typing import Any\n"
+            "def get_db(*args: Any, **kwargs: Any) -> Any:\n"
+            '    """Placeholder implementation."""\n'
+            "    return None\n"
+        )
+        hint = crh.build_stub_retry_prompt_hint({"app/db.py": stub_content})
+        assert hint != "", "hint must be non-empty when stubs exist"
+        assert "app/db.py" in hint, "hint must mention the stub file path"
+        assert "IMPORTANT" in hint, "hint must start with IMPORTANT marker"
+
+    def test_build_stub_retry_prompt_hint_empty_for_no_stubs(self, crh):
+        """build_stub_retry_prompt_hint returns empty string when no stubs exist."""
+        files = {"app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"}
+        assert crh.build_stub_retry_prompt_hint(files) == ""
+
+    def test_ensure_local_module_stubs_logs_created_stubs(self, crh):
+        """ensure_local_module_stubs still returns a dict (backward compatible)."""
+        files = {"app/routes.py": "from app.auth import get_current_user\n"}
+        result = crh.ensure_local_module_stubs(dict(files))
+        # Must return a dict
+        assert isinstance(result, dict), "ensure_local_module_stubs must return a dict"
+        # The stub file must be detectable by get_stub_files
+        stubs = crh.get_stub_files(result)
+        assert "app/auth.py" in stubs, (
+            "get_stub_files must find app/auth.py after ensure_local_module_stubs"
+        )
+
+
+# =============================================================================
+# TestIssue3CollisionAfterStubs — collision detection runs after stub generation
+# =============================================================================
+
+
+class TestIssue3CollisionAfterStubs:
+    """Issue 3: module/package collision detection must run after stub generation."""
+
+    def test_collision_resolved_when_stub_creates_conflicting_module(self, crh):
+        """When stub creation introduces a .py file that conflicts with a package
+        already in code_files, the collision must be resolved."""
+        # Use the module loaded via the custom loader (crh fixture) to avoid
+        # conflict with the synthetic package stubs registered in sys.modules.
+        _detect_collisions = crh._detect_module_package_collisions
+        files = {
+            "app/routes.py": "x = 1",
+            "app/auth.py": "# stub",
+            "app/auth/__init__.py": "from fastapi import APIRouter\nrouter = APIRouter()\n",
+        }
+        cleaned = _detect_collisions(files)
+        assert "app/auth.py" not in cleaned, (
+            "app/auth.py must be removed when app/auth/__init__.py exists"
+        )
+        assert "app/auth/__init__.py" in cleaned

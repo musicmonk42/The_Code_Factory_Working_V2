@@ -2316,6 +2316,9 @@ async function deleteJob(jobId) {
 
 // ===== GENERATOR AGENT FUNCTIONS =====
 
+// Track in-progress pipeline calls per job_id to prevent duplicate API requests
+const _pipelineInProgress = new Set();
+
 async function runAgentPipeline() {
     let jobIdInput = document.getElementById('agent-job-id').value;
     let jobId = null;
@@ -2352,7 +2355,20 @@ async function runAgentPipeline() {
             return; // Error already shown by sanitizeJobId
         }
     }
-    
+
+    // Client-side debounce: prevent duplicate pipeline calls for the same job
+    if (_pipelineInProgress.has(jobId)) {
+        showError('Pipeline is already running for this job. Please wait for it to complete.');
+        return;
+    }
+
+    // Find and disable the Run Pipeline button to prevent double-clicks
+    const pipelineBtn = document.querySelector('button[onclick="runAgentPipeline()"]');
+    if (pipelineBtn) {
+        pipelineBtn.disabled = true;
+    }
+    _pipelineInProgress.add(jobId);
+
     try {
         const response = await fetchWithRetry(`${API_BASE}/generator/${jobId}/pipeline`, {
             method: 'POST',
@@ -2387,6 +2403,12 @@ async function runAgentPipeline() {
         showSuccess('Pipeline started: ' + (data.status || 'Success'));
     } catch (error) {
         showError('Pipeline failed: ' + error.message);
+    } finally {
+        // Re-enable button and clear in-progress flag once response is received
+        _pipelineInProgress.delete(jobId);
+        if (pipelineBtn) {
+            pipelineBtn.disabled = false;
+        }
     }
 }
 
