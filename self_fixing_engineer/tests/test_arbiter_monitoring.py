@@ -22,6 +22,8 @@ def ensure_real_aiofiles():
     import aiofiles as _real_aiofiles
     importlib.reload(_real_aiofiles)
     sys.modules["aiofiles"] = _real_aiofiles
+    import self_fixing_engineer.arbiter.monitoring as monitoring_mod
+    importlib.reload(monitoring_mod)
     yield
 
 
@@ -267,7 +269,7 @@ async def test_export_log_error(monitor, tmp_path, caplog):
     monitor.log_action({"type": "test"})
 
     # Create a mock that raises an error when trying to open the file
-    with patch("aiofiles.open", side_effect=OSError("Permission denied")):
+    with patch("self_fixing_engineer.arbiter.monitoring.aiofiles.open", side_effect=OSError("Permission denied")):
         # The function should raise the OSError after logging it
         with pytest.raises(OSError, match="Permission denied"):
             await monitor.export_log(tmp_path / "export.jsonl")

@@ -747,6 +747,7 @@ async def test_health_check_nonexistent(reset_registry):
 
 # Test that PLUGIN_REGISTRY is a dictionary
 def test_plugin_registry_constant():
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PLUGIN_REGISTRY
     assert isinstance(PLUGIN_REGISTRY, dict)
     # It should be empty initially (in test environment)
     assert len(PLUGIN_REGISTRY) == 0
