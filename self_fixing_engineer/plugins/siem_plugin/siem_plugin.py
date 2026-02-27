@@ -69,6 +69,13 @@ from self_fixing_engineer.exceptions import AnalyzerCriticalError
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
 
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
+
 # --- Core Integrations (shared for all plugins/gateways) ---
 try:
     from core_audit import audit_logger
@@ -220,7 +227,9 @@ try:
         )
     )
     trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    trace.set_tracer_provider(trace_provider)
+    # Only set the global provider when no SDK provider has been configured yet.
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(trace_provider)
     set_global_textmap(TraceContextTextMapPropagator())
     tracer = trace.get_tracer(__name__)
     OPENTELEMETRY_AVAILABLE = True
@@ -1362,7 +1371,7 @@ class SIEMGateway:
             await asyncio.sleep(30)
 
 
-class SIEMGatewayManager:
+class SIEMGatewayManager(PluginBase):
     def __init__(
         self,
         settings: SIEMGatewaySettings,
@@ -1435,7 +1444,30 @@ class SIEMGatewayManager:
 
         main_logger.info("SIEM Gateway Manager shut down.")
 
-    def load_serializers_from_plugins(self, group="siem_gateway.serializers"):
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration is completed in __init__."""
+
+    async def start(self) -> None:
+        """Delegate to startup()."""
+        await self.startup()
+
+    async def stop(self) -> None:
+        """Delegate to shutdown()."""
+        await self.shutdown()
+
+    async def health_check(self) -> bool:
+        """Return True when at least one child gateway is running."""
+        async with self._lock:
+            return bool(self._gateways)
+
+    async def get_capabilities(self) -> List[str]:
+        return ["siem_event_forwarding", "splunk_hec", "security_audit_sink"]
+
+
         try:
             for entry_point in importlib.metadata.entry_points(group=group):
                 try:

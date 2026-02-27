@@ -12,6 +12,7 @@ import re
 import socket
 import ssl
 import sys
+import tempfile
 import time
 import uuid
 from collections import deque
@@ -97,6 +98,13 @@ from self_fixing_engineer.exceptions import AnalyzerCriticalError
 
 # ---- PROD MODE ENFORCEMENT ----
 PROD_MODE = os.environ.get("PROD_MODE", "false").lower() == "true"
+
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
 
 # --- Core integrations for multi-plugin production readiness ---
 try:
@@ -237,7 +245,9 @@ try:
         )
     )
     trace_provider.add_span_processor(BatchSpanProcessor(trace_exporter))
-    trace.set_tracer_provider(trace_provider)
+    # Only set the global provider when no SDK provider has been configured yet.
+    if not isinstance(trace.get_tracer_provider(), TracerProvider):
+        trace.set_tracer_provider(trace_provider)
     set_global_textmap(TraceContextTextMapPropagator())
     tracer = trace.get_tracer(__name__)
     OPENTELEMETRY_AVAILABLE = True
@@ -1525,7 +1535,7 @@ class SNSGateway:
             await asyncio.sleep(self.global_settings.heartbeat_interval)
 
 
-class SNSGatewayManager:
+class SNSGatewayManager(PluginBase):
     def __init__(
         self,
         settings: SNSGatewaySettings,
@@ -1604,7 +1614,30 @@ class SNSGatewayManager:
             await self._admin_audit_log.close()
         main_logger.info("SNS Gateway Manager shut down.")
 
-    async def _log_admin_action(self, action: str, details: Dict[str, Any]):
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration is completed in __init__."""
+
+    async def start(self) -> None:
+        """Delegate to startup()."""
+        await self.startup()
+
+    async def stop(self) -> None:
+        """Delegate to shutdown()."""
+        await self.shutdown()
+
+    async def health_check(self) -> bool:
+        """Return True when at least one child gateway is running."""
+        async with self._lock:
+            return bool(self._gateways)
+
+    async def get_capabilities(self) -> List[str]:
+        return ["sns_notification", "push_delivery", "topic_fan_out"]
+
+
         if self._admin_audit_log:
             log_entry = json.dumps(
                 {"timestamp": time.time(), "action": action, **details}
@@ -1971,7 +2004,6 @@ try:
         os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
         os.chmod(DEAD_LETTER_DIR, 0o700)
 except (PermissionError, OSError) as e:
-    import tempfile
     DEAD_LETTER_DIR = os.path.join(tempfile.gettempdir(), "sns_gateway_dead_letters")
     os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
     try:

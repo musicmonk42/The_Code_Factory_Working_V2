@@ -6,6 +6,13 @@ Kafka Plugin (production-ready)
 
 from __future__ import annotations
 
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
+
 import asyncio
 import contextlib
 import hashlib
@@ -467,7 +474,7 @@ def _serialize_event(event: Dict[str, Any]) -> bytes:
 
 # ---- Plugin Implementation
 @plugin(name="kafka_audit_plugin", version="1.2.0", kind=PlugInKind.SINK)
-class KafkaAuditPlugin:
+class KafkaAuditPlugin(PluginBase):
     """
     Async Kafka audit sink with batching, retries, and DLQ support.
 
@@ -614,6 +621,13 @@ class KafkaAuditPlugin:
 
         self._started = False
         logger.info("KafkaAuditPlugin stopped.")
+
+    async def health_check(self) -> bool:
+        """Return True when the plugin is started and the producer is connected."""
+        return self._started and (self.config.dev_dry_run or self._producer is not None)
+
+    async def get_capabilities(self) -> List[str]:
+        return ["kafka_audit_sink", "event_streaming", "dead_letter_queue"]
 
     async def enqueue_event(
         self,

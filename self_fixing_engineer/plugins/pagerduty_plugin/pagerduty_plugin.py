@@ -45,6 +45,13 @@ except ImportError as e:
         f"CRITICAL: Missing core dependency for PagerDuty plugin: {e}. Aborting startup."
     )
 
+# --- PluginBase lifecycle contract ---
+try:
+    from omnicore_engine.plugin_base import PluginBase
+except ImportError:
+    from abc import ABC
+    PluginBase = ABC  # type: ignore[misc,assignment]
+
 # --- Global Production Mode Flag (from main orchestrator) ---
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 
@@ -389,7 +396,7 @@ class PagerDutyAPIRequest(BaseModel):
 
 
 # ---- 5. Final Boss: The Resilient, Performant, Decoupled Gateway ----
-class PagerDutyGateway:
+class PagerDutyGateway(PluginBase):
     """
     Manages the entire lifecycle of PagerDuty communication, including a
     background sending queue, concurrency limiting, and a circuit breaker.
@@ -516,7 +523,33 @@ class PagerDutyGateway:
         logger.info("PagerDuty Gateway shutdown complete.")
         audit_logger.log_event("pagerduty_gateway_shutdown_complete", status="success")
 
-    async def _get_session(self) -> aiohttp.ClientSession:
+    # ------------------------------------------------------------------
+    # PluginBase lifecycle contract
+    # ------------------------------------------------------------------
+
+    async def initialize(self) -> None:
+        """No-op: configuration is completed in __init__."""
+
+    async def start(self) -> None:
+        """Delegate to startup()."""
+        await self.startup()
+
+    async def stop(self) -> None:
+        """Delegate to shutdown()."""
+        await self.shutdown()
+
+    async def health_check(self) -> bool:
+        """Return True when the circuit breaker is not open and workers are alive."""
+        return (
+            self._circuit_state != "open"
+            and bool(self._workers)
+            and all(not w.done() for w in self._workers)
+        )
+
+    async def get_capabilities(self) -> List[str]:
+        return ["incident_alerting", "on_call_routing", "event_deduplication"]
+
+
         async with self._session_lock:
             if self._session is None or self._session.closed:
                 timeout = aiohttp.ClientTimeout(

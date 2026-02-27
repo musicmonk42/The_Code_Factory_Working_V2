@@ -383,7 +383,7 @@ env:
   USE_KAFKA_INGESTION: "false"
   USE_KAFKA_AUDIT: "false"
   
-  ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
+  ENABLE_CITUS: "1"  # Distributed PostgreSQL sharding via Citus
 
   # Blockchain/DLT Configuration
   # DLT backend type used by audit_log.py and (via initialize_dlt_backend) dlt_backend.py.
