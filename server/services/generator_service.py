@@ -40,9 +40,9 @@ class GeneratorService:
     """
     
     # Retry configuration for agent loading (configurable via environment variables)
-    MAX_RETRY_ATTEMPTS = int(os.getenv("AGENT_RETRY_ATTEMPTS", "3"))  # Number of retry attempts after initial call
+    MAX_RETRY_ATTEMPTS = int(os.getenv("AGENT_RETRY_ATTEMPTS", "5"))  # Number of retry attempts after initial call
     RETRY_BASE_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_BASE_DELAY", "5"))  # Base delay for exponential backoff
-    RETRY_MAX_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_MAX_DELAY", "30"))  # Maximum delay cap
+    RETRY_MAX_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_MAX_DELAY", "60"))  # Maximum delay cap
 
     @staticmethod
     def _create_retryable_error(job_id: str, message: str) -> Dict[str, Any]:
@@ -1018,7 +1018,25 @@ class GeneratorService:
                     message="Code generation agents did not return data. Please retry in a few seconds."
                 )
 
-        # No OmniCore or routing failed - return hard error (not retryable)
+        # No OmniCore or routing failed - check if agents are still loading before returning hard error
+        try:
+            from server.utils.agent_loader import get_agent_loader
+            _loader = get_agent_loader()
+            if _loader and _loader.is_loading():
+                logger.warning(
+                    f"Full pipeline execution unavailable for job {job_id} - agents are still loading"
+                )
+                return {
+                    "job_id": job_id,
+                    "status": "error",
+                    "message": "Code generation pipeline unavailable. Agents are still loading.",
+                    "retry": True,
+                    "retry_after": 10,
+                    "agents_loading": True,
+                }
+        except Exception:
+            pass  # Agent loader unavailable - fall through to hard error
+
         logger.error(f"Full pipeline execution unavailable for job {job_id} - OmniCore service not available or routing failed")
         return {
             "job_id": job_id,

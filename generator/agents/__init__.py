@@ -314,6 +314,48 @@ def validate_agents_for_production(required_agents: Optional[List[str]] = None) 
 # This avoids circular imports during module initialization
 
 
+def __getattr__(name: str):
+    """Lazy-load agents on first attribute access and raise ImportError for unavailable ones.
+
+    This replaces silent None returns with actionable error messages when
+    downstream code tries to use an agent that failed to import.
+    """
+    # Only handle names that are declared exports (agent classes / configs)
+    _lazy_exports = {
+        "CodeGenConfig", "SecurityUtils",
+        "CritiqueConfig", "orchestrate_critique_pipeline",
+        "TestgenAgent", "Policy",
+        "DeployAgent", "DeployConfig",
+        "DocgenAgent", "DocgenConfig",
+    }
+    if name not in _lazy_exports:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    # Trigger lazy loading if not done yet
+    _load_all_agents()
+
+    # Return the module-level value (may still be None if the import failed)
+    value = globals().get(name)
+    if value is None:
+        # Map export names to their agent key in _AGENT_IMPORT_ERRORS
+        _export_to_agent = {
+            "CodeGenConfig": "codegen", "SecurityUtils": "codegen",
+            "CritiqueConfig": "critique", "orchestrate_critique_pipeline": "critique",
+            "TestgenAgent": "testgen", "Policy": "testgen",
+            "DeployAgent": "deploy", "DeployConfig": "deploy",
+            "DocgenAgent": "docgen", "DocgenConfig": "docgen",
+        }
+        agent_key = _export_to_agent.get(name, name)
+        error_detail = _AGENT_IMPORT_ERRORS.get(agent_key, "Unknown import error")
+        first_line = error_detail.split("\n")[0]
+        raise ImportError(
+            f"Agent export '{name}' is not available because its agent module failed to load. "
+            f"Original error: {first_line}. "
+            f"Check dependencies and set GENERATOR_STRICT_MODE=1 for full traceback at startup."
+        )
+    return value
+
+
 __all__ = [
     # Availability helpers
     "get_available_agents",

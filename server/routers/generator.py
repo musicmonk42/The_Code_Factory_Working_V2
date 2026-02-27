@@ -632,23 +632,22 @@ async def _trigger_pipeline_background(
         # Distinguish between CRITICAL and AUXILIARY stages
         # CRITICAL stages: codegen (always), validate (if not skipped), testgen (if tests requested AND not intentionally skipped)
         # AUXILIARY stages: deploy, docgen, critique (non-blocking, can fail without failing the job)
-        critical_stages = ["codegen"]  # codegen is always critical
+        critical_stages = ["codegen"]  # codegen is the only hard-critical stage
         
-        # Only treat validate as critical if it wasn't intentionally skipped or soft-failed
+        # "important" stages: their failure generates a warning but does NOT block job success
+        # validate and testgen are important but not critical - codegen succeeding is sufficient
+        important_stages = []
+        
+        # Track validate as important (not critical) - only if it wasn't intentionally skipped/soft-failed
         validate_was_skipped = any("validate:skipped" in s for s in stages_completed)
         validate_was_soft_fail = any("validate:soft_fail" in s for s in stages_completed)
         if not validate_was_skipped and not validate_was_soft_fail:
-            critical_stages.append("validate")
+            important_stages.append("validate")
         
-        # FIX Issue C: Only treat testgen as critical if it wasn't intentionally skipped
-        # Check if testgen was skipped for non-Python projects
+        # Track testgen as important (not critical) - only if it wasn't intentionally skipped
         testgen_was_skipped = any("testgen:skipped" in s for s in stages_completed)
-        
-        # Note: This function always requests all stages (see run_full_pipeline call at line 278)
-        # The following constants reflect the hardcoded True values passed to run_full_pipeline
         if not testgen_was_skipped:
-            # Only add testgen to critical stages if it wasn't intentionally skipped
-            critical_stages.append("testgen")
+            important_stages.append("testgen")
         
         # Define auxiliary stages (always requested in this function)
         auxiliary_stages = ["deploy", "docgen", "critique"]
@@ -662,13 +661,23 @@ async def _trigger_pipeline_background(
         # BUG FIX: Removed pipeline_status == "completed" short-circuit
         codegen_succeeded = "codegen" in stages_completed
         
+        # Identify any important stages that failed (for warning logging)
+        failed_important = [s for s in important_stages if not _stage_ran(s, stages_completed)]
+        
         # Identify any auxiliary stages that failed (for warning logging)
         failed_auxiliary = [s for s in auxiliary_stages if not _stage_ran(s, stages_completed)]
 
-        # FIX: Only finalize as SUCCESS if codegen succeeded AND all CRITICAL stages completed
-        # Auxiliary stage failures are logged as warnings but do NOT prevent success
+        # FIX: Only finalize as SUCCESS if codegen succeeded AND all CRITICAL stages completed.
+        # Important stage failures (validate, testgen) and auxiliary stage failures are logged
+        # as warnings but do NOT prevent success - core code generation succeeded.
         if codegen_succeeded and all_critical_completed:
             # SUCCESS: All critical stages completed - finalize with success status
+            # Log warnings for any important stages that failed
+            if failed_important:
+                logger.warning(
+                    f"[Pipeline] Job {job_id}: The following important stages did not complete "
+                    f"but job will still be marked as SUCCESS (codegen succeeded): {', '.join(failed_important)}"
+                )
             # Log warnings for any auxiliary stages that failed
             if failed_auxiliary:
                 logger.warning(
