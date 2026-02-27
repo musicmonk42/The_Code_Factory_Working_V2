@@ -2781,6 +2781,16 @@ if PLUGIN_AVAILABLE:
                                             f"endpoints covered — running gap-fill pass for "
                                             f"{len(_missing_eps)} missing endpoint(s)"
                                         )
+                                        # Detect placeholder services to guide the gap-fill LLM.
+                                        try:
+                                            _pre_fill_wiring = _validate_wiring(_merged_files)
+                                            _pre_fill_stubs = _pre_fill_wiring["placeholder_services"]
+                                        except Exception:
+                                            _pre_fill_stubs = []
+                                        _stub_hint = (
+                                            "\n\nService stub files that need real implementations:\n"
+                                            + "\n".join(f"  - {_sp}" for _sp, _ in _pre_fill_stubs)
+                                        ) if _pre_fill_stubs else ""
                                         _gap_prompt = (
                                             f"{prompt}"
                                             f"\n\nAlready-generated files (DO NOT regenerate): "
@@ -2788,9 +2798,12 @@ if PLUGIN_AVAILABLE:
                                             f"\n\n{_build_project_module_reference(_merged_files)}\n"
                                             f"\n\n### GENERATION PASS: endpoint_gap_fill ###\n"
                                             f"The following required endpoints are NOT yet implemented "
-                                            f"in the generated router files.  Generate ONLY the router "
-                                            f"files needed to implement them:\n"
+                                            f"in the generated router files.  Generate the router AND "
+                                            f"service files needed to implement them. Prioritize "
+                                            f"implementing real methods in service classes that are "
+                                            f"currently stubs:\n"
                                             + "\n".join(f"  - {ep}" for ep in sorted(_missing_eps))
+                                            + _stub_hint
                                             + "\nYou MUST add proper import statements at the top of each file "
                                             + "for all symbols you reference. Use `from <module> import <symbol>` "
                                             + "for project-local imports.\nReturn a JSON object with a 'files' key."

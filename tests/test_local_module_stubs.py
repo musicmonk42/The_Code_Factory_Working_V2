@@ -630,3 +630,241 @@ class TestIssue3CollisionAfterStubs:
             "app/auth.py must be removed when app/auth/__init__.py exists"
         )
         assert "app/auth/__init__.py" in cleaned
+
+
+# =============================================================================
+# TestStubMethodInjection — third pass injects methods from call sites
+# =============================================================================
+
+
+class TestStubMethodInjection:
+    """Third pass: methods referenced on stub class instances must be injected."""
+
+    def test_method_injected_for_depends_call_site(self, stub_fn):
+        """Depends(var.method) must inject the method into the stub class."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)):\n"
+                "    return user\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        assert "class AuthService" in stub, "AuthService stub must be created"
+        assert "get_current_user" in stub, (
+            "get_current_user must be injected into AuthService stub"
+        )
+
+    def test_injected_depends_method_is_async(self, stub_fn):
+        """Methods used in Depends() context must be generated as async."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)):\n"
+                "    return user\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        assert "async def get_current_user" in stub, (
+            "get_current_user used in Depends() must be async def"
+        )
+
+    def test_method_injected_for_await_call_site(self, stub_fn):
+        """``await var.method(...)`` must inject an async method into the stub."""
+        files = {
+            "app/routers/orders.py": (
+                "from app.services.orders import OrderService\n"
+                "order_service = OrderService()\n"
+                "async def create(data: dict):\n"
+                "    return await order_service.create_order(data)\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/orders.py", "")
+        assert "class OrderService" in stub, "OrderService stub must be created"
+        assert "async def create_order" in stub, (
+            "create_order used with await must be async def"
+        )
+
+    def test_plain_attr_access_injects_non_async_method(self, stub_fn):
+        """Plain ``var.method()`` without await or Depends must inject a sync method."""
+        files = {
+            "app/main.py": (
+                "from app.services.email import EmailService\n"
+                "email_service = EmailService()\n"
+                "def notify(msg: str):\n"
+                "    email_service.send(msg)\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/email.py", "")
+        assert "class EmailService" in stub
+        # ``send`` is not awaited and not in Depends — must be a plain def
+        assert "def send" in stub
+        assert "async def send" not in stub, (
+            "send used without await/Depends must not be async"
+        )
+
+    def test_multiple_methods_injected(self, stub_fn):
+        """All methods referenced on a stub instance must be injected."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def login(data=Depends(auth_service.login)): ...\n"
+                "async def logout(user=Depends(auth_service.logout)): ...\n"
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        for method in ("login", "logout", "get_current_user"):
+            assert f"async def {method}" in stub, (
+                f"{method} must be injected into AuthService stub"
+            )
+
+    def test_injected_stub_is_valid_python(self, stub_fn):
+        """Stub class with injected methods must be syntactically valid Python."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        assert _valid_python(stub), "stub with injected methods must be valid Python"
+
+    def test_method_injection_idempotent(self, stub_fn):
+        """Calling ensure_local_module_stubs twice must not duplicate injected methods."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+        }
+        result1 = stub_fn(dict(files))
+        result2 = stub_fn(dict(result1))
+        stub = result2.get("app/services/auth.py", "")
+        assert stub.count("def get_current_user") == 1, (
+            "get_current_user must appear exactly once after two passes"
+        )
+        assert _valid_python(stub), "idempotent injected stub must remain valid Python"
+
+    def test_async_wins_over_sync_across_files(self, stub_fn):
+        """When a method is called both as await and plain, async must win."""
+        files = {
+            "app/routers/orders.py": (
+                "from app.services.orders import OrderService\n"
+                "order_service = OrderService()\n"
+                # Plain call in one place
+                "def validate():\n"
+                "    order_service.validate_order()\n"
+            ),
+            "app/routers/checkout.py": (
+                "from app.services.orders import OrderService\n"
+                "order_service = OrderService()\n"
+                # Awaited call in another file
+                "async def checkout():\n"
+                "    await order_service.validate_order()\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/orders.py", "")
+        # async wins
+        assert "async def validate_order" in stub, (
+            "validate_order must be async because it is awaited in checkout.py"
+        )
+
+    def test_dunder_attributes_are_not_injected(self, stub_fn):
+        """Dunder attributes (__class__, __dict__, etc.) must never become method stubs.
+
+        Injecting a ``def __class__(self)`` stub would shadow Python's built-in
+        descriptor and break isinstance() checks at runtime.
+        """
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "auth_service = AuthService()\n"
+                # These dunder accesses must be silently ignored by the third pass.
+                "x = auth_service.__class__\n"
+                "y = auth_service.__dict__\n"
+                "z = auth_service.__module__\n"
+                # A real method that SHOULD be injected.
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        assert "def __class__" not in stub, "dunder __class__ must NOT be injected"
+        assert "def __dict__" not in stub, "dunder __dict__ must NOT be injected"
+        assert "def __module__" not in stub, "dunder __module__ must NOT be injected"
+        # The real method should still be injected.
+        assert "def get_current_user" in stub, (
+            "get_current_user must still be injected alongside filtered dunders"
+        )
+
+    def test_injected_methods_use_single_blank_line_separator(self, stub_fn):
+        """Methods injected into a stub class must be separated by exactly one blank line.
+
+        PEP 8 §E303 requires at most two blank lines inside a class; one blank
+        line between method definitions is the conventional standard.
+        """
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "from fastapi import Depends\n"
+                "auth_service = AuthService()\n"
+                "async def login(d=Depends(auth_service.login)): ...\n"
+                "async def logout(d=Depends(auth_service.logout)): ...\n"
+            ),
+        }
+        result = stub_fn(dict(files))
+        stub = result.get("app/services/auth.py", "")
+        # Two consecutive ``raise NotImplementedError`` lines followed by two blank
+        # lines (before the next ``def``) would indicate PEP 8 E303.
+        # Strip trailing whitespace so end-of-file newlines don't trigger a false positive.
+        stub_body = stub.rstrip("\n")
+        assert "\n\n\n" not in stub_body, (
+            "methods inside a stub class must not be separated by two blank lines"
+        )
+        assert _valid_python(stub), "stub with PEP-8 spacing must be valid Python"
+
+    def test_third_pass_is_non_fatal_on_corrupt_content(self, stub_fn):
+        """If the third pass encounters an unexpected error it must not discard code_files.
+
+        The stub dict produced by the first two passes must always be returned
+        intact, even if the method-injection regex scan fails on unusual input.
+        """
+        # Simulate a stub file that is syntactically unusual (but still valid Python)
+        # so that the stub class regex won't match — injection silently skips.
+        files = {
+            "app/routers/auth.py": (
+                "from app.services.auth import AuthService\n"
+                "auth_service = AuthService()\n"
+                "async def me(user=Depends(auth_service.get_current_user)): ...\n"
+            ),
+            # Override the stub with unusual whitespace that the regex won't match;
+            # ensure_local_module_stubs must still return this file unchanged.
+            "app/services/auth.py": (
+                'class AuthService:\n'
+                '    """Custom docstring — not the stub marker."""\n'
+                '    pass\n'
+            ),
+        }
+        result = stub_fn(dict(files))
+        # The class file must still be present (not discarded by a crash).
+        assert "app/services/auth.py" in result, (
+            "code_files must be returned intact even when injection finds no match"
+        )

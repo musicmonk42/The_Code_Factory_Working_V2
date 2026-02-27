@@ -1227,6 +1227,10 @@ class ImportFixerEngine:
                 _COMMON_FRAMEWORK_VARS = {
                     "router", "app", "db", "engine", "session",
                     "settings", "celery_app", "api_router",
+                    # Service instances injected via FastAPI's Depends() must never be
+                    # imported cross-router.  The ``_service`` suffix check below handles
+                    # the general pattern; listing common names here makes intent explicit.
+                    "auth_service",
                 }
 
                 for name in used_names:
@@ -1250,10 +1254,35 @@ class ImportFixerEngine:
                         if _self_module and mod != _self_module:
                             _self_pkg = _self_module.rsplit(".", 1)[0] if "." in _self_module else ""
                             _target_pkg = mod.rsplit(".", 1)[0] if "." in mod else ""
+                            # Skip all cross-router imports: service-level dependencies between
+                            # routers must use FastAPI's Depends() injection, not direct imports.
+                            if (
+                                _self_module.startswith("app.routers.")
+                                and mod.startswith("app.routers.")
+                            ):
+                                self.logger.debug(
+                                    f"Skipping cross-router import: "
+                                    f"{mod}.{sym_name} in {file_path}"
+                                )
+                                continue
                             if _self_pkg and _self_pkg == _target_pkg:
                                 if sym_name.lower() in _COMMON_FRAMEWORK_VARS:
                                     self.logger.debug(
                                         f"Skipping cross-sibling import for common var: "
+                                        f"{mod}.{sym_name} in {file_path}"
+                                    )
+                                    continue
+                                # Service instance variables in the router layer
+                                # (e.g. order_service, product_service) must be injected
+                                # via FastAPI's Depends() rather than cross-router imports.
+                                # Only apply within app.routers — other packages (app.services
+                                # etc.) are allowed to import service instances from siblings.
+                                if (
+                                    _self_pkg == "app.routers"
+                                    and sym_name.lower().endswith("_service")
+                                ):
+                                    self.logger.debug(
+                                        f"Skipping cross-sibling service instance import: "
                                         f"{mod}.{sym_name} in {file_path}"
                                     )
                                     continue

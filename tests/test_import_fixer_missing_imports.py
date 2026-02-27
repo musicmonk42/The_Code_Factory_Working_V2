@@ -333,3 +333,157 @@ def root(request: Request, response: Response):
         
         assert result["status"] == "success"
         assert "import uuid" in result["fixed_code"]
+
+
+class TestCrossRouterImportGuard:
+    """ImportFixerEngine must not inject cross-router service imports."""
+
+    def setup_method(self):
+        self.fixer = ImportFixerEngine()
+
+    def test_cross_router_service_import_is_skipped(self):
+        """auth_service defined in app.routers.auth must not be imported into orders.py."""
+        code = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def list_orders(user=Depends(auth_service.get_current_user)):\n"
+            "    return []\n"
+        )
+        project_symbol_map = {
+            "auth_service": ("app.routers.auth", "auth_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/orders.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.auth import auth_service" not in fixed, (
+            "cross-router import of auth_service must be suppressed"
+        )
+
+    def test_service_instance_import_skipped_for_same_package_siblings(self):
+        """order_service defined in a sibling router module must not be injected."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def checkout():\n"
+            "    return order_service.process()\n"
+        )
+        project_symbol_map = {
+            "order_service": ("app.routers.orders", "order_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/checkout.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.orders import order_service" not in fixed, (
+            "cross-sibling service instance import must be suppressed"
+        )
+
+    def test_non_service_cross_router_import_also_skipped(self):
+        """Any cross-router import (both under app.routers) must be skipped."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def some_view():\n"
+            "    return helper_fn()\n"
+        )
+        project_symbol_map = {
+            "helper_fn": ("app.routers.utils", "helper_fn"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/orders.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.utils import helper_fn" not in fixed, (
+            "any cross-router import must be suppressed"
+        )
+
+    def test_cross_service_import_is_allowed(self):
+        """Importing from app.services (not app.routers) must still be allowed."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def create_order():\n"
+            "    return order_service.create()\n"
+        )
+        project_symbol_map = {
+            "order_service": ("app.services.orders", "order_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/checkout.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.services.orders import order_service" in fixed, (
+            "import from app.services (not app.routers) must be allowed"
+        )
+
+    def test_auth_service_is_listed_in_common_vars_for_sibling_routers(self):
+        """auth_service is listed in _COMMON_FRAMEWORK_VARS.
+
+        This gives belt-and-suspenders blocking for same-package router siblings
+        in addition to the cross-router ``startswith("app.routers.")`` guard.
+        The test exercises the same-package sibling path (``_self_pkg == _target_pkg``)
+        by using a project_symbol_map that resolves auth_service to the SAME package
+        as the file under test.
+        """
+        code = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n"
+            "\n"
+            "@router.get('/me')\n"
+            "async def me(user=Depends(auth_service.get_current_user)):\n"
+            "    return user\n"
+        )
+        # map auth_service to a sibling router module — same app.routers package
+        project_symbol_map = {
+            "auth_service": ("app.routers.auth", "auth_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/orders.py",
+            project_symbol_map=project_symbol_map,
+        )
+        assert "from app.routers.auth import auth_service" not in result["fixed_code"], (
+            "auth_service must not be imported cross-router "
+            "(blocked by cross-router guard AND _COMMON_FRAMEWORK_VARS)"
+        )
+
+    def test_non_router_same_package_service_import_not_blocked(self):
+        """A same-package *non-router* sibling's service var should not be suppressed.
+
+        The guard only applies to the app.routers package.  Sibling modules in
+        app.services (for example) are allowed to import service helpers from each
+        other.
+        """
+        code = (
+            "from app.services.base import BaseService\n"
+            "\n"
+            "class ProductService(BaseService):\n"
+            "    def list(self):\n"
+            "        return catalog_service.all()\n"
+        )
+        project_symbol_map = {
+            "catalog_service": ("app.services.catalog", "catalog_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/services/products.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        # app.services.products importing from app.services.catalog is allowed.
+        assert "from app.services.catalog import catalog_service" in fixed, (
+            "same-package service import outside app.routers must not be blocked"
+        )
