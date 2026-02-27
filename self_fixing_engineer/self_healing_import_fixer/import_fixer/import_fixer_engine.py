@@ -892,6 +892,47 @@ class ImportFixerEngine:
         'IO', 'TextIO', 'BinaryIO', 'Pattern', 'Match',
     }
 
+    # Common stdlib symbols that require 'from X import Y' syntax
+    STDLIB_SYMBOLS: Dict[str, tuple] = {
+        # uuid module
+        'UUID': ('uuid', 'UUID'),
+        # pathlib module
+        'Path': ('pathlib', 'Path'),
+        'PurePath': ('pathlib', 'PurePath'),
+        'PosixPath': ('pathlib', 'PosixPath'),
+        'WindowsPath': ('pathlib', 'WindowsPath'),
+        # decimal module
+        'Decimal': ('decimal', 'Decimal'),
+        # datetime module
+        'date': ('datetime', 'date'),
+        'time': ('datetime', 'time'),
+        'timedelta': ('datetime', 'timedelta'),
+        'timezone': ('datetime', 'timezone'),
+        # enum module
+        'Enum': ('enum', 'Enum'),
+        'IntEnum': ('enum', 'IntEnum'),
+        'Flag': ('enum', 'Flag'),
+        'auto': ('enum', 'auto'),
+        # abc module
+        'ABC': ('abc', 'ABC'),
+        'abstractmethod': ('abc', 'abstractmethod'),
+        # dataclasses module
+        'dataclass': ('dataclasses', 'dataclass'),
+        'field': ('dataclasses', 'field'),
+        # contextlib module
+        'contextmanager': ('contextlib', 'contextmanager'),
+        'asynccontextmanager': ('contextlib', 'asynccontextmanager'),
+        # functools module
+        'wraps': ('functools', 'wraps'),
+        'lru_cache': ('functools', 'lru_cache'),
+        'partial': ('functools', 'partial'),
+        # collections module
+        'defaultdict': ('collections', 'defaultdict'),
+        'deque': ('collections', 'deque'),
+        'Counter': ('collections', 'Counter'),
+        'OrderedDict': ('collections', 'OrderedDict'),
+    }
+
     # Common SQLAlchemy names and their import paths
     SQLALCHEMY_NAMES: Dict[str, tuple] = {
         'AsyncSession': ('sqlalchemy.ext.asyncio', 'AsyncSession'),
@@ -1205,6 +1246,12 @@ class ImportFixerEngine:
                 if name in self.SQLALCHEMY_NAMES and name not in imported_names:
                     missing_sqlalchemy[name] = self.SQLALCHEMY_NAMES[name]
 
+            # Find missing stdlib symbol imports
+            missing_stdlib_symbols: Dict[str, tuple] = {}
+            for name in used_names:
+                if name in self.STDLIB_SYMBOLS and name not in imported_names:
+                    missing_stdlib_symbols[name] = self.STDLIB_SYMBOLS[name]
+
             # Collect locally defined names (assignments, functions, classes) to
             # prevent re-importing symbols already defined in this file.
             locally_defined_names: set = set()
@@ -1306,7 +1353,7 @@ class ImportFixerEngine:
                         missing_project[name] = (mod, sym_name)
 
             if not missing_stdlib and not missing_fastapi and not missing_typing \
-                    and not missing_sqlalchemy and not missing_project:
+                    and not missing_sqlalchemy and not missing_project and not missing_stdlib_symbols:
                 # No missing imports detected, but we may have fixed incorrect imports
                 return {
                     "fixed_code": code,
@@ -1426,6 +1473,33 @@ class ImportFixerEngine:
                         new_imports.append(f'from {mod} import {", ".join(syms_sorted)}')
                         fixes_applied.append(f"Added missing {mod} imports: {', '.join(syms_sorted)}")
                         self.logger.info(f"Adding {mod} imports: {', '.join(syms_sorted)}")
+
+            # Handle stdlib symbol imports - group by module
+            if missing_stdlib_symbols:
+                by_module_stdlib: Dict[str, list] = {}
+                for sym, (mod, sym_name) in missing_stdlib_symbols.items():
+                    by_module_stdlib.setdefault(mod, []).append(sym_name)
+                for mod, syms in sorted(by_module_stdlib.items()):
+                    syms_sorted = sorted(syms)
+                    # Check if there's already a matching "from <mod> import" line
+                    stdlib_import_line_idx = None
+                    for i, line in enumerate(lines):
+                        if line.strip().startswith(f'from {mod} import'):
+                            stdlib_import_line_idx = i
+                            break
+                    if stdlib_import_line_idx is not None:
+                        existing_line = lines[stdlib_import_line_idx]
+                        m = re.match(rf'from {re.escape(mod)} import (.+)', existing_line)
+                        if m:
+                            existing_imports = {n.strip() for n in m.group(1).split(',') if n.strip()}
+                            all_imports = existing_imports | set(syms_sorted)
+                            lines[stdlib_import_line_idx] = f'from {mod} import {", ".join(sorted(all_imports))}'
+                            fixes_applied.append(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                            self.logger.info(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                    else:
+                        new_imports.append(f'from {mod} import {", ".join(syms_sorted)}')
+                        fixes_applied.append(f"Added missing stdlib symbol imports: from {mod} import {', '.join(syms_sorted)}")
+                        self.logger.info(f"Adding stdlib symbol imports: from {mod} import {', '.join(syms_sorted)}")
 
             # Handle project-local imports - group by module
             if missing_project:

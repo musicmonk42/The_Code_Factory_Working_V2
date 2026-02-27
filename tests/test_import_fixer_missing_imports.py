@@ -334,6 +334,63 @@ def root(request: Request, response: Response):
         assert result["status"] == "success"
         assert "import uuid" in result["fixed_code"]
 
+    def test_missing_uuid_symbol_import(self):
+        """Test fixing missing UUID symbol import from uuid module."""
+        code = """def get_id(order_id: UUID) -> str:
+    return str(order_id)
+"""
+        result = self.fixer.fix_code(code)
+
+        assert result["status"] == "success"
+        assert "from uuid import UUID" in result["fixed_code"]
+
+    def test_missing_path_symbol_import(self):
+        """Test fixing missing Path symbol import from pathlib module."""
+        code = """def get_path() -> Path:
+    return Path('/tmp')
+"""
+        result = self.fixer.fix_code(code)
+
+        assert result["status"] == "success"
+        assert "from pathlib import Path" in result["fixed_code"]
+
+    def test_missing_decimal_symbol_import(self):
+        """Test fixing missing Decimal symbol import from decimal module."""
+        code = """def calculate_price(amount: Decimal) -> Decimal:
+    return amount * Decimal('1.1')
+"""
+        result = self.fixer.fix_code(code)
+
+        assert result["status"] == "success"
+        assert "from decimal import Decimal" in result["fixed_code"]
+
+    def test_extend_existing_uuid_import(self):
+        """Test extending existing uuid import with UUID symbol."""
+        code = """from uuid import uuid4
+
+def get_id(order_id: UUID) -> str:
+    return str(uuid4())
+"""
+        result = self.fixer.fix_code(code)
+
+        assert result["status"] == "success"
+        # Should extend existing import, not add a new one
+        assert result["fixed_code"].count("from uuid import") == 1
+        assert "UUID" in result["fixed_code"]
+        assert "uuid4" in result["fixed_code"]
+
+    def test_multiple_stdlib_symbols(self):
+        """Test fixing multiple stdlib symbol imports from different modules."""
+        code = """def process(id: UUID, path: Path, amount: Decimal):
+    return str(id), str(path), float(amount)
+"""
+        result = self.fixer.fix_code(code)
+
+        assert result["status"] == "success"
+        assert "from uuid import UUID" in result["fixed_code"]
+        assert "from pathlib import Path" in result["fixed_code"]
+        assert "from decimal import Decimal" in result["fixed_code"]
+
 
 class TestCrossRouterImportGuard:
     """ImportFixerEngine must not inject cross-router service imports."""
