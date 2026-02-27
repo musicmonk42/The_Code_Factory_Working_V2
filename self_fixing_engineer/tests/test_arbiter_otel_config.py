@@ -440,6 +440,12 @@ class TestModuleFunctions:
 class TestResourceCreation:
     """Tests for resource creation with metadata."""
 
+    def setup_method(self):
+        """Reset singleton before each test."""
+        import self_fixing_engineer.arbiter.otel_config as otel
+        otel._config = None
+        OpenTelemetryConfig.reset_for_testing()
+
     @patch.dict(os.environ, {"AWS_REGION": "us-west-2", "AWS_ACCOUNT_ID": "123456789"})
     @patch("socket.gethostname", return_value="test-host")
     @patch("os.getpid", return_value=1234)
@@ -484,6 +490,12 @@ class TestResourceCreation:
 
 class TestTraceContext:
     """Tests for trace context manager."""
+
+    def setup_method(self):
+        """Reset singleton before each test."""
+        import self_fixing_engineer.arbiter.otel_config as otel
+        otel._config = None
+        OpenTelemetryConfig.reset_for_testing()
 
     def test_trace_context_with_tracer(self):
         """Test trace_context when tracer is available."""

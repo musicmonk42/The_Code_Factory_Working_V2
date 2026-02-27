@@ -39,6 +39,19 @@ from self_fixing_engineer.arbiter.plugins.multimodal.providers.default_multimoda
 class TestE2EMultiModalSystem:
     """End-to-end tests for the complete multimodal system."""
 
+    @pytest.fixture(autouse=True)
+    def ensure_default_providers(self):
+        """Ensure default multimodal providers are registered before each test."""
+        for modality, cls in [
+            ("image", DefaultImageProcessor),
+            ("audio", DefaultAudioProcessor),
+            ("video", DefaultVideoProcessor),
+            ("text", DefaultTextProcessor),
+        ]:
+            if "default" not in PluginRegistry.get_supported_providers(modality):
+                PluginRegistry.register_processor(modality, "default", cls)
+        yield
+
     @pytest.fixture
     async def plugin_with_config(self):
         """Create a fully configured MultiModalPlugin."""
