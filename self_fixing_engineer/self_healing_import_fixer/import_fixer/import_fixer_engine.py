@@ -66,7 +66,24 @@ try:  # pragma: no cover - presence is env dependent
 except Exception:  # pragma: no cover
     Counter = Histogram = Gauge = None  # type: ignore
 
-from shared.noop_metrics import NoopMetric as _DummyMetric, safe_metric as _get_or_create_metric
+try:
+    from shared.noop_metrics import NoopMetric as _DummyMetric, safe_metric as _get_or_create_metric
+except ImportError:
+    class _DummyMetric:
+        """Fallback no-op metric when shared.noop_metrics is unavailable."""
+        def __init__(self, *args, **kwargs): pass
+        def labels(self, *args, **kwargs): return self
+        def inc(self, *args, **kwargs): pass
+        def observe(self, *args, **kwargs): pass
+        def set(self, *args, **kwargs): pass
+
+    def _get_or_create_metric(metric_class, name, doc, labels=None):
+        if metric_class is None:
+            return _DummyMetric()
+        try:
+            return metric_class(name, doc, labels) if labels else metric_class(name, doc)
+        except Exception:
+            return _DummyMetric()
 
 
 class _AssertableCall:

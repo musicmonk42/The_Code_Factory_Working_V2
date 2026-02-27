@@ -99,7 +99,24 @@ metrics = get_prometheus_metrics()
 audit_logger = get_audit_logger()
 json_logger = get_json_logger()
 
-from omnicore_engine.metrics_utils import get_or_create_metric
+try:
+    from omnicore_engine.metrics_utils import get_or_create_metric
+except ImportError:
+    def get_or_create_metric(metric_class, name, documentation, labelnames=None):
+        """Fallback: return a no-op metric when omnicore_engine is unavailable."""
+        class _Noop:
+            def labels(self, *args, **kwargs): return self
+            def inc(self, *args, **kwargs): pass
+            def observe(self, *args, **kwargs): pass
+
+        if metric_class is None:
+            return _Noop()
+        try:
+            if labelnames:
+                return metric_class(name, documentation, labelnames)
+            return metric_class(name, documentation)
+        except Exception:
+            return _Noop()
 
 
 cache_hits = get_or_create_metric(
