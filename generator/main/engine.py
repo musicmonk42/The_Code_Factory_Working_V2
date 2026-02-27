@@ -3096,7 +3096,30 @@ def _auto_register_agents() -> None:
             f"Auto-registered {registered_count} agents: {list(_agent_registry)}",
             extra={"action": "auto_register", "count": registered_count}
         )
-        
+
+        # If no agents were registered via the standard path, attempt to bridge with
+        # the global OmniCore plugin registry so agents registered there are visible.
+        if registered_count == 0:
+            try:
+                from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as _global_registry
+                global_plugins = _global_registry.get_plugin_names()
+                if global_plugins:
+                    logger.info(
+                        f"Engine auto-registration found 0 agents but global plugin registry "
+                        f"has {len(global_plugins)} plugin(s): {global_plugins}. "
+                        "Agents may be loaded via the server's AgentLoader — "
+                        "use get_agent_loader() for agent availability checks.",
+                        extra={"action": "auto_register_bridge", "global_plugins": global_plugins},
+                    )
+                else:
+                    logger.warning(
+                        "Auto-registered 0 agents and global plugin registry is also empty. "
+                        "Workflow engine may not function correctly until agents are loaded.",
+                        extra={"action": "auto_register_empty"},
+                    )
+            except Exception as _bridge_err:
+                logger.debug(f"Could not check global plugin registry: {_bridge_err}")
+
     except ImportError as e:
         logger.warning(
             f"Could not auto-register agents: {e}",

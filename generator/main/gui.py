@@ -100,7 +100,11 @@ except ImportError:
 
     # Dummy runner components
     class DummyRunner:
-        pass
+        def __getattr__(self, name):
+            raise NotImplementedError(
+                f"Runner.{name}() is unavailable: runner modules failed to import. "
+                "Check logs for import errors."
+            )
 
     class DummyConfigWatcher:
         def __init__(self, *args, **kwargs):
@@ -116,7 +120,11 @@ except ImportError:
             pass
 
     class DummyIntentParser:
-        pass
+        def __getattr__(self, name):
+            raise NotImplementedError(
+                f"IntentParser.{name}() is unavailable: IntentParser module failed to import. "
+                "Check logs for import errors."
+            )
 
     def load_config(*args, **kwargs):
         return {}
