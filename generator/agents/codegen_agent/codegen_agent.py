@@ -1212,6 +1212,119 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
     return merged
 
 
+def _parse_router_instance_prefixes(tree: ast.AST) -> Dict[str, str]:
+    """Return ``{variable_name: prefix}`` for all APIRouter/Router assignments.
+
+    Scans the AST for statements of the form::
+
+        router = APIRouter(prefix="/api/v1/products")
+
+    and returns a mapping from the assigned variable name to the prefix string.
+    """
+    prefixes: Dict[str, str] = {}
+    for _node in ast.walk(tree):
+        if not (isinstance(_node, ast.Assign) and isinstance(_node.value, ast.Call)):
+            continue
+        _call = _node.value
+        _func_name = ""
+        if isinstance(_call.func, ast.Name):
+            _func_name = _call.func.id
+        elif isinstance(_call.func, ast.Attribute):
+            _func_name = _call.func.attr
+        if _func_name not in ("APIRouter", "Router"):
+            continue
+        for _kw in _call.keywords:
+            if _kw.arg == "prefix" and isinstance(_kw.value, ast.Constant):
+                for _target in _node.targets:
+                    if isinstance(_target, ast.Name):
+                        prefixes[_target.id] = str(_kw.value.value)
+    return prefixes
+
+
+def _parse_include_router_prefixes(tree: ast.AST) -> Dict[str, str]:
+    """Return ``{router_alias: prefix}`` for all ``app.include_router()`` calls.
+
+    Scans the AST for calls of the form::
+
+        app.include_router(router, prefix="/api/v1")
+
+    and returns a mapping from the router variable name to the prefix string.
+    Only entries that carry an explicit ``prefix=`` keyword are included.
+    """
+    prefixes: Dict[str, str] = {}
+    for _node in ast.walk(tree):
+        if not isinstance(_node, ast.Call):
+            continue
+        _func = _node.func
+        if not (isinstance(_func, ast.Attribute) and _func.attr == "include_router"):
+            continue
+        if not _node.args:
+            continue
+        _router_arg = _node.args[0]
+        _router_name = ""
+        if isinstance(_router_arg, ast.Name):
+            _router_name = _router_arg.id
+        elif isinstance(_router_arg, ast.Attribute):
+            _router_name = _router_arg.attr
+        if not _router_name:
+            continue
+        for _kw in _node.keywords:
+            if _kw.arg == "prefix" and isinstance(_kw.value, ast.Constant):
+                prefixes[_router_name] = str(_kw.value.value)
+    return prefixes
+
+
+def _extract_route_entries(
+    tree: ast.AST,
+    router_prefixes: Dict[str, str],
+) -> List[Tuple[str, str, str]]:
+    """Return ``[(METHOD, normalized_path, router_var), ...]`` from a parsed AST.
+
+    Iterates every function/async-function definition and inspects its decorator
+    list for HTTP route decorators (``@router.get``, ``@app.post``, etc.).  The
+    inline ``APIRouter(prefix=...)`` is already folded into *normalized_path*;
+    path-parameter tokens such as ``{item_id}`` are replaced with
+    ``_PATH_PARAM_WILDCARD``.  The ``include_router()`` prefix from
+    ``app/main.py`` is intentionally **not** applied here — callers that need
+    it should use ``_parse_include_router_prefixes`` and combine separately.
+
+    Args:
+        tree: Parsed AST of a single source file.
+        router_prefixes: Mapping produced by ``_parse_router_instance_prefixes``.
+
+    Returns:
+        List of ``(METHOD, normalized_path, router_var)`` tuples.
+    """
+    entries: List[Tuple[str, str, str]] = []
+    for _node in ast.walk(tree):
+        if not isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for _dec in getattr(_node, "decorator_list", []):
+            if not isinstance(_dec, ast.Call) or not isinstance(_dec.func, ast.Attribute):
+                continue
+            _method = _dec.func.attr.lower()
+            if _method not in _HTTP_ROUTE_METHODS:
+                continue
+            _router_var = ""
+            if isinstance(_dec.func.value, ast.Name):
+                _router_var = _dec.func.value.id
+            if not _dec.args or not isinstance(_dec.args[0], ast.Constant):
+                continue
+            _path = str(_dec.args[0].value)
+            _inline_prefix = router_prefixes.get(_router_var, "")
+            if _inline_prefix:
+                _full_path = _inline_prefix.rstrip("/") + "/" + _path.lstrip("/")
+            else:
+                _full_path = _path
+            # Normalize: strip trailing slash (but keep root "/")
+            if len(_full_path) > 1:
+                _full_path = _full_path.rstrip("/")
+            # Normalize path parameters using the module-level wildcard constant
+            _full_path = re.sub(r'\{[^}]+\}', _PATH_PARAM_WILDCARD, _full_path)
+            entries.append((_method.upper(), _full_path, _router_var))
+    return entries
+
+
 def _extract_routes_from_files(files: Dict[str, str]) -> Set[Tuple[str, str]]:
     """Extract HTTP routes from router files using AST-based analysis.
 
@@ -1219,8 +1332,9 @@ def _extract_routes_from_files(files: Dict[str, str]) -> Set[Tuple[str, str]]:
     ``@app.<method>(path)`` patterns (where method is get/post/put/delete/patch
     etc.) and returns a set of ``(METHOD, path)`` tuples.
 
-    Also performs prefix concatenation when a router is constructed with a
-    ``prefix=`` keyword argument.
+    Also performs prefix concatenation for both inline ``APIRouter(prefix=…)``
+    arguments and ``app.include_router(router, prefix=…)`` calls in
+    ``app/main.py``.
 
     Args:
         files: Dict mapping file paths to source content.
@@ -1229,9 +1343,12 @@ def _extract_routes_from_files(files: Dict[str, str]) -> Set[Tuple[str, str]]:
         Set of ``(METHOD, normalized_path)`` tuples, e.g.
         ``{("GET", "/api/v1/audit"), ("POST", "/api/v1/orders")}``.
     """
-    _HTTP_METHODS = frozenset({"get", "post", "put", "delete", "patch", "head", "options"})
     routes: Set[Tuple[str, str]] = set()
 
+    # First pass: collect (method, path, router_var) from every Python file.
+    # We retain entries keyed by filepath so the second pass can reuse them
+    # without reparsing.
+    _file_entries: Dict[str, List[Tuple[str, str, str]]] = {}
     for _filepath, _content in files.items():
         if not _filepath.endswith(".py") or not isinstance(_content, str):
             continue
@@ -1239,60 +1356,37 @@ def _extract_routes_from_files(files: Dict[str, str]) -> Set[Tuple[str, str]]:
             _tree = ast.parse(_content)
         except SyntaxError:
             continue
+        _entries = _extract_route_entries(
+            _tree, _parse_router_instance_prefixes(_tree)
+        )
+        _file_entries[_filepath] = _entries
+        for _method, _path, _ in _entries:
+            routes.add((_method, _path))
 
-        # Extract router prefixes: APIRouter(prefix="/api/v1/products")
-        _router_prefixes: Dict[str, str] = {}  # variable_name -> prefix
-        for _node in ast.walk(_tree):
-            if isinstance(_node, ast.Assign) and isinstance(_node.value, ast.Call):
-                _call = _node.value
-                _func_name = ""
-                if isinstance(_call.func, ast.Name):
-                    _func_name = _call.func.id
-                elif isinstance(_call.func, ast.Attribute):
-                    _func_name = _call.func.attr
-                if _func_name in ("APIRouter", "Router"):
-                    for _kw in _call.keywords:
-                        if _kw.arg == "prefix" and isinstance(_kw.value, ast.Constant):
-                            for _target in _node.targets:
-                                if isinstance(_target, ast.Name):
-                                    _router_prefixes[_target.id] = str(_kw.value.value)
-
-        # Extract decorated route functions
-        for _node in ast.walk(_tree):
-            if not isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            for _dec in getattr(_node, "decorator_list", []):
-                if not isinstance(_dec, ast.Call):
-                    continue
-                _func = _dec.func
-                if not isinstance(_func, ast.Attribute):
-                    continue
-                _method = _func.attr.lower()
-                if _method not in _HTTP_ROUTE_METHODS:
-                    continue
-                # Get router variable name
-                _router_var = ""
-                if isinstance(_func.value, ast.Name):
-                    _router_var = _func.value.id
-                # Get path from first positional argument
-                if not _dec.args:
-                    continue
-                _path_arg = _dec.args[0]
-                if not isinstance(_path_arg, ast.Constant):
-                    continue
-                _path = str(_path_arg.value)
-                # Apply prefix if available
-                _prefix = _router_prefixes.get(_router_var, "")
-                if _prefix:
-                    _full_path = _prefix.rstrip("/") + "/" + _path.lstrip("/")
-                else:
-                    _full_path = _path
-                # Normalize: strip trailing slash (but keep root "/")
-                if len(_full_path) > 1:
-                    _full_path = _full_path.rstrip("/")
-                # Normalize path parameters using the module-level wildcard constant
-                _full_path = re.sub(r'\{[^}]+\}', _PATH_PARAM_WILDCARD, _full_path)
-                routes.add((_method.upper(), _full_path))
+    # Second pass: apply include_router() prefixes from app/main.py.
+    # Routes whose router variable appears in an include_router() call with a
+    # prefix= keyword get an additional entry with the combined prefix.
+    _main_content = files.get("app/main.py", "")
+    if _main_content:
+        try:
+            _main_tree = ast.parse(_main_content)
+        except SyntaxError:
+            _main_tree = None
+        if _main_tree:
+            _include_prefixes = _parse_include_router_prefixes(_main_tree)
+            if _include_prefixes:
+                for _entries in _file_entries.values():
+                    for _method, _path, _router_var in _entries:
+                        if _router_var not in _include_prefixes:
+                            continue
+                        _inc_prefix = _include_prefixes[_router_var]
+                        _prefixed = _inc_prefix.rstrip("/") + "/" + _path.lstrip("/")
+                        if len(_prefixed) > 1:
+                            _prefixed = _prefixed.rstrip("/")
+                        # _path is already normalised by _extract_route_entries;
+                        # only the newly prepended prefix segment needs checking.
+                        _prefixed = re.sub(r'\{[^}]+\}', _PATH_PARAM_WILDCARD, _prefixed)
+                        routes.add((_method, _prefixed))
 
     return routes
 

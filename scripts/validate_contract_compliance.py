@@ -91,7 +91,6 @@ class ContractValidator:
         required_files = [
             "app/main.py",
             "app/routes.py",
-            "app/schemas.py",
             "requirements.txt",
             "README.md",
         ]
@@ -99,6 +98,14 @@ class ContractValidator:
             full_path = self.output_dir / file_path
             if not full_path.exists():
                 raise AssertionError(f"Required file missing: {file_path}")
+
+        # Accept either app/schemas.py (flat) or app/schemas/ (package with .py files)
+        schemas_file = self.output_dir / "app" / "schemas.py"
+        schemas_dir = self.output_dir / "app" / "schemas"
+        if not schemas_file.exists() and not (schemas_dir.is_dir() and any(schemas_dir.glob("*.py"))):
+            raise AssertionError(
+                "Required schemas module missing: need either app/schemas.py or app/schemas/ package with .py files"
+            )
         
         # Check for double-nesting (should NOT exist).
         # A path like uploads/.../generated/<job_id>/ is valid — the output_dir itself
@@ -113,10 +120,20 @@ class ContractValidator:
     def check_schema_validation(self):
         """Issue #2: Verify Pydantic validators are used, not manual validation."""
         schemas_path = self.output_dir / "app" / "schemas.py"
-        if not schemas_path.exists():
-            raise AssertionError("app/schemas.py not found")
-        
-        schema_content = schemas_path.read_text()
+        schemas_dir = self.output_dir / "app" / "schemas"
+
+        if schemas_path.exists():
+            schema_content = schemas_path.read_text()
+        elif schemas_dir.is_dir():
+            # Read all .py files in the schemas package
+            schema_content = ""
+            for py_file in sorted(schemas_dir.glob("*.py")):
+                schema_content += py_file.read_text() + "\n"
+        else:
+            raise AssertionError("app/schemas.py or app/schemas/ package not found")
+
+        if not schema_content.strip():
+            raise AssertionError("Schema files are empty")
         
         # Check for @validator or @field_validator decorator usage (Pydantic V1 or V2)
         if "@validator" not in schema_content and "@field_validator" not in schema_content:

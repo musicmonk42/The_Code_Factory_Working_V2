@@ -116,9 +116,10 @@ except ImportError:
 class AuditJsonFormatter(jsonlogger.JsonFormatter):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._hmac_key = SECRETS_MANAGER.get_secret(
+        _hmac_key_value = SECRETS_MANAGER.get_secret(
             "SIEM_AUDIT_LOG_HMAC_KEY", required=PROD_MODE
-        ).encode()
+        )
+        self._hmac_key = _hmac_key_value.encode() if _hmac_key_value is not None else None
 
     def add_fields(self, log_record, message_dict):
         super().add_fields(log_record, message_dict)
@@ -129,9 +130,12 @@ class AuditJsonFormatter(jsonlogger.JsonFormatter):
         # Canonicalize and sign the log record
         payload = {k: v for k, v in log_record.items() if k not in ["signature"]}
         payload_str = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-        signature = hmac.new(
-            self._hmac_key, payload_str.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
+        if self._hmac_key is not None:
+            signature = hmac.new(
+                self._hmac_key, payload_str.encode("utf-8"), hashlib.sha256
+            ).hexdigest()
+        else:
+            signature = ""
         log_record["signature"] = signature
 
 
@@ -587,9 +591,10 @@ class PersistentWALQueue(EventQueue):
         self._max_log_size = 10 * 1024 * 1024
         self._log_rotation_interval = 86400
         self._last_rotation_time = time.time()
-        self._hmac_key = SECRETS_MANAGER.get_secret(
+        _wal_hmac_value = SECRETS_MANAGER.get_secret(
             "SIEM_WAL_HMAC_KEY", required=PROD_MODE
-        ).encode()
+        )
+        self._hmac_key = _wal_hmac_value.encode() if _wal_hmac_value is not None else b""
 
         if not os.path.exists(self._dir):
             os.makedirs(self._dir, exist_ok=True)
