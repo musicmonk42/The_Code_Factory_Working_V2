@@ -802,6 +802,7 @@ def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
 
 
 
+def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
     """
     Parses the LLM response, handling both multi-file JSON and single-file code.
 
