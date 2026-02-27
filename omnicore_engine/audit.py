@@ -524,7 +524,12 @@ class KafkaAuditStreamer:
         self.logger = logger
         self._last_connection_attempt = 0
         self._connection_retry_delay = 60  # seconds
-        
+
+        # Don't create real Kafka producers during testing
+        if os.environ.get("TESTING") == "1":
+            self.logger.info("TESTING mode: Skipping Kafka producer initialization")
+            return
+
         if KAFKA_AVAILABLE:
             try:
                 # Configure Kafka producer with retry and backoff settings

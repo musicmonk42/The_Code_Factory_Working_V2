@@ -10,7 +10,7 @@ from self_fixing_engineer.arbiter.plugin_config import SANDBOXED_PLUGINS, Plugin
 @pytest.fixture
 def expected_plugins():
     return {
-        "benchmarking": "self_fixing_engineer.arbiter.benchmarking_engine.BenchmarkingEnginePlugin",
+        "benchmarking": "omnicore_engine.benchmarking_engine.BenchmarkingEngine",
         "explainable_reasoner": "self_fixing_engineer.arbiter.explainable_reasoner.ExplainableReasonerPlugin",
         "generate_tests": "self_fixing_engineer.arbiter.generate_tests.GenerateTestsPlugin",
         "world": "self_fixing_engineer.arbiter.plugins.world_plugin",

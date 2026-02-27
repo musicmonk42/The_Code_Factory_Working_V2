@@ -470,19 +470,24 @@ async def test_load_success(pg_client, mocker: MockerFixture):
     mock_conn = pg_client._test_mock_conn
     mock_conn.fetch = mocker.AsyncMock(return_value=[SAMPLE_FEEDBACK_DATA])
 
+    before = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="load",
+        table="feedback",
+        status="success",
+    )
     record = await pg_client.load("feedback", SAMPLE_FEEDBACK_DATA["id"])
     assert record is not None
     assert record["id"] == SAMPLE_FEEDBACK_DATA["id"]
-    assert (
-        get_metric_value(
-            DB_CALLS_TOTAL,
-            db_type="postgresql",
-            operation="load",
-            table="feedback",
-            status="success",
-        )
-        == 1
+    after = get_metric_value(
+        DB_CALLS_TOTAL,
+        db_type="postgresql",
+        operation="load",
+        table="feedback",
+        status="success",
     )
+    assert after - before == 1
 
 
 @pytest.mark.asyncio
