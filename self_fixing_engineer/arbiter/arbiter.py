@@ -2409,8 +2409,9 @@ else:
                         try:
                             best_config = evolve_configs(
                                 audit_logger=self.audit_log_manager,
-                                generations=5,
-                                pop_size=10,
+                                # IB-2: read from env so K8s/Helm/Compose configs take effect
+                                generations=int(os.getenv("EVOLUTION_GENERATIONS", "5")),
+                                pop_size=int(os.getenv("EVOLUTION_POPULATION_SIZE", "10")),
                             )
                             self.log_event(
                                 f"GA found optimal configuration: {best_config}",

@@ -9,7 +9,7 @@
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
-	test-arbiter-policy test-arbiter-integration
+	test-arbiter-policy test-arbiter-integration test-evolution test-dlt
 
 # Default target
 .DEFAULT_GOAL := help
@@ -99,6 +99,20 @@ test-arbiter-integration: ## Run full Arbiter integration tests (PolicyEngine→
 		       -k "arbiter or policy or facade or constitution" \
 		       -v --tb=short
 	@echo "$(GREEN)Arbiter integration tests complete!$(NC)"
+
+test-evolution: ## Run Genetic Algorithm / Evolution Engine tests (EV-2, EV-3, IB-2 fixes)
+	@echo "$(BLUE)Running Evolution Engine tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
+		EVOLUTION_POPULATION_SIZE=4 EVOLUTION_GENERATIONS=2 && \
+		pytest -k "evolution or evolve or genetic or deap or gene" -v --tb=short
+	@echo "$(GREEN)Evolution Engine tests complete!$(NC)"
+
+test-dlt: ## Run DLT backend tests (RB-5 EVM support, IB-1 checkpoint bridge, SEC-1 HMAC)
+	@echo "$(BLUE)Running DLT backend tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
+		DLT_TYPE=fabric PRODUCTION_MODE=0 && \
+		pytest -k "dlt or checkpoint_manager or hmac or dlt_backend" -v --tb=short
+	@echo "$(GREEN)DLT backend tests complete!$(NC)"
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(BLUE)Running tests with coverage...$(NC)"
