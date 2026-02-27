@@ -1028,7 +1028,8 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     # ------------------------------------------------------------------ #
     _depends_re = re.compile(r'\bDepends\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)')
     _router_file_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
-    _builtins = set(__builtins__.keys()) if isinstance(__builtins__, dict) else set(dir(__builtins__))
+    import builtins as _builtins_mod
+    _python_builtins: FrozenSet[str] = frozenset(dir(_builtins_mod))
 
     for path, content in list(updated.items()):
         if not _router_file_re.match(path):
@@ -1038,31 +1039,51 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         if not depends_names:
             continue
 
-        # Collect names already defined or imported in this file
-        defined_names: set = set()
-        # function/class definitions
-        for m in re.finditer(r'^(?:async\s+)?(?:def|class)\s+([A-Za-z_][A-Za-z0-9_]*)', content, re.MULTILINE):
-            defined_names.add(m.group(1))
-        # bare imports: "import name" or "import pkg.mod as name" (supports "import a, b")
-        for m in re.finditer(r'^\s*import\s+(.+)', content, re.MULTILINE):
-            for part in m.group(1).split(','):
-                part = part.strip()
-                if ' as ' in part:
-                    defined_names.add(part.split(' as ')[-1].strip())
-                else:
-                    defined_names.add(part.strip().split('.')[0])
-        # from ... import name [as alias]
-        for m in re.finditer(r'^\s*from\s+\S+\s+import\s+(.+)', content, re.MULTILINE):
-            for part in m.group(1).split(','):
-                part = part.strip()
-                if ' as ' in part:
-                    defined_names.add(part.split(' as ')[-1].strip())
-                else:
-                    defined_names.add(part.strip())
+        # Use the AST to collect every name that is defined or imported in this
+        # file.  AST parsing correctly handles multi-line parenthesised imports,
+        # aliased imports, and all other valid Python import styles.  A regex
+        # fallback handles files that contain syntax errors (which can occur when
+        # the LLM produces partially-broken code).
+        defined_names: Set[str] = set()
+        try:
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    defined_names.add(node.name)
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        defined_names.add(alias.asname or alias.name.split(".")[0])
+                elif isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        defined_names.add(alias.asname or alias.name)
+        except SyntaxError:
+            # Fallback: regex-based extraction for files with syntax errors.
+            for m in re.finditer(
+                r'^(?:async\s+)?(?:def|class)\s+([A-Za-z_][A-Za-z0-9_]*)',
+                content, re.MULTILINE,
+            ):
+                defined_names.add(m.group(1))
+            for m in re.finditer(r'^\s*import\s+(.+)', content, re.MULTILINE):
+                for part in m.group(1).split(','):
+                    part = part.strip()
+                    defined_names.add(
+                        part.split(' as ')[-1].strip() if ' as ' in part
+                        else part.split('.')[0]
+                    )
+            for m in re.finditer(
+                r'^\s*from\s+\S+\s+import\s+\(?(.+?)\)?$', content, re.MULTILINE
+            ):
+                for part in m.group(1).split(','):
+                    part = part.strip().rstrip(')')
+                    if not part or part == '*':
+                        continue
+                    defined_names.add(
+                        part.split(' as ')[-1].strip() if ' as ' in part else part
+                    )
 
-        stubs_to_inject: list = []
+        stubs_to_inject: List[Tuple[str, str]] = []
         for dep_name in sorted(depends_names):
-            if dep_name in defined_names or dep_name in _builtins:
+            if dep_name in defined_names or dep_name in _python_builtins:
                 continue
             stub = (
                 f"\nasync def {dep_name}() -> dict:\n"
@@ -1074,7 +1095,8 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         if not stubs_to_inject:
             continue
 
-        # Insert stubs after the last import block (before first non-import line)
+        # Insert stubs immediately after the last top-level import statement so
+        # the injected functions are syntactically valid and importable.
         lines = content.splitlines(keepends=True)
         insert_idx = 0
         past_imports = False
@@ -1085,7 +1107,7 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             if stripped.startswith('import ') or stripped.startswith('from '):
                 insert_idx = i + 1
             elif stripped == '' or stripped.startswith('#'):
-                # blank/comment: tentatively advance only if still in import block
+                # blank/comment lines: stay in the import block tentatively
                 pass
             else:
                 past_imports = True
