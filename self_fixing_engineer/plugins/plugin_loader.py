@@ -5,218 +5,170 @@ PluginLoader — wires all integration plugins into the OmniCore / Arbiter
 plugin registry so that list_plugins(), get_plugin_for_task(), and
 discover() can find them.
 
-Each plugin is wrapped with a try/except so that a missing optional
-dependency (e.g. `aiormq` for RabbitMQ) does not prevent the other
-plugins from loading.
+Design principles
+-----------------
+* **Lazy registry acquisition** — the registry is resolved inside
+  ``initialize_all_plugins()``, never at module import time.
+* **Fault-isolated loading** — each plugin is wrapped in its own
+  try/except so a missing optional dependency (e.g. ``aiormq`` for
+  RabbitMQ) never prevents the other plugins from loading.
+* **Class registration only** — the loader registers gateway *classes*
+  (factories) with the registry.  Instantiation and lifecycle management
+  (``startup`` / ``shutdown``) remain the responsibility of each plugin's
+  own ``initialize()`` / ``shutdown()`` / ``app_lifecycle()`` functions.
+* **Idempotent** — safe to call more than once; already-registered names
+  are silently skipped by the registry.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import List, Optional
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Registry helpers (soft import so this module is importable standalone)
+# Soft import of PlugInKind so this module is importable without the full
+# omnicore / arbiter stack being present (e.g. in unit tests).
 # ---------------------------------------------------------------------------
 try:
-    from self_fixing_engineer.arbiter.arbiter_plugin_registry import (
-        PlugInKind,
-        get_registry,
-    )
-    _registry = get_registry()
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind
 except Exception:  # pragma: no cover
-    _registry = None  # type: ignore
     try:
-        from omnicore_engine.plugin_base import PlugInKind
+        from omnicore_engine.plugin_base import PlugInKind  # type: ignore[assignment]
     except Exception:
         from enum import Enum
 
-        class PlugInKind(Enum):  # type: ignore
+        class PlugInKind(Enum):  # type: ignore[no-redef]
             SINK = "sink"
             INTEGRATION = "integration"
 
 
-# ---------------------------------------------------------------------------
-# Track which gateway instances were initialised so we can shut them down.
-# ---------------------------------------------------------------------------
-_active_gateways: List = []
+def _get_registry() -> Optional[Any]:
+    """Return the active plugin registry, or *None* if unavailable."""
+    try:
+        from self_fixing_engineer.arbiter.arbiter_plugin_registry import get_registry
+        return get_registry()
+    except Exception:  # pragma: no cover
+        return None
 
+
+def _register(registry: Any, kind: Any, name: str, cls: Any, version: str = "1.0.0") -> None:
+    """Register *cls* with *registry* under *kind* / *name*."""
+    if registry is None:
+        return
+    try:
+        registry.register_instance(kind=kind, name=name, instance=cls, version=version)
+    except Exception as exc:
+        logger.warning(
+            "Failed to register plugin '%s' with registry: %s",
+            name,
+            exc,
+            exc_info=True,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Public lifecycle API
+# ---------------------------------------------------------------------------
 
 async def initialize_all_plugins() -> None:
-    """Import every integration plugin and register it with the registry."""
-    global _active_gateways
-    _active_gateways = []
+    """Import every integration plugin class and register it with the registry.
 
-    # ---- Azure EventGrid ----
+    Plugin lifecycle (``startup`` / ``shutdown``) is *not* managed here —
+    each plugin module owns that via its own ``initialize()`` and
+    ``shutdown()`` / ``app_lifecycle()`` functions.
+
+    Raises nothing — load failures are logged as warnings so a broken
+    optional dependency never prevents the rest from being registered.
+    """
+    registry = _get_registry()
+
+    # ---- Azure EventGrid (INTEGRATION) ----
     try:
-        from self_fixing_engineer.plugins.azure_eventgrid_plugin.azure_eventgrid_plugin import (
+        from self_fixing_engineer.plugins.azure_eventgrid_plugin.azure_eventgrid_plugin import (  # noqa: E501
             AzureEventGridAuditHook,
         )
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.INTEGRATION,
-                name="azure_eventgrid",
-                instance=AzureEventGridAuditHook,
-                version="1.0.0",
-            )
+        _register(registry, PlugInKind.INTEGRATION, "azure_eventgrid", AzureEventGridAuditHook)
         logger.info("azure_eventgrid plugin registered.")
     except Exception as exc:
-        logger.warning(f"azure_eventgrid plugin could not be loaded: {exc}")
+        logger.warning("azure_eventgrid plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- DLT Backend ----
+    # ---- DLT Backend (INTEGRATION) ----
     try:
-        from self_fixing_engineer.plugins.dlt_backend.dlt_backend import (
-            CheckpointManager,
-        )
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.INTEGRATION,
-                name="dlt_backend",
-                instance=CheckpointManager,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.dlt_backend.dlt_backend import CheckpointManager
+        _register(registry, PlugInKind.INTEGRATION, "dlt_backend", CheckpointManager)
         logger.info("dlt_backend plugin registered.")
     except Exception as exc:
-        logger.warning(f"dlt_backend plugin could not be loaded: {exc}")
+        logger.warning("dlt_backend plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- Kafka ----
+    # ---- Kafka (SINK) ----
     try:
         from self_fixing_engineer.plugins.kafka.kafka_plugin import KafkaAuditPlugin
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="kafka",
-                instance=KafkaAuditPlugin,
-                version="1.0.0",
-            )
+        _register(registry, PlugInKind.SINK, "kafka", KafkaAuditPlugin)
         logger.info("kafka plugin registered.")
     except Exception as exc:
-        logger.warning(f"kafka plugin could not be loaded: {exc}")
+        logger.warning("kafka plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- PagerDuty ----
+    # ---- PagerDuty (INTEGRATION) ----
     try:
         from self_fixing_engineer.plugins.pagerduty_plugin.pagerduty_plugin import (
             PagerDutyGateway,
-            initialize as pd_initialize,
-            shutdown as pd_shutdown,
         )
-        await pd_initialize()
-        from self_fixing_engineer.plugins.pagerduty_plugin import pagerduty_plugin as _pd_mod
-        if _pd_mod.pagerduty_gateway is not None:
-            _active_gateways.append(_pd_mod.pagerduty_gateway)
-            await _pd_mod.pagerduty_gateway.startup()
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.INTEGRATION,
-                name="pagerduty",
-                instance=PagerDutyGateway,
-                version="1.0.0",
-            )
+        _register(registry, PlugInKind.INTEGRATION, "pagerduty", PagerDutyGateway)
         logger.info("pagerduty plugin registered.")
     except Exception as exc:
-        logger.warning(f"pagerduty plugin could not be loaded: {exc}")
+        logger.warning("pagerduty plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- Google Pub/Sub ----
+    # ---- Google Pub/Sub (SINK) ----
     try:
-        from self_fixing_engineer.plugins.pubsub_plugin.pubsub_plugin import (
-            PubSubGateway,
-            initialize as ps_initialize,
-        )
-        await ps_initialize()
-        from self_fixing_engineer.plugins.pubsub_plugin import pubsub_plugin as _ps_mod
-        if _ps_mod.pubsub_gateway is not None:
-            _active_gateways.append(_ps_mod.pubsub_gateway)
-            await _ps_mod.pubsub_gateway.startup()
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="pubsub",
-                instance=PubSubGateway,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.pubsub_plugin.pubsub_plugin import PubSubGateway
+        _register(registry, PlugInKind.SINK, "pubsub", PubSubGateway)
         logger.info("pubsub plugin registered.")
     except Exception as exc:
-        logger.warning(f"pubsub plugin could not be loaded: {exc}")
+        logger.warning("pubsub plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- RabbitMQ ----
+    # ---- RabbitMQ (SINK) ----
     try:
-        from self_fixing_engineer.plugins.rabbitmq_plugin.rabbitmq_plugin import (
-            RabbitMQGateway,
-            initialize as rmq_initialize,
-        )
-        await rmq_initialize()
-        from self_fixing_engineer.plugins.rabbitmq_plugin import rabbitmq_plugin as _rmq_mod
-        if _rmq_mod.rabbitmq_gateway is not None:
-            _active_gateways.append(_rmq_mod.rabbitmq_gateway)
-            await _rmq_mod.rabbitmq_gateway.startup()
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="rabbitmq",
-                instance=RabbitMQGateway,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.rabbitmq_plugin.rabbitmq_plugin import RabbitMQGateway
+        _register(registry, PlugInKind.SINK, "rabbitmq", RabbitMQGateway)
         logger.info("rabbitmq plugin registered.")
     except Exception as exc:
-        logger.warning(f"rabbitmq plugin could not be loaded: {exc}")
+        logger.warning("rabbitmq plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- SIEM ----
+    # ---- SIEM (SINK) ----
     try:
-        from self_fixing_engineer.plugins.siem_plugin.siem_plugin import (
-            SIEMGatewayManager,
-        )
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="siem",
-                instance=SIEMGatewayManager,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.siem_plugin.siem_plugin import SIEMGatewayManager
+        _register(registry, PlugInKind.SINK, "siem", SIEMGatewayManager)
         logger.info("siem plugin registered.")
     except Exception as exc:
-        logger.warning(f"siem plugin could not be loaded: {exc}")
+        logger.warning("siem plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- Slack ----
+    # ---- Slack (SINK) ----
     try:
-        from self_fixing_engineer.plugins.slack_plugin.slack_plugin import (
-            SlackGatewayManager,
-        )
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="slack",
-                instance=SlackGatewayManager,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.slack_plugin.slack_plugin import SlackGatewayManager
+        _register(registry, PlugInKind.SINK, "slack", SlackGatewayManager)
         logger.info("slack plugin registered.")
     except Exception as exc:
-        logger.warning(f"slack plugin could not be loaded: {exc}")
+        logger.warning("slack plugin could not be loaded: %s", exc, exc_info=True)
 
-    # ---- SNS ----
+    # ---- SNS (SINK) ----
     try:
-        from self_fixing_engineer.plugins.sns_plugin.sns_plugin import (
-            SNSGatewayManager,
-        )
-        if _registry is not None:
-            _registry.register_instance(
-                kind=PlugInKind.SINK,
-                name="sns",
-                instance=SNSGatewayManager,
-                version="1.0.0",
-            )
+        from self_fixing_engineer.plugins.sns_plugin.sns_plugin import SNSGatewayManager
+        _register(registry, PlugInKind.SINK, "sns", SNSGatewayManager)
         logger.info("sns plugin registered.")
     except Exception as exc:
-        logger.warning(f"sns plugin could not be loaded: {exc}")
+        logger.warning("sns plugin could not be loaded: %s", exc, exc_info=True)
 
     logger.info("PluginLoader: all integration plugins processed.")
 
 
 async def shutdown_all_plugins() -> None:
-    """Gracefully shut down all gateway instances started by initialize_all_plugins."""
-    for gateway in _active_gateways:
-        try:
-            await gateway.shutdown()
-        except Exception as exc:
-            logger.warning(f"Error shutting down gateway {gateway!r}: {exc}")
-    _active_gateways.clear()
-    logger.info("PluginLoader: all plugins shut down.")
+    """No-op: gateway lifecycle is managed by each plugin module.
+
+    Retained for API symmetry and forward-compatibility — callers that
+    wire ``initialize_all_plugins`` / ``shutdown_all_plugins`` into a
+    central application lifecycle do not need to change when a future
+    plugin requires explicit shutdown work here.
+    """
+    logger.info("PluginLoader: shutdown complete.")
