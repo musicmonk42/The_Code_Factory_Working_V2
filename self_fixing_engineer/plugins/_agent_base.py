@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 __all__ = [
     "AgentMetrics",
+    "agent_span",
     "structured_log",
     "emit_audit_event_safe",
     "_validate_path",
@@ -201,6 +202,51 @@ async def emit_audit_event_safe(event_type: str, details: Optional[Dict[str, Any
         await emit_audit_event(event_type, _details)
     except Exception as exc:  # pylint: disable=broad-except
         logger.debug("emit_audit_event_safe: audit emission suppressed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry span context manager
+# ---------------------------------------------------------------------------
+
+from contextlib import contextmanager as _contextmanager  # noqa: E402
+from typing import Generator as _Generator
+
+
+@_contextmanager
+def agent_span(span_name: str, agent_name: str, task_keys: Sequence[str]) -> _Generator[Any, None, None]:
+    """Context manager that opens an OTel span and sets standard attributes.
+
+    Falls back to a no-op ``contextlib.nullcontext`` when OpenTelemetry is not
+    installed, so callers never need ``if _tracer`` guards.
+
+    Usage::
+
+        with agent_span("MyAgent.process", self.name, list(task.keys())):
+            ...  # agent processing logic
+
+    Parameters
+    ----------
+    span_name:
+        Span name, typically ``"ClassName.process"``.
+    agent_name:
+        Value for the ``agent.name`` span attribute.
+    task_keys:
+        Keys of the incoming task dict, recorded as ``task.keys``.
+    """
+    if _tracer is None:
+        from contextlib import nullcontext
+
+        with nullcontext():
+            yield
+        return
+
+    with _tracer.start_as_current_span(span_name) as span:
+        try:
+            span.set_attribute("agent.name", agent_name)
+            span.set_attribute("task.keys", str(list(task_keys)))
+        except Exception:  # pragma: no cover — OTel internals
+            pass
+        yield span
 
 
 # ---------------------------------------------------------------------------
