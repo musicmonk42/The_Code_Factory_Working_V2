@@ -969,10 +969,6 @@ class DiffblueBackend:
         self.config = new_config
         logger.info("DiffblueBackend config reloaded.")
 
-    def _deterministic_chance(self, key: str) -> float:
-        h = hashlib.sha256(key.encode("utf-8")).digest()
-        return int.from_bytes(h[:8], "big") / float(1 << 64)
-
     async def generate_tests(
         self, target_class_name: str, output_path_relative: str, params: Dict[str, Any]
     ) -> Tuple[bool, str, Optional[str]]:
@@ -1004,21 +1000,21 @@ class DiffblueBackend:
         )
 
         try:
-            proc = await asyncio.wait_for(
-                asyncio.create_subprocess_exec(
-                    dcover_path,
-                    "create",
-                    "--class", target_class_name,
-                    "--output-dir", os.path.dirname(dest_abs),
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=self.project_root,
-                ),
-                timeout=timeout,
+            proc = await asyncio.create_subprocess_exec(
+                dcover_path,
+                "create",
+                "--class", target_class_name,
+                "--output-dir", os.path.dirname(dest_abs),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.project_root,
             )
-            stdout, stderr = await proc.communicate()
-        except asyncio.TimeoutError:
-            return False, "timed out", None
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()  # drain pipes after kill
+                return False, "timed out", None
         except asyncio.CancelledError:
             raise
         except Exception as exc:

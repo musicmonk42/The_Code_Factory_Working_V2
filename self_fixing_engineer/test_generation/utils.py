@@ -19,6 +19,7 @@ used across the ATCO pipeline. Its production-ready posture is built upon:
 __version__ = "3.0.0"
 
 import asyncio
+import base64
 import functools
 import hashlib
 import inspect
@@ -1020,20 +1021,42 @@ class PRCreator:
             return False, "PR integration not enabled in config."
 
         loop = asyncio.get_running_loop()
+        _GIT_TIMEOUT = 120  # seconds per git operation
 
-        def _git_ops():
+        def _git_ops() -> Tuple[bool, str]:
             git = shutil.which("git")
             if git is None:
                 return False, "git not found on PATH"
             cwd = self.project_root
             try:
-                subprocess.run([git, "checkout", "-B", branch_name], cwd=cwd, check=True, capture_output=True)
+                subprocess.run(
+                    [git, "checkout", "-B", branch_name],
+                    cwd=cwd, check=True, capture_output=True, timeout=_GIT_TIMEOUT,
+                )
                 if files_to_add:
-                    subprocess.run([git, "add", "--"] + files_to_add, cwd=cwd, check=True, capture_output=True)
-                subprocess.run([git, "commit", "-m", title], cwd=cwd, check=True, capture_output=True)
-                subprocess.run([git, "push", "--set-upstream", "origin", branch_name], cwd=cwd, check=True, capture_output=True)
+                    subprocess.run(
+                        [git, "add", "--"] + files_to_add,
+                        cwd=cwd, check=True, capture_output=True, timeout=_GIT_TIMEOUT,
+                    )
+                # Only commit if there are staged changes to avoid "nothing to commit" error
+                status = subprocess.run(
+                    [git, "diff", "--cached", "--quiet"],
+                    cwd=cwd, capture_output=True, timeout=_GIT_TIMEOUT,
+                )
+                if status.returncode != 0:  # returncode 1 → staged changes exist
+                    subprocess.run(
+                        [git, "commit", "-m", title],
+                        cwd=cwd, check=True, capture_output=True, timeout=_GIT_TIMEOUT,
+                    )
+                subprocess.run(
+                    [git, "push", "--set-upstream", "origin", branch_name],
+                    cwd=cwd, check=True, capture_output=True, timeout=_GIT_TIMEOUT,
+                )
             except subprocess.CalledProcessError as exc:
-                return False, f"git operation failed: {exc.stderr.decode(errors='replace').strip() if exc.stderr else str(exc)}"
+                stderr = exc.stderr.decode(errors="replace").strip() if exc.stderr else ""
+                return False, f"git operation failed: {stderr or str(exc)}"
+            except subprocess.TimeoutExpired:
+                return False, "git operation timed out"
             return True, ""
 
         git_ok, git_msg = await loop.run_in_executor(None, _git_ops)
@@ -1094,7 +1117,17 @@ class PRCreator:
     async def create_jira_ticket(
         self, title: str, description: str, project_key: str = "ATCO"
     ) -> Tuple[bool, str]:
-        """Create a Jira ticket via the Jira REST API."""
+        """Create a Jira ticket via the Jira REST API.
+
+        Authentication strategy:
+          - Jira Cloud: requires ``JIRA_EMAIL`` + ``JIRA_API_TOKEN`` → HTTP Basic
+            auth with ``base64(email:token)`` as per Atlassian Cloud docs.
+          - Jira Server / Data Center: uses ``JIRA_API_TOKEN`` as a Personal
+            Access Token (PAT) → ``Authorization: Bearer <token>``.
+
+        Set ``JIRA_EMAIL`` in the environment to select Cloud auth; omit it to
+        select Server/DC Bearer auth.
+        """
         jira_config = self.config.get("jira_integration", {})
         if not jira_config.get("enabled", False):
             return False, "Jira integration not enabled in config."
@@ -1106,6 +1139,22 @@ class PRCreator:
         jira_token = os.environ.get("JIRA_API_TOKEN") or jira_config.get("api_token")
         if not jira_token:
             return False, "Jira API token not configured (set JIRA_API_TOKEN or jira_integration.api_token)."
+
+        # Determine authentication scheme:
+        # Jira Cloud → Basic auth with base64(email:token)
+        # Jira Server/DC → Bearer PAT
+        jira_email = os.environ.get("JIRA_EMAIL") or jira_config.get("email")
+        if jira_email:
+            # Jira Cloud: Basic base64(email:api_token)
+            credentials = base64.b64encode(
+                f"{jira_email}:{jira_token}".encode("utf-8")
+            ).decode("ascii")
+            auth_header = f"Basic {credentials}"
+            logger.debug("PRCreator: using Jira Cloud Basic auth (email:token)")
+        else:
+            # Jira Server/Data Center: Personal Access Token (Bearer)
+            auth_header = f"Bearer {jira_token}"
+            logger.debug("PRCreator: using Jira Server/DC Bearer auth")
 
         logger.info("PRCreator: Creating Jira ticket in %s for '%s'...", project_key, title)
 
@@ -1122,7 +1171,7 @@ class PRCreator:
                 f"{jira_api_url.rstrip('/')}/rest/api/2/issue",
                 data=payload,
                 headers={
-                    "Authorization": f"Bearer {jira_token}",
+                    "Authorization": auth_header,
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
@@ -2229,7 +2278,10 @@ async def prioritize_test_targets(
             for identifier in uncovered_python_modules:
                 current_line_rate = module_line_rates.get(identifier, 0.0)
                 priority_score = (1.0 - current_line_rate) * 100
-                priority_score += random.uniform(0, 5)
+                # Deterministic tie-breaking jitter derived from identifier hash,
+                # ensuring stable ordering across runs without non-determinism.
+                _hash_bytes = hashlib.sha256(identifier.encode()).digest()
+                priority_score += (int.from_bytes(_hash_bytes[:4], "big") / 0xFFFF_FFFF) * 5
 
                 target = {
                     "identifier": identifier,

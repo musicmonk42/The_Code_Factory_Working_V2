@@ -68,7 +68,7 @@ except ImportError:
             pass
 
         def compile(self, *args, **kwargs):
-            logging.warning("StateGraph stub: LangGraph not installed. Falling back to FallbackGraph.")
+            logger.warning("StateGraph stub: LangGraph not installed. Falling back to FallbackGraph.")
             return FallbackGraph(list(self._nodes.values()))
 
         async def ainvoke(self, state, config):

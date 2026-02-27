@@ -391,14 +391,16 @@ class DummyMutationTester:
         self, *args: Any, **kwargs: Any
     ) -> Tuple[float, float, str]:
         """
-        Stub implementation that returns a ``None`` sentinel score.
+        Stub implementation that returns zero sentinel scores.
 
-        Callers must treat ``(None, None, …)`` as "skipped" rather than
+        Callers must treat ``(0.0, 0.0, …)`` as "skipped" rather than
         "failed" so that CI quality gates are not triggered by a missing
         mutation-testing tool.
 
         Returns:
-            tuple: (None, None, message) — callers should skip mutation gate
+            tuple: ``(False, 0.0, message)`` — callers should skip the
+                mutation gate when the score is ``0.0`` and the message
+                indicates unavailability.
         """
         log("Using DummyMutationTester. Mutation testing unavailable (stub mode).", level="DEBUG")
 
