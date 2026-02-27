@@ -1188,6 +1188,19 @@ class ImportFixerEngine:
                 if name in self.SQLALCHEMY_NAMES and name not in imported_names:
                     missing_sqlalchemy[name] = self.SQLALCHEMY_NAMES[name]
 
+            # Collect locally defined names (assignments, functions, classes) to
+            # prevent re-importing symbols already defined in this file.
+            locally_defined_names: set = set()
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    locally_defined_names.add(node.name)
+                elif isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            locally_defined_names.add(target.id)
+                elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                    locally_defined_names.add(node.target.id)
+
             # Find missing project-local imports from project_symbol_map
             missing_project: Dict[str, tuple] = {}
             if project_symbol_map:
@@ -1205,9 +1218,26 @@ class ImportFixerEngine:
                     # Also handle __init__.py: "app/schemas/__init__.py" -> "app.schemas"
                     if _self_module.endswith(".__init__"):
                         _self_module = _self_module.removesuffix(".__init__")
+                    # Handle absolute paths — strip prefix up to the first "app." segment.
+                    # e.g. "/app/generated/my_app/app/database" -> "app.database"
+                    _app_idx = _self_module.find("app.")
+                    if _app_idx > 0:
+                        _self_module = _self_module[_app_idx:]
+
+                _COMMON_FRAMEWORK_VARS = {
+                    "router", "app", "db", "engine", "session",
+                    "settings", "celery_app", "api_router",
+                }
 
                 for name in used_names:
                     if name in project_symbol_map and name not in imported_names:
+                        # Skip symbols that are defined locally in this file —
+                        # they should never be re-imported from any module.
+                        if name in locally_defined_names:
+                            self.logger.debug(
+                                f"Skipping locally-defined symbol: {name} in {file_path}"
+                            )
+                            continue
                         mod, sym_name = project_symbol_map[name]
                         # Skip self-imports: don't add "from app.foo import bar" inside app/foo.py
                         if _self_module and mod == _self_module:
@@ -1215,6 +1245,18 @@ class ImportFixerEngine:
                                 f"Skipping self-import: {mod}.{sym_name} in {file_path}"
                             )
                             continue
+                        # Skip cross-sibling imports for common framework-level variables.
+                        # Prevents importing `router` from one router file into another.
+                        if _self_module and mod != _self_module:
+                            _self_pkg = _self_module.rsplit(".", 1)[0] if "." in _self_module else ""
+                            _target_pkg = mod.rsplit(".", 1)[0] if "." in mod else ""
+                            if _self_pkg and _self_pkg == _target_pkg:
+                                if sym_name.lower() in _COMMON_FRAMEWORK_VARS:
+                                    self.logger.debug(
+                                        f"Skipping cross-sibling import for common var: "
+                                        f"{mod}.{sym_name} in {file_path}"
+                                    )
+                                    continue
                         missing_project[name] = (mod, sym_name)
 
             if not missing_stdlib and not missing_fastapi and not missing_typing \
