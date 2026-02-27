@@ -1166,7 +1166,7 @@ class CheckpointManager(PluginBase):
                 return False
         return True
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["dlt_checkpoint", "state_versioning", "rollback", "hash_chain"]
 
 

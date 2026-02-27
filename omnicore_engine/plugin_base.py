@@ -44,7 +44,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List
+
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,7 @@ class PluginBase(ABC):
             async def health_check(self) -> bool:
                 return self._conn.is_alive()
 
-            async def get_capabilities(self) -> List[str]:
+            async def get_capabilities(self) -> list[str]:
                 return ["data_ingestion", "anomaly_detection"]
     """
 
@@ -222,7 +222,7 @@ class PluginBase(ABC):
         """
 
     @abstractmethod
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         """Return a list of capability identifiers exposed by this plugin.
 
         Capability strings should be stable, machine-readable tokens

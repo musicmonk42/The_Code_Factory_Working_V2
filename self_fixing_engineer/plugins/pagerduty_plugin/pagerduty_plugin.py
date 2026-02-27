@@ -546,7 +546,7 @@ class PagerDutyGateway(PluginBase):
             and all(not w.done() for w in self._workers)
         )
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["incident_alerting", "on_call_routing", "event_deduplication"]
 
     async def _get_session(self) -> aiohttp.ClientSession:

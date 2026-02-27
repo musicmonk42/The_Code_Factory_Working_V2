@@ -1634,7 +1634,7 @@ class SNSGatewayManager(PluginBase):
         async with self._lock:
             return bool(self._gateways)
 
-    async def get_capabilities(self) -> List[str]:
+    async def get_capabilities(self) -> list[str]:
         return ["sns_notification", "push_delivery", "topic_fan_out"]
 
     async def _log_admin_action(self, action: str, details: Dict[str, Any]):

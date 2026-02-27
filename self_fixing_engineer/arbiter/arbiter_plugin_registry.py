@@ -150,7 +150,7 @@ except ImportError:
             pass
 
         @abstractmethod
-        async def get_capabilities(self) -> List[str]:
+        async def get_capabilities(self) -> list[str]:
             pass
 
         def on_reload(self) -> None:
@@ -1354,7 +1354,7 @@ def register(kind: PlugInKind, name: str, version: str, author: str):
             async def health_check(self) -> bool:
                 return True
 
-            async def get_capabilities(self) -> List[str]:
+            async def get_capabilities(self) -> list[str]:
                 return []
 
             def execute(self, *args, **kwargs) -> Any:
