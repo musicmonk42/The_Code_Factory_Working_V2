@@ -528,6 +528,75 @@ class SyntaxAutoRepair:
                     f"in {len(lines)} lines of {language} code"
                 )
 
+            # ----------------------------------------------------------------
+            # Second pass: detect and close unbalanced triple-quoted strings.
+            #
+            # The per-line pass above intentionally skips lines containing
+            # triple-quotes because those delimit multiline strings.  However,
+            # an LLM can emit a triple-quoted string that is never closed
+            # (e.g. a docstring or raw SQL string whose closing ``"""`` is
+            # simply absent).  We detect this by using the ``tokenize`` module
+            # which tells us "EOF in multi-line string" and which quote style
+            # opened it so we can append the correct closing delimiter.
+            # ----------------------------------------------------------------
+            try:
+                import ast as _ast
+                _ast.parse(repaired_code)
+                # No syntax error — nothing more to do.
+            except SyntaxError as _se:
+                _se_msg = str(_se).lower()
+                if "unterminated" in _se_msg or "eof" in _se_msg:
+                    # Try tokenize to identify the unclosed triple-quote style.
+                    import io
+                    import tokenize as _tokenize
+
+                    _closing_quote: str = ""
+                    try:
+                        list(
+                            _tokenize.generate_tokens(
+                                io.StringIO(repaired_code).readline
+                            )
+                        )
+                    except _tokenize.TokenError as _te:
+                        # TokenError message is e.g. "('EOF in multi-line string', (7, 0))"
+                        if "multi-line string" in str(_te):
+                            # Determine which quote style opened the string by
+                            # inspecting the character at the reported start position.
+                            _te_args = _te.args  # (msg, (lineno, col))
+                            if len(_te_args) >= 2 and isinstance(_te_args[1], tuple):
+                                _lineno, _col = _te_args[1]
+                                try:
+                                    _problem_line = repaired_code.splitlines()[_lineno - 1]
+                                    _substr = _problem_line[_col:]
+                                    if _substr.startswith('"""') or _substr.startswith("r\"\"\""):
+                                        _closing_quote = '"""'
+                                    elif _substr.startswith("'''") or _substr.startswith("r'''"):
+                                        _closing_quote = "'''"
+                                except IndexError:
+                                    pass
+
+                    # Fall back to simple parity count when tokenize couldn't
+                    # pinpoint the quote style (e.g. the string started mid-line).
+                    if not _closing_quote:
+                        _dq_count = repaired_code.count('"""')
+                        _sq_count = repaired_code.count("'''")
+                        if _dq_count % 2 != 0:
+                            _closing_quote = '"""'
+                        elif _sq_count % 2 != 0:
+                            _closing_quote = "'''"
+
+                    if _closing_quote:
+                        repaired_code = repaired_code.rstrip() + f"\n{_closing_quote}\n"
+                        fixes.append(
+                            f"Appended missing closing triple-quoted string delimiter "
+                            f"({_closing_quote!r}) to close unterminated multiline string"
+                        )
+                        logger.info(
+                            "repair_unterminated_strings: appended %r to close "
+                            "unterminated multi-line string",
+                            _closing_quote,
+                        )
+
             return repaired_code, fixes
 
         except Exception as e:

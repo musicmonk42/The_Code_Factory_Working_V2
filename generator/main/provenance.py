@@ -1245,49 +1245,120 @@ def validate_spec_fidelity(
             if filename.endswith(('.py', '.ts', '.js', '.java', '.go')):
                 file_endpoints = extract_endpoints_from_code(content, filename)
                 all_found_endpoints.extend(file_endpoints)
-        
+
+        # ------------------------------------------------------------------
+        # Router-prefix reconciliation (Python / FastAPI projects).
+        #
+        # When the generated code uses FastAPI's ``include_router(router,
+        # prefix="/api/v1/orders")`` pattern, the route decorators in the
+        # router file contain only the *sub-path* (e.g. ``/stats``).  The
+        # per-file extractor therefore produces ``/stats``, not the full
+        # ``/api/v1/orders/stats`` that the spec requires.
+        #
+        # We resolve this by:
+        #   1. Scanning main.py (or app/main.py) for ``include_router`` calls
+        #      that carry an explicit ``prefix=`` keyword argument.
+        #   2. Building a map from router-file module name to its prefix.
+        #   3. Re-processing each router-file's endpoints to prepend the
+        #      resolved prefix, then adding the fully-qualified paths to the
+        #      found set.
+        # ------------------------------------------------------------------
+        _INCLUDE_ROUTER_RE = re.compile(
+            r'include_router\s*\(\s*(\w+)\s*,\s*(?:[^)]*\s)?prefix\s*=\s*["\']([^"\']+)["\']',
+            re.DOTALL,
+        )
+
+        # Identify main.py files (prefer app/main.py, fall back to main.py)
+        _main_file_content: str = ""
+        for _candidate in ("app/main.py", "main.py"):
+            if _candidate in generated_files:
+                _main_file_content = generated_files[_candidate]
+                break
+
+        # router_var_name → prefix string  (e.g. "orders_router" → "/api/v1/orders")
+        _router_prefix_map: Dict[str, str] = {}
+        if _main_file_content:
+            for _var, _prefix in _INCLUDE_ROUTER_RE.findall(_main_file_content):
+                _router_prefix_map[_var] = _prefix
+
+        if _router_prefix_map:
+            # Build a reverse map: router module stem → prefix
+            # e.g. "from app.routers.orders import router as orders_router"
+            _IMPORT_AS_RE = re.compile(
+                r'from\s+\S+\.(\w+)\s+import\s+\w+\s+as\s+(\w+)'
+            )
+            _stem_to_prefix: Dict[str, str] = {}
+            for _stem, _var in _IMPORT_AS_RE.findall(_main_file_content):
+                if _var in _router_prefix_map:
+                    _stem_to_prefix[_stem] = _router_prefix_map[_var]
+
+            # Re-extract endpoints from router files with the prefix prepended.
+            for _filename, _content in generated_files.items():
+                if not _filename.endswith(".py"):
+                    continue
+                # Determine if this file is a router file and get its prefix.
+                _module_stem = _filename.replace("/", ".").removesuffix(".py").split(".")[-1]
+                _prefix = _stem_to_prefix.get(_module_stem, "")
+                if not _prefix:
+                    continue
+                # Re-extract routes and prepend the include_router prefix.
+                _raw = extract_endpoints_from_code(_content, _filename)
+                for _ep in _raw:
+                    _raw_path = _ep.get("path", "")
+                    _full_path = (
+                        _prefix.rstrip("/") + "/" + _raw_path.lstrip("/")
+                    )
+                    all_found_endpoints.append(
+                        {"method": _ep["method"], "path": _full_path}
+                    )
+
         result["found_endpoints"] = all_found_endpoints
-        
+
         if span:
             span.set_attribute("found_endpoint_count", len(all_found_endpoints))
-        
+
         # Normalize paths for case-insensitive comparison with trailing slash handling
         def normalize_path(path: str) -> str:
-            """Normalize a path for comparison (remove trailing slashes, lowercase, strip api version prefix)."""
+            """Normalize a path for comparison.
+
+            Strips trailing slashes, lowercases, removes the ``/api/v{N}``
+            version prefix (so ``/api/v1/orders`` and ``/orders`` compare as
+            equal), and replaces path parameters with a canonical placeholder.
+            """
             normalized = path.rstrip('/').lower()
             # Strip /api/v{N} prefix so /api/v1/orders and /orders compare as equal
             normalized = re.sub(r'^/api/v\d+', '', normalized)
             # Normalize path parameters so {id}, {product_id}, {order_id} etc. compare as equal
             normalized = re.sub(r'\{[^}]+\}', '{_param}', normalized)
             return normalized or '/'
-        
+
         # Build lookup set of found endpoints
         found_set: Set[Tuple[str, str]] = {
             (e["method"], normalize_path(e["path"])) for e in all_found_endpoints
         }
-        
+
         # Build lookup set of required endpoints
         required_set: Set[Tuple[str, str]] = {
             (e["method"], normalize_path(e["path"])) for e in required_endpoints
         }
-        
+
         # Find missing endpoints (in spec but not in code)
         missing: List[Dict[str, str]] = []
         for endpoint in required_endpoints:
             key = (endpoint["method"], normalize_path(endpoint["path"]))
             if key not in found_set:
                 missing.append(endpoint)
-        
+
         # Find extra endpoints (in code but not in spec) - informational only
         extra: List[Dict[str, str]] = []
         for endpoint in all_found_endpoints:
             key = (endpoint["method"], normalize_path(endpoint["path"]))
             if key not in required_set:
                 extra.append(endpoint)
-        
+
         result["missing_endpoints"] = missing
         result["extra_endpoints"] = extra
-        
+
         if span:
             span.set_attribute("missing_endpoint_count", len(missing))
             span.set_attribute("extra_endpoint_count", len(extra))

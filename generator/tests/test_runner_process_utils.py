@@ -428,3 +428,145 @@ class TestDistributedSubprocess(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Metric label cardinality guard
+# ---------------------------------------------------------------------------
+
+
+class TestMetricLabelCardinality(unittest.TestCase):
+    """Verify that all UTIL_LATENCY / UTIL_ERRORS call sites use the correct
+    label cardinality defined by the metric in runner_metrics.py.
+
+    Background
+    ----------
+    ``UTIL_LATENCY`` is declared with labels ``["func", "status"]``.  Any call
+    site that passes only *one* positional label (e.g.
+    ``UTIL_LATENCY.labels("subprocess_wrapper")``) causes a
+    ``ValueError: Incorrect label count`` at runtime, which opens the circuit
+    breaker after a handful of failures and prevents further subprocess
+    execution.
+
+    This test guards against that regression by parsing the source of
+    ``process_utils.py`` with the ``ast`` module and asserting that every
+    ``UTIL_LATENCY.labels(...)`` call passes **two** label values (either as
+    positional arguments or as keyword arguments whose keys are ``func`` and
+    ``status``).
+    """
+
+    _EXPECTED_LATENCY_LABEL_NAMES = frozenset({"func", "status"})
+    _EXPECTED_ERRORS_LABEL_NAMES = frozenset({"func", "type"})
+
+    def _parse_process_utils(self) -> "ast.Module":  # type: ignore[name-defined]
+        import ast
+        from pathlib import Path
+
+        src_path = (
+            Path(__file__).parent.parent / "runner" / "process_utils.py"
+        )
+        return ast.parse(src_path.read_text(encoding="utf-8"), filename=str(src_path))
+
+    def test_util_latency_calls_use_two_keyword_labels(self):
+        """Every ``UTIL_LATENCY.labels(...)`` call must supply both 'func' and
+        'status' labels, matching the metric's two-label declaration."""
+        import ast
+
+        tree = self._parse_process_utils()
+        violations: list = []
+
+        for node in ast.walk(tree):
+            # Look for:  UTIL_LATENCY.labels(...).observe(...)
+            # The .labels(...) call is the inner Call of the .observe() chain.
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "observe":
+                continue
+            inner = node.func.value
+            if not isinstance(inner, ast.Call):
+                continue
+            if not isinstance(inner.func, ast.Attribute):
+                continue
+            if inner.func.attr != "labels":
+                continue
+            # Check that the metric object is UTIL_LATENCY
+            metric_obj = inner.func.value
+            if not (
+                isinstance(metric_obj, ast.Name) and metric_obj.id == "UTIL_LATENCY"
+            ):
+                continue
+
+            kw_keys = {kw.arg for kw in inner.keywords}
+            positional_count = len(inner.args)
+
+            if kw_keys:
+                # Keyword form: labels(func=..., status=...)
+                if kw_keys != self._EXPECTED_LATENCY_LABEL_NAMES:
+                    violations.append(
+                        f"Line {node.lineno}: UTIL_LATENCY.labels() keyword args "
+                        f"{kw_keys!r} do not match expected "
+                        f"{self._EXPECTED_LATENCY_LABEL_NAMES!r}"
+                    )
+            else:
+                # Positional form: labels("subprocess_wrapper", "success")
+                if positional_count != len(self._EXPECTED_LATENCY_LABEL_NAMES):
+                    violations.append(
+                        f"Line {node.lineno}: UTIL_LATENCY.labels() called with "
+                        f"{positional_count} positional arg(s); expected "
+                        f"{len(self._EXPECTED_LATENCY_LABEL_NAMES)}"
+                    )
+
+        self.assertEqual(
+            violations,
+            [],
+            "UTIL_LATENCY.labels() call-site arity mismatch(es) detected:\n"
+            + "\n".join(violations),
+        )
+
+    def test_util_errors_calls_use_two_labels(self):
+        """Every ``UTIL_ERRORS.labels(...)`` call must supply exactly 2 labels
+        (matching ``["func", "type"]`` in the metric declaration)."""
+        import ast
+
+        tree = self._parse_process_utils()
+        violations: list = []
+        expected_count = len(self._EXPECTED_ERRORS_LABEL_NAMES)
+
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            if not isinstance(node.func, ast.Attribute):
+                continue
+            if node.func.attr != "inc":
+                continue
+            inner = node.func.value
+            if not isinstance(inner, ast.Call):
+                continue
+            if not isinstance(inner.func, ast.Attribute):
+                continue
+            if inner.func.attr != "labels":
+                continue
+            metric_obj = inner.func.value
+            if not (
+                isinstance(metric_obj, ast.Name) and metric_obj.id == "UTIL_ERRORS"
+            ):
+                continue
+
+            kw_keys = {kw.arg for kw in inner.keywords}
+            positional_count = len(inner.args)
+            total_provided = len(kw_keys) + positional_count if kw_keys else positional_count
+
+            if total_provided != expected_count:
+                violations.append(
+                    f"Line {node.lineno}: UTIL_ERRORS.labels() called with "
+                    f"{total_provided} label(s); expected {expected_count}"
+                )
+
+        self.assertEqual(
+            violations,
+            [],
+            "UTIL_ERRORS.labels() call-site arity mismatch(es) detected:\n"
+            + "\n".join(violations),
+        )

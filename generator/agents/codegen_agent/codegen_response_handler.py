@@ -2332,74 +2332,212 @@ def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[
 # ==============================================================================
 
 
-def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
-    """
-    Detect if code contains stub/placeholder patterns indicating incomplete implementation.
-    
-    MODIFIED: Less aggressive detection that allows test code and simple implementations.
-    
+def _ast_body_is_stub(body: list, ast_module: Any) -> bool:  # noqa: ANN001
+    """Determine whether an AST class or function body is a stub (no real implementation).
+
+    A body is considered a stub when every statement is one of:
+
+    * ``pass``
+    * ``...`` (Ellipsis literal)
+    * A bare string constant – i.e. a docstring that is the *only* content
+
+    A body that contains any other statement (assignments, ``return``,
+    ``raise``, function/class definitions, loops, conditionals, etc.) is NOT
+    a stub regardless of its length.
+
     Args:
-        code: The code content to analyze
-        filename: Name of the file being analyzed
-        
+        body: The list of AST statement nodes forming the body.
+        ast_module: The ``ast`` standard-library module, passed in to avoid
+            repeated imports inside the hot path.
+
     Returns:
-        Tuple of (is_stub, list_of_issues):
-        - is_stub: True if stub patterns detected
-        - list_of_issues: Descriptions of stub patterns found
+        ``True`` if every node in *body* is a stub statement; ``False``
+        otherwise.  An empty body is treated as a stub.
     """
-    issues = []
-    
-    # Don't validate non-code files
-    if filename.lower().endswith(('.md', '.txt', '.json', '.yaml', '.yml', '.toml', '.xml', '.rst')):
+    if not body:
+        return True
+
+    _ast = ast_module
+    for node in body:
+        if isinstance(node, _ast.Pass):
+            continue
+        if isinstance(node, _ast.Expr):
+            val = node.value
+            # Ellipsis literal: ast.Constant(value=...) in Python ≥ 3.8
+            # or the legacy ast.Ellipsis node in Python < 3.8
+            if isinstance(val, _ast.Constant) and val.value is ...:
+                continue
+            # Bare string constant = docstring with no other code
+            if isinstance(val, _ast.Constant) and isinstance(val.value, str):
+                continue
+            # Python < 3.8 compatibility: ast.NameConstant / ast.Ellipsis
+            if hasattr(_ast, "Ellipsis") and isinstance(val, _ast.Ellipsis):
+                continue
+        # Any real statement means this is not a stub
+        return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Compiled stub-pattern table (module-level constant for performance).
+# Each entry is (compiled_regex, human_readable_description).
+# Patterns are matched with re.IGNORECASE | re.MULTILINE.
+# ---------------------------------------------------------------------------
+_STUB_REGEX_TABLE: List[Tuple[Any, str]] = [
+    (re.compile(r"\bTODO\b", re.IGNORECASE), "Contains TODO comment"),
+    (re.compile(r"\bFIXME\b", re.IGNORECASE), "Contains FIXME comment"),
+    (re.compile(r"\bXXX\b"), "Contains XXX marker"),
+    (
+        re.compile(r"^\s*#\s*NOT(?:_|\s+)IMPLEMENTED\s*$", re.IGNORECASE | re.MULTILINE),
+        "Contains NOT_IMPLEMENTED marker",
+    ),
+    (
+        re.compile(r"\braise\s+NotImplementedError", re.IGNORECASE),
+        "Raises NotImplementedError (stub indicator)",
+    ),
+    # Matches: "# Generated module — replace with actual implementation"
+    # Handles both the Unicode em dash (U+2014) and ASCII hyphen variants.
+    (
+        re.compile(
+            r"#\s*Generated\s+module\s*[-\u2014]+\s*replace\s+with\s+actual",
+            re.IGNORECASE,
+        ),
+        "Contains generated-module placeholder comment",
+    ),
+    (
+        re.compile(r"#\s*Replace\s+with\s+(?:actual|real)\s+implementation", re.IGNORECASE),
+        "Contains replace-with-implementation placeholder comment",
+    ),
+]
+
+# File extensions that are never subject to stub detection.
+_NON_CODE_EXTENSIONS: frozenset = frozenset(
+    {".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".xml", ".rst", ".ini", ".cfg", ".env"}
+)
+
+
+def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
+    """Detect stub/placeholder patterns in generated source code.
+
+    Uses a two-tier strategy that avoids false positives while reliably
+    catching the common LLM-generated stub patterns:
+
+    1. **Regex scan** – searches the raw text for well-known textual markers
+       (``TODO``, ``FIXME``, ``raise NotImplementedError``, placeholder
+       comments, etc.).
+    2. **AST scan** (Python files only) – parses the code and walks the
+       syntax tree to find class bodies or function bodies that contain
+       *only* ``pass``, ``...``, or a lone docstring string.
+
+    A file is only flagged when the combined indicator count reaches the
+    ``_STUB_DETECTION_THRESHOLD`` (currently 2), which prevents single
+    ``pass`` bodies in legitimate helper files or abstract base classes from
+    triggering false positives.
+
+    Args:
+        code: Full source text of the file to analyse.
+        filename: Basename (or relative path) of the file.  Used to skip
+            non-code assets and to apply stricter checks to primary
+            application entry-points.
+
+    Returns:
+        A tuple ``(is_stub, issues)`` where:
+
+        * ``is_stub`` is ``True`` when the file is judged to contain stub
+          patterns, ``False`` otherwise.
+        * ``issues`` is a non-empty list of human-readable descriptions only
+          when ``is_stub`` is ``True``; empty list when ``is_stub`` is
+          ``False``.
+    """
+    import ast as _ast
+
+    # ------------------------------------------------------------------
+    # 1. Skip non-code assets (documentation, config, data files, …).
+    # ------------------------------------------------------------------
+    fname_lower = filename.lower()
+    _, ext = os.path.splitext(fname_lower)
+    if ext in _NON_CODE_EXTENSIONS:
         return False, []
-    
-    # Parse code into lines early for all checks
-    lines = code.split('\n')
-    non_empty_lines = [line for line in lines if line.strip() and not line.strip().startswith('#')]
-    
-    # CHANGED: More lenient stub patterns - require multiple indicators
-    STUB_PATTERNS = [
-        (r'\bTODO\b', "Contains TODO comment"),
-        (r'\bFIXME\b', "Contains FIXME comment"),
-        (r'\bXXX\b', "Contains XXX comment"),
-        (r'^\s*#\s*NOT(?:_|\s+)IMPLEMENTED\s*$', "Contains NOT_IMPLEMENTED marker"),
-        (r'\braise\s+NotImplementedError', "Raises NotImplementedError (stub)"),
-    ]
-    
-    code_lower = code.lower()
-    
-    # Count stub indicators
-    stub_count = 0
-    for pattern, description in STUB_PATTERNS:
-        matches = re.findall(pattern, code, re.IGNORECASE | re.MULTILINE)
+
+    # ------------------------------------------------------------------
+    # 2. Regex-based stub marker scan.
+    # ------------------------------------------------------------------
+    issues: List[str] = []
+    stub_count: int = 0
+
+    for pattern, description in _STUB_REGEX_TABLE:
+        matches = pattern.findall(code)
         if matches:
-            issues.append(f"{description} (found {len(matches)} occurrence(s))")
+            issues.append(f"{description} ({len(matches)} occurrence(s))")
             stub_count += len(matches)
-    
-    # CHANGED: Only flag as stub if multiple strong indicators present
-    # Single pass statement or short code is OK for utilities and tests
-    if stub_count < 2:
-        # Code with 0-1 stub indicators is considered valid
+
+    # ------------------------------------------------------------------
+    # 3. AST-based stub detection for Python source files.
+    # ------------------------------------------------------------------
+    if fname_lower.endswith(".py"):
+        try:
+            tree = _ast.parse(code, filename=filename)
+        except SyntaxError:
+            # Syntax errors are detected and reported by validate_and_repair_syntax;
+            # skip AST stub detection for unparseable files.
+            tree = None
+
+        if tree is not None:
+            for node in _ast.walk(tree):
+                if isinstance(node, _ast.ClassDef):
+                    if _ast_body_is_stub(node.body, _ast):
+                        issues.append(
+                            f"Class '{node.name}' (line {node.lineno}) has no implementation"
+                            f" — body contains only pass/... or a bare docstring."
+                        )
+                        stub_count += 1
+                elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                    if _ast_body_is_stub(node.body, _ast):
+                        issues.append(
+                            f"Function/method '{node.name}' (line {node.lineno}) has no"
+                            f" implementation — body contains only pass/... or a bare docstring."
+                        )
+                        stub_count += 1
+
+    # ------------------------------------------------------------------
+    # 4. Apply detection threshold.
+    # A single indicator (e.g. one `pass` in a utility module) is not
+    # sufficient to classify the whole file as a stub.
+    # ------------------------------------------------------------------
+    _STUB_DETECTION_THRESHOLD = 2
+    if stub_count < _STUB_DETECTION_THRESHOLD:
         return False, []
-    
-    # REMOVED: Overly restrictive checks:
-    # - No longer checking for minimal line counts for non-main files  
-    # - No longer requiring error handling in all files
-    # - No longer requiring imports in all Python files
-    # These are too restrictive for test code, utilities, and simple implementations
-    
-    # Only check main application files for completeness
-    if filename.lower() in ('main.py', 'app.py', 'server.py'):
+
+    # ------------------------------------------------------------------
+    # 5. Additional completeness checks for primary application files.
+    # ------------------------------------------------------------------
+    code_lower = code.lower()
+    non_empty_lines = [
+        ln for ln in code.split("\n")
+        if ln.strip() and not ln.strip().startswith("#")
+    ]
+
+    if os.path.basename(fname_lower) in {"main.py", "app.py", "server.py"}:
         if len(non_empty_lines) < 10:
-            issues.append(f"Main application file is too short ({len(non_empty_lines)} non-empty lines)")
+            issues.append(
+                f"Primary application file is unusually short"
+                f" ({len(non_empty_lines)} non-empty lines)."
+            )
             stub_count += 1
-        
-        if 'try' not in code_lower and 'except' not in code_lower and len(non_empty_lines) > 20:
-            issues.append("Large main file missing error handling")
+
+        if (
+            "try" not in code_lower
+            and "except" not in code_lower
+            and len(non_empty_lines) > 20
+        ):
+            issues.append(
+                "Large primary application file contains no error-handling"
+                " (try/except) blocks."
+            )
             stub_count += 1
-    
-    # Need at least 2 concerning indicators to flag as stub
-    is_stub = stub_count >= 2
+
+    is_stub = stub_count >= _STUB_DETECTION_THRESHOLD
     return is_stub, issues if is_stub else []
 
 

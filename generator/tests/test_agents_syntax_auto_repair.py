@@ -63,13 +63,81 @@ z = 'value3'"""
         assert repaired == code, "Should not modify valid code"
         assert len(fixes) == 0, "Should have no fixes"
 
-    def test_skip_triple_quoted_strings(self):
-        """Should not modify triple-quoted strings (docstrings)."""
-        code = '"""This is a docstring'
+    def test_repair_unterminated_triple_double_quote(self):
+        """Unclosed triple-double-quote strings are repaired by appending the closing delimiter.
+
+        This tests the second-pass triple-quote balance check introduced to
+        handle the common LLM pattern of emitting a ``\"\"\"`` opening delimiter
+        that is never closed (e.g. an inline SQL block or a long docstring that
+        was truncated during generation).
+
+        The repaired code must be syntactically valid Python.
+        """
+        import ast
+
+        code = '"""This is an unterminated docstring'
         repaired, fixes = SyntaxAutoRepair.repair_unterminated_strings(code, "python")
 
-        assert repaired == code, "Should not modify triple-quoted strings"
-        assert len(fixes) == 0, "Should have no fixes"
+        assert repaired != code, "Unterminated triple-quote must be repaired"
+        assert len(fixes) >= 1, "At least one fix must be reported"
+        assert any("triple" in f.lower() or '"""' in f for f in fixes), (
+            "Fix description must mention the triple-quote delimiter"
+        )
+        try:
+            ast.parse(repaired)
+        except SyntaxError as exc:
+            raise AssertionError(
+                f"Repaired code must be valid Python but still raises SyntaxError: {exc}"
+            ) from exc
+
+    def test_repair_unterminated_triple_single_quote(self):
+        """Unclosed triple-single-quote strings are repaired correctly."""
+        import ast
+
+        code = "'''This is an unterminated single-quoted docstring"
+        repaired, fixes = SyntaxAutoRepair.repair_unterminated_strings(code, "python")
+
+        assert repaired != code, "Unterminated triple-single-quote must be repaired"
+        assert len(fixes) >= 1
+        try:
+            ast.parse(repaired)
+        except SyntaxError as exc:
+            raise AssertionError(
+                f"Repaired code must be valid Python but still raises: {exc}"
+            ) from exc
+
+    def test_valid_triple_quoted_string_is_not_modified(self):
+        """A correctly terminated triple-quoted string must not be altered."""
+        code = '"""This is a properly closed docstring."""\nresult = 42\n'
+        repaired, fixes = SyntaxAutoRepair.repair_unterminated_strings(code, "python")
+
+        assert repaired == code, (
+            "A syntactically valid triple-quoted string must be left unchanged"
+        )
+        assert fixes == [], "No fixes should be reported for valid code"
+
+    def test_repair_real_world_unclosed_sql_block(self):
+        """Repair real-world pattern: LLM generates a triple-quoted SQL constant without closing."""
+        import ast
+
+        code = (
+            "from sqlalchemy import text\n\n"
+            'SQL_QUERY = """\n'
+            "    SELECT * FROM products\n"
+            "    WHERE active = true\n"
+            "\n"
+            "def list_products(session):\n"
+            "    return session.execute(text(SQL_QUERY)).all()\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_unterminated_strings(code, "python")
+
+        assert len(fixes) >= 1, "The unclosed triple-quote must be repaired"
+        try:
+            ast.parse(repaired)
+        except SyntaxError as exc:
+            raise AssertionError(
+                f"Repaired SQL-block code must parse correctly: {exc}"
+            ) from exc
 
     def test_skip_comments(self):
         """Should not modify comment lines."""
