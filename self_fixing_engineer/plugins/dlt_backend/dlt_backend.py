@@ -25,6 +25,7 @@ import re
 import sys  # For sys.exit
 import time
 import traceback
+import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional, Tuple
@@ -343,25 +344,35 @@ except ImportError as e:
             f"S3OffChainClient not found. Off-chain storage is critical: {e}."
         )
     else:
-        logger.warning("S3OffChainClient not found. Using dummy for off-chain storage.")
+        logger.warning("S3OffChainClient not found. Using local file-backed dev implementation.")
 
-        class S3OffChainClient:  # Dummy for non-prod
+        class S3OffChainClient:  # Local file-backed dev implementation
             def __init__(self, config):
-                self.store = {}
-                logger.warning("Using dummy S3OffChainClient.")
+                self._storage_dir = config.get("storage_dir", "./dlt_dev_storage/offchain")
+                os.makedirs(self._storage_dir, exist_ok=True)
+                logger.warning(
+                    f"[DEV ONLY] Using local file-backed S3OffChainClient at {self._storage_dir!r}."
+                )
 
             async def save_blob(self, checkpoint_name, blob, correlation_id=None):
-                key = f"dummy_s3/{checkpoint_name}-{int(time.time())}.gz"
-                self.store[key] = blob
-                return key
+                blob_id = str(uuid.uuid4())
+                filename = os.path.join(self._storage_dir, f"{blob_id}.json")
+                data = {"checkpoint_name": checkpoint_name, "blob": blob if isinstance(blob, (str, dict, list)) else blob.decode("utf-8", errors="replace")}
+                await asyncio.to_thread(
+                    lambda: open(filename, "w").write(json.dumps(data))
+                )
+                return blob_id
 
             async def get_blob(self, off_chain_id, correlation_id=None):
-                if off_chain_id not in self.store:
-                    raise FileNotFoundError(f"Dummy blob {off_chain_id} not found.")
-                return self.store[off_chain_id]
+                filename = os.path.join(self._storage_dir, f"{off_chain_id}.json")
+                if not os.path.exists(filename):
+                    raise FileNotFoundError(f"Dev blob {off_chain_id} not found.")
+                raw = await asyncio.to_thread(lambda: open(filename).read())
+                return json.loads(raw).get("blob")
 
             async def health_check(self, correlation_id=None):
-                return {"status": True, "message": "Dummy S3 is healthy."}
+                ok = os.path.isdir(self._storage_dir) and os.access(self._storage_dir, os.W_OK)
+                return {"status": ok, "message": "Dev S3 storage healthy." if ok else "Dev S3 storage not writable."}
 
             async def close(self):
                 pass
@@ -387,13 +398,19 @@ except ImportError as e:
             f"FabricClientWrapper not found. DLT client is critical: {e}."
         )
     else:
-        logger.warning("FabricClientWrapper not found. Using dummy for DLT client.")
+        logger.warning("FabricClientWrapper not found. Using local file-backed dev implementation.")
 
-        class FabricClientWrapper:  # Dummy for non-prod
+        class FabricClientWrapper:  # Local file-backed dev implementation
             def __init__(self, config, off_chain_client):
-                self.chain = {}
+                self._ledger_dir = config.get("ledger_dir", "./dlt_dev_storage/ledger")
                 self.off_chain_client = off_chain_client
-                logger.warning("Using dummy FabricClientWrapper.")
+                os.makedirs(self._ledger_dir, exist_ok=True)
+                logger.warning(
+                    f"[DEV ONLY] Using local file-backed FabricClientWrapper at {self._ledger_dir!r}. Not for production."
+                )
+
+            def _version_file(self, name, version):
+                return os.path.join(self._ledger_dir, f"{name}_v{version}.json")
 
             async def write_checkpoint(
                 self,
@@ -404,8 +421,9 @@ except ImportError as e:
                 payload_blob,
                 correlation_id=None,
             ):
-                version = len(self.chain.get(checkpoint_name, [])) + 1
-                tx_id = f"{checkpoint_name}-tx{version}-{int(time.time())}"
+                existing = await self._latest_version(checkpoint_name)
+                version = existing + 1
+                tx_id = f"{checkpoint_name}-tx{version}-{str(uuid.uuid4())[:8]}"
                 off_chain_id = await self.off_chain_client.save_blob(
                     checkpoint_name, payload_blob
                 )
@@ -417,28 +435,37 @@ except ImportError as e:
                     "tx_id": tx_id,
                     "version": version,
                 }
-                self.chain.setdefault(checkpoint_name, []).append(entry)
+                filename = self._version_file(checkpoint_name, version)
+                await asyncio.to_thread(
+                    lambda: open(filename, "w").write(json.dumps(entry))
+                )
                 return tx_id, off_chain_id, version
 
+            async def _latest_version(self, name):
+                def _find():
+                    v = 0
+                    for f in os.listdir(self._ledger_dir):
+                        if f.startswith(f"{name}_v") and f.endswith(".json"):
+                            try:
+                                n = int(f[len(name) + 2:-5])
+                                v = max(v, n)
+                            except ValueError:
+                                pass
+                    return v
+                return await asyncio.to_thread(_find)
+
             async def read_checkpoint(self, name, version=None, correlation_id=None):
-                chain = self.chain.get(name, [])
-                entry = (
-                    chain[-1]
-                    if version is None or version == "latest"
-                    else next((e for e in chain if e["version"] == version), None)
-                )
-                if not entry:
-                    raise FileNotFoundError(
-                        f"Dummy checkpoint {name} v{version} not found."
-                    )
-                payload_blob = await self.off_chain_client.get_blob(
-                    entry["off_chain_ref"]
-                )
-                return {
-                    "metadata": entry,
-                    "payload_blob": payload_blob,
-                    "tx_id": entry["tx_id"],
-                }
+                if version is None or version == "latest":
+                    version = await self._latest_version(name)
+                if version == 0:
+                    raise FileNotFoundError(f"Dev checkpoint {name} not found.")
+                filename = self._version_file(name, version)
+                if not os.path.exists(filename):
+                    raise FileNotFoundError(f"Dev checkpoint {name} v{version} not found.")
+                raw = await asyncio.to_thread(lambda: open(filename).read())
+                entry = json.loads(raw)
+                payload_blob = await self.off_chain_client.get_blob(entry["off_chain_ref"])
+                return {"metadata": entry, "payload_blob": payload_blob, "tx_id": entry["tx_id"]}
 
             async def get_version_tx(self, name, version, correlation_id=None):
                 return await self.read_checkpoint(name, version)
@@ -446,28 +473,40 @@ except ImportError as e:
             async def rollback_checkpoint(
                 self, name, rollback_hash, correlation_id=None
             ):
-                chain = self.chain.get(name, [])
-                entry = next((e for e in chain if e["hash"] == rollback_hash), None)
-                if not entry:
+                latest = await self._latest_version(name)
+                target_entry = None
+                for v in range(1, latest + 1):
+                    filename = self._version_file(name, v)
+                    if os.path.exists(filename):
+                        raw = await asyncio.to_thread(lambda fn=filename: open(fn).read())
+                        e = json.loads(raw)
+                        if e.get("hash") == rollback_hash:
+                            target_entry = e
+                            break
+                if not target_entry:
                     raise FileNotFoundError(
-                        f"Dummy checkpoint {name} hash {rollback_hash} not found."
+                        f"Dev checkpoint {name} hash {rollback_hash} not found."
                     )
-                new_version = len(chain) + 1
-                tx_id = f"{name}-rollback-tx{new_version}-{int(time.time())}"
+                new_version = latest + 1
+                tx_id = f"{name}-rollback-tx{new_version}-{str(uuid.uuid4())[:8]}"
                 new_entry = {
-                    "hash": entry["hash"],
-                    "prev_hash": entry["prev_hash"],
-                    "metadata": entry["metadata"],
-                    "off_chain_ref": entry["off_chain_ref"],
+                    "hash": target_entry["hash"],
+                    "prev_hash": target_entry["prev_hash"],
+                    "metadata": target_entry["metadata"],
+                    "off_chain_ref": target_entry["off_chain_ref"],
                     "tx_id": tx_id,
                     "version": new_version,
-                    "rollback_of_version": entry["version"],
+                    "rollback_of_version": target_entry["version"],
                 }
-                chain.append(new_entry)
+                filename = self._version_file(name, new_version)
+                await asyncio.to_thread(
+                    lambda: open(filename, "w").write(json.dumps(new_entry))
+                )
                 return new_entry
 
             async def health_check(self, correlation_id=None):
-                return {"status": True, "message": "Dummy Fabric is healthy."}
+                ok = os.path.isdir(self._ledger_dir) and os.access(self._ledger_dir, os.W_OK)
+                return {"status": ok, "message": "Dev ledger storage healthy." if ok else "Dev ledger storage not writable."}
 
             async def close(self):
                 pass

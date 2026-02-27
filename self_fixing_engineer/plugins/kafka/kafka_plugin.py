@@ -23,9 +23,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 # ---- Optional core utilities (graceful fallbacks for dev/tests)
 try:
-    from core_audit import audit_logger
-    from core_secrets import SECRETS_MANAGER
-    from core_utils import alert_operator, scrub_secrets
+    from plugins.core_audit import audit_logger
+    from plugins.core_secrets import SECRETS_MANAGER
+    from plugins.core_utils import alert_operator, scrub_secrets
 except ImportError:
 
     def alert_operator(msg: str, level: str = "WARNING") -> None:
