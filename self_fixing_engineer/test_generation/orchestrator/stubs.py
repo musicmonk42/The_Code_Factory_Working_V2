@@ -398,7 +398,7 @@ class DummyMutationTester:
         mutation-testing tool.
 
         Returns:
-            tuple: ``(False, 0.0, message)`` — callers should skip the
+            tuple: ``(0.0, 0.0, message)`` — callers should skip the
                 mutation gate when the score is ``0.0`` and the message
                 indicates unavailability.
         """

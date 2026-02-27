@@ -2280,8 +2280,9 @@ async def prioritize_test_targets(
                 priority_score = (1.0 - current_line_rate) * 100
                 # Deterministic tie-breaking jitter derived from identifier hash,
                 # ensuring stable ordering across runs without non-determinism.
+                # Dividing by 2**32 guarantees the result is always in [0, 1).
                 _hash_bytes = hashlib.sha256(identifier.encode()).digest()
-                priority_score += (int.from_bytes(_hash_bytes[:4], "big") / 0xFFFF_FFFF) * 5
+                priority_score += (int.from_bytes(_hash_bytes[:4], "big") / 2**32) * 5
 
                 target = {
                     "identifier": identifier,

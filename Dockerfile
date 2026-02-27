@@ -312,6 +312,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:${PATH}" \
+    PYTHONPATH="/app" \
     APP_STARTUP=1 \
     SKIP_IMPORT_TIME_VALIDATION=1 \
     SPACY_WARNING_IGNORE=W007 \
