@@ -36,7 +36,42 @@ from cryptography.fernet import Fernet
 from prometheus_client import Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pythonjsonlogger import jsonlogger
+try:
+    from pythonjsonlogger import jsonlogger
+except ImportError:
+    import logging as _logging
+    _logger = _logging.getLogger(__name__)
+    _logger.warning("python-json-logger not installed. Using basic JSON formatter fallback.")
+
+    class _FallbackJsonFormatter(_logging.Formatter):
+        """Minimal JSON formatter fallback when pythonjsonlogger is not available."""
+        def format(self, record):
+            import json as _json
+            log_record = {
+                "message": record.getMessage(),
+                "level": record.levelname,
+                "timestamp": self.formatTime(record),
+                "logger": record.name,
+            }
+            if hasattr(record, 'exc_info') and record.exc_info:
+                log_record["exception"] = self.formatException(record.exc_info)
+            for key, value in record.__dict__.items():
+                if key not in ('msg', 'args', 'exc_info', 'exc_text', 'stack_info',
+                             'message', 'levelname', 'name', 'created', 'filename',
+                             'funcName', 'levelno', 'lineno', 'module', 'msecs',
+                             'pathname', 'process', 'processName', 'relativeCreated',
+                             'thread', 'threadName', 'taskName'):
+                    log_record[key] = value
+            return _json.dumps(log_record)
+
+        def add_fields(self, log_record, message_dict):
+            """No-op for compatibility with AuditJsonFormatter subclasses."""
+            pass
+
+    class _FallbackJsonLoggerModule:
+        JsonFormatter = _FallbackJsonFormatter
+
+    jsonlogger = _FallbackJsonLoggerModule()
 
 
 # ---- CUSTOM EXCEPTION CLASSES ----

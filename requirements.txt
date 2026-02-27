@@ -319,6 +319,7 @@ python-dateutil==2.9.0.post0
 python-docx>=0.8.11
 python-dotenv==1.2.1
 python-hcl2==7.3.1
+python-json-logger>=2.0.0
 python-jose==3.5.0
 python-magic>=0.4.27
 python-multipart==0.0.20
