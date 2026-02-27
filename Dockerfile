@@ -162,7 +162,8 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Skipping dependency verification for CI build"; \
     fi
 
-# Pre-download SpaCy models to prevent runtime download issues
+# Pre-download SpaCy models with retry logic for resilience against transient GitHub failures
+# The en_core_web_lg model (~560MB) is particularly prone to 502 errors from GitHub Releases
 # FIX: Only download English models since Presidio is configured for English-only
 # Multilingual models (es, it, pl) are not needed and waste ~600MB+ of image space
 # Using both sm (small) and lg (large) for flexibility
@@ -172,9 +173,12 @@ RUN if [ "$SKIP_HEAVY_DEPS" != "1" ]; then \
         echo "Upgrading pip and downloading SpaCy models..."; \
         echo "========================================"; \
         python -m pip install --no-cache-dir --upgrade pip setuptools wheel && \
-        # Download English models (required for PII detection)
+        # Download small model (required for PII detection)
         python -m spacy download en_core_web_sm && \
-        python -m spacy download en_core_web_lg && \
+        # Download large model with retries (GitHub Releases can return transient 502s)
+        (python -m spacy download en_core_web_lg || \
+         (echo "Retry 1/2: waiting 30s..." && sleep 30 && python -m spacy download en_core_web_lg) || \
+         (echo "Retry 2/2: waiting 60s..." && sleep 60 && python -m spacy download en_core_web_lg)) && \
         # Verify the large model loads successfully
         python -c "import spacy; nlp = spacy.load('en_core_web_lg'); print('✓ SpaCy model en_core_web_lg loaded successfully')" && \
         echo "✓ SpaCy model downloads complete (English only)"; \
