@@ -81,6 +81,10 @@ except ImportError:
         logging.critical(f"[FALLBACK ALERT] {level} - {message}")
 
     class DummyAuditLogger:
+        def __init__(self):
+            self.handlers = []
+            self.level = logging.INFO
+
         def info(self, *a, **k):
             pass
 
@@ -95,6 +99,12 @@ except ImportError:
 
         def debug(self, *a, **k):
             pass
+
+        def setLevel(self, level):
+            self.level = level
+
+        def addHandler(self, handler):
+            self.handlers.append(handler)
 
     audit_logger = DummyAuditLogger()
 

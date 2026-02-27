@@ -17,7 +17,7 @@ import uuid
 from collections import deque
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
-from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Protocol
+from typing import Any, Awaitable, Callable, ClassVar, Dict, List, Literal, Optional, Protocol
 
 try:
     import fcntl
@@ -554,11 +554,11 @@ class SNSEvent(BaseModel):
     enqueue_time: float = 0.0
     correlation_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
-    SENSITIVE_KEYS = re.compile(
+    SENSITIVE_KEYS: ClassVar[re.Pattern] = re.compile(
         r".*(password|secret|key|token|pii|ssn|credit_card|credentials).*",
         re.IGNORECASE,
     )
-    SENSITIVE_PATTERNS = [
+    SENSITIVE_PATTERNS: ClassVar[List[re.Pattern]] = [
         re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
         re.compile(r"\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b"),
         re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
