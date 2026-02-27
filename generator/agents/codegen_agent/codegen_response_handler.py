@@ -2725,6 +2725,39 @@ _ROUTER_VARIABLE_PATTERNS: frozenset = frozenset({
 })
 
 
+def _is_router_variable(name: str) -> bool:
+    """Return ``True`` when *name* is a FastAPI router variable.
+
+    Matches exact names in :data:`_ROUTER_VARIABLE_PATTERNS` (e.g. ``router``,
+    ``api_router``) as well as any name ending with ``_router`` (e.g.
+    ``products_router``, ``orders_router``).
+
+    Names that start with common verb prefixes (e.g. ``create_router``,
+    ``get_router``) are excluded because they are factory or getter functions,
+    not router instances.
+
+    Args:
+        name: The symbol name to check.
+
+    Returns:
+        ``True`` if the name should be stubbed as an ``APIRouter()`` instance.
+
+    Examples:
+        >>> _is_router_variable("router")
+        True
+        >>> _is_router_variable("products_router")
+        True
+        >>> _is_router_variable("create_router")
+        False
+        >>> _is_router_variable("db_engine")
+        False
+    """
+    lower = name.lower()
+    if any(lower.startswith(prefix) for prefix in _VERB_PREFIXES):
+        return False
+    return lower in _ROUTER_VARIABLE_PATTERNS or lower.endswith("_router")
+
+
 def _is_likely_variable(name: str) -> bool:
     """Return ``True`` when *name* looks like a module-level variable, not a callable.
 
@@ -2874,13 +2907,18 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Module file is entirely missing — generate a stub.
             # Determine up-front whether any router-pattern symbols are present
             # so the APIRouter import can be emitted once at the module header.
+            has_router_in_symbols = any(
+                _is_router_variable(s) for s in symbols if not s[0].isupper()
+            )
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
+            if has_router_in_symbols:
+                stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
             for sym in sorted(symbols):
-                # Uppercase initial → class; known router patterns → None variable;
+                # Uppercase initial → class; router variable → APIRouter() instance;
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
@@ -2889,9 +2927,9 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         f'    """Stub class."""\n'
                         f"    pass\n\n\n"
                     )
-                elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                elif _is_router_variable(sym):
                     stub_lines.append(
-                        f"{sym} = None  # Router placeholder — assign actual value\n\n\n"
+                        f"{sym} = APIRouter()\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
@@ -2937,11 +2975,13 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 # Emit the APIRouter import once at the top of the appended block
                 # if any missing symbol needs it.
                 has_router_missing = any(
-                    sym.lower() in _ROUTER_VARIABLE_PATTERNS
+                    _is_router_variable(sym)
                     for sym in missing
                     if not sym[0].isupper()
                 )
                 appended_lines = ["\n\n# Supplemental symbols appended by module-stub pass\n"]
+                if has_router_missing and "from fastapi import APIRouter" not in existing_content:
+                    appended_lines.append("from fastapi import APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
                         appended_lines.append(
@@ -2949,9 +2989,9 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f'    """Stub class."""\n'
                             f"    pass\n"
                         )
-                    elif sym.lower() in _ROUTER_VARIABLE_PATTERNS:
+                    elif _is_router_variable(sym):
                         appended_lines.append(
-                            f"\n{sym} = None  # Router placeholder — assign actual value\n"
+                            f"\n{sym} = APIRouter()\n"
                         )
                     elif _is_likely_variable(sym):
                         appended_lines.append(

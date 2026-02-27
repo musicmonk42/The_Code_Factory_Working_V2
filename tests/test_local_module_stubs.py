@@ -462,3 +462,46 @@ class TestRouterVariableStubs:
             f"api_router must be assigned exactly once after two passes, got {assign_count}"
         )
         assert _valid_python(stub), "idempotent router stub must remain valid Python"
+
+    def test_products_router_stubbed_as_apirouter(self, stub_fn):
+        """products_router must be stubbed as APIRouter(), not None."""
+        files = {"app/main.py": "from app.routers.products import products_router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers/products.py", "")
+        assert "APIRouter" in stub, "products_router stub must use APIRouter()"
+        assert "products_router = None" not in stub, "products_router must not be stubbed as None"
+        assert "products_router = APIRouter()" in stub, "products_router must be assigned APIRouter()"
+
+    def test_orders_router_stubbed_as_apirouter(self, stub_fn):
+        """orders_router must be stubbed as APIRouter(), not None."""
+        files = {"app/main.py": "from app.routers.orders import orders_router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers/orders.py", "")
+        assert "APIRouter" in stub, "orders_router stub must use APIRouter()"
+        assert "orders_router = None" not in stub, "orders_router must not be stubbed as None"
+
+    def test_suffixed_router_has_apirouter_import(self, stub_fn):
+        """from fastapi import APIRouter must be emitted for suffixed router names."""
+        files = {"app/main.py": "from app.routers.products import products_router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/routers/products.py", "")
+        assert "from fastapi import APIRouter" in stub, (
+            "stub for products_router must include 'from fastapi import APIRouter'"
+        )
+
+    def test_verb_prefixed_router_name_not_stubbed_as_apirouter(self, stub_fn):
+        """create_router must be stubbed as a function, not APIRouter().
+
+        Factory functions like create_router() must not be confused with
+        router-instance variables even though they end with _router.
+        """
+        files = {"app/main.py": "from app.factory import create_router\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/factory.py", "")
+        # create_router should be a callable stub, not an APIRouter() assignment
+        assert "create_router = APIRouter()" not in stub, (
+            "create_router must not be stubbed as APIRouter() — it is a factory function"
+        )
+        assert "def create_router" in stub, (
+            "create_router must be stubbed as a function"
+        )
