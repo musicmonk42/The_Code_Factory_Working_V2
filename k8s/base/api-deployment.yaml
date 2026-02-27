@@ -30,8 +30,9 @@ spec:
     spec:
       serviceAccountName: codefactory
       # terminationGracePeriodSeconds must exceed preStop sleep (15 s) + uvicorn graceful
-      # shutdown timeout (60 s) with a safety buffer.
-      # Formula: preStop(15) + gracefulShutdown(60) + buffer(15) = 90 s.
+      # shutdown timeout (30 s) with a safety buffer.
+      # Formula: preStop(15) + gracefulShutdown(30) + buffer(15) = 60 s minimum.
+      # Set to 90 s to include an additional 30 s safety margin for slow cleanup tasks.
       terminationGracePeriodSeconds: 90
       securityContext:
         runAsNonRoot: true

@@ -177,8 +177,9 @@ tolerations: []
 affinity: {}
 
 # terminationGracePeriodSeconds must be greater than:
-#   preStop sleep (15 s) + uvicorn timeout_graceful_shutdown (60 s) + buffer (15 s) = 90 s.
-# Lowering this value will cause Kubernetes to SIGKILL the pod before graceful shutdown
+#   preStop sleep (15 s) + uvicorn timeout_graceful_shutdown (30 s) + buffer (15 s) = 60 s minimum.
+# Set to 90 s to include an additional 30 s safety margin for slow cleanup tasks.
+# Lowering below 60 s will cause Kubernetes to SIGKILL the pod before graceful shutdown
 # completes, potentially interrupting in-flight LLM calls and losing job state.
 terminationGracePeriodSeconds: 90
 
