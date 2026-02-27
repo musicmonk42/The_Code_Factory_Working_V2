@@ -74,7 +74,7 @@ def render():
     with st.sidebar:
         st.header("Controls")
         if st.button("🔄 Refresh"):
-            st.experimental_rerun()
+            st.rerun()
         st.write(f"Last refresh: {time.strftime('%H:%M:%S')}")
 
     # Fetch status
