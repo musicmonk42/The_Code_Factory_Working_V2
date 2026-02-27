@@ -25,15 +25,38 @@ from typing import Callable, Dict, List, Optional
 import bleach
 
 # UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
-import boto3
-import hvac
-import pika
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+
+try:
+    import hvac
+except ImportError:
+    hvac = None
+
+try:
+    import pika
+except ImportError:
+    pika = None
+
 import redis.asyncio as aredis
-import sentry_sdk
+
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None
+
 from aiobreaker import CircuitBreaker
 
 # Import centralized OpenTelemetry configuration
-from self_fixing_engineer.arbiter.otel_config import get_tracer
+try:
+    from self_fixing_engineer.arbiter.otel_config import get_tracer
+except ImportError:
+    from opentelemetry import trace as _trace
+    def get_tracer(name):
+        return _trace.get_tracer(name)
+
 from cryptography.fernet import Fernet, InvalidToken
 from langchain_core.language_models.base import BaseLanguageModel
 from opentelemetry import trace
@@ -46,7 +69,11 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from transformers import pipeline
+
+try:
+    from transformers import pipeline
+except ImportError:
+    pipeline = None
 
 from shared.noop_metrics import safe_metric as _get_or_create_metric
 
@@ -83,8 +110,8 @@ ACTIVE_PLUGINS = _get_or_create_metric(
 )
 SAFETY_VIOLATIONS_TOTAL = _get_or_create_metric(
     Counter,
-    "cli_safety_violations_total",
-    "Safety violations in CLI suggestions"
+    "cli_autocomplete_safety_violations_total",
+    "Safety violations in CLI autocomplete suggestions"
 )
 KEY_REFRESH_SUCCESS_TIMESTAMP = _get_or_create_metric(
     Gauge,

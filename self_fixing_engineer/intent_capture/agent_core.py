@@ -72,7 +72,7 @@ import os
 import re
 import uuid
 from abc import ABC, abstractmethod
-from contextlib import contextmanager  # <--- ADDED contextlib IMPORT
+from contextlib import contextmanager, nullcontext  # <--- ADDED contextlib IMPORT
 from typing import Any, Dict, List, Optional
 
 # --- Production-Grade Library Imports ---
@@ -187,7 +187,7 @@ if not audit_logger.handlers:
     # In production, use a log shipper (e.g., Fluentd) to send to a secure data store.
     handler = logging.FileHandler("audit.log.json")
     formatter = logging.Formatter(
-        '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "event": %(message)s}'
+        '{"timestamp": "%(asctime)s", "level": "%(levelname)s", "event": "%(message)s"}'
     )
     handler.setFormatter(formatter)
     audit_logger.addHandler(handler)
@@ -588,8 +588,6 @@ class CollaborativeAgent:
             ]
         )
 
-        (RunnablePassthrough.assign(context=self._get_rag_context) | prompt | self.llm)
-
         # UPGRADE: Enforce structured output
         structured_llm = self.llm.with_structured_output(AgentResponse)
         chain_with_structure = (
@@ -635,13 +633,13 @@ class CollaborativeAgent:
         with (
             tracer.start_as_current_span("self_correction_cycle")
             if tracer
-            else open(os.devnull, "w")
+            else nullcontext()
         ):
             # 1. Initial Response
             with (
                 tracer.start_as_current_span("initial_response")
                 if tracer
-                else open(os.devnull, "w")
+                else nullcontext()
             ):
                 initial_response_msg: AgentResponse = await llm_breaker.call_async(
                     asyncio.wait_for,
@@ -649,10 +647,23 @@ class CollaborativeAgent:
                     timeout=timeout,
                 )
 
-            # 2. Reflection & Critique (simplified for brevity, can be expanded)
-            critique = "Critique step is enabled and passed."  # In a full implementation, this would be another LLM call
+            # 2. Reflection
+            reflection_prompt = f"Review the following response for accuracy and completeness. Identify any issues:\n\nOriginal question: {user_input}\nResponse: {initial_response_msg.response}"
+            reflection_result = await asyncio.wait_for(
+                self.llm.ainvoke([HumanMessage(content=reflection_prompt)]),
+                timeout=timeout,
+            )
+            reflection = reflection_result.content if hasattr(reflection_result, 'content') else str(reflection_result)
 
-            # 3. Final Response (using the structured output from the first call)
+            # 3. Critique
+            critique_prompt = f"Based on this reflection, suggest improvements:\n\nReflection: {reflection}"
+            critique_result = await asyncio.wait_for(
+                self.llm.ainvoke([HumanMessage(content=critique_prompt)]),
+                timeout=timeout,
+            )
+            critique = critique_result.content if hasattr(critique_result, 'content') else str(critique_result)
+
+            # 4. Final Response (using the structured output from the first call)
             final_response_obj = initial_response_msg
             final_response = final_response_obj.response
 
