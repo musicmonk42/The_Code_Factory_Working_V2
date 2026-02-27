@@ -259,13 +259,11 @@ graph TD
 
 &nbsp;   ```bash
 
-&nbsp;   go mod init checkpoint\_chaincode
+&nbsp;   # go.mod is already present; restore all dependencies in one step:
 
-&nbsp;   go get github.com/hyperledger/fabric-chaincode-go
+&nbsp;   go mod download
 
-&nbsp;   go get github.com/hyperledger/fabric-contract-api-go
-
-&nbsp;   go get github.com/hyperledger/fabric-protos-go
+&nbsp;   go mod verify
 
 &nbsp;   ```
 
@@ -467,7 +465,7 @@ AWS\_ACCESS\_KEY\_ID=your\_aws\_key
 
 &nbsp;       checkpoint\_name="my\_checkpoint",
 
-&nbsp;       hash="sha256:abc123",
+&nbsp;       hash="abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
 
 &nbsp;       prev\_hash="",
 
@@ -489,7 +487,7 @@ AWS\_ACCESS\_KEY\_ID=your\_aws\_key
 
 &nbsp;   ```bash
 
-&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"ReadCheckpoint","Args":\["my\_checkpoint"]}'
+&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"ReadCheckpoint","Args":\["my\_checkpoint", ""]}'
 
 &nbsp;   ```
 
@@ -509,7 +507,7 @@ AWS\_ACCESS\_KEY\_ID=your\_aws\_key
 
 &nbsp;   ```bash
 
-&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"ReadCheckpointByHash","Args":\["my\_checkpoint", "sha256:abc123"]}'
+&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"ReadCheckpointByHash","Args":\["my\_checkpoint", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"]}'
 
 &nbsp;   ```
 
@@ -523,7 +521,7 @@ AWS\_ACCESS\_KEY\_ID=your\_aws\_key
 
 &nbsp;   ```bash
 
-&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"RollbackCheckpoint","Args":\["my\_checkpoint", "sha256:abc123", "Rollback for audit"]}'
+&nbsp;   peer chaincode invoke -o orderer.example.com:7050 -C mychannel -n checkpoint\_chaincode -c '{"function":"RollbackCheckpoint","Args":\["my\_checkpoint", "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890", "Rollback for audit"]}'
 
 &nbsp;   ```
 
@@ -651,37 +649,53 @@ AWS\_ACCESS\_KEY\_ID=your\_aws\_key
 
 
 
-\*\*tests/test\_checkpoint\_chaincode.go (Assumed)\*\*
+\*\*checkpoint\_chaincode\_test.go\*\*
 
 
 
-\- Coverage: WriteCheckpoint, ReadCheckpoint, RollbackCheckpoint, hash chaining
+\- Coverage: WriteCheckpoint, ReadCheckpoint, ReadCheckpointByHash, ReadCheckpointHistory, RollbackCheckpoint, RBAC, hash chaining, version zero-padding, deterministic timestamps, secondary index integrity
 
-\- Gaps: Edge-case testing for stale indexes, rollback conflicts
+\- Run: `go test -v -count=1 -race ./...`
 
-\- Run: `go test ./tests -v`
-
-
-
-\*\*Integration Tests\*\*
+\- Coverage report: `go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out`
 
 
+
+\*\*Integration Tests (contracts/checkpoint\_chaincode\_integration\_test.go)\*\*
+
+
+
+\- Requires a running Hyperledger Fabric test network
 
 \- Test with Fabric network:
 
 &nbsp;   ```bash
 
-&nbsp;   python -m pytest tests/test\_dlt\_backend.py --cov=plugins.dlt\_backend
+&nbsp;   # From the fabric_chaincode/ directory:
+
+&nbsp;   go test -v -tags=integration -timeout=300s ./...
+
+&nbsp;   # Set FABRIC\_CONNECTION\_PROFILE=/path/to/connection.yaml to override default
 
 &nbsp;   ```
 
 
 
-\*\*Full Test Suite\*\*
+\*\*Makefile Targets\*\*
 
 ```bash
 
-go test ./... \&\& pytest --cov=plugins.dlt\_backend
+make chaincode-build    \# compile chaincode
+
+make chaincode-test     \# unit tests with race detector
+
+make chaincode-coverage \# unit tests with HTML coverage report
+
+make chaincode-vet      \# go vet static analysis
+
+make chaincode-lint     \# staticcheck \+ govulncheck
+
+make chaincode-clean    \# remove build artifacts
 
 ```
 
