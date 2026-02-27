@@ -737,6 +737,59 @@ class SandboxPolicy:
     timeout: float = 2.0
 
 
+# ---------------------------------------------------------------------------
+# Arbiter policy integration — validate SandboxPolicy against governance layer
+# ---------------------------------------------------------------------------
+
+try:
+    from self_fixing_engineer.arbiter.arbiter_plugin_registry import (  # type: ignore[import]
+        get_registry as _get_arbiter_registry,
+    )
+    _ARBITER_POLICY_AVAILABLE = True
+except ImportError:
+    _ARBITER_POLICY_AVAILABLE = False
+
+
+def _validate_policy_with_arbiter(policy: "SandboxPolicy") -> None:
+    """Validate *policy* against the arbiter policy engine when available.
+
+    Adapts :class:`SandboxPolicy` to the arbiter registry's
+    ``validate_sandbox_policy`` format.  This is intentionally non-blocking:
+    any exception *other* than :exc:`PermissionError` is caught and logged at
+    WARNING level so that a misconfigured arbiter cannot prevent legitimate
+    sandbox execution.
+
+    Parameters
+    ----------
+    policy:
+        The :class:`SandboxPolicy` to validate.
+
+    Raises
+    ------
+    PermissionError
+        Re-raised verbatim when the arbiter policy engine explicitly rejects
+        the policy.
+    """
+    if not _ARBITER_POLICY_AVAILABLE:
+        return
+
+    try:
+        registry = _get_arbiter_registry()
+        if registry is not None and hasattr(registry, "validate_sandbox_policy"):
+            registry.validate_sandbox_policy(
+                {
+                    "allow_imports": policy.allow_imports,
+                    "timeout": policy.timeout,
+                }
+            )
+    except PermissionError:
+        raise  # Surface explicit policy rejections to the caller
+    except Exception as exc:
+        logger.warning(
+            "Arbiter policy validation skipped (non-blocking error): %s", exc
+        )
+
+
 try:  # Bridge to real sandbox implementation
     from self_fixing_engineer.simulation.sandbox import (
         run_in_sandbox as _real_run_in_sandbox,
@@ -749,6 +802,9 @@ except ImportError:  # pragma: no cover
 def run_in_sandbox(
     code: str, inputs: Dict[str, Any], policy: SandboxPolicy
 ) -> Dict[str, Any]:
+    # Validate policy against arbiter's policy engine if available
+    _validate_policy_with_arbiter(policy)
+
     if not _REAL_SANDBOX_AVAILABLE:
         logger.warning(
             "Real sandbox not available, using stub (results may be unreliable)"

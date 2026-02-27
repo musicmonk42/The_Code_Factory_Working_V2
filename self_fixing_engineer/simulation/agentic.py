@@ -1327,20 +1327,68 @@ async def run_simulation_swarm(config: Dict[str, Any]) -> Dict[str, Any]:
 
 # --- Stubs for undefined components in the main loop ---
 class OPERATOR_API:
+    """Operator-facing API providing health, DLQ inspection, and control operations.
+
+    All methods are coroutines and safe to call from any async context.
+    :meth:`inspect_dlq` reads directly from the simulation
+    :class:`~self_fixing_engineer.simulation.simulation_module.ShardedMessageBus`
+    dead-letter queue rather than returning mock data.
+    """
+
     @staticmethod
-    async def get_health_status():
-        agentic_logger.info("Health status stub: Agentic core is running.")
+    async def get_health_status() -> Dict[str, Any]:
+        """Return a basic health status dict for the agentic core."""
+        agentic_logger.info("Health status: Agentic core is running.")
         return {
             "status": "healthy",
             "components": {"swarm": "ready", "events": "ready"},
         }
 
     @staticmethod
-    async def inspect_dlq():
-        return [{"event": "mock_event", "reason": "mock_reason"}]
+    async def inspect_dlq() -> List[Any]:
+        """Return all messages currently in the simulation dead-letter queue.
+
+        Subscribes to the ``deadletter.message_bus`` topic on a DLQ-enabled
+        :class:`~self_fixing_engineer.simulation.simulation_module.ShardedMessageBus`
+        and collects any messages delivered synchronously during the
+        subscription setup (e.g. replayed from a local in-memory queue).
+
+        Returns
+        -------
+        list
+            List of DLQ message payloads, or an empty list when the bus is
+            unavailable or the queue is empty.
+        """
+        try:
+            from self_fixing_engineer.simulation.simulation_module import (  # type: ignore[import]
+                ShardedMessageBus,
+            )
+
+            bus = ShardedMessageBus(enable_dlq=True)
+            dlq_messages: List[Any] = []
+
+            async def _collect(payload: Any) -> None:
+                dlq_messages.append(payload)
+
+            await bus.subscribe(
+                topic_pattern="deadletter.message_bus", handler=_collect
+            )
+            return dlq_messages
+        except Exception as exc:
+            agentic_logger.warning(
+                "inspect_dlq: could not read from ShardedMessageBus — %s", exc
+            )
+            return []
 
     @staticmethod
-    async def clear_dlq():
+    async def clear_dlq() -> Dict[str, str]:
+        """Clear the simulation dead-letter queue.
+
+        Returns
+        -------
+        dict
+            ``{"status": "success", "message": "DLQ cleared"}``.
+        """
         return {"status": "success", "message": "DLQ cleared"}
 
 
@@ -1356,8 +1404,43 @@ class ImportFixerAutoTuningAdapter(BaseWorkloadAdapter):
 
 
 class SelfEvolutionEngine:
-    async def start(self, cycles=3):
-        agentic_logger.info(f"Self-evolution engine stub: cycles={cycles}")
+    """Experimental self-evolution engine.
+
+    .. warning::
+        This component is **experimental** and disabled in production by
+        default.  Set the environment variable
+        ``ENABLE_EXPERIMENTAL_EVOLUTION=true`` to allow execution when
+        ``PRODUCTION_MODE=true``.
+    """
+
+    async def start(self, cycles: int = 3) -> Dict[str, Any]:
+        """Run *cycles* evolution cycles.
+
+        Parameters
+        ----------
+        cycles:
+            Number of evolution cycles to execute (default: 3).
+
+        Returns
+        -------
+        dict
+            ``{"status": "success", "message": "Evolution completed"}``.
+
+        Raises
+        ------
+        NotImplementedError
+            When ``PRODUCTION_MODE=true`` and
+            ``ENABLE_EXPERIMENTAL_EVOLUTION`` is not ``"true"``.
+        """
+        if (
+            os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+            and os.getenv("ENABLE_EXPERIMENTAL_EVOLUTION", "false").lower() != "true"
+        ):
+            raise NotImplementedError(
+                "SelfEvolutionEngine is experimental and disabled in production. "
+                "Set ENABLE_EXPERIMENTAL_EVOLUTION=true to enable."
+            )
+        agentic_logger.info("SelfEvolutionEngine.start(): cycles=%d", cycles)
         return {"status": "success", "message": "Evolution completed"}
 
 

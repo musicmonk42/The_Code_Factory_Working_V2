@@ -916,14 +916,118 @@ class CustomLLMProvider:
         _response_cache[cache_key] = (response, expiry)
 
     async def _make_request(self, messages: List[Any]) -> Any:
-        # This method is a hook for tests and is not fully implemented here
-        # It's expected to be mocked by the unit tests.
-        raise NotImplementedError("_make_request hook not implemented.")
+        """Execute a single non-streaming chat-completions request.
+
+        Builds an OpenAI-compatible ``/chat/completions`` payload from
+        *messages*, sends it with the configured ``api_key`` and ``timeout``,
+        and returns the parsed JSON response body.
+
+        Parameters
+        ----------
+        messages:
+            List of message objects.  Role is read from ``msg.type``
+            (LangChain convention) falling back to ``"user"``.  Content is
+            read from ``msg.content`` falling back to ``str(msg)``.
+
+        Returns
+        -------
+        Any
+            Parsed JSON response dict from the LLM provider.
+
+        Raises
+        ------
+        aiohttp.ClientResponseError
+            On non-2xx HTTP status after ``raise_for_status()``.
+        aiohttp.ClientError
+            On network-level failures.
+        """
+        endpoint = self.config.api_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {
+                    "role": getattr(m, "type", "user"),
+                    "content": getattr(m, "content", str(m)),
+                }
+                for m in messages
+            ],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+        timeout = aiohttp.ClientTimeout(
+            total=self.config.timeout,
+            connect=min(10, self.config.timeout),
+        )
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                endpoint, json=payload, headers=headers
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
 
     async def _make_streaming_request(self, messages: List[Any]) -> Any:
-        # This method is a hook for tests and is not fully implemented here
-        # It's expected to be mocked by the unit tests.
-        raise NotImplementedError("_make_streaming_request hook not implemented.")
+        """Execute a streaming chat-completions request and return the open response.
+
+        The caller is responsible for iterating the SSE stream and closing
+        the response.  The :class:`aiohttp.ClientSession` lifetime is managed
+        by the caller via the returned response object's context.
+
+        Parameters
+        ----------
+        messages:
+            List of message objects (same convention as :meth:`_make_request`).
+
+        Returns
+        -------
+        aiohttp.ClientResponse
+            An open streaming response.  The caller must await its content
+            and handle closure.
+
+        Raises
+        ------
+        aiohttp.ClientResponseError
+            On non-2xx HTTP status.
+        aiohttp.ClientError
+            On network-level failures.
+        """
+        endpoint = self.config.api_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Connection": "keep-alive",
+        }
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {
+                    "role": getattr(m, "type", "user"),
+                    "content": getattr(m, "content", str(m)),
+                }
+                for m in messages
+            ],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "stream": True,
+        }
+        timeout = aiohttp.ClientTimeout(
+            total=self.config.timeout,
+            connect=min(10, self.config.timeout),
+        )
+        # A new session is created per streaming call; the caller is expected
+        # to consume and close the response promptly.
+        session = aiohttp.ClientSession(timeout=timeout)
+        response = await session.post(endpoint, json=payload, headers=headers)
+        try:
+            response.raise_for_status()
+        except Exception:
+            await session.close()
+            raise
+        return response
 
     async def _get_fallback_provider(self) -> Optional["CustomLLMProvider"]:
         return None
