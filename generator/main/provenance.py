@@ -293,6 +293,9 @@ def validate_syntax(code_content: str, filename: str = "unknown.py") -> Dict[str
 
 def validate_has_content(content: str, filename: str) -> Dict[str, Any]:
     """Validate file has non-trivial content."""
+    # __init__.py files are allowed to be empty — they're Python package markers
+    if filename.endswith("__init__.py"):
+        return {"valid": True, "filename": filename, "length": len(content.strip()), "error": None}
     stripped = content.strip()
     has_content = len(stripped) > MIN_CONTENT_LENGTH
     return {

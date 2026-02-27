@@ -364,8 +364,8 @@ async def _run_pipeline_with_semaphore(
     # explicit run_full_pipeline call both start a pipeline concurrently.
     if job_id in _jobs_pipeline_started:
         logger.warning(
-            f"[Pipeline] Duplicate pipeline trigger detected for job {job_id}. "
-            "Skipping to prevent race condition."
+            "[Pipeline] Job %s is already running in pipeline. Skipping duplicate request.",
+            job_id,
         )
         return
 
