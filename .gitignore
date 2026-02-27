@@ -222,6 +222,7 @@ __marimo__/
 *.jsonl
 audit.log.json
 chroma_db/
+dlt_dev_storage/
 .prom_multiproc/
 validator_performance.json
 test_metrics_snapshot.json

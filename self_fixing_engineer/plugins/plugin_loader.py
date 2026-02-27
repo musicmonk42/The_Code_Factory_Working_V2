@@ -54,7 +54,28 @@ def _get_registry() -> Optional[Any]:
 
 
 def _register(registry: Any, kind: Any, name: str, cls: Any, version: str = "1.0.0") -> None:
-    """Register *cls* with *registry* under *kind* / *name*."""
+    """Register plugin *cls* with *registry* under *kind* / *name*.
+
+    Parameters
+    ----------
+    registry:
+        The active ``PluginRegistry`` instance, or *None* if the registry is
+        unavailable (e.g. during unit tests without the full arbiter stack).
+        When *None* the function is a no-op — plugins are still importable,
+        but not discoverable via the registry.
+    kind:
+        A ``PlugInKind`` enum value that categorises the plugin
+        (e.g. ``PlugInKind.SINK`` or ``PlugInKind.INTEGRATION``).
+    name:
+        The unique string name used to look up the plugin in the registry.
+    cls:
+        The plugin *class* (factory) to register.  An actual gateway instance
+        is **not** passed here; instantiation and lifecycle management remain
+        the responsibility of each plugin module's ``initialize()`` / ``shutdown()``
+        / ``app_lifecycle()`` functions.
+    version:
+        Semantic version string for the plugin (default ``"1.0.0"``).
+    """
     if registry is None:
         return
     try:

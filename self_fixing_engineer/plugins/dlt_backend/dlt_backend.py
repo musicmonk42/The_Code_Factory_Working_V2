@@ -325,6 +325,20 @@ def decrypt(ciphertext: bytes, key: bytes) -> bytes:
     return aes.decrypt(nonce, ct, associated_data=None)
 
 
+def _dlt_dev_storage_path(subdir: str) -> str:
+    """Return a dev-mode storage path for *subdir* (e.g. 'offchain' or 'ledger').
+
+    Respects the ``DLT_DEV_STORAGE_DIR`` environment variable so that operators
+    running in containers can redirect the path to a persistent volume mount
+    (e.g. ``/app/data/dlt_dev_storage``) instead of the default relative path
+    that would write into the ephemeral image overlay filesystem.
+
+    Priority: env var > hardcoded relative default.
+    """
+    base = os.environ.get("DLT_DEV_STORAGE_DIR", "")
+    return os.path.join(base, subdir) if base else f"./dlt_dev_storage/{subdir}"
+
+
 ############################################
 # Production Off-Chain Storage: S3 Example #
 ############################################
@@ -349,7 +363,7 @@ except ImportError as e:
 
         class S3OffChainClient:  # Local file-backed dev implementation
             def __init__(self, config):
-                self._storage_dir = config.get("storage_dir", "./dlt_dev_storage/offchain")
+                self._storage_dir = config.get("storage_dir", _dlt_dev_storage_path("offchain"))
                 os.makedirs(self._storage_dir, exist_ok=True)
                 logger.warning(
                     f"[DEV ONLY] Using local file-backed S3OffChainClient at {self._storage_dir!r}."
@@ -402,7 +416,7 @@ except ImportError as e:
 
         class FabricClientWrapper:  # Local file-backed dev implementation
             def __init__(self, config, off_chain_client):
-                self._ledger_dir = config.get("ledger_dir", "./dlt_dev_storage/ledger")
+                self._ledger_dir = config.get("ledger_dir", _dlt_dev_storage_path("ledger"))
                 self.off_chain_client = off_chain_client
                 os.makedirs(self._ledger_dir, exist_ok=True)
                 logger.warning(
