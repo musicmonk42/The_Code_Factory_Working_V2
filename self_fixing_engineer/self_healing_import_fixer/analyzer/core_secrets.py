@@ -673,10 +673,3 @@ __all__ = [
     "SecurityAnalysisError",
 ]
 
-
-class _SecretsManager:
-    def get_secret(self, key: str, required: bool = False):
-        return "dummy_secret"
-
-
-SECRETS_MANAGER = _SecretsManager()

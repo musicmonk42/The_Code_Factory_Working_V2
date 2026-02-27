@@ -242,8 +242,9 @@ except ImportError as e:
             )
             return {"status": "SUCCESS", "result": {}, "note": "import_fixer_fallback"}
 
-    def get_available_backends(self) -> List[str]:  # pragma: no cover
-        return ["qasm_simulator"]
+        def get_available_backends(self) -> List[str]:  # pragma: no cover
+            """Return available quantum simulation backends."""
+            return ["qasm_simulator"]
 
 
 @dataclass
@@ -772,7 +773,7 @@ async def run_import_healer(
     dep_results = await fixer_dep.heal_dependencies(
         project_roots=[project_root],
         dry_run=dry_run,
-        python_version="3.11",  # Hardcoded for a modern python version
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         prune_unused=False,
         fail_on_diff=False,
         sync_reqs=True,
@@ -783,21 +784,46 @@ async def run_import_healer(
     # a bit of a hack to call it here, but it works for this simulation.
     module_map, file_to_mod = await fixer_dep._get_module_map([project_root])
 
-    # 4. Find and heal cycles
-    cycle_healer_report = {}
+    # 4. Detect and heal cycles dynamically
+    cycle_healer_report = {"cycles_found": 0, "cycles_fixed": 0, "failures": []}
 
-    # We'll simulate a single cycle fix for the test
-    # In a real scenario, this would iterate through detected cycles.
-    cycle_healer = fixer_ast.CycleHealer(
-        file_path=str(Path(project_root) / "pkg" / "b.py"),
-        cycle=["pkg.b", "pkg.a"],
-        graph=None,  # Mocking the graph for this test
-        project_root=project_root,
-        whitelisted_paths=whitelisted_paths,
-    )
+    try:
+        # Import graph analyzer
+        try:
+            from self_healing_import_fixer.analyzer.core_graph import ImportGraphAnalyzer
+        except ImportError:
+            from analyzer.core_graph import ImportGraphAnalyzer
 
-    await cycle_healer.heal()
-    cycle_healer_report = {"status": "success", "fix_applied": True}
+        analyzer = ImportGraphAnalyzer(project_root, config={"whitelisted_paths": whitelisted_paths})
+        graph = analyzer.build_graph()
+        cycles = analyzer.detect_cycles(graph)
+
+        cycle_healer_report["cycles_found"] = len(cycles)
+
+        for cycle in cycles:
+            # Get the file path for the first module in the cycle
+            first_module = cycle[0] if cycle else None
+            if first_module and first_module in analyzer.module_paths:
+                file_path = analyzer.module_paths[first_module]
+                try:
+                    healer = fixer_ast.CycleHealer(
+                        file_path=file_path,
+                        cycle=cycle,
+                        graph=graph,
+                        project_root=project_root,
+                        whitelisted_paths=whitelisted_paths,
+                    )
+                    result = await healer.heal()
+                    if result:
+                        cycle_healer_report["cycles_fixed"] += 1
+                except Exception as e:
+                    logger.warning(f"Failed to heal cycle {cycle}: {e}")
+                    cycle_healer_report["failures"].append({"cycle": cycle, "error": str(e)})
+    except ImportError as e:
+        logger.warning(f"ImportGraphAnalyzer not available, skipping cycle detection: {e}")
+    except Exception as e:
+        logger.error(f"Error during cycle detection: {e}")
+        cycle_healer_report["error"] = str(e)
 
     return {
         "summary": "Healing process completed.",
@@ -1366,6 +1392,42 @@ class ImportFixerEngine:
                 **kwargs,
             ),
         )
+
+    async def fix_file(self, file_path: str, dry_run: bool = False) -> str:
+        """
+        Fix import errors in a file.
+
+        Args:
+            file_path: Path to the Python file to fix.
+            dry_run: If True, return what would be fixed without writing.
+
+        Returns:
+            The fixed code as a string.
+
+        Raises:
+            FileNotFoundError: If the file does not exist.
+            RuntimeError: If fixing fails.
+        """
+        import os
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        with open(file_path, 'r', encoding='utf-8') as f:
+            code = f.read()
+
+        result = self.fix_code(code, file_path=file_path, dry_run=dry_run)
+
+        if result['status'] == 'error':
+            raise RuntimeError(result['message'])
+
+        fixed_code = result['fixed_code']
+
+        if not dry_run and result['fixes_applied']:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(fixed_code)
+            self.logger.info(f"Fixed {len(result['fixes_applied'])} imports in {file_path}")
+
+        return fixed_code
 
     async def heal_project(
         self,
