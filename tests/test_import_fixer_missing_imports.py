@@ -333,3 +333,98 @@ def root(request: Request, response: Response):
         
         assert result["status"] == "success"
         assert "import uuid" in result["fixed_code"]
+
+
+class TestCrossRouterImportGuard:
+    """ImportFixerEngine must not inject cross-router service imports."""
+
+    def setup_method(self):
+        self.fixer = ImportFixerEngine()
+
+    def test_cross_router_service_import_is_skipped(self):
+        """auth_service defined in app.routers.auth must not be imported into orders.py."""
+        code = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def list_orders(user=Depends(auth_service.get_current_user)):\n"
+            "    return []\n"
+        )
+        project_symbol_map = {
+            "auth_service": ("app.routers.auth", "auth_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/orders.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.auth import auth_service" not in fixed, (
+            "cross-router import of auth_service must be suppressed"
+        )
+
+    def test_service_instance_import_skipped_for_same_package_siblings(self):
+        """order_service defined in a sibling router module must not be injected."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def checkout():\n"
+            "    return order_service.process()\n"
+        )
+        project_symbol_map = {
+            "order_service": ("app.routers.orders", "order_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/checkout.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.orders import order_service" not in fixed, (
+            "cross-sibling service instance import must be suppressed"
+        )
+
+    def test_non_service_cross_router_import_also_skipped(self):
+        """Any cross-router import (both under app.routers) must be skipped."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def some_view():\n"
+            "    return helper_fn()\n"
+        )
+        project_symbol_map = {
+            "helper_fn": ("app.routers.utils", "helper_fn"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/orders.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.routers.utils import helper_fn" not in fixed, (
+            "any cross-router import must be suppressed"
+        )
+
+    def test_cross_service_import_is_allowed(self):
+        """Importing from app.services (not app.routers) must still be allowed."""
+        code = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+            "\n"
+            "async def create_order():\n"
+            "    return order_service.create()\n"
+        )
+        project_symbol_map = {
+            "order_service": ("app.services.orders", "order_service"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/checkout.py",
+            project_symbol_map=project_symbol_map,
+        )
+        fixed = result["fixed_code"]
+        assert "from app.services.orders import order_service" in fixed, (
+            "import from app.services (not app.routers) must be allowed"
+        )

@@ -2923,6 +2923,10 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             required_symbols[module_path] = set()
                         required_symbols[module_path].add(symbol)
 
+    # Maps module_path -> set of non-pydantic stub class names created in the second pass.
+    # Consumed by the third pass to inject discovered instance methods.
+    _stub_class_names: Dict[str, Set[str]] = {}
+
     # Second pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
         if not symbols:
@@ -2973,6 +2977,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f'    """Stub class."""\n'
                             f"    pass\n\n\n"
                         )
+                        _stub_class_names.setdefault(module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
                         f"{sym} = APIRouter()\n\n\n"
@@ -3056,6 +3061,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                                 f'    """Stub class."""\n'
                                 f"    pass\n"
                             )
+                            _stub_class_names.setdefault(module_path, set()).add(sym)
                     elif _is_router_variable(sym):
                         appended_lines.append(
                             f"\n{sym} = APIRouter()\n"
@@ -3077,6 +3083,105 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     sorted(missing),
                     module_path,
                 )
+
+    # Third pass: detect methods referenced on instances of stub classes and inject
+    # placeholder method stubs so that attribute access does not raise AttributeError.
+    # Example: ``auth_service = AuthService()`` followed by
+    # ``Depends(auth_service.get_current_user)`` in a router file requires that
+    # ``AuthService`` exposes a ``get_current_user`` method.
+    if _stub_class_names:
+        # Build reverse mapping: class_name -> module_path
+        _class_to_module: Dict[str, str] = {}
+        for _mod_path, _cls_set in _stub_class_names.items():
+            for _cls in _cls_set:
+                _class_to_module[_cls] = _mod_path
+
+        # Guard: skip if all stub class sets were empty (avoids empty-alternation regex).
+        if _class_to_module:
+            # Pattern to find ``var = ClassName()`` instantiation sites.
+            _cls_alt = "|".join(re.escape(c) for c in sorted(_class_to_module))
+            _instantiation_re = re.compile(
+                r"^[ \t]*([A-Za-z_]\w*)\s*=\s*(" + _cls_alt + r")\s*\(",
+                re.MULTILINE,
+            )
+            # Maps variable_name -> (class_name, module_path)
+            _instance_vars: Dict[str, Tuple[str, str]] = {}
+            for _content in code_files.values():
+                for _m in _instantiation_re.finditer(_content):
+                    _instance_vars[_m.group(1)] = (
+                        _m.group(2), _class_to_module[_m.group(2)]
+                    )
+
+            if _instance_vars:
+                # Maps (module_path, class_name) -> {method_name: is_async}
+                _methods_to_inject: Dict[Tuple[str, str], Dict[str, bool]] = {}
+                for _var, (_cls, _mod_path) in _instance_vars.items():
+                    _ev = re.escape(_var)
+                    _depends_re = re.compile(
+                        r"\bDepends\(\s*" + _ev + r"\.([A-Za-z_]\w*)\s*\)"
+                    )
+                    _await_re = re.compile(
+                        r"\bawait\s+" + _ev + r"\.([A-Za-z_]\w*)\b"
+                    )
+                    _attr_re = re.compile(
+                        r"\b" + _ev + r"\.([A-Za-z_]\w*)\b"
+                    )
+                    _key: Tuple[str, str] = (_mod_path, _cls)
+                    _async_meths: Set[str] = set()
+                    _all_meths: Set[str] = set()
+                    for _fc in code_files.values():
+                        for _am in _depends_re.finditer(_fc):
+                            _async_meths.add(_am.group(1))
+                            _all_meths.add(_am.group(1))
+                        for _am in _await_re.finditer(_fc):
+                            _async_meths.add(_am.group(1))
+                            _all_meths.add(_am.group(1))
+                        for _am in _attr_re.finditer(_fc):
+                            _all_meths.add(_am.group(1))
+                    if _key not in _methods_to_inject:
+                        _methods_to_inject[_key] = {}
+                    for _meth in _all_meths:
+                        _is_async = _meth in _async_meths
+                        if _meth in _methods_to_inject[_key]:
+                            # async wins when discovered from multiple variables
+                            _methods_to_inject[_key][_meth] = (
+                                _methods_to_inject[_key][_meth] or _is_async
+                            )
+                        else:
+                            _methods_to_inject[_key][_meth] = _is_async
+
+                # Inject discovered methods into stub class bodies.
+                for (_mod_path, _cls), _methods in _methods_to_inject.items():
+                    if not _methods or _mod_path not in code_files:
+                        continue
+                    _method_lines: List[str] = []
+                    for _meth in sorted(_methods):
+                        _prefix = "async " if _methods[_meth] else ""
+                        _method_lines.append(
+                            f"    {_prefix}def {_meth}(self, *args, **kwargs):\n"
+                            f'        raise NotImplementedError("Stub: implement {_meth}")\n'
+                        )
+                    _method_body = "\n".join(_method_lines)
+                    _stub_cls_re = re.compile(
+                        r"(class\s+" + re.escape(_cls) + r"\s*:\s*\n"
+                        r'\s*"""Stub class\."""\s*\n)'
+                        r"(\s*pass\b[^\n]*)",
+                        re.MULTILINE,
+                    )
+                    _new_content = _stub_cls_re.sub(
+                        lambda m, _b=_method_body: m.group(1) + _b,
+                        code_files[_mod_path],
+                        count=1,
+                    )
+                    if _new_content != code_files[_mod_path]:
+                        code_files[_mod_path] = _new_content
+                        logger.info(
+                            "ensure_local_module_stubs: injected %d method(s) %s into %s.%s",
+                            len(_methods),
+                            sorted(_methods),
+                            _mod_path,
+                            _cls,
+                        )
 
     if stub_files_created:
         logger.info(
