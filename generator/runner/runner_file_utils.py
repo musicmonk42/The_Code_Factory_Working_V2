@@ -2488,7 +2488,7 @@ async def validate_generated_project(
                     # Distinguish third-party package errors from project-local errors
                     if "ModuleNotFoundError: No module named" in import_error:
                         # Extract the missing module name
-                        _match = __import__("re").search(
+                        _match = re.search(
                             r"No module named '([^']+)'", import_error
                         )
                         missing_mod = _match.group(1).split(".")[0] if _match else ""

@@ -1275,8 +1275,10 @@ class TestExtractAndPopulateRequirements:
             "Dockerfile": "FROM python:3.11",
         }
         result = crh.extract_and_populate_requirements(files)
-        # No Python files to scan, so no new packages should be added
-        assert result == files or "requirements.txt" not in result or not result.get("requirements.txt", "").strip()
+        # No Python files to scan — the returned dict must equal the input
+        # (no requirements.txt should be created from non-Python file content)
+        assert result == files, \
+            "extract_and_populate_requirements should not modify files when there are no .py files"
 
     def test_extracts_pydantic_settings(self):
         """Verify pydantic_settings import is mapped to pydantic-settings."""

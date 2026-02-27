@@ -1462,8 +1462,7 @@ def _is_third_party_import_error(error_str: str) -> bool:
     Returns:
         True if the error is caused by a missing third-party package.
     """
-    import re as _re
-    match = _re.search(r"No module named '([^']+)'", error_str)
+    match = re.search(r"No module named '([^']+)'", error_str)
     if not match:
         return False
     module_top = match.group(1).split(".")[0]
@@ -1472,6 +1471,7 @@ def _is_third_party_import_error(error_str: str) -> bool:
     return module_top not in _LOCAL_PREFIXES
 
 
+class OmniCoreService:
     """
     Service for interacting with the OmniCore Engine.
 
@@ -7571,11 +7571,11 @@ def _is_third_party_import_error(error_str: str) -> bool:
                                         
                                         for src_file in source_files:
                                             try:
-                                                _src_content = src_file.read_text(encoding="utf-8")
-                                                if not _src_content.strip():
+                                                src_content = src_file.read_text(encoding="utf-8")
+                                                if not src_content.strip():
                                                     continue
                                                 
-                                                fix_result = fixer.fix_code(_src_content, file_path=str(src_file), project_symbol_map=_proj_sym_map_src)
+                                                fix_result = fixer.fix_code(src_content, file_path=str(src_file), project_symbol_map=_proj_sym_map_src)
                                                 
                                                 if fix_result["status"] == "error":
                                                     error_count += 1
@@ -7585,7 +7585,7 @@ def _is_third_party_import_error(error_str: str) -> bool:
                                                     )
                                                     continue
                                                 
-                                                if fix_result["fixed_code"] != _src_content and fix_result["fixes_applied"]:
+                                                if fix_result["fixed_code"] != src_content and fix_result["fixes_applied"]:
                                                     src_file.write_text(fix_result["fixed_code"], encoding="utf-8")
                                                     fixed_count += 1
                                                     total_fixes += len(fix_result["fixes_applied"])
