@@ -1023,6 +1023,85 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         if changed:
             updated[path] = "".join(lines)
 
+    # ------------------------------------------------------------------ #
+    # 7. Inject stubs for undefined Depends() callables in router files   #
+    # ------------------------------------------------------------------ #
+    _depends_re = re.compile(r'\bDepends\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)')
+    _router_file_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
+    _builtins = set(__builtins__.keys()) if isinstance(__builtins__, dict) else set(dir(__builtins__))
+
+    for path, content in list(updated.items()):
+        if not _router_file_re.match(path):
+            continue
+
+        depends_names = set(_depends_re.findall(content))
+        if not depends_names:
+            continue
+
+        # Collect names already defined or imported in this file
+        defined_names: set = set()
+        # function/class definitions
+        for m in re.finditer(r'^(?:async\s+)?(?:def|class)\s+([A-Za-z_][A-Za-z0-9_]*)', content, re.MULTILINE):
+            defined_names.add(m.group(1))
+        # bare imports: "import name" or "import pkg.mod as name" (supports "import a, b")
+        for m in re.finditer(r'^\s*import\s+(.+)', content, re.MULTILINE):
+            for part in m.group(1).split(','):
+                part = part.strip()
+                if ' as ' in part:
+                    defined_names.add(part.split(' as ')[-1].strip())
+                else:
+                    defined_names.add(part.strip().split('.')[0])
+        # from ... import name [as alias]
+        for m in re.finditer(r'^\s*from\s+\S+\s+import\s+(.+)', content, re.MULTILINE):
+            for part in m.group(1).split(','):
+                part = part.strip()
+                if ' as ' in part:
+                    defined_names.add(part.split(' as ')[-1].strip())
+                else:
+                    defined_names.add(part.strip())
+
+        stubs_to_inject: list = []
+        for dep_name in sorted(depends_names):
+            if dep_name in defined_names or dep_name in _builtins:
+                continue
+            stub = (
+                f"\nasync def {dep_name}() -> dict:\n"
+                f'    """Placeholder dependency — replace with real auth logic."""\n'
+                f'    return {{"sub": "anonymous", "role": "guest"}}\n'
+            )
+            stubs_to_inject.append((dep_name, stub))
+
+        if not stubs_to_inject:
+            continue
+
+        # Insert stubs after the last import block (before first non-import line)
+        lines = content.splitlines(keepends=True)
+        insert_idx = 0
+        past_imports = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if past_imports:
+                break
+            if stripped.startswith('import ') or stripped.startswith('from '):
+                insert_idx = i + 1
+            elif stripped == '' or stripped.startswith('#'):
+                # blank/comment: tentatively advance only if still in import block
+                pass
+            else:
+                past_imports = True
+
+        injection = "".join(stub for _, stub in stubs_to_inject)
+        lines.insert(insert_idx, injection)
+        updated[path] = "".join(lines)
+
+        for dep_name, _ in stubs_to_inject:
+            logger.warning(
+                "[CODEGEN] _reconcile_app_wiring: injected placeholder for undefined"
+                " Depends() callable '%s' in %s",
+                dep_name,
+                path,
+            )
+
     return updated
 
 

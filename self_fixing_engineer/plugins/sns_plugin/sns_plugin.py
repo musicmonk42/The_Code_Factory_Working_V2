@@ -1966,9 +1966,24 @@ class SNSGatewayManager:
 DEAD_LETTER_DIR = os.environ.get(
     "SNS_GATEWAY_DEAD_LETTER_DIR", "/var/lib/sns_gateway_dead_letters"
 )
-if not os.path.exists(DEAD_LETTER_DIR):
+try:
+    if not os.path.exists(DEAD_LETTER_DIR):
+        os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+        os.chmod(DEAD_LETTER_DIR, 0o700)
+except (PermissionError, OSError) as e:
+    import tempfile
+    DEAD_LETTER_DIR = os.path.join(tempfile.gettempdir(), "sns_gateway_dead_letters")
     os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
-    os.chmod(DEAD_LETTER_DIR, 0o700)
+    try:
+        main_logger.warning(
+            f"Could not create dead letter directory at default location, "
+            f"using {DEAD_LETTER_DIR}: {e}"
+        )
+    except NameError:
+        logging.getLogger(__name__).warning(
+            f"Could not create dead letter directory at default location, "
+            f"using {DEAD_LETTER_DIR}: {e}"
+        )
 
 
 async def dead_letter_to_file(event: SNSEvent, reason: str):

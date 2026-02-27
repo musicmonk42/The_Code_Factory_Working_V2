@@ -1439,7 +1439,9 @@ class WorkflowEngine:
                                         )
                         
                         # Skip testgen and deploy if validation failed
-                        if not validation_passed:
+                        # Only retry codegen on non-final iterations with spec fidelity failures.
+                        # On the final iteration (or soft-fail only), continue to downstream stages.
+                        if not validation_passed and iteration_num < max_iterations:
                             continue
                         
                         # [STAGE:MATERIALIZE] Write codegen files to output_path
