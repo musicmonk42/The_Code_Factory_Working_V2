@@ -745,8 +745,12 @@ class MeshPolicyBackend:
                         if "id" not in policy_dict:
                             policy_dict["id"] = policy_id
                         self._graph_reasoner.add_policy(policy_dict)
-                    except Exception:
-                        pass  # graph seeding is best-effort
+                    except Exception as exc:
+                        logger.debug(
+                            "Graph seeding failed; continuing with cached policy only",
+                            policy_id=policy_id,
+                            error=str(exc),
+                        )
             return policy_data
         except Exception as e:
             await _dlq_policy_op("load", policy_id, e)
@@ -764,8 +768,11 @@ class MeshPolicyBackend:
                 ):
                     # This is plain signed data (not encrypted)
                     return json.loads(test_data["data"])
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Signed payload pre-parse failed; falling back to standard processing",
+                    error=str(exc),
+                )
 
             if self.multi_fernet:
                 decrypted_payload = self.multi_fernet.decrypt(data)

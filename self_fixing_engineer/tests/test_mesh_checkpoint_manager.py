@@ -348,6 +348,40 @@ class TestRegressionFixes:
         assert mgr._maintenance_task is None
         close_mock.assert_awaited_once_with("s3")
 
+    @pytest.mark.asyncio
+    async def test_close_continues_when_backend_client_close_fails(self):
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
+
+        mgr = CheckpointManager(backend_type="s3")
+        mgr._backend_client = Mock()
+        mgr._backend_client.close = Mock(side_effect=RuntimeError("close failed"))
+
+        with patch(
+            "self_fixing_engineer.mesh.checkpoint.checkpoint_backends.registry.close",
+            new=AsyncMock(),
+        ) as close_mock:
+            await mgr.close()
+
+        close_mock.assert_awaited_once_with("s3")
+        assert mgr._closed is True
+
+    @pytest.mark.asyncio
+    async def test_close_continues_when_async_backend_client_close_fails(self):
+        from self_fixing_engineer.mesh.checkpoint.checkpoint_manager import CheckpointManager
+
+        mgr = CheckpointManager(backend_type="s3")
+        mgr._backend_client = Mock()
+        mgr._backend_client.close = AsyncMock(side_effect=RuntimeError("async close failed"))
+
+        with patch(
+            "self_fixing_engineer.mesh.checkpoint.checkpoint_backends.registry.close",
+            new=AsyncMock(),
+        ) as close_mock:
+            await mgr.close()
+
+        close_mock.assert_awaited_once_with("s3")
+        assert mgr._closed is True
+
 
 # ---- Security Tests ----
 

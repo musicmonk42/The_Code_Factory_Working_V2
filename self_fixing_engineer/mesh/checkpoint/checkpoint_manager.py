@@ -1490,10 +1490,9 @@ class CheckpointManager:
                         if asyncio.iscoroutine(maybe_awaitable):
                             await maybe_awaitable
                     except Exception as close_err:
-                        logger.warning(
+                        logger.error(
                             f"Failed to close backend client for {self.backend_type}: {close_err}"
                         )
-                        raise
 
             if self.backend_type != "local":
                 from . import checkpoint_backends
@@ -1593,7 +1592,10 @@ class CheckpointManager:
             if isinstance(payload, dict):
                 return payload.get("metadata", {})
             return {}
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                f"Failed to read checkpoint metadata for '{name}' on backend '{self.backend_type}': {e}"
+            )
             return {}
 
     async def _write_to_dlq(self, entry: Dict[str, Any]) -> None:
@@ -1632,6 +1634,7 @@ class CheckpointManager:
                 line = line.strip()
                 if not line:
                     continue
+                entry: Optional[Dict[str, Any]] = None
                 try:
                     entry = json.loads(line)
                     if entry.get("operation") == "save" and entry.get("name"):
@@ -1643,12 +1646,13 @@ class CheckpointManager:
                         )
                     else:
                         remaining_entries.append(entry)
-                except Exception:
-                    logger.warning("DLQ replay failed for entry; keeping in DLQ")
-                    try:
-                        remaining_entries.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Skipping invalid DLQ entry (JSON decode failed): {e}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"DLQ replay failed for entry; keeping in DLQ: {e}")
+                    if isinstance(entry, dict):
+                        remaining_entries.append(entry)
 
             if remaining_entries:
                 if AIOFILES_AVAILABLE:
