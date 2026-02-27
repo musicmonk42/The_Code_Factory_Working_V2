@@ -766,10 +766,20 @@ class PluginRegistry(DependencyAwareRegistryMixin, BasePluginRegistry):
         lock = self._kind_locks[kind]
         # Use proper lock acquisition with threading.RLock
         with lock:
-            if not isinstance(instance, PluginBase):
-                raise TypeError(
-                    f"Plugin instance [{kind.value}:{name}] must inherit from PluginBase."
-                )
+            # Accept both class objects (subclass check) and instances (isinstance check)
+            if isinstance(instance, type):
+                # A class was passed — check if it's a subclass of PluginBase
+                if not issubclass(instance, PluginBase):
+                    logger.warning(
+                        f"Plugin class [{kind.value}:{name}] does not inherit from PluginBase. "
+                        "Registration will proceed but lifecycle methods may not be available."
+                    )
+            else:
+                # An instance was passed — check isinstance
+                if not isinstance(instance, PluginBase):
+                    raise TypeError(
+                        f"Plugin instance [{kind.value}:{name}] must inherit from PluginBase."
+                    )
 
             existing_meta = self.get_metadata(kind, name)
             if existing_meta and version_parse(version) < version_parse(

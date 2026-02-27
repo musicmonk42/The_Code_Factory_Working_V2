@@ -73,7 +73,7 @@ if not logger.handlers:
             sys.stderr.write(
                 "CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.\n"
             )
-            sys.exit(1)
+            raise ImportError("CRITICAL: Pub/Sub plugin file logging failed. Aborting startup.")
 
         class JsonFormatter(logging.Formatter):
             def format(self, record):
@@ -125,7 +125,7 @@ except ImportError as e:
     logger.critical(
         f"CRITICAL: Missing core dependency for Pub/Sub plugin: {e}. Aborting startup."
     )
-    sys.exit(1)
+    raise ImportError(f"CRITICAL: Missing core dependency for Pub/Sub plugin: {e}. Aborting startup.") from e
 
 
 # --- Dependency Gating ---
@@ -142,11 +142,10 @@ except ImportError as e:
         "CRITICAL: google-cloud-pubsub missing. Pub/Sub plugin aborted.",
         level="CRITICAL",
     )
-    sys.exit(1)
+    raise ImportError(f"CRITICAL: google-cloud-pubsub not found. Pub/Sub plugin functionality is critical. Aborting startup: {e}.") from e
 
 try:
-    from pydantic import BaseModel, Field, ValidationError, field_validator
-    from pydantic_core import ValidationInfo
+    from pydantic import BaseModel, Field, ValidationError, ValidationInfo, field_validator
     from pydantic_settings import BaseSettings, SettingsConfigDict
 except ImportError as e:
     logger.critical(
@@ -155,7 +154,7 @@ except ImportError as e:
     alert_operator(
         "CRITICAL: pydantic missing. Pub/Sub plugin aborted.", level="CRITICAL"
     )
-    sys.exit(1)
+    raise ImportError(f"CRITICAL: pydantic or pydantic-settings not found. Schema validation is critical. Aborting startup: {e}.") from e
 
 try:
     from prometheus_client import (
@@ -173,7 +172,7 @@ except ImportError as e:
         "CRITICAL: prometheus_client missing. Pub/Sub plugin aborted.",
         level="CRITICAL",
     )
-    sys.exit(1)
+    raise ImportError(f"CRITICAL: prometheus_client not found. Metrics are mandatory. Aborting startup: {e}.") from e
 
 # --- Caching: Redis Client Initialization ---
 try:
@@ -936,7 +935,7 @@ async def initialize() -> None:
         alert_operator(
             f"CRITICAL: PubSubSettings validation failed: {e}. Aborting.", level="CRITICAL"
         )
-        sys.exit(1)
+        raise RuntimeError(f"CRITICAL: PubSubSettings validation failed: {e}. Aborting startup.") from e
     try:
         metrics = PubSubMetrics(_metrics_registry_instance)
         logger.info("Prometheus metrics initialized.")
@@ -949,7 +948,7 @@ async def initialize() -> None:
             "CRITICAL: Prometheus metrics initialization failed. Pub/Sub plugin aborted.",
             level="CRITICAL",
         )
-        sys.exit(1)
+        raise RuntimeError(f"CRITICAL: Failed to initialize Prometheus metrics: {e}. Aborting startup.") from e
     pubsub_gateway = PubSubGateway(settings, metrics)
 
 
