@@ -43,21 +43,34 @@
 # ------------------------------------------------------------------------------------
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import re
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 # UPGRADE: Imports for enhanced features - [Date: August 19, 2025]
-import hvac
-import redis.asyncio as aredis
-import sentry_sdk
+try:
+    import hvac
+except ImportError:
+    hvac = None
+
+try:
+    import redis.asyncio as aredis
+except ImportError:
+    aredis = None
+
+try:
+    import sentry_sdk
+except ImportError:
+    sentry_sdk = None
 
 # --- Local Application Imports ---
-from intent_capture.agent_core import (
+from .agent_core import (
     AgentError,
     ConfigurationError,
     InvalidSessionError,
@@ -75,7 +88,8 @@ from fastapi_cache.backends.redis import RedisBackend
 from fastapi_cache.decorator import cache
 
 # --- Third-Party Imports ---
-from jose import JOSEError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 
 # FIX: Import the rate limit parser from the 'limits' library
 from limits import parse as parse_rate_limit
@@ -147,7 +161,7 @@ class AppConfig(BaseSettings):
         UPGRADE: Fetches a secret from HashiCorp Vault with a fallback to environment variables.
         - [Date: August 19, 2025]
         """
-        if self.USE_VAULT and self.VAULT_URL and self.VAULT_TOKEN:
+        if self.USE_VAULT and self.VAULT_URL and self.VAULT_TOKEN and hvac:
             try:
                 client = hvac.Client(url=self.VAULT_URL, token=self.VAULT_TOKEN)
                 if client.is_authenticated():
@@ -175,7 +189,7 @@ class AppConfig(BaseSettings):
         super().__init__(**values)
         self.JWT_SECRET_KEY = self._get_secret(
             "JWT_SECRET",
-            "secrets/data/api",
+            os.getenv("JWT_VAULT_PATH", "secrets/data/jwt"),
             "a_very_strong_and_long_secret_key_for_demo_thirty_two_chars_or_more",
         )
 
@@ -300,7 +314,7 @@ async def get_current_user(
             issuer="agent_core_auth",
         )
         return payload
-    except (JOSEError, InvalidSessionError):
+    except (PyJWTError, InvalidSessionError):
         raise credentials_exception
 
 
@@ -330,7 +344,7 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
         if os.getenv("ENABLE_AUDIT_LOGGING", "false").lower() == "true":
             {
                 "requestId": request.state.request_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "clientHost": request.client.host,
                 "path": request.url.path,
                 "statusCode": response.status_code,
@@ -346,7 +360,8 @@ class AuditLoggingMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if dsn := os.getenv("SENTRY_DSN"):
-        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.2)
+        if sentry_sdk:
+            sentry_sdk.init(dsn=dsn, traces_sample_rate=0.2)
     redis_client = await get_redis_client()
     await FastAPICache.init(RedisBackend(redis_client), prefix="api-cache")
     if hf_pipeline:
@@ -382,6 +397,16 @@ async def dynamic_rate_limiter(request: Request):
     rate_limit_item = parse_rate_limit(limit_str)
     if not await limiter.limiter.hit(rate_limit_item, get_remote_address(request)):
         raise RateLimitExceeded()
+
+
+def _predict_cache_key(func, *args, **kwargs):
+    """Deterministic cache key for predict endpoint using SHA-256."""
+    request_data = kwargs.get("request_data") or (args[2] if len(args) > 2 else None)
+    current_user = kwargs.get("current_user") or (args[3] if len(args) > 3 else {})
+    if request_data is None:
+        return "predict:unknown"
+    raw = f"{request_data.user_input}:{(current_user or {}).get('session_id', '')}"
+    return f"predict:{hashlib.sha256(raw.encode()).hexdigest()}"
 
 
 # RECONSTRUCTED: Main Application Factory
@@ -426,7 +451,7 @@ def create_app() -> FastAPI:
     @app.get("/health", tags=["Monitoring"], summary="Check API health")
     async def health_check():
         """Provides a simple health check endpoint."""
-        return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+        return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
     @app.post("/token", tags=["Authentication"], summary="Create a new session token")
     async def login_for_access_token():
@@ -436,7 +461,7 @@ def create_app() -> FastAPI:
             "tier": "standard",
             "consent_prune": True,
             "session_id": session_id,
-            "exp": datetime.utcnow() + timedelta(hours=1),
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1),
             "iss": "agent_core_auth",
             "aud": "agent_core_user",
         }
@@ -456,7 +481,7 @@ def create_app() -> FastAPI:
     )
     @cache(
         expire=300,
-        key_builder=lambda f, *args, **kwargs: f"predict:{hash(kwargs['request_data'].user_input + kwargs['current_user']['session_id'])}",
+        key_builder=_predict_cache_key,
     )
     async def predict_agent_response(
         request: Request,
@@ -470,28 +495,47 @@ def create_app() -> FastAPI:
         try:
             # UPGRADE: RabbitMQ Task Queuing - [Date: August 19, 2025]
             if os.getenv("USE_QUEUE", "false").lower() == "true":
-                # connection = pika.BlockingConnection(...); channel.basic_publish(...)
-                return {
-                    "response": "Prediction task has been queued.",
-                    "trace": {"status": "queued"},
-                }
-            else:
-                agent = await get_or_create_agent(request_data.session_token)
-                prediction_result = await agent.predict(
-                    request_data.user_input, timeout=request_data.timeout
-                )
-
-                # UPGRADE: Response Safety Check - [Date: August 19, 2025]
-                if hasattr(app.state, "safety_pipeline") and app.state.safety_pipeline:
-                    safety_result = app.state.safety_pipeline(
-                        prediction_result["response"]
+                try:
+                    import pika
+                    connection = pika.BlockingConnection(
+                        pika.URLParameters(os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/"))
                     )
-                    if any(
-                        r["label"] == "toxic" and r["score"] > 0.8
-                        for r in safety_result
-                    ):
-                        raise SafetyViolationError()
-                return prediction_result
+                    channel = connection.channel()
+                    channel.queue_declare(queue="predictions", durable=True)
+                    task_id = str(uuid.uuid4())
+                    channel.basic_publish(
+                        exchange="",
+                        routing_key="predictions",
+                        body=json.dumps({
+                            "task_id": task_id,
+                            "user_input": request_data.user_input,
+                            "session_token": request_data.session_token,
+                            "timeout": request_data.timeout,
+                        }),
+                        properties=pika.BasicProperties(delivery_mode=2, content_type="application/json"),
+                    )
+                    connection.close()
+                    return {"response": "Prediction task has been queued.", "trace": {"status": "queued", "task_id": task_id}}
+                except Exception as e:
+                    logger.error(f"RabbitMQ queuing failed: {e}, falling back to direct prediction")
+                    # Fall through to direct prediction below
+
+            agent = await get_or_create_agent(request_data.session_token)
+            prediction_result = await agent.predict(
+                request_data.user_input, timeout=request_data.timeout
+            )
+
+            # UPGRADE: Response Safety Check - [Date: August 19, 2025]
+            if hasattr(app.state, "safety_pipeline") and app.state.safety_pipeline:
+                safety_result = app.state.safety_pipeline(
+                    prediction_result["response"]
+                )
+                if any(
+                    r["label"] == "toxic" and r["score"] > 0.8
+                    for r in safety_result
+                ):
+                    raise SafetyViolationError()
+            return prediction_result
         except (ConfigurationError, InvalidSessionError) as e:
             # Client errors - incorrect configuration or invalid session
             raise HTTPException(status_code=400, detail=str(e))
@@ -503,6 +547,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=504, detail="Prediction timed out")
 
     # UPGRADE: GDPR/CCPA Data Pruning Endpoint - [Date: August 19, 2025]
+    from .session import prune_old_sessions as _session_prune_old_sessions
+
     @app.post(
         "/prune_sessions",
         status_code=204,
@@ -514,8 +560,9 @@ def create_app() -> FastAPI:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, "User has not consented to data pruning."
             )
+        pruned_count = await _session_prune_old_sessions()
         logger.info(
-            f"Data pruning request for user {current_user.get('sub')} (logic placeholder)."
+            f"Data pruning completed for user {current_user.get('sub')}: {pruned_count} sessions pruned."
         )
         return Response(status_code=204)
 

@@ -139,6 +139,18 @@ services:
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
 
+      # ============================================
+      # Intent Capture Module (Bug fixes: #4, #10, #17)
+      # ============================================
+      # CLI WebSocket collaboration JWT secret (intent_capture/cli.py)
+      # Generate with: openssl rand -hex 32
+      # WARNING: A fatal log is emitted in production if the insecure default is used
+      - CLI_JWT_SECRET=${CLI_JWT_SECRET:-default-insecure-secret-key-for-dev}
+      # Vault KV v2 path for the JWT_SECRET shared by API and CLI
+      - JWT_VAULT_PATH=${JWT_VAULT_PATH:-secrets/data/jwt}
+      # RabbitMQ URL for task queuing (only required when USE_QUEUE=true)
+      - RABBITMQ_URL=${RABBITMQ_URL:-}
+
       # -----------------------------------------------------------------------
       # Tier-1 AI Capability Configuration
       # -----------------------------------------------------------------------
@@ -153,6 +165,12 @@ services:
       - PROMETHEUS_URL=${PROMETHEUS_URL:-}
       # Feature 5: Genetic Evolution Engine
       - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
+      # Number of GA generations per evolution run (IB-2: new kwarg wired from env)
+      - EVOLUTION_GENERATIONS=${EVOLUTION_GENERATIONS:-5}
+      # DLT backend type for checkpoint storage and audit log DLT integration.
+      # Options: simple (dev), fabric (Hyperledger Fabric), evm/ethereum (EVM chains).
+      # RB-5: evm/ethereum support added to dlt_backend.py; IB-1: dlt/evm added to checkpoint_manager.
+      - DLT_TYPE=${DLT_TYPE:-fabric}
       # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
       - FEATURE_SUGGESTION_CACHE_TTL=${FEATURE_SUGGESTION_CACHE_TTL:-3600}
       # Clarifier WebSocket session timeout (seconds)

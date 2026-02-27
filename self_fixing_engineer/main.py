@@ -517,7 +517,12 @@ def _init_arbiter():
         try:
             from self_fixing_engineer.envs.code_health_env import CodeHealthEnv, EnvironmentConfig
             env_config = EnvironmentConfig()
-            code_health_env = CodeHealthEnv(config=env_config)
+            # IB-5: get_metrics and apply_action are required callables; pass safe stubs.
+            code_health_env = CodeHealthEnv(
+                get_metrics=lambda: [1.0, 0.0, 0.0, 0.0, 0.0],
+                apply_action=lambda action_id: {"success": True, "action": action_id},
+                config=env_config,
+            )
             engines["code_health_env"] = code_health_env
             logger.info("Connected CodeHealthEnv to Arbiter")
         except Exception as e:

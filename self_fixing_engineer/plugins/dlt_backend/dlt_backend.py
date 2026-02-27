@@ -151,7 +151,9 @@ else:
                 "CRITICAL: OpenTelemetry missing. DLT backend aborted.",
                 level="CRITICAL",
             )
-        sys.exit(1)
+        raise AnalyzerCriticalError(
+            "OpenTelemetry not found. Tracing is mandatory in PRODUCTION_MODE."
+        )
     else:
         logger.warning("OpenTelemetry not found. Tracing will be disabled.")
 
@@ -255,15 +257,25 @@ def _verify_hash_chain(
         )
 
 
+def _compute_checkpoint_hmac(key_material: str, base: Dict[str, Any]) -> str:
+    """Compute HMAC-SHA256 over a checkpoint base dict.
+
+    SEC-1: This single helper is used by BOTH the sign path and the verify path,
+    guaranteeing they always use identical serialization (sort_keys=True,
+    ensure_ascii=False, UTF-8 encoding). Duplicate inline logic with slight
+    differences caused silent HMAC mismatch on every load in the previous code.
+    """
+    key_bytes = key_material if isinstance(key_material, bytes) else key_material.encode("utf-8")
+    payload = json.dumps(base, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    return hmac.new(key_bytes, payload, hashlib.sha256).hexdigest()
+
+
 def _maybe_sign_checkpoint(checkpoint_data: Dict[str, Any]) -> Optional[str]:
     """Generates an HMAC signature for a checkpoint payload if a key is available."""
     key = SECRETS_MANAGER.get_secret("DLT_HMAC_KEY", required=PRODUCTION_MODE)
     if not key:
         return None
-    payload = json.dumps(checkpoint_data, sort_keys=True, ensure_ascii=False).encode(
-        "utf-8"
-    )
-    return hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+    return _compute_checkpoint_hmac(key, checkpoint_data)
 
 
 # --- Cryptography and Compression Helpers ---
@@ -327,7 +339,9 @@ except ImportError as e:
             "CRITICAL: S3OffChainClient missing. DLT backend aborted.",
             level="CRITICAL",
         )
-        sys.exit(1)
+        raise AnalyzerCriticalError(
+            f"S3OffChainClient not found. Off-chain storage is critical: {e}."
+        )
     else:
         logger.warning("S3OffChainClient not found. Using dummy for off-chain storage.")
 
@@ -369,7 +383,9 @@ except ImportError as e:
             "CRITICAL: FabricClientWrapper missing. DLT backend aborted.",
             level="CRITICAL",
         )
-        sys.exit(1)
+        raise AnalyzerCriticalError(
+            f"FabricClientWrapper not found. DLT client is critical: {e}."
+        )
     else:
         logger.warning("FabricClientWrapper not found. Using dummy for DLT client.")
 
@@ -523,9 +539,22 @@ async def initialize_dlt_backend(config: Dict[str, Any]) -> None:
         if dlt_type == "fabric":
             dlt_client_config = DLT_BACKEND_CONFIG.get("fabric", {})
             fabric_client = FabricClientWrapper(dlt_client_config, off_chain_client)
+        elif dlt_type in ("evm", "ethereum"):
+            # RB-5: route to the EVM client
+            try:
+                from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_evm_clients import (
+                    EthereumClientWrapper,
+                )
+            except ImportError as _evm_err:
+                raise AnalyzerCriticalError(
+                    f"EthereumClientWrapper not found for dlt_type='{dlt_type}': {_evm_err}."
+                )
+            evm_config = DLT_BACKEND_CONFIG.get("evm", DLT_BACKEND_CONFIG.get("ethereum", {}))
+            fabric_client = EthereumClientWrapper(evm_config, off_chain_client)  # type: ignore[assignment]
         else:
             raise AnalyzerCriticalError(
-                f"Unsupported DLT client type '{dlt_type}'. Aborting startup."
+                f"Unsupported DLT client type '{dlt_type}'. "
+                f"Supported types: 'fabric', 'evm', 'ethereum'."
             )
 
         health_result = await fabric_client.health_check()
@@ -880,13 +909,8 @@ async def _dlt_backend_impl(
                         "payload_hash": payload_hash,
                         "prev_hash": expected_prev,
                     }
-                    computed_sig = hmac.new(
-                        key.encode("utf-8"),
-                        json.dumps(base, sort_keys=True, ensure_ascii=False).encode(
-                            "utf-8"
-                        ),
-                        hashlib.sha256,
-                    ).hexdigest()
+                    # SEC-1: use shared helper to guarantee identical serialization
+                    computed_sig = _compute_checkpoint_hmac(key, base)
                     if computed_sig != sig:
                         raise HashChainError(
                             "HMAC signature mismatch for checkpoint metadata."

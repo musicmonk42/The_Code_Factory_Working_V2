@@ -133,6 +133,27 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Module-level in-memory state backend for internal engine use (no JWT validation needed)
+try:
+    from .agent_core import StateBackend as _StateBackend
+
+    class _InMemoryBackend(_StateBackend):
+        """Simple in-memory state backend for engine-internal agent creation."""
+
+        def __init__(self):
+            self._store = {}
+
+        async def load_state(self, sid):
+            return self._store.get(sid)
+
+        async def save_state(self, sid, state):
+            self._store[sid] = state
+
+    _INMEMORY_BACKEND_AVAILABLE = True
+except ImportError:
+    _InMemoryBackend = None
+    _INMEMORY_BACKEND_AVAILABLE = False
+
 
 @contextmanager
 def _trace_operation(operation_name: str, attributes: Optional[Dict[str, Any]] = None):
@@ -319,7 +340,7 @@ class IntentCaptureEngine:
             output_format = kwargs.get("output_format", "gherkin")
             
             # Try to get LLM from agent or use default
-            llm = getattr(agent, "_llm", None)
+            llm = getattr(agent, "llm", None)
             if llm is None:
                 logger.warning(f"No LLM available for agent {agent_name}, skipping spec generation")
                 spec_data = None
@@ -618,29 +639,43 @@ class IntentCaptureEngine:
         }
     
     async def _get_cached_agent(self, session_token: str) -> Any:
-        """Get or create agent with LRU caching."""
+        """Get or create agent with LRU caching, bypassing JWT validation for internal use."""
         if session_token in self._agent_cache:
             if PROMETHEUS_AVAILABLE:
                 ENGINE_CACHE_HITS_TOTAL.inc()
             logger.debug(f"Cache hit for agent {session_token}")
             return self._agent_cache[session_token]
-        
-        # Import and create agent
-        from .agent_core import get_or_create_agent
-        agent = await get_or_create_agent(session_token=session_token)
-        
+
+        # Create agent directly without JWT validation (internal engine use)
+        from .agent_core import CollaborativeAgent
+
+        llm_config = self.llm_config or {"provider": "openai", "model": "gpt-4"}
+        state_backend = self.session_backend
+        if state_backend is None:
+            if _INMEMORY_BACKEND_AVAILABLE:
+                state_backend = _InMemoryBackend()
+            else:
+                raise RuntimeError("No state backend provided and agent_core is unavailable")
+
+        agent = await CollaborativeAgent.create(
+            agent_id=session_token,
+            session_id=session_token,
+            llm_config=llm_config,
+            state_backend=state_backend,
+        )
+
         # Add to cache with size limit
         if len(self._agent_cache) >= self._cache_size:
             # Remove oldest entry (FIFO)
             oldest_key = next(iter(self._agent_cache))
             del self._agent_cache[oldest_key]
             logger.debug(f"Evicted oldest agent {oldest_key} from cache")
-        
+
         self._agent_cache[session_token] = agent
-        
+
         if PROMETHEUS_AVAILABLE:
             ENGINE_ACTIVE_AGENTS.set(len(self._agent_cache))
-        
+
         logger.debug(f"Created and cached agent {session_token}")
         return agent
     

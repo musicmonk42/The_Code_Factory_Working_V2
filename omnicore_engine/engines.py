@@ -116,13 +116,17 @@ except ImportError as e:
 
 
 # Optional imports that may not be available in all environments
+# IB-4: try fully-qualified path first, then fall back to relative import
 try:
-    from envs.code_health_env import CodeHealthEnv
-except ImportError as e:
-    logging.info(
-        f"CodeHealthEnv not available: {e}. Code health environment features disabled."
-    )
-    CodeHealthEnv = None
+    from self_fixing_engineer.envs.code_health_env import CodeHealthEnv
+except ImportError:
+    try:
+        from envs.code_health_env import CodeHealthEnv
+    except ImportError as e:
+        logging.info(
+            f"CodeHealthEnv not available: {e}. Code health environment features disabled."
+        )
+        CodeHealthEnv = None
 
 try:
     from intent_capture.api import app as intent_capture_api
@@ -977,13 +981,16 @@ class OmniCoreOmega:
                 return {"success": True, "message": "Service restarted."}
             return {"success": True}
 
-        code_health_env = CodeHealthEnv(
-            get_metrics=get_system_metrics,
-            apply_action=apply_action,
-            audit_logger=self.audit_log_manager,
-        )
-
+        # CB-1: create a *per-arbiter* CodeHealthEnv so each arbiter has its own
+        # step counter, history, cooldown tracking, and cumulative reward.
+        # Sharing a single instance across N arbiters corrupts internal state under
+        # concurrent access and causes premature episode termination.
         for i in range(self.num):
+            code_health_env = CodeHealthEnv(
+                get_metrics=get_system_metrics,
+                apply_action=apply_action,
+                audit_logger=self.audit_log_manager,
+            )
             arbiter = Arbiter(
                 name=f"Arbiter_{i}",
                 db_engine=db_engine_for_arbiters,

@@ -1,3 +1,5 @@
+//go:build integration
+
 // Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 //go:build integration
@@ -33,6 +35,14 @@ import (
 "github.com/hyperledger/fabric-sdk-go/pkg/gateway"
 "github.com/stretchr/testify/assert"
 "github.com/stretchr/testify/require"
+	"encoding/json"
+	"fmt"
+	"testing"
+
+	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
+	"github.com/hyperledger/fabric-sdk-go/pkg/gateway"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -49,6 +59,14 @@ integDataHash2  = "bbbb1234567890abcdef1234567890abcdef1234567890abcdef123456789
 integMetadata   = `{"integration":"true"}`
 integOffChain   = "bucket/integration-object" // Path-style; colons/double-slashes disallowed
 integMessage    = "Integration rollback test"
+	channelName     = "mychannel"
+	chaincodeName   = "checkpoint"
+	testName        = "test_checkpoint"
+	testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+	testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // Valid SHA256 (64 hex chars)
+	testMetadata    = `{"key":"value"}`
+	testOffChainRef = "s3://bucket/key"
+	testMessage     = "Rollback test message"
 )
 
 // ---------------------------------------------------------------------------

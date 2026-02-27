@@ -128,6 +128,15 @@ data:
   ENABLE_CITUS: "0"  # Set to "1" to enable Citus distributed SQL features
 
   # ============================================
+  # Blockchain/DLT Configuration
+  # ============================================
+  # DLT backend type used by audit_log.py and (via initialize_dlt_backend) dlt_backend.py.
+  # Options: simple (dev/in-memory only), fabric (Hyperledger), evm or ethereum (EVM chains).
+  # RB-5: "evm"/"ethereum" are fully supported — override via kustomize overlays when needed.
+  # DLT_HMAC_KEY must be provided via codefactory-secrets Secret in production.
+  DLT_TYPE: "fabric"
+
+  # ============================================
   # ML/NLP Data Paths
   # ============================================
   # NLTK data directory (accessible by appuser in Docker runtime)
@@ -251,6 +260,9 @@ data:
   # Feature 5: Genetic Evolution Engine
   # Number of genomes in the evolutionary population. Higher = more exploration, slower cycles.
   EVOLUTION_POPULATION_SIZE: "10"
+  # Number of GA generations per run (IB-2: new kwarg — arbiter.py reads this via env).
+  # Default 5 keeps runs fast; increase for production tuning.
+  EVOLUTION_GENERATIONS: "5"
 
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds, default = 3600)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
@@ -290,3 +302,11 @@ data:
   # Enable plugin integrity checks via HASH_MANIFEST.
   # Default: "false" in dev/staging, "true" in production (override in production overlay).
   PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
+
+  # ============================================
+  # HashiCorp Vault JWT Path (intent_capture/api.py, cli.py) - Bug 17 fix
+  # ============================================
+  # Vault KV v2 path for the JWT_SECRET used by both API and CLI.
+  # Both modules now share this path so tokens are cross-compatible.
+  # Override only if your Vault layout differs from the default.
+  JWT_VAULT_PATH: "secrets/data/jwt"

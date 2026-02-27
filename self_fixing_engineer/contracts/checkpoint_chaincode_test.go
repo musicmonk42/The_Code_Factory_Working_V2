@@ -1,3 +1,5 @@
+//go:build !integration
+
 // Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 // checkpoint_chaincode_test.go — reference unit tests for checkpoint_chaincode.go.
@@ -47,6 +49,24 @@ import (
 import . "checkpoint_chaincode"
 
 // ---------------------------------------------------------------------------
+	"encoding/json"
+	"fmt"
+	"os"
+	"regexp"
+	"testing"
+	"time"
+
+	"github.com/hyperledger/fabric-chaincode-go/shim"
+	"github.com/hyperledger/fabric-contract-api-go/contractapi"
+	"github.com/hyperledger/fabric-contract-api-go/mocks"
+	"github.com/hyperledger/fabric-protos-go/msp"
+	"github.com/hyperledger/fabric-protos-go/peer"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	. "main" // Adjust if package name differs
+)
+
 // Test constants
 // ---------------------------------------------------------------------------
 
@@ -88,6 +108,37 @@ stub.GetTxIDReturns(testTxID)
 stub.GetTxTimestampReturns(&peer.Timestamp{Seconds: testEpochSec, Nanos: 0}, nil)
 
 return ctx
+	testName        = "test_checkpoint"
+	testDataHash    = "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" // Valid SHA256 (64 hex chars)
+	testPrevHash    = "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" // Valid SHA256 (64 hex chars)
+	testMetadata    = `{"key":"value"}`
+	testOffChainRef = "s3://bucket/key"
+	testInvalidName = "@invalid@"
+	testInvalidHash = "short"
+	testMessage     = "Rollback test message"
+	testMSPID       = "Org1MSP"
+	testTxID        = "test_tx_id"
+	testTimestamp   = 1627849200000 // Unix timestamp in ms
+)
+
+// setupMockContext creates a mock TransactionContext for testing.
+// Accepts testing.TB so it works for both *testing.T and *testing.B benchmarks.
+func setupMockContext(t testing.TB) *mocks.TransactionContext {
+	ctx := new(mocks.TransactionContext)
+	stub := new(mocks.ChaincodeStub)
+	ctx.GetStubReturns(stub)
+
+	// Mock creator (MSPID)
+	serializedID := &msp.SerializedIdentity{Mspid: testMSPID}
+	creatorBytes, err := proto.Marshal(serializedID)
+	require.NoError(t, err)
+	stub.GetCreatorReturns(creatorBytes, nil)
+
+	// Mock TxID and Timestamp
+	stub.GetTxIDReturns(testTxID)
+	stub.GetTxTimestampReturns(&peer.Timestamp{Seconds: testTimestamp / 1000, Nanos: 0}, nil)
+
+	return ctx
 }
 
 // ---------------------------------------------------------------------------
