@@ -1141,51 +1141,63 @@ else:
         from self_fixing_engineer.simulation.simulation_module import SimulationEngine
         logging.getLogger(__name__).info("Using real SimulationEngine from simulation_module")
     except ImportError as e:
-        logging.getLogger(__name__).warning(f"SimulationEngine not available ({e}), using fallback")
-        
-        # Fallback SimulationEngine for when simulation_module is unavailable
+        logging.getLogger(__name__).warning(
+            "SimulationEngine not available (%s), using fallback", e
+        )
+
+        # Fallback SimulationEngine — matches the real implementation's interface
+        # so call-sites require no conditional logic.
         class SimulationEngine:
-            """Fallback simulation engine when real implementation unavailable."""
-    
-            def __init__(self):
+            """Fallback simulation engine used when simulation_module is unavailable.
+
+            Mirrors the public interface of the real
+            :class:`~self_fixing_engineer.simulation.simulation_module.SimulationEngine`
+            so that callers require no conditional branches.
+
+            All async methods are no-ops or return minimal status dicts.
+            :meth:`is_available` returns ``False`` so callers can gate
+            capability-dependent code paths if desired.
+            """
+
+            def __init__(self) -> None:
                 self.name = "SimulationEngine_Fallback"
-    
-            async def run(
-                self, config: Dict[str, Any], context: Dict[str, Any]
+
+            async def _ensure_initialized(self) -> None:
+                """No-op — no heavy resources to initialise in fallback mode."""
+
+            @staticmethod
+            def get_tools() -> Dict[str, Any]:
+                """Return a minimal fallback toolset with a warning."""
+                _log = logging.getLogger(__name__)
+                _log.warning(
+                    "SimulationEngine fallback: get_tools() returning minimal toolset"
+                )
+                return {"fallback_fixer": lambda x: f"fallback_fixed_{x}"}
+
+            @staticmethod
+            def is_available() -> bool:
+                """Return ``False`` — this is a fallback, not the real engine."""
+                return False
+
+            async def run_simulation(
+                self,
+                config: Dict[str, Any] = None,
+                **kwargs: Any,
             ) -> Dict[str, Any]:
-                """Fallback simulation - returns mock results."""
-                logging.getLogger(__name__).warning("Using fallback SimulationEngine")
+                """Return a stub result with a warning instead of running a real simulation."""
+                logging.getLogger(__name__).warning(
+                    "SimulationEngine fallback: run_simulation() called — "
+                    "returning stub result"
+                )
                 return {
                     "status": "success",
                     "result": 0.5,
-                    "details": {
-                        "agent": context.get("agent_name"),
-                        "warning": "Using fallback simulation engine"
-                    },
+                    "warning": "Using fallback simulation engine — real module unavailable",
                 }
-    
-            async def perform_quantum_op(
-                self, op_type: str, params: Dict[str, Any]
-            ) -> Dict[str, Any]:
-                """Fallback quantum operation."""
-                return {
-                    "status": "success",
-                    "output": f"Fallback quantum {op_type}",
-                }
-    
-            async def explain_result(self, result: Dict[str, Any]) -> str:
-                """
-                Explains simulation results.
-                """
-                return f"Simulation result: {result.get('result', 0):.2f} for agent {result.get('details', {}).get('agent', 'unknown')}"
-    
-            def health_check(self):
-                """Returns the health status of the engine."""
-                return {"status": "healthy"}
-    
-            def get_registry(self):
-                """Returns the plugin registry for the engine."""
-                return {"plugins": ["monte_carlo", "predictive"]}
+
+            def health_check(self) -> Dict[str, Any]:
+                """Return a health dict indicating fallback mode."""
+                return {"status": "healthy", "fallback": True}
     
     
     # --- Production-Ready Logging Setup ---

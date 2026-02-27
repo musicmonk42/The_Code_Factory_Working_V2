@@ -60,35 +60,68 @@ except ImportError as e:
 
     # Fallback implementation
     class SimulationEngine:
+        """Fallback simulation engine used when simulation_module is unavailable.
+
+        Mirrors the public interface of the real
+        :class:`~self_fixing_engineer.simulation.simulation_module.SimulationEngine`
+        so that :class:`ArbiterArena` requires no conditional branches.
+
+        All async methods are no-ops or return minimal status dicts.
+        :meth:`is_available` returns ``False`` so callers can gate
+        capability-dependent code paths if desired.
+        """
+
+        def __init__(self) -> None:
+            self.name = "SimulationEngine_Fallback"
+
+        async def _ensure_initialized(self) -> None:
+            """No-op — no heavy resources to initialise in fallback mode."""
+
         @staticmethod
-        def get_tools():
+        def get_tools() -> Dict[str, Any]:
+            """Return a minimal fallback toolset and emit a ``UserWarning``."""
             import warnings
-            logger = logging.getLogger(__name__)
-            logger.warning("SimulationEngine fallback: get_tools() returning minimal toolset")
+            _log = logging.getLogger(__name__)
+            _log.warning(
+                "SimulationEngine fallback: get_tools() returning minimal toolset"
+            )
             warnings.warn(
-                "SimulationEngine fallback: Limited tools available",
+                "SimulationEngine fallback active — limited tools available",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             return {"fallback_fixer": lambda x: f"fallback_fixed_{x}"}
 
         @staticmethod
-        def is_available():
+        def is_available() -> bool:
+            """Return ``False`` — this is a fallback, not the real engine."""
             return False
 
-        async def run_simulation(self, *args, **kwargs):
+        async def run_simulation(
+            self,
+            config: Dict[str, Any] = None,
+            **kwargs: Any,
+        ) -> Dict[str, Any]:
+            """Return a stub result with a warning instead of running a real simulation."""
             import warnings
-            logger = logging.getLogger(__name__)
-            logger.warning("SimulationEngine fallback: run_simulation() returning stub result")
+            _log = logging.getLogger(__name__)
+            _log.warning(
+                "SimulationEngine fallback: run_simulation() called — "
+                "returning stub result"
+            )
             warnings.warn(
-                "SimulationEngine fallback: Simulation not actually run",
+                "SimulationEngine fallback active — simulation not actually run",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
             return {
                 "status": "fallback_complete",
-                "warning": "Using fallback simulation",
+                "warning": "Using fallback simulation — real module unavailable",
             }
+
+        def health_check(self) -> Dict[str, Any]:
+            """Return a health dict indicating fallback mode."""
+            return {"status": "healthy", "fallback": True}
 
     SIMULATION_AVAILABLE = False
 

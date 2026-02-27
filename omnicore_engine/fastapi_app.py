@@ -290,6 +290,21 @@ from omnicore_engine.security_config import get_security_config
 
 from omnicore_engine.security_utils import RateLimiter, get_security_utils
 
+# Event bus bridges — optional; degrade gracefully when SFE subsystems absent
+try:
+    from self_fixing_engineer.arbiter.event_bus_bridge import (
+        get_bridge as _get_event_bridge,
+        stop_bridge as _stop_event_bridge,
+    )
+    from self_fixing_engineer.shared.simulation_bridge import setup_simulation_bridge
+    _BRIDGES_AVAILABLE = True
+except ImportError:
+    _BRIDGES_AVAILABLE = False
+    logger.debug(
+        "Event bus bridges not available — "
+        "self_fixing_engineer subsystems may be absent"
+    )
+
 security_config = get_security_config()
 security_utils = get_security_utils()
 rate_limiter = RateLimiter(
@@ -391,7 +406,24 @@ async def lifespan(app: FastAPI):
 
     # Initialize simulation module with proper database and message bus adapters
     try:
-        if UnifiedSimulationModule is not None:
+        # Check if simulation engine is already registered via OmniCore entrypoints
+        _omnicore_sim_engine = None
+        try:
+            from omnicore_engine.engines import get_engine as _get_engine
+            _registered = _get_engine("simulation")
+            if _registered and _registered.get("engine") is not None:
+                simulation_module = _registered["engine"]
+                logger.info(
+                    "Simulation module obtained from OmniCore engine registry "
+                    "(registered entrypoint path)."
+                )
+                _omnicore_sim_engine = simulation_module
+        except Exception as _reg_err:
+            logger.debug(
+                f"OmniCore simulation engine not pre-registered: {_reg_err}"
+            )
+
+        if _omnicore_sim_engine is None and UnifiedSimulationModule is not None:
             # Check if we have the enhanced simulation module with adapter classes
             if "create_simulation_module" in dir():
                 # Use the factory function to create simulation module with proper adapters
@@ -450,7 +482,7 @@ async def lifespan(app: FastAPI):
                 simulation_module = UnifiedSimulationModule(
                     config=settings, db=None, message_bus=None
                 )
-        else:
+        elif _omnicore_sim_engine is None:
             logger.warning(
                 "UnifiedSimulationModule not available, skipping initialization."
             )
@@ -601,6 +633,41 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(meta_supervisor_instance.run())
         logger.info("MetaSupervisor initialized and background task started.")
 
+        # Start event bus bridges after all subsystems are initialised.
+        # Both bridge setups are independently optional and never block startup.
+        if _BRIDGES_AVAILABLE:
+            try:
+                # Tripartite bridge: Mesh ↔ Arbiter ↔ Simulation
+                await _get_event_bridge()
+                logger.info("Event bus bridge (Mesh/Arbiter/Simulation) started.")
+            except Exception as _bridge_err:
+                logger.warning(
+                    "Event bus bridge startup failed (non-critical): %s", _bridge_err
+                )
+
+            try:
+                # Direct Arbiter ↔ Simulation wiring (subscription + on_event handler)
+                _sim_bus = (
+                    getattr(simulation_module, "message_bus", None)
+                    or getattr(simulation_module, "_message_bus", None)
+                )
+                if chatbot_arbiter is not None and _sim_bus is not None:
+                    await setup_simulation_bridge(
+                        arbiter_instance=chatbot_arbiter,
+                        simulation_bus=_sim_bus,
+                    )
+                    logger.info("Simulation ↔ Arbiter event bridge configured.")
+                else:
+                    logger.debug(
+                        "Simulation bridge skipped: arbiter=%s, sim_bus=%s",
+                        chatbot_arbiter is not None,
+                        _sim_bus is not None,
+                    )
+            except Exception as _sim_bridge_err:
+                logger.warning(
+                    "Simulation bridge setup failed (non-critical): %s", _sim_bridge_err
+                )
+
         logger.info("FastAPI app startup complete. OmniCore Engine ready.")
     except Exception as e:
         logger.critical(f"FastAPI startup failed: {e}", exc_info=True)
@@ -631,6 +698,15 @@ async def lifespan(app: FastAPI):
     if meta_supervisor_instance:
         await meta_supervisor_instance.stop()
         logger.info("MetaSupervisor services stopped.")
+
+    # Tear down event bus bridges last so in-flight events are not dropped.
+    if _BRIDGES_AVAILABLE:
+        try:
+            await _stop_event_bridge()
+            logger.info("Event bus bridge stopped.")
+        except Exception as _bridge_stop_err:
+            logger.warning("Event bus bridge stop failed: %s", _bridge_stop_err)
+
     logger.info("FastAPI app shutdown complete.")
 
 

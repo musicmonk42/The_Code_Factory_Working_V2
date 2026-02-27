@@ -311,6 +311,13 @@ env:
   #   helm upgrade --set env.EVOLUTION_GENERATIONS=10 ...
   EVOLUTION_GENERATIONS: "5"
 
+  # Guard for the experimental SelfEvolutionEngine.
+  # When PRODUCTION_MODE=1 this flag MUST be "true" for SelfEvolutionEngine.start()
+  # to proceed; any other value raises NotImplementedError (fail-closed default).
+  # Set to "true" ONLY after full QA sign-off of the evolution subsystem:
+  #   helm upgrade --set env.ENABLE_EXPERIMENTAL_EVOLUTION=true ...
+  ENABLE_EXPERIMENTAL_EVOLUTION: "false"
+
   # Feature 2: LLM Feature Suggestion Cache TTL (seconds)
   FEATURE_SUGGESTION_CACHE_TTL: "3600"
 

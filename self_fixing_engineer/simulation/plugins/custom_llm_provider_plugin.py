@@ -916,14 +916,119 @@ class CustomLLMProvider:
         _response_cache[cache_key] = (response, expiry)
 
     async def _make_request(self, messages: List[Any]) -> Any:
-        # This method is a hook for tests and is not fully implemented here
-        # It's expected to be mocked by the unit tests.
-        raise NotImplementedError("_make_request hook not implemented.")
+        """Execute a single non-streaming chat-completions request.
 
-    async def _make_streaming_request(self, messages: List[Any]) -> Any:
-        # This method is a hook for tests and is not fully implemented here
-        # It's expected to be mocked by the unit tests.
-        raise NotImplementedError("_make_streaming_request hook not implemented.")
+        Builds an OpenAI-compatible ``/chat/completions`` payload from
+        *messages*, sends it with the configured ``api_key`` and ``timeout``,
+        and returns the parsed JSON response body.
+
+        Parameters
+        ----------
+        messages:
+            List of message objects.  Role is read from ``msg.type``
+            (LangChain convention) falling back to ``"user"``.  Content is
+            read from ``msg.content`` falling back to ``str(msg)``.
+
+        Returns
+        -------
+        Any
+            Parsed JSON response dict from the LLM provider.
+
+        Raises
+        ------
+        aiohttp.ClientResponseError
+            On non-2xx HTTP status after ``raise_for_status()``.
+        aiohttp.ClientError
+            On network-level failures.
+        """
+        endpoint = self.config.api_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {
+                    "role": getattr(m, "type", "user"),
+                    "content": getattr(m, "content", str(m)),
+                }
+                for m in messages
+            ],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+        }
+        timeout = aiohttp.ClientTimeout(
+            total=self.config.timeout,
+            connect=min(10, self.config.timeout),
+        )
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(
+                endpoint, json=payload, headers=headers
+            ) as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def _make_streaming_request(
+        self, messages: List[Any]
+    ) -> "tuple[aiohttp.ClientSession, aiohttp.ClientResponse]":
+        """Execute a streaming chat-completions request.
+
+        Returns the ``(session, response)`` pair so the caller can guarantee
+        proper teardown of both objects even under ``asyncio.CancelledError``
+        or other exceptions.  The caller **must** call ``await session.close()``
+        (e.g. in a ``try/finally`` block) after consuming the response stream.
+
+        Parameters
+        ----------
+        messages:
+            List of message objects (same convention as :meth:`_make_request`).
+
+        Returns
+        -------
+        tuple[aiohttp.ClientSession, aiohttp.ClientResponse]
+            ``(session, response)`` where *response* is an open streaming
+            response.  Both must be closed by the caller.
+
+        Raises
+        ------
+        aiohttp.ClientResponseError
+            On non-2xx HTTP status.
+        aiohttp.ClientError
+            On network-level failures.
+        """
+        endpoint = self.config.api_base_url.rstrip("/") + "/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+            "Connection": "keep-alive",
+        }
+        payload = {
+            "model": self.config.model,
+            "messages": [
+                {
+                    "role": getattr(m, "type", "user"),
+                    "content": getattr(m, "content", str(m)),
+                }
+                for m in messages
+            ],
+            "temperature": self.config.temperature,
+            "max_tokens": self.config.max_tokens,
+            "stream": True,
+        }
+        timeout = aiohttp.ClientTimeout(
+            total=self.config.timeout,
+            connect=min(10, self.config.timeout),
+        )
+        session = aiohttp.ClientSession(timeout=timeout)
+        try:
+            response = await session.post(endpoint, json=payload, headers=headers)
+            response.raise_for_status()
+            return session, response
+        except Exception:
+            await session.close()
+            raise
 
     async def _get_fallback_provider(self) -> Optional["CustomLLMProvider"]:
         return None
@@ -995,29 +1100,32 @@ class CustomLLMProvider:
             )
 
     async def _astream(self, messages: List[Any]) -> AsyncGenerator[str, None]:
-        response = await self._make_streaming_request(messages)
-
-        if hasattr(response, "__aiter__"):
-            async for chunk in response:
-                normalized = _normalize_text_chunk(chunk)
-                # Skip if chunk is str and normalization didn't change it (malformed json)
-                if isinstance(chunk, str) and normalized == chunk:
-                    continue
-                yield normalized
-            return
-
-        for attr in ["content_iter", "aiter", "stream"]:
-            if hasattr(response, attr):
-                async for chunk in getattr(response, attr):
+        session, response = await self._make_streaming_request(messages)
+        try:
+            if hasattr(response, "__aiter__"):
+                async for chunk in response:
                     normalized = _normalize_text_chunk(chunk)
+                    # Skip if chunk is str and normalization didn't change it (malformed json)
                     if isinstance(chunk, str) and normalized == chunk:
                         continue
                     yield normalized
                 return
 
-        normalized = _normalize_text_chunk(response)
-        if not (isinstance(response, str) and normalized == response):
-            yield normalized
+            for attr in ["content_iter", "aiter", "stream"]:
+                if hasattr(response, attr):
+                    async for chunk in getattr(response, attr):
+                        normalized = _normalize_text_chunk(chunk)
+                        if isinstance(chunk, str) and normalized == chunk:
+                            continue
+                        yield normalized
+                    return
+
+            normalized = _normalize_text_chunk(response)
+            if not (isinstance(response, str) and normalized == response):
+                yield normalized
+        finally:
+            response.close()
+            await session.close()
 
     @classmethod
     async def _get_cached_vault_key(

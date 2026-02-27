@@ -118,7 +118,8 @@ test-arbiter-integration: ## Run full Arbiter integration tests (PolicyEngine→
 test-evolution: ## Run Genetic Algorithm / Evolution Engine tests (EV-2, EV-3, IB-2 fixes)
 	@echo "$(BLUE)Running Evolution Engine tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
-		EVOLUTION_POPULATION_SIZE=4 EVOLUTION_GENERATIONS=2 && \
+		EVOLUTION_POPULATION_SIZE=4 EVOLUTION_GENERATIONS=2 \
+		ENABLE_EXPERIMENTAL_EVOLUTION=true && \
 		pytest -k "evolution or evolve or genetic or deap or gene" -v --tb=short
 	@echo "$(GREEN)Evolution Engine tests complete!$(NC)"
 
