@@ -183,3 +183,69 @@ class TestImportFixerTestFileIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+def _load_stage_ran():
+    """Load _stage_ran from generator.py without triggering FastAPI imports."""
+    import re as _re
+    import importlib.util as _util
+    from pathlib import Path
+
+    src_path = Path("server/routers/generator.py")
+    source = src_path.read_text(encoding="utf-8")
+
+    func_match = _re.search(
+        r"(def _stage_ran\b.*?)(?=\n\n\n|\n\n[A-Z#])",
+        source,
+        _re.DOTALL,
+    )
+    assert func_match, "_stage_ran not found in server/routers/generator.py"
+    namespace = {}
+    exec(compile(func_match.group(1), "<generator>", "exec"), namespace)  # nosec B102
+    return namespace["_stage_ran"]
+
+
+class TestSoftFailValidation:
+    """Tests for the soft-fail validation mode in the pipeline."""
+
+    @pytest.fixture(scope="class")
+    def stage_ran(self):
+        return _load_stage_ran()
+
+    def test_validate_soft_fail_counts_as_stage_ran(self, stage_ran):
+        """validate:soft_fail must be treated as the validate stage having run."""
+        stages = ["codegen", "testgen", "validate:soft_fail"]
+        assert stage_ran("validate", stages) is True
+
+    def test_validate_skipped_counts_as_stage_ran(self, stage_ran):
+        """validate:skipped must also be treated as the validate stage having run."""
+        stages = ["codegen", "testgen", "validate:skipped"]
+        assert stage_ran("validate", stages) is True
+
+    def test_validate_not_in_stages_returns_false(self, stage_ran):
+        """When validate has not run at all, stage_ran returns False."""
+        stages = ["codegen", "testgen"]
+        assert stage_ran("validate", stages) is False
+
+    def test_validate_soft_fail_excluded_from_critical_stages(self):
+        """generator.py must exclude validate from critical_stages on soft_fail."""
+        from pathlib import Path
+        content = Path("server/routers/generator.py").read_text()
+        assert "validate_was_soft_fail" in content
+        assert "not validate_was_skipped and not validate_was_soft_fail" in content
+
+    def test_engine_uses_soft_fail_not_break(self):
+        """engine.py must not break out of the loop on STAGE:VALIDATE failure."""
+        from pathlib import Path
+        content = Path("generator/main/engine.py").read_text()
+        # HARD FAIL phrase should be gone from the validate section
+        assert "HARD FAIL - Validation failed" not in content
+        # validate:soft_fail must appear at least twice (VALIDATE + CONTRACT_VALIDATE)
+        assert content.count("validate:soft_fail") >= 2
+
+    def test_arbiter_bridge_event_includes_code(self):
+        """engine.py arbiter bridge event must include generated code payload."""
+        from pathlib import Path
+        content = Path("generator/main/engine.py").read_text()
+        assert '"code": codegen_files_for_arbiter' in content
+        assert '"file_paths": list(codegen_files_for_arbiter.keys())' in content

@@ -150,3 +150,67 @@ def get_timestamp():
         # May have minor whitespace differences but should be functionally identical
         assert "import time" in result["fixed_code"]
         assert "from fastapi import FastAPI" in result["fixed_code"]
+
+
+def _load_is_third_party_import_error():
+    """Load _is_third_party_import_error from omnicore_service.py without
+    triggering its heavy module-level imports, using source extraction."""
+    import re as _re
+    import importlib.util as _util
+
+    src_path = Path("server/services/omnicore_service.py")
+    source = src_path.read_text(encoding="utf-8")
+
+    # Extract the standalone function definition (ends at the next top-level def/class)
+    func_match = _re.search(
+        r"(def _is_third_party_import_error\b.*?)(?=\n\nclass |\n\ndef )",
+        source,
+        _re.DOTALL,
+    )
+    assert func_match, "_is_third_party_import_error not found in omnicore_service.py"
+    func_src = func_match.group(1)
+
+    # Compile and execute in an isolated namespace that has access to `re`
+    namespace = {"re": _re}
+    exec(compile(func_src, "<omnicore_service>", "exec"), namespace)  # nosec B102
+    return namespace["_is_third_party_import_error"]
+
+
+class TestThirdPartyImportErrorGuard:
+    """Behavioural tests for the _is_third_party_import_error() guard."""
+
+    @pytest.fixture(scope="class")
+    def fn(self):
+        return _load_is_third_party_import_error()
+
+    def test_third_party_module_returns_true(self, fn):
+        """asyncstdlib is a third-party package — guard should return True."""
+        assert fn("ModuleNotFoundError: No module named 'asyncstdlib'") is True
+
+    def test_httpx_is_third_party(self, fn):
+        """httpx is a third-party package — guard should return True."""
+        assert fn("ModuleNotFoundError: No module named 'httpx'") is True
+
+    def test_project_local_app_returns_false(self, fn):
+        """app.services is project-local — guard should return False."""
+        assert fn("ModuleNotFoundError: No module named 'app.services.auth'") is False
+
+    def test_server_module_returns_false(self, fn):
+        """server module is project-local — guard should return False."""
+        assert fn("ModuleNotFoundError: No module named 'server.routes'") is False
+
+    def test_non_import_error_returns_false(self, fn):
+        """SyntaxError is not a module import error — guard should return False."""
+        assert fn("SyntaxError: invalid syntax at line 42") is False
+
+    def test_empty_string_returns_false(self, fn):
+        """Empty error string should safely return False."""
+        assert fn("") is False
+
+    def test_importfixer_guard_code_present(self):
+        """The guard is wired into the ImportFixer section of _run_full_pipeline."""
+        content = Path("server/services/omnicore_service.py").read_text()
+        assert "all(_is_third_party_import_error(e) for e in _last_val_errors)" in content, \
+            "Guard should use all() with _last_val_errors"
+        assert "Skipping ImportFixer" in content, \
+            "Guard should log 'Skipping ImportFixer' message"
