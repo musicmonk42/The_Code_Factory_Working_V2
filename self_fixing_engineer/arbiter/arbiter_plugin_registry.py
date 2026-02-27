@@ -569,11 +569,19 @@ class PluginRegistry(DependencyAwareRegistryMixin, BasePluginRegistry):
         try:
             from omnicore_engine.engines import register_engine
 
+            start_fn = getattr(plugin, 'start', None) or getattr(plugin, 'startup', None)
+            if start_fn is None:
+                logger.warning(
+                    f"Plugin [{kind.value}:{name}] has no 'start' or 'startup' method. "
+                    "Skipping OmniCore engine registration."
+                )
+                return
+
             # Assuming 'engines' is a module that provides 'register_engine' function
             # The 'entrypoints' dict maps a unique name to a function to be exposed by the engine
             register_engine(
                 "arbiter_plugin_registry",
-                entrypoints={f"plugin_{kind.value}_{name}": plugin.start},
+                entrypoints={f"plugin_{kind.value}_{name}": start_fn},
             )
             from .audit_log import emit_audit_event
 

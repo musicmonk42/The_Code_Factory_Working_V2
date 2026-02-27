@@ -112,7 +112,7 @@ async def initialize_all_plugins() -> None:
         )
         _register(registry, PlugInKind.INTEGRATION, "azure_eventgrid", AzureEventGridAuditHook)
         logger.info("azure_eventgrid plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("azure_eventgrid plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- DLT Backend (INTEGRATION) ----
@@ -120,7 +120,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.dlt_backend.dlt_backend import CheckpointManager
         _register(registry, PlugInKind.INTEGRATION, "dlt_backend", CheckpointManager)
         logger.info("dlt_backend plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("dlt_backend plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- Kafka (SINK) ----
@@ -128,7 +128,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.kafka.kafka_plugin import KafkaAuditPlugin
         _register(registry, PlugInKind.SINK, "kafka", KafkaAuditPlugin)
         logger.info("kafka plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("kafka plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- PagerDuty (INTEGRATION) ----
@@ -138,7 +138,7 @@ async def initialize_all_plugins() -> None:
         )
         _register(registry, PlugInKind.INTEGRATION, "pagerduty", PagerDutyGateway)
         logger.info("pagerduty plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("pagerduty plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- Google Pub/Sub (SINK) ----
@@ -146,7 +146,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.pubsub_plugin.pubsub_plugin import PubSubGateway
         _register(registry, PlugInKind.SINK, "pubsub", PubSubGateway)
         logger.info("pubsub plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("pubsub plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- RabbitMQ (SINK) ----
@@ -154,7 +154,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.rabbitmq_plugin.rabbitmq_plugin import RabbitMQGateway
         _register(registry, PlugInKind.SINK, "rabbitmq", RabbitMQGateway)
         logger.info("rabbitmq plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("rabbitmq plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- SIEM (SINK) ----
@@ -162,7 +162,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.siem_plugin.siem_plugin import SIEMGatewayManager
         _register(registry, PlugInKind.SINK, "siem", SIEMGatewayManager)
         logger.info("siem plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("siem plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- Slack (SINK) ----
@@ -170,7 +170,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.slack_plugin.slack_plugin import SlackGatewayManager
         _register(registry, PlugInKind.SINK, "slack", SlackGatewayManager)
         logger.info("slack plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("slack plugin could not be loaded: %s", exc, exc_info=True)
 
     # ---- SNS (SINK) ----
@@ -178,7 +178,7 @@ async def initialize_all_plugins() -> None:
         from self_fixing_engineer.plugins.sns_plugin.sns_plugin import SNSGatewayManager
         _register(registry, PlugInKind.SINK, "sns", SNSGatewayManager)
         logger.info("sns plugin registered.")
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         logger.warning("sns plugin could not be loaded: %s", exc, exc_info=True)
 
     logger.info("PluginLoader: all integration plugins processed.")
