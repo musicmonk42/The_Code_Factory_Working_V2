@@ -535,6 +535,7 @@ class CheckpointManager:
     - Compliance reporting
     - Disaster recovery capabilities
     """
+    _METADATA_CACHE_MAX_SIZE = 1000
 
     # --- Start of Fix 1 ---
     def __init__(
@@ -813,8 +814,12 @@ class CheckpointManager:
                 if hasattr(self, "_cache_l1"):
                     # TTLCache handles expiration automatically
                     pass
-                if hasattr(self, "_metadata_cache") and len(self._metadata_cache) > 1000:
-                    self._metadata_cache.clear()
+                if (
+                    hasattr(self, "_metadata_cache")
+                    and len(self._metadata_cache) > self._METADATA_CACHE_MAX_SIZE
+                ):
+                    while len(self._metadata_cache) > self._METADATA_CACHE_MAX_SIZE:
+                        self._metadata_cache.popitem()
 
                 # DLQ processing
                 if self.enable_dlq_rotation:
@@ -1464,6 +1469,7 @@ class CheckpointManager:
             self._closed = True
 
             # Flush any pending operations
+            # Yield control so in-flight callbacks scheduled in this event-loop tick can finish.
             await asyncio.sleep(0)
 
             if self._maintenance_task:
@@ -1479,9 +1485,15 @@ class CheckpointManager:
                 # Backend-specific cleanup
                 close_fn = getattr(self._backend_client, "close", None)
                 if close_fn:
-                    maybe_awaitable = close_fn()
-                    if asyncio.iscoroutine(maybe_awaitable):
-                        await maybe_awaitable
+                    try:
+                        maybe_awaitable = close_fn()
+                        if asyncio.iscoroutine(maybe_awaitable):
+                            await maybe_awaitable
+                    except Exception as close_err:
+                        logger.warning(
+                            f"Failed to close backend client for {self.backend_type}: {close_err}"
+                        )
+                        raise
 
             if self.backend_type != "local":
                 from . import checkpoint_backends
@@ -1632,6 +1644,7 @@ class CheckpointManager:
                     else:
                         remaining_entries.append(entry)
                 except Exception:
+                    logger.warning("DLQ replay failed for entry; keeping in DLQ")
                     try:
                         remaining_entries.append(json.loads(line))
                     except json.JSONDecodeError:

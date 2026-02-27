@@ -206,6 +206,7 @@ class GraphRAGPolicyReasoner:
     max_policies:
         Upper bound on the number of nodes (default 10 000).
     """
+    _explanation_enricher: Optional[Callable[[str], str]] = None
 
     def __init__(
         self,
@@ -508,8 +509,11 @@ class GraphRAGPolicyReasoner:
         if GraphRAGPolicyReasoner._explanation_enricher:
             try:
                 return GraphRAGPolicyReasoner._explanation_enricher(explanation)
-            except Exception:
-                logger.warning("Explanation enricher failed; using base explanation")
+            except Exception as exc:
+                logger.warning(
+                    "Explanation enricher failed; using base explanation",
+                    error=str(exc),
+                )
         prefix = os.environ.get("GRAPH_RAG_EXPLANATION_PREFIX")
         if prefix:
             return f"{prefix}{explanation}"
@@ -548,4 +552,3 @@ def _record_eval_metric(policy_id: str, decision: str, start: float) -> None:
     """Emit Prometheus counter + histogram observations."""
     POLICY_EVAL_TOTAL.labels(policy_id=policy_id, decision=decision).inc()
     POLICY_EVAL_DURATION.observe(time.monotonic() - start)
-    _explanation_enricher: Optional[Callable[[str], str]] = None
