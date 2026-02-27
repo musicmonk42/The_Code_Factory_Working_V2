@@ -236,7 +236,8 @@ exceptions.log.*
 reasoner.log.*
 
 # Fabric Chaincode — Go build artifacts (binary, coverage, scan results)
-# go.mod and go.sum are intentionally tracked for reproducible builds
+# go.mod and go.sum are intentionally tracked for reproducible builds in fabric_chaincode/
+# contracts/go.sum is an orphaned file with no paired go.mod — always exclude it
 self_fixing_engineer/fabric_chaincode/checkpoint_chaincode
 self_fixing_engineer/fabric_chaincode/coverage.out
 self_fixing_engineer/fabric_chaincode/coverage.html
@@ -245,6 +246,7 @@ self_fixing_engineer/fabric_chaincode/test-results.txt
 self_fixing_engineer/fabric_chaincode/govulncheck-chaincode.txt
 self_fixing_engineer/fabric_chaincode/staticcheck-results.txt
 self_fixing_engineer/fabric_chaincode/nancy-results.txt
+self_fixing_engineer/contracts/go.sum
 
 # Backup files - IDE and editor backup files should not be committed
 *.bak
