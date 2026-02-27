@@ -48,6 +48,12 @@ patches:
       - op: replace
         path: /data/APP_ENV
         value: development
+      - op: replace
+        path: /data/SENTRY_ENVIRONMENT
+        value: development
+      - op: replace
+        path: /data/PLUGIN_INTEGRITY_CHECK_ENABLED
+        value: "false"
 
 labels:
   - pairs:

@@ -40,7 +40,6 @@ except ImportError:
         def register_agent_class(cls):
             pass
 
-
 try:
     import sentry_sdk  # type: ignore[import]
 except ImportError:
@@ -48,7 +47,7 @@ except ImportError:
 
 from self_fixing_engineer.plugins._agent_base import (
     AgentMetrics,
-    _tracer,
+    agent_span,
     _validate_command,
     _validate_path,
     emit_audit_event_safe,
@@ -67,7 +66,6 @@ _AGENT_TYPE = "judge"
 # Branch node types used for cyclomatic complexity proxy
 _BRANCH_NODES = (ast.If, ast.For, ast.While, ast.ExceptHandler, ast.With, ast.Assert)
 
-
 def _compute_complexity_score(source: str) -> float:
     """Return a quality score 0.0–1.0 based on cyclomatic complexity proxy.
 
@@ -80,7 +78,6 @@ def _compute_complexity_score(source: str) -> float:
         return 0.0
     branch_count = sum(1 for node in ast.walk(tree) if isinstance(node, _BRANCH_NODES))
     return max(0.0, 1.0 - branch_count * 0.02)
-
 
 class JudgeAgent(CrewAgentBase):
     """AI agent that evaluates code quality, produces scores and feedback."""
@@ -115,94 +112,78 @@ class JudgeAgent(CrewAgentBase):
         task = task or {}
         start_time = time.monotonic()
 
-        span_ctx = _tracer.start_as_current_span(f"{self.__class__.__name__}.process") if _tracer else None
-        try:
-            span = span_ctx.__enter__() if span_ctx else None
-            if span:
-                span.set_attribute("agent.name", self.name)
-                span.set_attribute("task.keys", str(list(task.keys())))
-        except Exception:
-            span_ctx = None
-            span = None
-
         code_path = task.get("code_path", ".")
         report_path = task.get("report_path")
         command = task.get("command")
 
         structured_log("JudgeAgent.process.start", agent=self.name, code_path=code_path)
 
-        try:
-            if report_path and not _validate_path(report_path, self.WHITELISTED_PATHS):
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
-                await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": report_path})
-                return {
-                    "status": "error",
-                    "error": f"Path '{report_path}' is not in whitelisted paths.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "path_access_denied", "path": report_path},
+        with agent_span(f"{self.__class__.__name__}.process", self.name, list(task.keys())):
+            try:
+                if report_path and not _validate_path(report_path, self.WHITELISTED_PATHS):
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
+                    await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": report_path})
+                    return {
+                        "status": "error",
+                        "error": f"Path '{report_path}' is not in whitelisted paths.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "path_access_denied", "path": report_path},
+                    }
+
+                if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
+                    await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+                    return {
+                        "status": "error",
+                        "error": f"Command '{command}' is not in whitelisted commands.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    }
+
+                if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
+                    await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
+                    return {
+                        "status": "error",
+                        "error": "Destructive actions are not allowed for this agent.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
+                    }
+
+                source = task.get("source", "")
+                score = _compute_complexity_score(source) if source else 0.0
+
+                result: Dict[str, Any] = {
+                    "score": score,
+                    "feedback": [f"Complexity score: {score:.2f}"],
+                    "code_path": code_path,
+                    "report_path": report_path,
                 }
 
-            if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
-                await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+                elapsed = time.monotonic() - start_time
+                _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
+                _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
+
+                structured_log("JudgeAgent.process.complete", agent=self.name, score=score, elapsed=elapsed)
+                await emit_audit_event_safe("evaluation_completed", {"agent": self.name, "code_path": code_path, "score": score, "elapsed": elapsed})
+
                 return {
-                    "status": "error",
-                    "error": f"Command '{command}' is not in whitelisted commands.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    "status": "success",
+                    "result": result,
+                    "audit_event": {"agent": self.name, "event": "evaluation_completed", "code_path": code_path, "score": score, "elapsed": elapsed},
                 }
 
-            if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
-                await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
+            except Exception as exc:
+                elapsed = time.monotonic() - start_time
+                if sentry_sdk:
+                    sentry_sdk.capture_exception(exc)
+                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
+                structured_log("JudgeAgent.process.error", agent=self.name, error=str(exc))
+                await emit_audit_event_safe("evaluation_error", {"agent": self.name, "error": str(exc)})
                 return {
                     "status": "error",
-                    "error": "Destructive actions are not allowed for this agent.",
+                    "error": str(exc),
                     "result": None,
-                    "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
+                    "audit_event": {"agent": self.name, "event": "evaluation_error", "error": str(exc)},
                 }
-
-            source = task.get("source", "")
-            score = _compute_complexity_score(source) if source else 0.0
-
-            result: Dict[str, Any] = {
-                "score": score,
-                "feedback": [f"Complexity score: {score:.2f}"],
-                "code_path": code_path,
-                "report_path": report_path,
-            }
-
-            elapsed = time.monotonic() - start_time
-            _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
-            _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
-
-            structured_log("JudgeAgent.process.complete", agent=self.name, score=score, elapsed=elapsed)
-            await emit_audit_event_safe("evaluation_completed", {"agent": self.name, "code_path": code_path, "score": score, "elapsed": elapsed})
-
-            return {
-                "status": "success",
-                "result": result,
-                "audit_event": {"agent": self.name, "event": "evaluation_completed", "code_path": code_path, "score": score, "elapsed": elapsed},
-            }
-
-        except Exception as exc:
-            elapsed = time.monotonic() - start_time
-            if sentry_sdk:
-                sentry_sdk.capture_exception(exc)
-            _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
-            structured_log("JudgeAgent.process.error", agent=self.name, error=str(exc))
-            await emit_audit_event_safe("evaluation_error", {"agent": self.name, "error": str(exc)})
-            return {
-                "status": "error",
-                "error": str(exc),
-                "result": None,
-                "audit_event": {"agent": self.name, "event": "evaluation_error", "error": str(exc)},
-            }
-        finally:
-            if span_ctx:
-                try:
-                    span_ctx.__exit__(None, None, None)
-                except Exception:
-                    pass
-
 
 CrewManager.register_agent_class(JudgeAgent)

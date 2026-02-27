@@ -42,7 +42,6 @@ except ImportError:
         def register_agent_class(cls):
             pass
 
-
 try:
     import sentry_sdk  # type: ignore[import]
 except ImportError:
@@ -50,7 +49,7 @@ except ImportError:
 
 from self_fixing_engineer.plugins._agent_base import (
     AgentMetrics,
-    _tracer,
+    agent_span,
     _validate_command,
     _validate_path,
     emit_audit_event_safe,
@@ -74,7 +73,6 @@ _AGENT_TYPE = "smart_refactor"
 # ---------------------------------------------------------------------------
 # AST helpers
 # ---------------------------------------------------------------------------
-
 
 def _analyze_code(source: str) -> Dict[str, Any]:
     """Parse *source* and return a dict of refactoring opportunities."""
@@ -101,7 +99,6 @@ def _analyze_code(source: str) -> Dict[str, Any]:
         "long_functions": long_functions,
         "missing_annotations": missing_annotations,
     }
-
 
 class SmartRefactorAgent(CrewAgentBase):
     """AI agent that performs code refactoring using AST analysis."""
@@ -136,96 +133,80 @@ class SmartRefactorAgent(CrewAgentBase):
         task = task or {}
         start_time = time.monotonic()
 
-        span_ctx = _tracer.start_as_current_span(f"{self.__class__.__name__}.process") if _tracer else None
-        try:
-            span = span_ctx.__enter__() if span_ctx else None
-            if span:
-                span.set_attribute("agent.name", self.name)
-                span.set_attribute("task.keys", str(list(task.keys())))
-        except Exception:
-            span_ctx = None
-            span = None
-
         codebase_path = task.get("codebase_path", "")
         command = task.get("command")
 
         structured_log("SmartRefactorAgent.process.start", agent=self.name, codebase_path=codebase_path)
 
-        try:
-            if codebase_path and not _validate_path(codebase_path, self.WHITELISTED_PATHS):
+        with agent_span(f"{self.__class__.__name__}.process", self.name, list(task.keys())):
+            try:
+                if codebase_path and not _validate_path(codebase_path, self.WHITELISTED_PATHS):
+                    elapsed = time.monotonic() - start_time
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
+                    await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": codebase_path})
+                    return {
+                        "status": "error",
+                        "error": f"Path '{codebase_path}' is not in whitelisted paths.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "path_access_denied", "path": codebase_path},
+                    }
+
+                if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
+                    elapsed = time.monotonic() - start_time
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
+                    await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+                    return {
+                        "status": "error",
+                        "error": f"Command '{command}' is not in whitelisted commands.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    }
+
+                if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
+                    await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
+                    return {
+                        "status": "error",
+                        "error": "Destructive actions are not allowed for this agent.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
+                    }
+
+                source = task.get("source", "")
+                analysis = _analyze_code(source) if source else {"suggestions": [], "long_functions": [], "missing_annotations": []}
+
+                result: Dict[str, Any] = {
+                    "refactored_files": [],
+                    "suggestions": analysis["suggestions"],
+                    "long_functions": analysis["long_functions"],
+                    "missing_annotations": analysis["missing_annotations"],
+                    "codebase_path": codebase_path,
+                }
+
                 elapsed = time.monotonic() - start_time
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
-                await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": codebase_path})
+                _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
+                _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
+
+                structured_log("SmartRefactorAgent.process.complete", agent=self.name, elapsed=elapsed)
+                await emit_audit_event_safe("refactor_completed", {"agent": self.name, "codebase_path": codebase_path, "elapsed": elapsed})
+
                 return {
-                    "status": "error",
-                    "error": f"Path '{codebase_path}' is not in whitelisted paths.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "path_access_denied", "path": codebase_path},
+                    "status": "success",
+                    "result": result,
+                    "audit_event": {"agent": self.name, "event": "refactor_completed", "codebase_path": codebase_path, "elapsed": elapsed},
                 }
 
-            if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
+            except Exception as exc:
                 elapsed = time.monotonic() - start_time
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
-                await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+                if sentry_sdk:
+                    sentry_sdk.capture_exception(exc)
+                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
+                structured_log("SmartRefactorAgent.process.error", agent=self.name, error=str(exc))
+                await emit_audit_event_safe("refactor_error", {"agent": self.name, "error": str(exc)})
                 return {
                     "status": "error",
-                    "error": f"Command '{command}' is not in whitelisted commands.",
+                    "error": str(exc),
                     "result": None,
-                    "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    "audit_event": {"agent": self.name, "event": "refactor_error", "error": str(exc)},
                 }
-
-            if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
-                await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
-                return {
-                    "status": "error",
-                    "error": "Destructive actions are not allowed for this agent.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
-                }
-
-            source = task.get("source", "")
-            analysis = _analyze_code(source) if source else {"suggestions": [], "long_functions": [], "missing_annotations": []}
-
-            result: Dict[str, Any] = {
-                "refactored_files": [],
-                "suggestions": analysis["suggestions"],
-                "long_functions": analysis["long_functions"],
-                "missing_annotations": analysis["missing_annotations"],
-                "codebase_path": codebase_path,
-            }
-
-            elapsed = time.monotonic() - start_time
-            _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
-            _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
-
-            structured_log("SmartRefactorAgent.process.complete", agent=self.name, elapsed=elapsed)
-            await emit_audit_event_safe("refactor_completed", {"agent": self.name, "codebase_path": codebase_path, "elapsed": elapsed})
-
-            return {
-                "status": "success",
-                "result": result,
-                "audit_event": {"agent": self.name, "event": "refactor_completed", "codebase_path": codebase_path, "elapsed": elapsed},
-            }
-
-        except Exception as exc:
-            elapsed = time.monotonic() - start_time
-            if sentry_sdk:
-                sentry_sdk.capture_exception(exc)
-            _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
-            structured_log("SmartRefactorAgent.process.error", agent=self.name, error=str(exc))
-            await emit_audit_event_safe("refactor_error", {"agent": self.name, "error": str(exc)})
-            return {
-                "status": "error",
-                "error": str(exc),
-                "result": None,
-                "audit_event": {"agent": self.name, "event": "refactor_error", "error": str(exc)},
-            }
-        finally:
-            if span_ctx:
-                try:
-                    span_ctx.__exit__(None, None, None)
-                except Exception:
-                    pass
-
 
 CrewManager.register_agent_class(SmartRefactorAgent)

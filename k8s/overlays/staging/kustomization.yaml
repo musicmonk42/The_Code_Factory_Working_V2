@@ -45,6 +45,9 @@ patches:
       - op: replace
         path: /data/APP_ENV
         value: staging
+      - op: replace
+        path: /data/SENTRY_ENVIRONMENT
+        value: staging
 
 labels:
   - pairs:

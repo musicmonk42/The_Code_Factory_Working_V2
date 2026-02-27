@@ -183,6 +183,23 @@ data:
   # ============================================
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+  # Path to the Refactor Agent crew YAML configuration.
+  # Defaults to the bundled refactor_agent.yaml inside the container image.
+  # Override (e.g. via kustomize overlay) if you mount a custom config on a ConfigMap.
+  REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
+
+  # ============================================
+  # Refactor Agent / ConfigDB Settings
+  # ============================================
+  # Optional HTTPS endpoint for remote agent role/skill resolution by ConfigDBResolver.
+  # Leave empty (default) to use the bundled local YAML (configdb_defaults.yaml).
+  # When set, the host MUST also appear in CONFIGDB_ALLOWED_HOSTS (SSRF protection).
+  # Example: CONFIGDB_REMOTE_ENDPOINT: "https://config.internal.example.com/configdb"
+  CONFIGDB_REMOTE_ENDPOINT: ""
+  # Comma-separated list of hostnames permitted for remote ConfigDB resolution.
+  # Required when CONFIGDB_REMOTE_ENDPOINT is set; requests to unlisted hosts are blocked.
+  # Example: CONFIGDB_ALLOWED_HOSTS: "config.internal.example.com"
+  CONFIGDB_ALLOWED_HOSTS: ""
 
   # MetaLearning state file path — must be on the data PVC so state survives pod restarts.
   META_LEARNING_STATE_PATH: "/app/data/meta_learning_state.json"
@@ -302,6 +319,10 @@ data:
   # Enable plugin integrity checks via HASH_MANIFEST.
   # Default: "false" in dev/staging, "true" in production (override in production overlay).
   PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
+  # Sentry environment tag — used by sentry_sdk to distinguish prod/staging/dev events.
+  # Matches the SENTRY_DSN secret; set to "production" in the production overlay.
+  # Must be one of: production, staging, development
+  SENTRY_ENVIRONMENT: "production"
 
   # ============================================
   # HashiCorp Vault JWT Path (intent_capture/api.py, cli.py) - Bug 17 fix

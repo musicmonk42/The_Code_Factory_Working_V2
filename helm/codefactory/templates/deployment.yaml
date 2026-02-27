@@ -214,6 +214,11 @@ spec:
                   name: {{ .Values.secrets.security.encryptionKeySecretName }}
                   key: sentry-dsn
                   optional: true
+            - name: SENTRY_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "codefactory.fullname" . }}-config
+                  key: SENTRY_ENVIRONMENT
             - name: ALLOWED_ORIGINS
               valueFrom:
                 secretKeyRef:

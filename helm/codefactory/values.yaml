@@ -346,6 +346,10 @@ env:
   # Enable plugin integrity checks via HASH_MANIFEST.
   # Default "false"; set to "true" in production overlays together with HASH_MANIFEST.
   PLUGIN_INTEGRITY_CHECK_ENABLED: "false"
+  # Sentry environment tag — used by sentry_sdk to distinguish prod/staging/dev events.
+  # Override per chart release: helm upgrade --set env.SENTRY_ENVIRONMENT=staging ...
+  # Must be one of: production, staging, development
+  SENTRY_ENVIRONMENT: "production"
 
   # HashiCorp Vault JWT path (intent_capture/api.py, cli.py) - Bug 17 fix
   # Both API and CLI now use the same path so tokens are cross-compatible.
@@ -417,6 +421,22 @@ env:
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
   AUDIT_LOG_PATH: "/app/logs/audit_trail.log"
+  # Path to the Refactor Agent crew YAML configuration.
+  # Defaults to the bundled refactor_agent.yaml baked into the container image.
+  # Override with a mounted ConfigMap path if you need environment-specific config.
+  # Example: helm upgrade --set env.REFACTOR_AGENT_CONFIG=/app/config/refactor_prod.yaml
+  REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
+
+  # Refactor Agent — ConfigDB remote resolution
+  # Optional HTTPS endpoint for remote agent role/skill resolution by ConfigDBResolver.
+  # Leave empty (default) to use the bundled local YAML (configdb_defaults.yaml).
+  # When set, the host MUST also appear in CONFIGDB_ALLOWED_HOSTS (SSRF protection).
+  # Example: helm upgrade --set env.CONFIGDB_REMOTE_ENDPOINT=https://config.internal.corp/configdb
+  CONFIGDB_REMOTE_ENDPOINT: ""
+  # Comma-separated list of hostnames permitted for remote ConfigDB requests.
+  # Required when CONFIGDB_REMOTE_ENDPOINT is set; requests to unlisted hosts are blocked.
+  # Example: helm upgrade --set env.CONFIGDB_ALLOWED_HOSTS=config.internal.corp
+  CONFIGDB_ALLOWED_HOSTS: ""
 
   # MetaLearning state persistence path.
   # Points to the data PVC so state survives pod restarts.

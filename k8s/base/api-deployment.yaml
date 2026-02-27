@@ -191,6 +191,11 @@ spec:
                   name: codefactory-secrets
                   key: sentry-dsn
                   optional: true
+            - name: SENTRY_ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: codefactory-config
+                  key: SENTRY_ENVIRONMENT
 
             # CORS configuration
             - name: ALLOWED_ORIGINS

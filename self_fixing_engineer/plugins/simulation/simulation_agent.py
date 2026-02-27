@@ -40,7 +40,6 @@ except ImportError:
         def register_agent_class(cls):
             pass
 
-
 try:
     import sentry_sdk  # type: ignore[import]
 except ImportError:
@@ -48,7 +47,7 @@ except ImportError:
 
 from self_fixing_engineer.plugins._agent_base import (
     AgentMetrics,
-    _tracer,
+    agent_span,
     _validate_command,
     _validate_path,
     emit_audit_event_safe,
@@ -63,7 +62,6 @@ ALLOW_DESTRUCTIVE_ACTIONS: bool = False
 
 _METRICS = AgentMetrics.for_agent("simulation")
 _AGENT_TYPE = "simulation"
-
 
 class SimulationAgent(CrewAgentBase):
     """AI agent for simulation orchestration."""
@@ -99,16 +97,6 @@ class SimulationAgent(CrewAgentBase):
         task = task or {}
         start_time = time.monotonic()
 
-        span_ctx = _tracer.start_as_current_span(f"{self.__class__.__name__}.process") if _tracer else None
-        try:
-            span = span_ctx.__enter__() if span_ctx else None
-            if span:
-                span.set_attribute("agent.name", self.name)
-                span.set_attribute("task.keys", str(list(task.keys())))
-        except Exception:
-            span_ctx = None
-            span = None
-
         simulation_path = task.get("simulation_path")
         data_path = task.get("data_path")
         command = task.get("command")
@@ -116,90 +104,84 @@ class SimulationAgent(CrewAgentBase):
 
         structured_log("SimulationAgent.process.start", agent=self.name, simulation_path=simulation_path)
 
-        try:
-            if simulation_path and not _validate_path(simulation_path, self.WHITELISTED_PATHS):
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
-                await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": simulation_path})
-                return {
-                    "status": "error",
-                    "error": f"Path '{simulation_path}' is not in whitelisted paths.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "path_access_denied", "path": simulation_path},
+        with agent_span(f"{self.__class__.__name__}.process", self.name, list(task.keys())):
+            try:
+                if simulation_path and not _validate_path(simulation_path, self.WHITELISTED_PATHS):
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
+                    await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": simulation_path})
+                    return {
+                        "status": "error",
+                        "error": f"Path '{simulation_path}' is not in whitelisted paths.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "path_access_denied", "path": simulation_path},
+                    }
+
+                if data_path and not _validate_path(data_path, self.WHITELISTED_PATHS):
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
+                    await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": data_path})
+                    return {
+                        "status": "error",
+                        "error": f"Path '{data_path}' is not in whitelisted paths.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "path_access_denied", "path": data_path},
+                    }
+
+                if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
+                    _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
+                    await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+                    return {
+                        "status": "error",
+                        "error": f"Command '{command}' is not in whitelisted commands.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    }
+
+                if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
+                    await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
+                    return {
+                        "status": "error",
+                        "error": "Destructive actions are not allowed for this agent.",
+                        "result": None,
+                        "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
+                    }
+
+                run_id = str(uuid.uuid4())
+                elapsed = time.monotonic() - start_time
+
+                result: Dict[str, Any] = {
+                    "run_id": run_id,
+                    "simulation_path": simulation_path,
+                    "data_path": data_path,
+                    "parameters": parameters,
+                    "simulation_status": "queued",
+                    "elapsed_setup_seconds": elapsed,
+                    "metrics": {},
                 }
 
-            if data_path and not _validate_path(data_path, self.WHITELISTED_PATHS):
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="path_denied").inc()
-                await emit_audit_event_safe("path_access_denied", {"agent": self.name, "path": data_path})
+                _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
+                _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
+
+                structured_log("SimulationAgent.process.complete", agent=self.name, run_id=run_id, elapsed=elapsed)
+                await emit_audit_event_safe("simulation_queued", {"agent": self.name, "run_id": run_id, "simulation_path": simulation_path, "elapsed": elapsed})
+
                 return {
-                    "status": "error",
-                    "error": f"Path '{data_path}' is not in whitelisted paths.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "path_access_denied", "path": data_path},
+                    "status": "success",
+                    "result": result,
+                    "audit_event": {"agent": self.name, "event": "simulation_queued", "run_id": run_id, "simulation_path": simulation_path, "elapsed": elapsed},
                 }
 
-            if command and not _validate_command(command, self.WHITELISTED_COMMANDS):
-                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="command_denied").inc()
-                await emit_audit_event_safe("command_denied", {"agent": self.name, "command": command})
+            except Exception as exc:
+                elapsed = time.monotonic() - start_time
+                if sentry_sdk:
+                    sentry_sdk.capture_exception(exc)
+                _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
+                structured_log("SimulationAgent.process.error", agent=self.name, error=str(exc))
+                await emit_audit_event_safe("simulation_error", {"agent": self.name, "error": str(exc)})
                 return {
                     "status": "error",
-                    "error": f"Command '{command}' is not in whitelisted commands.",
+                    "error": str(exc),
                     "result": None,
-                    "audit_event": {"agent": self.name, "event": "command_denied", "command": command},
+                    "audit_event": {"agent": self.name, "event": "simulation_error", "error": str(exc)},
                 }
-
-            if task.get("destructive", False) and not self.ALLOW_DESTRUCTIVE_ACTIONS:
-                await emit_audit_event_safe("destructive_action_blocked", {"agent": self.name})
-                return {
-                    "status": "error",
-                    "error": "Destructive actions are not allowed for this agent.",
-                    "result": None,
-                    "audit_event": {"agent": self.name, "event": "destructive_action_blocked"},
-                }
-
-            run_id = str(uuid.uuid4())
-            elapsed = time.monotonic() - start_time
-
-            result: Dict[str, Any] = {
-                "run_id": run_id,
-                "simulation_path": simulation_path,
-                "data_path": data_path,
-                "parameters": parameters,
-                "simulation_status": "queued",
-                "elapsed_setup_seconds": elapsed,
-                "metrics": {},
-            }
-
-            _METRICS.calls.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").inc()
-            _METRICS.latency.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="ok").observe(elapsed)
-
-            structured_log("SimulationAgent.process.complete", agent=self.name, run_id=run_id, elapsed=elapsed)
-            await emit_audit_event_safe("simulation_queued", {"agent": self.name, "run_id": run_id, "simulation_path": simulation_path, "elapsed": elapsed})
-
-            return {
-                "status": "success",
-                "result": result,
-                "audit_event": {"agent": self.name, "event": "simulation_queued", "run_id": run_id, "simulation_path": simulation_path, "elapsed": elapsed},
-            }
-
-        except Exception as exc:
-            elapsed = time.monotonic() - start_time
-            if sentry_sdk:
-                sentry_sdk.capture_exception(exc)
-            _METRICS.errors.labels(agent_name=self.name, agent_type=_AGENT_TYPE, status="error").inc()
-            structured_log("SimulationAgent.process.error", agent=self.name, error=str(exc))
-            await emit_audit_event_safe("simulation_error", {"agent": self.name, "error": str(exc)})
-            return {
-                "status": "error",
-                "error": str(exc),
-                "result": None,
-                "audit_event": {"agent": self.name, "event": "simulation_error", "error": str(exc)},
-            }
-        finally:
-            if span_ctx:
-                try:
-                    span_ctx.__exit__(None, None, None)
-                except Exception:
-                    pass
-
 
 CrewManager.register_agent_class(SimulationAgent)
