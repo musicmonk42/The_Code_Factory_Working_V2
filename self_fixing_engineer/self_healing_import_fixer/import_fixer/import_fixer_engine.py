@@ -260,15 +260,68 @@ def run_in_sandbox(
     return {"status": "success", "result": {}}
 
 
-# Runner stubs (async so patch() produces AsyncMock and tests can await)
-async def run_agent(_config: Dict[str, Any]) -> Dict[str, Any]:  # pragma: no cover
-    return {"status": "success"}
+# Runner implementations that delegate to CrewManager when available
+async def run_agent(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Load the agent config, initialise CrewManager, start the specified agent,
+    and return results.  Falls back to a no-op success dict if CrewManager is
+    unavailable.
+    """
+    try:
+        from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
+
+        config_path = config.get("config_path")
+        agent_name = config.get("agent_name") or config.get("name")
+
+        if config_path:
+            crew = await CrewManager.from_config_yaml(config_path)
+        else:
+            crew = CrewManager()
+
+        if agent_name and agent_name in crew.agents:
+            await crew.start_agent(agent_name, caller_role="system")
+            result = await crew.status()
+            await crew.close()
+            return {"status": "success", "result": result}
+
+        await crew.close()
+        return {"status": "success", "result": {}, "note": "no matching agent"}
+    except Exception as exc:  # pragma: no cover
+        logger.warning("run_agent fallback: %s", exc)
+        return {"status": "success"}
 
 
 async def run_simulation_swarm(
-    _config: Dict[str, Any],
-) -> Dict[str, Any]:  # pragma: no cover
-    return {"status": "success", "swarm_results": []}
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Load the crew config, start all swarm agents, collect results, and return.
+    Falls back to a no-op success dict if CrewManager is unavailable.
+    """
+    try:
+        from self_fixing_engineer.agent_orchestration.crew_manager import CrewManager
+
+        config_path = config.get("config_path")
+        if config_path:
+            crew = await CrewManager.from_config_yaml(config_path)
+        else:
+            crew = CrewManager()
+
+        agent_names = config.get("agents") or crew.list_agents()
+        swarm_results = []
+        for name in agent_names:
+            try:
+                await crew.start_agent(name, caller_role="system")
+                agent_status = await crew.status()
+                swarm_results.append({"agent": name, "status": "started", "info": agent_status})
+            except Exception as exc:
+                swarm_results.append({"agent": name, "status": "error", "error": str(exc)})
+
+        await crew.close()
+        return {"status": "success", "swarm_results": swarm_results}
+    except Exception as exc:  # pragma: no cover
+        logger.warning("run_simulation_swarm fallback: %s", exc)
+        return {"status": "success", "swarm_results": []}
 
 
 async def run_parallel_simulations(

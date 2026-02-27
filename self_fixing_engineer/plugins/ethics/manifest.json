@@ -1,0 +1,17 @@
+{
+  "name": "EthicsAgent",
+  "version": "1.0.0",
+  "description": "AI agent for ethical and compliance review. Read-only.",
+  "entrypoint": "self_fixing_engineer/plugins/ethics/ethics_agent.py",
+  "agent_type": "ai",
+  "criticality": "medium",
+  "permissions": {
+    "whitelisted_paths": ["^\\./policies/.*$", "^\\./audit_logs/.*$"],
+    "whitelisted_commands": ["^python(3\\.[0-9]+)?$"],
+    "allow_destructive_actions": false
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml"]
+  }
+}

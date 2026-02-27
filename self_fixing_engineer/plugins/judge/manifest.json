@@ -1,0 +1,17 @@
+{
+  "name": "JudgeAgent",
+  "version": "1.0.0",
+  "description": "AI agent that evaluates code quality, produces scores and feedback. Read-only.",
+  "entrypoint": "self_fixing_engineer/plugins/judge/judge_agent.py",
+  "agent_type": "ai",
+  "criticality": "high",
+  "permissions": {
+    "whitelisted_paths": ["^\\./reports/.*$"],
+    "whitelisted_commands": ["^python(3\\.[0-9]+)?$"],
+    "allow_destructive_actions": false
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml"]
+  }
+}

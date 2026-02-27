@@ -1,0 +1,17 @@
+{
+  "name": "SimulationAgent",
+  "version": "1.0.0",
+  "description": "AI agent for simulation orchestration. Read-only.",
+  "entrypoint": "self_fixing_engineer/plugins/simulation/simulation_agent.py",
+  "agent_type": "ai",
+  "criticality": "low",
+  "permissions": {
+    "whitelisted_paths": ["^\\./simulations/.*$", "^\\./data/.*$"],
+    "whitelisted_commands": ["^python(3\\.[0-9]+)?$"],
+    "allow_destructive_actions": false
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "SmartRefactorAgent",
+  "version": "1.0.0",
+  "description": "AI agent that performs code refactoring using AST analysis and LLM suggestions.",
+  "entrypoint": "self_fixing_engineer/plugins/refactor/smart_refactor_agent.py",
+  "agent_type": "ai",
+  "criticality": "high",
+  "permissions": {
+    "whitelisted_paths": ["^\\./src/codebase/.*$", "^\\./tests/.*$"],
+    "whitelisted_commands": ["^python(3\\.[0-9]+)?$", "^git$", "^pytest(-cov)?$", "^ruff$"],
+    "allow_destructive_actions": true
+  },
+  "dependencies": {
+    "python": ">=3.10",
+    "packages": ["pyyaml", "ruff"]
+  }
+}

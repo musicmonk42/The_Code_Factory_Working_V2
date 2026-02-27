@@ -16,10 +16,12 @@ try:
         MAX_CONFIG_SIZE,
         NAME_REGEX,
         AgentError,
+        ComplianceChecker,
         CrewAgentBase,
         CrewManager,
         CrewPermissionError,
         ResourceError,
+        _load_entrypoint,
         sanitize_dict,
         structured_log,
     )
@@ -30,6 +32,8 @@ try:
         "ResourceError",
         "CrewPermissionError",
         "AgentError",
+        "ComplianceChecker",
+        "_load_entrypoint",
         "structured_log",
         "sanitize_dict",
         "NAME_REGEX",
@@ -46,6 +50,8 @@ except ImportError as e:
     ResourceError = Exception
     CrewPermissionError = Exception
     AgentError = Exception
+    ComplianceChecker = None
+    _load_entrypoint = None
 
     __all__ = []
 
