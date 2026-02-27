@@ -351,6 +351,11 @@ _SPEC_MODELS_MAX_CHARS = 4000
 # Minimum section length to be considered meaningful
 _SPEC_MODELS_MIN_SECTION_LEN = 30
 
+# HTTP methods recognized in route decorator extraction
+_HTTP_ROUTE_METHODS: FrozenSet[str] = frozenset({"get", "post", "put", "delete", "patch", "head", "options"})
+# Placeholder token used when normalizing path parameters for comparison
+_PATH_PARAM_WILDCARD = "{param}"
+
 def _extract_spec_models(requirements: Dict[str, Any]) -> str:
     """Extract data model and schema definitions from the README / spec document.
 
@@ -1134,15 +1139,205 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
         sorted(appended_names),
     )
 
+    # Collect import statements from old file and determine which are needed by
+    # the snippets being appended.
+    # Build a map: imported_name -> source line(s) from old file
+    old_import_lines: List[str] = []
+    old_import_name_to_line: Dict[str, str] = {}
+    for node in ast.iter_child_nodes(old_tree):
+        if isinstance(node, ast.Import):
+            _end = node.end_lineno if node.end_lineno else node.lineno
+            line = "".join(old_lines[node.lineno - 1 : _end]).rstrip()
+            old_import_lines.append(line)
+            for alias in node.names:
+                key = alias.asname if alias.asname else alias.name.split('.')[0]
+                old_import_name_to_line[key] = line
+        elif isinstance(node, ast.ImportFrom):
+            _end = node.end_lineno if node.end_lineno else node.lineno
+            line = "".join(old_lines[node.lineno - 1 : _end]).rstrip()
+            old_import_lines.append(line)
+            for alias in node.names:
+                key = alias.asname if alias.asname else alias.name
+                old_import_name_to_line[key] = line
+
+    # Collect names already imported in the new file
+    new_imported_names: Set[str] = set()
+    for node in ast.iter_child_nodes(new_tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                new_imported_names.add(alias.asname if alias.asname else alias.name.split('.')[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                new_imported_names.add(alias.asname if alias.asname else alias.name)
+
+    # For each appended snippet, find names it references that come from old imports
+    imports_to_prepend: List[str] = []
+    seen_import_lines: Set[str] = set()
+    for node_name, snippet in snippets:
+        try:
+            snippet_tree = ast.parse(snippet)
+        except SyntaxError:
+            continue
+        for snode in ast.walk(snippet_tree):
+            ref_name: Optional[str] = None
+            if isinstance(snode, ast.Name):
+                ref_name = snode.id
+            elif isinstance(snode, ast.Attribute) and isinstance(snode.value, ast.Name):
+                ref_name = snode.value.id
+            if ref_name and ref_name in old_import_name_to_line \
+                    and ref_name not in new_imported_names:
+                import_line = old_import_name_to_line[ref_name]
+                if import_line not in seen_import_lines:
+                    imports_to_prepend.append(import_line)
+                    seen_import_lines.add(import_line)
+                    new_imported_names.add(ref_name)  # avoid duplicates
+                    logger.info(
+                        "[CODEGEN] AST merge: carrying over import for %r: %s",
+                        ref_name,
+                        import_line,
+                    )
+
     # Normalise the base so it ends with exactly one newline, then append each
     # snippet separated by a blank line (PEP 8: two blank lines between
     # top-level definitions).
     base = new_content.rstrip("\n") + "\n"
-    return base + "\n\n" + "\n\n".join(s.rstrip("\n") for _, s in snippets) + "\n"
+    merged = base + "\n\n" + "\n\n".join(s.rstrip("\n") for _, s in snippets) + "\n"
+
+    # Prepend any missing imports at the top of the merged result
+    if imports_to_prepend:
+        merged = "\n".join(imports_to_prepend) + "\n" + merged
+
+    return merged
 
 
-# ==============================================================================
-# --- Production-Grade Logging and Auditing (PLACEHOLDERS) ---
+def _extract_routes_from_files(files: Dict[str, str]) -> Set[Tuple[str, str]]:
+    """Extract HTTP routes from router files using AST-based analysis.
+
+    Finds all decorator calls matching ``@router.<method>(path)`` or
+    ``@app.<method>(path)`` patterns (where method is get/post/put/delete/patch
+    etc.) and returns a set of ``(METHOD, path)`` tuples.
+
+    Also performs prefix concatenation when a router is constructed with a
+    ``prefix=`` keyword argument.
+
+    Args:
+        files: Dict mapping file paths to source content.
+
+    Returns:
+        Set of ``(METHOD, normalized_path)`` tuples, e.g.
+        ``{("GET", "/api/v1/audit"), ("POST", "/api/v1/orders")}``.
+    """
+    _HTTP_METHODS = frozenset({"get", "post", "put", "delete", "patch", "head", "options"})
+    routes: Set[Tuple[str, str]] = set()
+
+    for _filepath, _content in files.items():
+        if not _filepath.endswith(".py") or not isinstance(_content, str):
+            continue
+        try:
+            _tree = ast.parse(_content)
+        except SyntaxError:
+            continue
+
+        # Extract router prefixes: APIRouter(prefix="/api/v1/products")
+        _router_prefixes: Dict[str, str] = {}  # variable_name -> prefix
+        for _node in ast.walk(_tree):
+            if isinstance(_node, ast.Assign) and isinstance(_node.value, ast.Call):
+                _call = _node.value
+                _func_name = ""
+                if isinstance(_call.func, ast.Name):
+                    _func_name = _call.func.id
+                elif isinstance(_call.func, ast.Attribute):
+                    _func_name = _call.func.attr
+                if _func_name in ("APIRouter", "Router"):
+                    for _kw in _call.keywords:
+                        if _kw.arg == "prefix" and isinstance(_kw.value, ast.Constant):
+                            for _target in _node.targets:
+                                if isinstance(_target, ast.Name):
+                                    _router_prefixes[_target.id] = str(_kw.value.value)
+
+        # Extract decorated route functions
+        for _node in ast.walk(_tree):
+            if not isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for _dec in getattr(_node, "decorator_list", []):
+                if not isinstance(_dec, ast.Call):
+                    continue
+                _func = _dec.func
+                if not isinstance(_func, ast.Attribute):
+                    continue
+                _method = _func.attr.lower()
+                if _method not in _HTTP_ROUTE_METHODS:
+                    continue
+                # Get router variable name
+                _router_var = ""
+                if isinstance(_func.value, ast.Name):
+                    _router_var = _func.value.id
+                # Get path from first positional argument
+                if not _dec.args:
+                    continue
+                _path_arg = _dec.args[0]
+                if not isinstance(_path_arg, ast.Constant):
+                    continue
+                _path = str(_path_arg.value)
+                # Apply prefix if available
+                _prefix = _router_prefixes.get(_router_var, "")
+                if _prefix:
+                    _full_path = _prefix.rstrip("/") + "/" + _path.lstrip("/")
+                else:
+                    _full_path = _path
+                # Normalize: strip trailing slash (but keep root "/")
+                if len(_full_path) > 1:
+                    _full_path = _full_path.rstrip("/")
+                # Normalize path parameters using the module-level wildcard constant
+                _full_path = re.sub(r'\{[^}]+\}', _PATH_PARAM_WILDCARD, _full_path)
+                routes.add((_method.upper(), _full_path))
+
+    return routes
+
+
+def _build_project_module_reference(files: Dict[str, str]) -> str:
+    """Build a formatted "Project Module Reference" string for use in LLM prompts.
+
+    Extracts top-level symbols from each .py file and formats them as a
+    human-readable reference that the LLM can use to construct correct imports.
+
+    Args:
+        files: Dict mapping file paths to source content.
+
+    Returns:
+        Formatted string listing available project modules and their exported symbols.
+    """
+    lines: List[str] = ["## Available Project Modules (import from these):"]
+    for _filepath in sorted(files.keys()):
+        if not _filepath.endswith(".py"):
+            continue
+        _content = files[_filepath]
+        if not isinstance(_content, str) or not _content.strip():
+            continue
+        # Convert to module path
+        _mod = _filepath.replace("\\", "/").replace("/", ".")
+        if _mod.endswith(".py"):
+            _mod = _mod[:-3]
+        if _mod.endswith(".__init__"):
+            _mod = _mod[:-9]
+        try:
+            _tree = ast.parse(_content)
+        except SyntaxError:
+            continue
+        _symbols: List[str] = []
+        for _node in ast.iter_child_nodes(_tree):
+            if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                _symbols.append(_node.name)
+            elif isinstance(_node, ast.Assign):
+                for _t in _node.targets:
+                    if isinstance(_t, ast.Name):
+                        _symbols.append(_t.id)
+        if _symbols:
+            lines.append(f"- `{_mod}`: {', '.join(_symbols)}")
+    return "\n".join(lines)
+
+
+
 # --- REDUNDANT CLASS REMOVAL: SecretsManager removed ---
 # --- All internal AuditLogger definitions replaced with centralized call ---
 # ==============================================================================
@@ -2465,23 +2660,22 @@ if PLUGIN_AVAILABLE:
                                     )
                                 )
                                 if _required_eps:
-                                    _router_pattern = re.compile(
-                                        r'@(?:router|app)\.' +
-                                        r'(?:get|post|put|delete|patch|head|options)' +
-                                        r'\s*\(\s*[\'"]([^\'"]+)[\'"]'
-                                        ,
-                                        re.IGNORECASE,
-                                    )
-                                    _implemented_paths: set = set()
-                                    for _rf_content in _merged_files.values():
-                                        for _m in _router_pattern.finditer(_rf_content):
-                                            _implemented_paths.add(_m.group(1))
+                                    # Fix 5: AST-based route extraction (replaces brittle substring matching)
+                                    _extracted_routes = _extract_routes_from_files(_merged_files)
+                                    # Normalize spec endpoints for comparison
+                                    def _normalize_ep(ep: str) -> Tuple[str, str]:
+                                        parts = ep.split(None, 1)
+                                        method = parts[0].upper() if parts else ""
+                                        path = parts[1].rstrip("/") if len(parts) > 1 else ""
+                                        path = re.sub(r'\{[^}]+\}', _PATH_PARAM_WILDCARD, path)
+                                        return (method, path)
+
+                                    _normalized_required = {_normalize_ep(ep): ep for ep in _required_eps}
+                                    _implemented_methods_paths = _extracted_routes
                                     _missing_eps = [
-                                        ep for ep in _required_eps
-                                        if not any(
-                                            ep.split(None, 1)[-1].rstrip("/") in p
-                                            for p in _implemented_paths
-                                        )
+                                        orig_ep
+                                        for norm_ep, orig_ep in _normalized_required.items()
+                                        if norm_ep not in _implemented_methods_paths
                                     ]
                                     _total = len(_required_eps)
                                     _covered = _total - len(_missing_eps)
@@ -2495,12 +2689,15 @@ if PLUGIN_AVAILABLE:
                                             f"{prompt}"
                                             f"\n\nAlready-generated files (DO NOT regenerate): "
                                             f"{list(_merged_files.keys())}\n"
+                                            f"\n\n{_build_project_module_reference(_merged_files)}\n"
                                             f"\n\n### GENERATION PASS: endpoint_gap_fill ###\n"
                                             f"The following required endpoints are NOT yet implemented "
                                             f"in the generated router files.  Generate ONLY the router "
                                             f"files needed to implement them:\n"
                                             + "\n".join(f"  - {ep}" for ep in sorted(_missing_eps))
-                                            + "\nReturn a JSON object with a 'files' key."
+                                            + "\nYou MUST add proper import statements at the top of each file "
+                                            + "for all symbols you reference. Use `from <module> import <symbol>` "
+                                            + "for project-local imports.\nReturn a JSON object with a 'files' key."
                                         )
                                         _gap_heartbeat = asyncio.create_task(
                                             _multipass_heartbeat("endpoint_gap_fill")

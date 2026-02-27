@@ -847,6 +847,63 @@ class ImportFixerEngine:
         'IO', 'TextIO', 'BinaryIO', 'Pattern', 'Match',
     }
 
+    # Common SQLAlchemy names and their import paths
+    SQLALCHEMY_NAMES: Dict[str, tuple] = {
+        'AsyncSession': ('sqlalchemy.ext.asyncio', 'AsyncSession'),
+        'select': ('sqlalchemy.future', 'select'),
+        'create_async_engine': ('sqlalchemy.ext.asyncio', 'create_async_engine'),
+        'async_sessionmaker': ('sqlalchemy.ext.asyncio', 'async_sessionmaker'),
+        'declarative_base': ('sqlalchemy.orm', 'declarative_base'),
+        'relationship': ('sqlalchemy.orm', 'relationship'),
+        'sessionmaker': ('sqlalchemy.orm', 'sessionmaker'),
+        'Column': ('sqlalchemy', 'Column'),
+        'Integer': ('sqlalchemy', 'Integer'),
+        'String': ('sqlalchemy', 'String'),
+        'Boolean': ('sqlalchemy', 'Boolean'),
+        'DateTime': ('sqlalchemy', 'DateTime'),
+        'Text': ('sqlalchemy', 'Text'),
+        'Float': ('sqlalchemy', 'Float'),
+        'ForeignKey': ('sqlalchemy', 'ForeignKey'),
+    }
+
+    @staticmethod
+    def build_project_symbol_map(file_map: Dict[str, str]) -> Dict[str, tuple]:
+        """Build a mapping of {symbol_name: (module_path, symbol_name)} from project files.
+
+        AST-parses each .py file in file_map and extracts top-level class names,
+        function names, and module-level variable assignments.
+
+        Args:
+            file_map: Dict of {filepath: content} for all project files.
+
+        Returns:
+            Dict mapping symbol names to (module_path, symbol_name) tuples.
+            For example: {"AuditLogSchema": ("app.schemas", "AuditLogSchema")}
+        """
+        symbol_map: Dict[str, tuple] = {}
+        for filepath, content in file_map.items():
+            if not filepath.endswith('.py') or not isinstance(content, str):
+                continue
+            # Convert file path to module path
+            module_path = filepath.replace('\\', '/').replace('/', '.')
+            if module_path.endswith('.py'):
+                module_path = module_path[:-3]
+            # Handle __init__.py: app/schemas/__init__.py -> app.schemas
+            if module_path.endswith('.__init__'):
+                module_path = module_path[:-9]
+            try:
+                tree = ast.parse(content)
+            except SyntaxError:
+                continue
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    symbol_map[node.name] = (module_path, node.name)
+                elif isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            symbol_map[target.id] = (module_path, target.id)
+        return symbol_map
+
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the ImportFixerEngine.
@@ -883,6 +940,7 @@ class ImportFixerEngine:
         file_path: Optional[str] = None,
         project_root: Optional[str] = None,
         dry_run: bool = False,
+        project_symbol_map: Optional[Dict[str, tuple]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """
@@ -1052,7 +1110,21 @@ class ImportFixerEngine:
                 if name in self.TYPING_NAMES and name not in imported_names:
                     missing_typing.add(name)
 
-            if not missing_stdlib and not missing_fastapi and not missing_typing:
+            # Find missing SQLAlchemy imports
+            missing_sqlalchemy: Dict[str, tuple] = {}
+            for name in used_names:
+                if name in self.SQLALCHEMY_NAMES and name not in imported_names:
+                    missing_sqlalchemy[name] = self.SQLALCHEMY_NAMES[name]
+
+            # Find missing project-local imports from project_symbol_map
+            missing_project: Dict[str, tuple] = {}
+            if project_symbol_map:
+                for name in used_names:
+                    if name in project_symbol_map and name not in imported_names:
+                        missing_project[name] = project_symbol_map[name]
+
+            if not missing_stdlib and not missing_fastapi and not missing_typing \
+                    and not missing_sqlalchemy and not missing_project:
                 # No missing imports detected, but we may have fixed incorrect imports
                 return {
                     "fixed_code": code,
@@ -1145,6 +1217,60 @@ class ImportFixerEngine:
                     new_imports.append(f'from typing import {", ".join(sorted(missing_typing))}')
                     fixes_applied.append(f"Added missing typing imports: {', '.join(sorted(missing_typing))}")
                     self.logger.info(f"Adding typing imports: {', '.join(sorted(missing_typing))}")
+
+            # Handle SQLAlchemy imports - group by module
+            if missing_sqlalchemy:
+                by_module: Dict[str, list] = {}
+                for sym, (mod, sym_name) in missing_sqlalchemy.items():
+                    by_module.setdefault(mod, []).append(sym_name)
+                for mod, syms in sorted(by_module.items()):
+                    syms_sorted = sorted(syms)
+                    # Check if there's already a matching "from <mod> import" line
+                    sa_import_line_idx = None
+                    for i, line in enumerate(lines):
+                        if line.strip().startswith(f'from {mod} import'):
+                            sa_import_line_idx = i
+                            break
+                    if sa_import_line_idx is not None:
+                        existing_line = lines[sa_import_line_idx]
+                        m = re.match(rf'from {re.escape(mod)} import (.+)', existing_line)
+                        if m:
+                            existing_imports = {n.strip() for n in m.group(1).split(',') if n.strip()}
+                            all_imports = existing_imports | set(syms_sorted)
+                            lines[sa_import_line_idx] = f'from {mod} import {", ".join(sorted(all_imports))}'
+                            fixes_applied.append(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                            self.logger.info(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                    else:
+                        new_imports.append(f'from {mod} import {", ".join(syms_sorted)}')
+                        fixes_applied.append(f"Added missing {mod} imports: {', '.join(syms_sorted)}")
+                        self.logger.info(f"Adding {mod} imports: {', '.join(syms_sorted)}")
+
+            # Handle project-local imports - group by module
+            if missing_project:
+                by_module_proj: Dict[str, list] = {}
+                for sym, (mod, sym_name) in missing_project.items():
+                    by_module_proj.setdefault(mod, []).append(sym_name)
+                for mod, syms in sorted(by_module_proj.items()):
+                    syms_sorted = sorted(syms)
+                    # Check if there's already a matching "from <mod> import" line
+                    proj_import_line_idx = None
+                    for i, line in enumerate(lines):
+                        if line.strip().startswith(f'from {mod} import'):
+                            proj_import_line_idx = i
+                            break
+                    if proj_import_line_idx is not None:
+                        existing_line = lines[proj_import_line_idx]
+                        m = re.match(rf'from {re.escape(mod)} import (.+)', existing_line)
+                        if m:
+                            existing_imports = {n.strip() for n in m.group(1).split(',') if n.strip()}
+                            all_imports = existing_imports | set(syms_sorted)
+                            lines[proj_import_line_idx] = f'from {mod} import {", ".join(sorted(all_imports))}'
+                            fixes_applied.append(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                            self.logger.info(f"Extended {mod} import with: {', '.join(syms_sorted)}")
+                    else:
+                        new_imports.append(f'from {mod} import {", ".join(syms_sorted)}')
+                        fixes_applied.append(f"Added missing project imports: from {mod} import {', '.join(syms_sorted)}")
+                        self.logger.info(f"Adding project imports: from {mod} import {', '.join(syms_sorted)}")
 
             # Insert new imports at the appropriate position
             if new_imports:

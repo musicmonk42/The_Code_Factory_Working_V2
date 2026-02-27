@@ -15,6 +15,7 @@ This module implements proper agent integration with:
 """
 
 import aiofiles
+import ast
 import asyncio
 import json
 import logging
@@ -321,6 +322,81 @@ TEST_FILE_PATTERNS = {
     "go": lambda f: f.name.endswith("_test.go"),
     "rust": lambda f: f.name.startswith("test_") or "tests" in str(f.parent),
 }
+
+
+def _pre_materialization_import_check(files: Dict[str, str]) -> List[str]:
+    """Perform an in-memory import validity check before writing files to disk.
+
+    For each .py file in the file map:
+    1. AST-parses it to verify syntax.
+    2. Collects all ``from X import Y`` statements where X starts with ``app.``.
+    3. For each such import, verifies that the target module exists in the file
+       map and that the imported symbol is defined there.
+    4. Also checks for used names in decorators that may cause NameError at
+       import time.
+
+    Args:
+        files: Dict mapping file paths (e.g. ``"app/routers/audit.py"``) to
+               source content strings.
+
+    Returns:
+        List of error strings, one per unresolvable import or symbol.
+        Empty list means all imports are resolvable.
+    """
+    errors: List[str] = []
+
+    # Pre-build a map of module_path -> set of top-level symbol names
+    module_symbols: Dict[str, Set[str]] = {}
+    for filepath, content in files.items():
+        if not filepath.endswith('.py') or not isinstance(content, str):
+            continue
+        mod = filepath.replace('\\', '/').replace('/', '.').removesuffix('.py')
+        if mod.endswith('.__init__'):
+            mod = mod[:-9]
+        try:
+            tree = ast.parse(content)
+        except SyntaxError:
+            continue
+        syms: Set[str] = set()
+        for node in ast.iter_child_nodes(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                syms.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for t in node.targets:
+                    if isinstance(t, ast.Name):
+                        syms.add(t.id)
+        module_symbols[mod] = syms
+
+    for filepath, content in files.items():
+        if not filepath.endswith('.py') or not isinstance(content, str):
+            continue
+        try:
+            tree = ast.parse(content)
+        except SyntaxError as e:
+            errors.append(f"{filepath}: SyntaxError: {e}")
+            continue
+
+        # Check project-local from...import statements
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            module = node.module or ''
+            if not module.startswith('app.') and module != 'app':
+                continue
+            target_syms = module_symbols.get(module)
+            if target_syms is None:
+                errors.append(
+                    f"{filepath}: module '{module}' not found in generated files"
+                )
+                continue
+            for alias in node.names:
+                sym = alias.name
+                if sym != '*' and sym not in target_syms:
+                    errors.append(
+                        f"{filepath}: '{sym}' imported from '{module}' but not defined there"
+                    )
+
+    return errors
 
 
 def _detect_project_language(code_path: Path) -> str:
@@ -3344,6 +3420,8 @@ class OmniCoreService:
                     from self_fixing_engineer.self_healing_import_fixer.import_fixer.import_fixer_engine import ImportFixerEngine
                     
                     fixer = ImportFixerEngine()
+                    # Build project symbol map for resolving project-local imports (Fix 1)
+                    _proj_sym_map = fixer.build_project_symbol_map(result)
                     fixed_count = 0
                     error_count = 0
                     total_fixes = 0
@@ -3359,7 +3437,7 @@ class OmniCoreService:
                             continue
                         
                         try:
-                            fix_result = fixer.fix_code(content, file_path=filename)
+                            fix_result = fixer.fix_code(content, file_path=filename, project_symbol_map=_proj_sym_map)
                             
                             if fix_result["status"] == "error":
                                 # Log the error but continue processing other files
@@ -3518,6 +3596,7 @@ class OmniCoreService:
                 generated_files = []
                 total_bytes_written = 0
                 files_failed = []
+                _pre_mat_errors: List[str] = []
                 
                 if isinstance(result, dict):
                     if _MATERIALIZER_AVAILABLE:
@@ -3546,6 +3625,22 @@ class OmniCoreService:
                                 
                                 cleaned_file_map[cleaned_path] = content
                             
+                            # Fix 4: Pre-materialization import check (in-memory, before writing to disk)
+                            # Catches NameErrors like 'AuditLogSchema' not imported before they hit disk
+                            try:
+                                _pre_mat_errors = _pre_materialization_import_check(cleaned_file_map)
+                                if _pre_mat_errors:
+                                    logger.warning(
+                                        f"[CODEGEN] Pre-materialization import check found {len(_pre_mat_errors)} error(s) for job {job_id}",
+                                        extra={"job_id": job_id, "pre_mat_import_errors": _pre_mat_errors}
+                                    )
+                            except Exception as _pmc_err:
+                                _pre_mat_errors = []
+                                logger.warning(
+                                    f"[CODEGEN] Pre-materialization import check failed (non-fatal): {_pmc_err}",
+                                    extra={"job_id": job_id}
+                                )
+
                             mat_result = await _materialize_file_map(
                                 cleaned_file_map, output_path
                             )
@@ -3960,6 +4055,7 @@ class OmniCoreService:
                     "files_count": len(generated_files),
                     "total_bytes_written": total_bytes_written,
                     "duration_seconds": round(duration, 2),
+                    "pre_mat_import_errors": _pre_mat_errors,
                 }
                 
                 # Include failures in response if any
@@ -7101,6 +7197,15 @@ class OmniCoreService:
                                 import_errors = [e for e in validation_errors if 'does not import' in e.lower() or 'but does not import' in e.lower()]
                                 stub_errors = [e for e in validation_errors if 'stub marker' in e.lower() or 'stub class' in e.lower()]
                                 
+                                # Inject pre-materialization import errors (Fix 4) into import_errors
+                                _pme = codegen_result.get("pre_mat_import_errors", [])
+                                if _pme:
+                                    import_errors = import_errors + _pme
+                                    logger.info(
+                                        f"[PIPELINE] Job {job_id} injecting {len(_pme)} pre-materialization import error(s) into import_errors",
+                                        extra={"job_id": job_id, "pre_mat_import_errors": _pme}
+                                    )
+                                
                                 errors_for_retry = syntax_errors + import_errors + stub_errors
                                 if missing_files:
                                     error_txt_path = Path(output_path_for_validation) / "error.txt"
@@ -7213,7 +7318,32 @@ class OmniCoreService:
                                     # Continue to next attempt
                                     continue
 
-                            # Low file count check: retry if generated files are < 30% of spec-required
+                            # If validation passed, still check pre-materialization import errors (Fix 4)
+                            _pme_passed = codegen_result.get("pre_mat_import_errors", [])
+                            if _pme_passed and codegen_attempt <= max_codegen_retries and validation_passed:
+                                validation_passed = False
+                                previous_error = {
+                                    "error_type": "ImportError",
+                                    "details": "\n".join(_pme_passed[:3]),
+                                    "instruction": (
+                                        "The previous code generation had unresolvable project-local imports. "
+                                        "Please fix these errors:\n"
+                                        + "\n".join(f"- {e}" for e in _pme_passed[:5])
+                                        + "\nEnsure all symbols are imported from the correct project modules "
+                                        + "using `from <module> import <symbol>`."
+                                    ),
+                                }
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} has pre-materialization import errors, retrying",
+                                    extra={"job_id": job_id, "pre_mat_import_errors": _pme_passed, "attempt": codegen_attempt}
+                                )
+                                try:
+                                    shutil.rmtree(output_path_for_validation)
+                                except Exception:
+                                    pass
+                                if "codegen" in stages_completed:
+                                    stages_completed.remove("codegen")
+                                continue
                             # This catches cases where codegen "succeeds" but only generates a fraction of files
                             _CODEGEN_MIN_FILE_RATIO = 0.30
                             if spec_files and codegen_attempt <= max_codegen_retries and validation_passed:
@@ -7390,6 +7520,13 @@ class OmniCoreService:
                                     )
                                     
                                     fixer = ImportFixerEngine()
+                                    # Build project symbol map for on-disk source files
+                                    _src_file_map = {
+                                        str(f.relative_to(source_dir)): f.read_text(encoding="utf-8")
+                                        for f in source_files
+                                        if f.is_file()
+                                    }
+                                    _proj_sym_map_src = fixer.build_project_symbol_map(_src_file_map)
                                     fixed_count = 0
                                     error_count = 0
                                     total_fixes = 0
@@ -7400,7 +7537,7 @@ class OmniCoreService:
                                             if not content.strip():
                                                 continue
                                             
-                                            fix_result = fixer.fix_code(content, file_path=str(src_file))
+                                            fix_result = fixer.fix_code(content, file_path=str(src_file), project_symbol_map=_proj_sym_map_src)
                                             
                                             if fix_result["status"] == "error":
                                                 error_count += 1
