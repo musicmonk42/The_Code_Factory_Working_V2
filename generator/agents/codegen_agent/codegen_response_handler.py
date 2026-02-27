@@ -2732,6 +2732,15 @@ _ROUTER_VARIABLE_PATTERNS: frozenset = frozenset({
     "router", "api_router", "app_router", "main_router",
 })
 
+# Class name suffixes that strongly suggest a Pydantic model.  Used by
+# ``ensure_local_module_stubs`` to decide whether a stub class should inherit
+# from ``pydantic.BaseModel`` rather than being a bare class.
+_PYDANTIC_CLASS_SUFFIXES: tuple = (
+    "Response", "Request", "Schema", "Create", "Update",
+    "Read", "InDB", "Base", "Input", "Output", "Model",
+    "Params", "Filter", "Detail", "Summary", "List",
+)
+
 
 def _is_router_variable(name: str) -> bool:
     """Return ``True`` when *name* is a FastAPI router variable.
@@ -2926,10 +2935,21 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             has_router_in_symbols = any(
                 _is_router_variable(s) for s in symbols if not s[0].isupper()
             )
+            # Determine whether any class stubs need Pydantic BaseModel inheritance.
+            _is_pydantic_module = "schemas" in module_path or "models" in module_path
+            has_pydantic_class = any(
+                sym[0].isupper() and (
+                    _is_pydantic_module
+                    or any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
+                )
+                for sym in symbols
+            )
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
+            if has_pydantic_class:
+                stub_lines.append("from pydantic import BaseModel\n")
             if has_router_in_symbols:
                 stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
@@ -2938,11 +2958,21 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
-                    stub_lines.append(
-                        f"class {sym}:\n"
-                        f'    """Stub class."""\n'
-                        f"    pass\n\n\n"
+                    _sym_is_pydantic = _is_pydantic_module or any(
+                        sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
                     )
+                    if _sym_is_pydantic:
+                        stub_lines.append(
+                            f"class {sym}(BaseModel):\n"
+                            f'    """Stub Pydantic model."""\n'
+                            f"    pass\n\n\n"
+                        )
+                    else:
+                        stub_lines.append(
+                            f"class {sym}:\n"
+                            f'    """Stub class."""\n'
+                            f"    pass\n\n\n"
+                        )
                 elif _is_router_variable(sym):
                     stub_lines.append(
                         f"{sym} = APIRouter()\n\n\n"
@@ -2996,16 +3026,36 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     for sym in missing
                     if not sym[0].isupper()
                 )
+                _is_pydantic_module = "schemas" in module_path or "models" in module_path
+                has_pydantic_missing = any(
+                    sym[0].isupper() and (
+                        _is_pydantic_module
+                        or any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
+                    )
+                    for sym in missing
+                )
                 appended_lines = ["\n\n# Supplemental symbols appended by module-stub pass\n"]
+                if has_pydantic_missing and "from pydantic import BaseModel" not in existing_content:
+                    appended_lines.append("from pydantic import BaseModel\n")
                 if has_router_missing and "from fastapi import APIRouter" not in existing_content:
                     appended_lines.append("from fastapi import APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
-                        appended_lines.append(
-                            f"\nclass {sym}:\n"
-                            f'    """Stub class."""\n'
-                            f"    pass\n"
+                        _sym_is_pydantic = _is_pydantic_module or any(
+                            sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
                         )
+                        if _sym_is_pydantic:
+                            appended_lines.append(
+                                f"\nclass {sym}(BaseModel):\n"
+                                f'    """Stub Pydantic model."""\n'
+                                f"    pass\n"
+                            )
+                        else:
+                            appended_lines.append(
+                                f"\nclass {sym}:\n"
+                                f'    """Stub class."""\n'
+                                f"    pass\n"
+                            )
                     elif _is_router_variable(sym):
                         appended_lines.append(
                             f"\n{sym} = APIRouter()\n"

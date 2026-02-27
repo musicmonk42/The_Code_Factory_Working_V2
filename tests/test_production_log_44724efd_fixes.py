@@ -116,8 +116,70 @@ router = APIRouter()
         )
         assert result["status"] == "success"
 
+    def test_locally_defined_assignment_skipped(self):
+        """Symbol defined via top-level assignment must NOT be re-imported."""
+        code = """Base = declarative_base()
+async_session = sessionmaker()
+"""
+        project_symbol_map = {
+            "Base": ("app.database", "Base"),
+            "async_session": ("app.database", "async_session"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/database.py",
+            project_symbol_map=project_symbol_map,
+        )
+        assert result["status"] == "success"
+        fixed = result["fixed_code"]
+        assert "from app.database import Base" not in fixed
+        assert "from app.database import async_session" not in fixed
 
-# ---------------------------------------------------------------------------
+    def test_absolute_path_self_import_skipped(self):
+        """Absolute file paths are normalised to skip self-imports correctly."""
+        code = """Base = None
+async_session = None
+"""
+        project_symbol_map = {
+            "Base": ("app.database", "Base"),
+            "async_session": ("app.database", "async_session"),
+        }
+        # Simulates a post-materialisation pass with an absolute path.
+        result = self.fixer.fix_code(
+            code,
+            file_path="/app/generated/my_app/app/database.py",
+            project_symbol_map=project_symbol_map,
+        )
+        assert result["status"] == "success"
+        fixed = result["fixed_code"]
+        assert "from app.database import Base" not in fixed
+        assert "from app.database import async_session" not in fixed
+
+    def test_cross_sibling_router_import_skipped(self):
+        """router defined in a sibling router file must NOT be imported."""
+        code = """from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/auth/login")
+async def login():
+    return {}
+"""
+        project_symbol_map = {
+            # Simulate: another router file registered `router` last
+            "router": ("app.routers.product", "router"),
+        }
+        result = self.fixer.fix_code(
+            code,
+            file_path="app/routers/auth.py",
+            project_symbol_map=project_symbol_map,
+        )
+        assert result["status"] == "success"
+        fixed = result["fixed_code"]
+        assert "from app.routers.product import router" not in fixed
+
+
+
 # Fix 2: SIEM & SNS plugin encode() null guard
 # ---------------------------------------------------------------------------
 
@@ -433,3 +495,151 @@ class TestContractValidatorSchemaFlexibility:
         checker = self._make_validator(output_dir)
         with pytest.raises(AssertionError, match="schemas"):
             checker.check_schema_validation()
+
+
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Fix 5 (Bug 3): Pydantic stub class inheritance
+# ---------------------------------------------------------------------------
+
+_CODEGEN_RESPONSE_HANDLER_PATH = (
+    Path(__file__).parent.parent
+    / "generator/agents/codegen_agent/codegen_response_handler.py"
+)
+
+
+def _load_stub_helpers() -> dict:
+    """Compile and return stub-related helper functions from codegen_response_handler.py.
+
+    Extracts only the constants and functions needed by ``ensure_local_module_stubs``
+    and executes them in an isolated namespace, avoiding the heavy third-party imports
+    that the full module requires (aiohttp, opentelemetry, redis, etc.).
+    """
+    import ast as _ast
+    import re as _re
+    from typing import Dict, Set
+
+    source = _CODEGEN_RESPONSE_HANDLER_PATH.read_text()
+    tree = _ast.parse(source)
+
+    _TARGET_FUNCS = frozenset({
+        "_is_router_variable",
+        "_is_likely_variable",
+        "ensure_local_module_stubs",
+    })
+    _TARGET_CONSTS = frozenset({"_LOCAL_IMPORT_RE", "_APP_SUBMODULE_IMPORT_RE", "_PYDANTIC_CLASS_SUFFIXES"})
+
+    nodes = []
+    for node in tree.body:
+        if isinstance(node, _ast.Assign):
+            names = {t.id for t in node.targets if isinstance(t, _ast.Name)}
+            if names & _TARGET_CONSTS:
+                nodes.append(node)
+        elif isinstance(node, _ast.AnnAssign) and isinstance(node.target, _ast.Name):
+            if node.target.id in _TARGET_CONSTS:
+                nodes.append(node)
+        elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            if node.name in _TARGET_FUNCS:
+                nodes.append(node)
+
+    module = _ast.Module(body=nodes, type_ignores=[])
+    _ast.fix_missing_locations(module)
+    code = compile(module, str(_CODEGEN_RESPONSE_HANDLER_PATH), "exec")
+    import logging as _logging
+    ns: dict = {
+        "ast": _ast, "re": _re,
+        "Dict": Dict, "Set": Set,
+        "logging": _logging,
+        "logger": _logging.getLogger("codegen_response_handler"),
+    }
+    exec(code, ns)  # noqa: S102  (trusted internal source)
+    return ns
+
+
+class TestPydanticStubClassInheritance:
+    """Verify ensure_local_module_stubs generates BaseModel stubs for schema/model paths."""
+
+    def setup_method(self):
+        ns = _load_stub_helpers()
+        self.ensure_local_module_stubs = ns["ensure_local_module_stubs"]
+
+    def test_schema_path_gets_basemodel(self):
+        """Class stubs in app/schemas/common.py inherit from BaseModel."""
+        # A router file imports ErrorResponse from app.schemas.common, but that
+        # module is missing — ensure_local_module_stubs should create a stub
+        # with BaseModel inheritance.
+        code_files = {
+            "app/routers/auth.py": (
+                "from app.schemas.common import ErrorResponse, SuccessResponse\n\n"
+                "def login(): pass\n"
+            ),
+        }
+        result = self.ensure_local_module_stubs(code_files)
+        assert "app/schemas/common.py" in result
+        content = result["app/schemas/common.py"]
+        assert "class ErrorResponse(BaseModel):" in content
+        assert "class SuccessResponse(BaseModel):" in content
+        assert "from pydantic import BaseModel" in content
+
+    def test_response_suffix_gets_basemodel(self):
+        """Class stubs whose names end in 'Response' get BaseModel regardless of path."""
+        code_files = {
+            "app/routers/items.py": (
+                "from app.utils.helpers import ErrorResponse, SomeHelper\n\n"
+                "def get(): pass\n"
+            ),
+        }
+        result = self.ensure_local_module_stubs(code_files)
+        assert "app/utils/helpers.py" in result
+        content = result["app/utils/helpers.py"]
+        assert "class ErrorResponse(BaseModel):" in content
+        assert "from pydantic import BaseModel" in content
+        assert "class SomeHelper:" in content
+
+    def test_models_path_gets_basemodel(self):
+        """Class stubs in app/models/user.py inherit from BaseModel."""
+        code_files = {
+            "app/routers/users.py": (
+                "from app.models.user import UserCreate\n\n"
+                "def create(): pass\n"
+            ),
+        }
+        result = self.ensure_local_module_stubs(code_files)
+        assert "app/models/user.py" in result
+        content = result["app/models/user.py"]
+        assert "class UserCreate(BaseModel):" in content
+        assert "from pydantic import BaseModel" in content
+
+    def test_non_schema_plain_class_unchanged(self):
+        """Class stubs in non-schema paths without Pydantic suffixes stay as plain classes."""
+        code_files = {
+            "app/routers/utils.py": (
+                "from app.utils.helpers import MyHelper\n\n"
+                "def do(): pass\n"
+            ),
+        }
+        result = self.ensure_local_module_stubs(code_files)
+        assert "app/utils/helpers.py" in result
+        content = result["app/utils/helpers.py"]
+        assert "class MyHelper:" in content
+        assert "BaseModel" not in content
+
+    def test_existing_file_appended_with_basemodel(self):
+        """Supplemental stubs appended to existing schema files use BaseModel."""
+        existing = (
+            "from pydantic import BaseModel\n\n"
+            "class Existing(BaseModel):\n    pass\n"
+        )
+        code_files = {
+            "app/schemas/common.py": existing,
+            "app/routers/auth.py": (
+                "from app.schemas.common import ErrorResponse\n\ndef login(): pass\n"
+            ),
+        }
+        result = self.ensure_local_module_stubs(code_files)
+        content = result["app/schemas/common.py"]
+        assert "class ErrorResponse(BaseModel):" in content
+        # BaseModel import must not be duplicated since it was already present
+        assert content.count("from pydantic import BaseModel") == 1
