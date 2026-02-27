@@ -514,3 +514,79 @@ def test_cli_execution_failure_logs_and_aborts(
 
         # Check that operator was alerted
         assert mock_core_dependencies["alert_operator"].called
+
+
+def test_heal_command_dispatches_to_fixer_main_with_correct_args(
+    test_project_setup, mock_plugin_manager, mock_core_dependencies
+):
+    """
+    Tests that the 'heal' command:
+    - calls load_fixer() to resolve the entrypoint
+    - awaits heal_entrypoint (fixer.main) rather than calling it synchronously
+    - passes keyword args that match fixer.main()'s signature, not a raw Namespace
+    - loops over each root in args.roots
+    - uses the root itself as the default whitelisted_paths when fixer config is absent
+    - does NOT pass a 'config' keyword argument (old broken calling convention)
+    """
+    project_root = test_project_setup["project_root"]
+
+    # Allow the test project root to be in the whitelist
+    mock_plugin_manager.whitelisted_plugin_dirs = [
+        os.path.dirname(project_root),
+        tempfile.gettempdir(),
+        os.getcwd(),
+    ]
+
+    # AsyncMock so that `await heal_entrypoint(...)` works correctly
+    mock_heal_entrypoint = AsyncMock(
+        return_value={
+            "summary": "ok",
+            "dependency_report": {},
+            "cycle_healing_report": {"cycles_found": 0, "cycles_fixed": 0, "failures": []},
+            "run_id": "test-run-id",
+            "duration_seconds": 0.1,
+            "dry_run": True,
+        }
+    )
+
+    with (
+        patch(
+            "sys.argv",
+            [
+                "self_healing_import_fixer.cli",
+                "heal",
+                project_root,
+                "--dry-run",
+            ],
+        ),
+        patch(
+            "self_healing_import_fixer.cli.heal_entrypoint",
+            mock_heal_entrypoint,
+        ),
+        patch("self_healing_import_fixer.cli.load_fixer"),
+    ):
+        main()
+
+    # heal_entrypoint must have been called once (one root)
+    mock_heal_entrypoint.assert_awaited_once()
+
+    call_kwargs = mock_heal_entrypoint.call_args
+
+    # Must be called with keyword args, not positional Namespace
+    assert call_kwargs.kwargs.get("project_root") == project_root, (
+        "project_root must be the resolved root string, not an argparse Namespace"
+    )
+    assert call_kwargs.kwargs.get("dry_run") is True
+    # whitelisted_paths must include the project root (default is [root_path])
+    wl = call_kwargs.kwargs.get("whitelisted_paths")
+    assert wl is not None and project_root in wl, (
+        "whitelisted_paths must contain the project root"
+    )
+    # The old broken convention passed 'config' as a keyword — must not appear
+    assert "config" not in call_kwargs.kwargs, (
+        "heal_entrypoint must not be called with a 'config' kwarg (broken old convention)"
+    )
+    # Must not pass a raw argparse.Namespace as the first positional arg
+    assert not call_kwargs.args, (
+        "heal_entrypoint must be called with keyword args only, not positional Namespace"
+    )

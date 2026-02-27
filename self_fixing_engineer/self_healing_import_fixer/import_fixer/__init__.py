@@ -16,6 +16,7 @@ import importlib as _importlib
 
 # Static mapping of submodule names to full module paths
 _submodules = {
+    'fixer': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer',
     'fixer_ast': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_ast',
     'fixer_dep': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_dep',
     'fixer_plugins': 'self_fixing_engineer.self_healing_import_fixer.import_fixer.fixer_plugins',
@@ -52,4 +53,4 @@ def __getattr__(name):
 
 
 # Provide explicit __all__ for better IDE support and import clarity
-__all__ = ['fixer_ast', 'fixer_dep', 'fixer_plugins', 'fixer_validate']
+__all__ = ['fixer', 'fixer_ast', 'fixer_dep', 'fixer_plugins', 'fixer_validate']
