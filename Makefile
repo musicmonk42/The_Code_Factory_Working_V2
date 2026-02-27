@@ -84,6 +84,13 @@ test-sfe: ## Run Self-Fixing Engineer tests
 	@echo "$(BLUE)Running Self-Fixing Engineer tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && cd self_fixing_engineer && pytest tests/ -v --tb=short
 
+fix-imports: ## Run the self-healing import fixer CLI heal command against the project root (dry-run by default)
+	@echo "$(BLUE)Running self-healing import fixer...$(NC)"
+	@echo "$(YELLOW)Usage: make fix-imports ROOT=./my_project  (defaults to current directory)$(NC)"
+	@echo "$(YELLOW)       make fix-imports ROOT=./my_project DRY_RUN=  (apply fixes)$(NC)"
+	@python -m self_fixing_engineer.self_healing_import_fixer.cli heal $${ROOT:-.} $${DRY_RUN:---dry-run}
+	@echo "$(GREEN)Import fixing complete!$(NC)"
+
 test-plugin-agents: ## Run plugin agent integration tests (all 8 agents: refactor, healer, judge, ethics, simulation, ci_cd, human, oracle) + _agent_base unit tests
 	@echo "$(BLUE)Running plugin agent integration tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \

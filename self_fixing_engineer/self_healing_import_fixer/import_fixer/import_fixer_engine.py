@@ -21,8 +21,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 import sys
+import tempfile
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -242,8 +244,9 @@ except ImportError as e:
             )
             return {"status": "SUCCESS", "result": {}, "note": "import_fixer_fallback"}
 
-    def get_available_backends(self) -> List[str]:  # pragma: no cover
-        return ["qasm_simulator"]
+        def get_available_backends(self) -> List[str]:  # pragma: no cover
+            """Return available quantum simulation backends."""
+            return ["qasm_simulator"]
 
 
 @dataclass
@@ -772,7 +775,7 @@ async def run_import_healer(
     dep_results = await fixer_dep.heal_dependencies(
         project_roots=[project_root],
         dry_run=dry_run,
-        python_version="3.11",  # Hardcoded for a modern python version
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}",
         prune_unused=False,
         fail_on_diff=False,
         sync_reqs=True,
@@ -783,21 +786,46 @@ async def run_import_healer(
     # a bit of a hack to call it here, but it works for this simulation.
     module_map, file_to_mod = await fixer_dep._get_module_map([project_root])
 
-    # 4. Find and heal cycles
-    cycle_healer_report = {}
+    # 4. Detect and heal cycles dynamically
+    cycle_healer_report = {"cycles_found": 0, "cycles_fixed": 0, "failures": []}
 
-    # We'll simulate a single cycle fix for the test
-    # In a real scenario, this would iterate through detected cycles.
-    cycle_healer = fixer_ast.CycleHealer(
-        file_path=str(Path(project_root) / "pkg" / "b.py"),
-        cycle=["pkg.b", "pkg.a"],
-        graph=None,  # Mocking the graph for this test
-        project_root=project_root,
-        whitelisted_paths=whitelisted_paths,
-    )
+    try:
+        # Import graph analyzer
+        try:
+            from self_healing_import_fixer.analyzer.core_graph import ImportGraphAnalyzer
+        except ImportError:
+            from analyzer.core_graph import ImportGraphAnalyzer
 
-    await cycle_healer.heal()
-    cycle_healer_report = {"status": "success", "fix_applied": True}
+        analyzer = ImportGraphAnalyzer(project_root, config={"whitelisted_paths": whitelisted_paths})
+        graph = analyzer.build_graph()
+        cycles = analyzer.detect_cycles(graph)
+
+        cycle_healer_report["cycles_found"] = len(cycles)
+
+        for cycle in cycles:
+            # Get the file path for the first module in the cycle
+            first_module = cycle[0] if cycle else None
+            if first_module and first_module in analyzer.module_paths:
+                file_path = analyzer.module_paths[first_module]
+                try:
+                    healer = fixer_ast.CycleHealer(
+                        file_path=file_path,
+                        cycle=cycle,
+                        graph=graph,
+                        project_root=project_root,
+                        whitelisted_paths=whitelisted_paths,
+                    )
+                    result = await healer.heal()
+                    if result:
+                        cycle_healer_report["cycles_fixed"] += 1
+                except Exception as e:
+                    logger.warning(f"Failed to heal cycle {cycle}: {e}")
+                    cycle_healer_report["failures"].append({"cycle": cycle, "error": str(e)})
+    except ImportError as e:
+        logger.warning(f"ImportGraphAnalyzer not available, skipping cycle detection: {e}")
+    except Exception as e:
+        logger.error(f"Error during cycle detection: {e}")
+        cycle_healer_report["error"] = str(e)
 
     return {
         "summary": "Healing process completed.",
@@ -932,6 +960,50 @@ class ImportFixerEngine:
         """
         self._is_initialized = False
         self.logger.info("ImportFixerEngine shut down.")
+
+    async def health_check(self) -> Dict[str, Any]:
+        """
+        Return a health-status report for the engine.
+
+        Called by ``omnicore_engine.engines`` when it registers the engine in
+        the plugin registry and during platform-level liveness checks.
+
+        Returns:
+            A dictionary with at minimum a ``"status"`` key whose value is
+            ``"ok"`` when the engine is operational or ``"unhealthy"`` when
+            it is not.  Additional component-level keys may be present.
+        """
+        report: Dict[str, Any] = {
+            "status": "ok",
+            "initialized": self._is_initialized,
+            "components": {},
+        }
+
+        # Verify the engine has been initialised
+        if not self._is_initialized:
+            report["status"] = "unhealthy"
+            report["components"]["initialization"] = {
+                "status": "error",
+                "message": "Engine has not been initialized. Call initialize() first.",
+            }
+            self.logger.warning("ImportFixerEngine health_check: engine not initialized.")
+            return report
+
+        # Spot-check that AST parsing is functional
+        try:
+            import ast as _ast
+            _ast.parse("import os\n")
+            report["components"]["ast_parsing"] = {"status": "ok"}
+        except Exception as e:  # noqa: BLE001
+            report["status"] = "unhealthy"
+            report["components"]["ast_parsing"] = {
+                "status": "error",
+                "message": str(e),
+            }
+            self.logger.error("ImportFixerEngine health_check: AST parsing failed: %s", e)
+
+        self.logger.debug("ImportFixerEngine health_check: %s", report["status"])
+        return report
 
     def fix_code(
         self,
@@ -1366,6 +1438,79 @@ class ImportFixerEngine:
                 **kwargs,
             ),
         )
+
+    async def fix_file(self, file_path: str, dry_run: bool = False) -> str:
+        """
+        Fix import errors in a file.
+
+        Reads the file, applies :meth:`fix_code` to detect and insert missing
+        imports, then writes the result back to disk using an atomic rename so
+        that a partial write can never corrupt the original file.
+
+        Both the read and the write are dispatched via
+        :func:`asyncio.to_thread` to avoid blocking the event loop on large
+        files.
+
+        Args:
+            file_path: Absolute or relative path to the Python file to fix.
+            dry_run: When ``True``, return the fixed code string without
+                writing any changes to disk.  The original file is left
+                untouched.
+
+        Returns:
+            The fixed source code as a string.  If no fixes were necessary the
+            original source code is returned unchanged.
+
+        Raises:
+            FileNotFoundError: If ``file_path`` does not exist at call time.
+            RuntimeError: If :meth:`fix_code` reports a failure (i.e. returns
+                ``status == 'error'``).
+            OSError: If the atomic write-back fails (e.g. due to permissions
+                or a full disk). The original file is guaranteed to be intact
+                in this case because the rename is the last operation.
+        """
+        abs_path = os.path.abspath(file_path)
+        if not os.path.exists(abs_path):
+            raise FileNotFoundError(f"File not found: {abs_path}")
+
+        # --- Non-blocking read ---
+        code: str = await asyncio.to_thread(
+            Path(abs_path).read_text, "utf-8"
+        )
+
+        result = self.fix_code(code, file_path=abs_path, dry_run=dry_run)
+
+        if result["status"] == "error":
+            raise RuntimeError(result["message"])
+
+        fixed_code: str = result["fixed_code"]
+
+        if not dry_run and result["fixes_applied"]:
+            # --- Atomic write-back (temp file + os.replace) ---
+            def _atomic_write(path: str, data: str) -> None:
+                parent = os.path.dirname(path) or "."
+                fd, tmp_path = tempfile.mkstemp(
+                    dir=parent, suffix=".tmp", prefix=".fixer_"
+                )
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                        fh.write(data)
+                    os.replace(tmp_path, path)
+                except BaseException:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+
+            await asyncio.to_thread(_atomic_write, abs_path, fixed_code)
+            self.logger.info(
+                "Fixed %d imports in %s",
+                len(result["fixes_applied"]),
+                abs_path,
+            )
+
+        return fixed_code
 
     async def heal_project(
         self,

@@ -1104,8 +1104,32 @@ async def main_async():
                 sys.exit(1)
             load_fixer()
             fixer_config = global_config.get("fixer", {})
-            fixer_config["whitelisted_paths"] = allowlist
-            heal_entrypoint(args, config=fixer_config)
+            for root_path in args.roots:
+                await heal_entrypoint(
+                    project_root=root_path,
+                    whitelisted_paths=(
+                        fixer_config.get("whitelisted_paths") or [root_path]
+                    ),
+                    max_workers=fixer_config.get("max_workers", 4),
+                    dry_run=args.dry_run,
+                    auto_add_deps=getattr(args, "fix_deps", False),
+                    ai_enabled=fixer_config.get("ai_enabled", False),
+                    output_dir=fixer_config.get("output_dir"),
+                    fix_cycles=getattr(args, "fix_cycles", False),
+                    interactive=getattr(args, "interactive", False),
+                    run_tests=getattr(args, "run_tests", False),
+                    use_git_branch=getattr(args, "use_git_branch", False),
+                    backup=getattr(args, "backup", False),
+                    create_pr=getattr(args, "create_pr", False),
+                    yes=getattr(args, "yes", False),
+                    pre_hook=getattr(args, "pre_hook", None),
+                    post_hook=getattr(args, "post_hook", None),
+                    python_version=getattr(
+                        args,
+                        "python_version",
+                        f"{sys.version_info.major}.{sys.version_info.minor}",
+                    ),
+                )
             cli_audit_logger.log_event(
                 "command_executed", command="heal", args=scrub_secrets(vars(args))
             )

@@ -189,6 +189,15 @@ data:
   REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
 
   # ============================================
+  # Self-Healing Import Fixer (SHIF) Settings
+  # ============================================
+  # Enable per-operation metrics in the import healer (fixer_dep.py).
+  # Set to "true" to expose files_scanned, fixes_applied, and error counters
+  # via the SHIF metrics map. Defaults to "false" (off) to avoid overhead in
+  # high-frequency healing runs. Expose via Prometheus when enabled.
+  HEAL_METRICS: "false"
+
+  # ============================================
   # Refactor Agent / ConfigDB Settings
   # ============================================
   # Optional HTTPS endpoint for remote agent role/skill resolution by ConfigDBResolver.
