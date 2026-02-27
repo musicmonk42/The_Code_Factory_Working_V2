@@ -1191,9 +1191,31 @@ class ImportFixerEngine:
             # Find missing project-local imports from project_symbol_map
             missing_project: Dict[str, tuple] = {}
             if project_symbol_map:
+                # Compute the module path for the file being fixed to prevent self-imports.
+                # e.g. "app/routers/health.py" -> "app.routers.health"
+                _self_module = None
+                if file_path:
+                    _self_module = (
+                        file_path
+                        .replace("\\", "/")
+                        .replace("/", ".")
+                        .removesuffix(".py")
+                        .lstrip(".")
+                    )
+                    # Also handle __init__.py: "app/schemas/__init__.py" -> "app.schemas"
+                    if _self_module.endswith(".__init__"):
+                        _self_module = _self_module.removesuffix(".__init__")
+
                 for name in used_names:
                     if name in project_symbol_map and name not in imported_names:
-                        missing_project[name] = project_symbol_map[name]
+                        mod, sym_name = project_symbol_map[name]
+                        # Skip self-imports: don't add "from app.foo import bar" inside app/foo.py
+                        if _self_module and mod == _self_module:
+                            self.logger.debug(
+                                f"Skipping self-import: {mod}.{sym_name} in {file_path}"
+                            )
+                            continue
+                        missing_project[name] = (mod, sym_name)
 
             if not missing_stdlib and not missing_fastapi and not missing_typing \
                     and not missing_sqlalchemy and not missing_project:
