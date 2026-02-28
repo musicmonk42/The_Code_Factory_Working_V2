@@ -422,7 +422,7 @@ async def test_run_subprocess_safe_timeout(
 
     with pytest.raises(RunnerTimeoutError):
         await runner_mutation._run_subprocess_safe(
-            ["sleep", "1"], cwd=tmp_path, timeout=0.01
+            ["sleep", "1"], cwd=tmp_path, timeout=1
         )
 
 

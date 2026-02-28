@@ -302,7 +302,7 @@ def is_audit_logging_available() -> bool:
 # ==============================================================================
 
 DEFAULT_FILENAME = "main.py"
-ERROR_FILENAME = "__syntax_errors__"
+ERROR_FILENAME = "error.txt"
 
 # Maximum fraction of files that may fail validation before a high-rejection-rate
 # warning is emitted to the pipeline.  Also triggers when the absolute count
@@ -654,6 +654,16 @@ def remove_dead_imports(code: str, filename: str = "") -> str:
         if not replaced:
             replaced_lines.append(line)
     code = "".join(replaced_lines)
+
+    # --- Step 1b: Replace banned module attribute accesses in code body ---
+    # e.g. aioredis.create_redis_pool(...) -> redis.asyncio.create_redis_pool(...)
+    for banned_mod, replacement_mod in BANNED_IMPORTS.items():
+        if banned_mod in code:
+            code = re.sub(
+                rf'\b{re.escape(banned_mod)}\.',
+                f'{replacement_mod}.',
+                code,
+            )
 
     # --- Step 2: Remove dead imports (imported but never used) ---
     try:
@@ -4077,7 +4087,7 @@ def _classify_stub_module(module_path: str, symbols: Set[str]) -> str:
         return "auth"
     if "config" in stem or "setting" in stem:
         return "config"
-    if "model" in stem and "schema" not in stem:
+    if stem in ("model",) and "schema" not in stem:
         return "model"
     if "schema" in stem:
         return "schema"
@@ -4357,7 +4367,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Pydantic is appropriate only for schemas/ files or suffix-matched names.
             _is_pydantic_module = (
                 "schemas" in module_path
-                or (not _is_sqlalchemy_module and "models" in module_path)
+                or (not _is_sqlalchemy_module and "/models/" in module_path)
             )
             has_pydantic_class = any(
                 sym[0].isupper() and (
@@ -4477,11 +4487,9 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 stub_lines.append("from app.database import Base\n")
             elif has_pydantic_class:
                 stub_lines.append("from pydantic import BaseModel\n")
-            if has_router_in_symbols:
-                stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
             for sym in sorted(symbols):
-                # Uppercase initial → class; router variable → APIRouter() instance;
+                # Uppercase initial → class; router variable → None assignment;
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
@@ -4495,8 +4503,12 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f"    name = Column(String, nullable=False)\n\n\n"
                         )
                     else:
-                        _sym_is_pydantic = _is_pydantic_module or any(
-                            sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
+                        # For generic modules, always generate minimal bare class stubs.
+                        # For other categories, check Pydantic suffix patterns.
+                        _sym_is_pydantic = _stub_category != "generic" and (
+                            _is_pydantic_module or any(
+                                sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
+                            )
                         )
                         if _sym_is_pydantic:
                             stub_lines.append(
@@ -4513,7 +4525,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             _stub_class_names.setdefault(module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
-                        f"{sym} = APIRouter()\n\n\n"
+                        f"{sym} = None\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
@@ -4568,7 +4580,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 _is_sqlalchemy_module = "/models/" in module_path and "/schemas/" not in module_path
                 _is_pydantic_module = (
                     "schemas" in module_path
-                    or (not _is_sqlalchemy_module and "models" in module_path)
+                    or (not _is_sqlalchemy_module and "/models/" in module_path)
                 )
                 has_sqlalchemy_missing = _is_sqlalchemy_module and any(
                     sym[0].isupper() for sym in missing

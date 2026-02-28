@@ -998,7 +998,7 @@ async def _retry_stub_files(
 
         matched_files: Dict[str, str] = {}
         for returned_path, returned_content in new_files.items():
-            if returned_path in ("__syntax_errors__", "__validation_summary__"):
+            if returned_path in ("error.txt", "__syntax_errors__", "__validation_summary__"):
                 continue
             if returned_path in expected_paths:
                 matched_files[returned_path] = returned_content

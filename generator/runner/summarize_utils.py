@@ -72,7 +72,7 @@ def detect_anomaly(*a, **k):
 def _format_percentage(value: Any) -> str:
     """Format a 0–1 float score as a percentage string, or return 'N/A'."""
     if isinstance(value, (int, float)):
-        return f"{value * 100:.0f}"
+        return f"{value * 100:.1f}"
     return "N/A"
 
 
