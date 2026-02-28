@@ -1117,6 +1117,8 @@ _ORM_BASE_NAMES: frozenset = frozenset({
     "AbstractBase",      # Generic abstract base pattern
     "Model",             # Django ORM / Flask-SQLAlchemy base
     "db.Model",          # Flask-SQLAlchemy attribute form (attr-name only)
+    "BaseModel",         # Pydantic base model
+    "BaseSettings",      # Pydantic settings base
 })
 
 # Pre-compiled pattern for stripping markdown fences during materialization.
