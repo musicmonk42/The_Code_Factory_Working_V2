@@ -117,7 +117,7 @@ async def test_call_llm_for_critique_parses_json_and_merges(
     - Merge parsed JSON fields into the returned structure.
     """
 
-    async def fake_call_llm_api(prompt: str, provider: str) -> Dict[str, Any]:
+    async def fake_call_llm_api(prompt: str, provider: str, **kwargs) -> Dict[str, Any]:
         assert "CRITIQUE" in prompt or prompt  # not too strict; just ensure it's called
         # Simulate fenced JSON from an LLM
         return {"content": """```json
@@ -148,7 +148,7 @@ async def test_call_llm_for_critique_handles_bad_json(
     - Return a structured error indicator containing the raw content.
     """
 
-    async def fake_call_llm_api(prompt: str, provider: str) -> Dict[str, Any]:
+    async def fake_call_llm_api(prompt: str, provider: str, **kwargs) -> Dict[str, Any]:
         return {"content": "NOT JSON AT ALL"}
 
     monkeypatch.setattr(core, "call_llm_api", fake_call_llm_api, raising=False)

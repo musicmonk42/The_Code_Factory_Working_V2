@@ -309,9 +309,14 @@ def validate_required_agents(registry: object) -> dict:
         )
 
     if hard_missing:
+        _soft_missing_note = (
+            f" Also missing soft-required agents: {', '.join(sorted(soft_missing))}."
+            if soft_missing else ""
+        )
         raise ConfigurationError(
             f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(hard_missing))}. "
-            f"The generator workflow cannot execute without these agents. "
+            f"The generator workflow cannot execute without these agents."
+            f"{_soft_missing_note} "
             f"Please check agent initialization logs and ensure all dependencies are properly installed. "
             f"Hard-required agents: {', '.join(sorted(HARD_REQUIRED_AGENTS))}"
         )

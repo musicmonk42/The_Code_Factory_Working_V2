@@ -495,7 +495,7 @@ class TestOmniCoreOmega:
 
         assert len(omega.arbiters) == 3
         assert mock_arbiter.call_count == 3
-        assert mock_code_health_env.call_count == 1
+        assert mock_code_health_env.call_count == 3  # One CodeHealthEnv per arbiter
 
     @pytest.mark.asyncio
     @pytest.mark.integration

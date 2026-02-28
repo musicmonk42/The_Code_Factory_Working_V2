@@ -19,10 +19,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
-
 {% for router_var in router_names %}
-{{ router_var }} = APIRouter(tags=["general"])
+{{ router_var }} = None
 {% endfor %}
 
 {% for var in variable_names %}

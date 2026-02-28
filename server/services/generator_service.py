@@ -40,7 +40,7 @@ class GeneratorService:
     """
     
     # Retry configuration for agent loading (configurable via environment variables)
-    MAX_RETRY_ATTEMPTS = int(os.getenv("AGENT_RETRY_ATTEMPTS", "5"))  # Number of retry attempts after initial call
+    MAX_RETRY_ATTEMPTS = int(os.getenv("AGENT_RETRY_ATTEMPTS", "3"))  # Number of retry attempts after initial call
     RETRY_BASE_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_BASE_DELAY", "5"))  # Base delay for exponential backoff
     RETRY_MAX_DELAY_SECONDS = int(os.getenv("AGENT_RETRY_MAX_DELAY", "60"))  # Maximum delay cap
 
