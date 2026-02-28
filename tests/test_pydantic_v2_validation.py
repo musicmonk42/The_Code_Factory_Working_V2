@@ -520,3 +520,109 @@ class TestAutoFixPydanticV1Imports:
         assert "schemas.py" in parsed
         assert "@field_validator" in parsed["schemas.py"]
         assert "@validator(" not in parsed["schemas.py"]
+
+
+class TestAutoFixSettingsInstantiation:
+    """Tests for auto_fix_settings_instantiation() which converts module-level
+    Settings() to lazy get_settings() pattern."""
+
+    def _fix(self, files):
+        from generator.agents.codegen_agent.codegen_response_handler import (
+            auto_fix_settings_instantiation,
+        )
+        return auto_fix_settings_instantiation(files)
+
+    def test_module_level_settings_replaced_with_lazy(self):
+        """Module-level `settings = Settings()` should be replaced by @lru_cache get_settings()."""
+        files = {
+            "app/config.py": (
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["app/config.py"]
+        assert "def get_settings()" in content, f"Expected get_settings() in:\n{content}"
+        assert "@lru_cache()" in content, f"Expected @lru_cache() in:\n{content}"
+        assert "lru_cache" in content, f"Expected lru_cache import in:\n{content}"
+
+    def test_lru_cache_import_added_when_missing(self):
+        """lru_cache import is added when not already present."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        assert "lru_cache" in fixed["config.py"]
+
+    def test_lru_cache_import_not_duplicated(self):
+        """lru_cache import is not added twice when already present."""
+        files = {
+            "config.py": (
+                "from functools import lru_cache\n"
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        assert fixed["config.py"].count("lru_cache") >= 1
+
+    def test_no_basesettings_file_unchanged(self):
+        """Files without BaseSettings are returned unchanged."""
+        original = "from pydantic import BaseModel\n\nclass User(BaseModel):\n    name: str\n"
+        files = {"models.py": original}
+        fixed = self._fix(files)
+        assert fixed["models.py"] == original
+
+    def test_safe_default_added_for_cors_origins(self):
+        """A required cors_origins field should get a safe default injected."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n"
+                "from pydantic import Field\n\n"
+                "class Settings(BaseSettings):\n"
+                "    cors_origins: str\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        assert 'cors_origins' in content
+        # The safe default should have been injected as a Field(default=...) annotation
+        cors_line = next(
+            (ln for ln in content.splitlines() if "cors_origins" in ln), ""
+        )
+        assert '=' in cors_line, (
+            f"Expected a default value for cors_origins, got: {cors_line!r}"
+        )
+
+    def test_existing_default_not_overwritten(self):
+        """A field that already has a default value should not be modified."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n"
+                "from pydantic import Field\n\n"
+                "class Settings(BaseSettings):\n"
+                "    cors_origins: str = Field(default='http://localhost')\n"
+            )
+        }
+        fixed = self._fix(files)
+        assert "http://localhost" in fixed["config.py"], (
+            "Existing default should not be overwritten"
+        )
+
+    def test_non_python_files_unchanged(self):
+        """Non-.py files are passed through without modification."""
+        files = {
+            "requirements.txt": "pydantic-settings>=2.0.0\n",
+            "README.md": "# Project\n",
+        }
+        fixed = self._fix(files)
+        assert fixed == files

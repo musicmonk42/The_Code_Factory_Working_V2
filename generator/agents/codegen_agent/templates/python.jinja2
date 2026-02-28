@@ -54,8 +54,12 @@ You are a Senior Python Engineer with expertise in:
 
 ### BaseSettings has moved to a separate package (pydantic-settings)
 
+**CRITICAL: ALL `BaseSettings` fields MUST have safe defaults to survive cold-start import validation.**
+**CRITICAL: NEVER instantiate `Settings()` at module level — use lazy `get_settings()` to prevent import-time crashes when env vars are absent.**
+
 ```python
-# ✅ CORRECT (Pydantic v2):
+# ✅ CORRECT (Pydantic v2 with lazy instantiation and safe defaults):
+from functools import lru_cache
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -64,9 +68,21 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development")
     log_level: str = Field(default="info")
+    database_url: str = Field(default="sqlite:///./dev.db")
+    redis_url: str = Field(default="redis://localhost:6379/0")
+    jwt_secret_key: str = Field(default="change-me-in-production")
+    cors_origins: str = Field(default="*")
+    secret_key: str = Field(default="change-me-in-production")
+
+@lru_cache()
+def get_settings() -> Settings:
+    return Settings()
 
 # ❌ WRONG (Pydantic v1 - DO NOT USE - this will raise an ImportError at runtime):
 # from pydantic import BaseSettings  # ← This FAILS in Pydantic v2
+
+# ❌ WRONG (module-level instantiation - DO NOT USE - crashes on import when env vars are missing):
+# settings = Settings()  # ← This FAILS during cold-start import validation
 ```
 
 **Always add `pydantic-settings>=2.0.0` to requirements.txt when using BaseSettings:**

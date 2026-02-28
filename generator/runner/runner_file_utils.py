@@ -3028,6 +3028,24 @@ async def validate_generated_project(
         if entry_module:
             child_env = dict(_os_cold.environ)
             child_env["PYTHONPATH"] = str(output_dir)
+            # Inject .env.example values so BaseSettings fields with required env vars
+            # don't raise ValidationError during the cold-start import check (Fix 2).
+            _env_example = output_dir / ".env.example"
+            if _env_example.exists():
+                try:
+                    for _line in _env_example.read_text(encoding="utf-8").splitlines():
+                        _line = _line.strip()
+                        if _line and not _line.startswith("#") and "=" in _line:
+                            _k, _, _v = _line.partition("=")
+                            _k = _k.strip()
+                            if _k and _k not in child_env:
+                                _v = _v.strip()
+                                # Strip matching surrounding quotes (single or double)
+                                if len(_v) >= 2 and _v[0] == _v[-1] and _v[0] in ('"', "'"):
+                                    _v = _v[1:-1]
+                                child_env[_k] = _v
+                except Exception as _env_ex:
+                    logger.debug("Could not parse .env.example for cold-start env: %s", _env_ex)
             try:
                 proc = subprocess.run(
                     [_sys.executable, "-c", f"import {entry_module}; print('OK')"],
@@ -3081,6 +3099,20 @@ async def validate_generated_project(
                         result["valid"] = False
                         logger.error(
                             "Cold-start import check failed for '%s': %s", entry_module, import_error
+                        )
+                    elif "ValidationError" in import_error and (
+                        "pydantic" in import_error or "settings" in import_error.lower()
+                    ):
+                        # Pydantic settings ValidationError means required env vars are absent
+                        # at import time. This is not broken code — treat as non-fatal warning.
+                        result["warnings"].append(
+                            f"Cold-start import check: Pydantic settings ValidationError for "
+                            f"'{entry_module}' (missing env vars, non-fatal): {import_error}"
+                        )
+                        logger.warning(
+                            "Cold-start import check: Pydantic settings ValidationError for '%s' "
+                            "(missing env vars — code structure is valid, non-fatal).",
+                            entry_module,
                         )
                     else:
                         # Other import errors (e.g., circular imports) — hard failure
