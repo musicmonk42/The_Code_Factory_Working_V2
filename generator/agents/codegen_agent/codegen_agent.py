@@ -46,6 +46,7 @@ from .codegen_prompt import build_code_generation_prompt
 from .codegen_response_handler import (
     add_traceability_comments,
     build_stub_retry_prompt_hint,
+    _classify_stub_module,
     _detect_module_package_collisions,
     disambiguate_model_schema_imports,
     fix_response_model_type_mismatches,
@@ -818,7 +819,6 @@ async def _retry_stub_files(
                 )
                 # Group stubs by module category so the template can emit
                 # per-category technology instructions (SQLAlchemy, Pydantic, etc.).
-                from .codegen_response_handler import _classify_stub_module
                 _stub_groups: Dict[str, List[str]] = {}
                 for _p in sorted(stub_paths):
                     _cat = _classify_stub_module(_p, set())

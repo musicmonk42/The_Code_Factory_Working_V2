@@ -54,6 +54,10 @@ class TemplateConfig:
     
     # Template directories
     template_dir: Path = field(default_factory=lambda: Path(__file__).parent / "templates")
+    # Stub-specific sub-directory for code-synthesis templates (auth, model, schema, etc.)
+    stubs_template_dir: Path = field(
+        default_factory=lambda: Path(__file__).parent / "templates" / "stubs"
+    )
     
     # Caching
     enable_caching: bool = True
@@ -100,6 +104,14 @@ class TemplateConfig:
             if not macros_file.exists():
                 logger.warning(f"Macros file not found: {macros_file}")
         
+        # Validate the stubs subdirectory (non-fatal: warn only).
+        if not self.stubs_template_dir.exists():
+            logger.warning(
+                "Stub templates directory not found: %s — "
+                "ensure_local_module_stubs will fall back to inline stub generation",
+                self.stubs_template_dir,
+            )
+        
         return True
 
 
@@ -131,13 +143,24 @@ class TemplateManager:
         self._template_cache: Dict[str, Template] = {}
         self._cache_timestamps: Dict[str, datetime] = {}
         
-        # Initialize Jinja2 environment
+        # Initialize Jinja2 environment for main prompt templates
         self._env = Environment(
             loader=FileSystemLoader(str(self.config.template_dir)),
             autoescape=False,  # Code generation shouldn't auto-escape
             trim_blocks=True,
             lstrip_blocks=True,
         )
+
+        # Initialize a separate Jinja2 environment for stub code-synthesis templates.
+        # These live in templates/stubs/ and generate Python source, not LLM prompts.
+        self._stubs_env: Optional[Environment] = None
+        if self.config.stubs_template_dir.is_dir():
+            self._stubs_env = Environment(
+                loader=FileSystemLoader(str(self.config.stubs_template_dir)),
+                autoescape=False,
+                trim_blocks=True,
+                lstrip_blocks=True,
+            )
         
         # Discover templates
         self._discover_templates()
@@ -185,6 +208,21 @@ class TemplateManager:
             self._templates[name] = metadata
             
             logger.debug(f"Discovered template: {name} ({language}/{framework or 'base'})")
+
+        # Also discover stub code-synthesis templates from the stubs/ subdirectory.
+        if self.config.stubs_template_dir.is_dir():
+            for stub_file in self.config.stubs_template_dir.glob("*.jinja2"):
+                stub_name = f"stubs/{stub_file.stem}"
+                metadata = TemplateMetadata(
+                    name=stub_name,
+                    path=stub_file,
+                    language="python",
+                    framework="stub",
+                    last_modified=datetime.fromtimestamp(stub_file.stat().st_mtime),
+                )
+                metadata.calculate_checksum()
+                self._templates[stub_name] = metadata
+                logger.debug(f"Discovered stub template: {stub_name}")
     
     def get_template(self, language: str, framework: Optional[str] = None) -> Template:
         """
@@ -250,8 +288,62 @@ class TemplateManager:
             return template
     
     def list_templates(self) -> List[TemplateMetadata]:
-        """Get list of all available templates."""
+        """Get list of all available templates (prompt and stub templates)."""
         return list(self._templates.values())
+
+    def get_stub_template(self, stub_name: str) -> Optional[Template]:
+        """Load a stub code-synthesis template from the ``templates/stubs/`` directory.
+
+        Stub templates generate Python source code (not LLM prompts), and are
+        stored in :attr:`TemplateConfig.stubs_template_dir`.  Returns ``None``
+        when the stubs environment is unavailable or the template is not found,
+        so callers can fall back gracefully.
+
+        Args:
+            stub_name: Stem of the template file (e.g. ``"auth_stub"``,
+                ``"model_stub"``).  The ``.jinja2`` suffix is appended
+                automatically.
+
+        Returns:
+            A Jinja2 :class:`~jinja2.Template` object, or ``None`` on failure.
+        """
+        if self._stubs_env is None:
+            logger.debug(
+                "get_stub_template: stubs environment unavailable "
+                "(templates/stubs/ directory not found)"
+            )
+            return None
+        cache_key = f"stubs/{stub_name}"
+        if self.config.enable_caching and cache_key in self._template_cache:
+            cached_time = self._cache_timestamps.get(cache_key)
+            if cached_time:
+                age = (datetime.now() - cached_time).total_seconds()
+                if age < self.config.cache_ttl_seconds:
+                    return self._template_cache[cache_key]
+        try:
+            template = self._stubs_env.get_template(f"{stub_name}.jinja2")
+            if self.config.enable_caching:
+                self._template_cache[cache_key] = template
+                self._cache_timestamps[cache_key] = datetime.now()
+            return template
+        except TemplateNotFound:
+            # Transparent fallback to generic_stub.jinja2
+            try:
+                template = self._stubs_env.get_template("generic_stub.jinja2")
+                logger.debug(
+                    "get_stub_template: %s not found, falling back to generic_stub.jinja2",
+                    stub_name,
+                )
+                if self.config.enable_caching:
+                    self._template_cache[cache_key] = template
+                    self._cache_timestamps[cache_key] = datetime.now()
+                return template
+            except TemplateNotFound:
+                logger.warning("get_stub_template: generic_stub.jinja2 not found")
+                return None
+        except Exception as exc:
+            logger.warning("get_stub_template: failed to load %s: %s", stub_name, exc)
+            return None
     
     def clear_cache(self):
         """Clear template cache."""
