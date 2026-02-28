@@ -266,7 +266,22 @@ CLARIFICATION_KEYWORDS: Final[tuple] = (
 )
 
 def _make_fallback_code(prompt: str = "") -> str:
-    """Generate a meaningful fallback code skeleton when the LLM API is unavailable."""
+    """Generate a meaningful Python skeleton when the LLM API is unavailable.
+
+    The returned code is valid Python that includes a module docstring, standard
+    library imports (``argparse``, ``logging``), a ``main()`` entry-point with a
+    ``--verbose`` flag, and a ``TODO`` comment containing the original request so
+    that a developer can quickly identify what was requested and implement it.
+
+    Args:
+        prompt: The original generation request.  Up to the first 200 characters
+            are embedded in the docstring and ``TODO`` comment.  Pass an empty
+            string (the default) when no original prompt is available.
+
+    Returns:
+        A string containing syntactically valid Python source code that acts as
+        a ready-to-extend skeleton for the requested functionality.
+    """
     prompt_summary = (prompt[:200] + "...") if len(prompt) > 200 else prompt
     return (
         '"""Auto-generated fallback module.\n'
