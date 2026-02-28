@@ -914,6 +914,23 @@ fail or produce a non-functional application.
     ```
 """
 
+# ---------------------------------------------------------------------------
+# Anti-stub instructions injected into every code generation prompt.
+# These complement the "REAL IMPLEMENTATION" section of
+# get_syntax_safety_instructions() by giving explicit, numbered rules at the
+# very start of the prompt where LLMs pay the most attention.
+# ---------------------------------------------------------------------------
+ANTI_STUB_INSTRUCTIONS = """
+CRITICAL CODE QUALITY REQUIREMENTS:
+1. NEVER use `pass` statements in function/method bodies
+2. NEVER use `...` (Ellipsis) as placeholder implementations
+3. NEVER write "# TODO: implement" or similar comments without actual code
+4. Every function MUST have a complete, working implementation
+5. All database operations MUST use actual SQLAlchemy queries
+6. All authentication endpoints MUST implement JWT token logic
+7. All CRUD operations MUST have full create/read/update/delete logic
+"""
+
 # --- Expanded Best Practices ---
 BEST_PRACTICES = {
     "python": [
@@ -1781,9 +1798,9 @@ Review the error carefully and ensure your generated code does not repeat the sa
                         logger.error(f"Meta-LLM critique failed: {e}")
                         PROMPT_ERRORS.labels("MetaLLMFailure").inc()
 
-            # 8. Prepend Syntax Safety Instructions
-            # These are CRITICAL to reduce syntax errors from LLM generation
-            prompt = get_syntax_safety_instructions(target_language, spec_structure) + "\n\n" + prompt
+            # 8. Prepend Syntax Safety Instructions and Anti-Stub Instructions
+            # These are CRITICAL to reduce syntax errors and stub implementations
+            prompt = ANTI_STUB_INSTRUCTIONS + "\n\n" + get_syntax_safety_instructions(target_language, spec_structure) + "\n\n" + prompt
 
             if error_context:
                 # If this is a retry, add error context prominently at the start
