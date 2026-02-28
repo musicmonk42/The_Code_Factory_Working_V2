@@ -16,19 +16,26 @@ Test Categories:
    - Failure finalization
    - Idempotency verification
    - Manifest generation
+   - Automatic SFE dispatch on success
+   - Dispatch idempotency
    
 2. Dispatch Service Tests
    - Circuit breaker functionality
    - Kafka dispatch
    - Webhook fallback
    - Health status reporting
+
+3. ArbiterBridge Tests
+   - NO-OP mode detection when stubs are used
+   - Strict mode raises on stubs
+
+4. EventBusBridge Tests
+   - Startup is conditional on subsystem availability
 """
 
-import asyncio
 import pytest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the services to test
@@ -37,6 +44,7 @@ from server.services.job_finalization import (
     finalize_job_failure,
     reset_finalization_state,
     _generate_output_manifest,
+    _dispatched_jobs,
 )
 from server.services.dispatch_service import (
     kafka_available,
@@ -342,6 +350,290 @@ class TestManifestGeneration:
             assert result["total_files"] == 3
             assert result["total_size"] == 225  # 100 + 50 + 75
             assert len(result["files"]) == 3
+
+
+class TestAutoDispatchOnFinalization:
+    """Test suite for automatic SFE dispatch on job success finalization."""
+
+    @pytest.fixture(autouse=True)
+    def setup_teardown(self):
+        """Reset state before and after each test."""
+        reset_finalization_state()
+        yield
+        reset_finalization_state()
+
+    @pytest.fixture
+    def mock_jobs_db(self):
+        """Mock the jobs database with a test job."""
+        with patch('server.services.job_finalization.jobs_db') as mock_db:
+            mock_job = MagicMock()
+            mock_job.status = JobStatus.RUNNING
+            mock_job.current_stage = JobStage.GENERATOR_GENERATION
+            mock_job.metadata = {}
+            mock_job.output_files = []
+            mock_db.__contains__ = MagicMock(return_value=True)
+            mock_db.__getitem__ = MagicMock(return_value=mock_job)
+            yield mock_db, mock_job
+
+    @pytest.mark.asyncio
+    async def test_finalize_success_triggers_dispatch(self, mock_jobs_db):
+        """Test that successful finalization automatically dispatches to SFE."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = True
+
+            result = await finalize_job_success("test-dispatch-job")
+
+            assert result is True
+            mock_dispatch.assert_called_once()
+            call_args = mock_dispatch.call_args
+            assert call_args[0][0] == "test-dispatch-job"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_idempotent_not_called_twice(self, mock_jobs_db):
+        """Test that dispatch is called at most once even if finalize is called again."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = True
+
+            # First finalization — should dispatch
+            result1 = await finalize_job_success("test-idem-job")
+            assert result1 is True
+            assert mock_dispatch.call_count == 1
+
+            # Second call — finalization is idempotent (returns early)
+            result2 = await finalize_job_success("test-idem-job")
+            assert result2 is True
+            # Dispatch should still only have been called once
+            assert mock_dispatch.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_dispatch_failure_does_not_corrupt_job_status(self, mock_jobs_db):
+        """Test that a dispatch failure leaves the job COMPLETED and does not raise."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.side_effect = RuntimeError("Simulated dispatch failure")
+
+            # Should succeed (return True) even if dispatch errors
+            result = await finalize_job_success("test-dispatch-fail-job")
+
+            assert result is True
+            assert mock_job.status == JobStatus.COMPLETED
+            # Failure should be recorded in metadata
+            assert mock_job.metadata.get("sfe_dispatched") is False
+
+    @pytest.mark.asyncio
+    async def test_dispatch_includes_job_payload(self, mock_jobs_db):
+        """Test that dispatch payload includes required fields for SFE analysis."""
+        mock_db, mock_job = mock_jobs_db
+        mock_job.output_files = ["app.py", "tests.py"]
+
+        pipeline_result = {
+            "output_path": "/tmp/outputs/test-job",
+            "stages_completed": ["codegen", "testgen"],
+            "message": "Pipeline succeeded",
+        }
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = True
+
+            await finalize_job_success("test-payload-job", result=pipeline_result)
+
+            assert mock_dispatch.called
+            _job_id, job_data, _cid = mock_dispatch.call_args[0]
+            assert _job_id == "test-payload-job"
+            assert job_data["output_path"] == "/tmp/outputs/test-job"
+            assert "codegen" in job_data["completed_stages"]
+            assert "testgen" in job_data["completed_stages"]
+
+    @pytest.mark.asyncio
+    async def test_dispatch_records_success_in_metadata(self, mock_jobs_db):
+        """Test that successful dispatch is recorded in job metadata."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = True
+
+            await finalize_job_success("test-meta-job")
+
+            assert mock_job.metadata.get("sfe_dispatched") is True
+            assert "sfe_dispatch_at" in mock_job.metadata
+
+    @pytest.mark.asyncio
+    async def test_dispatch_failure_records_metadata_and_blocks_retry(self, mock_jobs_db):
+        """Test that a False return from dispatch is recorded and blocks automatic retry."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = False  # all dispatch methods exhausted
+
+            result = await finalize_job_success("test-false-dispatch-job")
+
+            # Finalization itself must still succeed
+            assert result is True
+            assert mock_job.status == JobStatus.COMPLETED
+            # Failure recorded in metadata
+            assert mock_job.metadata.get("sfe_dispatched") is False
+            assert mock_job.metadata.get("sfe_dispatch_error") == "All dispatch methods failed"
+            # Job is tracked as dispatched (attempt made) to prevent automatic retry loop
+            assert "test-false-dispatch-job" in _dispatched_jobs
+            # Only one attempt was made
+            assert mock_dispatch.call_count == 1
+
+
+class TestArbiterBridgeNoOpMode:
+    """Test suite for ArbiterBridge NO-OP mode detection."""
+
+    def test_bridge_is_noop_when_stubs_used(self):
+        """Test that bridge reports is_noop=True when auto-created stub services are in use."""
+        from generator.arbiter_bridge import ArbiterBridge
+
+        # A minimal stub that can be constructed with no args
+        class _Stub:
+            def __init__(self): pass
+
+        # Simulate the scenario where all real imports failed (flags are False)
+        # and bridge auto-creates services from the stub classes
+        with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', False), \
+             patch('generator.arbiter_bridge._REAL_MESSAGE_QUEUE', False), \
+             patch('generator.arbiter_bridge._REAL_BUG_MANAGER', False), \
+             patch('generator.arbiter_bridge._REAL_KNOWLEDGE_GRAPH', False), \
+             patch('generator.arbiter_bridge._REAL_HUMAN_IN_LOOP', False), \
+             patch('generator.arbiter_bridge.PolicyEngine', _Stub), \
+             patch('generator.arbiter_bridge.MessageQueueService', _Stub), \
+             patch('generator.arbiter_bridge.BugManager', _Stub), \
+             patch('generator.arbiter_bridge.KnowledgeGraph', _Stub), \
+             patch('generator.arbiter_bridge.HumanInLoop', _Stub):
+            # Do NOT inject services so the bridge auto-creates them as stubs
+            bridge = ArbiterBridge()
+            # With all real flags False and no injected services, bridge is in NO-OP mode
+            assert bridge.is_noop is True
+            assert len(bridge._noop_services) == 5
+
+    def test_bridge_is_noop_property_false_when_real_services(self):
+        """Test that is_noop is False when all services are real."""
+        from generator.arbiter_bridge import ArbiterBridge
+
+        real_pe = MagicMock()
+        real_mq = MagicMock()
+        real_bm = MagicMock()
+        real_kg = MagicMock()
+        real_hil = MagicMock()
+
+        with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', True), \
+             patch('generator.arbiter_bridge._REAL_MESSAGE_QUEUE', True), \
+             patch('generator.arbiter_bridge._REAL_BUG_MANAGER', True), \
+             patch('generator.arbiter_bridge._REAL_KNOWLEDGE_GRAPH', True), \
+             patch('generator.arbiter_bridge._REAL_HUMAN_IN_LOOP', True):
+            bridge = ArbiterBridge(
+                policy_engine=real_pe,
+                message_queue=real_mq,
+                bug_manager=real_bm,
+                knowledge_graph=real_kg,
+                human_in_loop=real_hil,
+            )
+            assert bridge.is_noop is False
+
+    @pytest.mark.asyncio
+    async def test_publish_event_includes_arbiter_enabled_flag(self):
+        """Test that published events include arbiter_enabled metadata."""
+        from generator.arbiter_bridge import ArbiterBridge
+
+        mock_mq = MagicMock()
+        mock_mq.publish = AsyncMock()
+
+        with patch('generator.arbiter_bridge._REAL_MESSAGE_QUEUE', True):
+            bridge = ArbiterBridge(
+                policy_engine=MagicMock(),
+                message_queue=mock_mq,
+                bug_manager=MagicMock(),
+                knowledge_graph=MagicMock(),
+                human_in_loop=MagicMock(),
+            )
+
+        await bridge.publish_event("test_event", {"key": "value"})
+
+        # Verify publish was called
+        assert mock_mq.publish.called
+        _topic, payload = mock_mq.publish.call_args[0]
+        assert "arbiter_enabled" in payload
+
+    def test_strict_mode_raises_when_stubs_present(self):
+        """Test that ARBITER_STRICT=1 raises when any service is a stub."""
+        import os
+        from generator.arbiter_bridge import ArbiterBridge
+
+        with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', False), \
+             patch.dict(os.environ, {"ARBITER_STRICT": "1"}):
+            with pytest.raises(RuntimeError, match="ARBITER_STRICT=1"):
+                ArbiterBridge()  # Will try to create real PolicyEngine but fall back to stub
+
+
+class TestEventBusBridgeStartup:
+    """Test suite for EventBusBridge startup behaviour."""
+
+    @pytest.mark.asyncio
+    async def test_bridge_starts_when_subsystem_available(self):
+        """Test that EventBusBridge starts when at least one subsystem is available."""
+        from self_fixing_engineer.arbiter.event_bus_bridge import EventBusBridge
+
+        bridge = EventBusBridge()
+        mock_mqs = MagicMock()
+        mock_mqs.subscribe = AsyncMock()
+        bridge.arbiter_mqs = mock_mqs
+        bridge.mesh_bus = MagicMock()
+
+        await bridge.start()
+        stats = bridge.get_stats()
+
+        assert stats["arbiter_available"] is True
+        assert stats["mesh_available"] is True
+        await bridge.stop()
+
+    @pytest.mark.asyncio
+    async def test_bridge_does_not_start_when_no_subsystems(self):
+        """Test that EventBusBridge does not start when no subsystems are configured."""
+        from self_fixing_engineer.arbiter.event_bus_bridge import EventBusBridge
+
+        bridge = EventBusBridge()
+        # Remove all subsystems
+        bridge.mesh_bus = None
+        bridge.arbiter_mqs = None
+        bridge.simulation_bus = None
+
+        await bridge.start()
+        stats = bridge.get_stats()
+
+        assert stats["running"] is False
+        assert stats["active_tasks"] == 0
+
+    def test_bridge_get_stats_keys(self):
+        """Test that EventBusBridge.get_stats() returns expected keys."""
+        from self_fixing_engineer.arbiter.event_bus_bridge import EventBusBridge
+
+        bridge = EventBusBridge()
+        stats = bridge.get_stats()
+
+        assert "running" in stats
+        assert "mesh_available" in stats
+        assert "arbiter_available" in stats
+        assert "simulation_available" in stats
+        assert "active_tasks" in stats
 
 
 if __name__ == "__main__":

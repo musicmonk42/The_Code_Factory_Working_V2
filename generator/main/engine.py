@@ -1191,6 +1191,58 @@ class WorkflowEngine:
             try:
                 result["status"] = WorkflowStatus.RUNNING.value
                 
+                # Emit a structured summary of registered vs missing agents
+                # so operators can diagnose silent stage skipping.
+                _registered_agents = list(_agent_registry)
+                _optional_agents = ["critique", "testgen", "docgen", "deploy"]
+                _missing_optional = [a for a in _optional_agents if a not in _agent_registry]
+                _present_optional = [a for a in _optional_agents if a in _agent_registry]
+                if _missing_optional:
+                    logger.warning(
+                        "[Pipeline:%s] Agent availability summary — registered: %s | "
+                        "missing optional stages: %s. "
+                        "Missing stages will be skipped. "
+                        "To install: pip install -e generator[%s]",
+                        workflow_id,
+                        _registered_agents or "(none)",
+                        _missing_optional,
+                        ",".join(_missing_optional),
+                        extra={
+                            "workflow_id": workflow_id,
+                            "registered_agents": _registered_agents,
+                            "missing_optional_agents": _missing_optional,
+                        }
+                    )
+                else:
+                    logger.info(
+                        "[Pipeline:%s] All optional agents registered: %s",
+                        workflow_id,
+                        _present_optional,
+                        extra={"workflow_id": workflow_id, "registered_agents": _registered_agents}
+                    )
+
+                # PIPELINE_REQUIRE_AGENTS: fail fast if any required agents are absent.
+                # Checked unconditionally so that misconfigurations are always caught,
+                # even when all optional agents happen to be registered.
+                _pipeline_require = os.environ.get("PIPELINE_REQUIRE_AGENTS", "").strip()
+                if _pipeline_require:
+                    _required = [a.strip() for a in _pipeline_require.split(",") if a.strip()]
+                    _absent_required = [a for a in _required if a not in _agent_registry]
+                    if _absent_required:
+                        _err_msg = (
+                            f"PIPELINE_REQUIRE_AGENTS requires {_absent_required} but they are not registered. "
+                            "Install missing agents or unset PIPELINE_REQUIRE_AGENTS."
+                        )
+                        logger.error("[Pipeline:%s] %s", workflow_id, _err_msg, extra={"workflow_id": workflow_id})
+                        result["status"] = WorkflowStatus.FAILED.value
+                        result["errors"].append({
+                            "error_type": "MissingRequiredAgents",
+                            "message": _err_msg,
+                            "missing_agents": _absent_required,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        return result
+
                 # [STAGE:READ_MD] Read and record input MD content
                 md_content = ""
                 if Path(input_file).exists():
@@ -2085,14 +2137,17 @@ class WorkflowEngine:
             
             if agent_class is None:
                 logger.warning(
-                    f"Agent '{agent_name}' not available, using fallback behavior",
-                    extra={"agent_name": agent_name, "workflow_id": workflow_id}
+                    "Agent '%s' not available — stage will be skipped. "
+                    "To install: pip install -e generator[%s]",
+                    agent_name,
+                    agent_name,
+                    extra={"agent_name": agent_name, "workflow_id": workflow_id, "stage_skipped": agent_name}
                 )
                 span.add_event("agent_not_available")
                 AGENT_EXECUTIONS.labels(agent_name=agent_name, status="skipped").inc()
                 return {
                     "status": AgentStatus.SKIPPED.value,
-                    "message": f"Agent '{agent_name}' not available"
+                    "message": f"Agent '{agent_name}' not available — stage skipped"
                 }
             
             try:
