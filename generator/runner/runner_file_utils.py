@@ -1109,6 +1109,16 @@ EXCLUDED_BUILD_DIRS = {'__pycache__', '.pytest_cache', '.git', 'node_modules', '
 DANGEROUS_EXTENSIONS = {'.exe', '.dll', '.so', '.dylib', '.bat', '.cmd', '.sh', '.ps1'}
 ALLOWED_EXTENSIONS = {'.py', '.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.html', '.css', '.js', '.ts', '.jsx', '.tsx'}
 
+# ORM/framework base class names whose body is legitimately just ``pass``.
+# Used by validate_generated_project() to exempt these classes from stub detection.
+_ORM_BASE_NAMES: frozenset = frozenset({
+    "DeclarativeBase",   # SQLAlchemy 2.x mapped base
+    "Base",              # Conventional SQLAlchemy base class name
+    "AbstractBase",      # Generic abstract base pattern
+    "Model",             # Django ORM / Flask-SQLAlchemy base
+    "db.Model",          # Flask-SQLAlchemy attribute form (attr-name only)
+})
+
 # Pre-compiled pattern for stripping markdown fences during materialization.
 # Matches any language identifier (or none) after the opening fence so that
 # LLM responses such as ```python, ```yaml, ```Dockerfile, or plain ``` are
@@ -2540,6 +2550,18 @@ async def validate_generated_project(
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef):
                         if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                            # Exempt known ORM/framework base classes whose body is legitimately just 'pass'
+                            base_names = set()
+                            for base in node.bases:
+                                if isinstance(base, ast.Name):
+                                    base_names.add(base.id)
+                                elif isinstance(base, ast.Attribute):
+                                    base_names.add(base.attr)
+                            if base_names & _ORM_BASE_NAMES:
+                                continue  # Skip ORM base classes
+                            # Also skip if the class name itself is 'Base' and it inherits from anything
+                            if node.name == "Base" and node.bases:
+                                continue
                             msg = f"Stub class '{node.name}' in {rel_path} (body is only 'pass')"
                             result["stub_detections"].append(msg)
                             if is_critical and not is_init:
