@@ -89,6 +89,9 @@ except ImportError:
 # In production, this should be backed by a distributed cache (Redis) for multi-instance deployments
 _finalized_jobs: Set[str] = set()
 
+# Track dispatched jobs to ensure dispatch idempotency (separate from finalization)
+_dispatched_jobs: Set[str] = set()
+
 # Correlation ID for tracking finalization operations across logs
 _finalization_correlation_id: Optional[str] = None
 
@@ -312,6 +315,10 @@ async def _finalize_job_success_impl(
                 "file_count": len(job.output_files)
             }
         )
+        
+        # 6. Automatically dispatch to Self-Fixing Engineer (idempotent)
+        await _auto_dispatch_to_sfe(job_id, job, result, correlation_id)
+        
         return True
         
     except Exception as e:
@@ -335,6 +342,106 @@ async def _finalize_job_success_impl(
             job_finalization_total.labels(job_id=job_id, result="error").inc()
         
         return False
+
+
+async def _auto_dispatch_to_sfe(
+    job_id: str,
+    job: Any,
+    result: Optional[Dict[str, Any]],
+    correlation_id: str,
+) -> None:
+    """
+    Automatically dispatch completed job to Self-Fixing Engineer.
+
+    This function is called as Step 6 of finalize_job_success() to ensure
+    every successful job is forwarded to SFE/Arbiter without manual intervention.
+
+    The dispatch is:
+    - Idempotent: guarded by ``_dispatched_jobs`` so it fires at most once per job
+    - Fail-safe: any error is logged and recorded in job metadata but does NOT
+      affect the already-persisted COMPLETED status
+    - Non-blocking: dispatch failure never raises; the caller always proceeds
+
+    Args:
+        job_id: Unique job identifier
+        job: The job object from jobs_db (already COMPLETED)
+        result: Optional pipeline result passed to finalize_job_success
+        correlation_id: Correlation ID for request tracing
+    """
+    if job_id in _dispatched_jobs:
+        logger.debug(
+            f"Job {job_id} already dispatched to SFE, skipping duplicate dispatch",
+            extra={"job_id": job_id, "correlation_id": correlation_id, "action": "auto_dispatch_sfe"}
+        )
+        return
+
+    try:
+        from server.services.dispatch_service import dispatch_job_completion
+
+        job_data: Dict[str, Any] = {
+            "job_id": job_id,
+            "status": job.status,
+            "output_files": list(getattr(job, "output_files", [])),
+            "completed_at": job.metadata.get("finalized_at", datetime.now(timezone.utc).isoformat()),
+            "correlation_id": correlation_id,
+        }
+        if result:
+            job_data["output_path"] = result.get("output_path")
+            job_data["completed_stages"] = result.get("stages_completed", [])
+            job_data["message"] = result.get("message")
+        if "output_manifest" in job.metadata:
+            job_data["output_manifest"] = job.metadata["output_manifest"]
+
+        dispatched = await dispatch_job_completion(job_id, job_data, correlation_id)
+        _dispatched_jobs.add(job_id)
+
+        if dispatched:
+            job.metadata["sfe_dispatched"] = True
+            job.metadata["sfe_dispatch_at"] = datetime.now(timezone.utc).isoformat()
+            logger.info(
+                f"✓ Job {job_id} automatically dispatched to Self-Fixing Engineer",
+                extra={
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "action": "auto_dispatch_sfe",
+                    "result": "success",
+                }
+            )
+        else:
+            job.metadata["sfe_dispatched"] = False
+            job.metadata["sfe_dispatch_error"] = "All dispatch methods failed"
+            logger.warning(
+                f"Job {job_id} dispatch to SFE failed (all methods exhausted); "
+                "job is still COMPLETED — dispatch can be retried via manual endpoint",
+                extra={
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "action": "auto_dispatch_sfe",
+                    "result": "failed",
+                }
+            )
+
+    except ImportError:
+        logger.warning(
+            "dispatch_service not available; SFE dispatch skipped for job %s", job_id,
+            extra={"job_id": job_id, "action": "auto_dispatch_sfe", "result": "skipped_no_service"}
+        )
+    except Exception as exc:
+        # Fail-safe: record failure but do not raise — job completion must not be corrupted
+        job.metadata["sfe_dispatched"] = False
+        job.metadata["sfe_dispatch_error"] = str(exc)
+        logger.error(
+            f"Unexpected error during SFE auto-dispatch for job {job_id}: {exc}; "
+            "job remains COMPLETED",
+            exc_info=True,
+            extra={
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "action": "auto_dispatch_sfe",
+                "result": "error",
+                "error_type": type(exc).__name__,
+            }
+        )
 
 
 async def finalize_job_failure(
@@ -652,8 +759,9 @@ def reset_finalization_state():
     - Clear security context before calling
     - Validate environment before use
     """
-    global _finalized_jobs
+    global _finalized_jobs, _dispatched_jobs
     _finalized_jobs.clear()
+    _dispatched_jobs.clear()
     logger.debug(
         "Finalization state reset (test mode)",
         extra={"action": "reset_finalization_state", "mode": "test"}

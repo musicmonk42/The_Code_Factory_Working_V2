@@ -734,6 +734,43 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
             exc_info=True,
         )
 
+    # ========================================================================
+    # EVENT BUS BRIDGE STARTUP
+    # ========================================================================
+    # Instantiate and start the EventBusBridge so that Mesh, Arbiter, and
+    # Simulation events are cross-wired at runtime.  Missing subsystems are
+    # handled gracefully inside EventBusBridge.start() — each leg is
+    # optional.
+    #
+    # Configure via environment variables:
+    #   ARBITER_EVENTS_URL  — Arbiter HTTP events endpoint
+    #   EVENT_BUS_*         — Other event-bus configuration
+    # If no subsystems are available the bridge logs a warning and skips.
+    # ========================================================================
+    try:
+        from self_fixing_engineer.arbiter.event_bus_bridge import get_bridge as _get_event_bridge
+        _event_bridge = await _get_event_bridge()
+        _bridge_stats = _event_bridge.get_stats()
+        if _bridge_stats.get("running"):
+            logger.info(
+                "✓ EventBusBridge started: mesh=%s, arbiter=%s, simulation=%s, active_legs=%d",
+                _bridge_stats.get("mesh_available"),
+                _bridge_stats.get("arbiter_available"),
+                _bridge_stats.get("simulation_available"),
+                _bridge_stats.get("active_tasks", 0),
+            )
+        else:
+            logger.warning(
+                "EventBusBridge not running — no subsystems are configured. "
+                "Set ARBITER_EVENTS_URL and EVENT_BUS_* environment variables to enable."
+            )
+    except Exception as _bridge_exc:
+        logger.warning(
+            "EventBusBridge startup failed (non-critical): %s",
+            _bridge_exc,
+            exc_info=True,
+        )
+
     # FIX: If routers failed to load synchronously, retry in background
     if not routers_ok:
         logger.info("=" * 80)
@@ -1680,6 +1717,14 @@ async def lifespan(app: FastAPI):
         await startup_lock.close()
     except Exception as e:
         logger.warning("[shutdown 3/3] Error releasing startup lock: %s", e)
+
+    # Gracefully stop the EventBusBridge if it was started
+    try:
+        from self_fixing_engineer.arbiter.event_bus_bridge import stop_bridge as _stop_event_bridge
+        await _stop_event_bridge()
+        logger.info("[shutdown 3/3] EventBusBridge stopped")
+    except Exception as _bridge_stop_exc:
+        logger.warning("[shutdown 3/3] Error stopping EventBusBridge: %s", _bridge_stop_exc)
 
     logger.info(
         "[shutdown 3/3] Resources released (%.1fs elapsed)",

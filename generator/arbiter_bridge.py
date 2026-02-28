@@ -70,20 +70,30 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Tuple
 
 # Try to import real Arbiter components with fallback to stubs
+# Track which services loaded from stubs vs real implementations
+_REAL_POLICY_ENGINE = True
+_REAL_MESSAGE_QUEUE = True
+_REAL_BUG_MANAGER = True
+_REAL_KNOWLEDGE_GRAPH = True
+_REAL_HUMAN_IN_LOOP = True
+
 try:
     from self_fixing_engineer.arbiter.policy.core import PolicyEngine
 except ImportError:
     from self_fixing_engineer.arbiter.stubs import PolicyEngineStub as PolicyEngine
+    _REAL_POLICY_ENGINE = False
 
 try:
     from self_fixing_engineer.arbiter.message_queue_service import MessageQueueService
 except ImportError:
     from self_fixing_engineer.arbiter.stubs import MessageQueueServiceStub as MessageQueueService
+    _REAL_MESSAGE_QUEUE = False
 
 try:
     from self_fixing_engineer.arbiter.bug_manager.bug_manager import BugManager
 except ImportError:
     from self_fixing_engineer.arbiter.stubs import BugManagerStub as BugManager
+    _REAL_BUG_MANAGER = False
 
 try:
     from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
@@ -92,11 +102,13 @@ except ImportError:
         from self_fixing_engineer.arbiter.knowledge_graph import KnowledgeGraph
     except ImportError:
         from self_fixing_engineer.arbiter.stubs import KnowledgeGraphStub as KnowledgeGraph
+        _REAL_KNOWLEDGE_GRAPH = False
 
 try:
     from self_fixing_engineer.arbiter.human_loop import HumanInLoop
 except ImportError:
     from self_fixing_engineer.arbiter.stubs import HumanInLoopStub as HumanInLoop
+    _REAL_HUMAN_IN_LOOP = False
 
 # Prometheus metrics for bridge monitoring
 try:
@@ -195,45 +207,89 @@ class ArbiterBridge:
             human_in_loop: Optional HumanInLoop instance
         """
         self.enabled = True
+        self._noop_services: list = []  # Names of services running as stubs
         
         # Initialize services with fallbacks
         try:
             self.policy_engine = policy_engine or PolicyEngine()
-            logger.info("ArbiterBridge: PolicyEngine initialized")
+            if not _REAL_POLICY_ENGINE and policy_engine is None:
+                self._noop_services.append("PolicyEngine")
+            else:
+                logger.info("ArbiterBridge: PolicyEngine initialized")
         except Exception as e:
             logger.warning(f"ArbiterBridge: PolicyEngine initialization failed, using stub: {e}")
             self.policy_engine = PolicyEngine()
+            self._noop_services.append("PolicyEngine")
         
         try:
             self.message_queue = message_queue or MessageQueueService()
-            logger.info("ArbiterBridge: MessageQueueService initialized")
+            if not _REAL_MESSAGE_QUEUE and message_queue is None:
+                self._noop_services.append("MessageQueueService")
+            else:
+                logger.info("ArbiterBridge: MessageQueueService initialized")
         except Exception as e:
             logger.warning(f"ArbiterBridge: MessageQueueService initialization failed, using stub: {e}")
             self.message_queue = MessageQueueService()
+            self._noop_services.append("MessageQueueService")
         
         try:
             self.bug_manager = bug_manager or BugManager()
-            logger.info("ArbiterBridge: BugManager initialized")
+            if not _REAL_BUG_MANAGER and bug_manager is None:
+                self._noop_services.append("BugManager")
+            else:
+                logger.info("ArbiterBridge: BugManager initialized")
         except Exception as e:
             logger.warning(f"ArbiterBridge: BugManager initialization failed, using stub: {e}")
             self.bug_manager = BugManager()
+            self._noop_services.append("BugManager")
         
         try:
             self.knowledge_graph = knowledge_graph or KnowledgeGraph()
-            logger.info("ArbiterBridge: KnowledgeGraph initialized")
+            if not _REAL_KNOWLEDGE_GRAPH and knowledge_graph is None:
+                self._noop_services.append("KnowledgeGraph")
+            else:
+                logger.info("ArbiterBridge: KnowledgeGraph initialized")
         except Exception as e:
             logger.warning(f"ArbiterBridge: KnowledgeGraph initialization failed, using stub: {e}")
             self.knowledge_graph = KnowledgeGraph()
+            self._noop_services.append("KnowledgeGraph")
         
         try:
             self.human_in_loop = human_in_loop or HumanInLoop()
-            logger.info("ArbiterBridge: HumanInLoop initialized")
+            if not _REAL_HUMAN_IN_LOOP and human_in_loop is None:
+                self._noop_services.append("HumanInLoop")
+            else:
+                logger.info("ArbiterBridge: HumanInLoop initialized")
         except Exception as e:
             logger.warning(f"ArbiterBridge: HumanInLoop initialization failed, using stub: {e}")
             self.human_in_loop = HumanInLoop()
-        
-        logger.info("ArbiterBridge initialized successfully")
-    
+            self._noop_services.append("HumanInLoop")
+
+        if self._noop_services:
+            logger.warning(
+                "ArbiterBridge running in NO-OP mode for services: %s. "
+                "Events and policy checks will succeed silently without real effect. "
+                "Set arbiter_enabled=false in job metadata. "
+                "To fix: ensure self_fixing_engineer arbiter dependencies are installed.",
+                ", ".join(self._noop_services),
+                extra={"arbiter_noop_services": self._noop_services, "arbiter_enabled": False}
+            )
+            # Support ARBITER_STRICT=1 to fail fast when stubs are in use
+            if os.environ.get("ARBITER_STRICT", "").strip() == "1":
+                raise RuntimeError(
+                    f"ARBITER_STRICT=1 and the following Arbiter services are using stubs: "
+                    f"{', '.join(self._noop_services)}. "
+                    "Ensure all Arbiter dependencies are properly installed."
+                )
+        else:
+            logger.info("ArbiterBridge initialized successfully with all real services")
+
+    @property
+    def is_noop(self) -> bool:
+        """Return True when one or more services are running as no-op stubs."""
+        return bool(self._noop_services)
+
+
     async def check_policy(
         self,
         action: str,
@@ -349,7 +405,8 @@ class ArbiterBridge:
                 **data,
                 "event_type": event_type,
                 "source": "generator",
-                "timestamp": datetime.now(timezone.utc).isoformat()
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "arbiter_enabled": not self.is_noop,
             }
 
             # For generator_output events, ensure file_paths provenance metadata
