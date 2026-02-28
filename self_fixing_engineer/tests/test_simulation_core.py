@@ -287,7 +287,10 @@ def test_run_job_disabled():
 def test_watch_mode_success(monkeypatch):
     """Test watch mode with watchdog."""
     monkeypatch.setattr("self_fixing_engineer.simulation.core.WATCHDOG_AVAILABLE", True)
-    monkeypatch.setattr("watchdog.observers.Observer", MagicMock())
+    mock_observer = MagicMock()
+    mock_observer_class = MagicMock(return_value=mock_observer)
+    mock_observer.join.side_effect = KeyboardInterrupt()
+    monkeypatch.setattr("watchdog.observers.Observer", mock_observer_class)
     monkeypatch.setattr("watchdog.events.FileSystemEventHandler", MagicMock())
     with pytest.raises(KeyboardInterrupt):
         watch_mode(["file.txt"], lambda: None)
