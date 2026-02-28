@@ -166,11 +166,17 @@ except ImportError:
     asyncpg = types.ModuleType("asyncpg")
     asyncpg.create_pool = create_pool_fallback
     asyncpg.exceptions = asyncpg_exceptions
-    asyncpg.pool = types.SimpleNamespace(Pool=Pool)
+    # Use ModuleType instead of SimpleNamespace so that sys.modules entries remain
+    # hashable.  hypothesis (<=6.150) calls set(sys.modules.values()) inside
+    # _get_local_constants; SimpleNamespace instances are unhashable and would
+    # cause a TypeError there.
+    pool_module = types.ModuleType("asyncpg.pool")
+    pool_module.Pool = Pool
+    asyncpg.pool = pool_module
     asyncpg.Record = Record
     sys.modules.setdefault("asyncpg", asyncpg)
     sys.modules.setdefault("asyncpg.exceptions", asyncpg_exceptions)
-    sys.modules.setdefault("asyncpg.pool", asyncpg.pool)
+    sys.modules.setdefault("asyncpg.pool", pool_module)
 
 # Import centralized OpenTelemetry configuration
 from self_fixing_engineer.arbiter.otel_config import get_tracer
