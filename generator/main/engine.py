@@ -56,6 +56,7 @@ Industry Standards Compliance:
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
 import logging
 import os
@@ -1662,6 +1663,16 @@ class WorkflowEngine:
                                             if not _critique_data
                                             else None
                                         ),
+                                        "coverage": {
+                                            "total_lines": 0,
+                                            "covered_lines": 0,
+                                            "percentage": 0.0,
+                                        },
+                                        "test_results": {
+                                            "total": 0,
+                                            "passed": 0,
+                                            "failed": 0,
+                                        },
                                         "issues": _critique_data.get("issues", []),
                                         "fixes_applied": _critique_data.get("fixes_applied", []),
                                     }
@@ -2544,6 +2555,8 @@ class WorkflowEngine:
         if not _has("## Setup"):
             additions.append(
                 "\n## Setup\n\n"
+                "Create and activate a virtual environment:\n\n"
+                "```bash\npython -m venv venv\nsource venv/bin/activate  # On Windows: venv\\Scripts\\activate\n```\n\n"
                 "Install dependencies:\n\n"
                 "```bash\npip install -r requirements.txt\n```\n"
             )
@@ -3396,6 +3409,35 @@ def _auto_register_agents() -> None:
                     )
             except Exception as _bridge_err:
                 logger.debug(f"Could not check global plugin registry: {_bridge_err}")
+
+            # Final fallback: attempt individual direct imports for each agent
+            # when the registry bridge also produced 0 results.
+            if registered_count == 0:
+                _fallback_imports = [
+                    ("codegen", "generator.agents.codegen_agent.codegen_agent", "CodeGenConfig"),
+                    ("testgen", "generator.agents.testgen_agent.testgen_agent", "TestgenAgent"),
+                    ("deploy", "generator.agents.deploy_agent.deploy_agent", "DeployAgent"),
+                    ("docgen", "generator.agents.docgen_agent.docgen_agent", "DocgenAgent"),
+                    ("critique", "generator.agents.critique_agent.critique_agent", "CritiqueAgent"),
+                ]
+                for _fb_name, _fb_module_path, _fb_class_name in _fallback_imports:
+                    if _fb_name in _agent_registry:
+                        continue
+                    try:
+                        _fb_mod = importlib.import_module(_fb_module_path)
+                        _fb_cls = getattr(_fb_mod, _fb_class_name, None)
+                        if _fb_cls is not None:
+                            _agent_registry.register(
+                                _fb_name, _fb_cls, metadata={"source": "fallback_import"}
+                            )
+                            registered_count += 1
+                    except Exception as _fb_err:
+                        logger.debug(f"Fallback import for {_fb_name} failed: {_fb_err}")
+                if registered_count > 0:
+                    logger.info(
+                        f"Fallback registration registered {registered_count} agents: {list(_agent_registry)}",
+                        extra={"action": "auto_register_fallback", "count": registered_count},
+                    )
 
     except ImportError as e:
         logger.warning(

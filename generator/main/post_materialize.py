@@ -604,6 +604,22 @@ def post_materialize(
                 logger.warning("%s %s", _STAGE, warn, exc_info=True)
 
             # ------------------------------------------------------------------
+            # Phase 9: Ensure requirements.txt exists
+            # ------------------------------------------------------------------
+            try:
+                _create_if_absent(
+                    output_dir / "requirements.txt",
+                    "fastapi>=0.100.0\nuvicorn[standard]>=0.22.0\npydantic>=2.0.0\n",
+                    result,
+                    output_dir=output_dir,
+                    file_type="requirements_txt",
+                )
+            except Exception as req_exc:  # pylint: disable=broad-except
+                warn = f"ensure_requirements_txt error: {req_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
+
+            # ------------------------------------------------------------------
             # Finalize
             # ------------------------------------------------------------------
             result.duration_seconds = time.monotonic() - start_ts
@@ -1211,6 +1227,8 @@ def ensure_readme_sections(
     if not _has("## Setup"):
         additions.append(
             "\n## Setup\n\n"
+            "Create and activate a virtual environment:\n\n"
+            "```bash\npython -m venv venv\nsource venv/bin/activate  # On Windows: venv\\Scripts\\activate\n```\n\n"
             "Install dependencies:\n\n"
             "```bash\npip install -r requirements.txt\n```\n"
         )
