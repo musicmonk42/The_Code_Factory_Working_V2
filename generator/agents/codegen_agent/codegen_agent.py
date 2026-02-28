@@ -220,7 +220,9 @@ _MULTIPASS_GROUPS = [
             "Helm charts (helm/**) MUST be valid Go template YAML (not JSON), "
             "CI/CD configs (.github/workflows/*.yml), pyproject.toml, requirements.txt, "
             "Makefile, and test files (tests/**). "
-            "Do NOT regenerate application source code files."
+            "Do NOT regenerate application source code files. "
+            "Reference the symbol manifest provided above to determine service names, ports, and health check paths. "
+            "Do NOT use generic placeholder values — use the actual service and model names from earlier passes. "
         ),
     },
 ]
@@ -352,7 +354,7 @@ async def _multipass_heartbeat(pass_name: str, interval: int = 30) -> None:
 
 
 # Maximum total characters returned to avoid overwhelming the prompt
-_SPEC_MODELS_MAX_CHARS = 4000
+_SPEC_MODELS_MAX_CHARS = 12000
 # Minimum section length to be considered meaningful
 _SPEC_MODELS_MIN_SECTION_LEN = 30
 
@@ -469,7 +471,7 @@ def _extract_spec_models(requirements: Dict[str, Any]) -> str:
 
 
 # Percentage of stub-like function bodies above which a service file is flagged
-_PLACEHOLDER_SERVICE_THRESHOLD_PCT = 50.0
+_PLACEHOLDER_SERVICE_THRESHOLD_PCT = 30.0
 
 # Maximum number of targeted LLM stub-replacement passes after the ensemble merge.
 # Kept small to prevent unbounded retry loops when the LLM persistently returns stubs.
@@ -600,6 +602,7 @@ async def _repair_stub_services(
     merged_files: Dict[str, str],
     config: Any,
     placeholder_services: List[Tuple[str, float]],
+    spec_models: str = "",
 ) -> Dict[str, str]:
     """Fix 6: Trigger a targeted LLM pass to replace stub service functions with real ORM logic.
 
@@ -665,12 +668,14 @@ async def _repair_stub_services(
             context_parts.append(f"# FILE: {router_path}\n{related_router}")
 
         context_block = "\n\n".join(context_parts)
+        spec_context = f"\n\nSpec Data Models (implement these exactly):\n{spec_models}\n" if spec_models else ""
         repair_prompt = (
             f"The following service file is {pct:.0f}% placeholder stubs "
             f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
             f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
             f"Use the model and schema files provided as context.\n\n"
             f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+            f"{spec_context}"
             f"{context_block}"
         )
 
@@ -3047,11 +3052,12 @@ if PLUGIN_AVAILABLE:
                                 _manifest_note = (
                                     f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
                                 )
-                                # Inject spec model definitions only for the core pass so the LLM
-                                # has explicit field/type information when generating models and schemas.
-                                _core_models_note = _models_note if _group["name"] == "core" else ""
+                                # Inject spec model definitions for core and routes_and_services
+                                # passes so the LLM has explicit field/type information when
+                                # generating models, schemas, routers, and services.
+                                _spec_models_note = _models_note if _group["name"] in ("core", "routes_and_services") else ""
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}{_manifest_note}{_core_models_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}{_spec_models_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -3329,7 +3335,7 @@ if PLUGIN_AVAILABLE:
                             if _placeholder_svcs:
                                 try:
                                     _merged_files = await _repair_stub_services(
-                                        _merged_files, config, _placeholder_svcs
+                                        _merged_files, config, _placeholder_svcs, spec_models=_spec_models
                                     )
                                 except Exception as _repair_err:
                                     logger.warning(
@@ -3762,11 +3768,12 @@ else:
                                 _manifest_note = (
                                     f"\n\n{_symbol_manifest}\n" if _symbol_manifest else ""
                                 )
-                                # Inject spec model definitions only for the core pass so the LLM
-                                # has explicit field/type information when generating models and schemas.
-                                _core_models_note = _models_note if _group["name"] == "core" else ""
+                                # Inject spec model definitions for core and routes_and_services
+                                # passes so the LLM has explicit field/type information when
+                                # generating models, schemas, routers, and services.
+                                _spec_models_note = _models_note if _group["name"] in ("core", "routes_and_services") else ""
                                 _pass_prompt = (
-                                    f"{prompt}{_already_note}{_manifest_note}{_core_models_note}"
+                                    f"{prompt}{_already_note}{_manifest_note}{_spec_models_note}"
                                     f"\n\n### GENERATION PASS: {_group['name'].upper()} ###\n"
                                     f"{_group['focus']}\n"
                                     f"Return ONLY the files for this pass as a JSON object with a 'files' key."
@@ -3873,7 +3880,7 @@ else:
                             if _placeholder_svcs:
                                 try:
                                     _merged_files = await _repair_stub_services(
-                                        _merged_files, config, _placeholder_svcs
+                                        _merged_files, config, _placeholder_svcs, spec_models=_spec_models
                                     )
                                 except Exception as _repair_err:
                                     logger.warning(

@@ -163,6 +163,11 @@ def _install_stubs() -> None:
             "generator.agents.codegen_agent.codegen_response_handler",
             add_traceability_comments=lambda f, **kw: f,
             parse_llm_response=lambda r: {},
+            build_stub_retry_prompt_hint=lambda r: "",
+            _detect_module_package_collisions=lambda f: f,
+            disambiguate_model_schema_imports=lambda f, **kw: f,
+            fix_response_model_type_mismatches=lambda f, **kw: f,
+            get_stub_files=lambda f: [],
         ),
     }
     _ALWAYS_OVERRIDE = frozenset({"prometheus_client", "redis.asyncio"})
@@ -218,6 +223,11 @@ def _load_agent_module() -> types.ModuleType:
             f"{pkg_name}.codegen_response_handler",
             add_traceability_comments=lambda f, **kw: f,
             parse_llm_response=lambda r: {},
+            build_stub_retry_prompt_hint=lambda r: "",
+            _detect_module_package_collisions=lambda f: f,
+            disambiguate_model_schema_imports=lambda f, **kw: f,
+            fix_response_model_type_mismatches=lambda f, **kw: f,
+            get_stub_files=lambda f: [],
         ),
     )
 
@@ -421,7 +431,7 @@ class TestExtractSpecModels:
         # Build a very large spec
         large_section = "## Data Models\n\n" + ("| field | type | required |\n|---|---|---|\n| id | UUID | yes |\n") * 200
         result = fn({"md_content": large_section})
-        assert len(result) <= 4000
+        assert len(result) <= 12000
 
     def test_deduplication_prevents_repeated_content(self, fn):
         # The same table appears twice — it should only appear once
@@ -452,7 +462,7 @@ class TestExtractSpecModels:
 
     def test_spec_models_max_chars_value(self):
         mod = _load_agent_module()
-        assert mod._SPEC_MODELS_MAX_CHARS == 4000  # type: ignore[attr-defined]
+        assert mod._SPEC_MODELS_MAX_CHARS == 12000  # type: ignore[attr-defined]
 
     def test_spec_models_min_section_len_value(self):
         mod = _load_agent_module()
@@ -595,7 +605,7 @@ class TestValidateWiring:
 
     def test_placeholder_threshold_value(self):
         mod = _load_agent_module()
-        assert mod._PLACEHOLDER_SERVICE_THRESHOLD_PCT == 50.0  # type: ignore[attr-defined]
+        assert mod._PLACEHOLDER_SERVICE_THRESHOLD_PCT == 30.0  # type: ignore[attr-defined]
 
     def test_todo_comment_counted_as_stub(self, fn):
         svc = (
