@@ -964,6 +964,70 @@ class TestValidateGeneratedProject:
         # No import-consistency errors about app.models.product
         assert not any("app.models.product" in e for e in result["errors"])
 
+    @pytest.mark.asyncio
+    async def test_cold_start_basesettings_env_example_injected(self, project_dir):
+        """Cold-start check injects .env.example values so BaseSettings required fields
+        don't raise ValidationError and the project is not marked invalid."""
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        # config.py: BaseSettings with a required field (no default)
+        (app_dir / "config.py").write_text(
+            "from pydantic_settings import BaseSettings\n\n"
+            "class Settings(BaseSettings):\n"
+            "    model_config = {'env_file': '.env'}\n"
+            "    cors_origins: str\n\n"
+            "settings = Settings()\n"
+        )
+        (app_dir / "__init__.py").write_text("")
+        (app_dir / "main.py").write_text(
+            "from app.config import settings\n\napp = None\n"
+        )
+        (project_dir / "main.py").write_text("from app.main import app\n")
+        (project_dir / "requirements.txt").write_text(
+            "fastapi\npydantic-settings>=2.0.0\n"
+        )
+        # Provide .env.example with a value for the required field
+        (project_dir / ".env.example").write_text("CORS_ORIGINS=*\n")
+
+        result = await validate_generated_project(project_dir)
+
+        # ValidationError must not appear as a hard error
+        validation_errors = [e for e in result["errors"] if "ValidationError" in e]
+        assert validation_errors == [], (
+            f"Pydantic ValidationError should not be a hard error; got: {validation_errors}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_cold_start_basesettings_validation_error_is_warning(self, project_dir):
+        """If a Pydantic ValidationError occurs during cold-start (no .env.example),
+        it is recorded as a warning, not a hard error."""
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        (app_dir / "config.py").write_text(
+            "from pydantic_settings import BaseSettings\n\n"
+            "class Settings(BaseSettings):\n"
+            "    model_config = {'env_file': '.env'}\n"
+            "    required_field: str\n\n"
+            "settings = Settings()\n"
+        )
+        (app_dir / "__init__.py").write_text("")
+        (app_dir / "main.py").write_text(
+            "from app.config import settings\n\napp = None\n"
+        )
+        (project_dir / "main.py").write_text("from app.main import app\n")
+        (project_dir / "requirements.txt").write_text(
+            "fastapi\npydantic-settings>=2.0.0\n"
+        )
+        # No .env.example → ValidationError expected from subprocess
+
+        result = await validate_generated_project(project_dir)
+
+        # ValidationError must NOT appear in errors (should be a warning instead)
+        validation_errors = [e for e in result["errors"] if "ValidationError" in e]
+        assert validation_errors == [], (
+            f"Pydantic ValidationError should be a warning, not an error; got: {validation_errors}"
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Tests for new structural validation helpers
