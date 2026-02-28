@@ -243,15 +243,17 @@ class TestBreakerStateManagement:
         with patch(
             "self_fixing_engineer.arbiter.policy.circuit_breaker._MAX_PROVIDERS", 3
         ):
-            # CRITICAL: Clear breaker states before test
-            _breaker_states.clear()
+            # CRITICAL: Clear breaker states before test using the lock
+            with _breaker_states_lock:
+                _breaker_states.clear()
 
             # Create up to the limit
             for i in range(3):
                 await get_breaker_state(f"provider_{i}", mock_config)
 
             # Verify we're at the limit
-            assert len(_breaker_states) == 3
+            with _breaker_states_lock:
+                assert len(_breaker_states) == 3
 
             # Should fail when exceeding limit
             with pytest.raises(RuntimeError, match="Maximum provider limit"):
