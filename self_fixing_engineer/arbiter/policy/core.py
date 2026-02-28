@@ -2122,9 +2122,13 @@ class PolicyEngine:
         """Stops the policy refresh task."""
         with tracer.start_as_current_span("stop_policy_engine") as span:
             self._stop_event.set()
-            if self._policy_refresh_task:
+            if self._policy_refresh_task and not self._policy_refresh_task.done():
                 self._policy_refresh_task.cancel()
-                await asyncio.gather(self._policy_refresh_task, return_exceptions=True)
+                try:
+                    await asyncio.gather(self._policy_refresh_task, return_exceptions=True)
+                except RuntimeError:
+                    # Event loop may already be closed during interpreter shutdown
+                    pass
                 span.set_attribute("task_status", "stopped")
 
 

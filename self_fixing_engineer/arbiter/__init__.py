@@ -222,4 +222,17 @@ def __getattr__(name):
             return result
         raise ImportError(f"Cannot import name '{name}' from 'arbiter'")
 
+    # Check if this is a submodule that was already imported by the import system
+    # (e.g. 'policy', 'models', 'plugins') — Python sets subpackages as attributes
+    # on their parent package, but a custom __getattr__ is only called when the
+    # attribute is NOT found in the module's __dict__.  When pytest's monkeypatch
+    # or unittest.mock.patch traverses dotted import paths like
+    # "self_fixing_engineer.arbiter.policy.core.audit_log", they use getattr() on
+    # each intermediate module.  Without this fallback, the traversal would fail
+    # even for subpackages that have already been imported.
+    full_name = f"self_fixing_engineer.arbiter.{name}"
+    submodule = sys.modules.get(full_name)
+    if submodule is not None:
+        return submodule
+
     raise AttributeError(f"module 'arbiter' has no attribute '{name}'")
