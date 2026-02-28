@@ -551,12 +551,11 @@ async def shutdown(
                 for method_name in ("close", "cleanup", "shutdown"):
                     method = getattr(runner_instance, method_name, None)
                     if callable(method):
-                        import asyncio as _asyncio
-                        if _asyncio.iscoroutinefunction(method):
+                        if asyncio.iscoroutinefunction(method):
                             await method()
                         else:
                             method()
-                        logger.info(f"Runner {method_name}() called.")
+                        logger.info(f"Runner {method_name}() called successfully.")
                         break
                 temp_dir = getattr(runner_instance, "temp_dir", None)
                 if temp_dir:
@@ -566,9 +565,12 @@ async def shutdown(
                 proc = getattr(runner_instance, "process", None)
                 if proc and hasattr(proc, "terminate"):
                     proc.terminate()
-                    logger.info("Runner subprocess terminated.")
+                    logger.info("Runner subprocess terminated gracefully.")
             except Exception as _cleanup_err:
-                logger.warning(f"Runner cleanup encountered an error: {_cleanup_err}")
+                logger.warning(
+                    f"Runner cleanup encountered an error (non-fatal): {_cleanup_err}",
+                    exc_info=True,
+                )
 
         if config_watcher:
             logger.info("Stopping config watcher...")

@@ -1697,12 +1697,7 @@ class EmailPrompt(UserPromptChannel):
 
 class SMSPrompt(UserPromptChannel):
     def __init__(self, target_language: str = "en"):
-        if not all([_get_channel_config("SMS_API"), _get_channel_config("SMS_KEY")]):
-            raise ValueError(
-                "SMSPrompt requires CLARIFIER_SMS_API and CLARIFIER_SMS_KEY "
-                "to be configured. Set these environment variables with your SMS "
-                "provider credentials before using the SMS channel."
-            )
+        validate_channel_config("sms")
         super().__init__(target_language=target_language)
 
     async def prompt(
@@ -1843,11 +1838,7 @@ class SMSPrompt(UserPromptChannel):
 
 class VoicePrompt(UserPromptChannel):
     def __init__(self, target_language: str = "en"):
-        if not HAS_SPEECH_RECOGNITION:
-            raise ImportError(
-                "VoicePrompt requires the 'speech_recognition' package. "
-                "Install it with: pip install SpeechRecognition"
-            )
+        validate_channel_config("voice")
         super().__init__(target_language=target_language)
 
     async def prompt(
@@ -2069,16 +2060,32 @@ class VoicePrompt(UserPromptChannel):
 def validate_channel_config(channel_type: str) -> None:
     """Validate prerequisites for a channel type before instantiation.
 
+    This function is the single source of truth for channel prerequisite
+    checks and is called by both the channel ``__init__`` methods and the
+    :func:`get_channel` factory to guarantee consistent early failure with
+    clear, actionable error messages.
+
+    Args:
+        channel_type: One of the supported channel type strings
+            (e.g. ``"sms"``, ``"voice"``).
+
     Raises:
-        ValueError: If required configuration is missing.
-        ImportError: If a required dependency is not installed.
+        ValueError: If required configuration env-vars are absent.
+        ImportError: If a required optional dependency is not installed.
     """
     if channel_type == "sms":
-        if not all([_get_channel_config("SMS_API"), _get_channel_config("SMS_KEY")]):
+        sms_api = _get_channel_config("SMS_API")
+        sms_key = _get_channel_config("SMS_KEY")
+        if not sms_api or not sms_key:
+            missing = []
+            if not sms_api:
+                missing.append("CLARIFIER_SMS_API")
+            if not sms_key:
+                missing.append("CLARIFIER_SMS_KEY")
             raise ValueError(
-                "SMS channel requires CLARIFIER_SMS_API and CLARIFIER_SMS_KEY "
-                "to be configured. Set these environment variables with your SMS "
-                "provider credentials before using the SMS channel."
+                f"SMS channel requires the following environment variable(s) to be set: "
+                f"{', '.join(missing)}. "
+                "Configure your SMS provider credentials before using the SMS channel."
             )
     elif channel_type == "voice":
         if not HAS_SPEECH_RECOGNITION:

@@ -1680,7 +1680,22 @@ def test_{file_stem}_syntax_error_documentation():
                                     f"[TESTGEN] {language} generator failed for {file_path}: {_exc}",
                                     extra={"run_id": run_id},
                                 )
-                    # Fallback: parse exported functions and generate real test stubs
+                    # Fallback: parse exported names and generate real test stubs.
+                    # Compute a proper relative import path from the test file to the source.
+                    _src_path = Path(file_path)
+                    _test_dir = Path(test_file_path).parent  # e.g. "__tests__"
+                    try:
+                        _rel_import = str(
+                            Path(os.path.relpath(str(_src_path), str(_test_dir)))
+                        ).replace("\\", "/")
+                        # Strip the extension for the import statement.
+                        _rel_import = re.sub(r"\.(js|ts|jsx|tsx)$", "", _rel_import)
+                        if not _rel_import.startswith("."):
+                            _rel_import = f"./{_rel_import}"
+                    except ValueError:
+                        # os.path.relpath may fail on Windows with different drives.
+                        _rel_import = f"../{file_path}"
+
                     _js_exports = re.findall(
                         r"(?:export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)|"
                         r"export\s+const\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\())",
@@ -1688,10 +1703,9 @@ def test_{file_stem}_syntax_error_documentation():
                     )
                     _func_names = [g[0] or g[1] for g in _js_exports if g[0] or g[1]]
                     if _func_names:
-                        _import_path = f"../{file_path}" if not file_path.startswith("..") else file_path
                         _test_lines = [
-                            f"// Tests for {file_path}",
-                            f"import {{ {', '.join(_func_names)} }} from '{_import_path}';",
+                            f"// Auto-generated tests for {file_path}",
+                            f"import {{ {', '.join(_func_names)} }} from '{_rel_import}';",
                             "",
                             f"describe('{file_stem}', () => {{",
                         ]
@@ -1710,10 +1724,11 @@ def test_{file_stem}_syntax_error_documentation():
                         basic_tests[test_file_path] = "\n".join(_test_lines) + "\n"
                     else:
                         basic_tests[test_file_path] = (
-                            f"// Tests for {file_path}\n"
+                            f"// Auto-generated tests for {file_path}\n"
                             f"describe('{file_stem}', () => {{\n"
                             f"  it('module loads without errors', () => {{\n"
-                            f"    const mod = require('../{file_path}');\n"
+                            f"    // eslint-disable-next-line @typescript-eslint/no-var-requires\n"
+                            f"    const mod = require('{_rel_import}');\n"
                             f"    expect(mod).toBeDefined();\n"
                             f"  }});\n"
                             f"}});\n"
@@ -1722,32 +1737,57 @@ def test_{file_stem}_syntax_error_documentation():
                 elif language == "java":
                     class_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Unknown"
                     test_file_path = f"src/test/java/{class_name}Test.java"
-                    _java_methods = re.findall(
-                        r"public\s+(?:static\s+)?(?:\w+\s+)?(\w+)\s*\([^)]*\)\s*(?:throws\s+\w+\s*)?\{",
-                        code_content,
+                    # Parse public method signatures including parameter lists.
+                    _java_method_re = re.compile(
+                        r"public\s+(?:static\s+)?(?:\w[\w<>\[\],\s]*\s+)?(\w+)\s*\(([^)]*)\)"
+                        r"\s*(?:throws\s+[\w,\s]+)?\s*\{",
                     )
-                    _java_methods = [m for m in _java_methods if m not in ("class", "interface", "enum", class_name)]
+                    _excluded = {"class", "interface", "enum", "if", "for", "while", class_name}
+                    _java_methods_parsed = [
+                        (m, p)
+                        for m, p in _java_method_re.findall(code_content)
+                        if m not in _excluded
+                    ]
                     _test_methods = ""
-                    for method in (_java_methods or ["placeholder"]):
-                        _camel = method[0].upper() + method[1:] if method else "Placeholder"
-                        if method == "placeholder":
-                            _test_methods += (
-                                f"\n    @Test\n"
-                                f"    void testInstantiation() {{\n"
-                                f"        {class_name} instance = new {class_name}();\n"
-                                f"        assertNotNull(instance);\n"
-                                f"    }}\n"
-                            )
-                        else:
-                            _test_methods += (
-                                f"\n    @Test\n"
-                                f"    void test{_camel}NotNull() {{\n"
-                                f"        {class_name} instance = new {class_name}();\n"
-                                f"        assertNotNull(instance);\n"
-                                f"        // Call {method} and assert basic contract\n"
-                                f"        assertDoesNotThrow(() -> instance.{method}());\n"
-                                f"    }}\n"
-                            )
+                    if not _java_methods_parsed:
+                        # No public methods found — generate a basic instantiation test.
+                        _test_methods = (
+                            f"\n    @Test\n"
+                            f"    void testInstantiation() {{\n"
+                            f"        {class_name} instance = new {class_name}();\n"
+                            f"        assertNotNull(instance);\n"
+                            f"    }}\n"
+                        )
+                    else:
+                        for _method, _params_raw in _java_methods_parsed:
+                            _camel = _method[0].upper() + _method[1:]
+                            _has_params = bool(_params_raw.strip())
+                            if _has_params:
+                                # Method requires arguments — verify it exists and is callable.
+                                _test_methods += (
+                                    f"\n    @Test\n"
+                                    f"    void test{_camel}Exists() throws Exception {{\n"
+                                    f"        {class_name} instance = new {class_name}();\n"
+                                    f"        assertNotNull(instance);\n"
+                                    f"        // Verify method exists via reflection; "
+                                    f"provide representative arguments to call it.\n"
+                                    f"        var methods = java.util.Arrays.stream("
+                                    f"instance.getClass().getMethods())\n"
+                                    f"            .filter(m -> m.getName().equals(\"{_method}\"))\n"
+                                    f"            .findFirst();\n"
+                                    f"        assertTrue(methods.isPresent(), "
+                                    f"\"{_method} must be present on {class_name}\");\n"
+                                    f"    }}\n"
+                                )
+                            else:
+                                _test_methods += (
+                                    f"\n    @Test\n"
+                                    f"    void test{_camel}() {{\n"
+                                    f"        {class_name} instance = new {class_name}();\n"
+                                    f"        assertNotNull(instance);\n"
+                                    f"        assertDoesNotThrow(() -> instance.{_method}());\n"
+                                    f"    }}\n"
+                                )
                     basic_tests[test_file_path] = (
                         f"import org.junit.jupiter.api.Test;\n"
                         f"import static org.junit.jupiter.api.Assertions.*;\n\n"
@@ -1757,26 +1797,63 @@ def test_{file_stem}_syntax_error_documentation():
                     )
 
                 elif language == "go":
-                    # Go convention: same directory, _test.go suffix
+                    # Go convention: test file lives in the same package directory.
                     parent = str(Path(file_path).parent)
                     test_file_path = (
                         f"{parent}/{file_stem}_test.go"
                         if parent and parent != "."
                         else f"{file_stem}_test.go"
                     )
-                    package_name = parent.replace("/", "_").replace("-", "_") if parent and parent != "." else "main"
-                    _go_funcs = re.findall(r"^func\s+([A-Z]\w*)\s*\(", code_content, re.MULTILINE)
-                    if _go_funcs:
+                    # Derive package name from the source (first `package` declaration).
+                    _pkg_match = re.search(r"^package\s+(\w+)", code_content, re.MULTILINE)
+                    package_name = (
+                        _pkg_match.group(1) if _pkg_match
+                        else (
+                            parent.replace("/", "_").replace("-", "_")
+                            if parent and parent != "."
+                            else "main"
+                        )
+                    )
+                    # Extract exported functions with their full parameter/return signature.
+                    # Pattern: func Name(params) returns — capture params and returns.
+                    _go_func_re = re.compile(
+                        r"^func\s+([A-Z]\w*)\s*\(([^)]*)\)\s*(.*?)\s*\{",
+                        re.MULTILINE,
+                    )
+                    _go_funcs_parsed = _go_func_re.findall(code_content)
+                    if _go_funcs_parsed:
                         _go_test_body = ""
-                        for fn in _go_funcs:
-                            _go_test_body += (
-                                f"\nfunc Test{fn}(t *testing.T) {{\n"
-                                f"\tresult := {fn}()\n"
-                                f"\tif result == nil {{\n"
-                                f'\t\tt.Errorf("{fn}() returned nil")\n'
-                                f"\t}}\n"
-                                f"}}\n"
-                            )
+                        for _fn_name, _params_raw, _returns_raw in _go_funcs_parsed:
+                            # Determine whether the function has parameters.
+                            _has_params = bool(_params_raw.strip())
+                            # Determine whether it returns at least one value.
+                            _returns = _returns_raw.strip().lstrip("(").rstrip(")")
+                            _has_returns = bool(_returns)
+                            if _has_params:
+                                # Cannot call without arguments safely; use t.Logf and skip.
+                                _go_test_body += (
+                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                    f"\t// {_fn_name} requires parameters; provide representative values.\n"
+                                    f"\t// Signature: func {_fn_name}({_params_raw}) {_returns_raw}\n"
+                                    f"\tt.Skipf(\"Test{_fn_name}: add test arguments for func {_fn_name}({_params_raw})\")\n"
+                                    f"}}\n"
+                                )
+                            elif _has_returns:
+                                _go_test_body += (
+                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                    f"\tgot := {_fn_name}()\n"
+                                    f'\tif got == ({_returns})(nil) {{\n'
+                                    f'\t\tt.Errorf("{_fn_name}() returned zero value")\n'
+                                    f"\t}}\n"
+                                    f"}}\n"
+                                )
+                            else:
+                                _go_test_body += (
+                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                    f"\t{_fn_name}()\n"
+                                    f'\tt.Logf("{_fn_name}() completed without panic")\n'
+                                    f"}}\n"
+                                )
                         basic_tests[test_file_path] = (
                             f"package {package_name}\n\n"
                             f"import \"testing\"\n"
@@ -1787,9 +1864,9 @@ def test_{file_stem}_syntax_error_documentation():
                         basic_tests[test_file_path] = (
                             f"package {package_name}\n\n"
                             f"import \"testing\"\n\n"
-                            f"func Test{func_name}Runs(t *testing.T) {{\n"
-                            f"\t// Verify package-level initialization succeeds\n"
-                            f"\tt.Log(\"{file_stem} package loaded\")\n"
+                            f"func Test{func_name}Loads(t *testing.T) {{\n"
+                            f"\t// Verify the package compiles and initialises without panic.\n"
+                            f'\tt.Logf("{file_stem} package loaded")\n'
                             f"}}\n"
                         )
 

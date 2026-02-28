@@ -1052,7 +1052,17 @@ async def plugin_install(plugin_identifier, verify_signature):
                 )
                 return
             try:
-                from generator.scripts.generate_plugin_manifest import verify_signature as _verify_sig
+                try:
+                    from generator.scripts.generate_plugin_manifest import (
+                        verify_signature as _verify_sig,
+                    )
+                except ImportError as _imp_err:
+                    console.print(
+                        f"[red]Signature verification unavailable: {_imp_err}. "
+                        "Ensure the 'cryptography' package is installed: "
+                        "pip install cryptography[/red]"
+                    )
+                    return
                 import json as _json
                 manifest_bytes = manifest_path.read_bytes()
                 doc = _json.loads(manifest_bytes)

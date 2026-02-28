@@ -1538,27 +1538,80 @@ class InMemoryBackend(LogBackend):
 
     # --- ADDED: _load_snapshot method referenced in __init__ ---
     async def _load_snapshot(self):
-        """Loads previously saved snapshot from disk if configured."""
+        """Loads previously saved snapshot from disk if configured.
+
+        Uses zlib-compressed JSON (same format as the streaming backends).
+        Applies a maximum decompressed-size guard to prevent decompression
+        bomb attacks when loading externally-provided snapshot files.
+        """
         snapshot_file = self.params.get("snapshot_file", None)
-        if not snapshot_file or not os.path.exists(snapshot_file):
-            logger.info("InMemoryBackend: No snapshot file configured or found; starting empty.")
+        if not snapshot_file:
+            logger.info("InMemoryBackend: No snapshot_file configured; starting empty.")
             return
+        if not os.path.exists(snapshot_file):
+            logger.info(
+                f"InMemoryBackend: Snapshot file '{snapshot_file}' does not exist; "
+                "starting empty."
+            )
+            return
+
+        _MAX_COMPRESSED_BYTES = 512 * 1024 * 1024   # 512 MB on-disk limit
+        _MAX_DECOMPRESSED_BYTES = 1024 * 1024 * 1024  # 1 GB decompressed limit
+
         logger.info(
             f"InMemoryBackend: Attempting to load snapshot from '{snapshot_file}'.",
         )
         try:
+            _compressed_size = os.path.getsize(snapshot_file)
+            if _compressed_size > _MAX_COMPRESSED_BYTES:
+                logger.error(
+                    f"InMemoryBackend: Snapshot file '{snapshot_file}' is too large "
+                    f"({_compressed_size} bytes > {_MAX_COMPRESSED_BYTES} byte limit). "
+                    "Skipping snapshot load for safety."
+                )
+                return
+
             with open(snapshot_file, "rb") as f:
                 compressed_data = f.read()
-            decompressed_data = zlib.decompress(compressed_data)
+
+            # Decompress with an explicit output-size cap to prevent zip bombs.
+            _decompressor = zlib.decompressobj()
+            _chunks: List[bytes] = []
+            _total = 0
+            _CHUNK = 65536
+            for _offset in range(0, len(compressed_data), _CHUNK):
+                _chunk = _decompressor.decompress(
+                    compressed_data[_offset: _offset + _CHUNK]
+                )
+                _total += len(_chunk)
+                if _total > _MAX_DECOMPRESSED_BYTES:
+                    raise ValueError(
+                        f"Decompressed size exceeds safety limit of "
+                        f"{_MAX_DECOMPRESSED_BYTES} bytes; aborting to prevent "
+                        "memory exhaustion."
+                    )
+                _chunks.append(_chunk)
+            _chunks.append(_decompressor.flush())
+            decompressed_data = b"".join(_chunks)
+
             loaded_entries = json.loads(decompressed_data.decode("utf-8"))
+            if not isinstance(loaded_entries, list):
+                raise ValueError(
+                    f"Snapshot root is {type(loaded_entries).__name__}, expected list."
+                )
+
             existing_ids = {e.get("entry_id") for e in self.storage}
             new_count = 0
             for entry in loaded_entries:
+                if not isinstance(entry, dict):
+                    continue
                 if entry.get("entry_id") not in existing_ids:
                     self.storage.append(entry)
                     new_count += 1
+
             logger.info(
-                f"InMemoryBackend: Loaded {new_count} entries from snapshot '{snapshot_file}'.",
+                f"InMemoryBackend: Loaded {new_count} new entries "
+                f"({len(loaded_entries)} total in snapshot) from '{snapshot_file}'.",
             )
         except Exception as e:
             logger.error(

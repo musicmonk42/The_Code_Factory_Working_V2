@@ -786,45 +786,78 @@ async def mutation_test(
 
     if strategy == "ai-guided":
         logger.info("Using AI-guided mutation strategy.")
+        _llm = None
         try:
-            from generator.clarifier.clarifier_llm import LLMProvider
-            _llm = LLMProvider() if not getattr(LLMProvider, '__abstractmethods__', None) else None
-        except Exception:
-            _llm = None
-        if _llm is None:
-            # Try GrokLLM
-            try:
-                from generator.clarifier.clarifier_llm import GrokLLM
-                _llm = GrokLLM()
-            except Exception:
-                _llm = None
+            from generator.clarifier.clarifier_llm import GrokLLM
+            _llm = GrokLLM()
+        except Exception as _llm_import_err:
+            logger.debug(f"AI-guided: could not load GrokLLM: {_llm_import_err}")
         if _llm is not None:
             try:
-                _code_snippets = "\n\n".join(
-                    f"# File: {p}\n{open(p).read()[:500]}" if Path(p).exists() else f"# {p}"
-                    for p in (code_files or [])[:5]
-                )
+                _MAX_PREVIEW_BYTES = 500
+                _MAX_SAMPLE_FILES = 5
+                _snippet_parts: List[str] = []
+                for _p in (list(code_files) if code_files else [])[:_MAX_SAMPLE_FILES]:
+                    _file = Path(_p)
+                    if _file.is_file():
+                        try:
+                            with open(_file, encoding="utf-8", errors="replace") as _fh:
+                                _preview = _fh.read(_MAX_PREVIEW_BYTES)
+                            _snippet_parts.append(f"# File: {_p}\n{_preview}")
+                        except OSError as _io_err:
+                            logger.debug(f"AI-guided: cannot read {_p}: {_io_err}")
+                    else:
+                        _snippet_parts.append(f"# File: {_p} (not readable)")
+                _code_snippets = "\n\n".join(_snippet_parts)
                 _prompt = (
-                    f"You are a mutation testing expert. Analyze the following source files "
-                    f"and identify the top 5 file paths and function names most likely to "
-                    f"have bugs or insufficient test coverage. Respond with a JSON list of "
-                    f"objects with keys 'file' and 'function'.\n\n{_code_snippets}"
+                    "You are a mutation testing expert. Analyze the following source file "
+                    "previews and identify up to 5 file paths and function names most likely "
+                    "to have bugs or insufficient test coverage. "
+                    "Respond ONLY with a JSON array of objects with keys 'file' and 'function'. "
+                    "Example: [{\"file\": \"src/foo.py\", \"function\": \"bar\"}]\n\n"
+                    f"{_code_snippets}"
                 )
                 _response = await _llm.generate(_prompt)
-                import json as _json
-                _targets = _json.loads(_response) if isinstance(_response, str) else _response
+                if isinstance(_response, str):
+                    # Strip any markdown code fences the LLM may have added
+                    _clean = re.sub(r"```[^\n]*\n?", "", _response).strip()
+                    _targets = json.loads(_clean)
+                else:
+                    _targets = _response
                 if isinstance(_targets, list) and _targets:
-                    _target_files = {str(t.get("file", "")) for t in _targets if isinstance(t, dict)}
+                    _target_files = {
+                        str(t.get("file", ""))
+                        for t in _targets
+                        if isinstance(t, dict) and t.get("file")
+                    }
                     if _target_files and code_files:
-                        _filtered = [f for f in code_files if any(t in str(f) for t in _target_files if t)]
+                        _filtered = [
+                            f for f in code_files
+                            if any(t and t in str(f) for t in _target_files)
+                        ]
                         if _filtered:
                             code_files = _filtered
-                            logger.info(f"AI-guided strategy filtered to {len(code_files)} target files.")
+                            logger.info(
+                                f"AI-guided strategy filtered to {len(code_files)} "
+                                f"high-value target files from LLM analysis."
+                            )
+                        else:
+                            logger.debug(
+                                "AI-guided: LLM targets did not match any code_files; "
+                                "keeping full file set."
+                            )
             except Exception as _ai_err:
-                logger.warning(f"AI-guided strategy LLM analysis failed: {_ai_err}. Falling back to 'targeted' strategy.")
+                logger.warning(
+                    f"AI-guided strategy LLM analysis failed: {_ai_err}. "
+                    "Falling back to 'targeted' strategy.",
+                    exc_info=True,
+                )
                 strategy = "targeted"
         else:
-            logger.warning("AI-guided strategy: LLM unavailable. Falling back to 'targeted' strategy.")
+            logger.warning(
+                "AI-guided strategy: LLM provider unavailable. "
+                "Falling back to 'targeted' strategy."
+            )
             strategy = "targeted"
 
     # --- Setup mutator-specific configuration files ---
@@ -902,22 +935,40 @@ async def mutation_test(
                     f"Sending mutation task to distributed runner at '{_endpoint}' for language '{language}'."
                 )
                 try:
+                    _MAX_PAYLOAD_FILES = 50
+                    _MAX_FILE_BYTES = 512 * 1024  # 512 KB per file
+                    _files_payload: Dict[str, str] = {}
+                    for _p in temp_dir.rglob("*"):
+                        if not _p.is_file():
+                            continue
+                        if len(_files_payload) >= _MAX_PAYLOAD_FILES:
+                            logger.warning(
+                                f"Distributed mutation: payload truncated at "
+                                f"{_MAX_PAYLOAD_FILES} files to avoid excessive memory use."
+                            )
+                            break
+                        try:
+                            _file_size = _p.stat().st_size
+                            if _file_size > _MAX_FILE_BYTES:
+                                continue
+                            with open(_p, encoding="utf-8", errors="replace") as _fh:
+                                _files_payload[str(_p)] = _fh.read()
+                        except OSError as _read_err:
+                            logger.debug(f"Distributed mutation: skipping {_p}: {_read_err}")
                     _task_payload = {
                         "language": language,
                         "tool_name": tool_name,
                         "strategy": strategy,
                         "params": mutation_run_params,
-                        "files": {
-                            str(p): p.read_text(errors="replace")
-                            for p in temp_dir.rglob("*")
-                            if p.is_file() and p.stat().st_size < 1_000_000
-                        },
+                        "files": _files_payload,
                     }
                     async with _aiohttp.ClientSession() as _session:
                         async with _session.post(
                             _endpoint,
                             json=_task_payload,
-                            timeout=_aiohttp.ClientTimeout(total=getattr(config, "mutation_timeout", 300)),
+                            timeout=_aiohttp.ClientTimeout(
+                                total=getattr(config, "mutation_timeout", 300)
+                            ),
                         ) as _resp:
                             _resp.raise_for_status()
                             raw_result = await _resp.json()
