@@ -3023,7 +3023,7 @@ if PLUGIN_AVAILABLE:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
-                            _skip = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
+                            _skip_cache = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
                             # Extract spec model definitions once to inject into the core pass.
                             _spec_models = _extract_spec_models(requirements)
                             _models_note = (
@@ -3083,7 +3083,7 @@ if PLUGIN_AVAILABLE:
                                          provider=config.backend,
                                          model=config.model.get(config.backend),
                                          response_format={"type": "json_object"},
-                                         skip_cache=_skip,
+                                         skip_cache=_skip_cache,
                                      )
                                      _pass_resp = (
                                          _pass_dict["content"]
@@ -3260,7 +3260,7 @@ if PLUGIN_AVAILABLE:
                                                 provider=config.backend,
                                                 model=config.model.get(config.backend),
                                                 response_format={"type": "json_object"},
-                                                skip_cache=_skip,
+                                                skip_cache=_skip_cache,
                                             )
                                             _gap_resp = (
                                                 _gap_dict["content"]
@@ -3738,7 +3738,7 @@ else:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
-                            _skip = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
+                            _skip_cache = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
                             # Extract spec model definitions once to inject into the core pass.
                             _spec_models = _extract_spec_models(requirements)
                             _models_note = (
@@ -3798,7 +3798,7 @@ else:
                                          provider=config.backend,
                                          model=config.model.get(config.backend),
                                          response_format={"type": "json_object"},
-                                         skip_cache=_skip,
+                                         skip_cache=_skip_cache,
                                      )
                                      _pass_resp = (
                                          _pass_dict["content"]
