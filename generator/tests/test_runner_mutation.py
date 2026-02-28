@@ -37,7 +37,7 @@ class DummyConfig(dict):
         except KeyError as e:
             raise AttributeError(item) from e
 
-    # FIX: Add a .get() method to mimic RunnerConfig's Pydantic/dict-like behavior
+    # Add a .get() method to mimic RunnerConfig's Pydantic/dict-like behavior
     # This is needed because the main code uses getattr(config, 'key', default)
     # but the test DummyConfig doesn't inherit from RunnerConfig, it *is* a dict.
     # The tests *pass* a DummyConfig, which is a dict, to functions expecting
@@ -196,7 +196,7 @@ async def test_mutation_test_success(mock_config: DummyConfig, temp_dir: Path):
 
     result = await mutation_test(temp_dir, mock_config, code_files, test_files)
 
-    # FIX: The result dictionary uses verbose keys like 'total_mutants', not 'total'.
+    # The result dictionary uses verbose keys like 'total_mutants', not 'total'.
     assert result["total_mutants"] == 10
     assert result["killed_mutants"] == 6
     assert result["survived_mutants"] == 3
@@ -224,11 +224,11 @@ async def test_mutation_test_no_mutmut_fallback(temp_dir: Path):
     with patch("runner.runner_mutation.HAS_MUTMUT", False):
         result = await mutation_test(temp_dir, cfg, {"a.py": "pass"}, {})
 
-    # FIX: The function returns 'error': 0 because skipping is not an *execution* error.
+    # The function returns 'error': 0 because skipping is not an *execution* error.
     assert result["error"] == 0
-    # FIX: The key is 'total_mutants'.
+    # The key is 'total_mutants'.
     assert result["total_mutants"] == 0
-    # FIX: Check the message for the *reason* for the 0 result.
+    # Check the message for the *reason* for the 0 result.
     assert result["message"] == "No mutator for python"
 
 
@@ -249,7 +249,7 @@ async def test_mutation_test_error(mock_config: DummyConfig, temp_dir: Path):
     result = await mutation_test(temp_dir, mock_config, {"a.py": "pass"}, {})
 
     assert result["error"] == 1
-    # FIX: The key is 'total_mutants'.
+    # The key is 'total_mutants'.
     assert result["total_mutants"] == 0
     # The rich implementation includes the underlying message
     assert "subprocess fail" in result["message"]
@@ -335,7 +335,7 @@ async def test_property_based_test_success_no_fuzz_functions(
     module.func = lambda x: x + 1
     sys.modules[module_name] = module
 
-    # FIX: Add patch for importlib.reload to prevent ModuleNotFoundError
+    # Add patch for importlib.reload to prevent ModuleNotFoundError
     with (
         patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
         patch.object(runner_mutation.importlib, "import_module", return_value=module),
@@ -460,7 +460,7 @@ async def test_full_pipeline(
 
     # Mutation
     mutation_result = await mutation_test(temp_dir, mock_config, code_files, test_files)
-    # FIX: Assert the correct keys
+    # Assert the correct keys
     assert mutation_result["total_mutants"] == 4
     assert mutation_result["killed_mutants"] == 3
     assert mutation_result["survived_mutants"] == 1
@@ -478,7 +478,7 @@ async def test_full_pipeline(
     pb_module = types.ModuleType(module_name)
     sys.modules[module_name] = pb_module
 
-    # FIX: Add patch for importlib.reload
+    # Add patch for importlib.reload
     with (
         patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
         patch.object(runner_mutation.importlib, "import_module", return_value=pb_module),

@@ -233,7 +233,7 @@ register_error_code(
     "EXPORTER_FAILURE", "Failed to export metrics to an external system."
 )
 
-# FIX: Register the missing LLM-related error codes
+# Register the missing LLM-related error codes
 register_error_code("LLM_PROVIDER_ERROR", "The LLM provider API call failed.")
 register_error_code("LLM_RATE_LIMIT", "Rate limit exceeded for the LLM provider.")
 register_error_code("LLM_CIRCUIT_OPEN", "Circuit breaker is open for the LLM provider.")
@@ -242,7 +242,7 @@ register_error_code(
     "The specified LLM provider plugin is not loaded or available.",
 )
 
-# FIX: Register deployment-related error codes
+# Register deployment-related error codes
 register_error_code(
     "VALIDATION_FAILED",
     "Deployment configuration validation failed."
@@ -259,7 +259,7 @@ class BackendError(RunnerError):
     (e.g., Docker daemon unreachable, Kubernetes API error).
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -284,7 +284,7 @@ class FrameworkError(RunnerError):
     Raised when the test framework is unsupported, not detected, or misconfigured.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -340,7 +340,7 @@ class ParsingError(RunnerError):
     Raised when parsing test results, coverage data, or other output files fails.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -366,7 +366,7 @@ class SetupError(RunnerError):
     custom setup command within the backend) fails.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -391,7 +391,7 @@ class TimeoutError(RunnerError):
     Raised when an operation exceeds its allocated time limit.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -417,7 +417,7 @@ class DistributedError(RunnerError):
     (e.g., network error to coordinator, remote worker failure).
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -442,7 +442,7 @@ class PersistenceError(RunnerError):
     Raised when saving or loading persistent state (e.g., task queue, results) fails.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -467,7 +467,7 @@ class ConfigurationError(RunnerError):
     Raised when an issue occurs during configuration loading or validation.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -487,7 +487,7 @@ class ValidationError(RunnerError):
     This often wraps Pydantic validation errors.
     """
 
-    # FIX: Added 'error_code: str' as the first argument
+    # Added 'error_code: str' as the first argument
     def __init__(
         self,
         error_code: str,
@@ -550,7 +550,7 @@ class ExporterError(RunnerError):
     Raised when exporting metrics to an external system (e.g., Datadog, CloudWatch) fails.
     """
 
-    # FIX: Added 'error_code: str' as the first argument (and kept 'detail' as second)
+    # Added 'error_code: str' as the first argument (and kept 'detail' as second)
     def __init__(
         self,
         error_code: str,

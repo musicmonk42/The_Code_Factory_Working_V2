@@ -12,7 +12,7 @@ os.environ.setdefault("AUDIT_LOG_DEV_MODE", "true")
 
 
 # test_audit_keystore.py
-# FIX: All import paths and patch paths have been corrected to be absolute from the 'generator' root.
+# All import paths and patch paths have been corrected to be absolute from the 'generator' root.
 
 import base64
 import json

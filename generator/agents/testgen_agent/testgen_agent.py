@@ -90,7 +90,7 @@ def _get_presidio_analyzer():
         return None
     if _presidio_analyzer is None:
         try:
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            # Limit to English to suppress unsupported-language recognizer warnings
             _presidio_analyzer = AnalyzerEngine(supported_languages=["en"])
             
             # Add custom recognizers (e.g., API_KEY) to this singleton instance
@@ -145,7 +145,6 @@ from runner.llm_client import call_ensemble_api
 from runner.runner_errors import ConfigurationError, LLMError
 
 # --- CENTRAL RUNNER FOUNDATION ---
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger, tracer
 
@@ -158,7 +157,7 @@ from tenacity import (  # For robust retries
 )
 
 # Test generation specific components: REQUIRED.
-# FIXED: Changed to relative imports
+# Changed to relative imports
 from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
 from .testgen_response_handler import parse_llm_response
 from .testgen_validator import validate_test_quality
@@ -434,7 +433,7 @@ class TestgenAgent:
         if self.arbiter_bridge:
             logger.info("TestgenAgent: Arbiter integration enabled")
 
-        # FIX: Schedule async initialization as a background task instead of blocking
+        # Schedule async initialization as a background task instead of blocking
         # This prevents "asyncio.run() cannot be called from a running event loop" error
         self._init_task = None  # Track initialization task
         try:
@@ -536,7 +535,7 @@ class TestgenAgent:
                     # Return the original relative path as key, not the cleaned one
                     # This maintains compatibility with existing code
                     # 
-                    # FIX: Do NOT scrub source code files that will be parsed by ast.parse()
+                    # Do NOT scrub source code files that will be parsed by ast.parse()
                     # Presidio's PII detection incorrectly flags code entities (imports, class names)
                     # as PERSON/ORGANIZATION/etc., corrupting code with [REDACTED] placeholders.
                     # This causes SyntaxError in ast.parse() and breaks test generation.
@@ -1009,14 +1008,14 @@ Agent --> Dev : Deliver Report
             try:
                 time.time()
 
-                # CRITICAL FIX: Add configurable timeout for LLM calls to prevent indefinite hangs
+                # Add configurable timeout for LLM calls to prevent indefinite hangs
                 # Default is 300s (increased from 120s) to handle heavy test generation workloads
                 # Can be configured via TESTGEN_LLM_TIMEOUT environment variable
                 llm_timeout = int(os.getenv("TESTGEN_LLM_TIMEOUT", "300"))
                 
                 # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
                 # Wrap with asyncio.wait_for to enforce timeout
-                # FIX Issue 1: Add provider to model configuration for call_ensemble_api
+                # Add provider to model configuration for call_ensemble_api
                 # Use centralized utility for provider inference (Industry Standard: DRY principle)
                 from generator.utils.llm_provider_utils import create_model_config
                 
@@ -1027,7 +1026,7 @@ Agent --> Dev : Deliver Report
                     response = await asyncio.wait_for(
                         call_ensemble_api(
                             prompt=prompt,
-                            models=[model_config],  # FIX: Use validated model config
+                            models=[model_config],
                             voting_strategy="majority",  # Default strategy
                             stream=stream,
                         ),
@@ -1265,7 +1264,7 @@ Agent --> Dev : Deliver Report
                     # Check if this is a FastAPI app (detect FastAPI patterns)
                     is_fastapi_app = self._detect_fastapi_app(content)
                     
-                    # FIX Issue 2: Improve rule-based fallback to generate FastAPI tests
+                    # Improve rule-based fallback to generate FastAPI tests
                     # for any file containing FastAPI routes, not just specific filenames
                     if is_fastapi_app:
                         # Generate real FastAPI TestClient tests
@@ -1304,7 +1303,7 @@ Agent --> Dev : Deliver Report
                     
                     # Add import for the module being tested
                     # Use explicit imports to avoid namespace pollution (industry best practice)
-                    # FIX Bug 2: Compute correct import path for nested packages
+                    # Compute correct import path for nested packages
                     # Strip "generated/<project>/" prefix to get package-relative path
                     file_path_obj = Path(file_path)
                     
@@ -1435,7 +1434,7 @@ Agent --> Dev : Deliver Report
                         test_lines.append('')
                     
                     # Create test file path
-                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Ensure test files are always placed in tests/ subdirectory
                     # Extract just the filename from the path for consistency
                     file_name = Path(file_path).name
                     file_stem_name = file_name.replace('.py', '')
@@ -1458,7 +1457,6 @@ Agent --> Dev : Deliver Report
                     # structural tests that verify file existence and basic properties.
                     # This ensures the test suite always produces meaningful output.
                     
-                    # FIX: Log actual file content to help debug false positives
                     logger.error(
                         f"[TESTGEN] SyntaxError while parsing {file_path} at line {e.lineno}. "
                         f"Error: {e.msg}. Content preview (first 500 chars): {content[:500] if content else 'EMPTY'}",
@@ -1618,7 +1616,7 @@ def test_{file_stem}_syntax_error_documentation():
 '''
                     
                     # Generate test file path following pytest conventions
-                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Ensure test files are always placed in tests/ subdirectory
                     # Extract just the filename from the path
                     file_name = Path(file_path).name
                     # Remove .py extension
@@ -2105,7 +2103,7 @@ def test_{file_stem}_syntax_error_documentation():
                     })
 
         # Determine the import based on file path
-        # FIX Bug 1: Compute correct import path for nested packages
+        # Compute correct import path for nested packages
         # Strip "generated/<project>/" prefix to get package-relative path
         # If file_path is "generated/hello_generator/app/main.py", strip to "app/main.py"
         # If file_path is "app/main.py", keep as "app/main.py"
@@ -2288,7 +2286,7 @@ def test_{file_stem}_syntax_error_documentation():
                 )
 
                 # Check if we should use rule-based generation instead of LLM
-                # FIX Issue 2: Use LLM by default when credentials are available
+                # Use LLM by default when credentials are available
                 # Only use rule-based mode when explicitly requested via env var
                 force_rule_based = os.getenv("TESTGEN_FORCE_RULE_BASED", "").lower() == "true"
                 
@@ -2478,7 +2476,7 @@ def test_{file_stem}_syntax_error_documentation():
                         last_generated_tests_content = last_step_in_history.get(
                             "generated_tests_content", {}
                         )
-                        # FIX Problem 2B: Extract execution errors from history
+                        # Extract execution errors from history
                         last_execution_errors = last_step_in_history.get(
                             "execution_errors", {}
                         )
@@ -2503,7 +2501,7 @@ def test_{file_stem}_syntax_error_documentation():
                             generated_tests=last_generated_tests_content,
                             validation_feedback=json.dumps(last_validation_report),
                             critique=last_critique_content,
-                            execution_errors=execution_errors_str,  # FIX Problem 2B: Pass execution errors
+                            execution_errors=execution_errors_str,
                             ast_context=ast_context,  # Issue 1: include schema for accurate imports
                         )
                         logger.info(
@@ -2695,7 +2693,7 @@ def test_{file_stem}_syntax_error_documentation():
                     )
                     history[-1]["validation_report"] = validation_report
                     
-                    # FIX Problem 2A: Capture execution errors from validation report
+                    # Capture execution errors from validation report
                     execution_errors = {}
                     for v_type, v_result in validation_report.items():
                         if isinstance(v_result, dict):

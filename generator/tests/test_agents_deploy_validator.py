@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import the module under test
-# FIX: Use absolute imports from the project root. Remove sys.path hack.
+# Use absolute imports from the project root. Remove sys.path hack.
 from generator.agents.deploy_agent.deploy_validator import (
     DANGEROUS_CONFIG_PATTERNS,
     DockerValidator,
@@ -25,7 +25,7 @@ from generator.agents.deploy_agent.deploy_validator import (
     scrub_text,
 )
 
-# FIX: Removed non-existent imports: TerraformValidator, repair_sections
+# Removed non-existent imports: TerraformValidator, repair_sections
 
 
 # ============================================================================
@@ -132,7 +132,7 @@ def mock_trivy_json_output():
     ).encode()
 
 
-# FIX: Add a mock for the asyncio subprocess calls to avoid NotImplementedError on Windows
+# Add a mock for the asyncio subprocess calls to avoid NotImplementedError on Windows
 @pytest.fixture(autouse=True)
 def mock_subprocess():
     """Auto-use fixture to mock asyncio.create_subprocess_exec."""
@@ -172,19 +172,19 @@ class TestValidatorRegistry:
 
         assert isinstance(validator, HelmValidator)
 
-    # FIX: Removed test_get_terraform_validator as it's not a built-in
+    # Removed test_get_terraform_validator as it's not a built-in
 
     def test_unsupported_target(self):
         """Test requesting unsupported validator."""
         registry = ValidatorRegistry()
 
-        # FIX: Update match string to be more precise
+        # Update match string to be more precise
         with pytest.raises(ValueError, match="No validator found for target"):
             registry.get_validator("unsupported")
 
     def test_register_custom_validator(self):
         """Test registering a custom validator."""
-        # FIX: Import the correct base class
+        # Import the correct base class
         from generator.agents.deploy_agent.deploy_validator import (
             Validator as BaseValidator,
         )
@@ -198,7 +198,7 @@ class TestValidatorRegistry:
 
         registry = ValidatorRegistry()
 
-        # FIX: The registry stores *classes*, not instances
+        # The registry stores *classes*, not instances
         registry.validators["custom"] = CustomValidator
 
         validator = registry.get_validator("custom")
@@ -277,7 +277,7 @@ class TestScrubText:
         result = scrub_text("")
         assert result == ""
 
-        # FIX: The function doesn't handle None, it expects a string.
+        # The function doesn't handle None, it expects a string.
         # result = scrub_text(None)
         # assert result == ""
 
@@ -293,7 +293,7 @@ class TestScanConfigForFindings:
     @pytest.mark.asyncio
     async def test_scan_privileged_container(self, privileged_pod_yaml):
         """Test detecting privileged container."""
-        # FIX: The function now requires the patterns to be passed
+        # The function now requires the patterns to be passed
         findings = await scan_config_for_findings(
             privileged_pod_yaml, "yaml", DANGEROUS_CONFIG_PATTERNS
         )
@@ -363,7 +363,7 @@ data:
 
         # Should call trivy
         mock_subprocess.assert_called()
-        # FIX: Check that the trivy finding was parsed
+        # Check that the trivy finding was parsed
         assert any("CVE-2021-1234" in f["category"] for f in findings)
 
     @pytest.mark.asyncio
@@ -468,7 +468,7 @@ CMD ["python", "app.py"]
         validator = DockerValidator()
         issues = ["Missing FROM instruction", "Missing CMD"]
 
-        # FIX: Patch add_provenance to avoid TypeError
+        # Patch add_provenance to avoid TypeError
         with patch(
             "generator.agents.deploy_agent.deploy_validator.add_provenance"
         ) as mock_add_prov:
@@ -543,7 +543,7 @@ class TestHelmValidator:
         validator = HelmValidator()
         issues = ["Missing version field"]
 
-        # FIX: Patch add_provenance to avoid TypeError
+        # Patch add_provenance to avoid TypeError
         with patch(
             "generator.agents.deploy_agent.deploy_validator.add_provenance"
         ) as mock_add_prov:
@@ -558,14 +558,14 @@ class TestHelmValidator:
 # TESTS: TerraformValidator
 # ============================================================================
 
-# FIX: Removed TestTerraformValidator class entirely
+# Removed TestTerraformValidator class entirely
 
 
 # ============================================================================
 # TESTS: repair_sections
 # ============================================================================
 
-# FIX: Removed TestRepairSections class entirely
+# Removed TestRepairSections class entirely
 
 
 # ============================================================================
@@ -723,7 +723,7 @@ class TestErrorRecovery:
 
         validator = DockerValidator()
 
-        # FIX: The code raises a RuntimeError, not TimeoutError directly
+        # The code raises a RuntimeError, not TimeoutError directly
         with pytest.raises(RuntimeError, match="Failed to auto-fix"):
             await validator.fix("FROM alpine", ["Missing CMD"], "docker")
 

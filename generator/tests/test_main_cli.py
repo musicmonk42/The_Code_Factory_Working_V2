@@ -15,7 +15,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-# FIX: REMOVED the autouse fixture. It's causing the freeze on exit.
+# REMOVED the autouse fixture. It's causing the freeze on exit.
 # @pytest.fixture(autouse=True)
 # def disable_gc():
 #     gc.disable()
@@ -56,7 +56,7 @@ def mock_expensive_modules():
             sys.modules.pop(mod, None)
 
 
-# FIX: Replaced old cli_runner with new one that creates config.yaml in an isolated filesystem
+# Replaced old cli_runner with new one that creates config.yaml in an isolated filesystem
 @pytest.fixture
 def cli_runner():
     """Fixture providing Click CLI runner."""
@@ -178,7 +178,7 @@ def mock_dependencies():
         }
 
 
-# FIX: Removed the temp_files fixture as it's replaced by the cli_runner's isolated_filesystem
+# Removed the temp_files fixture as it's replaced by the cli_runner's isolated_filesystem
 
 
 class TestCLIBasics:
@@ -216,14 +216,14 @@ class TestRunCommand:
         """Test run command with input file."""
         from generator.main.cli import cli
 
-        # FIX: Create files manually in the isolated filesystem
+        # Create files manually in the isolated filesystem
         Path("README.md").write_text("# Test Readme")
         Path("output").mkdir()
 
         result = cli_runner.invoke(
             cli,
             [
-                # FIX: No --config needed, default config.yaml is found
+                # No --config needed, default config.yaml is found
                 "run",
                 "--input",
                 "README.md",
@@ -252,7 +252,7 @@ class TestRunCommand:
         """Test run command in dry-run mode."""
         from generator.main.cli import cli
 
-        # FIX: Create required input file
+        # Create required input file
         Path("README.md").write_text("# Test Readme")
 
         result = cli_runner.invoke(cli, ["run", "--input", "README.md", "--dry-run"])
@@ -264,7 +264,7 @@ class TestRunCommand:
         """Test run command with user ID."""
         from generator.main.cli import cli
 
-        # FIX: Create required input file
+        # Create required input file
         Path("README.md").write_text("# Test Readme")
 
         result = cli_runner.invoke(
@@ -363,7 +363,7 @@ class TestMetricsCommand:
         from generator.main.cli import cli
 
         result = cli_runner.invoke(cli, ["metrics", "--help"])
-        print(result.output)  # FIX: Added debug print
+        print(result.output)  # Added debug print
         assert result.exit_code == 0
 
     def test_metrics_command_execution(self, cli_runner, mock_dependencies):
@@ -389,7 +389,7 @@ class TestConfigCommands:
         """Test config show command."""
         from generator.main.cli import cli
 
-        # FIX: No --config-file needed, uses default from cli_runner
+        # No --config-file needed, uses default from cli_runner
         result = cli_runner.invoke(cli, ["config", "show"])
 
         assert result.exit_code in [0, 1, 2]
@@ -398,7 +398,7 @@ class TestConfigCommands:
         """Test config validate command."""
         from generator.main.cli import cli
 
-        # FIX: No --config-file needed, uses default from cli_runner
+        # No --config-file needed, uses default from cli_runner
         result = cli_runner.invoke(cli, ["config", "validate"])
 
         assert result.exit_code in [0, 1, 2]
@@ -416,7 +416,7 @@ class TestConfigCommands:
         """Test config reload command."""
         from generator.main.cli import cli
 
-        # FIX: Removed patch for console.print, will check result.output
+        # Removed patch for console.print, will check result.output
         with patch("generator.main.cli.aiohttp.ClientSession") as MockSession:  # Mock API call
 
             # Mock API response for reload
@@ -433,11 +433,11 @@ class TestConfigCommands:
             mock_session_instance.post = AsyncMock(return_value=mock_response)
             MockSession.return_value = mock_session_instance
 
-            # FIX: No --config-file needed, uses default from cli_runner
+            # No --config-file needed, uses default from cli_runner
             result = cli_runner.invoke(cli, ["config", "reload"])
 
             assert result.exit_code == 0
-            # FIX: Assert that the captured output contains the success string
+            # Assert that the captured output contains the success string
             assert "Configuration reload triggered successfully" in result.output
             assert "Response: Reloaded" in result.output
 
@@ -549,7 +549,7 @@ class TestDocsCommands:
         """Test docs generate command."""
         from generator.main.cli import cli
 
-        # FIX: Create source and output dirs in isolated filesystem
+        # Create source and output dirs in isolated filesystem
         Path("src").mkdir()
         Path("docs_output").mkdir()
 
@@ -708,7 +708,7 @@ class TestParallelExecution:
         """Test parallel execution with multiple workers."""
         from generator.main.cli import cli
 
-        # FIX: Create required input file
+        # Create required input file
         Path("README.md").write_text("# Test Readme")
 
         result = cli_runner.invoke(
@@ -743,7 +743,7 @@ class TestConfigurationValidation:
 
     def test_valid_config(self, cli_runner):
         """Test validation of valid configuration."""
-        # FIX: Use the config.yaml from the cli_runner fixture
+        # Use the config.yaml from the cli_runner fixture
         config = yaml.safe_load(Path("config.yaml").read_text())
 
         # Basic validation
@@ -767,7 +767,7 @@ class TestEnvironmentVariables:
         from generator.main.cli import cli
 
         with patch.dict(os.environ, {"CONFIG_BACKEND": "override"}):
-            # FIX: No --config-file needed
+            # No --config-file needed
             result = cli_runner.invoke(cli, ["config", "show"])
 
             assert result.exit_code in [0, 1, 2]
@@ -779,7 +779,7 @@ class TestAsyncCommandExecution:
     @pytest.mark.asyncio
     async def test_async_run_command(self, cli_runner, mock_dependencies):
         """Test async execution of run command."""
-        # FIX: Create files in isolated filesystem
+        # Create files in isolated filesystem
         Path("README.md").write_text("# Test Readme")
         Path("output").mkdir()
 

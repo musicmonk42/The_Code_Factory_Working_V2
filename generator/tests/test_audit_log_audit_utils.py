@@ -196,7 +196,7 @@ def mock_rfc3161ng():
 # --------------------------------------------------------------------------- #
 # 4. Hashing
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as compute_hash is synchronous
+# Removed async/await as compute_hash is synchronous
 def test_compute_hash_basic(reset_registries):
     data = b"test_data"
     # compute_hash defaults to 'default_internal' which maps to DEFAULT_HASH_ALGO (sha3_256)
@@ -205,7 +205,7 @@ def test_compute_hash_basic(reset_registries):
     assert compute_hash(data) == expected
 
 
-# FIX: Removed async/await as compute_hash is synchronous
+# Removed async/await as compute_hash is synchronous
 def test_compute_hash_custom_algo(reset_registries):
     # Custom registered functions must accept (data, algo) due to the fix in register_hash_algo
     def sha512_wrapper(data, algo):
@@ -218,7 +218,7 @@ def test_compute_hash_custom_algo(reset_registries):
     assert compute_hash(data, algo="sha512") == expected
 
 
-# FIX: Added test for pre_redaction mode (required coverage)
+# Added test for pre_redaction mode (required coverage)
 def test_compute_hash_pre_redaction(reset_registries):
     data = "test_data with secret=123-45-6789"
 
@@ -231,7 +231,7 @@ def test_compute_hash_pre_redaction(reset_registries):
     assert h_pre == expected_pre
 
 
-# FIX: Added test for pre_redaction:post_redaction mode (required coverage)
+# Added test for pre_redaction:post_redaction mode (required coverage)
 def test_compute_hash_both_redaction_modes(reset_registries):
     data = "test_data with secret=123-45-6789"
 
@@ -251,7 +251,7 @@ def test_compute_hash_both_redaction_modes(reset_registries):
 # --------------------------------------------------------------------------- #
 # 5. Redaction
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as redaction is synchronous
+# Removed async/await as redaction is synchronous
 def test_redact_sensitive_data_str():
     # Updated test data to use patterns that match REDACTION_PATTERNS
     sensitive = "John Doe lives in New York, SSN 123-45-6789, email is test@example.com, and api_key=abcDEF123abcdef1234567890xyz."
@@ -276,7 +276,7 @@ def test_redact_sensitive_data_str():
         assert "[REDACTED]" in redacted  # General check
 
 
-# FIX: Removed async/await as redaction is synchronous
+# Removed async/await as redaction is synchronous
 def test_redact_sensitive_data_dict():
     data = {
         "name": "John Doe",
@@ -299,7 +299,7 @@ def test_redact_sensitive_data_dict():
     assert redacted["city"] == "New York"
 
 
-# FIX: Removed async/await as redaction is synchronous
+# Removed async/await as redaction is synchronous
 def test_redact_sensitive_data_list():
     data = ["John Doe", "New York", "123-45-6789", {"secret": "private-key-12345"}]
     # The production code performs a deep copy
@@ -320,7 +320,7 @@ def test_redact_sensitive_data_list():
 # --------------------------------------------------------------------------- #
 # 6. Key rotation
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as key rotation is synchronous
+# Removed async/await as key rotation is synchronous
 def test_rotate_key():
     old = b"old_key_32_bytes_long_enough___"
     new_key = rotate_key(old)
@@ -332,10 +332,10 @@ def test_rotate_key():
 # --------------------------------------------------------------------------- #
 # 7. Provenance chain
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as provenance generation is synchronous (only signing proxied async)
+# Removed async/await as provenance generation is synchronous (only signing proxied async)
 def test_generate_provenance_chain(mock_rfc3161ng):
     chain = []
-    # FIX: Ensure key_id is present
+    # Ensure key_id is present
     entry = {"action": "test", "timestamp": time.time(), "signing_key_id": "test_key"}
 
     new_chain_link = generate_provenance_chain(chain, entry)
@@ -353,10 +353,10 @@ def test_generate_provenance_chain(mock_rfc3161ng):
     assert new_chain_link != new_chain_link_2
 
 
-# FIX: Removed async/await as provenance generation is synchronous
+# Removed async/await as provenance generation is synchronous
 def test_provenance_language_tagging(mock_rfc3161ng):
     chain = []
-    # FIX: Ensure key_id is present
+    # Ensure key_id is present
     entry = {
         "action": "test",
         "timestamp": time.time(),
@@ -372,11 +372,11 @@ def test_provenance_language_tagging(mock_rfc3161ng):
 # --------------------------------------------------------------------------- #
 # 8. Registry lock-down
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as registry ops are synchronous
+# Removed async/await as registry ops are synchronous
 def test_registry_lockdown():
     lock_registries()
 
-    # FIX: Must pass correct number of args to the register functions
+    # Must pass correct number of args to the register functions
     with pytest.raises(RuntimeError):
         register_hash_algo("locked", lambda d, a: "x")
 
@@ -384,7 +384,7 @@ def test_registry_lockdown():
         register_provenance_logic("locked", lambda c, e, t: "x")
 
 
-# FIX: Removed async/await as registry ops are synchronous
+# Removed async/await as registry ops are synchronous
 def test_production_registry_overwrite_policy(reset_registries):
     # Patch IS_PRODUCTION temporarily
     with patch("generator.audit_log.audit_utils.IS_PRODUCTION", new=True):
@@ -410,7 +410,7 @@ def test_production_registry_overwrite_policy(reset_registries):
 # --------------------------------------------------------------------------- #
 # 9. Secure logging
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as secure_log is synchronous
+# Removed async/await as secure_log is synchronous
 def test_secure_log(mock_audit_log):
     # Use an email which matches the email redaction pattern: r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
     # Use a password which matches the password pattern
@@ -437,7 +437,7 @@ def test_secure_log(mock_audit_log):
 # --------------------------------------------------------------------------- #
 # 10. Self-tests
 # --------------------------------------------------------------------------- #
-# FIX: Removed async/await as self-tests are synchronous
+# Removed async/await as self-tests are synchronous
 def test_self_test_hash_performance(reset_registries):
     # Skip if running on a slow CI or dev machine
     if os.getenv("CI_SKIP_SLOW_TESTS", "False").lower() == "true":
@@ -448,7 +448,7 @@ def test_self_test_hash_performance(reset_registries):
     assert isinstance(result, bool)
 
 
-# FIX: Removed async/await as self-tests are synchronous
+# Removed async/await as self-tests are synchronous
 def test_self_test_redaction():
     result = self_test_redaction()
 
@@ -457,7 +457,7 @@ def test_self_test_redaction():
     assert result is True
 
 
-# FIX: Removed async/await as self-tests are synchronous
+# Removed async/await as self-tests are synchronous
 def test_self_test_provenance(mock_rfc3161ng):
     result = self_test_provenance()
 
@@ -466,7 +466,7 @@ def test_self_test_provenance(mock_rfc3161ng):
     assert result is True
 
 
-# FIX: Removed async/await as self-tests are synchronous
+# Removed async/await as self-tests are synchronous
 def test_run_self_tests(mock_rfc3161ng, reset_registries):
     results = run_self_tests()
 
@@ -479,7 +479,7 @@ def test_run_self_tests(mock_rfc3161ng, reset_registries):
 # --------------------------------------------------------------------------- #
 # 11. Certificate loading
 # --------------------------------------------------------------------------- #
-# FIX: Test verifies that cryptography's certificate loading can be mocked
+# Test verifies that cryptography's certificate loading can be mocked
 def test_certificate_loading(mock_audit_log):
     # This test verifies that certificate loading can be mocked
     key = rsa.generate_private_key(
@@ -507,10 +507,10 @@ def test_certificate_loading(mock_audit_log):
 # --------------------------------------------------------------------------- #
 # 12. Thread-safety (hash computation)
 # --------------------------------------------------------------------------- #
-# FIX: compute_hash is synchronous; use simple loop to simulate concurrent calls
+# compute_hash is synchronous; use simple loop to simulate concurrent calls
 def test_concurrent_hash_computation(mock_audit_log):
     # Registration is handled by the fixture
-    # FIX: Use simple synchronous loop since compute_hash is synchronous
+    # Use simple synchronous loop since compute_hash is synchronous
     results = []
     for i in range(5):
         result = compute_hash(f"data_{i}".encode())

@@ -2,7 +2,7 @@
 
 # audit_utils.py
 import base64
-import copy  # FIX: Added import for deepcopy in redaction logic
+import copy  # Added import for deepcopy in redaction logic
 import datetime
 import hashlib
 import json
@@ -25,7 +25,7 @@ except ImportError:
 
 
 # Assuming log_action is imported from an adjacent module for secure_log (FIX)
-# CRITICAL FIX: Use lazy loading function to break module dependency cycle during pytest collection.
+# Use lazy loading function to break module dependency cycle during pytest collection.
 def _lazy_log_action(*args, **kwargs):
     """
     Placeholder that attempts to lazily import log_action from the parent package.
@@ -64,7 +64,7 @@ try:
 
     PRESIDIO_AVAILABLE = True
     
-    # FIX: Configure Presidio to ignore unwanted entity types that cause log spam
+    # Configure Presidio to ignore unwanted entity types that cause log spam
     # (CARDINAL, ORDINAL, WORK_OF_ART, PRODUCT, FAC, PERCENT, MONEY)
     configuration = {
         "nlp_engine_name": "spacy",
@@ -82,13 +82,13 @@ try:
         }
     }
     
-    # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+    # Limit to English to suppress unsupported-language recognizer warnings
     nlp_engine_provider = NlpEngineProvider(nlp_configuration=configuration)
     nlp_engine = nlp_engine_provider.create_engine()
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["en"])
     anonymizer = AnonymizerEngine()
     
-    # FIX: Set presidio logger to ERROR level and add filters to reduce log spam
+    # Set presidio logger to ERROR level and add filters to reduce log spam
     # Filter for both underscore and hyphen variants of logger names
     presidio_filter = lambda record: not any(
         msg_part in record.getMessage().lower()
@@ -224,40 +224,27 @@ REDACTION_PATTERNS = [
 ]
 
 # --- Metrics ---
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    HASH_OPERATIONS = Counter(
-        "audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"]
-    )
-    HASH_LATENCY = Histogram(
-        "audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"]
-    )
-    REDACTION_COUNTS = Counter(
-        "audit_utils_redactions_total", "Total redacted items", ["pattern_type"]
-    )
-    PROVENANCE_CHAINS = Gauge(
-        "audit_utils_provenance_length", "Current cryptographic chain length"
-    )
-    SELF_TEST_RESULTS = Gauge(
-        "audit_utils_self_test_pass", "Self-test status", ["test"]
-    )
-    LANG_TAGGED_LOGS = Counter(
-        "audit_utils_lang_tagged_logs_total", "Logs tagged with language", ["language"]
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
+# Use get_or_create_metric for idempotent registration — safe on hot-reload and in tests.
+from generator.agents.metrics_utils import get_or_create_metric as _get_or_create_metric
 
-    HASH_OPERATIONS = REGISTRY._names_to_collectors.get("audit_utils_hash_ops_total")
-    HASH_LATENCY = REGISTRY._names_to_collectors.get("audit_utils_hash_latency_seconds")
-    REDACTION_COUNTS = REGISTRY._names_to_collectors.get("audit_utils_redactions_total")
-    PROVENANCE_CHAINS = REGISTRY._names_to_collectors.get(
-        "audit_utils_provenance_length"
-    )
-    SELF_TEST_RESULTS = REGISTRY._names_to_collectors.get("audit_utils_self_test_pass")
-    LANG_TAGGED_LOGS = REGISTRY._names_to_collectors.get(
-        "audit_utils_lang_tagged_logs_total"
-    )
+HASH_OPERATIONS = _get_or_create_metric(
+    Counter, "audit_utils_hash_ops_total", "Hash computations", ["algo", "mode"]
+)
+HASH_LATENCY = _get_or_create_metric(
+    Histogram, "audit_utils_hash_latency_seconds", "Hash time", ["algo", "mode"]
+)
+REDACTION_COUNTS = _get_or_create_metric(
+    Counter, "audit_utils_redactions_total", "Total redacted items", ["pattern_type"]
+)
+PROVENANCE_CHAINS = _get_or_create_metric(
+    Gauge, "audit_utils_provenance_length", "Current cryptographic chain length"
+)
+SELF_TEST_RESULTS = _get_or_create_metric(
+    Gauge, "audit_utils_self_test_pass", "Self-test status", ["test"]
+)
+LANG_TAGGED_LOGS = _get_or_create_metric(
+    Counter, "audit_utils_lang_tagged_logs_total", "Logs tagged with language", ["language"]
+)
 
 # --- Extensible Registries ---
 hash_registry: Dict[str, Callable[[bytes, str], str]] = {}
@@ -325,13 +312,13 @@ def register_hash_algo(name: str, func: Callable[[bytes, str], str]):
             if "missing 1 required positional argument: 'algo_name'" in str(
                 e
             ) or "takes 1 positional argument but 2 were given" in str(e):
-                # FIX: Corrected error message based on lambda contract change
+                # Corrected error message based on lambda contract change
                 raise ValueError(
                     f"Registered hash function '{name}' must accept two positional arguments (data: bytes, algo_name: str). Underlying error: {e}"
                 )
             raise ValueError(f"Test for registered hash function '{name}' failed: {e}")
 
-        # FIX: The test function needs to pass the algo name because default_hash_impl requires it.
+        # The test function needs to pass the algo name because default_hash_impl requires it.
         # Reworked weak algorithm check to use the correct signature
         if (
             IS_PRODUCTION
@@ -385,7 +372,7 @@ def register_provenance_logic(
         # to avoid a RuntimeError that makes the module unimportable.
         if not (IS_PRODUCTION and not _is_real_signer_set):
             try:
-                # FIX (from prior step): Add 'key_id' to the test dictionary
+                # Add 'key_id' to the test dictionary
                 test_result = func([], {"test": "data", "key_id": "test_key"}, False)
                 if not isinstance(test_result, str):
                     raise ValueError("Registered provenance function must return a string.")
@@ -425,7 +412,7 @@ def default_hash_impl(data: bytes, algo_name: str, mode: str = "post_redaction")
     Raises:
         ValueError: If an unsupported hash algorithm is specified.
     """
-    # FIX: Handle 'default_internal' correctly by mapping it to the global DEFAULT_HASH_ALGO
+    # Handle 'default_internal' correctly by mapping it to the global DEFAULT_HASH_ALGO
     if algo_name == "default_internal":
         hash_obj = SUPPORTED_HASH_ALGOS.get(DEFAULT_HASH_ALGO)
     else:
@@ -473,7 +460,7 @@ def compute_hash(
         TypeError: If the input data type is not supported.
         ValueError: If the specified hash algorithm is not found or an invalid redaction mode is chosen.
     """
-    # FIX: Ensure 'default_internal' is registered if it's being used and is missing (e.g., in a late-import scenario)
+    # Ensure 'default_internal' is registered if it's being used and is missing (e.g., in a late-import scenario)
     # The default registration is supposed to run at the bottom of the module, but this check provides safety.
     if algo == "default_internal" and "default_internal" not in hash_registry:
         if not _registries_locked:
@@ -560,7 +547,7 @@ def redact_sensitive_data(data: Any) -> Any:
             new_data, count = pattern.subn("[REDACTED]", data)
             if count > 0:
                 if METRICS_AVAILABLE:
-                    # FIX: Use pattern.pattern for type, not the full regex object
+                    # Use pattern.pattern for type, not the full regex object
                     REDACTION_COUNTS.labels(pattern_type=pattern.pattern).inc(count)
                 data = new_data
 
@@ -583,10 +570,10 @@ def redact_sensitive_data(data: Any) -> Any:
 
         return data
     elif isinstance(data, dict):
-        # FIX: Deep copy the dictionary to prevent mutation issues in tests (AssertionError fix)
+        # Deep copy the dictionary to prevent mutation issues in tests (AssertionError fix)
         return {k: redact_sensitive_data(v) for k, v in copy.deepcopy(data).items()}
     elif isinstance(data, list):
-        # FIX: Deep copy the list to prevent mutation issues in tests (AssertionError fix)
+        # Deep copy the list to prevent mutation issues in tests (AssertionError fix)
         return [redact_sensitive_data(item) for item in copy.deepcopy(data)]
     elif hasattr(data, "__dict__"):
         # Handle custom objects, dataclasses, etc.
@@ -640,7 +627,7 @@ def secure_log(
     redacted_kwargs = {k: redact_sensitive_data(v) for k, v in kwargs.items()}
 
     # Use the globally defined log_action proxy for tests to intercept
-    # FIX: log_action now points to the lazy loader, ensuring module load succeeds.
+    # log_action now points to the lazy loader, ensuring module load succeeds.
     if level >= logging.ERROR:
         log_action("secure_log_error", redacted_message, extra=redacted_kwargs)
     else:
@@ -693,7 +680,7 @@ def sign_entry(data: Dict[str, Any], key_id: str) -> bytes:
             logger.warning(
                 "Using DUMMY sign_entry for dev/test. This provides NO cryptographic security!"
             )
-            # FIX: Add a clear warning that this is NOT a cryptographic signature
+            # Add a clear warning that this is NOT a cryptographic signature
             # This is intentionally insecure for dev/test environments only
             # A real HMAC or digital signature MUST be used in production
             dummy_hash = hashlib.sha256(
@@ -765,7 +752,7 @@ def default_provenance_chain_impl(
                 # A real TSA CA bundle should be configured here
                 TSA_CA_BUNDLE = os.getenv("TSA_CA_BUNDLE")
                 if not TSA_CA_BUNDLE or not os.path.exists(TSA_CA_BUNDLE):
-                    # FIX: Don't raise FileNotFoundError in production unless we absolutely must
+                    # Don't raise FileNotFoundError in production unless we absolutely must
                     if IS_PRODUCTION:
                         raise RuntimeError(
                             "TSA_CA_BUNDLE is required but missing/invalid in production."
@@ -906,7 +893,7 @@ def run_self_tests(on_demand: bool = True) -> Dict[str, bool]:
 
     logger.info("Running audit_utils self-tests...")
 
-    # FIX: Initialize results and overall_pass before the try block
+    # Initialize results and overall_pass before the try block
     results = {}
     overall_pass = True
 
@@ -936,7 +923,7 @@ def run_self_tests(on_demand: bool = True) -> Dict[str, bool]:
         if IS_PRODUCTION:
             raise
 
-    # FIX: Update gauge metrics for each test
+    # Update gauge metrics for each test
     if METRICS_AVAILABLE:
         for test_name, passed in results.items():
             SELF_TEST_RESULTS.labels(test=test_name).set(1 if passed else 0)
@@ -1060,7 +1047,7 @@ def self_test_provenance() -> bool:
 # we register them *just* before running self-tests.
 if not os.getenv("RUNNING_TESTS", "False").lower() == "true":
     # Default Registration Logic (Moved from global scope)
-    # FIX: Use the correct lambda that accepts both arguments
+    # Use the correct lambda that accepts both arguments
     register_hash_algo(
         "default_internal",
         lambda data, algo_name: default_hash_impl(

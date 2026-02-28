@@ -92,7 +92,7 @@ except ImportError as e:
     def Security(callable=None):
         return callable
 
-    # FIX: Replaced ... with *args, **kwargs and return None to fix SyntaxError
+    # Replaced ... with *args, **kwargs and return None to fix SyntaxError
     def Body(*args, **kwargs):
         return None
 
@@ -469,7 +469,7 @@ except ImportError:
         logging.warning("Dummy encrypt_log: Not implemented.")
         return f"[ENCRYPTED]{log_data}"
 
-    # FIX: Added dummy load_config and ConfigWatcher to the except block
+    # Added dummy load_config and ConfigWatcher to the except block
     def load_config(config_file: str):
         """Dummy config loader for when imports fail."""
         logging.debug(
@@ -576,7 +576,7 @@ api_key_header = APIKeyHeader(
 # PRODUCTION FIX: The DATABASE_URL must be provided from the environment.
 # Using a local SQLite file is not suitable for most production deployments.
 DATABASE_URL = os.getenv("DATABASE_URL")
-# FIX: Add DEV_MODE fallback to prevent startup crash
+# Add DEV_MODE fallback to prevent startup crash
 if not DATABASE_URL:
     if _is_dev_or_test_mode():
         DATABASE_URL = "sqlite:///./dev.db"
@@ -1090,7 +1090,7 @@ else:
 
 
 # --- Singleton Instances ---
-# FIX: Wrap global config loading in try/except to prevent FileNotFoundError during test collection
+# Wrap global config loading in try/except to prevent FileNotFoundError during test collection
 # Use path relative to generator package root
 _generator_root = Path(__file__).parent.parent
 _config_path = _generator_root / "config.yaml"
@@ -1142,7 +1142,7 @@ def get_runner_instance() -> Runner:
 
 def get_parser_instance() -> IntentParser:
     """Returns the singleton IntentParser instance."""
-    # FIX: Corrected the typo in the global variable name
+    # Corrected the typo in the global variable name
     global _global_parser_instance
     if _global_parser_instance is None:
         # Use path relative to generator package root
@@ -1299,7 +1299,7 @@ async def login_for_access_token(
             logger.warning(f"Login failed for user '{username}': Invalid credentials.")
             span.set_status(
                 Status(StatusCode.UNAUTHENTICATED, "Invalid credentials")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect username or password",
@@ -1328,7 +1328,7 @@ async def login_for_access_token(
             expires_delta=access_token_expires,
         )
         logger.info(f"User '{username}' logged in successfully.")
-        span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+        span.set_status(Status(StatusCode.OK))  # Use Status object
         return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -1352,7 +1352,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             )
             span.set_status(
                 Status(StatusCode.ALREADY_EXISTS, "Username already exists")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Username already registered",
@@ -1369,7 +1369,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             await asyncio.to_thread(db.commit)
             await asyncio.to_thread(db.refresh, new_user)
             logger.info(f"User '{new_user.username}' registered successfully.")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return UserResponse.from_orm(new_user)
         except IntegrityError as e:
             logger.error(
@@ -1378,7 +1378,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             )
             span.set_status(
                 Status(StatusCode.ALREADY_EXISTS, "Username already exists")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Username already registered (DB error)",
@@ -1390,7 +1390,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
             )
             span.set_status(
                 Status(StatusCode.INTERNAL_ERROR, "Database error")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=500,
                 detail="Internal database error during user registration.",
@@ -1436,7 +1436,7 @@ async def create_api_key(api_key_data: APIKeyCreate, db: Session = Depends(get_d
             await asyncio.to_thread(db.commit)
             await asyncio.to_thread(db.refresh, new_api_key)
             logger.info(f"API Key '{api_key_id}' created successfully.")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             # Return the raw API key ONLY ONCE. It's not stored in DB.
             return {
                 "api_key_id": api_key_id,
@@ -1447,7 +1447,7 @@ async def create_api_key(api_key_data: APIKeyCreate, db: Session = Depends(get_d
             logger.error(f"Database error during API key creation: {e}", exc_info=True)
             span.set_status(
                 Status(StatusCode.INTERNAL_ERROR, "Database error")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=500,
                 detail="Internal database error during API key creation.",
@@ -1484,7 +1484,7 @@ async def delete_api_key(api_key_id: str, db: Session = Depends(get_db)):
             )
             span.set_status(
                 Status(StatusCode.NOT_FOUND, "API Key not found")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
             )
@@ -1493,7 +1493,7 @@ async def delete_api_key(api_key_id: str, db: Session = Depends(get_db)):
             await asyncio.to_thread(db.delete, api_key_to_delete)
             await asyncio.to_thread(db.commit)
             logger.info(f"API Key '{api_key_id}' deleted successfully.")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return {"status": "success", "message": "API Key deleted."}
         except SQLAlchemyError as e:
             logger.error(
@@ -1502,7 +1502,7 @@ async def delete_api_key(api_key_id: str, db: Session = Depends(get_db)):
             )
             span.set_status(
                 Status(StatusCode.INTERNAL_ERROR, "Database error")
-            )  # FIX: Use Status object
+            )  # Use Status object
             raise HTTPException(
                 status_code=500,
                 detail="Internal database error during API key deletion.",
@@ -1545,11 +1545,11 @@ async def api_run(
             # Convert Pydantic model to dict for runner
             result = await runner.run(payload.dict())
             logger.info(f"Run completed for entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return result
         except Exception as e:
             logger.error(f"Run error for entity {entity_id}: {e}", exc_info=True)
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1590,11 +1590,11 @@ async def api_parse_text(
                 user_id=entity_id,
             )
             logger.info(f"Parse text completed for entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return result
         except Exception as e:
             logger.error(f"Parse text error for entity {entity_id}: {e}", exc_info=True)
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1656,11 +1656,11 @@ async def api_parse_file(
                 user_id=entity_id,
             )
             logger.info(f"Parse file completed for entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return result
         except Exception as e:
             logger.error(f"Parse file error for entity {entity_id}: {e}", exc_info=True)
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1708,13 +1708,13 @@ async def api_submit_parse_feedback(
         try:
             parser.feedback.rate(item_id, rating, entity_id)
             logger.info(f"Feedback submitted for item {item_id} by entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return {"status": "success", "message": f"Feedback for {item_id} recorded."}
         except Exception as e:
             logger.error(
                 f"Feedback submission error for entity {entity_id}: {e}", exc_info=True
             )
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1742,7 +1742,7 @@ async def api_reload_parser_config(
         try:
             parser.reload_config_and_strategies()
             logger.info(f"Parser config reloaded by entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return {
                 "status": "success",
                 "message": "IntentParser configuration reloaded.",
@@ -1751,7 +1751,7 @@ async def api_reload_parser_config(
             logger.error(
                 f"Config reload error for entity {entity_id}: {e}", exc_info=True
             )
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1819,13 +1819,13 @@ async def api_submit_runner_feedback(
                     f"Failed to persist feedback to database for run {feedback_data.run_id}: {db_err}",
                     exc_info=True,
                 )
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return {"status": "success", "message": "Feedback recorded."}
         except Exception as e:
             logger.error(
                 f"Feedback submission error for entity {entity_id}: {e}", exc_info=True
             )
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500,
@@ -1854,13 +1854,13 @@ async def api_search_logs(
         try:
             results = search_logs(query)
             logger.info(f"Logs searched by entity {entity_id}")
-            span.set_status(Status(StatusCode.OK))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.OK))  # Use Status object
             return {"results": results}
         except Exception as e:
             logger.error(
                 f"Logs search error for entity {entity_id}: {e}", exc_info=True
             )
-            span.set_status(Status(StatusCode.ERROR, str(e)))  # FIX: Use Status object
+            span.set_status(Status(StatusCode.ERROR, str(e)))  # Use Status object
             span.record_exception(e)
             raise HTTPException(
                 status_code=500, detail="An internal error occurred during log search."

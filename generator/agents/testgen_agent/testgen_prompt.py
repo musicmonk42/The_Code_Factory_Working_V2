@@ -53,7 +53,6 @@ from jinja2 import Environment, FileSystemLoader, Template, select_autoescape
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
 from runner.runner_errors import LLMError
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL
@@ -580,7 +579,7 @@ class AdvancedTemplateTracker:
         class TemplateReloadHandler(FileSystemEventHandler):
             def __init__(self, tracker: "AdvancedTemplateTracker"):
                 self.tracker = tracker
-                # FIX #5: Add debouncing
+                # Add debouncing
                 import time as time_module
                 self.time = time_module
                 self.last_reload_time = {}
@@ -1163,7 +1162,7 @@ async def initialize_codebase_for_rag(repo_path: str):
                 elif (
                     file.lower().endswith((".log", ".txt"))
                     and "fail" in content.lower()
-                ):  # FIX: Added case-insensitivity check to endswith
+                ):  # Case-insensitive suffix check
                     content = content[-20000:]
                     failure_logs[filepath] = content
             except Exception as e:
@@ -1173,7 +1172,7 @@ async def initialize_codebase_for_rag(repo_path: str):
     # Get the multi_vdb instance using the lazy getter
     vdb = _get_multi_vdb()
     
-    # FIX: Now properly async - just await the async function
+    # Async call site — awaited correctly
     await _add_all_files_to_vdb(vdb, code_files, test_files, doc_files, dep_files, failure_logs)
     
     logger.info("Multi-RAG initialization complete. Indexed files across collections.")

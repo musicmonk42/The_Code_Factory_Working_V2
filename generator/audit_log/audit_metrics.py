@@ -286,7 +286,7 @@ PERF_SCORE = Gauge(
 LOG_ERRORS = safe_counter(
     "audit_log_errors_total", "Total number of errors encountered in the log system."
 )
-# FIX 1: Add the required 'action' label for use in tests (and production)
+# Add the required 'action' label for use in tests (and production)
 LOG_WRITES = safe_counter(
     "audit_log_writes_total",
     "Total number of successful writes to the log system.",
@@ -384,7 +384,7 @@ class AuditMetrics:
         # Initialize Datadog API
         if DATADOG_API_KEY:
             try:
-                # FIX: Import Datadog here to avoid global import errors if not installed
+                # Import Datadog here to avoid global import errors if not installed
                 import datadog
 
                 datadog.initialize(api_key=DATADOG_API_KEY)
@@ -398,7 +398,7 @@ class AuditMetrics:
         self._shutdown_event = asyncio.Event()
         self._async_tasks: List[asyncio.Task] = []
 
-        # FIX 3: Initialize metric_history as an instance attribute
+        # Initialize metric_history as an instance attribute
         self.metric_history: Dict[str, Deque[Tuple[float, float]]] = defaultdict(
             lambda: deque(maxlen=200)
         )
@@ -419,7 +419,7 @@ class AuditMetrics:
         for task in self._async_tasks:
             task.cancel()
 
-        # FIX: Wait for tasks to complete/cancel with a timeout to prevent hang.
+        # Wait for tasks to complete/cancel with a timeout to prevent hang.
         # Filter out tasks that might have completed before cancellation.
         running_tasks = [task for task in self._async_tasks if not task.done()]
 
@@ -566,7 +566,7 @@ class AuditMetrics:
                             "metric": f"audit.{metric_name}",
                             "points": [
                                 (now, float(value))
-                            ],  # FIX: Correct Datadog payload
+                            ],  # Correct Datadog payload
                             "tags": tags,
                             "type": datadog_type,
                         }
@@ -605,7 +605,7 @@ class AuditMetrics:
                     )
 
             # `put_metric_data` has a batch size limit of 20
-            # FIX: Ensure loop slices the real list correctly
+            # Ensure loop slices the real list correctly
             for i in range(0, len(metric_data), 20):
                 batch = metric_data[i : i + 20]
                 self.cloudwatch.put_metric_data(
@@ -621,7 +621,7 @@ class AuditMetrics:
     async def _monitor_and_alert(self):
         """Monitors metric thresholds and triggers alerts."""
         while not self._shutdown_event.is_set():
-            # FIX: Reduced sleep interval for faster test shutdown
+            # Reduced sleep interval for faster test shutdown
             await asyncio.sleep(1)
 
             if self._shutdown_event.is_set():
@@ -631,7 +631,7 @@ class AuditMetrics:
             try:
                 # We need the current value for the rate calculation.
                 # In Prometheus client, ._value is often the only accessible way for non-collected data
-                # FIX: Use safe access for counter values with proper bounds checking
+                # Use safe access for counter values with proper bounds checking
                 try:
                     error_metrics = LOG_ERRORS.collect()
                     error_value = (
@@ -690,7 +690,7 @@ class AuditMetrics:
                 )
                 # Write to a dead-letter log file
                 with open("alert_dead_letter.log", "a") as f:
-                    # FIX: Use UTC time for log
+                    # Use UTC time for log
                     f.write(
                         f"[{datetime.datetime.now(datetime.timezone.utc).isoformat()}] FAILED ALERT: {subject} - {message}\n"
                     )
@@ -803,7 +803,7 @@ class AuditMetrics:
     async def _self_test_periodically(self):
         """Periodically runs self-tests and anomaly detection."""
         while not self._shutdown_event.is_set():
-            # FIX: Reduced sleep interval for faster test shutdown
+            # Reduced sleep interval for faster test shutdown
             await asyncio.sleep(1)
 
             if self._shutdown_event.is_set():
@@ -827,7 +827,7 @@ class AuditMetrics:
         Performs anomaly detection based on historical metric data.
         Currently uses a simple Z-score algorithm.
         """
-        # FIX 3: Access instance's metric history
+        # Access instance's metric history
         anomalies = []
         for name, hist_deque in self.metric_history.items():
             if len(hist_deque) < 30:
@@ -872,8 +872,8 @@ class AuditMetrics:
             )
             return
 
-        # FIX 3: Access instance's metric history
-        # FIX: Use the actual metric name (e.g., 'audit_write_latency_seconds')
+        # Access instance's metric history
+        # Use the actual metric name (e.g., 'audit_write_latency_seconds')
         # if the decorator logic is complex, we use the global name as the key
         self.metric_history[name].append((time.time(), float(value)))
         logger.debug(

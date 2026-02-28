@@ -2068,7 +2068,7 @@ def log_action(
     """
     Logs a specific action with structured data, ensuring secrets are redacted and data is encrypted.
     """
-    # FIX: Lazy import to break circular dependency
+    # Lazy import to avoid a circular import at module load time
     try:
         from runner.runner_security_utils import encrypt_data, redact_secrets
     except ImportError as e:
@@ -2141,7 +2141,7 @@ def search_logs(
     return results
 
 
-# FIX: Logger is now defined early in the module (after tracer initialization)
+# Logger is now defined early in the module (after tracer initialization)
 # to prevent circular import issues. The following setup configures the audit logger.
 # Allow propagation in testing to enable caplog capture
 if os.getenv("TESTING") != "1":

@@ -7,7 +7,7 @@ import json
 import logging  # Import logging directly
 import os  # For environment variables
 import sys
-import threading  # FIX: Import threading for thread identification
+import threading  # Import threading for thread identification
 import uuid  # For generating run IDs
 from pathlib import Path
 from typing import Dict, Optional
@@ -293,7 +293,7 @@ class MainApp(App):
         if self.runner_log:
             self.tui_log_handler = TuiLogHandler(
                 self.runner_log, self
-            )  # FIX: Pass self (the app)
+            )  # Pass self (the app)
             app_logger.addHandler(self.tui_log_handler)
 
         self.runner = Runner(load_config(RUNNER_CONFIG_PATH))
@@ -319,7 +319,7 @@ class MainApp(App):
         ):
             self.metrics_update_interval_task.stop()  # Use .stop() for Timers
         if hasattr(self, "tui_log_handler") and self.tui_log_handler:
-            # FIX: Remove handler to prevent zombie writes during tests
+            # Remove handler to prevent zombie writes during tests
             app_logger.removeHandler(self.tui_log_handler)
             self.tui_log_handler.close()
 

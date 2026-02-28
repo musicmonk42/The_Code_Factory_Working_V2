@@ -51,7 +51,6 @@ from aiohttp import web
 
 # --- CENTRAL RUNNER FOUNDATION ---
 from runner.llm_client import call_llm_api
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL
@@ -773,7 +772,7 @@ class ResponseParser(ABC):
         logger.info(
             f"Attempting LLM auto-healing for malformed response in {language}."
         )
-        # FIX Issue 2: Improve auto-healing prompt to be more specific about syntax errors
+        # Improve auto-healing prompt to be more specific about syntax errors
         # Compute file extension once for clarity
         file_ext = LANGUAGE_CONFIG.get(language, {}).get('ext', 'txt')
         heal_prompt = f"""
@@ -1002,7 +1001,7 @@ class DefaultResponseParser(ResponseParser):
                 else:
                     filename = f"test_file_{i+1}.{ext}"
 
-                # FIX Issue 2: Strip markdown fences from code content
+                # Strip markdown fences from code content
                 cleaned_content = _strip_markdown_fences(code_content.strip())
                 # Apply filename normalization, passing content for preamble detection
                 normalized_filename = normalize_test_filename(filename, language, content=cleaned_content)
@@ -1023,7 +1022,7 @@ class DefaultResponseParser(ResponseParser):
             parsed_files = {}
             _ctr = {}
             for filename, content in file_matches:
-                # FIX Issue 2: Strip markdown fences from content
+                # Strip markdown fences from content
                 cleaned_content = _strip_markdown_fences(content.strip())
                 # Apply filename normalization, passing content for preamble detection
                 normalized_filename = normalize_test_filename(filename, language, content=cleaned_content)
@@ -1044,7 +1043,7 @@ class DefaultResponseParser(ResponseParser):
             logger.warning(
                 f"Could not parse structured response. Treating as single file: {single_filename}"
             )
-            # FIX Issue 2: Strip markdown fences from entire response
+            # Strip markdown fences from entire response
             cleaned_response = _strip_markdown_fences(response.strip())
             # P3: Strip non-Python preambles (e.g. "(Refined)" hallucinations)
             if language == "python":
@@ -1755,13 +1754,13 @@ async def parse_llm_response(
                 )
         test_files = filtered_files
 
-        # FIX #3: Fix import paths after parsing but before validation
+        # Fix import paths after parsing but before validation
         test_files = fix_import_paths(test_files, code_files, language)
 
         # Fix brittle Pydantic v1-style assertions before validation
         test_files = fix_brittle_pydantic_assertions(test_files, language)
 
-        # FIX #3: Validate and fix monkeypatch targets
+        # Validate and fix monkeypatch targets
         test_files = validate_monkeypatch_targets(test_files, code_files, language)
         
         await parser.validate(test_files, language, code_files)
@@ -1782,13 +1781,13 @@ async def parse_llm_response(
         healed_files = await parser._llm_auto_heal(response, str(e), language)
 
         if healed_files:
-            # FIX #3: Also fix import paths in healed files
+            # Also fix import paths in healed files
             healed_files = fix_import_paths(healed_files, code_files, language)
 
             # Fix brittle Pydantic v1-style assertions in healed files
             healed_files = fix_brittle_pydantic_assertions(healed_files, language)
 
-            # FIX #3: Also validate monkeypatch targets in healed files
+            # Also validate monkeypatch targets in healed files
             healed_files = validate_monkeypatch_targets(healed_files, code_files, language)
             
             try:

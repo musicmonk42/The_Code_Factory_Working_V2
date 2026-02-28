@@ -50,7 +50,7 @@ class MockObserver:
         pass
 
 
-# FIX: Mock runner modules before importing docgen_agent to handle source file import issues
+# Mock runner modules before importing docgen_agent to handle source file import issues
 # Save all originals for restoration after imports to avoid polluting other test modules
 _saved_modules = {}
 _modules_to_mock = [
@@ -71,7 +71,7 @@ for _mod in _modules_to_mock:
 for _mod in _modules_to_mock[:8]:  # runner.* modules
     sys.modules[_mod] = MagicMock()
 
-# FIX: Mock Presidio modules properly
+# Mock Presidio modules properly
 mock_analyzer_result = MagicMock()
 mock_analyzer_result.text = "My email is <EMAIL> and my API key is <API_KEY>."
 
@@ -91,7 +91,7 @@ mock_anonymizer.AnonymizerEngine.return_value.anonymize.return_value = (
 sys.modules["presidio_analyzer"] = mock_analyzer
 sys.modules["presidio_anonymizer"] = mock_anonymizer
 
-# FIX: Mock other dependencies
+# Mock other dependencies
 sys.modules["pypandoc"] = MagicMock()
 # Mock pypandoc.convert_text to just return the input
 sys.modules["pypandoc"].convert_text = MagicMock(
@@ -230,7 +230,7 @@ mock_span.__exit__ = MagicMock(return_value=None)
 mock_tracer = MagicMock()
 mock_tracer.start_as_current_span = MagicMock(return_value=mock_span)
 
-# FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
+# Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
 from abc import ABC, abstractmethod
 

@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import aiohttp
 import pytest
-import yaml  # FIX: Added missing import
+import yaml  # Added missing import
 from _pytest.logging import LogCaptureFixture
 from tenacity import RetryError
 
@@ -82,7 +82,7 @@ def test_global_pricing_is_mutable(clean_pricing: None) -> None:
 # 2. Custom model / hook registration
 @pytest.mark.asyncio
 async def test_register_custom_model(provider: LocalProvider) -> None:
-    # FIX: register_custom_model now expects a config dict
+    # register_custom_model now expects a config dict
     provider.register_custom_model(
         "my-llm",
         {"endpoint": "http://localhost:9999/gen", "token_counter": lambda _: 99},
@@ -98,14 +98,14 @@ async def test_pre_hook(provider: LocalProvider) -> None:
 
     provider.add_pre_hook(upper)
 
-    # FIX: Mock response to simulate aiohttp response object
+    # Mock response to simulate aiohttp response object
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "ok", "done": true}')
 
     with patch.object(provider, "_api_call", new=AsyncMock(return_value=mock_resp)):
         result = await provider.call("hello", "model")
-        # FIX: Check that the call was made (prompt was transformed by hook)
+        # Check that the call was made (prompt was transformed by hook)
         provider._api_call.assert_called_once()
         call_args = provider._api_call.call_args
         # The data dict should contain the uppercased prompt
@@ -120,7 +120,7 @@ async def test_post_hook(provider: LocalProvider) -> None:
 
     provider.add_post_hook(suffix)
 
-    # FIX: Mock response to simulate aiohttp response object
+    # Mock response to simulate aiohttp response object
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "world", "done": true}')
@@ -148,7 +148,7 @@ async def test_load_plugins_success(provider: LocalProvider, tmp_path: Path) -> 
     dummy_pre = MagicMock(return_value="PRE")
     dummy_post = MagicMock(return_value={"content": "POST"})
 
-    # FIX: Added yaml import and proper mocking
+    # Added yaml import and proper mocking
     with (
         patch("builtins.open", mock_open(read_data=yaml_content)),
         patch("yaml.safe_load", return_value=yaml.safe_load(yaml_content)),
@@ -169,7 +169,7 @@ async def test_load_plugins_success(provider: LocalProvider, tmp_path: Path) -> 
 async def test_load_plugins_missing_file(
     provider: LocalProvider, caplog: LogCaptureFixture
 ) -> None:
-    # FIX: load_plugins now accepts a file_path parameter
+    # load_plugins now accepts a file_path parameter
     old_propagate = logger.propagate
     logger.propagate = True
     try:
@@ -195,7 +195,7 @@ async def test_api_call_non_stream(provider: LocalProvider) -> None:
 
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
-        # FIX: _api_call requires: endpoint, headers, data, stream, run_id
+        # _api_call requires: endpoint, headers, data, stream, run_id
         out = await provider._api_call(
             "http://localhost:11434/api/generate",
             {"Content-Type": "application/json"},
@@ -218,7 +218,7 @@ async def test_api_call_stream(provider: LocalProvider) -> None:
 
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
-        # FIX: Use correct signature
+        # Use correct signature
         resp = await provider._api_call(
             "http://localhost:11434/api/generate",
             {"Content-Type": "application/json"},
@@ -238,7 +238,7 @@ async def test_api_call_http_error(provider: LocalProvider) -> None:
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
         with pytest.raises(LLMError):
-            # FIX: Use correct signature
+            # Use correct signature
             await provider._api_call(
                 "http://localhost:11434/api/generate",
                 {"Content-Type": "application/json"},
@@ -257,7 +257,7 @@ async def test_api_call_retry_rate_limit(provider: LocalProvider) -> None:
     with patch("aiohttp.ClientSession.post") as mock_post:
         mock_post.return_value.__aenter__.return_value = mock_resp
         with pytest.raises(RetryError):
-            # FIX: Use correct signature
+            # Use correct signature
             await provider._api_call(
                 "http://localhost:11434/api/generate",
                 {"Content-Type": "application/json"},
@@ -270,7 +270,7 @@ async def test_api_call_retry_rate_limit(provider: LocalProvider) -> None:
 # 5. Public .call()
 @pytest.mark.asyncio
 async def test_call_non_stream(provider: LocalProvider) -> None:
-    # FIX: Mock response to simulate aiohttp response object
+    # Mock response to simulate aiohttp response object
     mock_resp = AsyncMock()
     mock_resp.status = 200
     mock_resp.text = AsyncMock(return_value='{"response": "hi", "done": true}')
@@ -283,7 +283,7 @@ async def test_call_non_stream(provider: LocalProvider) -> None:
 
 @pytest.mark.asyncio
 async def test_call_stream(provider: LocalProvider) -> None:
-    # FIX: Mock response to simulate aiohttp streaming response
+    # Mock response to simulate aiohttp streaming response
     mock_resp = AsyncMock()
     mock_resp.status = 200
 
@@ -302,7 +302,7 @@ async def test_call_stream(provider: LocalProvider) -> None:
 
 @pytest.mark.asyncio
 async def test_call_missing_model(provider: LocalProvider) -> None:
-    # FIX: Now raises ValueError for None model
+    # Now raises ValueError for None model
     with pytest.raises(ValueError):
         await provider.call("p", None)  # type: ignore[arg-type]
 
@@ -376,7 +376,7 @@ def test_get_provider_env_key(mock_load: MagicMock) -> None:
 @patch("generator.runner.providers.local_provider.load_config")
 @patch.dict(os.environ, clear=True)
 def test_get_provider_no_key(mock_load: MagicMock) -> None:
-    # FIX: Local provider doesn't require a key, so this test should pass
+    # Local provider doesn't require a key, so this test should pass
     mock_load.return_value = mock_cfg(None)
     p = get_provider()
     assert p.api_key is None  # Local provider allows None API key
@@ -398,7 +398,7 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
                 baseline_latency_count = sample.value
                 break
 
-    # FIX: Mock response to simulate aiohttp streaming response
+    # Mock response to simulate aiohttp streaming response
     mock_resp = AsyncMock()
     mock_resp.status = 200
 
@@ -431,7 +431,7 @@ async def test_stream_metrics(provider: LocalProvider) -> None:
 # 10. Exception inside streaming generator
 @pytest.mark.asyncio
 async def test_stream_error(provider: LocalProvider) -> None:
-    # FIX: Mock response to simulate aiohttp streaming response that errors
+    # Mock response to simulate aiohttp streaming response that errors
     mock_resp = AsyncMock()
     mock_resp.status = 200
 
@@ -450,7 +450,7 @@ async def test_stream_error(provider: LocalProvider) -> None:
 
 # 11. Logger sanity check
 def test_logger_configured(caplog: LogCaptureFixture) -> None:
-    # FIX: Configure logger to propagate to caplog
+    # Configure logger to propagate to caplog
     logger.propagate = True
     with caplog.at_level(logging.DEBUG, logger=logger.name):
         logger.debug("debug-msg")

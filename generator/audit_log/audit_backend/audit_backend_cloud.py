@@ -101,7 +101,7 @@ class S3Backend(LogBackend):
     async def close(self):
         """Closes the S3Backend."""
         await self.flush_batch()  # Flush final batch
-        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        # Cancel the specific _init_task if it exists and hasn't been awaited fully
         if self._init_task and not self._init_task.done():
             self._init_task.cancel()
             try:
@@ -202,7 +202,7 @@ class S3Backend(LogBackend):
         self, filters: Dict[str, Any], limit: int
     ) -> List[Dict[str, Any]]:
         """Queries S3 using Athena with partitioning and column filtering."""
-        # FIX: Check for self._init_task status to ensure Athena is ready
+        # Check for self._init_task status to ensure Athena is ready
         if self._init_task and not self._init_task.done():
             raise RuntimeError("Athena client is not yet initialized.")
 
@@ -790,7 +790,7 @@ class GCSBackend(LogBackend):
     async def close(self):
         """Closes the GCSBackend."""
         await self.flush_batch()  # Flush final batch
-        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        # Cancel the specific _init_task if it exists and hasn't been awaited fully
         if self._init_task and not self._init_task.done():
             self._init_task.cancel()
             try:
@@ -859,7 +859,7 @@ class GCSBackend(LogBackend):
         self, filters: Dict[str, Any], limit: int
     ) -> List[Dict[str, Any]]:
         """Queries GCS using BigQuery with filtering."""
-        # FIX: Check for self._init_task status to ensure BigQuery is ready
+        # Check for self._init_task status to ensure BigQuery is ready
         if self._init_task and not self._init_task.done():
             raise RuntimeError("BigQuery client is not yet initialized.")
 
@@ -1360,7 +1360,7 @@ class AzureBlobBackend(LogBackend):
     async def close(self):
         """Closes the Azure Blob client and shuts down base tasks."""
         await self.flush_batch()  # Flush final batch
-        # FIX: Cancel the specific _init_task if it exists and hasn't been awaited fully
+        # Cancel the specific _init_task if it exists and hasn't been awaited fully
         if self._init_task and not self._init_task.done():
             self._init_task.cancel()
             try:
@@ -1429,7 +1429,7 @@ class AzureBlobBackend(LogBackend):
         self, filters: Dict[str, Any], limit: int
     ) -> List[Dict[str, Any]]:
         """Queries Azure Blob Storage, filtering by top-level attributes."""
-        # FIX: Check for self._init_task status to ensure client is ready
+        # Check for self._init_task status to ensure client is ready
         if self._init_task and not self._init_task.done():
             raise RuntimeError("Azure client is not yet initialized.")
 

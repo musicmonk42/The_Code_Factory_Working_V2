@@ -119,7 +119,7 @@ class FileHandlerRegistry(Dict[str, Callable[..., Any]]):
         return self._extensions
 
 
-# FIX: Initialize FILE_HANDLERS with the custom class
+# Initialize FILE_HANDLERS with the custom class
 FILE_HANDLERS: FileHandlerRegistry = FileHandlerRegistry()
 
 
@@ -128,7 +128,7 @@ def register_file_handler(mime_type: str, extensions: List[str]):
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         FILE_HANDLERS[mime_type] = func
-        # FIX: Directly use the internal _extensions attribute on the class instance
+        # Directly use the internal _extensions attribute on the class instance
         FILE_HANDLERS._extensions[mime_type] = extensions
         return func
 
@@ -170,7 +170,7 @@ from shared.registry import Registry  # noqa: E402
 SUMMARIZERS = Registry()
 
 
-# FIX: Add registration function for Summarizers as required
+# Add registration function for Summarizers as required
 def register_summarizer(name: str):
     """Registers a summarization function."""
 
@@ -320,7 +320,7 @@ import sys as _sys
 # NEW: Import the logging module for aliasing
 # NEW: Import the errors module for aliasing
 # NEW: Import the contracts module for aliasing
-# FIX: Wrap imports in try-except to handle circular import during initial module load
+# Wrap imports in try-except to handle circular import during initial module load
 _runner_alerting = None
 _runner_feedback_handlers = None
 _runner_config = None
@@ -332,7 +332,7 @@ _runner_metrics = None
 _runner_providers = None
 
 try:
-    # FIX: Import order is critical to avoid circular imports
+    # Import order is critical to avoid circular imports
     # runner_logging MUST be imported before runner_core because runner_core
     # imports from runner_logging and needs it to be fully initialized.
     # Similarly, modules are ordered by their dependencies.

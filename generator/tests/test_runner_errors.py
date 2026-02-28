@@ -131,7 +131,7 @@ def test_register_error_code_duplicate_raises():
 # --------------------------------------------------------------------------- #
 def test_no_op_tracer_when_ot_missing():
     # Simulate missing OpenTelemetry by raising ImportError on trace
-    # FIX 1: Patch the correct module 'runner.runner_errors.trace'
+    # Patch the correct module 'runner.runner_errors.trace'
     with patch("runner.runner_errors.trace", side_effect=ImportError("No OT")):
         # Force reload so the except-block runs
         import importlib
@@ -140,7 +140,7 @@ def test_no_op_tracer_when_ot_missing():
 
         importlib.reload(err_mod)
 
-        # FIX 2: Use start_span which returns the span object directly (NoOpSpan)
+        # Use start_span which returns the span object directly (NoOpSpan)
         span = err_mod._tracer.start_span("test")
         span.set_attribute("k", "v")
         span.record_exception(Exception("boom"))
@@ -182,12 +182,12 @@ async def test_runner_error_basic(clean_state, run_id):
             BackendError,
             "BACKEND_INIT_FAILURE",
             {"backend_type": "docker"},
-        ),  # FIX: Use correct kwarg
+        ),  # Use correct kwarg
         (
             FrameworkError,
             "FRAMEWORK_UNSUPPORTED",
             {"framework_name": "pytest"},
-        ),  # FIX: Use correct kwarg
+        ),  # Use correct kwarg
         (ExecutionError, "TEST_EXECUTION_FAILED", {"returncode": 1, "cmd": "pytest"}),
         (SetupError, "SETUP_FAILURE", {}),
         (TimeoutError, "TASK_TIMEOUT", {"timeout_seconds": 30}),
@@ -222,7 +222,7 @@ async def test_error_subclasses(cls, code, extra_kwargs, clean_state, run_id):
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
 async def test_error_redacts_secrets(clean_state, run_id):
-    # FIX: Ensure registration is handled safely
+    # Ensure registration is handled safely
     if "REDACT_ERR" not in ERROR_CODE_REGISTRY:
         register_error_code("REDACT_ERR", "Error with secret")
 
@@ -233,7 +233,7 @@ async def test_error_redacts_secrets(clean_state, run_id):
     ):
         exc = RunnerError(
             error_code="REDACT_ERR",
-            # FIX: Use a string that demonstrably contains the lowercase word "secret"
+            # Use a string that demonstrably contains the lowercase word "secret"
             detail="Error in config. API key is secret=abc123",
             task_id=run_id,
         )

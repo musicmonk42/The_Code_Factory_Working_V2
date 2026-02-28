@@ -659,7 +659,7 @@ def log_audit_event_sync(action: str, data: Dict[str, Any], **kwargs) -> None:
         
         # STEP 2: If we got here, we're in an async context with a running loop
         # Create a fire-and-forget task with proper error handling
-        # FIX: Add named task and callback to prevent silent failures and hash chain breaks
+        # Add named task and callback to prevent silent failures and hash chain breaks
         task = asyncio.create_task(
             log_audit_event(action, data, **kwargs),
             name=f"audit_{action}"

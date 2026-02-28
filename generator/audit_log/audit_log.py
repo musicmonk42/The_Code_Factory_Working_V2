@@ -309,7 +309,7 @@ IMMUTABLE = os.getenv("AUDIT_LOG_IMMUTABLE", "true").lower() == "true"
 
 # --- FIX 3: Prometheus labels match usage ---
 # Ensuring that the labels used in the Counter/Histogram definition match the labels used in the code.
-# FIX: Each metric is created individually with try-except to handle duplicate registration.
+# Each metric is created individually with try-except to handle duplicate registration.
 # If a conflicting metric exists (e.g., same name but different labels from another module),
 # unregister it first, then re-register with the correct labels.
 from prometheus_client import REGISTRY
@@ -505,7 +505,7 @@ class AuditLog:
             raise RuntimeError("Failed to initialize crypto provider for AuditLog.")
 
         self.crypto_provider = provider
-        # FIX: Ensure a default key ID for systems that don't need rotation (e.g., test/dev)
+        # Ensure a default key ID for systems that don't need rotation (e.g., test/dev)
         self.current_signing_key_id: Optional[str] = (
             "DUMMY_KEY_ID" if DEV_MODE else None
         )
@@ -535,7 +535,7 @@ class AuditLog:
 
         self.executor.shutdown(wait=False)
         try:
-            # CRITICAL FIX: Use asyncio.wait with a timeout to prevent indefinite hanging
+            # Use asyncio.wait with a timeout to prevent indefinite hanging
             # Gather tasks and any existing futures
             tasks_to_wait = [
                 self._self_heal_task,
@@ -543,7 +543,7 @@ class AuditLog:
             ]
 
             # Filter out tasks that might be None
-            # FIX: Ensure only Future/Task objects are considered for waiting
+            # Ensure only Future/Task objects are considered for waiting
             valid_tasks = [
                 t
                 for t in tasks_to_wait
@@ -668,7 +668,7 @@ class AuditLog:
                         else entry["signed_data"]
                     )
 
-                    # FIX: Use the correct method name `verify` (or `verify_data` if patched)
+                    # Use the correct method name `verify` (or `verify_data` if patched)
                     verifier = getattr(self.crypto_provider, "verify", None)
                     if verifier is None:
                         verifier = getattr(
@@ -707,7 +707,7 @@ class AuditLog:
                     TAMPER_ALERTS.inc()
                     SELF_HEAL_EVENTS.labels(type="decryption_failed").inc()
                     issues_detected += 1
-                    # FIX: Pass the raw data if decryption failed
+                    # Pass the raw data if decryption failed
                     await self._execute_hooks(
                         "tamper_detected",
                         entry=encrypted_entry_b64,
@@ -757,7 +757,7 @@ class AuditLog:
             decrypted_bytes = self.encrypter.decrypt(encrypted_bytes)
             return json.loads(decrypted_bytes.decode("utf-8"))
         except (InvalidToken, json.JSONDecodeError, base64.binascii.Error) as e:
-            # FIX: Ensure user label is 'system' or 'unknown' for internal decryption failures
+            # Ensure user label is 'system' or 'unknown' for internal decryption failures
             LOG_ERRORS.labels(
                 type="decryption_or_parse_failed", user="system", action="query"
             ).inc()
@@ -784,7 +784,7 @@ class AuditLog:
             {
                 "uuid": str(uuid.uuid4()),
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                # FIX: Safely retrieve source_ip
+                # Safely retrieve source_ip
                 "source_ip": (
                     request.client.host
                     if request and request.client and request.client.host
@@ -955,7 +955,7 @@ class AuditLog:
                         "Crypto provider does not implement sign/sign_data"
                     )
 
-                # CRITICAL FIX: Correct typo from current_signing_id to current_signing_key_id
+                # Correct typo from current_signing_id to current_signing_key_id
                 signature = await signer(
                     data=payload, key_id=self.current_signing_key_id
                 )
@@ -991,7 +991,7 @@ class AuditLog:
                 raise  # Re-raise if it's already an HTTPException (e.g., from _authorize)
             except Exception as e:
                 logger.error(f"Failed to log action '{action}': {e}", exc_info=True)
-                # FIX: Ensure user is properly labeled in log errors
+                # Ensure user is properly labeled in log errors
                 LOG_ERRORS.labels(
                     type="log_fail", user=user.get("username", "unknown"), action=action
                 ).inc()
@@ -1035,7 +1035,7 @@ class AuditLog:
             LOG_QUERIES.inc()
 
             try:
-                # FIX: Backend returns raw, *unencrypted* dicts in tests; self._decrypt_entry is for production only
+                # Backend returns raw, *unencrypted* dicts in tests; self._decrypt_entry is for production only
                 raw_entries = await self.backend.read_last_n(limit)
 
                 decrypted_entries = []
@@ -1169,7 +1169,7 @@ class AuditLog:
                 status_code=403, detail="Not authorized to manage keys."
             )
 
-        # FIX: Access supported algos from the provider's settings object
+        # Access supported algos from the provider's settings object
         supported_algos = getattr(self.crypto_provider.settings, "SUPPORTED_ALGOS", [])
         if algo not in supported_algos:
             raise ValueError(
@@ -1177,7 +1177,7 @@ class AuditLog:
             )
 
         try:
-            # FIX: Use crypto_provider.rotate_key which is safer than generating then manually updating.
+            # Use crypto_provider.rotate_key which is safer than generating then manually updating.
             new_key_id = await self.crypto_provider.rotate_key(
                 old_key_id=self.current_signing_key_id, algo=algo
             )
@@ -1215,7 +1215,7 @@ app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 # Global instance initialization function
-# FIX: Centralize the initialization logic to allow for late instantiation in CLI/gRPC
+# Centralize the initialization logic to allow for late instantiation in CLI/gRPC
 def initialize_audit_log_instance():
     """Initializes the global AuditLog instance using current environment variables."""
     backend_params = os.getenv("AUDIT_LOG_BACKEND_PARAMS", "{}")

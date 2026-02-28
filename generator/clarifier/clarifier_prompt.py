@@ -51,7 +51,6 @@ from ._audit_compat import _wrap_log_audit_event  # noqa: E402
 # via the _USING_DUMMY_LOG_ACTION flag rather than at import time.
 _USING_DUMMY_LOG_ACTION = False
 try:
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event as _log_audit_event
     from runner.runner_logging import send_alert
 
@@ -389,7 +388,7 @@ async def run(
     user_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """OmniCore plugin entry point for the prompt-focused clarification pipeline."""
-    # CRITICAL FIX: Use the real Clarifier instead of mocking it
+    # Use the real Clarifier instead of mocking it
     # The mock was causing clarification to be skipped entirely in production
     clarifier = PromptClarifier()
     try:

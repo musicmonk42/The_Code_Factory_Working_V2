@@ -79,7 +79,6 @@ except (ImportError, OSError, RuntimeError, Exception) as e:
 try:
     from runner.llm_client import count_tokens
     from runner.runner_backends import rag_retrieve as _rag_retrieve_context
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event
     from runner.runner_audit import log_audit_event as log_action
     from runner.runner_metrics import CRITIQUE_PROMPT_BUILDS, CRITIQUE_PROMPT_LATENCY
@@ -182,7 +181,7 @@ MAX_PROMPT_TOKENS = 16000
 TEMPLATE_DIR = "prompt_templates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 
-# FIX: Define a constant namespace for deterministic UUIDs
+# Define a constant namespace for deterministic UUIDs
 AGENT_NAMESPACE_UUID = uuid.UUID("c4a1b1b0-2b1a-4c8a-9f0a-1a2b3c4d5e6f")
 
 # Default Template (Inline for safety/fallback)

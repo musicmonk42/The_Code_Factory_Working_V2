@@ -250,7 +250,7 @@ class CryptoInitializationError(Exception):
 # --- Configuration and Secrets Management ---
 
 
-# FIX: Set test mode environment variables BEFORE creating Dynaconf
+# Set test mode environment variables BEFORE creating Dynaconf
 def _is_test_or_dev_mode() -> bool:
     # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag.
     # CI workflows set TESTING=1 and/or CI=1 which should also trigger test mode
@@ -309,7 +309,7 @@ if _is_test_or_dev_mode():
     os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
 
 # Using Dynaconf for environment-based configuration
-# FIX: Only add validators in production mode
+# Only add validators in production mode
 if _is_test_or_dev_mode():
     settings = Dynaconf(
         envvar_prefix="AUDIT",
@@ -320,7 +320,7 @@ else:
         envvar_prefix="AUDIT",
         settings_files=["audit_config.yaml"],
         validators=[
-            # FIX: Removed is_type_of=list check for ENCRYPTION_KEYS
+            # Removed is_type_of=list check for ENCRYPTION_KEYS
             # Railway sets this as a JSON string, and Dynaconf can't validate list types on strings
             # The _as_json_list() function handles parsing and validation instead
             Validator("ENCRYPTION_KEYS", must_exist=True),
@@ -343,11 +343,11 @@ else:
 # from dynaconf import settings <-- START: EDIT A (Removed)
 
 
-# FIX: Moved _is_test_or_dev_mode() and environment setup BEFORE Dynaconf creation above
+# Moved _is_test_or_dev_mode() and environment setup BEFORE Dynaconf creation above
 
 
 # ---- Import-time validation with test/dev fallback ----
-# FIX: This block is now handled before Dynaconf creation, but keep validation attempt
+# This block is now handled before Dynaconf creation, but keep validation attempt
 if _is_test_or_dev_mode():
     # Try validation, but don't fail in test/dev mode
     try:
@@ -752,7 +752,7 @@ async def retry_operation(
     """Retries an async operation with exponential backoff."""
     for attempt in range(max_attempts):
         try:
-            # FIX: If the operation is synchronous, run it in a threadpool
+            # If the operation is synchronous, run it in a threadpool
             if asyncio.iscoroutinefunction(operation):
                 return await operation()
             else:
@@ -810,7 +810,7 @@ class LogBackend(abc.ABC):
 
         self._validate_params()
 
-        # FIX: Initialize task set, but DO NOT create tasks here.
+        # Initialize task set, but DO NOT create tasks here.
         self._async_tasks = set()  # Use a set to track tasks for graceful shutdown
 
     async def start(self):
@@ -819,7 +819,7 @@ class LogBackend(abc.ABC):
         Subclasses MUST call await super().start() if they override this.
         """
         logger.info(f"Starting background tasks for {self.__class__.__name__}...")
-        # FIX: Get the *running* loop. This is safe as start() is async.
+        # Get the *running* loop. This is safe as start() is async.
         loop = asyncio.get_running_loop()
 
         self._migrate_task = loop.create_task(self._migrate_schema())
@@ -1454,7 +1454,7 @@ class InMemoryBackend(LogBackend):
         self.storage: List[Dict[str, Any]] = []
         self._validate_params()  # _validate_params is called by super().__init__
 
-        # FIX: Task creation moved to start()
+        # Task creation moved to start()
         # self._load_snapshot_task = asyncio.create_task(self._load_snapshot())
 
     async def start(self):

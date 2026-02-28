@@ -18,7 +18,7 @@ import yaml
 # to ensure they are loaded before any test discovery.
 
 
-# FIX: Removed 'self' from the module-level fixture definition.
+# Removed 'self' from the module-level fixture definition.
 @pytest.fixture
 def mock_dependencies():
     """Mock all external dependencies."""
@@ -103,22 +103,22 @@ class TestMainConfiguration:
 class TestMainAppInitialization:
     """Tests for main application initialization."""
 
-    # FIX: Removed the mock_dependencies fixture from here, it's now module-scoped.
+    # Removed the mock_dependencies fixture from here, it's now module-scoped.
 
     def test_imports_successful(self):
         """Test that main module imports successfully."""
         try:
-            # FIX: Import the main.py script as main_script
+            # Import the main.py script as main_script
             from generator.main import main as main_script
 
-            # FIX: Check __version__ on main_script
+            # Check __version__ on main_script
             assert main_script.__version__ == "1.0.0"
         except ImportError as e:
             pytest.fail(f"Failed to import main module: {e}")
 
     def test_logging_configuration(self):
         """Test logging is configured correctly."""
-        # FIX: Patch 'generator.main.main.logging'
+        # Patch 'generator.main.main.logging'
         with patch("generator.main.main.logging") as mock_logging:
 
             # Verify logging was configured
@@ -131,7 +131,7 @@ class TestInterfaceLaunching:
     @pytest.fixture
     def mock_main_function(self):
         """Mock the main function and its dependencies."""
-        # FIX: Patch 'generator.main.main.main'
+        # Patch 'generator.main.main.main'
         with patch("generator.main.main.main") as mock_main_cmd:
             mock_ctx = MagicMock()
             mock_ctx.params = {
@@ -147,7 +147,7 @@ class TestInterfaceLaunching:
     @pytest.mark.asyncio
     async def test_gui_interface_launch(self, mock_dependencies):
         """Test launching GUI interface."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.main_cli") as mock_cli,
             patch("generator.main.main.MainApp") as MockApp,
@@ -170,7 +170,7 @@ class TestInterfaceLaunching:
     @pytest.mark.asyncio
     async def test_cli_interface_launch(self):
         """Test launching CLI interface."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.main_cli") as mock_cli,
             patch("generator.main.main.setup_signals"),
@@ -186,7 +186,7 @@ class TestInterfaceLaunching:
     @pytest.mark.asyncio
     async def test_api_interface_launch(self):
         """Test launching API interface."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.uvicorn") as mock_uvicorn,
             patch("generator.main.main.fastapi_app") as mock_app,
@@ -218,7 +218,7 @@ class TestHealthChecks:
     @pytest.mark.asyncio
     async def test_perform_health_check_success(self):
         """Test successful health check."""
-        # FIX: Patch 'generator.main.main.perform_health_check'
+        # Patch 'generator.main.main.perform_health_check'
         with patch("generator.main.main.perform_health_check") as mock_health:
             mock_health.return_value = True
 
@@ -231,7 +231,7 @@ class TestHealthChecks:
     @pytest.mark.asyncio
     async def test_perform_health_check_failure(self):
         """Test failed health check."""
-        # FIX: Patch 'generator.main.main.perform_health_check'
+        # Patch 'generator.main.main.perform_health_check'
         with patch("generator.main.main.perform_health_check") as mock_health:
             mock_health.return_value = False
 
@@ -243,7 +243,7 @@ class TestHealthChecks:
     @pytest.mark.asyncio
     async def test_health_check_with_api(self):
         """Test health check including API check."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.perform_health_check") as mock_health,
             patch("generator.main.main.aiohttp.ClientSession") as mock_session,
@@ -262,7 +262,7 @@ class TestConfigurationReload:
 
     def test_on_config_reload_valid(self):
         """Test configuration reload with valid config."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.validate_config") as mock_validate,
             patch("generator.main.main.log_action") as mock_log,
@@ -271,7 +271,7 @@ class TestConfigurationReload:
 
             mock_validate.return_value = True
 
-            # FIX: Import from 'generator.main.main'
+            # Import from 'generator.main.main'
             from generator.main.main import on_config_reload
 
             config_path = Path("config.yaml")
@@ -285,7 +285,7 @@ class TestConfigurationReload:
 
     def test_on_config_reload_invalid(self):
         """Test configuration reload with invalid config."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.validate_config") as mock_validate,
             patch("generator.main.main.send_alert") as mock_alert,
@@ -295,7 +295,7 @@ class TestConfigurationReload:
 
             mock_validate.side_effect = ValueError("Invalid config")
 
-            # FIX: Import from 'generator.main.main'
+            # Import from 'generator.main.main'
             from generator.main.main import on_config_reload
 
             config_path = Path("config.yaml")
@@ -314,7 +314,7 @@ class TestSignalHandling:
 
     def test_setup_signals(self):
         """Test signal handler setup."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.signal.signal") as mock_signal,
             patch("generator.main.main.setup_signals") as mock_setup,
@@ -327,7 +327,7 @@ class TestSignalHandling:
 
     def test_signal_handler_calls_cleanup(self):
         """Test that signal handler triggers cleanup."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with patch("generator.main.main.signal.signal") as mock_signal:
 
             # Verify signal handlers are registered
@@ -341,7 +341,7 @@ class TestLogScrubbing:
     def test_log_scrubber_filter_enabled(self):
         """Test log scrubbing when enabled."""
         with patch.dict(os.environ, {"ENABLE_LOG_SCRUBBING": "true"}):
-            # FIX: Import from 'generator.main.main'
+            # Import from 'generator.main.main'
             from generator.main.main import LogScrubberFilter
 
             filter_instance = LogScrubberFilter()
@@ -351,7 +351,7 @@ class TestLogScrubbing:
             record.msg = "API_KEY=secret123 PASSWORD=pass456"
             record.args = ()
 
-            # FIX: Patch 'generator.main.main.X'
+            # Patch 'generator.main.main.X'
             with patch("generator.main.main.runner_logger_instance") as mock_logger:
                 mock_logger.redact_secrets.return_value = (
                     "API_KEY=[REDACTED] PASSWORD=[REDACTED]"
@@ -364,7 +364,7 @@ class TestLogScrubbing:
     def test_log_scrubber_filter_disabled(self):
         """Test log scrubbing when disabled."""
         with patch.dict(os.environ, {"ENABLE_LOG_SCRUBBING": "false"}):
-            # FIX: Import from 'generator.main.main'
+            # Import from 'generator.main.main'
             from generator.main.main import LogScrubberFilter
 
             filter_instance = LogScrubberFilter()
@@ -383,7 +383,7 @@ class TestMetricsCollection:
 
     def test_metrics_initialization(self):
         """Test metrics are initialized correctly."""
-        # FIX: Patch 'generator.main.main.get_metrics_dict'
+        # Patch 'generator.main.main.get_metrics_dict'
         with patch("generator.main.main.get_metrics_dict") as mock_metrics:
             mock_metrics.return_value = {
                 "app_running_status": MagicMock(),
@@ -397,7 +397,7 @@ class TestMetricsCollection:
 
     def test_startup_duration_recorded(self):
         """Test that startup duration is recorded."""
-        # FIX: Patch 'generator.main.main.APP_STARTUP_DURATION'
+        # Patch 'generator.main.main.APP_STARTUP_DURATION'
         with patch("generator.main.main.APP_STARTUP_DURATION") as mock_duration:
             mock_observe = MagicMock()
             mock_duration.labels.return_value.observe = mock_observe
@@ -418,7 +418,7 @@ class TestAllInterfaceMode:
     @pytest.mark.asyncio
     async def test_all_mode_api_readiness_check(self):
         """Test API readiness check in 'all' mode."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.aiohttp.ClientSession") as MockSession,
             patch("generator.main.main.multiprocessing.Process") as MockProcess,
@@ -456,7 +456,7 @@ class TestAllInterfaceMode:
 
     def test_all_mode_api_process_termination(self):
         """Test API process termination in 'all' mode."""
-        # FIX: Patch 'generator.main.main.multiprocessing.Process'
+        # Patch 'generator.main.main.multiprocessing.Process'
         with patch("generator.main.main.multiprocessing.Process") as MockProcess:
             mock_process = MagicMock()
             mock_process.is_alive.return_value = True
@@ -480,7 +480,7 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_import_error_handling(self):
         """Test handling of import errors."""
-        # FIX: Patch 'generator.main.main.IMPORT_ERROR'
+        # Patch 'generator.main.main.IMPORT_ERROR'
         with (
             patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")),
             patch("generator.main.main.logger") as mock_logger,
@@ -497,7 +497,7 @@ class TestErrorHandling:
 
     def test_critical_error_alert(self):
         """Test that critical errors trigger alerts."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.send_alert") as mock_alert,
             patch("generator.main.main.asyncio.run") as mock_run,
@@ -512,7 +512,7 @@ class TestErrorHandling:
 
     def test_gui_crash_handling(self):
         """Test handling of GUI crashes."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.MainApp") as MockApp,
             patch("generator.main.main.send_alert") as mock_alert,
@@ -562,7 +562,7 @@ class TestMainEntryPoint:
 
     def test_main_entry_point_with_import_error(self):
         """Test main entry point handles import errors."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.IMPORT_ERROR", Exception("Import failed")),
             patch("generator.main.main.logger") as mock_logger,
@@ -579,7 +579,7 @@ class TestMainEntryPoint:
 
     def test_main_entry_point_successful(self):
         """Test successful main entry point execution."""
-        # FIX: Patch 'generator.main.main.X'
+        # Patch 'generator.main.main.X'
         with (
             patch("generator.main.main.main") as mock_main,
             patch("generator.main.main.asyncio.get_event_loop") as mock_loop,

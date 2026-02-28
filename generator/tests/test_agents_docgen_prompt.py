@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# FIX: Mock runner modules before importing docgen_agent to handle source file import issues
+# Mock runner modules before importing docgen_agent to handle source file import issues
 # Save originals for restoration
 _saved_modules_dp = {}
 _modules_to_mock_dp = [
@@ -60,7 +60,7 @@ mock_sentence_transformers.util = mock_util
 sys.modules["sentence_transformers"] = mock_sentence_transformers
 
 
-# FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
+# Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
 from abc import ABC, abstractmethod
 

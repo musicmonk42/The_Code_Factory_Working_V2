@@ -74,7 +74,6 @@ try:
     from runner.llm_client import LLMError, call_llm_api
     from runner.runner_config import ConfigurationError, load_config
     from runner.runner_errors import RunnerError, ValidationError
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event
     from runner.runner_logging import logger
     from runner.runner_security_utils import redact_secrets

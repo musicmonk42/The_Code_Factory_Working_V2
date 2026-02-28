@@ -33,7 +33,7 @@ from hypothesis import strategies as st
 # --------------------------------------------------------------------------- #
 # Import module under test – only symbols that exist
 # --------------------------------------------------------------------------- #
-# FIX: Import the local registries/functions from the module
+# Import the local registries/functions from the module
 from runner.runner_security_utils import _secret_cache  # Import for cleaning up
 from runner.runner_security_utils import (
     DECRYPTORS,
@@ -122,16 +122,16 @@ def mock_xattr():
 # Tests for register_redactor / REDACTORS
 # --------------------------------------------------------------------------- #
 def test_register_redactor():
-    # FIX: The register function is not a decorator in the provided module.
+    # The register function is not a decorator in the provided module.
     def custom_redactor(text: str, patterns: Optional[List] = None) -> str:
         return text.replace("custom", "[CUSTOM]")
 
-    # FIX: Call the function directly and pass the function object.
-    # FIX: Removed 'priority' kwarg which is not in the function signature.
+    # Call the function directly and pass the function object.
+    # Removed 'priority' kwarg which is not in the function signature.
     register_redactor("custom", custom_redactor)
 
     assert "custom" in REDACTORS
-    # FIX: Access the function directly from the dict
+    # Access the function directly from the dict
     assert REDACTORS["custom"]("custom secret") == "[CUSTOM] secret"
 
 
@@ -139,12 +139,12 @@ def test_register_redactor():
 # Tests for register_encryptor / ENCRYPTORS
 # --------------------------------------------------------------------------- #
 def test_register_encryptor():
-    # FIX: The register function is not a decorator.
-    # FIX: The function signature must be compatible (data, key, mode)
+    # The register function is not a decorator.
+    # The function signature must be compatible (data, key, mode)
     def custom_encrypt(data: Any, key: Any, mode: str) -> bytes:
         return base64.b64encode(data)
 
-    # FIX: Call the function directly
+    # Call the function directly
     register_encryptor("custom_enc", custom_encrypt)
 
     assert "custom_enc" in ENCRYPTORS
@@ -155,12 +155,12 @@ def test_register_encryptor():
 # Tests for register_decryptor / DECRYPTORS
 # --------------------------------------------------------------------------- #
 def test_register_decryptor():
-    # FIX: The register function is not a decorator.
-    # FIX: The function signature must be compatible (data, key, mode)
+    # The register function is not a decorator.
+    # The function signature must be compatible (data, key, mode)
     def custom_decrypt(data: Any, key: Any, mode: str) -> bytes:
         return base64.b64decode(data)
 
-    # FIX: Call the function directly
+    # Call the function directly
     register_decryptor("custom_dec", custom_decrypt)
 
     assert "custom_dec" in DECRYPTORS
@@ -172,7 +172,7 @@ def test_register_decryptor():
 # --------------------------------------------------------------------------- #
 @given(st.text(min_size=0, max_size=1000))
 def test_redact_secrets_hypothesis(text: str):
-    # FIX: redact_secrets is a synchronous function, not async
+    # redact_secrets is a synchronous function, not async
     redacted = redact_secrets(text)
     # Assuming redaction replaces common patterns
     assert isinstance(redacted, str)
@@ -185,15 +185,15 @@ def test_redact_secrets_hypothesis(text: str):
 @pytest.mark.parametrize(
     "text, expected",
     [
-        # FIX: Test patterns that 'regex_basic' actually looks for (email, phone)
+        # Test patterns that 'regex_basic' actually looks for (email, phone)
         ("My email: test@example.com", "My email: [REDACTED]"),
         ("No secrets", "No secrets"),
         ("My phone: 555-123-4567", "My phone: [REDACTED]"),
     ],
 )
 def test_redact_secrets_basic(text: str, expected: str):
-    # FIX: redact_secrets is a synchronous function, not async
-    # FIX: The kwarg is 'method', not 'strategy'
+    # redact_secrets is a synchronous function, not async
+    # The kwarg is 'method', not 'strategy'
     result = redact_secrets(text, method="regex_basic")
     assert result == expected
 
@@ -201,8 +201,8 @@ def test_redact_secrets_basic(text: str, expected: str):
 # --------------------------------------------------------------------------- #
 # Tests for encrypt_data / decrypt_data
 # --------------------------------------------------------------------------- #
-@pytest.mark.asyncio  # FIX: Add asyncio mark
-# FIX: Test algorithms that are actually implemented: 'fernet', 'aes_cbc'
+@pytest.mark.asyncio  # Add asyncio mark
+# Test algorithms that are actually implemented: 'fernet', 'aes_cbc'
 @pytest.mark.parametrize("algorithm", ["fernet", "aes_cbc"])
 @patch("runner.runner_logging.log_audit_event", new_callable=AsyncMock)
 async def test_encrypt_decrypt_roundtrip(mock_log_audit, algorithm: str):
@@ -216,29 +216,29 @@ async def test_encrypt_decrypt_roundtrip(mock_log_audit, algorithm: str):
         key = os.urandom(32)  # 32 bytes works for AES-256
     # --- END FIX ---
 
-    encrypted = await encrypt_data(data, key, algorithm)  # FIX: Add await
+    encrypted = await encrypt_data(data, key, algorithm)
 
-    # FIX: decrypt_data returns a string, not bytes
-    decrypted = await decrypt_data(encrypted, key, algorithm)  # FIX: Add await
+    # decrypt_data returns a string, not bytes
+    decrypted = await decrypt_data(encrypted, key, algorithm)
 
-    assert decrypted == data.decode("utf-8")  # FIX: Compare string to decoded string
+    assert decrypted == data.decode("utf-8")  # Compare string to decoded string
 
 
-@pytest.mark.asyncio  # FIX: Add asyncio mark
+@pytest.mark.asyncio  # Add asyncio mark
 async def test_encrypt_data_invalid_algo():
-    # FIX: Await the call inside pytest.raises
-    # FIX: Match the exact error message from the module
+    # Await the call inside pytest.raises
+    # Match the exact error message from the module
     with pytest.raises(
         ValueError, match="Encryption algorithm 'invalid' not registered."
     ):
-        await encrypt_data(b"data", b"key", "invalid")  # FIX: Add await
+        await encrypt_data(b"data", b"key", "invalid")
 
 
 # --------------------------------------------------------------------------- #
 # Tests for fetch_secret (async)
 # --------------------------------------------------------------------------- #
 @pytest.mark.asyncio
-# FIX: Patch boto3 at the correct location where it's imported
+# Patch boto3 at the correct location where it's imported
 @patch("runner.runner_security_utils.boto3")
 async def test_fetch_secret_success(mock_boto3: MagicMock):
     # Setup the mock for boto3
@@ -265,7 +265,7 @@ async def test_fetch_secret_fallback_env():
 
 @pytest.mark.asyncio
 async def test_fetch_secret_error():
-    # FIX: The function logs an error and returns None, it does not raise
+    # The function logs an error and returns None, it does not raise
     secret = await fetch_secret("non_existent", source="invalid")
     assert secret is None
 
@@ -285,10 +285,10 @@ def test_scan_for_secrets_hypothesis(text: str):
 @pytest.mark.parametrize(
     "text, expected_leaks",
     [
-        # FIX: The API key regex requires 20+ chars.
+        # The API key regex requires 20+ chars.
         ("API key: aBcDeF1234567890gHiJkL-mNoPqR_sTuV", 1),
         ("No secrets", 0),
-        # FIX: The password regex requires 8+ chars
+        # The password regex requires 8+ chars
         ("Password: mypass123456", 1),
         ("Password: short", 0),  # Too short
     ],
@@ -307,8 +307,8 @@ async def test_scan_for_vulnerabilities_success(temp_dir: Path):
     code_file.write_text("import os; os.system('rm -rf /')")
     result = await scan_for_vulnerabilities(
         code_file, scan_type="code"
-    )  # FIX: Add await
-    # FIX: In testing mode, the function returns 0 vulnerabilities by design for safety
+    )
+    # In testing mode, the function returns 0 vulnerabilities by design for safety
     assert result["vulnerabilities_found"] == 0
     assert result["status"] == "completed"
 
@@ -318,7 +318,7 @@ async def test_scan_for_vulnerabilities_fallback_no_deps(temp_dir: Path):
     with patch("runner.runner_security_utils.scan_for_secrets", return_value=[]):
         result = await scan_for_vulnerabilities(
             "data", scan_type="data"
-        )  # FIX: Add await
+        )
         assert result["vulnerabilities_found"] == 0
 
 
@@ -329,11 +329,11 @@ async def test_scan_for_vulnerabilities_fallback_no_deps(temp_dir: Path):
 @patch("runner.runner_logging.send_alert", new_callable=AsyncMock)
 @patch("runner.runner_logging.log_audit_event", new_callable=AsyncMock)
 async def test_monitor_for_leaks_success(mock_log_audit, mock_send_alert, temp_dir: Path):
-    # FIX: The function signature is `monitor_for_leaks(text: str)`.
+    # The function signature is `monitor_for_leaks(text: str)`.
     # It does not monitor files or take interval/duration.
     log_text = "secret=abc12345678901234567890"  # Use a long secret
 
-    # FIX: Call with a string, remove invalid kwargs
+    # Call with a string, remove invalid kwargs
     result_list = await monitor_for_leaks(log_text)
 
     assert isinstance(result_list, list)

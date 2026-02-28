@@ -14,7 +14,7 @@ import asyncio
 import os
 import sys
 
-# FIX for Issue A: Removed sys.path manipulation that breaks pip installations
+
 # The package should be installed properly or run with -m from the repo root:
 # python -m generator.main.main
 import datetime
@@ -63,7 +63,7 @@ except ImportError:
 
 
 # Observability imports
-# FIX: Create a dummy MagicMock for fallbacks
+# Create a dummy MagicMock for fallbacks
 class _DummyMagicMock:
     def __call__(self, *args, **kwargs):
         return self
@@ -174,7 +174,7 @@ try:
     from runner.runner_core import Runner
     from runner.runner_logging import log_action
     from runner.runner_logging import logger as runner_logger_instance
-    from runner.runner_metrics import (  # FIX: Import bootstrap_metrics
+    from runner.runner_metrics import (  # Import bootstrap_metrics
         APP_RUNNING_STATUS,
         APP_STARTUP_DURATION,
         bootstrap_metrics,
@@ -548,7 +548,7 @@ async def shutdown(
         except Exception as e:
             logger.error(f"Failed to flush OpenTelemetry traces: {e}", exc_info=True)
 
-        # FIX: Only cancel 'owned' background tasks (like config_watcher)
+        # Only cancel 'owned' background tasks (like config_watcher)
         # to avoid killing uvicorn/textual tasks prematurely.
         tasks = [
             t
@@ -608,7 +608,7 @@ async def shutdown(
                 logger.warning("API process did not terminate gracefully, killing.")
                 api_process.kill()
 
-        # FIX: Remove loop.stop(). The loop's runner (e.g., uvicorn, textual)
+        # Remove loop.stop(). The loop's runner (e.g., uvicorn, textual)
         # is responsible for stopping the loop after shutdown completes.
         span.set_status(
             StatusCode.OK, f"Application gracefully shut down by signal {signal_name}"
@@ -690,7 +690,7 @@ def generate_launch_provenance(
             "environment": env_details,
         }
 
-        # FIX: Add robust check for log_action before calling
+        # Add robust check for log_action before calling
         try:
             if "log_action" in globals() and callable(log_action):
                 provenance_data = {**provenance, "category": "startup"}
@@ -795,7 +795,7 @@ def validate_config(config: Dict[str, Any], is_reload: bool = False):
             logger.error(error_msg, extra={"validation_path": list(e.absolute_path)})
 
         # --- SEMANTIC VALIDATION: Critical Keys ---
-        # FIX for Issue D: Validate that critical keys required by agents exist
+        # Validate that critical keys required by agents exist
         critical_keys = {
             "backend": "Backend execution environment",
             "framework": "Application framework",
@@ -851,7 +851,7 @@ def validate_config(config: Dict[str, Any], is_reload: bool = False):
                     logger.warning(warning_msg)
 
         # --- LLM API KEY VALIDATION (if agents use LLM) ---
-        # FIX for Issue D: Check that LLM API keys are set if required
+        # Check that LLM API keys are set if required
         llm_config = config.get("llm_config", {}) or config.get("external_services", {})
         if llm_config:
             # Check for common LLM API key environment variables
@@ -1245,7 +1245,7 @@ def main(
     ).set(1)
 
     config_watcher = ConfigWatcher(config_path, partial(on_config_reload, config_path))
-    # FIX: Flag the config_watcher task as an 'owned' background task for graceful shutdown
+    # Flag the config_watcher task as an 'owned' background task for graceful shutdown
     config_watcher_task = loop.create_task(config_watcher.start())
     config_watcher_task._owned_by_main = True
 
@@ -1318,7 +1318,7 @@ def main(
             ).set(0)
 
     elif interface == "all":
-        # FIX for Issue C: Industry-standard process isolation for event loop conflict prevention
+        # Industry-standard process isolation for event loop conflict prevention
         if not uvicorn or not aiohttp:
             logger.critical(
                 "uvicorn or aiohttp not found. Cannot start 'all' interface."
@@ -1613,7 +1613,7 @@ def on_config_reload(
             logger.warning(f"Could not log config diff: {e}")
 
         try:
-            # FIX for Issue D: Use stricter validation for reloads
+            # Use stricter validation for reloads
             validate_config(new_config, is_reload=True)
             logger.info(
                 "New configuration validated successfully upon reload.",

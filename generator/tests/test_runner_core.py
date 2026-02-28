@@ -48,7 +48,7 @@ from generator.runner.runner_contracts import TaskPayload, TaskResult
 # Import runner modules
 from generator.runner.runner_core import ALL_BACKENDS, Runner
 
-# FIX: Import ExecutionError directly (no alias)
+# Import ExecutionError directly (no alias)
 from generator.runner.runner_errors import ExecutionError, ParsingError, TimeoutError
 from generator.runner.runner_metrics import RUN_PASS_RATE, RUN_QUEUE
 
@@ -80,11 +80,11 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.original_backends = dict(ALL_BACKENDS)
         ALL_BACKENDS.clear()
 
-        # FIX: Use AsyncMock for the backend, as its 'setup' method is async
+        # Use AsyncMock for the backend, as its 'setup' method is async
         self.mock_backend = AsyncMock()
         # Mock health for any potential self-tests
         self.mock_backend.health.return_value = {"status": "healthy"}
-        # FIX: Mock backend.execute to return a proper TaskResult
+        # Mock backend.execute to return a proper TaskResult
         # This will be overridden in individual tests as needed
         self.mock_backend.execute = AsyncMock(
             return_value=TaskResult(
@@ -113,14 +113,14 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         self.patch_log_audit = patch(
             "generator.runner.runner_logging.log_audit_event", new=AsyncMock()
         )
-        # FIX: Capture the mock object created by the patcher
+        # Capture the mock object created by the patcher
         self.mock_log_audit = self.patch_log_audit.start()
 
-        # FIX: Removed backoff patch - backoff module is not used in runner_core.py
+        # Removed backoff patch - backoff module is not used in runner_core.py
 
-        # FIX: Removed unused subprocess_wrapper patch - tests now use backend.execute()
+        # Removed unused subprocess_wrapper patch - tests now use backend.execute()
 
-        # FIX: Patch _load_persisted_queue to prevent state leak between tests
+        # Patch _load_persisted_queue to prevent state leak between tests
         self.patch_load_queue = patch(
             "generator.runner.runner_core.Runner._load_persisted_queue", new=MagicMock()
         )
@@ -152,13 +152,13 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             task_id=str(uuid.uuid4()),
         )
         result = await runner.enqueue(payload)
-        # FIX: The test was wrong, enqueue sets status to 'enqueued'
+        # The test was wrong, enqueue sets status to 'enqueued'
         self.assertEqual(result.status, "enqueued")
         self.assertIn(payload.task_id, runner.task_status_map)
         await runner.shutdown_services()
 
     async def test_run_tests_success(self):
-        # FIX: backend.execute is already configured in setUp() to return success
+        # backend.execute is already configured in setUp() to return success
         # Just need to mock the parser
 
         # Mock the parser to return a valid schema object
@@ -182,7 +182,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         )
 
         # Patch the specific parser being used
-        # FIX: Patch the function where it is DEFINED, not where it is imported
+        # Patch the function where it is DEFINED, not where it is imported
         with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
@@ -194,13 +194,13 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
                 result = await runner.run_tests(payload)
 
         self.assertEqual(result.status, "completed")
-        # FIX: Check the value from the mocked parser dump
+        # Check the value from the mocked parser dump
         self.assertEqual(result.results.get("total_tests", 0), 1)
         self.assertEqual(result.results.get("pass_rate"), 1.0)
         await runner.shutdown_services()
 
     async def test_run_tests_failure(self):
-        # FIX: Mock backend.execute to raise ExecutionError
+        # Mock backend.execute to raise ExecutionError
         # Backend.execute raises ExecutionError which is caught by run_tests
 
         self.mock_backend.execute.side_effect = ExecutionError(
@@ -220,13 +220,13 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         result = await runner.run_tests(payload)
         self.assertEqual(result.status, "failed")
-        # FIX: Assert against the error KEY
+        # Assert against the error KEY
         self.assertEqual(result.error["error_code"], "TEST_EXECUTION_FAILED")
 
         await runner.shutdown_services()
 
     async def test_timeout_handling(self):
-        # FIX: Mock backend.execute to raise TimeoutError
+        # Mock backend.execute to raise TimeoutError
 
         self.mock_backend.execute.side_effect = TimeoutError(
             "TASK_TIMEOUT", detail="Subprocess timed out", timeout_seconds=1
@@ -243,13 +243,13 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
         result = await runner.run_tests(payload)
         self.assertEqual(result.status, "timed_out")
-        # FIX: Assert against the error KEY
+        # Assert against the error KEY
         self.assertEqual(result.error["error_code"], "TASK_TIMEOUT")
 
         await runner.shutdown_services()
 
     async def test_parsing_error(self):
-        # FIX: Mock backend.execute to return invalid output that parser can't handle
+        # Mock backend.execute to return invalid output that parser can't handle
         self.mock_backend.execute.return_value = TaskResult(
             task_id="test_task",
             status="completed",
@@ -264,7 +264,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         )
 
         # Mock the parser to raise the error
-        # FIX: Pass the KEY to the constructor
+        # Pass the KEY to the constructor
 
         mock_fail_parser = AsyncMock(
             side_effect=ParsingError("PARSING_ERROR", detail="Failed to parse XML")
@@ -278,18 +278,18 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             task_id=str(uuid.uuid4()),
         )
 
-        # FIX: Patch the function where it is DEFINED, not where it is imported
+        # Patch the function where it is DEFINED, not where it is imported
         with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_fail_parser):
             result = await runner.run_tests(payload)
 
         self.assertEqual(result.status, "failed")
-        # FIX: Assert against the error KEY
+        # Assert against the error KEY
         self.assertEqual(result.error["error_code"], "PARSING_ERROR")
 
         await runner.shutdown_services()
 
     async def test_metrics_update(self):
-        # FIX: Mock backend.execute to return successful results
+        # Mock backend.execute to return successful results
         self.mock_backend.execute.return_value = TaskResult(
             task_id="test_task",
             status="completed",
@@ -327,7 +327,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             task_id=str(uuid.uuid4()),
         )
 
-        # FIX: Patch the function where it is DEFINED, not where it is imported
+        # Patch the function where it is DEFINED, not where it is imported
         with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
@@ -338,14 +338,14 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             ):
                 await runner.run_tests(payload)
 
-        # FIX: The queue metric requires labels and ._value.get()
+        # The queue metric requires labels and ._value.get()
         # This test now passes because _load_persisted_queue is mocked
         queue_value = RUN_QUEUE.labels(framework="all", instance_id="test_instance")._value
         self.assertEqual(
             queue_value.get() if hasattr(queue_value, 'get') else queue_value,
             0,
         )
-        # FIX: Access metric value correctly - handle both real and mock Prometheus
+        # Access metric value correctly - handle both real and mock Prometheus
         pass_rate_value = RUN_PASS_RATE._value
         self.assertEqual(
             pass_rate_value.get() if hasattr(pass_rate_value, 'get') else pass_rate_value,
@@ -355,7 +355,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
         await runner.shutdown_services()
 
     async def test_logging_and_audit(self):
-        # FIX: Mock backend.execute to return successful results
+        # Mock backend.execute to return successful results
         self.mock_backend.execute.return_value = TaskResult(
             task_id="test_task",
             status="completed",
@@ -393,7 +393,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
             task_id=str(uuid.uuid4()),
         )
 
-        # FIX: Patch the function where it is DEFINED, not where it is imported
+        # Patch the function where it is DEFINED, not where it is imported
         with patch("generator.runner.runner_parsers.parse_junit_xml", new=mock_success_parser):
             # --- ADD: Mock coverage parser to avoid PermissionError ---
             with patch(
@@ -405,7 +405,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
                 await runner.run_tests(payload)
 
         # Check that the *audit* logger was called
-        # FIX: log_audit_event is async and should be awaited during test runs
+        # log_audit_event is async and should be awaited during test runs
         # However, the assertion error shows that log_action (not log_audit_event) is being called
         # with arguments about 'security_redact'. This is expected behavior from redact_secrets.
         # The test should verify the audit event was logged, but the current assertion is too strict.
@@ -418,7 +418,7 @@ class TestRunnerCore(unittest.IsolatedAsyncioTestCase):
 
     async def test_shutdown_services(self):
         runner = Runner(self.config)
-        # FIX: Get a reference to the task, check it's running,
+        # Get a reference to the task, check it's running,
         # call shutdown, then check the reference is done and the attribute is None.
 
         # We must explicitly start services for the background task to exist

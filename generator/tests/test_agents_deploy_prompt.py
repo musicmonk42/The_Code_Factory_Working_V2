@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# FIX: Add missing Jinja2 imports
+# Add missing Jinja2 imports
 from jinja2 import Environment, FileSystemLoader
 
 # Import the module under test
@@ -32,7 +32,7 @@ def temp_repo():
         templates_dir = repo_path / "deploy_templates"
         templates_dir.mkdir(exist_ok=True)
 
-        # FIX: Updated template to include context.framework and few_shot_examples
+        # Updated template to include context.framework and few_shot_examples
         (templates_dir / "docker_default.jinja").write_text("""
 Generate a Dockerfile for {{ target }} based on these files:
 {% for file in files %}
@@ -133,7 +133,7 @@ def agent(temp_repo):
         # Point the agent's template registry to the temp template dir
         agent.template_registry = MagicMock()
 
-        # FIX: Use the now-imported Environment and FileSystemLoader
+        # Use the now-imported Environment and FileSystemLoader
         agent.template_registry.get_template.return_value = Environment(
             loader=FileSystemLoader(str(temp_repo / "deploy_templates")),
             enable_async=True,
@@ -270,7 +270,7 @@ class TestPromptBuilding:
             )
 
         assert isinstance(prompt, str)
-        # FIX: Check for 'flask' (from context.framework) and 'python' (from context.language)
+        # Check for 'flask' (from context.framework) and 'python' (from context.language)
         assert "flask" in prompt.lower()
         assert "python" in prompt.lower()
 
@@ -434,12 +434,12 @@ class TestFewShotLearning:
         agent.gather_context_for_prompt = AsyncMock(return_value={})
         agent.optimize_prompt_with_feedback = AsyncMock(side_effect=lambda s, *args: s)
 
-        # FIX: Mock retrieve_few_shot to return a known example
+        # Mock retrieve_few_shot to return a known example
         agent.retrieve_few_shot = AsyncMock(
             return_value=["FROM python:FEW_SHOT_EXAMPLE"]
         )
 
-        # FIX: Mock embedding_model to enable few-shot retrieval
+        # Mock embedding_model to enable few-shot retrieval
         agent.embedding_model = MagicMock()  # Just needs to be truthy
         agent.few_shot_examples = [{"query": "test", "example": "FROM python:FEW_SHOT_EXAMPLE"}]
 
@@ -473,7 +473,7 @@ class TestFewShotLearning:
             )
 
         assert isinstance(prompt, str)
-        # FIX: Check that the few-shot example is in the prompt
+        # Check that the few-shot example is in the prompt
         assert "FROM python:FEW_SHOT_EXAMPLE" in prompt
         agent.retrieve_few_shot.assert_called_once()
 
@@ -699,7 +699,7 @@ class TestSecretScrubbing:
         """
         scrubbed = scrub_text(text)
 
-        # FIX: Corrected assertion for sk-test123
+        # Corrected assertion for sk-test123
         assert "sk-test123" not in scrubbed
         assert "secret_xyz" not in scrubbed
         assert "user@email.com" not in scrubbed
@@ -874,7 +874,7 @@ class TestErrorHandling:
             )
 
             assert isinstance(prompt, str)
-            # FIX: Check for the *original* content, not the fallback.
+            # Check for the *original* content, not the fallback.
             # The agent gracefully skips optimization on failure.
             assert "dockerfile" in prompt.lower()
             assert "fallback" not in prompt.lower()
@@ -884,14 +884,14 @@ class TestErrorHandling:
     async def test_invalid_target(self, temp_repo, agent, mock_model_info):
         """Test building prompt for invalid/unsupported target."""
 
-        # FIX: Mock the template registry to raise the error
+        # Mock the template registry to raise the error
         error_msg = "Required template 'unsupported_target_default.jinja' not found"
         agent.template_registry.get_template.side_effect = ValueError(error_msg)
 
         agent.gather_context_for_prompt = AsyncMock(return_value={})
         agent.retrieve_few_shot = AsyncMock(return_value=[])
 
-        # FIX: The error is raised *before* the try/except block
+        # The error is raised *before* the try/except block
         # in build_deploy_prompt. The test must expect the exception.
         with pytest.raises(ValueError, match=error_msg):
             await agent.build_deploy_prompt(

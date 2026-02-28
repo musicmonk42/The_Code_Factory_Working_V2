@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-import aiosqlite  # FIX: Import aiosqlite
+import aiosqlite  # Import aiosqlite
 import pytest
 
 # Import the module under test

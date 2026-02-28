@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-# FIX: Use absolute imports from the project root. Remove sys.path hack.
+# Use absolute imports from the project root. Remove sys.path hack.
 from generator.agents.deploy_agent.deploy_response_handler import (
-    enrich_config_output,  # FIX: Renamed from enrich_config_with_badges
+    enrich_config_output,  # Renamed from enrich_config_with_badges
 )
 from generator.agents.deploy_agent.deploy_response_handler import (
     ERROR_FILENAME,
@@ -29,7 +29,7 @@ from generator.agents.deploy_agent.deploy_response_handler import (
     scan_config_for_findings,
 )
 
-# FIX: Removed imports for non-existent functions: summarize_section, enrich_config_with_badges
+# Removed imports for non-existent functions: summarize_section, enrich_config_with_badges
 
 # ============================================================================
 # FIXTURES
@@ -116,7 +116,7 @@ def sample_json():
     )
 
 
-# FIX: Add a registry fixture to provide to handler functions
+# Add a registry fixture to provide to handler functions
 @pytest.fixture
 def registry():
     """Fixture to create a HandlerRegistry with watchers patched."""
@@ -130,7 +130,7 @@ def registry():
         yield reg
 
 
-# FIX: Add a dummy patterns dict for security scanning tests
+# Add a dummy patterns dict for security scanning tests
 @pytest.fixture
 def dangerous_patterns():
     """Dummy patterns for scan_config_for_findings."""
@@ -155,7 +155,7 @@ class TestParseLLMResponse:
         response = "FROM alpine:latest\nCMD echo 'hello'"
         result = parse_llm_response(response, lang="raw")
 
-        # FIX: Check for 'response.txt' as per module code
+        # Check for 'response.txt' as per module code
         assert "response.txt" in result
         assert result["response.txt"] == response
 
@@ -205,7 +205,7 @@ class TestParseLLMResponse:
 
         result = parse_llm_response(response, lang="raw")
 
-        # FIX: Check for 'response.txt' as per module code
+        # Check for 'response.txt' as per module code
         assert "response.txt" in result
         assert result["response.txt"] == response
 
@@ -220,24 +220,24 @@ class TestHandlerRegistry:
 
     def test_registry_get_dockerfile_handler(
         self, registry
-    ):  # FIX: Use registry fixture
+    ):  # Use registry fixture
         """Test getting Dockerfile handler."""
         handler = registry.get_handler("dockerfile")
         assert isinstance(handler, DockerfileHandler)
 
-    def test_registry_get_yaml_handler(self, registry):  # FIX: Use registry fixture
+    def test_registry_get_yaml_handler(self, registry):  # Use registry fixture
         """Test getting YAML handler."""
         handler = registry.get_handler("yaml")
         assert isinstance(handler, YAMLHandler)
 
-    def test_registry_get_json_handler(self, registry):  # FIX: Use registry fixture
+    def test_registry_get_json_handler(self, registry):  # Use registry fixture
         """Test getting JSON handler."""
         handler = registry.get_handler("json")
         assert isinstance(handler, JSONHandler)
 
-    def test_registry_unsupported_format(self, registry):  # FIX: Use registry fixture
+    def test_registry_unsupported_format(self, registry):  # Use registry fixture
         """Test getting handler for unsupported format."""
-        # FIX: Update match string to match module's error
+        # Update match string to match module's error
         with pytest.raises(
             ValueError, match="No handler found for output format 'unsupported_format'"
         ):
@@ -262,7 +262,7 @@ class TestDockerfileHandler:
         normalized = handler.normalize(sample_dockerfile)
         sections = handler.extract_sections(normalized)
 
-        # FIX: Check for correct keys based on module code
+        # Check for correct keys based on module code
         assert "FROM" in sections
         assert "RUN_commands" in sections
         assert "CMD" in sections
@@ -272,7 +272,7 @@ class TestDockerfileHandler:
         """Test converting Dockerfile back to string."""
         handler = DockerfileHandler()
         normalized = handler.normalize(sample_dockerfile)
-        # FIX: Convert to 'dockerfile', not 'string'
+        # Convert to 'dockerfile', not 'string'
         output = handler.convert(normalized, "dockerfile")
 
         assert "FROM python:3.9-slim" in output
@@ -323,7 +323,7 @@ class TestYAMLHandler:
         handler = YAMLHandler()
         invalid_yaml = "key: value\n  bad: indentation"
 
-        # FIX: Check for specific ValueError
+        # Check for specific ValueError
         with pytest.raises(ValueError, match="Invalid YAML format"):
             handler.normalize(invalid_yaml)
 
@@ -408,7 +408,7 @@ class TestJSONHandler:
         handler = JSONHandler()
         invalid_json = '{"key": "value",}'
 
-        # FIX: Check for specific ValueError
+        # Check for specific ValueError
         with pytest.raises(ValueError, match="Invalid JSON format"):
             handler.normalize(invalid_json)
 
@@ -434,7 +434,7 @@ class TestSecurityScanning:
     @pytest.mark.asyncio
     async def test_scan_privileged_container(
         self, dangerous_patterns
-    ):  # FIX: Add patterns
+    ):  # Add patterns
         """Test scanning for privileged container."""
         config = """apiVersion: v1
 kind: Pod
@@ -447,7 +447,7 @@ spec:
     securityContext:
       privileged: true
 """
-        # FIX: Pass patterns to function
+        # Pass patterns to function
         findings = await scan_config_for_findings(config, "yaml", dangerous_patterns)
 
         assert len(findings) > 0
@@ -456,7 +456,7 @@ spec:
     @pytest.mark.asyncio
     async def test_scan_hardcoded_credentials(
         self, dangerous_patterns
-    ):  # FIX: Add patterns
+    ):  # Add patterns
         """Test scanning for hardcoded credentials."""
         config = """apiVersion: v1
 kind: Secret
@@ -466,7 +466,7 @@ data:
   password: supersecretpassword123
   api_key: sk-1234567890abcdef
 """
-        # FIX: Pass patterns to function
+        # Pass patterns to function
         findings = await scan_config_for_findings(config, "yaml", dangerous_patterns)
 
         assert any("HardcodedCredentials_Pattern" in f["category"] for f in findings)
@@ -474,13 +474,13 @@ data:
     @pytest.mark.asyncio
     async def test_scan_root_user_dockerfile(
         self, dangerous_patterns
-    ):  # FIX: Add patterns
+    ):  # Add patterns
         """Test scanning for root user in Dockerfile."""
         config = """FROM alpine:latest
 USER root
 RUN apk add --no-cache python3
 """
-        # FIX: Pass patterns to function
+        # Pass patterns to function
         findings = await scan_config_for_findings(
             config, "dockerfile", dangerous_patterns
         )
@@ -496,10 +496,10 @@ RUN apk add --no-cache python3
 class TestSummarizationRepair:
     """Tests for summarization and repair functions."""
 
-    # FIX: Removed test_summarize_section_short_text, as the function always calls an LLM.
+    # Removed test_summarize_section_short_text, as the function always calls an LLM.
 
     @pytest.mark.asyncio
-    # FIX: Patch call_llm_api, which is what summarize_section uses
+    # Patch call_llm_api, which is what summarize_section uses
     @patch("generator.agents.deploy_agent.deploy_response_handler.call_llm_api")
     async def test_summarize_section_long_text(self, mock_call):
         """Test summarization with long text."""
@@ -511,7 +511,7 @@ class TestSummarizationRepair:
             "provider": "openai",
         }
 
-        # FIX: Must instantiate a handler to call the method
+        # Must instantiate a handler to call the method
         handler = DockerfileHandler()
         # Ensure TESTING mode is disabled so LLM is actually called
         original_testing = os.environ.pop("TESTING", None)
@@ -529,7 +529,7 @@ class TestSummarizationRepair:
     @patch("generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api")
     async def test_repair_sections_dockerfile(
         self, mock_call, mock_ensemble_response, registry
-    ):  # FIX: Add registry
+    ):  # Add registry
         """Test repairing missing sections in Dockerfile."""
         mock_call.return_value = mock_ensemble_response(
             json.dumps(
@@ -540,7 +540,7 @@ class TestSummarizationRepair:
         current_data = ["RUN npm install", "COPY . ."]
         missing_sections = ["FROM instruction", "CMD instruction"]
 
-        # FIX: Pass the required handler_registry
+        # Pass the required handler_registry
         result = await repair_sections(
             missing_sections, current_data, "dockerfile", registry
         )
@@ -553,7 +553,7 @@ class TestSummarizationRepair:
     @patch("generator.agents.deploy_agent.deploy_response_handler.call_ensemble_api")
     async def test_repair_sections_yaml(
         self, mock_call, mock_ensemble_response, registry
-    ):  # FIX: Add registry
+    ):  # Add registry
         """Test repairing missing sections in YAML."""
         repaired_yaml = """apiVersion: v1
 kind: Pod
@@ -571,7 +571,7 @@ spec:
         current_data = {"kind": "Pod"}
         missing_sections = ["metadata", "spec"]
 
-        # FIX: Pass the required handler_registry
+        # Pass the required handler_registry
         result = await repair_sections(missing_sections, current_data, "yaml", registry)
 
         assert mock_call.called
@@ -589,7 +589,7 @@ class TestHandleDeployResponse:
     """Tests for the main handle_deploy_response function."""
 
     @pytest.mark.asyncio
-    # FIX: Patch the handler method, not the ensemble API directly
+    # Patch the handler method, not the ensemble API directly
     @patch.object(DockerfileHandler, "summarize_section", new_callable=AsyncMock)
     @patch(
         "generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings"
@@ -600,7 +600,7 @@ class TestHandleDeployResponse:
         mock_summarize,
         sample_dockerfile,
         temp_repo,
-        registry,  # FIX: Add registry
+        registry,  # Add registry
     ):
         """Test handling a valid Dockerfile response."""
         mock_scan.return_value = []
@@ -608,7 +608,7 @@ class TestHandleDeployResponse:
 
         result = await handle_deploy_response(
             raw_response=sample_dockerfile,
-            handler_registry=registry,  # FIX: Pass registry
+            handler_registry=registry,  # Pass registry
             output_format="dockerfile",
             repo_path=str(temp_repo),
         )
@@ -616,9 +616,9 @@ class TestHandleDeployResponse:
         assert "final_config_output" in result
         assert "structured_data" in result
         assert "provenance" in result
-        # FIX: Check for 'initial_format'
+        # Check for 'initial_format'
         assert result["provenance"]["initial_format"] == "dockerfile"
-        # FIX: Check for content inside the *enriched* output
+        # Check for content inside the *enriched* output
         assert "FROM python:3.9-slim" in result["final_config_output"]
 
     @pytest.mark.asyncio
@@ -632,7 +632,7 @@ class TestHandleDeployResponse:
         mock_summarize,
         sample_yaml,
         temp_repo,
-        registry,  # FIX: Add registry
+        registry,  # Add registry
     ):
         """Test handling a valid YAML response."""
         mock_scan.return_value = []
@@ -640,7 +640,7 @@ class TestHandleDeployResponse:
 
         result = await handle_deploy_response(
             raw_response=sample_yaml,
-            handler_registry=registry,  # FIX: Pass registry
+            handler_registry=registry,  # Pass registry
             output_format="yaml",
             repo_path=str(temp_repo),
         )
@@ -655,7 +655,7 @@ class TestHandleDeployResponse:
         "generator.agents.deploy_agent.deploy_response_handler.scan_config_for_findings"
     )
     async def test_handle_with_security_findings(
-        self, mock_scan, mock_summarize, temp_repo, registry  # FIX: Add registry
+        self, mock_scan, mock_summarize, temp_repo, registry  # Add registry
     ):
         """Test handling response with security findings."""
         dangerous_config = """FROM alpine:latest
@@ -674,7 +674,7 @@ RUN apk add --no-cache python3
 
         result = await handle_deploy_response(
             raw_response=dangerous_config,
-            handler_registry=registry,  # FIX: Pass registry
+            handler_registry=registry,  # Pass registry
             output_format="dockerfile",
             repo_path=str(temp_repo),
         )
@@ -694,7 +694,7 @@ RUN apk add --no-cache python3
         mock_summarize,
         sample_yaml,
         temp_repo,
-        registry,  # FIX: Add registry
+        registry,  # Add registry
     ):
         """Test format conversion (yaml to json)."""
         mock_scan.return_value = []
@@ -702,30 +702,30 @@ RUN apk add --no-cache python3
 
         result = await handle_deploy_response(
             raw_response=sample_yaml,
-            handler_registry=registry,  # FIX: Pass registry
+            handler_registry=registry,  # Pass registry
             output_format="yaml",
             to_format="json",
             repo_path=str(temp_repo),
         )
 
-        # FIX: Check 'converted_to_format'
+        # Check 'converted_to_format'
         assert result["provenance"]["converted_to_format"] == "json"
-        # FIX: Check for JSON content within the enriched markdown output
+        # Check for JSON content within the enriched markdown output
         assert '"apiVersion": "v1"' in result["final_config_output"]
         assert '"kind": "Service"' in result["final_config_output"]
 
     @pytest.mark.asyncio
     async def test_handle_unsupported_format(
         self, temp_repo, registry
-    ):  # FIX: Add registry
+    ):  # Add registry
         """Test handling unsupported format."""
-        # FIX: Update match string
+        # Update match string
         with pytest.raises(
             ValueError, match="No handler found for output format 'unsupported'"
         ):
             await handle_deploy_response(
                 raw_response="some content",
-                handler_registry=registry,  # FIX: Pass registry
+                handler_registry=registry,  # Pass registry
                 output_format="unsupported",
                 repo_path=str(temp_repo),
             )
@@ -740,16 +740,16 @@ class TestEnrichment:
     """Tests for configuration enrichment."""
 
     @pytest.mark.asyncio
-    # FIX: Renamed test and function, added fixtures
+    # Renamed test and function, added fixtures
     async def test_enrich_config_output(self, temp_repo, registry):
         """Test enriching configuration with badges."""
         config = "FROM alpine:latest\nCMD echo 'hello'"
 
-        # FIX: Create structured data
+        # Create structured data
         handler = DockerfileHandler()
         structured_data = handler.normalize(config)
 
-        # FIX: Call the correct function with correct args
+        # Call the correct function with correct args
         enriched = await enrich_config_output(
             structured_data, "dockerfile", "test-run-123", str(temp_repo), registry
         )
@@ -770,22 +770,22 @@ class TestErrorHandling:
     """Tests for error handling scenarios."""
 
     @pytest.mark.asyncio
-    # FIX: Patch the summarize_section method on the handler
+    # Patch the summarize_section method on the handler
     @patch.object(DockerfileHandler, "summarize_section", new_callable=AsyncMock)
     async def test_handle_llm_failure(
         self, mock_summarize, temp_repo, registry
-    ):  # FIX: Add registry
+    ):  # Add registry
         """Test handling LLM API failure during summarization."""
-        # FIX: The module raises RuntimeError on summarization failure
+        # The module raises RuntimeError on summarization failure
         mock_summarize.side_effect = RuntimeError("LLM API Error")
 
         config = "FROM alpine:latest"
 
-        # FIX: The handler should catch and re-raise the RuntimeError
+        # The handler should catch and re-raise the RuntimeError
         with pytest.raises(RuntimeError, match="LLM API Error"):
             await handle_deploy_response(
                 raw_response=config,
-                handler_registry=registry,  # FIX: Pass registry
+                handler_registry=registry,  # Pass registry
                 output_format="dockerfile",
                 repo_path=str(temp_repo),
             )
@@ -793,17 +793,17 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_handle_malformed_response(
         self, temp_repo, registry
-    ):  # FIX: Add registry
+    ):  # Add registry
         """Test handling malformed LLM response."""
         malformed = "FROM python:3.9\n  bad-indent"  # Not really malformed for docker, let's use YAML
 
         malformed_yaml = "key: value\n  bad: indent"
 
-        # FIX: The handler.normalize raises ValueError, which handle_deploy_response re-raises
+        # The handler.normalize raises ValueError, which handle_deploy_response re-raises
         with pytest.raises(ValueError, match="Invalid YAML format"):
             await handle_deploy_response(
                 raw_response=malformed_yaml,
-                handler_registry=registry,  # FIX: Pass registry
+                handler_registry=registry,  # Pass registry
                 output_format="yaml",
                 repo_path=str(temp_repo),
             )
@@ -828,7 +828,7 @@ class TestProvenance:
         mock_summarize,
         sample_dockerfile,
         temp_repo,
-        registry,  # FIX: Add registry
+        registry,  # Add registry
     ):
         """Test that provenance is properly tracked."""
         mock_scan.return_value = []
@@ -836,18 +836,18 @@ class TestProvenance:
 
         result = await handle_deploy_response(
             raw_response=sample_dockerfile,
-            handler_registry=registry,  # FIX: Pass registry
+            handler_registry=registry,  # Pass registry
             output_format="dockerfile",
             repo_path=str(temp_repo),
         )
 
         prov = result["provenance"]
         assert "run_id" in prov
-        # FIX: Check for correct timestamp key
+        # Check for correct timestamp key
         assert "timestamp_utc" in prov
-        # FIX: Check for correct format key
+        # Check for correct format key
         assert "initial_format" in prov
-        # FIX: Check for quality, not sections
+        # Check for quality, not sections
         assert "quality_analysis" in prov
         assert "security_findings" in prov
         assert prov["initial_format"] == "dockerfile"

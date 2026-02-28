@@ -70,6 +70,7 @@ from typing import Any, Dict, FrozenSet, List, Optional, Set, Union
 # Pydantic — required for structured result validation
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel, Field
+from generator.agents.metrics_utils import get_or_create_metric
 
 # ---------------------------------------------------------------------------
 # Prometheus — conditional import with no-op stubs
@@ -88,32 +89,17 @@ _extraction_total: Any = None
 _extraction_duration: Any = None
 
 if PROMETHEUS_AVAILABLE:
-    try:
-        _extraction_total = Counter(
-            "ast_endpoint_extraction_total",
-            "Total AST endpoint extraction operations",
-            ["status"],
-        )
-    except ValueError:
-        from prometheus_client import REGISTRY as _REGISTRY
-
-        _extraction_total = _REGISTRY._names_to_collectors.get(
-            "ast_endpoint_extraction_total"
-        )
-
-    try:
-        _extraction_duration = Histogram(
-            "ast_endpoint_extraction_duration_seconds",
-            "Duration of AST endpoint extraction operations in seconds",
-        )
-    except ValueError:
-        from prometheus_client import REGISTRY as _REGISTRY
-
-        _extraction_duration = _REGISTRY._names_to_collectors.get(
-            "ast_endpoint_extraction_duration_seconds"
-        )
-
-
+    _extraction_total = get_or_create_metric(
+        Counter,
+        "ast_endpoint_extraction_total",
+        "Total AST endpoint extraction operations",
+        ["status"],
+    )
+    _extraction_duration = get_or_create_metric(
+        Histogram,
+        "ast_endpoint_extraction_duration_seconds",
+        "Duration of AST endpoint extraction operations in seconds",
+    )
 class _NoopMetric:
     """Lightweight no-op stub that silently accepts any Prometheus-style call."""
 

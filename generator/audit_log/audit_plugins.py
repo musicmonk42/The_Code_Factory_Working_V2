@@ -493,7 +493,7 @@ async def execute_hooks_sync(event: str, data: Any) -> Any:
                 )
                 result = await asyncio.to_thread(hook, current_data)
             else:
-                # FIX: Run sync hooks in a thread to avoid blocking the event loop
+                # Run sync hooks in a thread to avoid blocking the event loop
                 result = await asyncio.to_thread(hook, current_data)
 
             if result is not None:
@@ -590,7 +590,7 @@ def _sandboxed_worker(
             event, entry
         )  # NOTE: event, data order changed from test
 
-        # CRITICAL FIX 1: Send back both the result (modified data) AND the updated plugin instance (with counters)
+        # Send back both the result (modified data) AND the updated plugin instance (with counters)
         q.put((result, plugin_instance))
 
     except Exception as e:
@@ -796,7 +796,7 @@ async def trigger_event(event: str, data: Any) -> Any:
     # Ensure plugin state is isolated for hypothesis examples
     # TestPlugin.reset_usage_data() is already called in the test, but ensure no stale carryover.
 
-    # FIX: Ensure deep copy is made before passing to hooks and plugins
+    # Ensure deep copy is made before passing to hooks and plugins
     try:
         current_data = json.loads(json.dumps(data))  # Deep copy using serialization
     except Exception:
@@ -948,7 +948,7 @@ async def trigger_event(event: str, data: Any) -> Any:
             # Errors for plugin execution are already logged by `sandboxed_execute`
 
     # Audit plugin events for traceability
-    # FIX: Added await for the async log_action
+    # Added await for the async log_action
     await log_action(
         "plugin_event",
         {

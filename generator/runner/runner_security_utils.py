@@ -12,14 +12,14 @@ import time
 from functools import wraps  # [NEW] Added for no-op decorator
 from pathlib import Path  # Added for Path objects
 
-# FIX: Added Tuple to the typing import list
+# Added Tuple to the typing import list
 from typing import Any, Callable, Dict, List, Optional, Pattern, Tuple, Union
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.backends import default_backend
 
 # Conditional import for xattr based on OS
-# FIX: Use try/except Exception as requested for maximum import robustness.
+# Use try/except Exception as requested for maximum import robustness.
 try:
     import xattr  # type: ignore[import] # For metadata (compliance expiration)
 except Exception:
@@ -29,7 +29,6 @@ except Exception:
     )
 
 # --- REFACTOR FIX: Corrected imports ---
-# FIX: Define logger at the top, using __name__
 logger = logging.getLogger(__name__)
 
 # Import the TESTING sentinel from the leaf module — no circular risk.
@@ -68,12 +67,10 @@ except ImportError:
         DECRYPTORS[name] = func
 
 
-# FIX: Corrected import dependency name
 
 # --- END REFACTOR FIX ---
 
 # [NEW] State for lazy Presidio loading
-# FIX: Removed extra ']' brackets
 _PRESIDIO_ANALYZER_ENGINE: Optional[Any] = None
 _PRESIDIO_ANONYMIZER_ENGINE: Optional[Any] = None
 _PRESIDIO_AVAILABLE: bool = False
@@ -102,7 +99,7 @@ PRESIDIO_IGNORED_ENTITY_TYPES = [
 
 # Technical terms and patterns that should NOT be redacted as PII
 # These are common in technical documentation and code requirements
-# FIX: Expanded allowlist to prevent tool names from being marked as PII
+# Allowlist expanded to prevent common tool names being flagged as PII
 TECHNICAL_ALLOWLIST = [
     # Container and orchestration tools
     "Docker", "Kubernetes", "Helm", "K8s", "Podman", "Containerd",
@@ -204,7 +201,7 @@ def _add_custom_recognizers(analyzer_engine):
     try:
         from presidio_analyzer import Pattern, PatternRecognizer
         
-        # FIX: Remove URL recognizer to prevent over-aggressive URL redaction
+        # URL recognizer removed to prevent technical strings being over-redacted
         # Technical documentation often contains example URLs, API endpoints, etc.
         try:
             analyzer_engine.registry.remove_recognizer("UrlRecognizer")
@@ -314,7 +311,6 @@ def _load_presidio_engine() -> bool:
 
     _PRESIDIO_LOAD_ATTEMPTED = True
 
-    # FIX: CRITICAL CHECK: Use the global TESTING flag if available, otherwise define locally
     global TESTING
     if "TESTING" not in globals():
         TESTING = (
@@ -341,7 +337,7 @@ def _load_presidio_engine() -> bool:
         # Enterprise-grade: Make model configurable via environment
         model_name = os.getenv("PRESIDIO_SPACY_MODEL", "en_core_web_sm")
 
-        # FIX: Only load English recognizers to prevent unsupported language warnings
+        # Load only English recognizers to suppress unsupported-language warnings
         # The multilingual models (es, it, pl) were generating 132+ warnings per run:
         # "Recognizer not added to registry because language is not supported by registry"
         # We only support English for now to avoid log pollution
@@ -398,7 +394,7 @@ def _load_presidio_engine() -> bool:
                 "Using regex-only PII detection mode for graceful degradation."
             )
             # Create analyzer without NLP engine - uses regex patterns only
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            # Limit to English to suppress unsupported-language recognizer warnings
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
                 nlp_engine=None, supported_languages=["en"]
             )
@@ -422,7 +418,7 @@ def _load_presidio_engine() -> bool:
                 "Using regex-only mode for PII detection."
             )
             # Graceful degradation: use presidio without NLP
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            # Limit to English to suppress unsupported-language recognizer warnings
             _PRESIDIO_ANALYZER_ENGINE = AnalyzerEngine(
                 nlp_engine=None, supported_languages=["en"]
             )
@@ -581,7 +577,7 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
     Returns:
         Redacted data with PII removed but technical terms preserved
     """
-    # FIX: Skip PII redaction for documentation and test files
+    # Skip PII redaction for documentation and test files
     # Documentation files (README.md, docs/*.md, etc.) intentionally contain example URLs,
     # service names, and organization names that should not be redacted.
     # Test files must also be skipped because Presidio misclassifies integer literals
@@ -590,7 +586,7 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
         logger.debug("Skipping PII redaction for file")
         return data
     
-    # FIX: Ensure Presidio is loaded only when this function is called
+    # Lazy-load Presidio to defer heavy model initialisation until first use
     if not _PRESIDIO_AVAILABLE:
         _load_presidio_engine()
 
@@ -608,7 +604,7 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
 
     if isinstance(data, str):
         try:
-            # FIX: Apply allowlist filtering to reduce false positives
+            # Apply allowlist to reduce false positives in PII detection
             # Analyze with higher thresholds for common entities
             results = _PRESIDIO_ANALYZER_ENGINE.analyze(
                 text=data, 
@@ -616,7 +612,7 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
                 score_threshold=0.6  # Increased from default 0.0 to reduce false positives
             )
             
-            # FIX: Filter out technical terms from allowlist
+            # Filter out technical terms that Presidio may incorrectly flag
             if apply_allowlist:
                 filtered_results = []
                 for result in results:
@@ -657,7 +653,7 @@ def nlp_presidio_redactor(data: Any, patterns: Optional[List[Pattern]] = None, a
 
 # Register the redactors
 register_redactor("regex_basic", regex_basic_redactor)
-# FIX: Register the NLP redactor. The function itself will handle lazy-loading
+# Register the NLP redactor (lazy-loads Presidio models on first call)
 # and skip if Presidio is not available. This prevents _load_presidio_engine()
 # from being called at import time, which fixes the torch/pytest DLL error.
 register_redactor("nlp_presidio", nlp_presidio_redactor)
@@ -722,7 +718,6 @@ def aes_cbc_encrypt_decrypt(
 # Register encryption providers
 register_encryptor("fernet", fernet_encrypt_decrypt)
 register_encryptor("aes_cbc", aes_cbc_encrypt_decrypt)
-# FIX: Corrected typo in function name registration
 register_decryptor("fernet", fernet_encrypt_decrypt)
 register_decryptor("aes_cbc", aes_cbc_encrypt_decrypt)
 
@@ -780,7 +775,7 @@ def redact_secrets(
             filename_lower == 'changelog' or
             filename_lower == 'contributing' or
             filename_lower == 'license' or
-            # FIX Issue 1: Skip test files to prevent Presidio misclassifying integer
+            # Skip test files to prevent Presidio misclassifying integer
             # literals (e.g. 123456) as CARDINAL/DATE_TIME entities in test assertions
             filename_base.startswith('test_') or
             '_test.' in filename_base or  # matches *_test.py, *_test.js, *_test.go, etc.
@@ -789,11 +784,10 @@ def redact_secrets(
         )
         if should_skip_redaction:
             logger.debug(f"Skipping PII redaction for file: {filename}")
-            # FIX: Return early for documentation/test files - skip all redaction
             return data
 
     try:
-        # FIX: Lazy import to break circular dependency - use sync version
+        # Lazy import (sync version) to avoid a circular import at module load time
         from .runner_audit import log_audit_event_sync as log_audit_event
     except ImportError:
         # If logging not available, continue without it
@@ -835,7 +829,7 @@ def redact_secrets(
 
         logger.debug(f"Redacting secrets using method: {effective_method}")
 
-        # FIX: Call the synchronous redactor directly with error handling
+        # Call the synchronous redactor directly with error handling
         try:
             # Pass should_skip_redaction flag to nlp_presidio_redactor
             if effective_method == "nlp_presidio":
@@ -898,7 +892,7 @@ async def encrypt_data(
     Encrypts data using the specified symmetric algorithm.
     Returns encrypted bytes.
     """
-    # FIX: Lazy import to break circular dependency - use relative import
+    # Lazy relative import to avoid a circular import at module load time
     from .runner_logging import log_audit_event
 
     # --- FIX: REMOVED METRICS IMPORT ---
@@ -930,7 +924,7 @@ async def decrypt_data(data: bytes, key: bytes, algorithm: str = "fernet") -> st
     Decrypts data using the specified symmetric algorithm.
     Returns decrypted string (assumes utf-8).
     """
-    # FIX: Lazy import to break circular dependency - use relative import
+    # Lazy relative import to avoid a circular import at module load time
     from .runner_logging import log_audit_event
 
     # --- FIX: REMOVED METRICS IMPORT ---
@@ -987,7 +981,7 @@ async def fetch_secret(
     Fetches a secret from a configured source (env, vault, aws_sm, hsm_pin).
     Caches secrets in memory with a TTL.
     """
-    # FIX: Lazy import to break circular dependency - use relative import
+    # Lazy relative import to avoid a circular import at module load time
     from .runner_logging import send_alert
 
     # --- FIX: REMOVED METRICS IMPORT ---
@@ -1224,7 +1218,7 @@ async def monitor_for_leaks(text: str) -> List[Dict[str, Any]]:
     """
     Monitors text for potential leaks using Presidio (if available) and regex.
     """
-    # FIX: Lazy import to break circular dependency - use relative import
+    # Lazy relative import to avoid a circular import at module load time
     from .runner_logging import log_audit_event, send_alert
 
     # --- FIX: REMOVED METRICS IMPORT ---

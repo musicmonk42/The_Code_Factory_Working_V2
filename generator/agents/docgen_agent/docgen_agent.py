@@ -125,7 +125,6 @@ def _get_anonymizer():
 from runner import tracer
 from runner.llm_client import call_llm_api
 from runner.runner_errors import LLMError
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger, send_alert
 from runner.runner_metrics import (
@@ -151,7 +150,7 @@ from tenacity import (
     wait_exponential,
 )
 
-# FIX: Add try-except for omnicore_engine.plugin_registry import
+# Add try-except for omnicore_engine.plugin_registry import
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
@@ -1104,7 +1103,7 @@ class DocgenAgent:
             )
 
             # Build HTML documentation if Sphinx is available
-            # FIX: Always attempt to build even if there are validation warnings
+            # Always attempt to build even if there are validation warnings
             # RST validation can be overly strict - Sphinx itself may handle the content fine
             if SPHINX_AVAILABLE:
                 try:
@@ -1194,7 +1193,7 @@ class DocgenAgent:
         # We ensure ClientError is caught explicitly now.
         retry=retry_if_exception_type(
             (LLMError, ClientError)
-        ),  # FIX: Explicitly include ClientError
+        ),
     )
     async def generate_documentation(
         self,
@@ -1383,7 +1382,7 @@ class DocgenAgent:
                         )
 
                 # Combine validator issues and agent-level issues
-                # FIX: Handle both list and dict formats for validator_result["issues"]
+                # Handle both list and dict formats for validator_result["issues"]
                 validator_issues = validator_result.get("issues", [])
                 if isinstance(validator_issues, dict):
                     compliance_from_validator = validator_issues.get("compliance_issues", [])
@@ -1558,7 +1557,7 @@ class DocgenAgent:
                             ).inc()
 
                 # 11. Apply Post-processing Hooks
-                # FIX: Post-processing hooks use pre_process_hooks list here (typo)
+                # Post-processing hooks use pre_process_hooks list here (typo)
                 # Correcting to post_process_hooks
                 for hook in self.post_process_hooks:
                     final_result = hook(final_result)
@@ -1802,7 +1801,7 @@ class DocgenAgent:
                 except Exception as e:
                     logger.error(f"Compliance plugin '{plugin.name}' failed: {e}")
 
-            # FIX: Handle both list and dict formats for validator_result["issues"]
+            # Handle both list and dict formats for validator_result["issues"]
             validator_issues = validator_result.get("issues", [])
             if isinstance(validator_issues, dict):
                 compliance_from_validator = validator_issues.get("compliance_issues", [])

@@ -24,7 +24,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# FIX: Import the module itself to fix the namespace conflict
+# Import the module itself to fix the namespace conflict
 import runner.llm_client as llm_client
 from runner.llm_client import (  # <-- Removed _async_client from this import
     CacheManager,
@@ -427,7 +427,7 @@ async def test_call_llm_api_cache_hit(initialized_client, mock_provider):
     prompt = "cache_prompt"
     model = "test_model"
     provider = "openai"  # Default provider
-    # FIX: Use the actual provider name 'openai' used in the client init
+    # Use the actual provider name 'openai' used in the client init
     cache_key = hashlib.sha256(f"{prompt}:{model}:{provider}".encode()).hexdigest()
 
     # Mock cache hit with the expected dictionary

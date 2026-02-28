@@ -105,6 +105,7 @@ from runner import tracer
 from runner.llm_client import call_ensemble_api
 from runner.runner_file_utils import get_commits  # For changelog enrichment
 from runner.runner_logging import logger
+from generator.agents.metrics_utils import get_or_create_metric
 
 # Import centralized environment detection utility
 try:
@@ -122,70 +123,12 @@ except ImportError:
 # -----------------------------------
 
 
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    process_calls_total = Counter(
-        "docgen_validator_calls_total",
-        "Total validation calls by format and operation",
-        ["format", "operation"],
-    )
-    process_errors_total = Counter(
-        "docgen_validator_errors_total",
-        "Total validation errors by format, operation, and type",
-        ["format", "operation", "error_type"],
-    )
-    process_latency_seconds = Histogram(
-        "docgen_validator_latency_seconds",
-        "Validation latency in seconds by format and operation",
-        ["format", "operation"],
-    )
-    docgen_compliance_issues_total = Counter(
-        "docgen_validator_compliance_issues_total",
-        "Compliance issues detected during validation",
-        ["format", "issue_type"],
-    )
-    docgen_security_findings_total = Counter(
-        "docgen_validator_security_findings_total",
-        "Security findings detected during validation",
-        ["format", "finding_category"],
-    )
-    docgen_content_quality_score = Gauge(
-        "docgen_validator_content_quality_score",
-        "Quality score of processed documentation",
-        ["format", "metric_type"],
-    )
-    section_status_gauge = Gauge(
-        "docgen_response_section_status",
-        "Status of required sections in docs (1=present, 0=missing)",
-        ["output_format", "section_name"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    process_calls_total = REGISTRY._names_to_collectors.get(
-        "docgen_validator_calls_total"
-    )
-    process_errors_total = REGISTRY._names_to_collectors.get(
-        "docgen_validator_errors_total"
-    )
-    process_latency_seconds = REGISTRY._names_to_collectors.get(
-        "docgen_validator_latency_seconds"
-    )
-    docgen_compliance_issues_total = REGISTRY._names_to_collectors.get(
-        "docgen_validator_compliance_issues_total"
-    )
-    docgen_security_findings_total = REGISTRY._names_to_collectors.get(
-        "docgen_validator_security_findings_total"
-    )
-    docgen_content_quality_score = REGISTRY._names_to_collectors.get(
-        "docgen_validator_content_quality_score"
-    )
-    section_status_gauge = REGISTRY._names_to_collectors.get(
-        "docgen_response_section_status"
-    )
-
-
+process_calls_total = get_or_create_metric(
+    Counter,
+    "docgen_validator_calls_total",
+    "Total validation calls by format and operation",
+    ["format", "operation"],
+)
 # --- NLTK Data Download (Strictly required data for NLP features) ---
 # Use a helper function to avoid polluting global scope
 def setup_nltk_data():
@@ -529,7 +472,7 @@ class MarkdownPlugin(DocGenPlugin):
         if len(content) < min_length:
             issues.append(f"Content too short: {len(content)} < {min_length}")
 
-        # FIXED: More reasonable section checking
+        # More reasonable section checking
 
         # Check if DOCGEN_TEST_MODE is enabled for relaxed validation
         test_mode = os.environ.get("DOCGEN_TEST_MODE", "0") == "1"

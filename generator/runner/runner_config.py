@@ -455,7 +455,7 @@ class RunnerConfig(BaseModel):
         """Context-aware suggestions based on hardware/environment."""
         suggestions = {}
         suggestions["parallel_workers"] = multiprocessing.cpu_count()
-        # FIX: Ensure sysconf check is safe and result is used correctly
+        # Ensure sysconf check is safe and result is used correctly
         total_mem_gb = (
             os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3)
             if hasattr(os, "sysconf")
@@ -474,7 +474,7 @@ class RunnerConfig(BaseModel):
         """Auto-generate config documentation based on Pydantic schema."""
         schema = self.model_json_schema()
         if format == "yaml":
-            # FIX: Ensure schema is correctly cleaned before YAML dump
+            # Ensure schema is correctly cleaned before YAML dump
             clean_schema = json.loads(json.dumps(schema))
             return yaml.dump(clean_schema, default_flow_style=False, sort_keys=False)
         elif format == "markdown":
@@ -607,7 +607,7 @@ class RunnerConfig(BaseModel):
                             nested_schema_name = info["$ref"].split("/")[-1]
                             if nested_schema_name in schema.get("$defs", {}):
                                 md += f"  *Nested fields for `{field_name}` (object `{nested_schema_name}`):*\n"
-                                # FIX: Use .get() for safe access to properties
+                                # Use .get() for safe access to properties
                                 for nested_field, nested_info in (
                                     schema["$defs"][nested_schema_name]
                                     .get("properties", {})
@@ -632,7 +632,7 @@ class RunnerConfig(BaseModel):
         def _encrypt_field(field_value):
             if field_value and isinstance(field_value, SecretStr):
                 try:
-                    # FIX: Use get_secret_value() to get the raw string for encryption
+                    # Use get_secret_value() to get the raw string for encryption
                     encrypted_value = f.encrypt(
                         field_value.get_secret_value().encode()
                     ).decode()
@@ -655,7 +655,7 @@ class RunnerConfig(BaseModel):
         def _decrypt_field(field_value, field_name):
             if field_value and isinstance(field_value, SecretStr):
                 try:
-                    # FIX: Use get_secret_value() to get the raw string (which is the ciphertext)
+                    # Use get_secret_value() to get the raw string (which is the ciphertext)
                     decrypted_value = f.decrypt(
                         field_value.get_secret_value().encode()
                     ).decode()
@@ -699,7 +699,7 @@ class RunnerConfig(BaseModel):
                 url=self.vault_url, token=self.vault_token.get_secret_value()
             )
             if client.is_authenticated():
-                # FIX: Read secret from 'runner/secrets' using KV v2 path
+                # Read secret from 'runner/secrets' using KV v2 path
                 # hvac is a synchronous library, so we don't need asyncio.to_thread
                 secrets_response = client.secrets.kv.v2.read_secret_version(path="runner/secrets")
                 if (
@@ -708,7 +708,7 @@ class RunnerConfig(BaseModel):
                     and "data" in secrets_response["data"]
                 ):
                     secrets = secrets_response["data"]["data"]
-                    # FIX: Use object.__setattr__ to ensure Pydantic model is properly updated
+                    # Use object.__setattr__ to ensure Pydantic model is properly updated
                     if "api_key" in secrets:
                         object.__setattr__(self, "api_key", SecretStr(secrets["api_key"]))
                         logger.info("API key fetched from Vault.")
@@ -984,7 +984,7 @@ def load_config(
     for env_key, field_name in env_map.items():
         if env_val := os.getenv(env_key):
             try:
-                # FIX: Sanitize environment variables from Railway/cloud providers that may include
+                # Sanitize environment variables from Railway/cloud providers that may include
                 # wrapping quotes or whitespace that cause validation failures
                 sanitized_val = env_val.strip()
                 # Remove wrapping quotes only (preserves quotes in the middle of values)
@@ -1024,14 +1024,14 @@ def load_config(
                         "true",
                         "1",
                         "yes",
-                    )  # FIX: Robust boolean parsing
+                    )  # Robust boolean parsing
                 elif actual_type is SecretStr:
                     data[field_name] = SecretStr(env_val)
                 elif actual_type is list or (
                     hasattr(actual_type, "__origin__")
                     and actual_type.__origin__ is list
                 ):
-                    # FIX: Safely parse lists/dicts from JSON string
+                    # Safely parse lists/dicts from JSON string
                     data[field_name] = json.loads(env_val)
                 elif actual_type is dict or (
                     hasattr(actual_type, "__origin__")
@@ -1204,7 +1204,7 @@ class ConfigWatcher:
             return  # Do not start any watch tasks
 
         logger.info("ConfigWatcher started.")
-        # FIX: The watcher logic must handle cancellation gracefully
+        # The watcher logic must handle cancellation gracefully
         self.watch_task = asyncio.create_task(self._watch_loop())
 
     async def _watch_loop(self):
@@ -1243,7 +1243,7 @@ class ConfigWatcher:
                 f"Error in 'watchfiles' watcher: {e}. Falling back to polling.",
                 exc_info=True,
             )
-            # FIX: If watchfiles fails, start the polling fallback in the same task
+            # If watchfiles fails, start the polling fallback in the same task
             await self._start_polling_fallback()
 
     def _is_target_file(self, change_type, path, target):
@@ -1272,7 +1272,7 @@ class ConfigWatcher:
             mtime = os.path.getmtime(self.config_file)
             if mtime > self.last_mtime:
                 logger.info(f"Config file '{self.config_file}' modified. Reloading...")
-                # FIX: Catch exceptions from load_config gracefully
+                # Catch exceptions from load_config gracefully
                 try:
                     new_config = load_config(str(self.config_file))
                 except Exception as load_e:
@@ -1305,7 +1305,7 @@ class ConfigWatcher:
                             )
                             self.last_mtime = mtime
                             return
-                        # FIX: Convert DeepDiff object to JSON string for logging/passing
+                        # Convert DeepDiff object to JSON string for logging/passing
                         diff = json.loads(diff_result.to_json())
                     except Exception as diff_e:
                         logger.warning(
@@ -1348,7 +1348,7 @@ class ConfigWatcher:
         Args:
             remote_url (Optional[str]): The URL to fetch the config from. If None, uses dist_url from current_config.
         """
-        # FIX: Check for ClientSession availability instead of aiohttp module
+        # Check for ClientSession availability instead of aiohttp module
         # This allows tests to mock ClientSession even if aiohttp module is not fully available
         try:
             from aiohttp import ClientSession
@@ -1369,7 +1369,7 @@ class ConfigWatcher:
                 async with session.get(fetch_url) as resp:
                     resp.raise_for_status()  # Raise exception for 4xx/5xx responses
                     data = yaml.safe_load(await resp.text())
-                    # FIX: Catch validation errors from RunnerConfig
+                    # Catch validation errors from RunnerConfig
                     new_config = RunnerConfig(**data)
 
                     diff = {}
@@ -1391,7 +1391,7 @@ class ConfigWatcher:
                                     "Remote config fetched, but no significant differences detected."
                                 )
                                 return
-                            # FIX: Convert DeepDiff object to JSON string for logging/passing
+                            # Convert DeepDiff object to JSON string for logging/passing
                             diff = json.loads(diff_result.to_json())
                         except Exception as diff_e:
                             logger.warning(

@@ -440,7 +440,7 @@ class TestCryptoProviderABC:
         await provider.close()
 
         mock_task.cancel.assert_called_once()
-        # FIX: Assert task is *removed* from the set
+        # Assert task is *removed* from the set
         assert (
             mock_task not in provider._background_tasks
         )  # add_done_callback not called on mock
@@ -452,13 +452,13 @@ class TestCryptoProviderABC:
 )
 class TestSoftwareCryptoProvider:
 
-    # FIX: This test must be SYNC because it tests a SYNC __init__ that calls asyncio.run()
+    # This test must be SYNC because it tests a SYNC __init__ that calls asyncio.run()
     def test_init_success(self, mock_accessors, mock_keystore, mock_settings):
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             SoftwareCryptoProvider,
         )
 
-        # FIX: Removed asyncio.run patch
+        # Removed asyncio.run patch
         with (
             patch.object(
                 SoftwareCryptoProvider, "_load_existing_keys", AsyncMock()
@@ -488,9 +488,9 @@ class TestSoftwareCryptoProvider:
 
             finally:
                 if provider:
-                    asyncio.run(provider.close())  # FIX: Cleanup
+                    asyncio.run(provider.close())  # Cleanup
 
-    # FIX: This test must be SYNC
+    # This test must be SYNC
     def test_init_no_master_key(self, mock_accessors, mock_settings):
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             SoftwareCryptoProvider,
@@ -498,13 +498,13 @@ class TestSoftwareCryptoProvider:
 
         mock_accessors[0].return_value = None  # Master key accessor fails
 
-        # FIX: Removed asyncio.run patch
+        # Removed asyncio.run patch
         with pytest.raises(Exception, match="Master encryption key is missing"):
             SoftwareCryptoProvider(
                 mock_accessors[0], mock_accessors[1], mock_settings[0]
             )
 
-    # FIX: This test must be SYNC
+    # This test must be SYNC
     def test_init_keystore_fail(self, mock_accessors, mock_keystore, mock_settings):
         from generator.audit_log.audit_crypto.audit_crypto_provider import (
             SoftwareCryptoProvider,
@@ -512,7 +512,7 @@ class TestSoftwareCryptoProvider:
 
         mock_keystore[1].side_effect = Exception("Keystore init failed")
 
-        # FIX: Removed asyncio.run patch
+        # Removed asyncio.run patch
         with pytest.raises(Exception, match="Failed to initialize KeyStore"):
             SoftwareCryptoProvider(
                 mock_accessors[0], mock_accessors[1], mock_settings[0]
@@ -826,7 +826,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_sign_success(self, hsm_provider):
-        # FIX: Assign mock key first, *then* set its attributes
+        # Assign mock key first, *then* set its attributes
         mock_priv_key = MagicMock(name="MockPrivKey")
         mock_pkcs11_session.find_objects.return_value.single.return_value = (
             mock_priv_key
@@ -845,7 +845,7 @@ class TestHSMCryptoProvider:
                 mock_pkcs11.Attribute.LABEL: "key-label-1",
             }
         )
-        # FIX: Assert the call on the signer, not the session
+        # Assert the call on the signer, not the session
         mock_priv_key.sign.assert_called_once_with(
             ANY
         )  # Check that .sign() was called to get the context
@@ -866,7 +866,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_verify_success(self, hsm_provider):
-        # FIX: Assign mock key first, *then* set its attributes
+        # Assign mock key first, *then* set its attributes
         mock_pub_key = MagicMock(name="MockPubKey")
         mock_pkcs11_session.find_objects.return_value.single.return_value = mock_pub_key
         mock_pub_key.get_attribute.return_value = mock_pkcs11.KeyType.EC_EDWARDS
@@ -886,7 +886,7 @@ class TestHSMCryptoProvider:
 
     @pytest.mark.asyncio
     async def test_verify_fail_invalid_signature(self, hsm_provider):
-        # FIX: Assign mock key first, *then* set its attributes
+        # Assign mock key first, *then* set its attributes
         mock_pub_key = MagicMock(name="MockPubKey")
         mock_pkcs11_session.find_objects.return_value.single.return_value = mock_pub_key
         mock_pub_key.get_attribute.return_value = mock_pkcs11.KeyType.EC_EDWARDS

@@ -27,7 +27,7 @@ def _is_uvloop_policy() -> bool:
 try:
     import nest_asyncio
 
-    # FIX: Check if uvloop is being used - nest_asyncio doesn't support uvloop
+    # Check if uvloop is being used - nest_asyncio doesn't support uvloop
     if _is_uvloop_policy():
         # uvloop is the event loop policy - skip nest_asyncio as it's not compatible
         HAS_NEST_ASYNCIO = False
@@ -241,7 +241,7 @@ class CryptoProvider(ABC):
         _add_sensitive_filter()  # Ensure sensitive data filter is applied to instance loggers
         self.settings = self._lazy_settings
 
-        # FIX: Store the accessor functions, not the raw keys
+        # Store the accessor functions, not the raw keys
         self.software_key_master_accessor = software_key_master_accessor
         self.fallback_hmac_secret_accessor = fallback_hmac_secret_accessor
 
@@ -290,7 +290,6 @@ class CryptoProvider(ABC):
         try:
             from .audit_crypto_factory import CRYPTO_ERRORS, log_action
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -390,7 +389,6 @@ class SoftwareCryptoProvider(CryptoProvider):
         try:
             from .audit_crypto_factory import CryptoInitializationError, log_action
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             async def log_action(*args, **kwargs):
                 return None
 
@@ -455,7 +453,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 "SoftwareCryptoProvider cannot be initialized: Master encryption key is missing or failed to fetch.",
                 extra={"operation": "software_init_no_master_key"},
             )
-            # FIX 1.2: Use conditional logging to avoid RuntimeError: no running event loop
+            # Use conditional logging to avoid RuntimeError: no running event loop
             _conditional_log_action(
                 "software_provider_init", "fail", reason="no_master_key"
             )
@@ -475,7 +473,7 @@ class SoftwareCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "keystore_init_fail"},
             )
-            # FIX 1.2: Use conditional logging to avoid RuntimeError: no running event loop
+            # Use conditional logging to avoid RuntimeError: no running event loop
             _conditional_log_action(
                 "software_provider_init",
                 "fail",
@@ -519,7 +517,6 @@ class SoftwareCryptoProvider(CryptoProvider):
         try:
             from .audit_crypto_factory import CRYPTO_ERRORS, KEY_LOAD_COUNT, log_action
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             KEY_LOAD_COUNT = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -712,7 +709,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -736,7 +732,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             raise TypeError("Key ID must be a string.")
 
         start_time = time.perf_counter()
-        # FIX 2.2: Initialize algo and status_label for finally block protection
+        # Initialize algo and status_label for finally block protection
         algo = "unknown"
 
         key_info = self.keys.get(key_id)
@@ -872,7 +868,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             VERIFY_OPERATIONS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -898,7 +893,7 @@ class SoftwareCryptoProvider(CryptoProvider):
             raise TypeError("Key ID must be a string.")
 
         start_time = time.perf_counter()
-        # FIX 2.2: Initialize algo and status_label for finally block protection
+        # Initialize algo and status_label for finally block protection
         algo = "unknown"
         status_label = "key_not_found"  # Most likely failure on early exit
 
@@ -1059,7 +1054,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -1175,7 +1169,6 @@ class SoftwareCryptoProvider(CryptoProvider):
         try:
             from .audit_crypto_factory import CRYPTO_ERRORS, KEY_ROTATIONS, log_action
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             CRYPTO_ERRORS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -1293,7 +1286,6 @@ class SoftwareCryptoProvider(CryptoProvider):
                 send_alert,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             KEY_CLEANUP_COUNT = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -1528,7 +1520,6 @@ class HSMCryptoProvider(CryptoProvider):
                 log_action,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )
@@ -1545,7 +1536,7 @@ class HSMCryptoProvider(CryptoProvider):
                 "python-pkcs11 library not found. HSMCryptoProvider cannot be initialized.",
                 extra={"operation": "hsm_init_no_pkcs11"},
             )
-            # FIX: Use conditional logging
+            # Use conditional logging
             _conditional_log_action(
                 "hsm_provider_init", "fail", reason="pkcs11_not_found"
             )
@@ -1568,7 +1559,7 @@ class HSMCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "hsm_pin_fetch_fail"},
             )
-            # FIX: Use conditional logging
+            # Use conditional logging
             _conditional_log_action(
                 "hsm_provider_init", "fail", reason="pin_fetch_fail", error=str(e)
             )
@@ -1579,7 +1570,7 @@ class HSMCryptoProvider(CryptoProvider):
                 f"HSM library not found at configured path: {self.hsm_library_path}. Cannot initialize HSM.",
                 extra={"operation": "hsm_lib_not_found", "path": self.hsm_library_path},
             )
-            # FIX: Use conditional logging
+            # Use conditional logging
             _conditional_log_action(
                 "hsm_provider_init",
                 "fail",
@@ -1614,7 +1605,7 @@ class HSMCryptoProvider(CryptoProvider):
             HSM_SESSION_HEALTH.labels(provider_type="hsm").set(
                 0
             )  # Set to unhealthy until session is confirmed
-            # FIX: Use conditional logging
+            # Use conditional logging
             _conditional_log_action("hsm_provider_init", "success_pending_session")
         except Exception as e:
             self.logger.critical(
@@ -1622,7 +1613,7 @@ class HSMCryptoProvider(CryptoProvider):
                 exc_info=True,
                 extra={"operation": "hsm_lib_load_fail"},
             )
-            # FIX: Use conditional logging
+            # Use conditional logging
             _conditional_log_action(
                 "hsm_provider_init", "fail", reason="pkcs11_lib_load_fail", error=str(e)
             )
@@ -1638,7 +1629,6 @@ class HSMCryptoProvider(CryptoProvider):
                 log_action,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )
@@ -1790,7 +1780,6 @@ class HSMCryptoProvider(CryptoProvider):
                 send_alert,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )
@@ -1899,7 +1888,6 @@ class HSMCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             KEY_ROTATIONS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -2088,7 +2076,6 @@ class HSMCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             SIGN_OPERATIONS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -2112,7 +2099,7 @@ class HSMCryptoProvider(CryptoProvider):
             raise TypeError("Key ID must be a string.")
 
         start_time = time.perf_counter()
-        # FIX 2.2: Initialize algo and status_label for finally block protection
+        # Initialize algo and status_label for finally block protection
         # HSM operations do not typically have an 'algo' label unless parsed from the key, use 'hsm'
 
         await self._initialize_hsm_session()
@@ -2292,7 +2279,6 @@ class HSMCryptoProvider(CryptoProvider):
                 tracer,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             VERIFY_OPERATIONS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -2318,7 +2304,7 @@ class HSMCryptoProvider(CryptoProvider):
             raise TypeError("Key ID must be a string.")
 
         start_time = time.perf_counter()
-        # FIX 2.2: Initialize algo and status_label for finally block protection
+        # Initialize algo and status_label for finally block protection
         status_label = "no_session"
 
         await self._initialize_hsm_session()
@@ -2506,7 +2492,6 @@ class HSMCryptoProvider(CryptoProvider):
                 send_alert,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             KEY_ROTATIONS = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(inc=lambda: None)
             )
@@ -2691,7 +2676,6 @@ class HSMCryptoProvider(CryptoProvider):
                 log_action,
             )
         except ImportError:
-            # FIX 2.1: Make log_action a valid async function
             HSM_SESSION_HEALTH = SimpleNamespace(
                 labels=lambda **kwargs: SimpleNamespace(set=lambda value: None)
             )

@@ -11,7 +11,7 @@ Covers:
 """
 
 import unittest
-from typing import Any, AsyncGenerator, Dict, Union  # FIX: Added Union and List
+from typing import Any, AsyncGenerator, Dict, Union  # Added Union and List
 from unittest.mock import AsyncMock, patch
 
 from generator.runner.llm_provider_base import LLMProvider, LLMResponse, LLMResult, LLMStream
@@ -81,7 +81,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
         ):
             _ = (
                 NonConformingProvider()
-            )  # FIX: Changed expectation to catch TypeError on instantiation
+            )  # Changed expectation to catch TypeError on instantiation
 
         # The remaining checks for missing methods are redundant since instantiation already failed,
         # but if we could instantiate, the attributes would be missing.
@@ -175,7 +175,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
             approx_count = await mock_approx(text)
 
         expected_count = int(7 * 1.3)  # 9
-        self.assertEqual(approx_count, expected_count)  # FIX: Expected value is 9
+        self.assertEqual(approx_count, expected_count)  # Expected value is 9
         self.assertIsInstance(approx_count, int)
 
     # =========================================================================
@@ -191,7 +191,7 @@ class TestLLMProvider(unittest.IsolatedAsyncioTestCase):
 
     def test_llm_response_type_aliases(self):
         # Check that the aliases map to the expected types for compatibility
-        # FIX: Use == for type alias comparison since Union creates new objects
+        # Use == for type alias comparison since Union creates new objects
         self.assertEqual(LLMResponse, Union[LLMResult, LLMStream])
         self.assertEqual(LLMResult, Dict[str, Any])
         self.assertEqual(LLMStream, AsyncGenerator[str, None])

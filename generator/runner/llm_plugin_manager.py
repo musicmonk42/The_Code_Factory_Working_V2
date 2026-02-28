@@ -56,13 +56,14 @@ except ImportError:
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
+from generator.agents.metrics_utils import get_or_create_metric
 
 # ============================================================================
 # Logging
 # ============================================================================
 
 try:
-    # FIX: Use relative import to match runner's package structure
+    # Use relative import to match runner's package structure
     from .runner_logging import logger
 except ImportError:
     logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ except ImportError:
 DEFAULT_PLUGIN_DIR = os.getenv("PLUGIN_DIR") or os.getenv("LLM_PLUGIN_PLUGIN_DIR") or "./plugins"
 
 REQUIRED_VALIDATORS = [
-    # FIX: Provide default value for PLUGIN_DIR to prevent startup failures
+    # Provide default value for PLUGIN_DIR to prevent startup failures
     Validator("PLUGIN_DIR", default=DEFAULT_PLUGIN_DIR, is_type_of=str),
     Validator("HASH_MANIFEST", default="", is_type_of=str),
     Validator("AUTO_RELOAD", default=False, is_type_of=bool),
@@ -201,25 +202,12 @@ if TEST_METRICS:
     )
 else:
     # In non-test mode, use real Prometheus counters/gauges.
-    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-    try:
-        PLUGIN_LOADS = Counter(
-            "llm_plugin_loads_total",
-            "Plugin load attempts",
-            ["plugin"],
-        )
-        PLUGIN_ERRORS = Counter(
-            "llm_plugin_errors_total",
-            "Plugin load failures",
-            ["plugin", "error_type"],
-        )
-    except ValueError:
-        # Metrics already registered (happens during pytest collection)
-        from prometheus_client import REGISTRY
-
-        PLUGIN_LOADS = REGISTRY._names_to_collectors.get("llm_plugin_loads_total")
-        PLUGIN_ERRORS = REGISTRY._names_to_collectors.get("llm_plugin_errors_total")
-
+    PLUGIN_LOADS = get_or_create_metric(
+        Counter,
+        "llm_plugin_loads_total",
+        "Plugin load attempts",
+        ["plugin"],
+    )
     # Use the real or dummy LLM_PROVIDER_HEALTH we resolved above.
     LLM_PROVIDER_HEALTH = BASE_LLM_PROVIDER_HEALTH
 
@@ -820,7 +808,7 @@ class LLMPluginManager:
         """
         Stop watcher, cancel background tasks, and clean up resources.
         """
-        # CRITICAL FIX: Cancel the initial _load_task if it's still running
+        # Cancel the initial _load_task if it's still running
         if (
             hasattr(self, "_load_task")
             and self._load_task

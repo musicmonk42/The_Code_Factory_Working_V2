@@ -35,7 +35,6 @@ try:
 except ImportError:
     pass
 
-# FIX: Add missing submodule imports that tests expect
 try:
     from . import clarifier  # noqa: F401
 except ImportError:

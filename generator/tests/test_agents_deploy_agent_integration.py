@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 # Import all modules under test
-# FIX: Use correct import paths from generator.agents.deploy_agent
+# Use correct import paths from generator.agents.deploy_agent
 from generator.agents.deploy_agent.deploy_agent import DeployAgent
 from generator.agents.deploy_agent.deploy_prompt import DeployPromptAgent
 from generator.agents.deploy_agent.deploy_response_handler import (
@@ -348,7 +348,7 @@ class TestFullDeploymentPipeline:
         """
         # Initialize agent
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
         # Generate documentation/configs
         result = await agent.generate_documentation(
@@ -378,9 +378,9 @@ class TestFullDeploymentPipeline:
         - Docker, Kubernetes, and Helm (all targets now have proper handlers)
         """
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
-        # FIX Bug 3 & 4: Re-enable all deployment targets with proper handlers
+        # Re-enable all deployment targets with proper handlers
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt"],
             targets=["docker", "kubernetes", "helm"],
@@ -408,11 +408,11 @@ class TestFullDeploymentPipeline:
         3. Self-heal is available for errors
         """
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
         # Mock the validator at instance level with a success response
         mock_validator = MagicMock()
-        # FIX: Use return_value instead of side_effect to avoid StopAsyncIteration
+        # Use return_value instead of side_effect to avoid StopAsyncIteration
         mock_validator.validate = AsyncMock(return_value={
             "build_status": "success",
             "lint_status": "passed",
@@ -477,7 +477,7 @@ class TestPromptResponseValidationFlow:
         4. Validate
         """
         # Step 1: Build prompt
-        # FIX: DeployPromptAgent doesn't take repo_path in __init__, only few_shot_dir
+        # DeployPromptAgent doesn't take repo_path in __init__, only few_shot_dir
         prompt_agent = DeployPromptAgent(
             few_shot_dir=str(full_test_repo / "few_shot_examples")
         )
@@ -485,7 +485,7 @@ class TestPromptResponseValidationFlow:
         prompt = await prompt_agent.build_deploy_prompt(
             target="docker",
             files=["src/app.py", "requirements.txt"],
-            # FIX: Add repo_path to build_deploy_prompt call instead
+            # Add repo_path to build_deploy_prompt call instead
             repo_path=str(full_test_repo),
             instructions="Create a production-ready Dockerfile",
             variant="default",
@@ -511,7 +511,7 @@ class TestPromptResponseValidationFlow:
         ) as mock_scan:
             mock_scan.return_value = []
 
-            # FIX: handle_deploy_response now requires handler_registry argument
+            # handle_deploy_response now requires handler_registry argument
             handler_registry = HandlerRegistry()
             handled_response = await handle_deploy_response(
                 raw_response=llm_response,
@@ -591,7 +591,7 @@ CMD ["python", "src/app.py"]
             ) as mock_llm:
                 mock_llm.return_value = {"content": "Summary", "model": "gpt-4"}
 
-                # FIX: handle_deploy_response now requires handler_registry argument
+                # handle_deploy_response now requires handler_registry argument
                 handler_registry = HandlerRegistry()
                 result = await handle_deploy_response(
                     raw_response=insecure_config,
@@ -627,7 +627,7 @@ class TestMultiStagePipeline:
         5. Verify
         """
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
         # Stage 1: Generate
         result = await agent.generate_documentation(
@@ -643,7 +643,7 @@ class TestMultiStagePipeline:
         assert "validations" in result
 
         # Stage 3: Fix if needed (self-heal)
-        # FIX: self_heal now requires arguments - call with proper parameters
+        # self_heal now requires arguments - call with proper parameters
         if result["validations"]["docker"].get("lint_issues"):
             healed = await agent.self_heal(
                 target_files=["src/app.py", "requirements.txt"],
@@ -659,7 +659,7 @@ class TestMultiStagePipeline:
                 result = healed
 
         # Stage 4: Simulate deployment (mock)
-        # FIX: Use simulate_deployment instead of deploy (method doesn't exist)
+        # Use simulate_deployment instead of deploy (method doesn't exist)
         with patch.object(agent.plugin_registry.get_plugin("docker"), "simulate_deployment") as mock_simulate:
             mock_simulate.return_value = {"status": "success", "message": "Simulation passed"}
 
@@ -701,7 +701,7 @@ class TestErrorRecovery:
             ]
 
             agent = DeployAgent(str(full_test_repo))
-            await agent._init_db()  # FIX: Initialize database
+            await agent._init_db()  # Initialize database
 
             # Should handle the failure
             try:
@@ -714,7 +714,7 @@ class TestErrorRecovery:
                 # If it succeeds after retry
                 assert "configs" in result
             except Exception as e:
-                # FIX: Accept any exception - the system may raise different
+                # Accept any exception - the system may raise different
                 # types of errors when LLM fails depending on retry logic
                 # The test verifies the system handles failures gracefully
                 pass  # Any exception is acceptable behavior
@@ -733,9 +733,9 @@ class TestErrorRecovery:
             mock_subprocess.side_effect = FileNotFoundError("docker not found")
 
             agent = DeployAgent(str(full_test_repo))
-            await agent._init_db()  # FIX: Initialize database
+            await agent._init_db()  # Initialize database
 
-            # FIX: The system may raise an error when validation tools fail
+            # The system may raise an error when validation tools fail
             # or it may complete with validation limitations documented
             try:
                 result = await agent.generate_documentation(
@@ -817,7 +817,7 @@ class TestPerformanceConcurrency:
             )
 
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
         start_time = time.time()
 
@@ -855,7 +855,7 @@ class TestHistoryRollback:
         4. Verify rollback was attempted
         """
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
         # Generate v1
         result_v1 = await agent.generate_documentation(
@@ -912,9 +912,9 @@ class TestReportGenerationIntegration:
         4. Verify report completeness
         """
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
 
-        # FIX Bug 3 & 4: Re-enable all deployment targets with proper handlers
+        # Re-enable all deployment targets with proper handlers
         result = await agent.generate_documentation(
             target_files=["src/app.py", "requirements.txt", "README.md"],
             targets=["docker", "kubernetes", "helm"],
@@ -954,11 +954,11 @@ class TestPluginSystemIntegration:
         3. Verify registration works
         4. Verify plugin methods can be called
         """
-        # FIX: Use correct import path
+        # Use correct import path
         from generator.agents.deploy_agent.deploy_agent import TargetPlugin
 
         class CustomPlugin(TargetPlugin):
-            # FIX: Implement correct abstract methods from TargetPlugin
+            # Implement correct abstract methods from TargetPlugin
             async def generate_config(
                 self, target_files, instructions, context, previous_configs
             ):
@@ -977,7 +977,7 @@ class TestPluginSystemIntegration:
                 return True
 
         agent = DeployAgent(str(full_test_repo))
-        await agent._init_db()  # FIX: Initialize database
+        await agent._init_db()  # Initialize database
         custom_plugin = CustomPlugin()
         agent.register_plugin("custom", custom_plugin)
 

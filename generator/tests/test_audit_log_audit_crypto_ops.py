@@ -771,7 +771,7 @@ class TestChainVerification:
 
         assert result is False
 
-        # FIX: The loop adds tasks for 0 and 1, then fails on 2.
+        # The loop adds tasks for 0 and 1, then fails on 2.
         # The gather is called with 2 tasks.
         assert mock_verify_entry.call_count == 2
 
@@ -837,7 +837,7 @@ class TestChainVerification:
         # Loop 1 checks hash (ok), then sig/key (fail), then returns False.
         # asyncio.gather is never called.
 
-        # FIX: The task is created, so mock_verify_entry *is* called once.
+        # The task is created, so mock_verify_entry *is* called once.
         assert mock_verify_entry.call_count == 1
         assert mock_compute_hash.call_count == 1  # Only for entry 0
 
@@ -1080,7 +1080,7 @@ class TestFallbackLogic:
             await safe_sign(sample_entry_data, "key-1", "hash")
 
         # Check metrics
-        # FIX: The code path logs 3 times: PrimaryFail, FallbackSecretMissing, FallbackSignFail
+        # The code path logs 3 times: PrimaryFail, FallbackSecretMissing, FallbackSignFail
         assert mock_metrics.labels.call_count == 3
         mock_metrics.labels.assert_any_call(
             type="PrimarySignFail", provider_type="mock_provider", operation="safe_sign"
