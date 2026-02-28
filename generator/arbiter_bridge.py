@@ -209,7 +209,11 @@ class ArbiterBridge:
         self.enabled = True
         self._noop_services: list = []  # Names of services running as stubs
         
-        # Initialize services with fallbacks
+        # Initialize services with fallbacks.
+        # Only auto-created services are tracked as NO-OP: if the caller explicitly
+        # injects a service instance, we trust it to be a real (or intentional stub)
+        # implementation.  The caller is responsible for ensuring injected services
+        # are functional if full Arbiter integration is required.
         try:
             self.policy_engine = policy_engine or PolicyEngine()
             if not _REAL_POLICY_ENGINE and policy_engine is None:

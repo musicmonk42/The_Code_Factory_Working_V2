@@ -1213,24 +1213,6 @@ class WorkflowEngine:
                             "missing_optional_agents": _missing_optional,
                         }
                     )
-                    _pipeline_require = os.environ.get("PIPELINE_REQUIRE_AGENTS", "").strip()
-                    if _pipeline_require:
-                        _required = [a.strip() for a in _pipeline_require.split(",") if a.strip()]
-                        _absent_required = [a for a in _required if a not in _agent_registry]
-                        if _absent_required:
-                            _err_msg = (
-                                f"PIPELINE_REQUIRE_AGENTS requires {_absent_required} but they are not registered. "
-                                "Install missing agents or unset PIPELINE_REQUIRE_AGENTS."
-                            )
-                            logger.error("[Pipeline:%s] %s", workflow_id, _err_msg, extra={"workflow_id": workflow_id})
-                            result["status"] = WorkflowStatus.FAILED.value
-                            result["errors"].append({
-                                "error_type": "MissingRequiredAgents",
-                                "message": _err_msg,
-                                "missing_agents": _absent_required,
-                                "timestamp": datetime.now(timezone.utc).isoformat()
-                            })
-                            return result
                 else:
                     logger.info(
                         "[Pipeline:%s] All optional agents registered: %s",
@@ -1238,6 +1220,28 @@ class WorkflowEngine:
                         _present_optional,
                         extra={"workflow_id": workflow_id, "registered_agents": _registered_agents}
                     )
+
+                # PIPELINE_REQUIRE_AGENTS: fail fast if any required agents are absent.
+                # Checked unconditionally so that misconfigurations are always caught,
+                # even when all optional agents happen to be registered.
+                _pipeline_require = os.environ.get("PIPELINE_REQUIRE_AGENTS", "").strip()
+                if _pipeline_require:
+                    _required = [a.strip() for a in _pipeline_require.split(",") if a.strip()]
+                    _absent_required = [a for a in _required if a not in _agent_registry]
+                    if _absent_required:
+                        _err_msg = (
+                            f"PIPELINE_REQUIRE_AGENTS requires {_absent_required} but they are not registered. "
+                            "Install missing agents or unset PIPELINE_REQUIRE_AGENTS."
+                        )
+                        logger.error("[Pipeline:%s] %s", workflow_id, _err_msg, extra={"workflow_id": workflow_id})
+                        result["status"] = WorkflowStatus.FAILED.value
+                        result["errors"].append({
+                            "error_type": "MissingRequiredAgents",
+                            "message": _err_msg,
+                            "missing_agents": _absent_required,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        })
+                        return result
 
                 # [STAGE:READ_MD] Read and record input MD content
                 md_content = ""

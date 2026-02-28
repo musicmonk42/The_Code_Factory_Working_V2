@@ -479,31 +479,30 @@ class TestArbiterBridgeNoOpMode:
     """Test suite for ArbiterBridge NO-OP mode detection."""
 
     def test_bridge_is_noop_when_stubs_used(self):
-        """Test that bridge reports is_noop=True when stub services are in use."""
+        """Test that bridge reports is_noop=True when auto-created stub services are in use."""
         from generator.arbiter_bridge import ArbiterBridge
 
-        # Inject stub-like services that aren't real implementations
-        stub_pe = MagicMock()
-        stub_mq = MagicMock()
-        stub_bm = MagicMock()
-        stub_kg = MagicMock()
-        stub_hil = MagicMock()
+        # A minimal stub that can be constructed with no args
+        class _Stub:
+            def __init__(self): pass
 
+        # Simulate the scenario where all real imports failed (flags are False)
+        # and bridge auto-creates services from the stub classes
         with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', False), \
              patch('generator.arbiter_bridge._REAL_MESSAGE_QUEUE', False), \
              patch('generator.arbiter_bridge._REAL_BUG_MANAGER', False), \
              patch('generator.arbiter_bridge._REAL_KNOWLEDGE_GRAPH', False), \
-             patch('generator.arbiter_bridge._REAL_HUMAN_IN_LOOP', False):
-            bridge = ArbiterBridge(
-                policy_engine=stub_pe,
-                message_queue=stub_mq,
-                bug_manager=stub_bm,
-                knowledge_graph=stub_kg,
-                human_in_loop=stub_hil,
-            )
-            # Injected services don't trigger _noop_services since they were provided
-            # by the caller; is_noop only triggers for auto-created stubs.
-            assert isinstance(bridge.is_noop, bool)
+             patch('generator.arbiter_bridge._REAL_HUMAN_IN_LOOP', False), \
+             patch('generator.arbiter_bridge.PolicyEngine', _Stub), \
+             patch('generator.arbiter_bridge.MessageQueueService', _Stub), \
+             patch('generator.arbiter_bridge.BugManager', _Stub), \
+             patch('generator.arbiter_bridge.KnowledgeGraph', _Stub), \
+             patch('generator.arbiter_bridge.HumanInLoop', _Stub):
+            # Do NOT inject services so the bridge auto-creates them as stubs
+            bridge = ArbiterBridge()
+            # With all real flags False and no injected services, bridge is in NO-OP mode
+            assert bridge.is_noop is True
+            assert len(bridge._noop_services) == 5
 
     def test_bridge_is_noop_property_false_when_real_services(self):
         """Test that is_noop is False when all services are real."""

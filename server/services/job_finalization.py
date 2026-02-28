@@ -379,7 +379,6 @@ async def _auto_dispatch_to_sfe(
         from server.services.dispatch_service import dispatch_job_completion
 
         job_data: Dict[str, Any] = {
-            "job_id": job_id,
             "status": job.status,
             "output_files": list(getattr(job, "output_files", [])),
             "completed_at": job.metadata.get("finalized_at", datetime.now(timezone.utc).isoformat()),
