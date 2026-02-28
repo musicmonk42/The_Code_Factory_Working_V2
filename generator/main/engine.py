@@ -3300,12 +3300,18 @@ def _auto_register_agents() -> None:
     try:
         from generator.agents import (
             _AVAILABLE_AGENTS,
+            _load_all_agents,
             CodeGenConfig,
             CritiqueConfig,
             DeployAgent,
             DocgenAgent,
             TestgenAgent,
         )
+
+        # Trigger lazy loading so _AVAILABLE_AGENTS is populated before we check it.
+        # Without this, _AVAILABLE_AGENTS is an empty dict at module-load time because
+        # the __getattr__-based lazy loading hasn't been triggered yet.
+        _load_all_agents()
         
         # Registration mapping
         agent_mapping = [
@@ -3338,13 +3344,50 @@ def _auto_register_agents() -> None:
                 from omnicore_engine.plugin_registry import PLUGIN_REGISTRY as _global_registry
                 global_plugins = _global_registry.get_plugin_names()
                 if global_plugins:
-                    logger.info(
-                        f"Engine auto-registration found 0 agents but global plugin registry "
-                        f"has {len(global_plugins)} plugin(s): {global_plugins}. "
-                        "Agents may be loaded via the server's AgentLoader — "
-                        "use get_agent_loader() for agent availability checks.",
-                        extra={"action": "auto_register_bridge", "global_plugins": global_plugins},
-                    )
+                    # Map OmniCore plugin names to engine agent names and register callable wrappers.
+                    # This handles the timing case where plugins are loaded but agent modules
+                    # haven't fully initialized yet.
+                    _plugin_to_agent_name = {
+                        "codegen_agent": "codegen",
+                        "generator_workflow": "codegen",
+                        "testgen_agent": "testgen",
+                        "critique_agent": "critique",
+                        "deploy_agent": "deploy",
+                        "docgen_agent": "docgen",
+                    }
+                    bridge_count = 0
+                    for plugin_name in global_plugins:
+                        agent_name = _plugin_to_agent_name.get(plugin_name)
+                        if agent_name and agent_name not in _agent_registry:
+                            try:
+                                plugin_callable = _global_registry.get(plugin_name)
+                                if plugin_callable is not None:
+                                    _agent_registry.register(
+                                        agent_name,
+                                        plugin_callable,
+                                        metadata={
+                                            "source": "auto_register_bridge",
+                                            "plugin_name": plugin_name,
+                                        },
+                                    )
+                                    bridge_count += 1
+                            except Exception as _reg_err:
+                                logger.debug(
+                                    f"Could not bridge plugin '{plugin_name}' as agent '{agent_name}': {_reg_err}"
+                                )
+                    if bridge_count > 0:
+                        logger.info(
+                            f"Bridged {bridge_count} agent(s) from global plugin registry: {list(_agent_registry)}",
+                            extra={"action": "auto_register_bridge", "bridge_count": bridge_count},
+                        )
+                    else:
+                        logger.info(
+                            f"Engine auto-registration found 0 agents but global plugin registry "
+                            f"has {len(global_plugins)} plugin(s): {global_plugins}. "
+                            "Agents may be loaded via the server's AgentLoader — "
+                            "use get_agent_loader() for agent availability checks.",
+                            extra={"action": "auto_register_bridge", "global_plugins": global_plugins},
+                        )
                 else:
                     logger.warning(
                         "Auto-registered 0 agents and global plugin registry is also empty. "

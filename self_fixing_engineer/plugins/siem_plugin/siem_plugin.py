@@ -1754,9 +1754,31 @@ class SIEMGatewayManager(PluginBase):
 DEAD_LETTER_DIR = os.environ.get(
     "SIEM_GATEWAY_DEAD_LETTER_DIR", "/var/lib/siem_gateway_dead_letters"
 )
-if not os.path.exists(DEAD_LETTER_DIR):
-    os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
-    os.chmod(DEAD_LETTER_DIR, 0o700)
+try:
+    if not os.path.exists(DEAD_LETTER_DIR):
+        os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+        os.chmod(DEAD_LETTER_DIR, 0o700)
+except (PermissionError, OSError) as e:
+    # Fall back to a temp directory if we can't create the default one
+    import tempfile
+
+    DEAD_LETTER_DIR = os.path.join(tempfile.gettempdir(), "siem_gateway_dead_letters")
+    try:
+        os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+    except (PermissionError, OSError) as fallback_error:
+        # Last resort - use current working directory
+        DEAD_LETTER_DIR = os.path.join(os.getcwd(), ".siem_gateway_dead_letters")
+        try:
+            os.makedirs(DEAD_LETTER_DIR, exist_ok=True)
+        except (PermissionError, OSError):
+            DEAD_LETTER_DIR = os.path.join(tempfile.gettempdir(), "siem_gw_dl")
+        main_logger.warning(
+            f"Could not create temp dead letter directory, using {DEAD_LETTER_DIR}: {fallback_error}"
+        )
+    else:
+        main_logger.warning(
+            f"Could not create dead letter directory at default location, using {DEAD_LETTER_DIR}: {e}"
+        )
 
 
 async def dead_letter_to_file(event: SIEMEvent, reason: str):
