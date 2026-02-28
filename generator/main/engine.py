@@ -2291,7 +2291,11 @@ class WorkflowEngine:
                                                 for tpl_name, tpl_content in helm_data["templates"].items():
                                                     # Ensure template name doesn't duplicate "templates/"
                                                     clean_name = tpl_name.replace("templates/", "")
-                                                    deploy_files[f"helm/templates/{clean_name}"] = str(tpl_content)
+                                                    deploy_files[f"helm/templates/{clean_name}"] = (
+                                                        self._sanitize_helm_template(
+                                                            clean_name, str(tpl_content), deploy_agent, project_name
+                                                        )
+                                                    )
                                         else:
                                             deploy_files["helm/Chart.yaml"] = config_content
                                     except json.JSONDecodeError:
@@ -2334,7 +2338,11 @@ class WorkflowEngine:
                                             if "templates" in helm_data and isinstance(helm_data["templates"], dict):
                                                 for tpl_name, tpl_content in helm_data["templates"].items():
                                                     clean_name = tpl_name.replace("templates/", "")
-                                                    deploy_files[f"helm/templates/{clean_name}"] = str(tpl_content)
+                                                    deploy_files[f"helm/templates/{clean_name}"] = (
+                                                        self._sanitize_helm_template(
+                                                            clean_name, str(tpl_content), deploy_agent, project_name
+                                                        )
+                                                    )
                                     except (json.JSONDecodeError, TypeError):
                                         deploy_files["helm/Chart.yaml"] = fallback if fallback else ""
                         
@@ -2560,6 +2568,66 @@ class WorkflowEngine:
 
         return content
 
+    @staticmethod
+    def _sanitize_helm_template(
+        template_name: str,
+        content: str,
+        deploy_agent: Any,
+        project_name: str,
+    ) -> str:
+        """Ensure a Helm template file contains proper Go-template YAML, not a JSON blob.
+
+        When the LLM returns Helm template content as a raw JSON object (i.e. the
+        content starts with ``{``), the resulting file is invalid for ``helm
+        template`` / ``helm install`` because Helm expects Go-template YAML, not
+        JSON.  This method detects that condition for *deployment.yaml* — the
+        template most commonly mis-generated — and replaces it with the known-good
+        fallback produced by :meth:`DeployAgent._generate_fallback_config`.
+
+        All other template files are returned unchanged so that legitimate
+        JSON-like content (e.g., a ``configmap.yaml`` that embeds a JSON data
+        field) is not accidentally clobbered.
+
+        Args:
+            template_name: The bare file name within ``helm/templates/`` (e.g.
+                           ``"deployment.yaml"``).
+            content: Raw string content of the template as produced by the LLM or
+                     the fallback config generator.
+            deploy_agent: A :class:`DeployAgent` instance used to call
+                          ``_generate_fallback_config`` when replacement is needed.
+            project_name: Name of the project, forwarded to
+                          ``_generate_fallback_config``.
+
+        Returns:
+            The sanitized template content as a UTF-8 string.
+        """
+        # Only the deployment template is susceptible to the JSON-blob problem in
+        # current LLM outputs.  Guard against false positives for other files.
+        if template_name != "deployment.yaml" or not content.lstrip().startswith("{"):
+            return content
+
+        logger.warning(
+            "[DEPLOY] Helm deployment.yaml was returned as a JSON blob — "
+            "replacing with known-good Go-template YAML for project %r",
+            project_name,
+        )
+        try:
+            fallback_json = deploy_agent._generate_fallback_config("helm", project_name)
+            fallback_data = json.loads(fallback_json or "{}")
+            replacement = (
+                fallback_data.get("templates", {}).get("deployment.yaml")
+                or fallback_data.get("templates", {}).get("templates/deployment.yaml")
+            )
+            if replacement and not str(replacement).lstrip().startswith("{"):
+                return str(replacement)
+        except (json.JSONDecodeError, TypeError, AttributeError, KeyError) as exc:
+            logger.warning(
+                "[DEPLOY] Could not extract deployment.yaml from Helm fallback: %s", exc
+            )
+        # Last resort: return the original content unchanged so the file still
+        # exists (validators can then flag the issue rather than crashing).
+        return content
+
     def _split_k8s_manifests(self, combined_yaml: str) -> Dict[str, str]:
         """Split a combined Kubernetes YAML (separated by ---) into named files.
 
@@ -2634,6 +2702,105 @@ class WorkflowEngine:
                 "  ports:\n  - protocol: TCP\n    port: 80\n    targetPort: 8000\n"
                 "  type: LoadBalancer\n"
             )
+        if "k8s/ingress.yaml" not in result:
+            # Minimal nginx-class Ingress stub.  The ingressClassName annotation
+            # is omitted intentionally so the manifest works with any Ingress
+            # controller that responds to the nginx class annotation.
+            result["k8s/ingress.yaml"] = (
+                "---\n"
+                "apiVersion: networking.k8s.io/v1\n"
+                "kind: Ingress\n"
+                "metadata:\n"
+                "  name: app-ingress\n"
+                "  annotations:\n"
+                "    nginx.ingress.kubernetes.io/rewrite-target: /\n"
+                "spec:\n"
+                "  rules:\n"
+                "  - http:\n"
+                "      paths:\n"
+                "      - path: /\n"
+                "        pathType: Prefix\n"
+                "        backend:\n"
+                "          service:\n"
+                "            name: app-service\n"
+                "            port:\n"
+                "              number: 80\n"
+            )
+
+        if "k8s/hpa.yaml" not in result:
+            # autoscaling/v2 is GA since Kubernetes 1.23 (Dec 2021).
+            # Clusters older than 1.23 must use autoscaling/v2beta2 instead.
+            result["k8s/hpa.yaml"] = (
+                "---\n"
+                "apiVersion: autoscaling/v2\n"
+                "kind: HorizontalPodAutoscaler\n"
+                "metadata:\n"
+                "  name: app-hpa\n"
+                "spec:\n"
+                "  scaleTargetRef:\n"
+                "    apiVersion: apps/v1\n"
+                "    kind: Deployment\n"
+                "    name: app\n"
+                "  minReplicas: 1\n"
+                "  maxReplicas: 10\n"
+                "  metrics:\n"
+                "  - type: Resource\n"
+                "    resource:\n"
+                "      name: cpu\n"
+                "      target:\n"
+                "        type: Utilization\n"
+                "        averageUtilization: 70\n"
+            )
+
+        # ------------------------------------------------------------------ #
+        # Structural repair: move misplaced `strategy` to spec.strategy       #
+        #                                                                      #
+        # Some LLMs incorrectly nest the Deployment `strategy` block under    #
+        # `spec.template.spec` (the Pod spec) instead of the top-level        #
+        # `spec` (the Deployment spec).  The Kubernetes API server rejects    #
+        # such manifests.  We detect and relocate the field here so that      #
+        # downstream validators always receive a structurally-correct object.  #
+        # ------------------------------------------------------------------ #
+        if "k8s/deployment.yaml" in result:
+            try:
+                import yaml as _yaml  # local import — PyYAML is always available
+
+                raw_docs = list(_yaml.safe_load_all(result["k8s/deployment.yaml"]))
+                # Filter out None documents (empty sections after `---` separators).
+                parsed_docs = [d for d in raw_docs if d is not None]
+                repaired = False
+
+                for doc in parsed_docs:
+                    if not isinstance(doc, dict) or doc.get("kind") != "Deployment":
+                        continue
+                    pod_spec = (
+                        doc.get("spec", {})
+                        .get("template", {})
+                        .get("spec", {})
+                    )
+                    if not isinstance(pod_spec, dict) or "strategy" not in pod_spec:
+                        continue
+                    # Move strategy up to the Deployment spec level.
+                    doc.setdefault("spec", {})["strategy"] = pod_spec.pop("strategy")
+                    repaired = True
+                    logger.warning(
+                        "[K8S] Repaired misplaced `strategy` in k8s/deployment.yaml: "
+                        "relocated from spec.template.spec to spec"
+                    )
+
+                if repaired:
+                    result["k8s/deployment.yaml"] = _yaml.dump_all(
+                        parsed_docs,
+                        default_flow_style=False,
+                        allow_unicode=True,
+                        explicit_start=True,
+                    )
+            except Exception as repair_err:
+                # Non-fatal: if YAML parsing fails the original content is preserved.
+                logger.warning(
+                    "[K8S] Could not repair k8s/deployment.yaml structure (non-fatal): %s",
+                    repair_err,
+                )
 
         return result
 
