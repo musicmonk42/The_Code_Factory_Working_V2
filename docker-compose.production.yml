@@ -78,6 +78,9 @@ services:
       - DB_COMMAND_TIMEOUT=60  # Query execution timeout in seconds
       - DB_RETRY_ATTEMPTS=3
       - DB_RETRY_DELAY=1.0
+      # Canonical names read by codebase_analyzer.py (mirrors DB_RETRY_* above)
+      - DATABASE_RETRY_ATTEMPTS=3
+      - DATABASE_RETRY_DELAY=1.0
 
       # ============================================
       # Message Bus Configuration
@@ -199,6 +202,10 @@ services:
       # Monitoring
       # ============================================
       - PROMETHEUS_PORT=9090
+      # OpenTelemetry OTLP export endpoint (Bug 6 fix: set to route spans to a collector
+      # instead of stdout, eliminating Railway's 500 logs/sec rate-limit hits).
+      # Example: - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
       # ============================================
       # Application Paths

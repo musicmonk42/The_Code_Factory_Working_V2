@@ -2699,17 +2699,26 @@ class HelmHandler(FormatHandler):
         raise ValueError(f"HelmHandler does not support conversion to '{to_format}'")
 
     def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
-        """Extract sections from Helm chart."""
+        """Extract sections from Helm chart, serialising Chart.yaml and values.yaml as YAML."""
+        from io import StringIO
         sections = {}
-        
-        if "Chart.yaml" in data:
-            sections["Chart.yaml"] = json.dumps(data["Chart.yaml"], indent=2)
-        if "values.yaml" in data:
-            sections["values.yaml"] = json.dumps(data["values.yaml"], indent=2)
+        _yaml = YAML()
+        _yaml.default_flow_style = False
+
+        # Serialise Chart.yaml and values.yaml as proper YAML (not JSON) so that
+        # `helm install` can consume the files without parse errors (Bug 5 fix).
+        for key in ("Chart.yaml", "values.yaml"):
+            value = data.get(key)
+            if value is None:
+                continue
+            stream = StringIO()
+            _yaml.dump(value, stream)
+            sections[key] = stream.getvalue()
+
         if "templates" in data:
             for name, content in data["templates"].items():
                 sections[f"templates/{name}"] = content
-        
+
         return sections
 
     def lint(self, data: Dict[str, Any]) -> List[str]:

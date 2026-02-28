@@ -6375,6 +6375,36 @@ class OmniCoreService:
                 "job_id": job_id,
             }
         
+        # Attempt to reuse a shared PostgresClient so CodebaseAnalyzer does not open a
+        # second connection to the same Railway PostgreSQL instance (Bug 7 fix).
+        # The client is cached on the service instance after the first successful connection.
+        # If the cached pool has since been closed (e.g. idle timeout), reset it so the
+        # code below creates a fresh one.
+        _shared_db_client = getattr(self, "_sfe_db_client", None)
+        if _shared_db_client is not None:
+            _pool = getattr(_shared_db_client, "_pool", None)
+            if _pool is None or (hasattr(_pool, "is_closed") and _pool.is_closed()):
+                logger.info("[SFE_ANALYSIS] Cached PostgresClient pool is closed — reconnecting.")
+                self._sfe_db_client = None
+                _shared_db_client = None
+
+        if _shared_db_client is None:
+            try:
+                from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient as _PGClient
+                _db_url = os.environ.get("DATABASE_URL")
+                if _db_url:
+                    _shared_db_client = _PGClient(_db_url)
+                    await _shared_db_client.connect()
+                    self._sfe_db_client = _shared_db_client
+                    logger.info("[SFE_ANALYSIS] Shared PostgresClient connected for SFE analysis.")
+            except Exception as _db_err:
+                logger.warning(
+                    "[SFE_ANALYSIS] Could not create shared PostgresClient (%s); "
+                    "CodebaseAnalyzer will create its own connection.",
+                    _db_err,
+                )
+                _shared_db_client = None
+
         try:
             # Wrap analysis with configurable timeout
             async with asyncio.timeout(DEFAULT_SFE_ANALYSIS_TIMEOUT):
@@ -6392,9 +6422,11 @@ class OmniCoreService:
                 
                 # Use CodebaseAnalyzer as async context manager
                 # Don't ignore tests - we want to analyze both code AND test files
+                # Pass shared db client to avoid opening a duplicate PostgreSQL connection (Bug 7).
                 async with CodebaseAnalyzer(
                     root_dir=str(code_path_obj),
-                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"]
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                    external_db_client=_shared_db_client,
                 ) as analyzer:
                     # First, do a quick scan to get overall summary
                     summary = await analyzer.scan_codebase(str(code_path_obj))
@@ -9046,6 +9078,50 @@ class OmniCoreService:
                 if sfe_result is not None:
                     job.metadata["sfe_analysis"] = sfe_result
 
+            # Build sfe_feedback summary from SFE results for the pipeline return value
+            sfe_feedback: Dict[str, Any] = {}
+            if sfe_result and sfe_result.get("status") == "completed":
+                _all_defects = sfe_result.get("all_defects", [])
+                _issue_counts: Dict[str, int] = {}
+                for _d in _all_defects:
+                    _sev = _d.get("severity", "unknown").lower()
+                    _issue_counts[_sev] = _issue_counts.get(_sev, 0) + 1
+
+                # Collect top actionable recommendations (critical/high issues first)
+                _top_issues = [
+                    _d for _d in _all_defects
+                    if _d.get("severity", "").lower() in ("critical", "high")
+                ][:10]
+
+                sfe_feedback = {
+                    "issues_found": sfe_result.get("issues_found", 0),
+                    "issues_fixed": sfe_result.get("issues_fixed", 0),
+                    "issue_counts_by_severity": _issue_counts,
+                    "critical_high_count": sfe_result.get("critical_high_count", 0),
+                    "top_actionable_recommendations": [
+                        {
+                            "file": _d.get("file", ""),
+                            "line": _d.get("line"),
+                            "severity": _d.get("severity", ""),
+                            "message": _d.get("message", ""),
+                        }
+                        for _d in _top_issues
+                    ],
+                    "files_analyzed": sfe_result.get("files_analyzed", 0),
+                }
+                if sfe_feedback["critical_high_count"] > 0:
+                    logger.warning(
+                        "[PIPELINE] SFE found %d critical/high severity issues for job %s — "
+                        "review sfe_feedback in pipeline result for details.",
+                        sfe_feedback["critical_high_count"],
+                        job_id,
+                    )
+
+            # Persist the feedback summary in job metadata so it's available to
+            # downstream consumers (e.g., the finalizer and SFE dispatch step).
+            if sfe_feedback and job_id in jobs_db:
+                jobs_db[job_id].metadata["sfe_feedback"] = sfe_feedback
+
             # NOTE: Do NOT call _finalize_successful_job here.
             # Finalization is handled by finalize_job_success() in generator.py
             # to avoid double-finalization and inconsistent state.
@@ -9056,6 +9132,7 @@ class OmniCoreService:
                 "output_path": output_path,
                 "validation_warnings": validation_warnings,
                 "sfe_analysis": sfe_result if sfe_result is not None else {},  # Include SFE results in pipeline return
+                "sfe_feedback": sfe_feedback,  # Summarised SFE findings for callers
             }
             
         except Exception as e:

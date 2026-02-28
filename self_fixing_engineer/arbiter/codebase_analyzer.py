@@ -9,6 +9,7 @@ import importlib.util
 import json
 import logging
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -638,6 +639,7 @@ class CodebaseAnalyzer:
         ignore_patterns: Optional[List[str]] = None,
         config_file: Optional[str] = None,
         max_workers: int = 10,
+        external_db_client: Optional[Any] = None,
     ):
         self.root_dir = Path(root_dir or os.getcwd()).resolve()
         if not self.root_dir.is_dir():
@@ -656,6 +658,10 @@ class CodebaseAnalyzer:
         self.executor = None
         self.db_client = None
         self._using_fallback_storage = False
+        # Optional pre-connected database client provided by the caller (e.g. the
+        # server's shared pool). When set, __aenter__ skips its own connection
+        # attempt and uses this client directly, avoiding duplicate connections.
+        self._external_db_client = external_db_client
 
         self._tool_cache: Optional[List[ToolInfo]] = None
         self.plugins: List[Plugin] = []
@@ -668,6 +674,15 @@ class CodebaseAnalyzer:
         """Initializes the analyzer, setting up resources."""
         self.executor = ProcessPoolExecutor(max_workers=self.max_workers)
         self.semaphore = asyncio.Semaphore(self.max_workers)
+
+        # If an external DB client was provided by the caller, reuse it directly
+        # instead of opening a new connection (avoids exhausting Railway's connection pool).
+        if self._external_db_client is not None:
+            self.db_client = self._external_db_client
+            self._using_fallback_storage = False
+            logger.info("CodebaseAnalyzer using externally-provided database client.")
+            return self
+
         try:
             # Connect to a database if a URL is provided in the config.
             # Apply a timeout so that unresolvable hostnames (e.g.,
@@ -769,7 +784,9 @@ class CodebaseAnalyzer:
         except Exception as e:
             logger.error(f"Error shutting down executor: {e}")
         finally:
-            if self.db_client:
+            # Only disconnect a DB client that *we* created; never close an externally
+            # provided client as the caller manages its lifecycle.
+            if self.db_client and self._external_db_client is None:
                 try:
                     await self.db_client.disconnect()
                 except Exception as e:
@@ -1009,13 +1026,43 @@ class CodebaseAnalyzer:
                     # Handle API difference: newer Pylint uses exit=False, older uses do_exit=False
                     # FIX Issue 3: Also catch AttributeError caused by missing mixin_class_rgx
                     # in the Pylint async checker when running without full config.
+                    _pylint_api_ok = False
                     try:
                         Run([str(file_path)], reporter=reporter, exit=False)
+                        _pylint_api_ok = True
                     except (TypeError, AttributeError):
                         try:
                             Run([str(file_path)], reporter=reporter, do_exit=False)
+                            _pylint_api_ok = True
                         except (TypeError, AttributeError):
-                            logger.warning("Pylint Run API incompatible or config error, skipping lint for %s", file_path)
+                            pass
+                    if not _pylint_api_ok:
+                        # Fall back to subprocess invocation when the programmatic API is
+                        # incompatible with the installed Pylint version (Bug 8 fix).
+                        try:
+                            _proc = subprocess.run(
+                                [sys.executable, "-m", "pylint", "--output-format=json", str(file_path)],
+                                capture_output=True,
+                                text=True,
+                                timeout=60,
+                            )
+                            if _proc.stdout.strip():
+                                _msgs = json.loads(_proc.stdout)
+                                for _m in _msgs:
+                                    defects.append({
+                                        "file": str(file_path),
+                                        "line": _m.get("line", 0),
+                                        "column": _m.get("column", 0),
+                                        "message": _m.get("message", ""),
+                                        "source": "pylint",
+                                    })
+                                continue  # skip the reporter.messages extend below
+                        except Exception as _sub_err:
+                            logger.warning(
+                                "Pylint Run API incompatible or config error, skipping lint for %s: %s",
+                                file_path,
+                                _sub_err,
+                            )
                     defects.extend(
                         [
                             {

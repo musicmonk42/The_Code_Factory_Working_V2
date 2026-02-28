@@ -706,6 +706,9 @@ fail or produce a non-functional application.
    - Comments like ``# Placeholder``, ``# TODO``, ``# Not implemented``, ``# stub``
    - ``raise NotImplementedError`` in service/router functions
    - Empty middleware files (only ``__init__.py`` present)
+   - ``class AsyncSessionLocal: pass`` or any stub database session class
+   - Hardcoded token strings instead of real JWT signing/verification
+   - Empty Pydantic model bodies (``class ProductCreate(BaseModel): pass``)
 
    ✓ REQUIRED patterns:
    - Every service function MUST contain SQLAlchemy ORM queries:
@@ -722,6 +725,68 @@ fail or produce a non-functional application.
      @router.get("/{product_id}", response_model=ProductResponse)
      async def read_product(product_id: UUID, db: AsyncSession = Depends(get_db)):
          return await product_service.get_product(db, product_id)
+     ```
+   - ``app/database.py`` MUST use a real async engine and session factory:
+     ```python
+     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+     from sqlalchemy.orm import DeclarativeBase
+     import os
+
+     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/db")
+     engine = create_async_engine(DATABASE_URL, echo=False)
+     AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
+
+     class Base(DeclarativeBase):
+         pass
+
+     async def get_db():
+         async with AsyncSessionLocal() as session:
+             yield session
+     ```
+   - JWT authentication MUST use real ``python-jose`` or ``PyJWT`` for token
+     creation/verification and ``passlib`` with bcrypt for password hashing.
+     Do NOT return hardcoded token strings:
+     ```python
+     from passlib.context import CryptContext
+     import jwt, os
+     from datetime import datetime, timedelta, timezone
+
+     pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+     SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
+     ALGORITHM = "HS256"
+
+     def hash_password(password: str) -> str:
+         return pwd_context.hash(password)
+
+     def verify_password(plain: str, hashed: str) -> bool:
+         return pwd_context.verify(plain, hashed)
+
+     def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)) -> str:
+         payload = {**data, "exp": datetime.now(timezone.utc) + expires_delta}
+         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+     ```
+   - Pydantic models MUST include real field validators, constraints, and type
+     annotations. Do NOT generate empty ``pass`` class bodies:
+     ```python
+     from pydantic import BaseModel, Field, field_validator
+
+     class ProductCreate(BaseModel):
+         name: str = Field(..., min_length=1, max_length=255)
+         price: float = Field(..., gt=0)
+         description: str = Field(default="", max_length=2000)
+
+         @field_validator("name")
+         @classmethod
+         def name_must_not_be_blank(cls, v: str) -> str:
+             if not v.strip():
+                 raise ValueError("name must not be blank")
+             return v.strip()
+     ```
+   - If middleware modules are generated, they MUST be registered in ``app/main.py``
+     via ``app.add_middleware()``:
+     ```python
+     from app.middleware.auth import JWTAuthMiddleware
+     app.add_middleware(JWTAuthMiddleware)
      ```
 
 9. SQLALCHEMY MODELS (EXACT SPEC FIDELITY):

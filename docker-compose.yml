@@ -83,6 +83,9 @@ services:
       - REDIS_URL=${REDIS_URL}
       - DB_PATH=${DB_PATH}
       - DATABASE_URL=${DATABASE_URL}
+      # Canonical names read by codebase_analyzer.py for SFE analysis DB retries (Bug 7 fix)
+      - DATABASE_RETRY_ATTEMPTS=${DATABASE_RETRY_ATTEMPTS:-3}
+      - DATABASE_RETRY_DELAY=${DATABASE_RETRY_DELAY:-1.0}
 
       # Citus Extension Configuration
       # Set to 1 to enable Citus distributed SQL features
@@ -146,6 +149,10 @@ services:
 
       # Metrics
       - PROMETHEUS_PORT=9090  # Prometheus metrics HTTP server port
+      # OpenTelemetry OTLP export endpoint (Bug 6 fix: set to a collector endpoint to
+      # route spans off stdout and avoid Railway's 500 logs/sec rate-limit burst).
+      # Example: OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
 
       # ============================================
       # Intent Capture Module (Bug fixes: #4, #10, #17)

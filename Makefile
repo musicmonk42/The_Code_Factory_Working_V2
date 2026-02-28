@@ -42,7 +42,7 @@ install-dev: ## Install all dependencies including development tools
 	@echo "$(BLUE)Installing unified platform development dependencies...$(NC)"
 	pip install --upgrade pip setuptools wheel
 	pip install -r requirements.txt
-	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit pylint
+	pip install pytest pytest-cov pytest-asyncio pytest-mock black ruff flake8 mypy bandit safety pip-audit "pylint>=3.0.0,<4.0.0"
 	@echo "$(GREEN)Development installation complete!$(NC)"
 
 install-ai: ## Install optional Tier-1 AI capability dependencies (qiskit, nengo, opencv)
