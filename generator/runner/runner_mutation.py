@@ -1004,7 +1004,7 @@ async def mutation_test(
             if _code_file_list and len(_code_file_list) > 1:
                 _chunk_size = max(1, math.ceil(len(_code_file_list) / _max_workers))
                 _chunks = [
-                    _code_file_list[i: i + _chunk_size]
+                    _code_file_list[i:i + _chunk_size]
                     for i in range(0, len(_code_file_list), _chunk_size)
                 ]
                 _partitioned_params = [

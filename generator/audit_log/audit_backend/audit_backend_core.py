@@ -1588,7 +1588,7 @@ class InMemoryBackend(LogBackend):
             _CHUNK = 65536
             for _offset in range(0, len(compressed_data), _CHUNK):
                 _chunk = _decompressor.decompress(
-                    compressed_data[_offset: _offset + _CHUNK]
+                    compressed_data[_offset:_offset + _CHUNK]
                 )
                 _total += len(_chunk)
                 if _total > _MAX_DECOMPRESSED_BYTES:

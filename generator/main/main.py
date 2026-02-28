@@ -656,6 +656,7 @@ def generate_launch_provenance(
         timestamp = (
             datetime.datetime.now(datetime.timezone.utc)
             .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
         )
 
         try:
