@@ -9,9 +9,8 @@
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
-	test-arbiter-policy test-arbiter-integration test-codegen-stubs \
+	test-arbiter-policy test-arbiter-integration test-codegen-stubs test-pipeline-fixes \
 	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
-	test-arbiter-policy test-arbiter-integration test-evolution test-dlt test-plugin-agents test-codegen-stubs
 
 # Default target
 .DEFAULT_GOAL := help
@@ -74,6 +73,11 @@ test-large-spec-fixes: ## Run tests for large-spec pipeline fixes (multi-pass, e
 	@echo "$(BLUE)Running large-spec pipeline fix tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest tests/test_large_spec_pipeline_fixes.py -v --tb=short
 	@echo "$(GREEN)Large-spec fix tests complete!$(NC)"
+
+test-pipeline-fixes: ## Run tests for 5 pipeline fixes (agent registration, README venv, critique report, plugin fallback, requirements.txt)
+	@echo "$(BLUE)Running pipeline fix validation tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest tests/test_production_log_pipeline_fixes.py -v --tb=short
+	@echo "$(GREEN)Pipeline fix tests complete!$(NC)"
 
 test-codegen-stubs: ## Run stub-generation tests (classify, render, detection checks for new Jinja2 stub templates)
 	@echo "$(BLUE)Running codegen stub-generation tests...$(NC)"

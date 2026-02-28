@@ -131,6 +131,8 @@ spec:
             capabilities:
               drop:
               - ALL
+      containers:
+        - name: codefactory
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: {{ include "codefactory.image" . }}

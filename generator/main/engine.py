@@ -3414,7 +3414,7 @@ def _auto_register_agents() -> None:
             # when the registry bridge also produced 0 results.
             if registered_count == 0:
                 _fallback_imports = [
-                    ("codegen", "generator.agents.codegen_agent.codegen_agent", "CodegenAgent"),
+                    ("codegen", "generator.agents.codegen_agent.codegen_agent", "CodeGenConfig"),
                     ("testgen", "generator.agents.testgen_agent.testgen_agent", "TestgenAgent"),
                     ("deploy", "generator.agents.deploy_agent.deploy_agent", "DeployAgent"),
                     ("docgen", "generator.agents.docgen_agent.docgen_agent", "DocgenAgent"),

@@ -606,15 +606,18 @@ def post_materialize(
             # ------------------------------------------------------------------
             # Phase 9: Ensure requirements.txt exists
             # ------------------------------------------------------------------
-            req_path = output_dir / "requirements.txt"
-            if not req_path.exists():
+            try:
                 _create_if_absent(
-                    req_path,
+                    output_dir / "requirements.txt",
                     "fastapi>=0.100.0\nuvicorn[standard]>=0.22.0\npydantic>=2.0.0\n",
                     result,
                     output_dir=output_dir,
                     file_type="requirements_txt",
                 )
+            except Exception as req_exc:  # pylint: disable=broad-except
+                warn = f"ensure_requirements_txt error: {req_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
 
             # ------------------------------------------------------------------
             # Finalize
