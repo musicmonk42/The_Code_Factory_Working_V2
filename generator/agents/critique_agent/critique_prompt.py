@@ -91,13 +91,24 @@ try:
     PROMPT_BUILDS = CRITIQUE_PROMPT_BUILDS
     PROMPT_LATENCY = CRITIQUE_PROMPT_LATENCY
 
-    # Stub for legacy dependency (kept only so calls do not explode)
+    # Stub for LanguageCritiquePlugin — the real implementation lives in a
+    # separate process/container that is not available in this deployment.
+    # Returns (False, …) so callers that check `if success` correctly skip
+    # dependent logic rather than processing a fabricated result.
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            logging.error(
-                "LanguageCritiquePlugin is a dependency bleed and should be refactored."
+            logging.warning(
+                "LanguageCritiquePlugin is not available in this environment. "
+                "Language-specific coverage tooling will be skipped."
             )
-            return True, {"output": "Mock success"}
+            return False, {
+                "output": "",
+                "stderr": (
+                    "LanguageCritiquePlugin is not available. "
+                    "Install the required runner dependencies to enable "
+                    "language-specific critique tooling."
+                ),
+            }
 
     def save_files_to_output(*args, **kwargs):
         # Legacy stub; no-op in this module.
@@ -136,7 +147,17 @@ except ImportError as e:
 
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            return True, {"output": "Mock success"}
+            logging.warning(
+                "LanguageCritiquePlugin is not available (runner utilities not installed). "
+                "Language-specific coverage tooling will be skipped."
+            )
+            return False, {
+                "output": "",
+                "stderr": (
+                    "LanguageCritiquePlugin unavailable — runner utilities not installed. "
+                    "Install the runner package to enable language-specific critique tooling."
+                ),
+            }
 
     def save_files_to_output(*args, **kwargs):
         return None

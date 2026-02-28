@@ -653,7 +653,10 @@ def generate_launch_provenance(
     with tracer.start_as_current_span(
         "generate_launch_provenance", attributes={"app.interface": interface}
     ) as span:
-        timestamp = datetime.datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
+        timestamp = (
+            datetime.datetime.now(datetime.timezone.utc)
+            .isoformat(timespec="milliseconds")
+        )
 
         try:
             config_model = load_config(config_path)
