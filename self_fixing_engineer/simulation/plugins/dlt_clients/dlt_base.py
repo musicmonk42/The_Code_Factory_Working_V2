@@ -523,6 +523,9 @@ try:
 
     # Use OTLP exporter instead of deprecated Jaeger exporter
     # (Since v1.35, Jaeger supports OTLP natively. JaegerExporter support ended July 2023.)
+    _otel_resource = Resource.create({"service.name": "dlt-client-plugin"})
+    _otel_tracer_provider = TracerProvider(resource=_otel_resource)
+
     try:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
@@ -549,11 +552,17 @@ try:
 
         if _otlp_reachable:
             exporter = OTLPSpanExporter(endpoint=_otlp_endpoint, insecure=True)
+            _otel_tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
         else:
             exporter = _ConsoleExporter()
             _base_logger.info(
                 "OTLP collector at %s:%s is not reachable — using ConsoleSpanExporter for DLT tracing",
                 _otlp_host, _otlp_port,
+            )
+            # Rate-limit console output to avoid exceeding Railway's 500 logs/sec
+            # limit when many spans complete simultaneously (e.g., ~20 parallel lint runs).
+            _otel_tracer_provider.add_span_processor(
+                BatchSpanProcessor(exporter, max_export_batch_size=64, schedule_delay_millis=5000)
             )
     except ImportError:
         # OTLP exporter not available, try Console exporter as fallback
@@ -563,10 +572,10 @@ try:
         _base_logger.warning(
             "OTLP exporter not available. Using ConsoleSpanExporter for tracing."
         )
-
-    _otel_resource = Resource.create({"service.name": "dlt-client-plugin"})
-    _otel_tracer_provider = TracerProvider(resource=_otel_resource)
-    _otel_tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+        # Rate-limit console output
+        _otel_tracer_provider.add_span_processor(
+            BatchSpanProcessor(exporter, max_export_batch_size=64, schedule_delay_millis=5000)
+        )
     trace.set_tracer_provider(_otel_tracer_provider)
     TRACER = trace.get_tracer(__name__)
     OTEL_AVAILABLE = True

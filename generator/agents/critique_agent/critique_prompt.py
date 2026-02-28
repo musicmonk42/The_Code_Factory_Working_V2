@@ -331,10 +331,9 @@ async def incorporate_multi_modal_data(
                 async with aiofiles.open(file_path, mode="w", encoding="utf-8") as f:
                     await f.write(content)
 
-            combined_code_content = "\n".join(code_files.values())
             lang = (
-                await detect_language(combined_code_content)
-                if combined_code_content
+                await _maybe_await(detect_language(code_files))
+                if code_files
                 else None
             )
 

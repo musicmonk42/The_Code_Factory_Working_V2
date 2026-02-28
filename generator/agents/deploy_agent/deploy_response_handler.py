@@ -2700,16 +2700,23 @@ class HelmHandler(FormatHandler):
 
     def extract_sections(self, data: Dict[str, Any]) -> Dict[str, str]:
         """Extract sections from Helm chart."""
+        from io import StringIO
         sections = {}
-        
+        _yaml = YAML()
+        _yaml.default_flow_style = False
+
         if "Chart.yaml" in data:
-            sections["Chart.yaml"] = json.dumps(data["Chart.yaml"], indent=2)
+            stream = StringIO()
+            _yaml.dump(dict(data["Chart.yaml"]) if hasattr(data["Chart.yaml"], "items") else data["Chart.yaml"], stream)
+            sections["Chart.yaml"] = stream.getvalue()
         if "values.yaml" in data:
-            sections["values.yaml"] = json.dumps(data["values.yaml"], indent=2)
+            stream = StringIO()
+            _yaml.dump(dict(data["values.yaml"]) if hasattr(data["values.yaml"], "items") else data["values.yaml"], stream)
+            sections["values.yaml"] = stream.getvalue()
         if "templates" in data:
             for name, content in data["templates"].items():
                 sections[f"templates/{name}"] = content
-        
+
         return sections
 
     def lint(self, data: Dict[str, Any]) -> List[str]:
