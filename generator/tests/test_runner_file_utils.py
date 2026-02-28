@@ -1145,6 +1145,27 @@ class TestValidateAsyncSyncCompatibility:
         errors = _validate_async_sync_compatibility(tmp_path)
         assert errors == []
 
+    def test_async_engine_with_sync_url_flagged(self, tmp_path):
+        """create_async_engine used with a sync URL (postgresql://) should be flagged."""
+        db_file = tmp_path / "database.py"
+        db_file.write_text(
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n"
+            "engine = create_async_engine('postgresql://user:pass@localhost/db')\n"
+        )
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert len(errors) > 0
+        assert any("async" in e.lower() or "driver" in e.lower() for e in errors)
+
+    def test_async_engine_with_asyncpg_url_no_driver_error(self, tmp_path):
+        """create_async_engine with postgresql+asyncpg:// should not be flagged."""
+        db_file = tmp_path / "database.py"
+        db_file.write_text(
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+        )
+        errors = _validate_async_sync_compatibility(tmp_path)
+        assert errors == []
+
 
 class TestValidateDependencyInjection:
     """Tests for _validate_dependency_injection."""

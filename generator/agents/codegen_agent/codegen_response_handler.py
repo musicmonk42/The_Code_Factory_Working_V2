@@ -868,6 +868,106 @@ def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
     return result
 
 
+# Sync→async driver URL rewrite patterns.  Each entry is (compiled_regex, replacement).
+# The negative lookahead ensures already-correct async URLs are not re-processed.
+# NOTE: The capture group always includes the URL scheme separator (`:///` or `://`)
+# so that the replacement can reconstruct the full URL correctly.
+_SYNC_TO_ASYNC_URL_REWRITES: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r'\bpostgresql(?!\+asyncpg)(://)', re.IGNORECASE), r"postgresql+asyncpg\1"),
+    (re.compile(r'\bpostgres(?!\+asyncpg)(://)', re.IGNORECASE), r"postgresql+asyncpg\1"),
+    (re.compile(r'\bmysql(?!\+aiomysql)(://)', re.IGNORECASE), r"mysql+aiomysql\1"),
+    (re.compile(r'\bsqlite(?!\+aiosqlite)(:///)', re.IGNORECASE), r"sqlite+aiosqlite\1"),
+]
+
+# Synchronous driver PyPI package names that should be removed for async projects.
+_SYNC_DRIVER_PYPI_NAMES: Set[str] = {"psycopg2", "psycopg2-binary", "psycopg2_binary"}
+
+
+def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
+    """Rewrite synchronous DATABASE_URLs to async equivalents when ``create_async_engine`` is used.
+
+    Scans all Python files in *files* for usage of ``create_async_engine`` or
+    ``async_sessionmaker``.  When found, any database URL strings that use a
+    synchronous driver scheme (``postgresql://``, ``mysql://``, ``sqlite:///``,
+    etc.) are rewritten to their async equivalents
+    (``postgresql+asyncpg://``, ``mysql+aiomysql://``, ``sqlite+aiosqlite:///``).
+
+    Also updates ``requirements.txt``:
+
+    * Removes synchronous driver packages (``psycopg2-binary``, ``psycopg2``).
+    * Adds ``asyncpg`` if ``postgresql+asyncpg://`` URLs are present.
+    * Adds ``aiosqlite`` if ``sqlite+aiosqlite:///`` URLs are present.
+
+    Args:
+        files: Dict mapping filenames to file contents (as returned by
+               :func:`parse_llm_response`).
+
+    Returns:
+        Updated *files* dict with async-compatible database URLs and
+        ``requirements.txt`` adjusted for async drivers.
+    """
+    # Check if any Python file uses the async SQLAlchemy API.
+    uses_async_engine = any(
+        filename.endswith(".py") and (
+            "create_async_engine" in content
+            or "async_sessionmaker" in content
+        )
+        for filename, content in files.items()
+    )
+    if not uses_async_engine:
+        return files
+
+    result = dict(files)
+    changed_files: List[str] = []
+
+    for filename, content in result.items():
+        if not filename.endswith(".py"):
+            continue
+        new_content = content
+        for pattern, replacement in _SYNC_TO_ASYNC_URL_REWRITES:
+            new_content = pattern.sub(replacement, new_content)
+        if new_content != content:
+            result[filename] = new_content
+            changed_files.append(filename)
+
+    if changed_files:
+        logger.info(
+            "fix_async_database_url: rewrote sync database URL(s) in %d file(s): %s",
+            len(changed_files),
+            changed_files,
+        )
+
+    # Update requirements.txt: remove sync drivers, add async drivers as needed.
+    reqs_content = result.get("requirements.txt", "")
+    if reqs_content is None:
+        reqs_content = ""
+
+    def _pkg_name(req: str) -> str:
+        return re.split(r"[><=!;\[]", req)[0].strip().lower()
+
+    lines = [ln.strip() for ln in reqs_content.splitlines() if ln.strip()]
+    filtered = [ln for ln in lines if _pkg_name(ln) not in _SYNC_DRIVER_PYPI_NAMES]
+    pkg_names = {_pkg_name(ln) for ln in filtered}
+
+    all_py_content = " ".join(
+        content for fname, content in result.items() if fname.endswith(".py")
+    )
+
+    if "postgresql+asyncpg" in all_py_content and "asyncpg" not in pkg_names:
+        filtered.append("asyncpg")
+    if "sqlite+aiosqlite" in all_py_content and "aiosqlite" not in pkg_names:
+        filtered.append("aiosqlite")
+
+    new_reqs = ("\n".join(filtered) + "\n") if filtered else ""
+    if new_reqs != reqs_content:
+        result["requirements.txt"] = new_reqs
+        logger.info(
+            "fix_async_database_url: updated requirements.txt "
+            "(removed sync drivers, added async driver packages)"
+        )
+
+    return result
+
 
 def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
     """
@@ -954,8 +1054,13 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             fixed_files = fix_response_model_type_mismatches(fixed_files)
             # Fix 3: alias ORM imports when models/ and schemas/ share a class name
             fixed_files = disambiguate_model_schema_imports(fixed_files)
+            # Fix 5: consolidate duplicate Base class definitions to app/database.py
+            fixed_files = consolidate_base_definitions(fixed_files)
         # Populate requirements.txt with any third-party imports found in the generated code
         fixed_files = extract_and_populate_requirements(fixed_files)
+        # Fix async database driver: rewrite sync URLs (postgresql://) to async (postgresql+asyncpg://)
+        if lang == "python":
+            fixed_files = fix_async_database_url(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -3899,6 +4004,179 @@ def disambiguate_model_schema_imports(code_files: Dict[str, str]) -> Dict[str, s
 
         if changed:
             updated[path] = new_content
+
+    return updated
+
+
+def _remove_symbol_from_import(source: str, module: str, symbol: str) -> str:
+    """Remove a single *symbol* from a ``from <module> import ...`` statement.
+
+    Handles both single-symbol and multi-symbol import lines:
+
+    * ``from sqlalchemy.orm import declarative_base`` → line removed entirely.
+    * ``from sqlalchemy.orm import Session, declarative_base`` → rewritten as
+      ``from sqlalchemy.orm import Session`` (symbol stripped, rest preserved).
+    * Parenthesised multi-line imports are **not** modified; they are rare in
+      LLM-generated code and would require a more complex parser.
+
+    Args:
+        source: Python source code to process.
+        module: Dotted module name (e.g. ``"sqlalchemy.orm"``).
+        symbol: Symbol name to remove (e.g. ``"declarative_base"``).
+
+    Returns:
+        Modified source with the named symbol removed.  The original source
+        is returned unchanged if no matching import is found.
+    """
+    escaped_module = re.escape(module)
+    escaped_symbol = re.escape(symbol)
+
+    # Pattern for a flat (single-line, no parens) from … import … statement
+    # that contains the target symbol.
+    flat_import_re = re.compile(
+        rf'^([ \t]*from\s+{escaped_module}\s+import\s+)([^\n(]+)\n?',
+        re.MULTILINE,
+    )
+
+    def _replace(m: re.Match) -> str:
+        prefix = m.group(1)   # "from sqlalchemy.orm import "
+        names_raw = m.group(2)  # e.g. "Session, declarative_base, relationship"
+        # Split on commas, strip whitespace and trailing backslashes
+        names = [n.strip().rstrip("\\").strip() for n in names_raw.split(",")]
+        names = [n for n in names if n and n != symbol]
+        if not names:
+            # Symbol was the only import — remove the entire line.
+            return ""
+        return prefix + ", ".join(names) + "\n"
+
+    return flat_import_re.sub(_replace, source)
+
+
+def consolidate_base_definitions(code_files: Dict[str, str]) -> Dict[str, str]:
+    """Remove duplicate ``Base`` class definitions from model files.
+
+    When the LLM generates multiple files that each define their own
+    ``Base = declarative_base()`` or ``class Base(DeclarativeBase)``, SQLAlchemy
+    creates separate metadata registries, which causes warnings and prevents
+    Alembic from discovering all tables.
+
+    This function checks whether ``app/database.py`` (the canonical source)
+    defines ``Base``.  If so, it rewrites every *other* ``*.py`` file that also
+    defines ``Base`` by:
+
+    1. Removing the inline ``Base = declarative_base()`` line **or** the
+       ``class Base(DeclarativeBase): pass`` block.
+    2. Adding ``from app.database import Base`` near the top of the file
+       (after any ``from __future__`` import, before other local imports).
+
+    Files that already import ``Base`` from ``app.database`` are left unchanged.
+    ``app/database.py`` itself is never modified.
+
+    Args:
+        code_files: Mapping of relative file path → source code.
+
+    Returns:
+        The (potentially modified) *code_files* mapping.
+    """
+    # Patterns that define a Base in a file
+    _base_declarative_re = re.compile(
+        r'^[ \t]*Base\s*=\s*declarative_base\s*\([^\n]*\)\s*\n?',
+        re.MULTILINE,
+    )
+    _base_class_re = re.compile(
+        r'^[ \t]*class\s+Base\s*\(\s*DeclarativeBase\s*\)\s*:\s*\n'
+        r'(?:[ \t]+(?:pass|\.\.\.)\s*\n)',
+        re.MULTILINE,
+    )
+    _base_import_re = re.compile(
+        r'\bfrom\s+app\.database\s+import\b[^\n]*\bBase\b'
+    )
+
+    # Check if app/database.py defines Base (canonical source)
+    db_content = code_files.get("app/database.py", "")
+    if not db_content:
+        return code_files
+    has_base_in_db = bool(
+        _base_declarative_re.search(db_content)
+        or _base_class_re.search(db_content)
+        or re.search(r'\bclass\s+Base\s*\(', db_content)
+    )
+    if not has_base_in_db:
+        return code_files
+
+    updated = dict(code_files)
+    canonical_import = "from app.database import Base"
+
+    for path, content in code_files.items():
+        if path == "app/database.py":
+            continue
+        if not path.endswith(".py"):
+            continue
+        # Skip files that don't define Base locally
+        has_local_base = bool(
+            _base_declarative_re.search(content)
+            or _base_class_re.search(content)
+        )
+        if not has_local_base:
+            continue
+        # Skip files that already import Base from app.database
+        if _base_import_re.search(content):
+            continue
+
+        new_content = content
+        # Remove inline Base = declarative_base() line
+        new_content = _base_declarative_re.sub("", new_content)
+        # Remove class Base(DeclarativeBase): pass block
+        new_content = _base_class_re.sub("", new_content)
+
+        # Remove `declarative_base` from any `from sqlalchemy.orm import ...` line
+        # if it is no longer CALLED anywhere.  Checking for a call pattern
+        # ``declarative_base(`` is precise: it ignores the import line itself so
+        # that co-imported symbols (e.g. ``Session``) are preserved.
+        if not re.search(r'\bdeclarative_base\s*\(', new_content):
+            new_content = _remove_symbol_from_import(
+                new_content, "sqlalchemy.orm", "declarative_base"
+            )
+        # Remove `DeclarativeBase` from any `from sqlalchemy.orm import ...` line
+        # if no class in the file inherits from it directly (other than the Base
+        # stub we just removed).  Checking for ``class Foo(DeclarativeBase)``
+        # prevents removing the symbol when it still has legitimate usages.
+        if not re.search(r'\bclass\s+\w+\s*\([^)]*DeclarativeBase', new_content):
+            new_content = _remove_symbol_from_import(
+                new_content, "sqlalchemy.orm", "DeclarativeBase"
+            )
+
+        # Insert `from app.database import Base` after any `from __future__` line,
+        # or at the very beginning of the import block.
+        if canonical_import not in new_content:
+            future_match = re.search(r'^from\s+__future__\s+import[^\n]*\n', new_content, re.MULTILINE)
+            if future_match:
+                insert_pos = future_match.end()
+                new_content = (
+                    new_content[:insert_pos]
+                    + canonical_import + "\n"
+                    + new_content[insert_pos:]
+                )
+            else:
+                # Insert before the first import statement
+                first_import = re.search(r'^(?:import |from )', new_content, re.MULTILINE)
+                if first_import:
+                    insert_pos = first_import.start()
+                    new_content = (
+                        new_content[:insert_pos]
+                        + canonical_import + "\n"
+                        + new_content[insert_pos:]
+                    )
+                else:
+                    new_content = canonical_import + "\n" + new_content
+
+        if new_content != content:
+            updated[path] = new_content
+            logger.info(
+                "consolidate_base_definitions: removed local Base definition from '%s', "
+                "added 'from app.database import Base'",
+                path,
+            )
 
     return updated
 
