@@ -219,10 +219,10 @@ class TestOpenTelemetryConfig:
         config = OpenTelemetryConfig.get_instance()
         assert isinstance(config.tracer, NoOpTracer)
 
-    @patch("self_fixing_engineer.arbiter.otel_config.OTEL_AVAILABLE", False)
-    def test_missing_opentelemetry_uses_noop_tracer(self, mock_env):
+    def test_missing_opentelemetry_uses_noop_tracer(self):
         """Test fallback to NoOpTracer when OpenTelemetry is not available."""
-        with patch.object(Environment, "current", return_value=Environment.DEVELOPMENT):
+        with patch("self_fixing_engineer.arbiter.otel_config.OTEL_AVAILABLE", False), \
+             patch.object(Environment, "current", return_value=Environment.DEVELOPMENT):
             config = OpenTelemetryConfig.get_instance()
             assert isinstance(config.tracer, NoOpTracer)
 
