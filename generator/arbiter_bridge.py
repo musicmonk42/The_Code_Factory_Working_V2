@@ -207,7 +207,7 @@ class ArbiterBridge:
             human_in_loop: Optional HumanInLoop instance
         """
         self.enabled = True
-        self._noop_services: list = []  # Names of services running as stubs
+        self._noop_services: List[str] = []  # Names of services running as stubs
         
         # Initialize services with fallbacks.
         # Only auto-created services are tracked as NO-OP: if the caller explicitly

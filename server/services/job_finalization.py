@@ -92,21 +92,18 @@ _finalized_jobs: Set[str] = set()
 # Track dispatched jobs to ensure dispatch idempotency (separate from finalization)
 _dispatched_jobs: Set[str] = set()
 
-# Correlation ID for tracking finalization operations across logs
-_finalization_correlation_id: Optional[str] = None
-
-
 def _get_correlation_id() -> str:
     """
-    Get or generate correlation ID for tracking operations.
-    
+    Generate a fresh correlation ID for tracking a single finalization operation.
+
+    Each call returns a new UUID so that concurrent or successive finalization
+    calls—each with its own logical scope—are independently traceable in logs
+    and distributed-tracing systems.
+
     Returns:
-        Correlation ID string for log correlation
+        A new UUID4 string suitable for log correlation and OpenTelemetry spans.
     """
-    global _finalization_correlation_id
-    if _finalization_correlation_id is None:
-        _finalization_correlation_id = str(uuid4())
-    return _finalization_correlation_id
+    return str(uuid4())
 
 
 async def finalize_job_success(
@@ -376,6 +373,12 @@ async def _auto_dispatch_to_sfe(
         return
 
     try:
+        # Lazy import: dispatch_service has heavy optional dependencies
+        # (omnicore_engine → numpy, asyncpg, etc.) that may not be installed in
+        # all environments.  Deferring the import to call time lets
+        # job_finalization load successfully even when those extras are absent,
+        # and surfaces the ImportError as a non-fatal warning rather than a
+        # startup failure.
         from server.services.dispatch_service import dispatch_job_completion
 
         job_data: Dict[str, Any] = {
@@ -392,6 +395,11 @@ async def _auto_dispatch_to_sfe(
             job_data["output_manifest"] = job.metadata["output_manifest"]
 
         dispatched = await dispatch_job_completion(job_id, job_data, correlation_id)
+        # Mark as dispatched regardless of the outcome so that automatic dispatch
+        # does not fire again for this job in this process lifetime.  A False
+        # return (all methods exhausted) is still a completed attempt; any retry
+        # should go through the manual /dispatch-to-sfe endpoint which has its
+        # own idempotency logic and richer retry controls.
         _dispatched_jobs.add(job_id)
 
         if dispatched:

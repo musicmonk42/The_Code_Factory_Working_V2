@@ -33,11 +33,9 @@ Test Categories:
    - Startup is conditional on subsystem availability
 """
 
-import asyncio
 import pytest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # Import the services to test
@@ -473,6 +471,29 @@ class TestAutoDispatchOnFinalization:
 
             assert mock_job.metadata.get("sfe_dispatched") is True
             assert "sfe_dispatch_at" in mock_job.metadata
+
+    @pytest.mark.asyncio
+    async def test_dispatch_failure_records_metadata_and_blocks_retry(self, mock_jobs_db):
+        """Test that a False return from dispatch is recorded and blocks automatic retry."""
+        mock_db, mock_job = mock_jobs_db
+
+        with patch('server.services.job_finalization._generate_output_manifest') as mock_manifest, \
+             patch('server.services.dispatch_service.dispatch_job_completion', new_callable=AsyncMock) as mock_dispatch:
+            mock_manifest.return_value = None
+            mock_dispatch.return_value = False  # all dispatch methods exhausted
+
+            result = await finalize_job_success("test-false-dispatch-job")
+
+            # Finalization itself must still succeed
+            assert result is True
+            assert mock_job.status == JobStatus.COMPLETED
+            # Failure recorded in metadata
+            assert mock_job.metadata.get("sfe_dispatched") is False
+            assert mock_job.metadata.get("sfe_dispatch_error") == "All dispatch methods failed"
+            # Job is tracked as dispatched (attempt made) to prevent automatic retry loop
+            assert "test-false-dispatch-job" in _dispatched_jobs
+            # Only one attempt was made
+            assert mock_dispatch.call_count == 1
 
 
 class TestArbiterBridgeNoOpMode:
