@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import base64
 import enum
 import hashlib
 import hmac
+import json
 import os
 import time
 from typing import Any
@@ -21,7 +23,7 @@ try:
 except ImportError:
     _PASSLIB_AVAILABLE = False
 
-from fastapi import Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 SECRET_KEY: str = os.environ.get("SECRET_KEY", "change-me-in-production-at-least-32-chars!!")
@@ -95,7 +97,6 @@ def create_access_token(data: dict[str, Any], expires_in_minutes: int | None = N
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     raw = f"{payload}".encode()
     sig = hmac.new(SECRET_KEY.encode(), raw, hashlib.sha256).hexdigest()
-    import base64, json
     header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).decode().rstrip("=")
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
     return f"{header}.{body}.{sig}"
@@ -111,7 +112,6 @@ def decode_access_token(token: str) -> dict[str, Any]:
                 detail="Could not validate credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             ) from exc
-    import base64, json
     parts = token.split(".")
     if len(parts) != 3:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format")
@@ -132,19 +132,23 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
         )
     return {"sub": sub, **payload}
 
+{% if router_names %}
 {% for router_var in router_names %}
-from fastapi import APIRouter as _APIRouter
-{{ router_var }} = _APIRouter(prefix="/auth", tags=["auth"])
+{{ router_var }} = APIRouter(prefix="/auth", tags=["auth"])
+{% endfor %}
+
+_auth_router = {{ router_names[0] }}
 
 
-@{{ router_var }}.post("/token", summary="Obtain access token")
+@_auth_router.post("/token", summary="Obtain access token")
 async def login_for_access_token(username: str, password: str) -> dict:
     token = create_access_token({"sub": username})
     return {"access_token": token, "token_type": "bearer"}
 
-{% endfor %}
+{% endif %}
+{% set _auth_builtins = ["get_current_user", "create_access_token", "decode_access_token", "hash_password", "verify_password", "login_for_access_token"] %}
 {% for fn in function_names %}
-{% if fn not in ["get_current_user", "create_access_token", "decode_access_token", "hash_password", "verify_password"] %}
+{% if fn not in _auth_builtins %}
 
 def {{ fn }}(*args: Any, **kwargs: Any) -> dict[str, Any]:
     """{{ fn | replace('_', ' ') | capitalize }}."""

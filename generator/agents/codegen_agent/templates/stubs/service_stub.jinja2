@@ -56,12 +56,25 @@ async def delete_{{ cls | lower }}(session: AsyncSession, record_id: int) -> boo
     return result.rowcount > 0
 
 {% endfor %}
+{% set _primary = class_names[0] | lower if class_names else "" %}
+{% set _crud_names = [
+    "get_" + _primary,
+    "list_" + _primary + "s",
+    "create_" + _primary,
+    "update_" + _primary,
+    "delete_" + _primary,
+] %}
 {% for fn in function_names %}
-{% if fn not in ["get_" + (class_names[0] | lower if class_names else ""), "list_" + (class_names[0] | lower if class_names else "") + "s", "create_" + (class_names[0] | lower if class_names else ""), "update_" + (class_names[0] | lower if class_names else ""), "delete_" + (class_names[0] | lower if class_names else "")] %}
+{% if fn not in _crud_names %}
+{% if class_names %}
 async def {{ fn }}(session: AsyncSession, **kwargs) -> dict:
-    result = await session.execute(select({{ class_names[0] if class_names else "object" }}))
+    result = await session.execute(select({{ class_names[0] }}))
     rows = result.scalars().all()
     return {"items": [r.__dict__ for r in rows], "count": len(rows)}
+{% else %}
+async def {{ fn }}(session: AsyncSession, **kwargs) -> dict:
+    return {"function": "{{ fn }}", "kwargs": kwargs}
+{% endif %}
 
 {% endif %}
 {% endfor %}

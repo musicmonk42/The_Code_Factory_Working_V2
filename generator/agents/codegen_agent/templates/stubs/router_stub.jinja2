@@ -47,8 +47,15 @@ async def delete_{{ base_name }}(record_id: int) -> None:
     if record_id < 1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
 
+{% set _crud_names = [
+    "list_" + base_name + "s",
+    "get_" + base_name,
+    "create_" + base_name,
+    "update_" + base_name,
+    "delete_" + base_name,
+] %}
 {% for fn in function_names %}
-{% if fn not in ["list_" + base_name + "s", "get_" + base_name, "create_" + base_name, "update_" + base_name, "delete_" + base_name] %}
+{% if fn not in _crud_names %}
 
 @_router.get("/actions/{{ fn | replace('_', '-') }}", summary="{{ fn | replace('_', ' ') | capitalize }}")
 async def {{ fn }}() -> dict:
