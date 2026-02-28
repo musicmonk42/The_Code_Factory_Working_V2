@@ -1410,8 +1410,12 @@ async def orchestrate_critique_pipeline(
 
                     if config.explainability:
                         rationale_prompt = (
-                            "Explain the rationale behind this critique: "
-                            f"{json.dumps(semantic_result, indent=2, default=str)}"
+                            "Explain the rationale behind this critique result. "
+                            "Return a JSON object with exactly this schema: "
+                            '{"content": "<human-readable explanation>", '
+                            '"key_findings": ["<finding1>", "..."], '
+                            '"recommendation": "<one-sentence action>"}. '
+                            f"Critique result:\n{json.dumps(semantic_result, indent=2, default=str)}"
                         )
                         rationale = await resilient_step(
                             call_llm_for_critique,

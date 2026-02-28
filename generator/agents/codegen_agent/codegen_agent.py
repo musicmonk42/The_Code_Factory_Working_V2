@@ -471,6 +471,10 @@ def _extract_spec_models(requirements: Dict[str, Any]) -> str:
 # Percentage of stub-like function bodies above which a service file is flagged
 _PLACEHOLDER_SERVICE_THRESHOLD_PCT = 50.0
 
+# Maximum number of targeted LLM stub-replacement passes after the ensemble merge.
+# Kept small to prevent unbounded retry loops when the LLM persistently returns stubs.
+_STUB_RETRY_MAX_ATTEMPTS: int = 2
+
 def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     """Validate that generated files form a coherent, runnable application.
 
@@ -703,6 +707,94 @@ async def _repair_stub_services(
     return updated
 
 
+async def _retry_stub_files(
+    merged_files: Dict[str, str],
+    config: Any,
+) -> Dict[str, str]:
+    """Replace auto-generated stub modules with real implementations via focused LLM calls.
+
+    After the multi-pass ensemble completes, some files may still contain the
+    canonical ``"Generated module — replace with actual implementation."`` stub
+    header.  This function runs up to :data:`_STUB_RETRY_MAX_ATTEMPTS`
+    targeted LLM passes, each time asking the model to replace *only* the
+    remaining stub files.  It exits as soon as no stubs remain (happy-path
+    fast exit) or the attempt budget is exhausted.
+
+    Each LLM call uses ``response_format={"type": "json_object"}`` and
+    ``skip_cache=True`` so results are fresh and machine-parseable.
+
+    Args:
+        merged_files: Current merged code-file mapping (path → content) after
+                      the ensemble merge and reconciliation steps.
+        config: CodegenConfig-like object exposing ``backend`` and ``model``
+                attributes, mirroring the convention used by
+                :func:`_repair_stub_services`.
+
+    Returns:
+        An updated code-file mapping where stub files have been replaced by
+        real implementations where the LLM succeeded.  Files the LLM did
+        *not* return, or returned with empty content, are left unchanged.
+    """
+    result = dict(merged_files)
+
+    for attempt in range(_STUB_RETRY_MAX_ATTEMPTS):
+        retry_hint = build_stub_retry_prompt_hint(result)
+        if not retry_hint:
+            # No stubs remaining — exit early.
+            logger.info(
+                "[CODEGEN] _retry_stub_files: all stubs resolved after %d attempt(s)",
+                attempt,
+            )
+            break
+
+        stub_paths = get_stub_files(result)
+        logger.info(
+            "[CODEGEN] _retry_stub_files: attempt %d/%d — %d stub file(s) remaining: %s",
+            attempt + 1,
+            _STUB_RETRY_MAX_ATTEMPTS,
+            len(stub_paths),
+            sorted(stub_paths),
+        )
+
+        retry_prompt = (
+            f"{retry_hint}\n\n"
+            "Return ONLY a JSON object whose keys are the file paths listed above "
+            "and whose values are the complete, production-ready file contents. "
+            "Do NOT include any explanatory text outside the JSON object."
+        )
+
+        try:
+            retry_response = await call_llm_api(
+                prompt=retry_prompt,
+                provider=config.backend,
+                model=config.model.get(config.backend) if hasattr(config, "model") else None,
+                response_format={"type": "json_object"},
+                skip_cache=True,
+            )
+            new_files = parse_llm_response(retry_response)
+        except Exception as llm_err:
+            logger.warning(
+                "[CODEGEN] _retry_stub_files: LLM call failed on attempt %d (non-fatal): %s",
+                attempt + 1,
+                llm_err,
+            )
+            break
+
+        replaced = 0
+        for path, content in new_files.items():
+            if path in result and content and content.strip():
+                result[path] = content
+                replaced += 1
+
+        logger.info(
+            "[CODEGEN] _retry_stub_files: attempt %d replaced %d file(s)",
+            attempt + 1,
+            replaced,
+        )
+
+    return result
+
+
 def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     """Post-ensemble reconciliation: wire discovered routers into main.py (no LLM needed).
 
@@ -813,20 +905,50 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             extra_routes.append(handler)
 
     # ------------------------------------------------------------------ #
-    # 3b. Discover middleware classes in app/middleware/*.py              #
+    # 3b. Discover ASGI middleware classes in app/middleware/*.py          #
+    #                                                                      #
+    # Strategy (preference order):                                         #
+    #   1. Classes that explicitly subclass BaseHTTPMiddleware             #
+    #   2. Classes named *Middleware* (any base)                           #
+    #   3. First non-dunder class in the file (last resort)               #
+    #                                                                      #
+    # Each discovered class is wired via `app.add_middleware(<Cls>)`.      #
+    # Classes are mounted *before* routers so middleware executes first.  #
     # ------------------------------------------------------------------ #
-    _middleware_class_re = re.compile(r'class\s+(\w+)[\s(:]', re.MULTILINE)
-    _middleware_path_re = re.compile(r'^app/middleware/(?!__init__)[^/]+\.py$')
+    _mw_path_re = re.compile(r'^app/middleware/(?!__init__)[^/]+\.py$')
+    # Matches class definitions regardless of whether they have base classes.
+    # Group 1: class name; optional group 2: base class list (may be empty).
+    _mw_class_re = re.compile(
+        r'^class\s+(\w+)\s*(?:\(([^)]*)\))?', re.MULTILINE
+    )
+    _mw_keyword_re = re.compile(r'Middleware', re.IGNORECASE)
+
     middleware_modules: List[Dict[str, str]] = []  # [{module, cls}]
 
     for path, content in list(updated.items()):
-        if not _middleware_path_re.match(path):
+        if not _mw_path_re.match(path):
             continue
-        classes = _middleware_class_re.findall(content)
-        if not classes:
+        all_classes = _mw_class_re.findall(content)  # [(name, bases), ...]
+        if not all_classes:
             continue
         module = path.replace("/", ".").removesuffix(".py")
-        middleware_modules.append({"module": module, "cls": classes[0]})
+
+        # Priority 1 — explicit BaseHTTPMiddleware subclass
+        chosen: Optional[str] = next(
+            (name for name, bases in all_classes if "BaseHTTPMiddleware" in bases),
+            None,
+        )
+        # Priority 2 — any class whose name contains "Middleware"
+        if chosen is None:
+            chosen = next(
+                (name for name, _ in all_classes if _mw_keyword_re.search(name)),
+                None,
+            )
+        # Priority 3 — first class in the file
+        if chosen is None:
+            chosen = all_classes[0][0]
+
+        middleware_modules.append({"module": module, "cls": chosen})
 
     main_lines = [
         "# Auto-generated by _reconcile_app_wiring — do not edit manually",
@@ -842,6 +964,8 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         "app = FastAPI()",
         "",
     ]
+    # Middleware must be added before routers (Starlette middleware stack is
+    # built in LIFO order, so the first `add_middleware` call runs outermost).
     for mm in middleware_modules:
         main_lines.append(f"app.add_middleware({mm['cls']})")
     for rm in router_modules:
@@ -3196,36 +3320,18 @@ if PLUGIN_AVAILABLE:
                             except Exception as _recon_err:
                                 logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
                             # ------------------------------------------------------------------
-                            # Stub retry loop: re-generate stub files left after reconciliation
-                            # (max 2 attempts to avoid infinite loops)
+                            # Stub replacement pass: delegate to _retry_stub_files helper.
+                            # Runs up to _STUB_RETRY_MAX_ATTEMPTS targeted LLM calls to
+                            # replace any remaining auto-generated stub modules.
                             # ------------------------------------------------------------------
                             try:
-                                _stub_retry_files = _merged_files
-                                for _stub_retry_attempt in range(2):
-                                    _stub_hint = build_stub_retry_prompt_hint(_stub_retry_files)
-                                    if not _stub_hint:
-                                        break
-                                    _stub_retry_prompt = (
-                                        f"{_stub_hint}\n\n"
-                                        "Return ONLY the replacement files as a JSON object "
-                                        "mapping filename to complete file content."
-                                    )
-                                    _stub_retry_dict = await call_llm_api(
-                                        prompt=_stub_retry_prompt,
-                                        provider=config.backend,
-                                        model=config.model.get(config.backend) if hasattr(config, "model") else None,
-                                        response_format={"type": "json_object"},
-                                        skip_cache=True,
-                                    )
-                                    _stub_retry_new = parse_llm_response(_stub_retry_dict)
-                                    for _srp, _src in _stub_retry_new.items():
-                                        if _srp in _stub_retry_files and _src.strip():
-                                            _stub_retry_files[_srp] = _src
-                                _merged_files = _stub_retry_files
+                                _merged_files = await _retry_stub_files(_merged_files, config)
                                 response = {"files": _merged_files}
-                                logger.info("[CODEGEN] Stub retry loop completed")
                             except Exception as _stub_retry_err:
-                                logger.warning(f"[CODEGEN] Stub retry loop failed (non-fatal): {_stub_retry_err}")
+                                logger.warning(
+                                    "[CODEGEN] Stub replacement pass failed (non-fatal): %s",
+                                    _stub_retry_err,
+                                )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
                             # NOTE: Using "first" voting strategy because majority voting requires exact
@@ -3756,36 +3862,18 @@ else:
                             except Exception as _recon_err:
                                 logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
                             # ------------------------------------------------------------------
-                            # Stub retry loop: re-generate stub files left after reconciliation
-                            # (max 2 attempts to avoid infinite loops)
+                            # Stub replacement pass: delegate to _retry_stub_files helper.
+                            # Runs up to _STUB_RETRY_MAX_ATTEMPTS targeted LLM calls to
+                            # replace any remaining auto-generated stub modules.
                             # ------------------------------------------------------------------
                             try:
-                                _stub_retry_files = _merged_files
-                                for _stub_retry_attempt in range(2):
-                                    _stub_hint = build_stub_retry_prompt_hint(_stub_retry_files)
-                                    if not _stub_hint:
-                                        break
-                                    _stub_retry_prompt = (
-                                        f"{_stub_hint}\n\n"
-                                        "Return ONLY the replacement files as a JSON object "
-                                        "mapping filename to complete file content."
-                                    )
-                                    _stub_retry_dict = await call_llm_api(
-                                        prompt=_stub_retry_prompt,
-                                        provider=config.backend,
-                                        model=config.model.get(config.backend) if hasattr(config, "model") else None,
-                                        response_format={"type": "json_object"},
-                                        skip_cache=True,
-                                    )
-                                    _stub_retry_new = parse_llm_response(_stub_retry_dict)
-                                    for _srp, _src in _stub_retry_new.items():
-                                        if _srp in _stub_retry_files and _src.strip():
-                                            _stub_retry_files[_srp] = _src
-                                _merged_files = _stub_retry_files
+                                _merged_files = await _retry_stub_files(_merged_files, config)
                                 response = {"files": _merged_files}
-                                logger.info("[CODEGEN] Stub retry loop completed")
                             except Exception as _stub_retry_err:
-                                logger.warning(f"[CODEGEN] Stub retry loop failed (non-fatal): {_stub_retry_err}")
+                                logger.warning(
+                                    "[CODEGEN] Stub replacement pass failed (non-fatal): %s",
+                                    _stub_retry_err,
+                                )
                         else:
                             # Single-pass ensemble (original behavior for small specs with ensemble enabled)
                             # NOTE: Using "first" voting strategy because majority voting requires exact
