@@ -670,7 +670,10 @@ async def _repair_stub_services(
         context_block = "\n\n".join(context_parts)
         spec_context = f"\n\nSpec Data Models (implement these exactly):\n{spec_models}\n" if spec_models else ""
 
-        # Target 3: Use Jinja2 template for the repair prompt when available.
+        # Use the Jinja2 repair_stub_services.jinja2 template when available for
+        # richer, per-service context (related model / schema / router included).
+        # Falls back to an inline f-string prompt when Jinja2 is absent or the
+        # template file has been removed.
         repair_prompt: str
         _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
         _repair_tmpl = _tmpl_dir / "repair_stub_services.jinja2"
@@ -693,6 +696,7 @@ async def _repair_stub_services(
                     related_router=related_router,
                 )
             except Exception:
+                # Template render failed — fall back to inline prompt string.
                 repair_prompt = (
                     f"The following service file is {pct:.0f}% placeholder stubs "
                     f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
@@ -703,6 +707,7 @@ async def _repair_stub_services(
                     f"{context_block}"
                 )
         else:
+            # Template file not present — use inline prompt string directly.
             repair_prompt = (
                 f"The following service file is {pct:.0f}% placeholder stubs "
                 f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
@@ -796,7 +801,10 @@ async def _retry_stub_files(
         )
 
         retry_prompt: str
-        # Target 4: Use Jinja2 template for the retry prompt when available.
+        # Use the Jinja2 retry_stub_files.jinja2 template when available for a
+        # structured, per-category prompt with technology-specific guidance and
+        # an importer dependency map.  Falls back to a plain concatenation of
+        # the hint string when Jinja2 is absent or the template is missing.
         _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
         _retry_tmpl = _tmpl_dir / "retry_stub_files.jinja2"
         if _retry_tmpl.exists():
@@ -808,17 +816,19 @@ async def _retry_stub_files(
                     lstrip_blocks=True,
                     autoescape=False,
                 )
-                # Group stubs by module category and build importer map
+                # Group stubs by module category so the template can emit
+                # per-category technology instructions (SQLAlchemy, Pydantic, etc.).
                 from .codegen_response_handler import _classify_stub_module
                 _stub_groups: Dict[str, List[str]] = {}
                 for _p in sorted(stub_paths):
                     _cat = _classify_stub_module(_p, set())
                     _stub_groups.setdefault(_cat, []).append(_p)
+                # Build importer map: stub_path → list of files that import it.
+                # This lets the LLM infer expected signatures from the importers.
                 _importers_map: Dict[str, List[str]] = {}
                 for _p in sorted(stub_paths):
-                    # Derive the module name from the path for import scanning.
                     _mod_name = _p.replace("/", ".").removesuffix(".py")
-                    # Strip the leading package prefix (e.g. "app.") for matching.
+                    # Strip leading package prefix (e.g. "app.") for broader matching.
                     _mod_base = _mod_name.split(".", 1)[-1] if "." in _mod_name else _mod_name
                     _importers_map[_p] = [
                         f for f, c in result.items()
@@ -834,6 +844,7 @@ async def _retry_stub_files(
                     importers_map=_importers_map,
                 )
             except Exception:
+                # Template render failed — fall back to plain hint concatenation.
                 retry_prompt = (
                     f"{retry_hint}\n\n"
                     "Return ONLY a JSON object whose keys are the file paths listed above "
@@ -841,6 +852,7 @@ async def _retry_stub_files(
                     "Do NOT include any explanatory text outside the JSON object."
                 )
         else:
+            # Template file not present — use plain prompt fallback directly.
             retry_prompt = (
                 f"{retry_hint}\n\n"
                 "Return ONLY a JSON object whose keys are the file paths listed above "

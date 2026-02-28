@@ -1,3 +1,18 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+schema_stub.jinja2 — Pydantic v2 Schema Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates production-ready Pydantic v2 schema stubs for each class name,
+producing Base/Create/Update/Read/List variants with Field() constraints
+and ConfigDict(from_attributes=True) for SQLAlchemy ORM compatibility.
+
+Template Variables:
+- class_names: List of schema entity names to generate (e.g. User, Product)
+- function_names: List of validation helper function names to generate
+#}
 from __future__ import annotations
 
 import datetime

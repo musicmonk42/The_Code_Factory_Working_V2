@@ -1,3 +1,18 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+service_stub.jinja2 — SQLAlchemy Async Service Layer Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready async service layer stub using SQLAlchemy 2.x
+async sessions.  For each class name, produces get/list/create/update/delete
+CRUD coroutines.  Additional function names receive generic session-aware stubs.
+
+Template Variables:
+- class_names: List of ORM model class names to generate CRUD functions for
+- function_names: List of additional async service function names to generate
+#}
 from __future__ import annotations
 
 from typing import Any, Sequence

@@ -1,3 +1,17 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+stub_retry_hint.jinja2 — Stub Retry Prompt Hint Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Renders a structured LLM prompt hint listing all auto-generated stub files
+that require real implementations.  Groups stubs by module category and
+provides per-file symbol export requirements for targeted LLM replacement.
+
+Template Variables:
+- grouped_stubs: Dict mapping category name → list of (path, symbols, content) tuples
+#}
 IMPORTANT: The following files are placeholder stubs that MUST be replaced with real implementations:
 
 {% for group_name, group_files in grouped_stubs.items() %}

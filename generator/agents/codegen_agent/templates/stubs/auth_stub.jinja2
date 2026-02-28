@@ -1,3 +1,19 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+auth_stub.jinja2 — Authentication Module Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready authentication module stub with JWT token
+handling, password hashing via passlib/bcrypt, and FastAPI OAuth2 support.
+Falls back to an HMAC-SHA256 implementation when python-jose is unavailable.
+
+Template Variables:
+- class_names: List of class names to generate (e.g. Role, Token)
+- function_names: List of additional authentication function names to generate
+- router_names: List of APIRouter variable names to register auth routes on
+#}
 from __future__ import annotations
 
 import base64

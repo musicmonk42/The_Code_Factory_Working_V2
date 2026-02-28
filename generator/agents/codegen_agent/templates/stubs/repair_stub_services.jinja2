@@ -1,3 +1,24 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+repair_stub_services.jinja2 — Service Stub Repair Prompt Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Renders a focused LLM repair prompt for a service file that has a high
+percentage of stub/placeholder functions.  Provides related model, schema,
+and router context to guide the LLM toward correct SQLAlchemy 2.x async
+ORM implementations.
+
+Template Variables:
+- svc_path: Relative path to the service file being repaired
+- pct: Percentage of stub functions in the service file (float)
+- context_block: Multi-file context block (service + related files concatenated)
+- spec_context: Optional spec/data-model context string (may be empty)
+- related_model: Content of the related ORM model file (may be empty)
+- related_schema: Content of the related Pydantic schema file (may be empty)
+- related_router: Content of the related FastAPI router file (may be empty)
+#}
 The service file "{{ svc_path }}" has {{ pct }}% placeholder stub functions.
 Replace every stub function with a real SQLAlchemy 2.x async ORM implementation.
 

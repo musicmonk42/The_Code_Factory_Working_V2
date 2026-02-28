@@ -1,3 +1,18 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+model_stub.jinja2 — SQLAlchemy ORM Model Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready SQLAlchemy 2.x ORM model stub using
+DeclarativeBase, Mapped[T] type annotations, and mapped_column() descriptors.
+Every model includes id, name, description, created_at, and updated_at columns.
+
+Template Variables:
+- class_names: List of ORM model class names to generate
+- function_names: List of helper function names to generate
+#}
 from __future__ import annotations
 
 import datetime

@@ -1,3 +1,18 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+config_stub.jinja2 — Configuration / Settings Module Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready configuration module stub using pydantic-settings
+BaseSettings for environment-variable loading and validation.  Falls back to
+pydantic BaseModel when pydantic-settings is unavailable.
+
+Template Variables:
+- class_names: List of class names to generate (Settings/Config/Env variants)
+- function_names: List of configuration loader function names to generate
+#}
 from __future__ import annotations
 
 import os

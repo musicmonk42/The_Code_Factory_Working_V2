@@ -1,3 +1,20 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+retry_stub_files.jinja2 — Stub Retry Prompt Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Renders a structured LLM retry prompt that requests complete implementations
+for all remaining stub files.  Groups files by module category with per-category
+technology guidance and provides a cross-file importer dependency map so the
+LLM can resolve signature requirements from importing modules.
+
+Template Variables:
+- retry_hint: Pre-rendered stub listing hint string (from stub_retry_hint.jinja2)
+- stub_groups: Dict mapping category name → list of file paths in that category
+- importers_map: Dict mapping stub path → list of files that import from it
+#}
 {{ retry_hint }}
 
 Return ONLY a JSON object whose keys are the file paths listed above and whose values are

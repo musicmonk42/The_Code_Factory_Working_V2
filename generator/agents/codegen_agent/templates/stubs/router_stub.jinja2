@@ -1,3 +1,20 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+router_stub.jinja2 — FastAPI Router Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready FastAPI router stub with a complete CRUD
+endpoint set (list, get, create, update, delete) for the resource identified
+by base_name.  Additional function names are registered as GET action routes.
+
+Template Variables:
+- class_names: List of request-handler class names to generate
+- function_names: List of additional route handler function names
+- router_names: List of APIRouter instance variable names to declare
+- base_name: Base resource name used for route paths and function naming
+#}
 from __future__ import annotations
 
 from typing import Annotated
