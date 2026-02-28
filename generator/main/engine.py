@@ -2224,7 +2224,7 @@ class WorkflowEngine:
                         # (See DeployAgent docs: database must be initialized before use)
                         await deploy_agent._init_db()  # Initialize SQLite history
                         
-                        # FIX 1: Pass actual generated files to deploy agent for context
+                        # Pass actual generated files to deploy agent for context
                         generated_files = list(codegen_files.keys()) if codegen_files else []
                         
                         project_name = Path(output_path).name if output_path else "app"
@@ -2240,8 +2240,8 @@ class WorkflowEngine:
                                         "entry_point": entry_point,
                                         "pipeline_steps": ["generate", "validate"],  # Skip simulate in pipeline
                                         "config": "",  # Will be generated
-                                        "files": generated_files,  # FIX 1: Pass actual file list
-                                        "code_path": output_path,  # FIX 1: Pass code path
+                                        "files": generated_files,
+                                        "code_path": output_path,
                                     }
                                 )
                                 

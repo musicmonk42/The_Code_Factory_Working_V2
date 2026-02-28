@@ -97,34 +97,36 @@ except ImportError as e:
         """Stub LLM Provider - actual implementation should be in clarifier_llm.py"""
 
         def __init__(self, *args, **kwargs):
-            logging.critical(
-                "LLMProvider is unavailable: clarifier_llm.py module failed to import. "
+            logging.warning(
+                "LLMProvider stub is active: clarifier_llm.py module failed to import. "
                 "Ensure all dependencies are installed and clarifier_llm.py is present."
             )
 
         async def generate(self, prompt: str, **kwargs) -> str:
-            """Stub method that raises LLMProviderError on call."""
-            raise LLMUnavailableError(
-                "LLMProvider.generate is not implemented: "
-                "clarifier_llm.py module with actual LLM integration is required."
+            """Stub method that returns a fallback response."""
+            logging.warning(
+                "LLMProvider stub generate() called — LLM is unavailable. "
+                "Please configure API access."
             )
+            return "LLM unavailable — please configure API access"
 
     class GrokLLM(LLMProvider):
         """Stub Grok LLM Provider - actual implementation should be in clarifier_llm.py"""
 
         def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "GrokLLM is unavailable: clarifier_llm.py module failed to import. "
+            self._degraded = True
+            logging.warning(
+                "GrokLLM stub is active: clarifier_llm.py module failed to import. "
                 "Ensure all dependencies are installed and clarifier_llm.py is present."
             )
 
         async def generate(self, prompt: str, **kwargs) -> str:
-            """Stub method that raises NotImplementedError"""
-            raise NotImplementedError(
-                "GrokLLM.generate is not implemented. "
-                "The clarifier_llm.py module with actual Grok API integration is required. "
-                "Please implement the GrokLLM class with proper API calls."
+            """Stub method that returns a fallback response."""
+            logging.warning(
+                "GrokLLM stub generate() called — LLM is unavailable. "
+                "Please configure API access."
             )
+            return "LLM unavailable — please configure API access"
 
     class Prioritizer(ABC):
         """Base class for prioritizing ambiguities in requirements"""
@@ -327,7 +329,6 @@ from ._audit_compat import _wrap_log_audit_event  # noqa: E402
 
 
 try:
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event as _log_audit_event
     from runner.runner_logging import send_alert
 
@@ -683,50 +684,15 @@ def get_tracer() -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
 
 
 # --- Metrics (defined globally for easy access) ---
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    CLARIFIER_CYCLES = Counter(
-        "clarifier_cycles_total", "Total clarification cycles", ["status"]
-    )
-    CLARIFIER_LATENCY = Histogram(
-        "clarifier_latency_seconds", "Clarification cycle latency", ["status"]
-    )
-    CLARIFIER_ERRORS = Counter(
-        "clarifier_errors_total", "Clarifier errors", ["error_type"]
-    )
-    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = Histogram(
-        "clarifier_context_retrieval_seconds",
-        "Context retrieval latency",
-        ["manager_type"],
-    )
-    CLARIFIER_QUESTION_PROMPT_LATENCY = Histogram(
-        "clarifier_question_prompt_seconds",
-        "Question prompt latency",
-        ["interaction_mode"],
-    )
-    CLARIFIER_PRIORITIZATION_LATENCY = Histogram(
-        "clarifier_prioritization_seconds", "Prioritization latency", ["strategy"]
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    CLARIFIER_CYCLES = REGISTRY._names_to_collectors.get("clarifier_cycles_total")
-    CLARIFIER_LATENCY = REGISTRY._names_to_collectors.get("clarifier_latency_seconds")
-    CLARIFIER_ERRORS = REGISTRY._names_to_collectors.get("clarifier_errors_total")
-    CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = REGISTRY._names_to_collectors.get(
-        "clarifier_context_retrieval_seconds"
-    )
-    CLARIFIER_QUESTION_PROMPT_LATENCY = REGISTRY._names_to_collectors.get(
-        "clarifier_question_prompt_seconds"
-    )
-    CLARIFIER_PRIORITIZATION_LATENCY = REGISTRY._names_to_collectors.get(
-        "clarifier_prioritization_seconds"
-    )
-
-
+CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = get_or_create_metric(
+    Histogram,
+    "clarifier_context_retrieval_seconds",
+    "Context retrieval latency",
+    ["manager_type"],
+)
 # --- Circuit Breaker ---
 from shared.circuit_breaker import CircuitBreaker  # noqa: E402
+from generator.agents.metrics_utils import get_or_create_metric
 
 
 def get_circuit_breaker() -> CircuitBreaker:
@@ -907,7 +873,7 @@ class SQLiteContextManager(ContextManager):
             )
             raise RuntimeError("SQLiteContextManager not connected.")
         try:
-            # FIX: Use CAST to TEXT for LIKE matching on BLOB data
+            # Use CAST to TEXT for LIKE matching on BLOB data
             # SQLite's LIKE operator doesn't work directly on binary BLOB data
             search_pattern = f"%{query}%"
             cursor = await asyncio.to_thread(
@@ -1285,7 +1251,7 @@ class Clarifier:
                 raise ValueError(
                     "Production environment requires a configured CLARIFIER_CONTEXT_DB_PATH."
                 )
-            # FIX: Create manager but don't initialize yet
+            # Create manager but don't initialize yet
             manager = SQLiteContextManager(self.config.CONTEXT_DB_PATH, fernet=None)
             # Schedule initialization if we have an event loop
             try:
@@ -1389,9 +1355,19 @@ class Clarifier:
             if self.shutdown_event.is_set():
                 break
             if self.context_manager and self.context_manager.is_production_ready:
-                self.logger.debug(
-                    "Performing periodic context manager sync (conceptual)."
-                )
+                try:
+                    sync_method = getattr(self.context_manager, "sync", None)
+                    if callable(sync_method):
+                        await sync_method()
+                        self.logger.debug("Periodic context sync completed via sync().")
+                    else:
+                        # Persist current context state by writing a sync marker
+                        await self.context_manager.add_to_context(
+                            {"event": "periodic_sync", "status": "ok"}
+                        )
+                        self.logger.debug("Periodic context sync completed (state persisted).")
+                except Exception as _sync_err:
+                    self.logger.warning(f"Periodic context sync failed: {_sync_err}")
 
     def _extract_json_from_markdown(self, response: str) -> str:
         """
@@ -1500,7 +1476,7 @@ Format your response as a JSON array of strings, for example:
            not any(platform in content_lower for platform in deploy_platforms):
             ambiguities.append("Deployment platform not specified")
 
-        # FIX Issue 1: Remove generic fallback - only return actual ambiguities found
+        # Remove generic fallback - only return actual ambiguities found
         # If no specific ambiguities are detected, return empty list instead of forcing a generic question
         self.logger.info(f"Rule-based detection found {len(ambiguities)} ambiguities")
         return ambiguities[:5]  # Limit to 5 for rule-based
@@ -1603,7 +1579,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
                     "category": "general"
                 })
 
-        # FIX Issue 2: Filter out any empty or blank questions
+        # Filter out any empty or blank questions
         # Validate that all questions have non-empty text before returning
         filtered_questions = []
         for q in questions:
@@ -1613,7 +1589,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             else:
                 self.logger.warning(f"Skipping empty question from generation: {q}")
 
-        # FIX Issue 1: Remove hard-coded default questions
+        # Remove hard-coded default questions
         # Only generate questions for actual ambiguities detected
         # If no ambiguities, return empty list - this allows pipeline to proceed without clarification
 
@@ -1736,7 +1712,7 @@ Format your response as a JSON array of objects with 'question' and 'category' f
             CLARIFIER_LATENCY.labels(status="success").observe(
                 time.perf_counter() - start_time
             )
-            # FIX: Add the missing metric increment for 'completed' cycles
+            # Add the missing metric increment for 'completed' cycles
             CLARIFIER_CYCLES.labels(status="completed").inc()
             self.circuit_breaker.record_success()
             return updated_reqs

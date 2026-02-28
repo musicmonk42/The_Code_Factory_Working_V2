@@ -50,7 +50,7 @@ from opentelemetry.trace import Status, StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 from ruamel.yaml import (
     YAML as RuYAML,
-    YAMLError as RuamelYAMLError,  # FIX: Import correct exception for YAML parsing errors
+    YAMLError as RuamelYAMLError,  # Import correct exception for YAML parsing errors
 )  # For advanced YAML operations (preserving comments)
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -87,13 +87,13 @@ from runner.llm_client import (
     call_ensemble_api,
 )  # Central LLM Client for auto-correction
 from runner.runner_errors import LLMError
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger  # Use central logging and provenance
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_metrics import (
     LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL,
 )  # Use central metrics
+from generator.agents.metrics_utils import get_or_create_metric
 
 # -----------------------------------
 
@@ -107,60 +107,12 @@ from runner.runner_metrics import (
 
 # --- Prometheus Metrics ---
 # NOTE: Local metrics retained for validator-specific statistics (non-LLM)
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    validator_calls = Counter(
-        "deploy_validator_calls_total",
-        "Total validator calls by operation",
-        ["target", "operation"],
-    )
-    validator_errors = Counter(
-        "deploy_validator_errors_total",
-        "Total validator errors by operation and type",
-        ["target", "operation", "error_type"],
-    )
-    validator_latency = Histogram(
-        "deploy_validator_latency_seconds",
-        "Validator latency by operation",
-        ["target", "operation"],
-    )
-    issue_count_gauge = Gauge(
-        "deploy_validator_issue_count",
-        "Number of issues found in the last validation",
-        ["target", "issue_type_category"],
-    )
-    issue_total_found = Counter(
-        "deploy_validator_issues_total",
-        "Total cumulative issues found",
-        ["target", "issue_type_category"],
-    )
-    # FIX: Add scan_total_findings metric that's used in scan_config_for_findings function
-    scan_total_findings = Counter(
-        "deploy_scan_total_findings",
-        "Total security findings detected",
-        ["format", "finding_type"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    validator_calls = REGISTRY._names_to_collectors.get("deploy_validator_calls_total")
-    validator_errors = REGISTRY._names_to_collectors.get(
-        "deploy_validator_errors_total"
-    )
-    validator_latency = REGISTRY._names_to_collectors.get(
-        "deploy_validator_latency_seconds"
-    )
-    issue_count_gauge = REGISTRY._names_to_collectors.get(
-        "deploy_validator_issue_count"
-    )
-    issue_total_found = REGISTRY._names_to_collectors.get(
-        "deploy_validator_issues_total"
-    )
-    scan_total_findings = REGISTRY._names_to_collectors.get(
-        "deploy_scan_total_findings"
-    )
-
+validator_calls = get_or_create_metric(
+    Counter,
+    "deploy_validator_calls_total",
+    "Total validator calls by operation",
+    ["target", "operation"],
+)
 # --- Security: PII/Secret & Dangerous Config Scanning Patterns ---
 # NOTE: This DANGEROUS_CONFIG_PATTERNS is now used by the *imported* scan_config_for_findings
 DANGEROUS_CONFIG_PATTERNS = {
@@ -305,7 +257,7 @@ async def scan_config_for_findings(
 
     # --- Dangerous/Misconfiguration Pattern Matching ---
     for finding_name, pattern_regex in dangerous_patterns.items():
-        # FIX: Use re.MULTILINE flag so ^ and $ match start/end of each line, not just start/end of string
+        # re.MULTILINE makes ^ and $ match line boundaries, not just string boundaries
         if re.search(pattern_regex, config_text, re.MULTILINE):
             findings.append(
                 {
@@ -332,7 +284,7 @@ async def scan_config_for_findings(
             async with aiofiles.open(temp_config_path, mode="w", encoding="utf-8") as f:
                 await f.write(config_text)
 
-            # FIX: Check if trivy is available before attempting to use it
+            # Check if trivy is available before attempting to use it
             if not shutil.which("trivy"):
                 findings.append(
                     {
@@ -467,7 +419,7 @@ async def scan_config_for_findings(
             ).inc()
 
     # Update gauge with current number of unique findings.
-    # FIX: Use 'target' instead of 'format' to match the metric label definition
+    # Use 'target' instead of 'format' to match the metric label definition
     issue_count_gauge.labels(
         target=config_format, issue_type_category="OverallFindingsCount"
     ).set(len(findings))
@@ -515,7 +467,7 @@ class DockerValidator(Validator):
         report = {
             "build_status": "unknown",
             "build_output": "",
-            "lint_status": "unknown",  # FIX: Add lint_status field expected by tests
+            "lint_status": "unknown",  # Add lint_status field expected by tests
             "lint_issues": [],
             "security_findings": [],
             "compliance_score": 0.0,  # Will be calculated
@@ -559,11 +511,11 @@ class DockerValidator(Validator):
                 ) as f:
                     await f.write(config_content)
 
-                # FIX: Check if Docker is available before attempting to use it
+                # Check if Docker is available before attempting to use it
                 if not shutil.which("docker"):
                     logger.warning("Docker tool not found. Skipping Docker build test.")
                     report["build_status"] = "skipped"
-                    report["lint_status"] = "skipped"  # FIX: Also set lint_status to skipped
+                    report["lint_status"] = "skipped"  # Also set lint_status to skipped
                     report["lint_issues"].append(
                         "Docker tool not available. Install docker to enable build validation."
                     )
@@ -595,7 +547,7 @@ class DockerValidator(Validator):
                         ).inc()
 
                 # 2. Lint with Hadolint
-                # FIX: Check if hadolint is available before attempting to use it
+                # Check if hadolint is available before attempting to use it
                 if not shutil.which("hadolint"):
                     logger.warning("Hadolint tool not found. Skipping Dockerfile linting.")
                     report["lint_issues"].append(
@@ -610,7 +562,7 @@ class DockerValidator(Validator):
                             stderr=asyncio.subprocess.PIPE,
                         )
                         lint_stdout, lint_stderr = await hadolint_proc.communicate()
-                        # FIX: Only add lint issues when hadolint actually reports problems (returncode != 0)
+                        # Only add lint issues when hadolint actually reports problems (returncode != 0)
                         # When returncode is 0, hadolint found no issues, so don't add output to lint_issues
                         if hadolint_proc.returncode != 0:
                             lint_output_lines = (
@@ -623,7 +575,7 @@ class DockerValidator(Validator):
                             issue_total_found.labels(
                                 target=target_type, issue_type_category="HadolintLint"
                             ).inc(len(lint_output_lines))
-                        # FIX: Set lint_status based on hadolint results
+                        # Set lint_status based on hadolint results
                         if hadolint_proc.returncode == 0:
                             report["lint_status"] = "success"
                         else:
@@ -643,7 +595,7 @@ class DockerValidator(Validator):
                             "Hadolint not found. Skipping linting."
                         )
                         report["lint_status"] = (
-                            "skipped"  # FIX: Set status when tool not found
+                            "skipped"  # Set status when tool not found
                         )
                         logger.warning(
                             "Hadolint command not found. Please install hadolint for comprehensive Dockerfile linting."
@@ -655,7 +607,7 @@ class DockerValidator(Validator):
                         report["lint_issues"].append(
                             f"Error during Hadolint execution: {e}"
                         )
-                        report["lint_status"] = "error"  # FIX: Set status on error
+                        report["lint_status"] = "error"  # Set status on error
                         logger.error(
                             "Error during Hadolint execution: %s", e, exc_info=True
                         )
@@ -670,12 +622,12 @@ class DockerValidator(Validator):
                 )
 
                 # Calculate compliance score
-                # FIX: Use more strict scoring (divide by 5 instead of 10) so issues have bigger impact
+                # Use more strict scoring (divide by 5 instead of 10) so issues have bigger impact
                 total_issues = len(report["lint_issues"]) + len(
                     report["security_findings"]
                 )
                 
-                # FIX Issue 7: Set 'valid' key based on validation results
+                # Set 'valid' key based on validation results
                 # A Dockerfile that can't be parsed should NEVER be marked valid
                 # Check for parse errors in lint_issues (e.g., "unexpected '!' expecting '#', ADD, ARG...")
                 has_parse_error = False
@@ -862,7 +814,7 @@ class KubernetesValidator(Validator):
                         ).inc(len(report["lint_issues"]))
                         
             except RuamelYAMLError as e:
-                # CRITICAL FIX: Use RuamelYAMLError (not yaml.YAMLError)
+                # Use RuamelYAMLError (not yaml.YAMLError)
                 # The validator uses ruamel.yaml (RuYAML) for parsing, which raises
                 # ruamel.yaml.YAMLError. Using yaml.YAMLError would cause NameError
                 # since PyYAML is not imported, leading to incorrect "internal_error"
@@ -898,7 +850,7 @@ class KubernetesValidator(Validator):
                 1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
             )
             
-            # FIX Issue 5: Set 'valid' key based on validation results
+            # Set 'valid' key based on validation results
             # Consider valid if lint succeeded and no critical issues
             report["valid"] = (
                 report["lint_status"] in ("success", "warning") and
@@ -1039,7 +991,7 @@ class HelmValidator(Validator):
                     report["lint_status"] = "success"
                 else:
                     report["lint_status"] = "failed"
-                    # FIX: Make filtering case-insensitive to catch "Error:", "error:", "ERROR", etc.
+                    # Make filtering case-insensitive to catch "Error:", "error:", "ERROR", etc.
                     report["lint_issues"].extend(
                         [
                             line
@@ -1059,7 +1011,7 @@ class HelmValidator(Validator):
                 )
 
                 # Calculate compliance score
-                # FIX: Use more strict scoring (divide by 5 instead of 10) so issues have bigger impact
+                # Use more strict scoring (divide by 5 instead of 10) so issues have bigger impact
                 total_issues = len(report.get("lint_issues", [])) + len(
                     report.get("security_findings", [])
                 )
@@ -1067,7 +1019,7 @@ class HelmValidator(Validator):
                     1.0 if total_issues == 0 else max(0.0, 1.0 - (total_issues / 5.0))
                 )
                 
-                # FIX Issue 5: Set 'valid' key based on validation results
+                # Set 'valid' key based on validation results
                 # Consider valid if lint succeeded and no critical issues
                 report["valid"] = (
                     report["lint_status"] in ("success", "warning") and

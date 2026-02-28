@@ -49,7 +49,7 @@ class TestRunnerConfig(unittest.IsolatedAsyncioTestCase):
         clear_config_cache()
         self.temp_dir = Path(tempfile.mkdtemp())
         self.config_file = self.temp_dir / "config.yaml"
-        # FIX: Updated YAML to match the modern schema (first-class api_key)
+        # Updated YAML to match the modern schema (first-class api_key)
         self.config_file.write_text("""
 version: 4
 backend: docker
@@ -142,7 +142,7 @@ instance_id: test-remote-loaded
             return_value=MockAiohttpSession(self.mock_aiohttp_response)
         )
 
-        # FIX: Patch aiohttp.ClientSession directly since fetch_remote does local import
+        # Patch aiohttp.ClientSession directly since fetch_remote does local import
         self.patch_aiohttp = patch(
             "aiohttp.ClientSession",
             new=self.mock_aiohttp_session_cls,
@@ -168,7 +168,7 @@ instance_id: test-remote-loaded
         _load_config_module._cached_config_file = None
 
     def test_config_validation_success(self):
-        # FIX: Corrected to use valid fields and provide all required fields
+        # Corrected to use valid fields and provide all required fields
         os.environ["ENCRYPT_KEY"] = Fernet.generate_key().decode()
         os.environ["SIGN_KEY"] = "test-sign-key"
 
@@ -236,7 +236,7 @@ instance_id: test-remote-loaded
         del os.environ["RUNNER_TIMEOUT"]
 
     def test_secrets_handling(self):
-        # FIX: This now tests the @property 'secrets' which reads 'api_key'
+        # This now tests the @property 'secrets' which reads 'api_key'
         # The 'api_key' is loaded from the fixture file in setUp()
         config = load_config(str(self.config_file))
         self.assertEqual(config.secrets["api_key"], "sk-abc123")
@@ -278,14 +278,14 @@ instance_id: test-remote-loaded
                 self.assertEqual(config.secrets["api_key"], "vault-sk-123")
 
     async def test_config_watcher_file(self):
-        # FIX: Align test with ConfigWatcher's TESTING mode logic
+        # Align test with ConfigWatcher's TESTING mode logic
         watcher = ConfigWatcher(str(self.config_file), lambda c: None)
         await watcher.start()
         # In TESTING mode, watcher should not start the file-watching loop.
         self.mock_watchfiles.awatch.assert_not_called()
 
     async def test_config_watcher_remote(self):
-        # FIX: Align test to call fetch_remote directly and use correct mocks
+        # Align test to call fetch_remote directly and use correct mocks
         self.config_file.write_text("""
 version: 4
 backend: docker
@@ -306,7 +306,7 @@ instance_id: test-remote-loaded
         # Explicitly exercise the remote fetch path
         await watcher.fetch_remote("http://remote/config")
 
-        # FIX: Assert against the correct mock instance
+        # Assert against the correct mock instance
         self.mock_aiohttp_session_cls.return_value.get.assert_called_with(
             "http://remote/config"
         )
@@ -314,7 +314,7 @@ instance_id: test-remote-loaded
         self.assertEqual(watcher.current_config.backend, "local")
 
     def test_encryption_enabled(self):
-        # FIX: Correctly instantiate RunnerConfig with all required fields
+        # Correctly instantiate RunnerConfig with all required fields
         os.environ["ENCRYPT_KEY"] = Fernet.generate_key().decode()
         config = RunnerConfig(
             version=4,
@@ -370,7 +370,7 @@ instance_id: test-remote-loaded
         del os.environ["AGENTIC_AUDIT_HMAC_KEY"]
 
     def test_invalid_config_raises_error(self):
-        # FIX: This test now passes due to the fix in load_config
+        # This test now passes due to the fix in load_config
         invalid_config_file = self.temp_dir / "invalid_config.yaml"
         invalid_config_file.write_text("version: invalid")
         with self.assertRaises(ConfigurationError):

@@ -26,13 +26,13 @@ import os
 import time
 from collections import Counter
 
-# FIX: Import Path
+# Import Path
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Literal, Optional
 
 import redis.asyncio as aioredis
 
-# FIX: Import metrics module, not individual components to avoid import cycle issues
+# Import metrics module, not individual components to avoid import cycle issues
 from . import runner_metrics as metrics
 from dotenv import load_dotenv
 from .llm_plugin_manager import LLMPluginManager
@@ -44,7 +44,7 @@ from .runner_errors import ConfigurationError, LLMError
 # [FIX] Import log_audit_event instead of add_provenance
 from .runner_logging import log_audit_event, logger
 
-# FIX: Import only redact_secrets
+# Import only redact_secrets
 from .runner_security_utils import redact_secrets
 
 # Conditional SDKs
@@ -74,7 +74,7 @@ try:
 except ImportError:
     HAS_TIKTOKEN = False
 
-# FIX: Set TOKENIZERS_PARALLELISM to avoid warning about fork safety
+# Set TOKENIZERS_PARALLELISM to avoid warning about fork safety
 # This prevents the warning: "The current process just got forked, after parallelism has already been used"
 if "TOKENIZERS_PARALLELISM" not in os.environ:
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -120,7 +120,7 @@ class SecretsManager:
         else:
             logger.info("SecretsManager: Prod mode, no .env")
 
-    # FIX: Renamed 'get' to 'get_secret' to match test expectation
+    # Renamed 'get' to 'get_secret' to match test expectation
     def get_secret(self, secret_name: str) -> Optional[str]:
         if secret_name in self._cache:
             return self._cache[secret_name]
@@ -128,7 +128,7 @@ class SecretsManager:
         # In a real app, this should prioritize the environment variable over anything loaded by dotenv
         raw_secret = os.environ.get(secret_name)
         
-        # FIX: Sanitize environment variables from Railway/cloud providers that may include
+        # Sanitize environment variables from Railway/cloud providers that may include
         # wrapping quotes or whitespace that cause API key validation failures
         secret = None
         if raw_secret:
@@ -148,7 +148,7 @@ class SecretsManager:
         return secret
 
     def get_required(self, secret_name: str) -> str:
-        secret = self.get_secret(secret_name)  # FIX: Use get_secret
+        secret = self.get_secret(secret_name)  # Use get_secret
         if not secret:
             raise ConfigurationError(
                 "MISSING_SECRET",
@@ -526,7 +526,7 @@ class LLMClient:
         self._ensure_initialization()
         await self._is_initialized.wait()
         provider = provider or getattr(self.config, 'llm_provider', 'openai') or "openai"
-        # FIX #4: Changed default model from gpt-4 to gpt-4o to handle higher TPM limits
+        # Changed default model from gpt-4 to gpt-4o to handle higher TPM limits
         # The critique semantic analysis was hitting 10,000 TPM limit with gpt-4 (20,587 tokens requested)
         # gpt-4o has much higher rate limits and is also cheaper and faster
         model = model or getattr(self.config, "default_llm_model", "gpt-4o")
@@ -555,7 +555,7 @@ class LLMClient:
                 extra={"job_id": job_id, "call_count": self.job_call_counts[job_id], "budget": self.job_llm_budget}
             )
         
-        # FIX: Add retry logic with exponential backoff
+        # Add retry logic with exponential backoff
         for attempt in range(max_retries):
             try:
                 start_time = time.time()
@@ -564,7 +564,7 @@ class LLMClient:
                     metrics.LLM_ERRORS_TOTAL.labels(provider=provider, model=model).inc()
                     raise LLMError("Rate limit exceeded")
 
-                # FIX: Log circuit breaker state before call
+                # Log circuit breaker state before call
                 circuit_state = self.circuit_breaker.get_state(provider)
                 logger.debug(
                     "[LLM] Circuit breaker state",
@@ -576,7 +576,7 @@ class LLMClient:
                 )
                 
                 if not await self.circuit_breaker.allow_request(provider):
-                    # FIX: Log when circuit is open and blocking call
+                    # Log when circuit is open and blocking call
                     logger.warning(
                         "[LLM] Circuit breaker OPEN - call blocked",
                         extra={

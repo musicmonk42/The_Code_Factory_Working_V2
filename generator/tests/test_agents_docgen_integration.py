@@ -22,7 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-# FIX: Create proper exception classes for mocking
+# Create proper exception classes for mocking
 class MockLLMError(Exception):
     """Mock LLMError for testing."""
     pass
@@ -31,7 +31,7 @@ class MockRunnerError(Exception):
     """Mock RunnerError for testing."""
     pass
 
-# FIX: Mock runner modules before importing docgen_agent to handle source file import issues
+# Mock runner modules before importing docgen_agent to handle source file import issues
 # Save originals for restoration
 _saved_modules_di = {}
 _modules_to_mock_di = [
@@ -62,7 +62,7 @@ sys.modules["runner.runner_errors"] = mock_runner_errors
 sys.modules["runner.runner_file_utils"] = mock_runner_file_utils
 sys.modules["runner.summarize_utils"] = mock_summarize_utils
 
-# FIX: Mock tiktoken to prevent network calls during testing
+# Mock tiktoken to prevent network calls during testing
 mock_tiktoken = MagicMock()
 mock_encoding = MagicMock()
 mock_encoding.encode.return_value = [1, 2, 3, 4, 5]  # Return mock tokens
@@ -71,7 +71,7 @@ mock_tiktoken.get_encoding.return_value = mock_encoding
 mock_tiktoken.encoding_for_model.return_value = mock_encoding
 sys.modules["tiktoken"] = mock_tiktoken
 
-# FIX: Add Path, Tuple, Optional to builtins for type hint resolution in source files
+# Add Path, Tuple, Optional to builtins for type hint resolution in source files
 import builtins
 from abc import ABC, abstractmethod
 
@@ -114,10 +114,10 @@ def comprehensive_repo():
         (repo_path / "docs").mkdir()
         (repo_path / "doc_templates").mkdir()
         (repo_path / "few_shot_docs").mkdir()
-        # FIX: Create prompt_templates directory with required templates
+        # Create prompt_templates directory with required templates
         (repo_path / "prompt_templates").mkdir()
         
-        # FIX: Create required template files
+        # Create required template files
         (repo_path / "prompt_templates" / "markdown_default.jinja").write_text("""
 Generate Markdown documentation for the following code:
 
@@ -410,7 +410,7 @@ Divide two numbers with zero-division handling.
         "tokens_used": 500,
     }
 
-    # FIX: Use AsyncMock for async functions to properly support 'await'
+    # Use AsyncMock for async functions to properly support 'await'
     docgen_agent_llm_mock = AsyncMock(return_value=doc_response)
     docgen_prompt_llm_mock = AsyncMock(return_value=doc_response)
     
@@ -493,7 +493,7 @@ class TestEndToEndGeneration:
         assert len(result["docs"]) > 0
 
         # Verify compliance checks ran
-        # FIX: compliance is a list of issue strings, not a dict with keys
+        # compliance is a list of issue strings, not a dict with keys
         # Check that compliance checks were performed by verifying the list is populated
         # (the mock doc content doesn't have license/copyright, so issues are expected)
         assert isinstance(result["compliance"], list)
@@ -569,7 +569,7 @@ class TestStreamingGeneration:
         # Should have received multiple chunks
         assert len(chunks) > 0
 
-        # FIX: Chunks contain stage/status/run_id keys, not "file" or "docs"
+        # Chunks contain stage/status/run_id keys, not "file" or "docs"
         # Check that we received actual streaming progress chunks
         assert any("stage" in chunk or "status" in chunk for chunk in chunks)
 
@@ -608,7 +608,7 @@ class TestComponentIntegration:
     ):
         """Test flow from prompt generation to validation."""
         # 1. Generate prompt
-        # FIX: Pass repo_path to use the correct prompt_templates directory
+        # Pass repo_path to use the correct prompt_templates directory
         prompt_agent = DocGenPromptAgent(
             template_dir=str(comprehensive_repo / "doc_templates"),
             few_shot_dir=str(comprehensive_repo / "few_shot_docs"),
@@ -630,7 +630,7 @@ class TestComponentIntegration:
         doc_content = llm_response["content"]
 
         # 3. Validate response
-        # FIX: ResponseValidator requires a schema argument and uses process_and_validate_response
+        # ResponseValidator requires a schema argument and uses process_and_validate_response
         validator = ResponseValidator(schema={})
         validation_result = await validator.process_and_validate_response(
             raw_response=llm_response,
@@ -650,7 +650,7 @@ class TestComponentIntegration:
         """Test that DocgenAgent properly uses all components."""
         agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
-        # FIX: DocgenAgent has prompt_agent and plugin_registry, but not response_validator
+        # DocgenAgent has prompt_agent and plugin_registry, but not response_validator
         # ResponseValidator is instantiated within methods, not as an instance attribute
         assert agent.prompt_agent is not None
         assert agent.plugin_registry is not None
@@ -701,7 +701,7 @@ class TestHumanInTheLoop:
         """Test handling approval rejection."""
         agent = DocgenAgent(repo_path=str(comprehensive_repo))
 
-        # FIX: The code uses _human_approval method, not _request_approval
+        # The code uses _human_approval method, not _request_approval
         # And rejection returns a result dict with status='rejected_by_human', not an exception
         with patch.object(agent, "_human_approval", return_value=(False, "Rejected by reviewer")):
             target_file = str(comprehensive_repo / "src" / "calculator.py")
@@ -728,7 +728,7 @@ class TestErrorRecovery:
         """Test LLM error retry across pipeline."""
         call_count = 0
 
-        # FIX: Make the mock function async since call_llm_api is async
+        # Make the mock function async since call_llm_api is async
         async def mock_llm_with_retry(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -752,7 +752,7 @@ class TestErrorRecovery:
             result = await agent.generate_documentation(target_files=[target_file])
 
             # Should have retried and succeeded (or at least attempted)
-            # FIX: The retry mechanism might not be triggered for all errors
+            # The retry mechanism might not be triggered for all errors
             # Check that we got a result (either success or error dict)
             assert result is not None
             assert call_count >= 1

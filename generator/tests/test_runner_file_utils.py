@@ -250,7 +250,7 @@ async def test_load_file_not_found():
         await load_file_content(Path("missing.txt"))
 
 
-# FIX: Skip this test on Windows, as os.chmod(0o555) does not prevent writes.
+# Skip this test on Windows, as os.chmod(0o555) does not prevent writes.
 @pytest.mark.skipif(
     platform.system() == "Windows",
     reason="os.chmod(0o555) does not reliably block writes on Windows.",
@@ -496,7 +496,7 @@ class TestFileUtils(unittest.IsolatedAsyncioTestCase):
 
         # Test deleting non-existent file
         mock_remove.reset_mock()
-        # FIX: Use a different path object for the non-existent file
+        # Use a different path object for the non-existent file
         non_existent_path = Path(self.temp_dir / "non_existent_file.txt")
         result_non_existent = await delete_compliant_data(
             non_existent_path, "non-existent-request", log_only=False

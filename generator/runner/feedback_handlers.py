@@ -96,7 +96,7 @@ class FeedbackEvent:
     data: Dict[str, Any]
     source: str = "default_source"
     severity: Severity = Severity.INFO
-    # FIX: Use lambda to force runtime lookup, allowing patch to work
+    # Use lambda to force runtime lookup, allowing patch to work
     timestamp: str = field(default_factory=lambda: _get_timestamp())
     event_id: str = field(default_factory=lambda: _get_event_id())
 
@@ -231,7 +231,7 @@ class LoggingSink(FeedbackSink):
         pass  # Nothing to close for this logger
 
 
-# FIX: Simplified FileSink to be purely synchronous and robust
+# Simplified FileSink to be purely synchronous and robust
 class FileSink(FeedbackSink):
     """Writes feedback events to a file path."""
 
@@ -295,13 +295,13 @@ class HttpSink(FeedbackSink):
         if auth_token:
             self.headers["Authorization"] = f"Bearer {auth_token}"
 
-        # FIX: Remove explicit urllib import here, rely on lazy import in emit
+        # Remove explicit urllib import here, rely on lazy import in emit
         # from urllib import request
         # self.request = request
 
     def emit(self, event: FeedbackEvent) -> None:
         """This runs *inside* the worker thread."""
-        # FIX: Lazy import urllib.request inside emit for thread safety and independence
+        # Lazy import urllib.request inside emit for thread safety and independence
 
         try:
             data = event.serialize().encode("utf-8")
@@ -418,10 +418,10 @@ def register_sink(sink: FeedbackSink, name: Optional[str] = None) -> None:
                 pass
 
         _registry.sinks[sink_name] = sink
-        # FIX: This is now the only place sinks_registered is calculated
+        # This is now the only place sinks_registered is calculated
         _registry.sinks_registered = len(_registry.sinks)
 
-    # FIX: Call start *after* sink is registered
+    # Call start *after* sink is registered
     _ensure_worker_started()
     logger.info(f"Feedback sink '{sink_name}' registered.")
 
@@ -438,7 +438,7 @@ def collect_feedback(
     It will **never** raise an exception.
     """
     try:
-        # FIX: Add default sink if this is the first call and no sinks exist
+        # Add default sink if this is the first call and no sinks exist
         if _registry.sinks_registered == 0:
             with _registry.lock:
                 # Double-check inside lock
@@ -446,7 +446,7 @@ def collect_feedback(
                     _registry.sinks["default_logger"] = LoggingSink()
                     _registry.sinks_registered = 1
 
-        # FIX: Call _ensure_worker_started() *after* the sink is guaranteed to exist
+        # Call _ensure_worker_started() *after* the sink is guaranteed to exist
         _ensure_worker_started()  # This call will now correctly start the thread
 
         event = FeedbackEvent(

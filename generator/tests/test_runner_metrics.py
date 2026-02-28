@@ -281,7 +281,7 @@ def mock_lazy_imports():
             return {"error_code": self.code, "detail": self.detail, **self.kwargs}
 
     # 2. Create mock modules
-    # FIX: log_action is NOT async - it's called synchronously in runner_metrics.py
+    # log_action is NOT async - it's called synchronously in runner_metrics.py
     mock_logging_mod = MagicMock(log_action=MagicMock())
     mock_security_mod = MagicMock(
         redact_secrets=MagicMock(side_effect=lambda x, **kwargs: x)
@@ -316,7 +316,7 @@ def mock_lazy_imports():
 
 
 @pytest.fixture
-# FIX: Remove @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+# Remove @pytest.mark.asyncio from fixture - marks on fixtures have no effect
 async def started_metrics_exporter(
     mock_config, mock_external_sdks, mock_lazy_imports, clean_prometheus_registry, ensure_asyncio_not_mocked
 ):

@@ -26,7 +26,7 @@ from pydantic import ValidationError
 # --------------------------------------------------------------------------- #
 # Import module under test
 # --------------------------------------------------------------------------- #
-from runner.runner_parsers import (  # FIX: Add imports for RunnerError, register_test_parser, and parser_wrapper; FIX: Import the correct registry name
+from runner.runner_parsers import (  # Add imports for RunnerError, register_test_parser, and parser_wrapper; FIX: Import the correct registry name
     _PARSER_REGISTRY,
     CoverageReportSchema,
     ParserInfo,
@@ -366,19 +366,19 @@ async def test_parsers_success(
 # Tests for parser registration & wrappers
 # --------------------------------------------------------------------------- #
 def test_parser_registration():
-    # FIX: Remove 'extensions' arg (not in source) and define parser
+    # Remove 'extensions' arg (not in source) and define parser
     @register_test_parser("custom")
     async def custom_parser(path: Path) -> Dict[str, Any]:
         return {"total_tests": 0, "passed_tests": 0, "pass_rate": 0.0}
 
-    # FIX: Check the correct registry name
+    # Check the correct registry name
     assert "custom" in _PARSER_REGISTRY
-    # FIX: Remove assertion for FILE_HANDLERS (not in source)
+    # Remove assertion for FILE_HANDLERS (not in source)
 
 
 @pytest.mark.asyncio
 async def test_parser_wrapper_success(temp_file: Path):
-    # FIX: Define the stub custom_parser
+    # Define the stub custom_parser
     async def custom_parser(path: Path) -> Dict[str, Any]:
         return {"total_tests": 1, "passed_tests": 1, "pass_rate": 1.0}
 
@@ -393,7 +393,7 @@ async def test_parser_wrapper_success(temp_file: Path):
 
 @pytest.mark.asyncio
 async def test_parser_wrapper_error(temp_file: Path):
-    # FIX: Define the stub bad_parser
+    # Define the stub bad_parser
     def bad_parser(path: Path) -> Dict[str, Any]:
         raise Exception("parse fail")
 
@@ -403,7 +403,7 @@ async def test_parser_wrapper_error(temp_file: Path):
 
     result = await wrapped_bad(temp_file)
 
-    # FIX: The wrapper correctly sets status to "failed" to match the schema.
+    # The wrapper correctly sets status to "failed" to match the schema.
     assert result.parser_info.status == "failed"
     assert result.parser_info.message == "parse fail"
 

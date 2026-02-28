@@ -13,7 +13,7 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-# FIX: Import the module itself to fix namespace issue
+# Import the module itself to fix namespace issue
 import runner.feedback_handlers as feedback_handlers
 from runner.feedback_handlers import _registry  # <-- REMOVED _worker_thread
 from runner.feedback_handlers import (
@@ -53,7 +53,7 @@ def reset_registry():
     shutdown()
 
     # 2. Explicitly reset the global state variables
-    # FIX: Set the variable on the module, not a local copy
+    # Set the variable on the module, not a local copy
     feedback_handlers._worker_thread = None
     _registry.events_collected = 0
     _registry.events_processed = 0
@@ -98,7 +98,7 @@ def test_feedback_event_valid():
     )
 
     event_json = json.loads(event.to_json())
-    # FIX: Delete the dynamically generated event_id before comparing dicts
+    # Delete the dynamically generated event_id before comparing dicts
     del event_json["event_id"]
 
     assert event_json == {
@@ -213,7 +213,7 @@ def test_registry_close_all(mock_file_sink):
     _registry.sinks["mock_sink"] = sink
     _registry.sinks_registered = 1
 
-    # FIX: Must trigger an emit to ensure the internal file handle (_fh) is opened/mocked
+    # Must trigger an emit to ensure the internal file handle (_fh) is opened/mocked
     sink.emit(FeedbackEvent(event_type="pre_close", data={}))
 
     _registry.close_all()
@@ -236,10 +236,10 @@ def test_collect_feedback(mock_file_sink):
     assert _registry.events_collected == 1
     assert _worker_queue.qsize() == 1
 
-    # FIX: Wait for the event to be processed before checking thread state
+    # Wait for the event to be processed before checking thread state
     _worker_queue.join()
 
-    # FIX: Check the variable on the module itself
+    # Check the variable on the module itself
     assert feedback_handlers._worker_thread is not None
     assert feedback_handlers._worker_thread.is_alive()
 
@@ -274,7 +274,7 @@ def test_worker_queue_full():
 def test_worker_sentinel():
     """Test worker stops on sentinel."""
     register_sink(LoggingSink())
-    # FIX: Check the variable on the module itself
+    # Check the variable on the module itself
     assert (
         feedback_handlers._worker_thread is not None
         and feedback_handlers._worker_thread.is_alive()
@@ -283,12 +283,12 @@ def test_worker_sentinel():
     # Put sentinel and wait for it to be processed
     _worker_queue.put_nowait(_SENTINEL)
 
-    # FIX: Wait for sentinel to be processed and thread to exit
+    # Wait for sentinel to be processed and thread to exit
     _worker_queue.join()
     if feedback_handlers._worker_thread:
         feedback_handlers._worker_thread.join(timeout=2.0)
 
-    # FIX: Use robust assertion on the module's variable
+    # Use robust assertion on the module's variable
     assert (
         feedback_handlers._worker_thread is None
         or not feedback_handlers._worker_thread.is_alive()
@@ -315,7 +315,7 @@ def test_get_feedback_metrics(mock_file_sink):
     metrics = get_feedback_metrics()
     assert metrics["events_collected"] == 3
 
-    # FIX: The data in Event 2 *is* a dict, so validation passes.
+    # The data in Event 2 *is* a dict, so validation passes.
     # All 3 events are valid, enqueued, and processed.
     assert metrics["events_processed"] == 3
     assert metrics["events_failed"] == 0  # No validation errors, no processing errors
@@ -337,7 +337,7 @@ def test_shutdown():
         # Shutdown
         shutdown()
 
-        # FIX: Use robust assertion on the module's variable
+        # Use robust assertion on the module's variable
         assert (
             feedback_handlers._worker_thread is None
             or not feedback_handlers._worker_thread.is_alive()
@@ -359,13 +359,13 @@ def test_shutdown_idempotent():
     shutdown()
 
     # Reset thread after first shutdown (as the fixture would do)
-    # FIX: Set the variable on the module
+    # Set the variable on the module
     feedback_handlers._worker_thread = None
 
     # Second shutdown call (should be safe)
     shutdown()
 
-    # FIX: Check the module's variable
+    # Check the module's variable
     assert (
         feedback_handlers._worker_thread is None
         or not feedback_handlers._worker_thread.is_alive()

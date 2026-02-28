@@ -183,11 +183,11 @@ except ImportError:  # pragma: no cover
 # from runner import tracer # This is now handled by the safe import above
 from runner.llm_client import call_ensemble_api, call_llm_api
 from runner.runner_errors import LLMError
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
 from runner.runner_metrics import LLM_REQUESTS_TOTAL as LLM_CALLS_TOTAL
+from generator.agents.metrics_utils import get_or_create_metric
 
 # -----------------------------------
 
@@ -230,45 +230,16 @@ except Exception:  # pragma: no cover
 
 # --- Prometheus Metrics (Local for prompt generation statistics) ---
 # NOTE: Replaced original prompt_gen_calls/errors/latency with central LLM metrics where applicable
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    prompt_feedback_score = Gauge(
-        "deploy_prompt_feedback_score",
-        "Latest feedback score for generated prompts",
-        ["target", "variant"],
-    )
-    prompt_tokens_generated = Histogram(
-        "deploy_prompt_tokens_generated",
-        "Number of tokens in generated prompts",
-        ["target", "variant"],
-    )
-    FEW_SHOT_USAGE = Counter(
-        "deploy_prompt_few_shot_usage",
-        "Number of few-shot examples used",
-        ["target", "variant"],
-    )
-    TEMPLATE_LOADS = Counter(
-        "deploy_prompt_template_loads",
-        "Number of template loads",
-        ["target", "variant"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    prompt_feedback_score = REGISTRY._names_to_collectors.get(
-        "deploy_prompt_feedback_score"
-    )
-    prompt_tokens_generated = REGISTRY._names_to_collectors.get(
-        "deploy_prompt_tokens_generated"
-    )
-    FEW_SHOT_USAGE = REGISTRY._names_to_collectors.get("deploy_prompt_few_shot_usage")
-    TEMPLATE_LOADS = REGISTRY._names_to_collectors.get("deploy_prompt_template_loads")
-
+prompt_feedback_score = get_or_create_metric(
+    Gauge,
+    "deploy_prompt_feedback_score",
+    "Latest feedback score for generated prompts",
+    ["target", "variant"],
+)
 # --- Security: Sensitive Data Scrubbing ---
 # Define common sensitive patterns for regex fallback if Presidio is not available or fails.
 COMMON_SECRET_PATTERNS = [
-    # FIX: Lowered from 20 to 8 to catch test keys
+    # Lowered from 20 to 8 to catch test keys
     r'(?i)(api[-_]?key|secret|token)\s*[:=]\s*["\']?[a-zA-Z0-9_\-]{8,}["\']?',
     r'(?i)password\s*[:=]\s*["\']?.+?["\']?',  # Passwords
     r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",  # Email addresses
@@ -730,7 +701,7 @@ class PromptTemplateRegistry:
         class ReloadHandler(FileSystemEventHandler):
             def __init__(self, registry_instance: "PromptTemplateRegistry"):
                 self.registry_instance = registry_instance
-                # FIX #5: Add debouncing to prevent multiple reload events in quick succession
+                # Add debouncing to prevent multiple reload events in quick succession
                 # The file watcher was triggering 6+ reload events for the same file within 1 second
                 self.last_reload_time = {}
                 self.debounce_seconds = 0.5  # Ignore events within 500ms of previous event
@@ -742,7 +713,7 @@ class PromptTemplateRegistry:
                     current_time = time.time()
                     last_time = self.last_reload_time.get(event.src_path, 0)
                     
-                    # FIX #5: Debounce - ignore if we reloaded this file recently
+                    # Debounce - ignore if we reloaded this file recently
                     if current_time - last_time < self.debounce_seconds:
                         logger.debug(
                             "Debounced template reload for %s (%.2fs since last reload)",
@@ -880,7 +851,7 @@ class DeployPromptAgent:
                 "sentence_transformers package not found. Few-shot retrieval will be disabled."
             )
 
-        # FIX: Accept template_dir parameter
+        # Accept template_dir parameter
         self.template_registry = PromptTemplateRegistry(template_dir=template_dir)
         self.few_shot_examples = self._load_few_shot(few_shot_dir)
         # self.repo_path = repo_path # REMOVED: repo_path is now passed per-method
@@ -1241,7 +1212,7 @@ class DeployPromptAgent:
             )
 
             # Retrieve the appropriate template
-            # FIX: This line is *before* the try...except block,
+            # This line is *before* the try...except block,
             # so errors here will NOT return a fallback prompt.
             template = self.template_registry.get_template(target, variant)
 
@@ -1784,7 +1755,7 @@ Output must be in JSON format: {"config": "string content"}
     else:
         # Run in CLI mode
         # Create an agent instance for CLI/AB test runs
-        # FIX: Instantiate agent without repo_path
+        # Instantiate agent without repo_path
         agent_instance = DeployPromptAgent()
 
         async def run_cli_mode():
@@ -1796,7 +1767,7 @@ Output must be in JSON format: {"config": "string content"}
                 ab_results = await agent_instance.ab_test_prompts(
                     target=args.target,
                     files=args.files,
-                    repo_path=args.repo_path,  # FIX: Pass repo_path
+                    repo_path=args.repo_path,
                     instructions=args.instructions,
                     variants=args.ab_variants,
                 )
@@ -1835,7 +1806,7 @@ Output must be in JSON format: {"config": "string content"}
                 final_prompt_string = await agent_instance.build_deploy_prompt(
                     target=args.target,
                     files=args.files,
-                    repo_path=args.repo_path,  # FIX: Pass repo_path
+                    repo_path=args.repo_path,
                     instructions=args.instructions,
                     variant=args.variant,
                     context=None,  # Let it gather context

@@ -100,7 +100,7 @@ import generator.audit_log.audit_plugins as audit_plugins_module
 # --------------------------------------------------------------------------- #
 # 2. Import the module under test
 # --------------------------------------------------------------------------- #
-# FIX: Import 'plugins' by its actual name (not an alias like '_PLUGINS') for module reloading
+# Import 'plugins' by its actual name (not an alias like '_PLUGINS') for module reloading
 from generator.audit_log.audit_plugins import plugins  # Added discover_plugins import
 from generator.audit_log.audit_plugins import (
     AuditPlugin,
@@ -184,7 +184,7 @@ class _TestCommercialPlugin(CommercialPlugin):
         self.count = 0
 
     def process(self, event: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        # FIX: Don't increment counter for billing_report events
+        # Don't increment counter for billing_report events
         if event != "billing_report":
             self.count += 1
         return data
@@ -347,7 +347,7 @@ class TestAuditPlugins:
                     mock_import.return_value = mock_mod
 
                     # Clear old plugins and force discover_plugins() to run
-                    # FIX: Call discover_plugins() explicitly instead of relying on module reload
+                    # Call discover_plugins() explicitly instead of relying on module reload
                     audit_plugins_module.plugins.clear()
                     audit_plugins_module.discover_plugins()  # Explicitly call discover_plugins
 
@@ -515,7 +515,7 @@ class TestAuditPlugins:
                 # Import and test discover_plugins (which loads the config)
                 import generator.audit_log.audit_plugins as audit_plugins_module
 
-                # FIX: Use the correct attribute name 'plugins'
+                # Use the correct attribute name 'plugins'
                 audit_plugins_module.plugins.clear()
                 audit_plugins_module.discover_plugins()  # Explicitly call discover_plugins
 

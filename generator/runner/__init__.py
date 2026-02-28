@@ -3,6 +3,14 @@
 """
 Runner package entry point.
 Centralises registries, OTEL tracer, and re-exports public symbols.
+
+Module aliasing
+---------------
+When this package is installed under ``generator.runner`` it ensures that bare
+``runner.*`` imports (used by legacy code and some third-party plugins) resolve
+to the *same* module objects.  The aliasing is performed with a strict identity
+check so that a pre-existing ``runner`` entry in ``sys.modules`` (e.g. an
+unrelated package or a test mock) is **never silently overwritten**.
 """
 
 # generator/runner/__init__.py
@@ -12,67 +20,93 @@ import sys
 
 _logger = logging.getLogger(__name__)
 
-# --- Module Aliasing for Backwards Compatibility ---
-# This must be done BEFORE any submodule imports to prevent duplicate module loading.
-# When this package is imported as 'generator.runner', we need to ensure that
-# any internal imports like 'from runner.runner_config import ...' resolve to
-# the same module objects.
+# ---------------------------------------------------------------------------
+# Module aliasing — backward compatibility
+# ---------------------------------------------------------------------------
+# Only register this package as the bare ``runner`` name when:
+#   1. ``runner`` is not yet registered, OR
+#   2. the registered object is the same package under a different key
+#      (both ``generator.runner`` and ``runner`` are already pointing here).
+#
+# We explicitly skip aliasing when ``runner`` is already occupied by a
+# *different* object (another package, a mock, etc.) to avoid identity
+# collisions that break isinstance() checks and duplicate metric registration.
 
-# Determine if we're being imported as 'generator.runner' or just 'runner'
 _is_generator_import = __name__ == "generator.runner"
+_existing_runner = sys.modules.get("runner")
 
-# Set up 'runner' as an alias to this module
-# Skip aliasing if the target is a Mock (happens during tests)
-if "runner" not in sys.modules:
+if _existing_runner is None:
     sys.modules["runner"] = sys.modules[__name__]
-elif _is_generator_import and sys.modules.get("runner") is not sys.modules[__name__]:
-    # Check if 'runner' is a Mock before overriding
-    runner_module = sys.modules.get("runner")
-    if not (
-        hasattr(runner_module, "_mock_name")
-        or str(type(runner_module).__name__) == "MagicMock"
+elif _is_generator_import and _existing_runner is not sys.modules[__name__]:
+    _is_mock = (
+        hasattr(_existing_runner, "_mock_name")
+        or type(_existing_runner).__name__ in ("MagicMock", "NonCallableMagicMock")
+    )
+    if _is_mock:
+        # Leave test mocks untouched; they own the ``runner`` namespace during tests.
+        _logger.debug(
+            "runner/__init__: 'runner' in sys.modules is a mock — skipping alias."
+        )
+    elif getattr(_existing_runner, "__file__", None) == getattr(
+        sys.modules[__name__], "__file__", object()
     ):
-        # Make runner point to generator.runner only if it's not a mock
+        # Same file on disk, different sys.modules key — harmless, unify them.
         sys.modules["runner"] = sys.modules[__name__]
+    else:
+        # Different package already registered as 'runner'; do NOT overwrite.
+        _logger.warning(
+            "runner/__init__: 'runner' is already registered in sys.modules as a "
+            "different object (%r).  Module aliasing skipped to prevent identity "
+            "collision.  If bare 'runner.*' imports fail, check your PYTHONPATH.",
+            _existing_runner,
+        )
 
 
-def _ensure_submodule_alias(submodule_name: str):
-    """
-    Ensure that runner.{submodule} and generator.runner.{submodule}
-    point to the same module object.
+def _ensure_submodule_alias(submodule_name: str) -> None:
+    """Ensure ``runner.<submodule>`` and ``generator.runner.<submodule>`` are the
+    same object in ``sys.modules``.
+
+    Aliasing is skipped when either slot already holds a mock or when both
+    slots are occupied by *different* non-mock objects (which would indicate a
+    genuine conflict that silently overwriting would hide).
     """
     gen_key = f"generator.runner.{submodule_name}"
     run_key = f"runner.{submodule_name}"
 
-    # Skip aliasing if either module is a Mock (happens during tests)
     gen_module = sys.modules.get(gen_key)
     run_module = sys.modules.get(run_key)
 
-    # Check if either is a Mock object
-    if gen_module is not None and hasattr(gen_module, "_mock_name"):
-        return  # Skip aliasing for mocked modules
-    if run_module is not None and hasattr(run_module, "_mock_name"):
-        return  # Skip aliasing for mocked modules
+    def _is_mock(m: object) -> bool:
+        return m is not None and (
+            hasattr(m, "_mock_name")
+            or type(m).__name__ in ("MagicMock", "NonCallableMagicMock")
+        )
 
-    if gen_key in sys.modules and run_key not in sys.modules:
-        sys.modules[run_key] = sys.modules[gen_key]
-    elif run_key in sys.modules and gen_key not in sys.modules:
-        sys.modules[gen_key] = sys.modules[run_key]
+    if _is_mock(gen_module) or _is_mock(run_module):
+        return  # Leave test mocks untouched.
+
+    if gen_module is not None and run_module is None:
+        sys.modules[run_key] = gen_module
+    elif run_module is not None and gen_module is None:
+        sys.modules[gen_key] = run_module
+    elif gen_module is not None and run_module is not None and gen_module is not run_module:
+        # Both slots occupied by different real objects — do NOT silently unify.
+        _logger.warning(
+            "_ensure_submodule_alias: '%s' and '%s' point to different objects; "
+            "skipping alias to prevent identity collision.",
+            gen_key,
+            run_key,
+        )
 
 
-# FIX: Added missing typing imports
 from typing import Any, Callable, Dict, List, Optional, Union
 
-# Detect pytest / testing early & reliably
-TESTING = (
-    os.getenv("TESTING") == "1"
-    or "pytest" in sys.modules
-    or os.getenv("PYTEST_CURRENT_TEST") is not None
-    or os.getenv("PYTEST_ADDOPTS") is not None
-)
+# TESTING is authoritative in runner_base_types (no intra-package imports there).
+# Re-export it here so that ``from runner import TESTING`` continues to work.
+from .runner_base_types import TESTING  # noqa: F401
 
 
-# --- FIX: Create a custom registry class that allows attribute setting ---
+# --- Registry class ---
 class FileHandlerRegistry(Dict[str, Callable[..., Any]]):
     """A dictionary subclass used to store file handlers, allowing extensions to be stored as attributes."""
 
@@ -85,7 +119,7 @@ class FileHandlerRegistry(Dict[str, Callable[..., Any]]):
         return self._extensions
 
 
-# FIX: Initialize FILE_HANDLERS with the custom class
+# Initialize FILE_HANDLERS with the custom class
 FILE_HANDLERS: FileHandlerRegistry = FileHandlerRegistry()
 
 
@@ -94,7 +128,7 @@ def register_file_handler(mime_type: str, extensions: List[str]):
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         FILE_HANDLERS[mime_type] = func
-        # FIX: Directly use the internal _extensions attribute on the class instance
+        # Directly use the internal _extensions attribute on the class instance
         FILE_HANDLERS._extensions[mime_type] = extensions
         return func
 
@@ -136,7 +170,7 @@ from shared.registry import Registry  # noqa: E402
 SUMMARIZERS = Registry()
 
 
-# FIX: Add registration function for Summarizers as required
+# Add registration function for Summarizers as required
 def register_summarizer(name: str):
     """Registers a summarization function."""
 
@@ -286,7 +320,7 @@ import sys as _sys
 # NEW: Import the logging module for aliasing
 # NEW: Import the errors module for aliasing
 # NEW: Import the contracts module for aliasing
-# FIX: Wrap imports in try-except to handle circular import during initial module load
+# Wrap imports in try-except to handle circular import during initial module load
 _runner_alerting = None
 _runner_feedback_handlers = None
 _runner_config = None
@@ -298,7 +332,7 @@ _runner_metrics = None
 _runner_providers = None
 
 try:
-    # FIX: Import order is critical to avoid circular imports
+    # Import order is critical to avoid circular imports
     # runner_logging MUST be imported before runner_core because runner_core
     # imports from runner_logging and needs it to be fully initialized.
     # Similarly, modules are ordered by their dependencies.

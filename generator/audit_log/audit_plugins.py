@@ -99,27 +99,34 @@ def safe_gauge(name, description, labelnames=()):
 
 # --- END: FIX 1 ---
 
-# Import log_action, handle potential circular dependency
-# First try to import from the package's __init__.py (which has lazy loading)
+# Import log_action — single authoritative source with a well-defined fallback.
+# The fallback is intentionally loud (WARNING, not debug) so that operators are
+# alerted to misconfiguration before compliance-critical audit events are lost.
+_DUMMY_LOG_ACTION_USED = False
 try:
-    from . import log_action as real_log_action
+    from .audit_log import log_action as real_log_action
+except ImportError as _log_action_import_err:
+    _DUMMY_LOG_ACTION_USED = True
+    logging.getLogger(__name__).warning(
+        "audit_plugins: could not import log_action from .audit_log (%s). "
+        "Audit events will be written to the application log only — "
+        "compliance-critical events may not reach the audit trail. "
+        "Ensure the audit_log package is properly installed.",
+        _log_action_import_err,
+    )
 
-    _DUMMY_LOG_ACTION_USED = False
-except ImportError:
-    try:
-        # Fallback: try to import directly from the audit_log module
-        from .audit_log import log_action as real_log_action
+    async def real_log_action(*args, **kwargs) -> None:  # type: ignore[misc]
+        """
+        Emergency fallback for log_action.
 
-        _DUMMY_LOG_ACTION_USED = False
-    except ImportError:
-        _DUMMY_LOG_ACTION_USED = True
-        logger = logging.getLogger(__name__)
-        logger.debug("log_action import failed, using dummy function.")
-
-        async def real_log_action(
-            *args, **kwargs
-        ):  # Make dummy async to match expected signature
-            logging.debug(f"Dummy log_action: {args}, {kwargs}")
+        Writes at WARNING level so that dropped audit events are visible in
+        application logs.  This is NOT a compliant audit trail.
+        """
+        logging.getLogger(__name__).warning(
+            "AUDIT EVENT DROPPED (log_action unavailable): args=%s kwargs=%s",
+            args,
+            kwargs,
+        )
 
 
 log_action = real_log_action
@@ -486,7 +493,7 @@ async def execute_hooks_sync(event: str, data: Any) -> Any:
                 )
                 result = await asyncio.to_thread(hook, current_data)
             else:
-                # FIX: Run sync hooks in a thread to avoid blocking the event loop
+                # Run sync hooks in a thread to avoid blocking the event loop
                 result = await asyncio.to_thread(hook, current_data)
 
             if result is not None:
@@ -583,7 +590,7 @@ def _sandboxed_worker(
             event, entry
         )  # NOTE: event, data order changed from test
 
-        # CRITICAL FIX 1: Send back both the result (modified data) AND the updated plugin instance (with counters)
+        # Send back both the result (modified data) AND the updated plugin instance (with counters)
         q.put((result, plugin_instance))
 
     except Exception as e:
@@ -789,7 +796,7 @@ async def trigger_event(event: str, data: Any) -> Any:
     # Ensure plugin state is isolated for hypothesis examples
     # TestPlugin.reset_usage_data() is already called in the test, but ensure no stale carryover.
 
-    # FIX: Ensure deep copy is made before passing to hooks and plugins
+    # Ensure deep copy is made before passing to hooks and plugins
     try:
         current_data = json.loads(json.dumps(data))  # Deep copy using serialization
     except Exception:
@@ -941,7 +948,7 @@ async def trigger_event(event: str, data: Any) -> Any:
             # Errors for plugin execution are already logged by `sandboxed_execute`
 
     # Audit plugin events for traceability
-    # FIX: Added await for the async log_action
+    # Added await for the async log_action
     await log_action(
         "plugin_event",
         {

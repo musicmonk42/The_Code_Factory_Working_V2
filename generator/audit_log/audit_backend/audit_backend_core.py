@@ -250,7 +250,7 @@ class CryptoInitializationError(Exception):
 # --- Configuration and Secrets Management ---
 
 
-# FIX: Set test mode environment variables BEFORE creating Dynaconf
+# Set test mode environment variables BEFORE creating Dynaconf
 def _is_test_or_dev_mode() -> bool:
     # pytest sets PYTEST_CURRENT_TEST; we also respect a simple dev flag.
     # CI workflows set TESTING=1 and/or CI=1 which should also trigger test mode
@@ -309,7 +309,7 @@ if _is_test_or_dev_mode():
     os.environ.setdefault("AUDIT_RETRY_BACKOFF_FACTOR", "0.1")
 
 # Using Dynaconf for environment-based configuration
-# FIX: Only add validators in production mode
+# Only add validators in production mode
 if _is_test_or_dev_mode():
     settings = Dynaconf(
         envvar_prefix="AUDIT",
@@ -320,7 +320,7 @@ else:
         envvar_prefix="AUDIT",
         settings_files=["audit_config.yaml"],
         validators=[
-            # FIX: Removed is_type_of=list check for ENCRYPTION_KEYS
+            # Removed is_type_of=list check for ENCRYPTION_KEYS
             # Railway sets this as a JSON string, and Dynaconf can't validate list types on strings
             # The _as_json_list() function handles parsing and validation instead
             Validator("ENCRYPTION_KEYS", must_exist=True),
@@ -343,11 +343,11 @@ else:
 # from dynaconf import settings <-- START: EDIT A (Removed)
 
 
-# FIX: Moved _is_test_or_dev_mode() and environment setup BEFORE Dynaconf creation above
+# Moved _is_test_or_dev_mode() and environment setup BEFORE Dynaconf creation above
 
 
 # ---- Import-time validation with test/dev fallback ----
-# FIX: This block is now handled before Dynaconf creation, but keep validation attempt
+# This block is now handled before Dynaconf creation, but keep validation attempt
 if _is_test_or_dev_mode():
     # Try validation, but don't fail in test/dev mode
     try:
@@ -752,7 +752,7 @@ async def retry_operation(
     """Retries an async operation with exponential backoff."""
     for attempt in range(max_attempts):
         try:
-            # FIX: If the operation is synchronous, run it in a threadpool
+            # If the operation is synchronous, run it in a threadpool
             if asyncio.iscoroutinefunction(operation):
                 return await operation()
             else:
@@ -810,7 +810,7 @@ class LogBackend(abc.ABC):
 
         self._validate_params()
 
-        # FIX: Initialize task set, but DO NOT create tasks here.
+        # Initialize task set, but DO NOT create tasks here.
         self._async_tasks = set()  # Use a set to track tasks for graceful shutdown
 
     async def start(self):
@@ -819,7 +819,7 @@ class LogBackend(abc.ABC):
         Subclasses MUST call await super().start() if they override this.
         """
         logger.info(f"Starting background tasks for {self.__class__.__name__}...")
-        # FIX: Get the *running* loop. This is safe as start() is async.
+        # Get the *running* loop. This is safe as start() is async.
         loop = asyncio.get_running_loop()
 
         self._migrate_task = loop.create_task(self._migrate_schema())
@@ -1454,7 +1454,7 @@ class InMemoryBackend(LogBackend):
         self.storage: List[Dict[str, Any]] = []
         self._validate_params()  # _validate_params is called by super().__init__
 
-        # FIX: Task creation moved to start()
+        # Task creation moved to start()
         # self._load_snapshot_task = asyncio.create_task(self._load_snapshot())
 
     async def start(self):
@@ -1516,8 +1516,7 @@ class InMemoryBackend(LogBackend):
         yield
 
     async def _append_single(self, prepared_entry: Dict[str, Any]):
-        # Batching handles storage, so single append is effectively no-op in this implementation
-        raise NotImplementedError
+        self.storage.append(prepared_entry)
 
     async def _query_single(
         self, filters: Dict[str, Any], limit: int
@@ -1539,12 +1538,93 @@ class InMemoryBackend(LogBackend):
 
     # --- ADDED: _load_snapshot method referenced in __init__ ---
     async def _load_snapshot(self):
-        """Conceptual: Loads previously saved snapshot."""
-        # This is a placeholder. In a real InMemoryBackend for testing,
-        # you might load from a file specified in params.
-        logger.info("InMemoryBackend: Skipping snapshot load (not implemented).")
-        await asyncio.sleep(0)  # Yield control to show it's async
-        return
+        """Loads previously saved snapshot from disk if configured.
+
+        Uses zlib-compressed JSON (same format as the streaming backends).
+        Applies a maximum decompressed-size guard to prevent decompression
+        bomb attacks when loading externally-provided snapshot files.
+        """
+        snapshot_file = self.params.get("snapshot_file", None)
+        if not snapshot_file:
+            logger.info("InMemoryBackend: No snapshot_file configured; starting empty.")
+            return
+        if not os.path.exists(snapshot_file):
+            logger.info(
+                f"InMemoryBackend: Snapshot file '{snapshot_file}' does not exist; "
+                "starting empty."
+            )
+            return
+
+        # Size limits — configurable via self.params so operators can tune them
+        # for their deployment's memory constraints.  Defaults are conservative:
+        # 512 MB compressed (on-disk) and 1 GB decompressed (in-memory).
+        _MAX_COMPRESSED_BYTES: int = self.params.get(
+            "max_snapshot_compressed_bytes", 512 * 1024 * 1024
+        )
+        _MAX_DECOMPRESSED_BYTES: int = self.params.get(
+            "max_snapshot_decompressed_bytes", 1024 * 1024 * 1024
+        )
+
+        logger.info(
+            f"InMemoryBackend: Attempting to load snapshot from '{snapshot_file}'.",
+        )
+        try:
+            _compressed_size = os.path.getsize(snapshot_file)
+            if _compressed_size > _MAX_COMPRESSED_BYTES:
+                logger.error(
+                    f"InMemoryBackend: Snapshot file '{snapshot_file}' is too large "
+                    f"({_compressed_size} bytes > {_MAX_COMPRESSED_BYTES} byte limit). "
+                    "Skipping snapshot load for safety."
+                )
+                return
+
+            with open(snapshot_file, "rb") as f:
+                compressed_data = f.read()
+
+            # Decompress with an explicit output-size cap to prevent zip bombs.
+            _decompressor = zlib.decompressobj()
+            _chunks: List[bytes] = []
+            _total = 0
+            _CHUNK = 65536
+            for _offset in range(0, len(compressed_data), _CHUNK):
+                _chunk = _decompressor.decompress(
+                    compressed_data[_offset:_offset + _CHUNK]
+                )
+                _total += len(_chunk)
+                if _total > _MAX_DECOMPRESSED_BYTES:
+                    raise ValueError(
+                        f"Decompressed size exceeds safety limit of "
+                        f"{_MAX_DECOMPRESSED_BYTES} bytes; aborting to prevent "
+                        "memory exhaustion."
+                    )
+                _chunks.append(_chunk)
+            _chunks.append(_decompressor.flush())
+            decompressed_data = b"".join(_chunks)
+
+            loaded_entries = json.loads(decompressed_data.decode("utf-8"))
+            if not isinstance(loaded_entries, list):
+                raise ValueError(
+                    f"Snapshot root is {type(loaded_entries).__name__}, expected list."
+                )
+
+            existing_ids = {e.get("entry_id") for e in self.storage}
+            new_count = 0
+            for entry in loaded_entries:
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("entry_id") not in existing_ids:
+                    self.storage.append(entry)
+                    new_count += 1
+
+            logger.info(
+                f"InMemoryBackend: Loaded {new_count} new entries "
+                f"({len(loaded_entries)} total in snapshot) from '{snapshot_file}'.",
+            )
+        except Exception as e:
+            logger.error(
+                f"InMemoryBackend: Failed to load snapshot from '{snapshot_file}': {e}",
+                exc_info=True,
+            )
 
 
 # =========================================================================

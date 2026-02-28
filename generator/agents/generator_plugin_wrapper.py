@@ -674,7 +674,7 @@ async def run_generator_workflow(
                 )
             else:
               try:
-                # FIX: Get deployment targets from config with proper default including kubernetes
+                # Get deployment targets from config with proper default including kubernetes
                 # Production logs show deploy_all(['docker', 'kubernetes', 'helm']) is expected
                 deployment_targets = config.get('deployment_targets', ['docker', 'kubernetes', 'helm'])
                 
@@ -702,7 +702,7 @@ async def run_generator_workflow(
                                     "correlation_id": correlation_id,
                                     "stage": "deploy",
                                     "artifacts_generated": len(deploy_result.get("configs", {})),
-                                    "targets": deployment_targets  # FIX: Use actual targets, not hardcoded
+                                    "targets": deployment_targets  # Use actual targets, not hardcoded
                                 }
                             )
                         except Exception as e:

@@ -69,7 +69,6 @@ try:
         call_ensemble_api,
         call_llm_api,
     )
-    # FIX: Import from runner_audit to avoid circular dependency
     from generator.runner.runner_audit import log_audit_event
     from generator.runner.runner_security_utils import scan_for_vulnerabilities
 except ImportError as e:
@@ -2860,7 +2859,7 @@ class CodeGenConfig:
         self.model = config.get("model", {})  # Retained for custom model mapping
 
         # VALIDATION: Ensure the environment key for the configured backend is present.
-        # FIX: Skip API key validation in test mode
+        # Skip API key validation in test mode
         testing_mode = (
             os.getenv("TESTING") == "1"
             or "pytest" in sys.modules
@@ -3880,7 +3879,7 @@ if PLUGIN_AVAILABLE:
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
                     
-                    # FIX: Log parsed files
+                    # Log parsed files
                     logger.info(
                         f"[CODEGEN] Parsed {len(code_files)} files from LLM response",
                         extra={"files": list(code_files.keys())}
@@ -3955,7 +3954,7 @@ if PLUGIN_AVAILABLE:
                 return code_files
 
             except Exception as e:
-                # FIX: Improve error logging with more context
+                # Improve error logging with more context
                 logger.error(
                     "[CODEGEN] Generation failed",
                     extra={
@@ -4476,7 +4475,7 @@ else:
                 return code_files
 
             except Exception as e:
-                # FIX: Improve error logging with more context
+                # Improve error logging with more context
                 logger.error(
                     "[CODEGEN] Generation failed",
                     extra={

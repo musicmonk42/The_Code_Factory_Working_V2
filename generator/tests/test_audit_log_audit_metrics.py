@@ -26,7 +26,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-# FIX 2: Import requests for patching in tests
+# Import requests for patching in tests
 import requests
 
 # --------------------------------------------------------------------------- #
@@ -195,7 +195,7 @@ class TestAuditMetrics:
     async def test_metric_registration_and_emission(self, audit_metrics_instance):
         """Test registration and emission of standard metrics."""
         with freeze_time("2025-09-01T12:00:00Z"):
-            # FIX 1: LOG_WRITES now correctly takes a label
+            # LOG_WRITES now correctly takes a label
             LOG_WRITES.labels(action="user_login").inc()
             ERROR_TYPES.labels(type="network_issue").inc()
             PLUGIN_INVOCATIONS.labels(event="pre_append", plugin="data_enrichment").inc()
@@ -263,7 +263,7 @@ class TestAuditMetrics:
             )
 
             try:
-                # FIX 2: Removed unexpected 'severity' keyword argument
+                # Removed unexpected 'severity' keyword argument
                 await audit_metrics_instance._send_slack_alert(
                     "Test alert", "This is a critical test message"
                 )
@@ -279,7 +279,7 @@ class TestAuditMetrics:
         """Test alerting with retry failure."""
 
         # Set up mock for synchronous requests.post to fail
-        # FIX 2: requests is imported
+        # requests is imported
         mock_fail_response = MagicMock(
             status_code=500,
             raise_for_status=MagicMock(side_effect=requests.exceptions.HTTPError),
@@ -295,7 +295,7 @@ class TestAuditMetrics:
             ],
         ):
             try:
-                # FIX 2: Removed unexpected 'severity' keyword argument
+                # Removed unexpected 'severity' keyword argument
                 # The alert will retry 3 times (set by env var)
                 await audit_metrics_instance._send_alert(
                     subject="Retry Test", message="Testing retry logic", channel="slack"
@@ -321,7 +321,7 @@ class TestAuditMetrics:
         for score in scores:
             audit_metrics_instance.observe_metric(metric_name, score)
 
-        # FIX 3: Correctly access the instance's metric_history
+        # Correctly access the instance's metric_history
         assert len(audit_metrics_instance.metric_history[metric_name]) == 30
 
         anomalies = audit_metrics_instance._detect_anomalies()
@@ -337,7 +337,7 @@ class TestAuditMetrics:
         # Just verify the instance exists and is running
         assert audit_metrics_instance is not None
 
-        # FIX 3: Since a new instance is created, metric_history is empty.
+        # Since a new instance is created, metric_history is empty.
         # This prevents leakage from other tests.
 
         # Act: Run anomaly detection immediately on the clean instance
@@ -352,7 +352,7 @@ class TestAuditMetrics:
         """Test concurrent metric updates for thread-safety."""
 
         async def update_metrics(i):
-            # FIX 1: LOG_WRITES now correctly takes a label
+            # LOG_WRITES now correctly takes a label
             LOG_WRITES.labels(action=f"user_action_{i}").inc()
             update_performance_score(60 + i)
 
@@ -384,7 +384,7 @@ class TestAuditMetrics:
         audit_metrics_instance.start()
 
         try:
-            # FIX: Wait briefly to ensure tasks are fully started before teardown is triggered.
+            # Wait briefly to ensure tasks are fully started before teardown is triggered.
             await asyncio.sleep(0.1)
 
             # The teardown logic in the fixture will call shutdown() after this test completes.

@@ -50,6 +50,7 @@ from .audit_backend_core import (
     logger,
     register_backend,
     retry_operation,
+    safe_metric,
     send_alert,
 )
 
@@ -2826,7 +2827,44 @@ class SplunkBackend(LogBackend):
         )
 
 
-# --- InMemoryBackend ---
+# --- InMemoryBackend — module-level metric singletons ---
+# These are defined at module scope (not inside __init__) so that the Prometheus
+# registry receives exactly one registration per metric name even when multiple
+# InMemoryBackend instances are created (e.g. during tests or hot-reload).
+# safe_metric() is idempotent: it returns the existing collector if the name is
+# already registered.
+_INMEMORY_SIZE_GAUGE = safe_metric(
+    "Gauge",
+    "audit_backend_inmemory_size_entries",
+    "Current number of entries in InMemoryBackend",
+    ["backend"],
+)
+_INMEMORY_MEMORY_BYTES_GAUGE = safe_metric(
+    "Gauge",
+    "audit_backend_inmemory_memory_bytes",
+    "Approximate memory usage of InMemoryBackend (bytes)",
+    ["backend"],
+)
+_INMEMORY_EVICTIONS_COUNTER = safe_metric(
+    "Counter",
+    "audit_backend_inmemory_evictions_total",
+    "Total entries evicted from InMemoryBackend",
+    ["backend"],
+)
+_INMEMORY_OOM_EVENTS_COUNTER = safe_metric(
+    "Counter",
+    "audit_backend_inmemory_oom_events_total",
+    "Out of memory events in InMemoryBackend",
+    ["backend"],
+)
+_INMEMORY_FLUSH_DURATION = safe_metric(
+    "Histogram",
+    "audit_backend_inmemory_flush_duration_seconds",
+    "Duration of InMemoryBackend batch flush",
+    ["backend"],
+)
+
+
 class InMemoryBackend(LogBackend):
     """
     In-memory backend for testing and development. Not suitable for production due to non-persistence.
@@ -2851,32 +2889,13 @@ class InMemoryBackend(LogBackend):
         self.lock = asyncio.Lock()
         self.current_memory_bytes = 0
 
-        # Metrics for InMemoryBackend
-        self.INMEMORY_SIZE_GAUGE = Gauge(
-            "audit_backend_inmemory_size_entries",
-            "Current number of entries in InMemoryBackend",
-            ["backend"],
-        )
-        self.INMEMORY_MEMORY_BYTES_GAUGE = Gauge(
-            "audit_backend_inmemory_memory_bytes",
-            "Approximate memory usage of InMemoryBackend (bytes)",
-            ["backend"],
-        )
-        self.INMEMORY_EVICTIONS_COUNTER = Counter(
-            "audit_backend_inmemory_evictions_total",
-            "Total entries evicted from InMemoryBackend",
-            ["backend"],
-        )
-        self.INMEMORY_OOM_EVENTS_COUNTER = Counter(
-            "audit_backend_inmemory_oom_events_total",
-            "Out of memory events in InMemoryBackend",
-            ["backend"],
-        )
-        self.INMEMORY_FLUSH_DURATION = Histogram(
-            "audit_backend_inmemory_flush_duration_seconds",
-            "Duration of InMemoryBackend batch flush",
-            ["backend"],
-        )
+        # Bind the module-level metric singletons as instance attributes so
+        # usage throughout the class is identical to before.
+        self.INMEMORY_SIZE_GAUGE = _INMEMORY_SIZE_GAUGE
+        self.INMEMORY_MEMORY_BYTES_GAUGE = _INMEMORY_MEMORY_BYTES_GAUGE
+        self.INMEMORY_EVICTIONS_COUNTER = _INMEMORY_EVICTIONS_COUNTER
+        self.INMEMORY_OOM_EVENTS_COUNTER = _INMEMORY_OOM_EVENTS_COUNTER
+        self.INMEMORY_FLUSH_DURATION = _INMEMORY_FLUSH_DURATION
 
         self.INMEMORY_SIZE_GAUGE.labels(backend=self.__class__.__name__).set(0)
         self.INMEMORY_MEMORY_BYTES_GAUGE.labels(backend=self.__class__.__name__).set(0)

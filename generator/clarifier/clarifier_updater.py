@@ -38,6 +38,7 @@ from prometheus_client import (
 
 # Use centralized utilities from clarifier.py
 from .clarifier import get_config, get_fernet, get_logger
+from generator.agents.metrics_utils import get_or_create_metric
 
 # --- Central Runner Foundation Imports ---
 try:
@@ -152,57 +153,12 @@ except ImportError:
 
 
 # --- Metrics ---
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    UPDATE_CYCLES = Counter("clarifier_updates_total", "Requirement updates")
-    UPDATE_ERRORS = Counter(
-        "clarifier_update_errors", "Update errors", ["type", "component"]
-    )
-    UPDATE_CONFLICTS = Gauge(
-        "clarifier_conflicts", "Conflicts detected", ["conflict_type"]
-    )
-    REDACTION_EVENTS = Counter(
-        "clarifier_redaction_events_total", "PII/Secret redactions", ["pattern_type"]
-    )
-    SCHEMA_MIGRATIONS = Counter(
-        "clarifier_schema_migrations_total",
-        "Schema migrations",
-        ["from_version", "to_version"],
-    )
-    INFERENCE_LATENCY = Histogram(
-        "clarifier_inference_latency_seconds", "LLM inference latency", ["model_name"]
-    )
-    SELF_TEST_PASS = Gauge(
-        "clarifier_updater_self_test", "Self-test status (1=pass, 0=fail)"
-    )
-    HISTORY_STORAGE_LATENCY = Histogram(
-        "clarifier_history_storage_seconds", "History storage latency", ["operation"]
-    )
-    ALERT_SEND_EVENTS = Counter(
-        "clarifier_alert_send_total", "Total alerts sent", ["severity"]
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    UPDATE_CYCLES = REGISTRY._names_to_collectors.get("clarifier_updates_total")
-    UPDATE_ERRORS = REGISTRY._names_to_collectors.get("clarifier_update_errors")
-    UPDATE_CONFLICTS = REGISTRY._names_to_collectors.get("clarifier_conflicts")
-    REDACTION_EVENTS = REGISTRY._names_to_collectors.get(
-        "clarifier_redaction_events_total"
-    )
-    SCHEMA_MIGRATIONS = REGISTRY._names_to_collectors.get(
-        "clarifier_schema_migrations_total"
-    )
-    INFERENCE_LATENCY = REGISTRY._names_to_collectors.get(
-        "clarifier_inference_latency_seconds"
-    )
-    SELF_TEST_PASS = REGISTRY._names_to_collectors.get("clarifier_updater_self_test")
-    HISTORY_STORAGE_LATENCY = REGISTRY._names_to_collectors.get(
-        "clarifier_history_storage_seconds"
-    )
-    ALERT_SEND_EVENTS = REGISTRY._names_to_collectors.get("clarifier_alert_send_total")
-
+SCHEMA_MIGRATIONS = get_or_create_metric(
+    Counter,
+    "clarifier_schema_migrations_total",
+    "Schema migrations",
+    ["from_version", "to_version"],
+)
 # --- Schema Definitions ---
 SCHEMAS = {
     1: {
@@ -391,7 +347,6 @@ class HistoryStore:
             HISTORY_STORAGE_LATENCY.labels(operation="store").observe(
                 time.perf_counter() - start_time
             )
-            # FIX: Removed await from synchronous log_action call
             log_action(
                 "history_stored",
                 category="history",
@@ -452,7 +407,6 @@ class HistoryStore:
             HISTORY_STORAGE_LATENCY.labels(operation="query").observe(
                 time.perf_counter() - start_time
             )
-            # FIX: Removed await from synchronous log_action call
             log_action("history_queried", category="history", count=len(entries))
             return entries
         except Exception as e:
@@ -595,7 +549,6 @@ class DefaultConflictResolver(ConflictResolver):
                     elif action == "prioritize_new" and feature and clarity:
                         if feature in resolved_requirements.get("features", []):
                             resolved_requirements["features"].remove(feature)
-                            # FIX: Removed await from synchronous log_action call
                             log_action(
                                 "conflict_resolved",
                                 category="conflict",
@@ -609,7 +562,6 @@ class DefaultConflictResolver(ConflictResolver):
                     elif action == "prioritize_old" and feature and clarity:
                         if feature in clarifications:
                             del clarifications[feature]
-                            # FIX: Removed await from synchronous log_action call
                             log_action(
                                 "conflict_resolved",
                                 category="conflict",
@@ -642,7 +594,6 @@ class DefaultConflictResolver(ConflictResolver):
                 if conflict_type == "feature_contradiction" and feature and clarity:
                     if feature in resolved_requirements.get("features", []):
                         resolved_requirements["features"].remove(feature)
-                        # FIX: Removed await from synchronous log_action call
                         log_action(
                             "conflict_resolved",
                             category="conflict",
@@ -654,7 +605,6 @@ class DefaultConflictResolver(ConflictResolver):
                         )
                         action_taken = True
             elif strategy == "discard":
-                # FIX: Removed await from synchronous log_action call
                 log_action(
                     "conflict_resolved",
                     category="conflict",
@@ -666,10 +616,76 @@ class DefaultConflictResolver(ConflictResolver):
                 )
                 action_taken = True
             elif strategy == "ml_recommend":
-                logger.warning(
-                    f"ML recommendation strategy not yet implemented for conflict: {conflict_desc}."
-                )
-                UPDATE_ERRORS.labels("conflict_resolution", "ml_not_implemented").inc()
+                try:
+                    _config = get_config()
+                    _llm_client = GrokLLMClient()
+                    _api_key = os.getenv(f"{_config.INFERENCE_LLM.upper()}_API_KEY", "")
+                    if not _api_key:
+                        raise ValueError("LLM API key not configured for ml_recommend strategy.")
+                    _prompt = (
+                        f"You are a requirements conflict resolver. "
+                        f"Analyze this conflict and recommend an action.\n\n"
+                        f"Conflict type: {conflict_type}\n"
+                        f"Description: {conflict_desc}\n"
+                        f"Feature: {feature or 'N/A'}\n"
+                        f"Clarity: {clarity or 'N/A'}\n\n"
+                        f"Respond with a JSON object with a single key 'action' whose value is "
+                        f"one of: 'keep_old', 'keep_new', 'merge', or 'discard'.\n"
+                        f"Example: {{\"action\": \"keep_new\"}}"
+                    )
+                    _response = await _llm_client.call_llm(
+                        _prompt, _config.INFERENCE_LLM, _api_key
+                    )
+                    _ml_action = _response.get("action", "discard")
+                    if _ml_action in ("keep_new", "merge"):
+                        if feature and feature in resolved_requirements.get("features", []):
+                            resolved_requirements["features"].remove(feature)
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type=f"ml_recommend_{_ml_action}",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended '{_ml_action}' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                    elif _ml_action == "keep_old":
+                        if feature and clarity and feature in clarifications:
+                            del clarifications[feature]
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type="ml_recommend_keep_old",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended 'keep_old' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                    else:
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type="ml_recommend_discard",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended 'discard' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                except Exception as _ml_err:
+                    logger.warning(
+                        f"ML recommendation failed for conflict '{conflict_desc}': {_ml_err}. "
+                        f"Falling back to 'discard' strategy."
+                    )
+                    log_action(
+                        "conflict_resolved",
+                        category="conflict",
+                        type="discard",
+                        description=conflict_desc,
+                    )
+                    action_taken = True
             else:
                 logger.warning(
                     f"Unknown conflict resolution strategy '{strategy}'. Conflict '{conflict_desc}' remains unaddressed."
@@ -704,7 +720,7 @@ class RequirementsUpdater:
         self.clarifications_snapshot: Dict[str, str] = {}
 
         self._db_init_task = asyncio.create_task(self.history_store._init_db())
-        # FIX: Allow disabling self-test for testing
+        # Allow disabling self-test for testing
         if run_self_test:
             self._self_test_task = asyncio.create_task(self._run_self_test_on_startup())
         else:
@@ -714,7 +730,7 @@ class RequirementsUpdater:
         """Runs self-test on initialization. Enforces fail-closed mode."""
         await self._db_init_task
 
-        # FIX: Now self_test() is async, so we can await it
+        # Now self_test() is async, so we can await it
         success = await self.self_test()
         if not success:
             logger.critical(
@@ -767,7 +783,6 @@ class RequirementsUpdater:
                 SCHEMA_MIGRATIONS.labels(
                     from_version=str(original_version), to_version=str(target_version)
                 ).inc()
-                # FIX: Removed await from synchronous log_action call
                 log_action(
                     "schema_migrated",
                     category="schema",
@@ -836,7 +851,7 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            # FIX: Check for event loop before attempting async call
+            # Check for event loop before attempting async call
             try:
                 asyncio.get_running_loop()
                 asyncio.create_task(
@@ -923,7 +938,6 @@ class RequirementsUpdater:
                 inference_duration
             )
 
-            # FIX: Removed await from synchronous log_action call
             log_action(
                 "inference_updates",
                 category="llm",
@@ -1137,13 +1151,12 @@ class RequirementsUpdater:
             span.set_attribute("versioning.previous_hash", current["prev_hash"])
             span.set_status(StatusCode.OK)
 
-        # FIX: Handle None prev_hash safely
+        # Handle None prev_hash safely
         prev_hash_display = (
             prev_hash[:8]
             if prev_hash and prev_hash != "genesis_hash_placeholder"
             else "None (first version)"
         )
-        # FIX: Removed await from synchronous log_action call
         log_action(
             "requirements_versioned",
             category="versioning",
@@ -1174,7 +1187,7 @@ class RequirementsUpdater:
         if recomputed_hash == entry["version_hash"]:
             return True
         else:
-            # FIX: Handle None prev_hash safely when logging
+            # Handle None prev_hash safely when logging
             prev_hash = entry.get("prev_hash")
             prev_hash_display = prev_hash[:8] if prev_hash else "None (first version)"
             logger.error(
@@ -1298,7 +1311,6 @@ class RequirementsUpdater:
             if span:
                 span.add_event("Requirements stored in history")
 
-            # FIX: Removed await from synchronous log_action call
             log_action(
                 "requirements_updated",
                 category="update_workflow",
@@ -1316,7 +1328,6 @@ class RequirementsUpdater:
             if span:
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            # FIX: Removed await from synchronous log_action call
             log_action(
                 "requirements_update_failed",
                 category="update_workflow",
@@ -1331,11 +1342,11 @@ class RequirementsUpdater:
         """Performs comprehensive self-test. This method is now properly async."""
         logger.info("Running self-test for RequirementsUpdater...")
 
-        # FIX: Use await instead of asyncio.run()
+        # Use await instead of asyncio.run()
         await self.history_store._init_db()
         await self._clear_history_for_test()
 
-        # FIX: Add conflict_strategy to the test data
+        # Add conflict_strategy to the test data
         test_req_initial = {
             "features": ["test_feature_1"],
             "schema_version": 1,
@@ -1358,7 +1369,7 @@ class RequirementsUpdater:
                 initial_req_for_test = copy.deepcopy(test_req_initial)
                 initial_req_for_test["features"].append("contradictory_feature")
 
-                # FIX: Use await instead of asyncio.run()
+                # Use await instead of asyncio.run()
                 updated_for_test = await self.update(
                     initial_req_for_test,
                     test_ambiguities,
@@ -1375,7 +1386,7 @@ class RequirementsUpdater:
                 SELF_TEST_PASS.set(0)
                 return False
 
-            # FIX: Use await instead of asyncio.run()
+            # Use await instead of asyncio.run()
             history = await self.history_store.query(limit=1)
             assert len(history) == 1, "Self-test: History should contain one entry."
             assert self._verify_hash_chain(
@@ -1429,7 +1440,7 @@ class RequirementsUpdater:
                 f"Self-test FAILED due to an unexpected error: {e}", exc_info=True
             )
             SELF_TEST_PASS.set(0)
-            # FIX: Use await instead of asyncio.run()
+            # Use await instead of asyncio.run()
             await send_alert(f"Updater self-test failed: {e}", severity="critical")
             return False
 

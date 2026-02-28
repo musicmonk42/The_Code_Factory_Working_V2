@@ -54,27 +54,69 @@ from opentelemetry.trace.status import (
     StatusCode,
 )  # *** FIX: Added missing import ***
 
-# --- External Dependencies (Strictly Required) ---
-from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine
-from presidio_anonymizer.entities import OperatorConfig
+# --- External Dependencies (Optional — Presidio for PII redaction) ---
+# Guard with try/except so the entire docgen agent remains importable even when
+# Presidio or its spaCy language models are not installed.  PII scrubbing will
+# fall back to regex patterns in that case.
+try:
+    from presidio_analyzer import AnalyzerEngine
+    from presidio_anonymizer import AnonymizerEngine
+    from presidio_anonymizer.entities import OperatorConfig
+
+    HAS_PRESIDIO = True
+except ImportError as _presidio_err:
+    HAS_PRESIDIO = False
+    AnalyzerEngine = None  # type: ignore[assignment,misc]
+    AnonymizerEngine = None  # type: ignore[assignment,misc]
+    OperatorConfig = None  # type: ignore[assignment,misc]
+    logging.getLogger(__name__).warning(
+        "docgen_agent: Presidio not available (%s). "
+        "PII/secret scrubbing will use regex-only fallback — "
+        "install presidio-analyzer and presidio-anonymizer for full protection.",
+        _presidio_err,
+    )
 
 # --- Presidio Singleton Pattern (to avoid repeated initialization and log spam) ---
 _analyzer_singleton = None
 _anonymizer_singleton = None
 
 
+# Regex patterns for basic PII redaction when Presidio is unavailable.
+_REDACT_PATTERNS = [
+    # API keys / secrets / tokens
+    (re.compile(r'(?i)(api[-_]?key|secret|token)\s*[:=]\s*["\']?[A-Za-z0-9_\-]{20,}["\']?'), r'\1: [REDACTED]'),
+    # Email addresses
+    (re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'), '[REDACTED_EMAIL]'),
+    # IPv4 addresses
+    (re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b'), '[REDACTED_IP]'),
+    # Passwords
+    (re.compile(r'(?i)password\s*[:=]\s*["\']?.+?["\']?(?=\s|$)'), 'password: [REDACTED]'),
+    # Credit-card-like sequences
+    (re.compile(r'\b(?:\d[ \-]?){13,16}\b'), '[REDACTED_CC]'),
+]
+
+
 def _get_analyzer():
-    """Get or create singleton AnalyzerEngine instance."""
+    """Get or create singleton AnalyzerEngine instance (requires Presidio)."""
     global _analyzer_singleton
+    if not HAS_PRESIDIO:
+        raise RuntimeError(
+            "AnalyzerEngine requested but Presidio is not installed. "
+            "Install presidio-analyzer and presidio-anonymizer."
+        )
     if _analyzer_singleton is None:
         _analyzer_singleton = AnalyzerEngine(supported_languages=["en"])
     return _analyzer_singleton
 
 
 def _get_anonymizer():
-    """Get or create singleton AnonymizerEngine instance."""
+    """Get or create singleton AnonymizerEngine instance (requires Presidio)."""
     global _anonymizer_singleton
+    if not HAS_PRESIDIO:
+        raise RuntimeError(
+            "AnonymizerEngine requested but Presidio is not installed. "
+            "Install presidio-analyzer and presidio-anonymizer."
+        )
     if _anonymizer_singleton is None:
         _anonymizer_singleton = AnonymizerEngine()
     return _anonymizer_singleton
@@ -83,7 +125,6 @@ def _get_anonymizer():
 from runner import tracer
 from runner.llm_client import call_llm_api
 from runner.runner_errors import LLMError
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger, send_alert
 from runner.runner_metrics import (
@@ -109,7 +150,7 @@ from tenacity import (
     wait_exponential,
 )
 
-# FIX: Add try-except for omnicore_engine.plugin_registry import
+# Add try-except for omnicore_engine.plugin_registry import
 try:
     from omnicore_engine.plugin_registry import PlugInKind, plugin
 except ImportError:
@@ -167,41 +208,52 @@ COMMON_SENSITIVE_PATTERNS_REF = [
 
 def scrub_text(text: str) -> str:
     """
-    Strictly redacts sensitive information from the text using Presidio.
-    Raises RuntimeError if Presidio fails.
-    Uses singleton instances to avoid repeated initialization.
+    Redact PII and secrets from *text*.
+
+    When Presidio is installed, full NLP-powered entity recognition is used
+    (``AnalyzerEngine`` + ``AnonymizerEngine``).  When Presidio is unavailable,
+    a set of conservative regex patterns is applied as a fallback so that the
+    docgen agent can still scrub obvious secrets (API keys, emails, IPs, etc.)
+    without crashing.
+
+    Args:
+        text: The input string to scrub.
+
+    Returns:
+        The scrubbed string.  Raises :class:`RuntimeError` only if Presidio is
+        present but encounters an internal error — the regex fallback never raises.
     """
     if not text:
         return ""
-    try:
-        # Use singleton instances to avoid repeated initialization and log spam
-        analyzer = _get_analyzer()
-        anonymizer = _get_anonymizer()
-        presidio_entities = [
-            "PERSON",
-            "EMAIL_ADDRESS",
-            "PHONE_NUMBER",
-            "CREDIT_CARD",
-            "US_SSN",
-            "IP_ADDRESS",
-            "URL",
-            "NRP",
-            "LOCATION",
-        ]
-        results = analyzer.analyze(text=text, entities=presidio_entities, language="en")
-        anonymized_text = anonymizer.anonymize(
-            text=text,
-            analyzer_results=results,
-            operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
-        ).text
-        return anonymized_text
-    except Exception as e:
-        logger.error(
-            f"Presidio PII/secret scrubbing failed critically: {e}", exc_info=True
-        )
-        raise RuntimeError(
-            f"Critical error during sensitive data scrubbing with Presidio: {e}"
-        ) from e
+
+    if HAS_PRESIDIO:
+        try:
+            analyzer = _get_analyzer()
+            anonymizer = _get_anonymizer()
+            presidio_entities = [
+                "PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD",
+                "US_SSN", "IP_ADDRESS", "URL", "NRP", "LOCATION",
+            ]
+            results = analyzer.analyze(text=text, entities=presidio_entities, language="en")
+            return anonymizer.anonymize(
+                text=text,
+                analyzer_results=results,
+                operators={"DEFAULT": OperatorConfig("replace", {"new_value": "[REDACTED]"})},
+            ).text
+        except Exception as e:
+            logger.error(
+                "Presidio PII/secret scrubbing failed: %s — falling back to regex scrubbing.",
+                e,
+                exc_info=True,
+            )
+            # Fall through to regex fallback rather than raising, so a Presidio
+            # internal error does not abort documentation generation entirely.
+
+    # Regex-based fallback (also used when Presidio unavailable)
+    scrubbed = text
+    for pattern, replacement in _REDACT_PATTERNS:
+        scrubbed = pattern.sub(replacement, scrubbed)
+    return scrubbed
 
 
 # --- Compliance Plugin System ---
@@ -1051,7 +1103,7 @@ class DocgenAgent:
             )
 
             # Build HTML documentation if Sphinx is available
-            # FIX: Always attempt to build even if there are validation warnings
+            # Always attempt to build even if there are validation warnings
             # RST validation can be overly strict - Sphinx itself may handle the content fine
             if SPHINX_AVAILABLE:
                 try:
@@ -1141,7 +1193,7 @@ class DocgenAgent:
         # We ensure ClientError is caught explicitly now.
         retry=retry_if_exception_type(
             (LLMError, ClientError)
-        ),  # FIX: Explicitly include ClientError
+        ),
     )
     async def generate_documentation(
         self,
@@ -1330,7 +1382,7 @@ class DocgenAgent:
                         )
 
                 # Combine validator issues and agent-level issues
-                # FIX: Handle both list and dict formats for validator_result["issues"]
+                # Handle both list and dict formats for validator_result["issues"]
                 validator_issues = validator_result.get("issues", [])
                 if isinstance(validator_issues, dict):
                     compliance_from_validator = validator_issues.get("compliance_issues", [])
@@ -1505,7 +1557,7 @@ class DocgenAgent:
                             ).inc()
 
                 # 11. Apply Post-processing Hooks
-                # FIX: Post-processing hooks use pre_process_hooks list here (typo)
+                # Post-processing hooks use pre_process_hooks list here (typo)
                 # Correcting to post_process_hooks
                 for hook in self.post_process_hooks:
                     final_result = hook(final_result)
@@ -1749,7 +1801,7 @@ class DocgenAgent:
                 except Exception as e:
                     logger.error(f"Compliance plugin '{plugin.name}' failed: {e}")
 
-            # FIX: Handle both list and dict formats for validator_result["issues"]
+            # Handle both list and dict formats for validator_result["issues"]
             validator_issues = validator_result.get("issues", [])
             if isinstance(validator_issues, dict):
                 compliance_from_validator = validator_issues.get("compliance_issues", [])

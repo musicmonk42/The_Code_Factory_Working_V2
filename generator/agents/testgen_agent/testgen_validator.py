@@ -45,10 +45,10 @@ from generator.runner import (  # Removed tracer - doesn't exist in runner
     run_stress_tests,
     run_tests_in_sandbox,
 )
-# FIX: Import audit functions directly now that circular import is resolved
+# Import audit functions directly now that circular import is resolved
 from generator.runner.runner_logging import logger
 from generator.runner.runner_audit import log_audit_event as add_provenance, log_audit_event_sync as add_provenance_sync
-from generator.runner.runner_mutation import (  # FIX 2: Added Mutation Runner Imports
+from generator.runner.runner_mutation import (
     mutation_test,
     property_based_test,
 )
@@ -393,7 +393,7 @@ class CoverageValidator(TestValidator):
             lines_covered = coverage_outputs.get("lines_covered", 0)
             total_lines = coverage_outputs.get("total_lines", 0)
             test_results = coverage_outputs.get("test_results", {})
-            # FIX Problem 2A: Capture execution stdout/stderr
+            # Capture execution stdout/stderr
             stdout = coverage_outputs.get("stdout", "")
             stderr = coverage_outputs.get("stderr", "")
 
@@ -414,7 +414,7 @@ class CoverageValidator(TestValidator):
                 "metrics": {
                     "coverage_percentage": coverage_percentage
                 },  # Nested for compatibility
-                # FIX Problem 2A: Include execution errors for refinement
+                # Include execution errors for refinement
                 "execution_stdout": stdout,
                 "execution_stderr": stderr,
             }

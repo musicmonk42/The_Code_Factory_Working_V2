@@ -81,10 +81,13 @@ except ImportError:
             pass
 
         def run(self, *args, **kwargs):
-            raise NotImplementedError(
-                "TUI is unavailable: 'textual' package is not installed. "
-                "Install it with: pip install textual"
+            import sys
+            print(
+                "TUI is unavailable: 'textual' and 'aiohttp' packages are required. "
+                "Install them with: pip install textual aiohttp",
+                file=sys.stderr,
             )
+            sys.exit(1)
 
         def query_one(self, *args, **kwargs):
             return self

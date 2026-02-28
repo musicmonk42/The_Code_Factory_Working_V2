@@ -85,7 +85,6 @@ except (ImportError, AttributeError):
 
         tracer = _NoopTracer()
 from runner.llm_client import call_ensemble_api, call_llm_api  # Use central LLM clients
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger  # Use central logging and provenance
 
@@ -141,7 +140,6 @@ except ImportError:  # Fallback for environments without LLM_SUMMARY_CALLS_TOTAL
     # summarize_section path can record usage without depending on runner changes.
     from prometheus_client import Counter as _Counter
 
-    # FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
     try:
         LLM_SUMMARY_CALLS_TOTAL = _Counter(
             "llm_summary_calls_total",
@@ -162,6 +160,7 @@ from runner.runner_audit import log_audit_event_sync as log_audit_event
 
 # ADDED: Centralized security and audit utilities as requested
 from runner.runner_security_utils import redact_secrets, scan_for_secrets
+from generator.agents.metrics_utils import get_or_create_metric
 
 # -----------------------------------
 
@@ -174,63 +173,12 @@ from runner.runner_security_utils import redact_secrets, scan_for_secrets
 
 # --- Prometheus Metrics (Local) ---
 # NOTE: Retaining local metrics for internal process statistics only, distinct from LLM metrics
-# FIX: Wrap metric creation in try-except to handle duplicate registration during pytest
-try:
-    handler_calls = Counter(
-        "deploy_response_handler_calls_total",
-        "Total handler calls",
-        ["format", "operation"],
-    )
-    handler_errors = Counter(
-        "deploy_response_handler_errors_total",
-        "Total handler errors",
-        ["format", "operation", "error_type"],
-    )
-    handler_latency = Histogram(
-        "deploy_response_handler_latency_seconds",
-        "Handler latency",
-        ["format", "operation"],
-    )
-    scan_findings_gauge = Gauge(
-        "deploy_scan_findings_count",
-        "Number of security findings in configs",
-        ["format", "finding_type"],
-    )
-    scan_total_findings = Counter(
-        "deploy_scan_total_findings",
-        "Total security findings detected",
-        ["format", "finding_type"],
-    )
-    # FIX 6: Add LLM_OUTPUT_FORMAT metric
-    llm_output_format_counter = Counter(
-        "deploy_llm_output_format_total",
-        "Classification of LLM output format",
-        ["target", "format_type"],
-    )
-except ValueError:
-    # Metrics already registered (happens during pytest collection)
-    from prometheus_client import REGISTRY
-
-    handler_calls = REGISTRY._names_to_collectors.get(
-        "deploy_response_handler_calls_total"
-    )
-    handler_errors = REGISTRY._names_to_collectors.get(
-        "deploy_response_handler_errors_total"
-    )
-    handler_latency = REGISTRY._names_to_collectors.get(
-        "deploy_response_handler_latency_seconds"
-    )
-    scan_findings_gauge = REGISTRY._names_to_collectors.get(
-        "deploy_scan_findings_count"
-    )
-    scan_total_findings = REGISTRY._names_to_collectors.get(
-        "deploy_scan_total_findings"
-    )
-    # FIX 6: Get existing LLM output format metric
-    llm_output_format_counter = REGISTRY._names_to_collectors.get(
-        "deploy_llm_output_format_total"
-    )
-
+handler_calls = get_or_create_metric(
+    Counter,
+    "deploy_response_handler_calls_total",
+    "Total handler calls",
+    ["format", "operation"],
+)
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"
 
@@ -305,7 +253,7 @@ def parse_llm_response(response: str, lang: str = "raw") -> Dict[str, str]:
         else:
             files[filename] = response
 
-    # FIXED: Aggregate errors into ERROR_FILENAME as requested by tests
+    # Aggregate errors into ERROR_FILENAME as requested by tests
     if errors:
         logger.warning(
             f"Encountered {len(errors)} errors during parsing. Aggregating to {ERROR_FILENAME}."
@@ -359,7 +307,7 @@ def monitor_and_scan_code(
     # 1. SAST Scan
     try:
         findings = _scan_for_vulnerabilities_sync(files)
-        # FIXED: Call log_action with "SAST" as expected by tests
+        # Call log_action with "SAST" as expected by tests
         if findings:
             log_action(
                 "Unified SAST Scan Completed",
@@ -369,14 +317,14 @@ def monitor_and_scan_code(
             log_action("Unified SAST Scan Completed", {"issues": [], "status": "clean"})
     except Exception as e:
         logger.error("Error during unified SAST scan: %s", e, exc_info=True)
-        # FIXED: Call log_action with "SAST" error as expected by tests
+        # Call log_action with "SAST" error as expected by tests
         log_action("Unified SAST Scan Error", {"error": str(e)})
 
     # 2. Secret Scan
     try:
-        # FIXED: Use a helper that calls the central runner scanner
+        # Use a helper that calls the central runner scanner
         if any(_looks_like_secret_sync(content) for content in files.values()):
-            # FIXED: Call log_action with "Secret" as expected by tests
+            # Call log_action with "Secret" as expected by tests
             log_action("Secret Scan Completed", {"status": "secrets_found"})
         else:
             log_action("Secret Scan Completed", {"status": "clean"})
@@ -437,7 +385,7 @@ async def scan_config_for_findings(
 
     # --- Dangerous/Misconfiguration Pattern Matching ---
     for finding_name, pattern_regex in dangerous_patterns.items():
-        # FIX: Use re.MULTILINE flag so ^ and $ match start/end of each line, not just start/end of string
+        # re.MULTILINE makes ^ and $ match line boundaries, not just string boundaries
         if re.search(pattern_regex, config_text, re.MULTILINE):
             findings.append(
                 {
@@ -615,7 +563,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     """
     raw = raw_response.strip()
     
-    # FIX Issue 2: Early detection of mermaid diagrams and markdown contamination
+    # Early detection of mermaid diagrams and markdown contamination
     # Case-insensitive mermaid detection using character class for reliability
     if re.search(r'```\s*[Mm][Ee][Rr][Mm][Aa][Ii][Dd]', raw):
         # Strip mermaid blocks instead of immediately rejecting
@@ -636,7 +584,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     
     # Check if empty
     if not raw:
-        # FIX 6: Record LLM output format classification
+        # Record LLM output format classification
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="empty").inc()
         logger.warning(f"Empty LLM response for {format_type}")
@@ -644,7 +592,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     
     # Check if response is already pure config (starts with expected instruction)
     if format_type == "dockerfile" and raw.startswith(("FROM", "ARG")):
-        # FIX 6: Record valid format
+        # Record valid format
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
@@ -670,17 +618,17 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
             
             raw = '\n'.join(lines)
             
-            # FIX 6: Record valid format
+            # Record valid format
             if llm_output_format_counter:
                 llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
             return raw
     if format_type == "json" and raw.startswith(("{", "[")):
-        # FIX 6: Record valid format
+        # Record valid format
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
     if format_type == "hcl" and (raw.startswith("resource") or raw.startswith("provider") or raw.startswith("terraform")):
-        # FIX 6: Record valid format
+        # Record valid format
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="valid").inc()
         return raw
@@ -695,14 +643,14 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
     if code_block_match:
         extracted = code_block_match.group(1).strip()
         logger.debug(f"Extracted config from markdown code block: {len(extracted)} chars")
-        # FIX 6: Record markdown wrapped format
+        # Record markdown wrapped format
         if llm_output_format_counter:
             llm_output_format_counter.labels(target=format_type, format_type="markdown_wrapped").inc()
         return extracted
     
     # Last resort for Dockerfile: find first FROM or ARG instruction
     if format_type == "dockerfile":
-        # FIX Issue 1: Enhanced Dockerfile extraction to handle LLM preamble text
+        # Enhanced Dockerfile extraction to handle LLM preamble text
         # Find the first line starting with FROM or ARG (case-insensitive for robustness)
         match = re.search(r'^(FROM|ARG)\s+', raw, re.MULTILINE | re.IGNORECASE)
         if match:
@@ -727,7 +675,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
                     break
             
             logger.debug(f"Extracted Dockerfile from first FROM/ARG: {len(extracted)} chars")
-            # FIX 6: Record prose format
+            # Record prose format
             if llm_output_format_counter:
                 llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
@@ -751,7 +699,7 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
                     extracted = extracted[:trail_match.start()].rstrip()
                     break
             logger.debug(f"Extracted YAML from first --- or apiVersion: {len(extracted)} chars")
-            # FIX 6: Record prose format
+            # Record prose format
             if llm_output_format_counter:
                 llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
@@ -762,14 +710,14 @@ def extract_config_from_response(raw_response: str, format_type: str) -> str:
         if match:
             extracted = raw[match.start():]
             logger.debug(f"Extracted JSON from first brace/bracket: {len(extracted)} chars")
-            # FIX 6: Record prose format
+            # Record prose format
             if llm_output_format_counter:
                 llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
             return extracted
     
     # Return as-is for handler to validate/fail
     logger.debug(f"No extraction patterns matched for {format_type}, returning original")
-    # FIX 6: Record unknown/prose format
+    # Record unknown/prose format
     if llm_output_format_counter:
         llm_output_format_counter.labels(target=format_type, format_type="prose").inc()
     return raw
@@ -968,7 +916,7 @@ class FormatHandler(ABC):
                 # STRICT FAILURES ENFORCED: No fallback to original text.
                 raise ValueError(error_msg)
 
-            # FIX: Changed to match log_audit_event signature: (event_name, data)
+            # log_audit_event signature: (event_name, data)
             await add_provenance(
                 "provenance",
                 {
@@ -1519,7 +1467,7 @@ class YAMLHandler(FormatHandler):
         Returns:
             True if content appears to be a Helm template, False otherwise
         """
-        # FIX Issue 3: Detect Helm templates with Go/Jinja templating syntax
+        # Detect Helm templates with Go/Jinja templating syntax
         # Look for common Helm template patterns
         helm_patterns = [
             r'\{\{[-\s]*\.Values\.',           # {{ .Values.x }}
@@ -1563,7 +1511,7 @@ class YAMLHandler(FormatHandler):
         lines = []
         in_code_block = False  # Track if we're inside any code block (mermaid, python, etc.)
         for line in raw.split('\n'):
-            # FIX Issue 2: Enhanced markdown detection and stripping
+            # Enhanced markdown detection and stripping
             # Detect code block boundaries (```language or just ```)
             if line.strip().startswith('```'):
                 in_code_block = not in_code_block
@@ -1589,7 +1537,7 @@ class YAMLHandler(FormatHandler):
                 # This looks like a markdown explanation list, skip it
                 continue
             
-            # FIX #2: Fix common LLM YAML syntax errors like "type: <PERSON>ports:"
+            # Fix common LLM YAML syntax errors like "type: <PERSON>ports:"
             # This pattern detects lines with malformed values containing <TAG>KEY: pattern
             # Example: "type: <PERSON>ports:" should be "type: LoadBalancer" + "  ports:"
             match = re.match(r'^(\s*)([\w-]+):\s*<[^>]+>(.+)$', line)
@@ -1686,7 +1634,7 @@ class YAMLHandler(FormatHandler):
             >>> handler.normalize("**bold**: value")  # Markdown detected
             ValueError: Invalid output: Response contains Markdown formatting...
         """
-        # FIX Issue 4: Sanitize LLM output to remove Mermaid diagrams and code fences
+        # Sanitize LLM output to remove Mermaid diagrams and code fences
         # This must happen BEFORE any other processing
         raw = _sanitize_llm_output(raw)
         
@@ -1707,7 +1655,7 @@ class YAMLHandler(FormatHandler):
         
         raw = raw.strip()
         
-        # FIX Issue 3: Detect Helm templates and treat as raw text
+        # Detect Helm templates and treat as raw text
         # Helm templates contain Go/Jinja syntax that is NOT valid YAML
         if self._is_helm_template(raw):
             logger.info(
@@ -1731,7 +1679,7 @@ class YAMLHandler(FormatHandler):
         # This helps when LLM occasionally adds explanatory text
         raw = self._sanitize_yaml_response(raw)
         
-        # FIX Issue 3: Instead of rejecting YAML with ** (markdown bold), sanitize it
+        # Instead of rejecting YAML with ** (markdown bold), sanitize it
         # Markdown bold markers should never appear in valid YAML values and can be safely removed
         if "**" in raw:
             # Log lines that had markdown for debugging (before sanitization)
@@ -1760,11 +1708,11 @@ class YAMLHandler(FormatHandler):
             raw = re.sub(r'\*\*', '', raw)
         
         # Parse YAML using ruamel.yaml for high fidelity
-        # FIX 2: Support multi-document YAML with load_all()
+        # Support multi-document YAML with load_all()
         # Industry standard: Handle multi-doc efficiently with lazy evaluation
         ru_yaml = YAML()
         
-        # FIX Issue 6: Explicitly disallow duplicate keys to ensure they're detected
+        # Explicitly disallow duplicate keys to ensure they're detected
         # By default, ruamel.yaml raises DuplicateKeyError on duplicates
         # We enforce this explicitly and catch the error to provide a helpful message
         ru_yaml.allow_duplicate_keys = False  # Explicitly enforce no duplicates
@@ -1818,7 +1766,7 @@ class YAMLHandler(FormatHandler):
                 raise ValueError("Empty YAML document")
             
         except Exception as e:
-            # FIX Issue 6: Special handling for duplicate key errors
+            # Special handling for duplicate key errors
             # Check if it's a DuplicateKeyError from ruamel.yaml
             if 'DuplicateKeyError' in type(e).__name__ or 'duplicate key' in str(e).lower():
                 # Extract key name from error message if possible
@@ -1887,7 +1835,7 @@ class YAMLHandler(FormatHandler):
             return json.dumps(clean_data, indent=2)
 
         elif to_format in ("yaml", "kubernetes", "k8s", "helm"):
-            # FIX Issue 4: Support kubernetes, k8s, helm as aliases for YAML format
+            # Support kubernetes, k8s, helm as aliases for YAML format
             # Use ruamel.yaml to dump, preserving comments/formatting if possible from normalized data
             from io import StringIO
 
@@ -2142,7 +2090,7 @@ class KubernetesHandler(FormatHandler):
         found_yaml_start = False  # Track if we've found the start of actual YAML
         
         for line in raw.split('\n'):
-            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Enhanced mermaid diagram block detection with edge cases
             # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
             # Use regex for more robust matching
             if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
@@ -2159,7 +2107,7 @@ class KubernetesHandler(FormatHandler):
             
             # Detect start of actual YAML content
             if not found_yaml_start:
-                # FIX Root Cause 2: Recognize kind: and metadata: as valid YAML start markers
+                # Recognize kind: and metadata: as valid YAML start markers
                 # This prevents dropping valid K8s YAML that doesn't start with apiVersion
                 if (line.strip() == '---' or 
                     re.match(r'^\s*(apiVersion|kind|metadata)\s*:', line)):
@@ -2312,7 +2260,7 @@ class HelmHandler(FormatHandler):
         """
         raw = self._sanitize_yaml_response(raw)
         
-        # FIX Root Cause 1: Check for Go template syntax BEFORE any YAML parsing
+        # Check for Go template syntax BEFORE any YAML parsing
         # Helm templates contain Go/Jinja syntax that is NOT valid YAML
         has_go_templates = bool(self._GO_TEMPLATE_PATTERN.search(raw))
         
@@ -2406,7 +2354,7 @@ class HelmHandler(FormatHandler):
                 if doc is not None and isinstance(doc, dict):
                     documents.append(doc)
         except Exception as e:
-            # FIX Root Cause 1: If parsing fails, check if content has Go templates
+            # If parsing fails, check if content has Go templates
             # If so, use the template parser instead of crashing
             logger.warning(f"Failed to parse multi-document Helm YAML: {e}")
             
@@ -2552,7 +2500,7 @@ class HelmHandler(FormatHandler):
         found_yaml_start = False
         
         for line in raw.split('\n'):
-            # FIX Issue 3: Enhanced mermaid diagram block detection with edge cases
+            # Enhanced mermaid diagram block detection with edge cases
             # Handle variations like "```mermaid", "``` mermaid", "```mermaid  ", etc.
             # Use regex for more robust matching
             if re.search(r'```\s*mermaid\b', line, re.IGNORECASE):
@@ -2898,7 +2846,7 @@ class HandlerRegistry:
         self.handler_info.clear()
 
         # 2. Load built-in handlers first
-        # FIX Bug 3 & 4: Add dedicated handlers for Kubernetes and Helm
+        # Add dedicated handlers for Kubernetes and Helm
         built_in_handlers = {
             "dockerfile": DockerfileHandler,
             "yaml": YAMLHandler,
@@ -3130,7 +3078,7 @@ async def repair_sections(
         LLM_LATENCY_SECONDS.labels(
             provider="deploy_response_handler", model="gpt-4o"
         ).observe(time.time() - start_time_repair_llm)
-        # FIX: Changed to match log_audit_event signature: (event_name, data)
+        # log_audit_event signature: (event_name, data)
         await add_provenance(
             "provenance",
             {
@@ -3257,9 +3205,55 @@ async def enrich_config_output(
     badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
     enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
 
-    # 2. Add Diagrams (Conceptual)
-    diagram_placeholder = f"```mermaid\n  graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]\n  ```"
-    enriched_content_parts.append(f"## Configuration Diagram\n{diagram_placeholder}\n")
+    # 2. Add Diagram from parsed config
+    # Maximum number of top-level keys shown as diagram nodes for generic configs.
+    # Kept small to avoid producing an unreadable diagram for configs with many keys.
+    _MAX_DIAGRAM_KEYS = 8
+    try:
+        _diagram_lines = ["graph TD"]
+        _nodes_added = set()
+        _data = structured_data if isinstance(structured_data, dict) else {}
+        # Kubernetes resources
+        if _data.get("kind") or _data.get("apiVersion"):
+            _kind = _data.get("kind", "Resource")
+            _name = (_data.get("metadata") or {}).get("name", _kind)
+            _diagram_lines.append(f'  K8s["{_kind}: {_name}"]')
+            _spec = _data.get("spec") or {}
+            for _key in ("containers", "template", "rules", "ports"):
+                if _key in _spec or _key in (_spec.get("template", {}).get("spec") or {}):
+                    _label = _key.capitalize()
+                    if _label not in _nodes_added:
+                        _diagram_lines.append(f'  K8s --> {_label}["{_label}"]')
+                        _nodes_added.add(_label)
+        # Docker Compose services
+        elif "services" in _data:
+            _diagram_lines.append('  DC["Docker Compose"]')
+            for _svc, _svc_cfg in (_data.get("services") or {}).items():
+                _safe = _svc.replace("-", "_")
+                _diagram_lines.append(f'  DC --> {_safe}["{_svc}"]')
+                for _dep in ((_svc_cfg or {}).get("depends_on") or []):
+                    _dep_safe = _dep.replace("-", "_")
+                    _diagram_lines.append(f'  {_dep_safe} --> {_safe}')
+        # Terraform/HCL resources
+        elif "resource" in _data or "module" in _data:
+            _diagram_lines.append('  TF["Terraform Config"]')
+            for _rtype, _rinstances in (_data.get("resource") or {}).items():
+                for _rname in (_rinstances or {}).keys():
+                    _safe = f"{_rtype}_{_rname}".replace("-", "_").replace(".", "_")
+                    _diagram_lines.append(f'  TF --> {_safe}["{_rtype}.{_rname}"]')
+        # Generic: show top-level keys as nodes
+        else:
+            _diagram_lines.append(f'  Root["{output_format} Config"]')
+            for _k in list(_data.keys())[:_MAX_DIAGRAM_KEYS]:
+                _safe = str(_k).replace("-", "_").replace(".", "_")
+                _diagram_lines.append(f'  Root --> {_safe}["{_k}"]')
+        if len(_diagram_lines) <= 1:
+            raise ValueError("No parseable structure")
+        _diagram_content = "\n".join(_diagram_lines)
+    except Exception as _diag_err:
+        logger.warning(f"Could not build config diagram from structured data: {_diag_err}. Using fallback.")
+        _diagram_content = f"graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]"
+    enriched_content_parts.append(f"## Configuration Diagram\n```mermaid\n{_diagram_content}\n```\n")
 
     # 3. Add Documentation Links
     enriched_content_parts.append(
@@ -3361,7 +3355,7 @@ async def handle_deploy_response(
     to_format: Optional[str] = None,
     run_id: str = str(uuid.uuid4()),
     repo_path: str = ".",
-    skip_presidio: bool = True,  # FIX Issue 4: Skip Presidio on deployment configs by default
+    skip_presidio: bool = True,
 ) -> Dict[str, Any]:
     """
     Main function to handle an LLM-generated raw response, normalizing, validating,
@@ -3393,10 +3387,10 @@ async def handle_deploy_response(
 
         try:
             # 1. Normalize the raw response
-            # FIX 3: Extract config from response before scrubbing/normalizing
+            # Extract config from response before scrubbing/normalizing
             extracted_raw = extract_config_from_response(raw_response, output_format)
             
-            # FIX Issue 4: Skip Presidio scrubbing on deployment configs (technical files)
+            # Skip Presidio scrubbing on deployment configs (technical files)
             # Presidio corrupts YAML/Dockerfile syntax by replacing tokens with [REDACTED]
             if skip_presidio:
                 logger.debug(
@@ -3421,7 +3415,7 @@ async def handle_deploy_response(
             # 2. Extract sections (useful for identifying missing parts or summarization)
             extracted_sections = handler.extract_sections(normalized_data)
 
-            # FIX: Summarize each extracted section using LLM (STRICT FAILURES ENFORCED)
+            # Summarize each extracted section using LLM (STRICT FAILURES ENFORCED)
             # This ensures we're using the LLM for prompt optimization as required by the strict mode
             summarized_sections = {}
             for section_name, section_text in extracted_sections.items():
@@ -3501,7 +3495,7 @@ async def handle_deploy_response(
             local_dangerous_patterns = {
                 "PrivilegedContainer": r"(?i)privileged:\s*true",
                 "HostPathMount": r"(?i)hostpath:\s*.*",
-                "RootUserInDockerfile": r"(?i)^\s*user\s+root",  # FIX: Allow whitespace
+                "RootUserInDockerfile": r"(?i)^\s*user\s+root",  # Allow whitespace
                 "ExposeAllPorts": r"(?i)expose\s+\d{1,5}\s+-\s+\d{1,5}",
                 "NoResourceLimits": r"(?i)resources:\s*\{\s*\}",
                 "HardcodedCredentials_Pattern": r"(?i)password:\s*\S+|secret:\s*\S+|api_key:\s*\S+",
@@ -3571,7 +3565,7 @@ async def handle_deploy_response(
                 "quality_analysis": quality_analysis_result,
             }
             # Use central runner provenance utility for logging the final stamp
-            # FIX: Changed to match log_audit_event signature: (event_name, data)
+            # log_audit_event signature: (event_name, data)
             await add_provenance("provenance", provenance)
 
             total_latency = time.perf_counter() - start_time
@@ -3600,7 +3594,7 @@ async def handle_deploy_response(
                 '<SERVICE_NAME>': 'app',
                 '{BASE_IMAGE}': 'python:3.11-slim',
                 '<BASE_IMAGE>': 'python:3.11-slim',
-                # FIX Issue 1: Add USER_ID and GROUP_ID placeholders
+                # Add USER_ID and GROUP_ID placeholders
                 '{USER_ID}': '1000',
                 '{GROUP_ID}': '1000',
                 '{UID}': '1000',
@@ -3631,17 +3625,17 @@ async def handle_deploy_response(
                 '<BASE_VERSION>': '3.11-slim',
                 '{RUBY_VERSION}': '3.3',
                 '<RUBY_VERSION>': '3.3',
-                # FIX Issue 6: Add missing placeholders
+                # Add missing placeholders
                 '{APP_HOME}': '/app',
                 '<APP_HOME>': '/app',
                 '<value>': '""',
                 '<VALUE>': '""',
                 '<ENV_VAR>': 'APP_ENV',
                 '{ENV_VAR}': 'APP_ENV',
-                # FIX Bug 4: Add PATH placeholder substitution
+                # Add PATH placeholder substitution
                 '{PATH}': '/app',
                 '<PATH>': '/app',
-                # FIX Issue 2: Add Kubernetes-specific placeholders
+                # Add Kubernetes-specific placeholders
                 # Note: These are development defaults for validation purposes.
                 # Production deployments should use environment-specific values or CI/CD variables.
                 '<DOCKER_IMAGE>': 'app:latest',
@@ -3664,14 +3658,14 @@ async def handle_deploy_response(
                 '{APPLICATION_NAME}': 'myapp',
                 '<ORGANIZATION_CONTACT>': 'admin@example.com',
                 '{ORGANIZATION_CONTACT}': 'admin@example.com',
-                # FIX: Add missing placeholders that LLM generates for helm/docker deployments
+                # Add missing placeholders that LLM generates for helm/docker deployments
                 '<ORGANIZATION_NAME>': 'my-org',
                 '{ORGANIZATION_NAME}': 'my-org',
                 '<SECRET_REF>': 'app-secrets',
                 '{SECRET_REF}': 'app-secrets',
                 '<hash>': 'latest',
                 '{hash}': 'latest',
-                # FIX: Add your_repo/your_org placeholders generated by LLM in CI/CD templates
+                # Add your_repo/your_org placeholders generated by LLM in CI/CD templates
                 'your_repo': 'myapp',
                 'your_org': 'myorg',
                 'your-repo': 'myapp',

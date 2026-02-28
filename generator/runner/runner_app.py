@@ -79,8 +79,8 @@ _TextualAppBase = App
 # Import necessary components using the corrected module names
 from .runner_config import ConfigWatcher, RunnerConfig, load_config
 from .runner_contracts import TaskPayload
-from .runner_core import Runner  # FIX
-from .runner_logging import LOG_HISTORY, logger  # FIX (added LOG_HISTORY)
+from .runner_core import Runner
+from .runner_logging import LOG_HISTORY, logger
 from .runner_metrics import MetricsExporter  # Import MetricsExporter
 from .runner_metrics import (
     HEALTH_STATUS,

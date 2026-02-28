@@ -138,7 +138,7 @@ except ImportError:
 
 # Presidio: REQUIRED for scrubbing.
 from presidio_analyzer import AnalyzerEngine
-from presidio_anonymizer import AnonymizerEngine  # FIX: Corrected typo 'presonymizer'
+from presidio_anonymizer import AnonymizerEngine
 from presidio_anonymizer.entities import OperatorConfig
 
 # --- CENTRAL RUNNER FOUNDATION ---
@@ -148,7 +148,6 @@ from runner.runner_errors import LLMError
 from runner.runner_file_utils import (
     get_commits as runner_get_commits,
 )  # Alias to avoid name clash
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger
 from runner.runner_metrics import LLM_CALLS_TOTAL, LLM_ERRORS_TOTAL, LLM_LATENCY_SECONDS
@@ -223,7 +222,7 @@ def scrub_text(text: str) -> str:
         return ""
 
     try:
-        # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+        # Limit to English to suppress unsupported-language recognizer warnings
         analyzer = AnalyzerEngine(supported_languages=["en"])
         anonymizer = AnonymizerEngine()
 
@@ -677,7 +676,7 @@ class PromptTemplateRegistry:
         class ReloadHandler(FileSystemEventHandler):
             def __init__(self, registry_instance: "PromptTemplateRegistry"):
                 self.registry_instance = registry_instance
-                # FIX #5: Add debouncing to prevent multiple reload events
+                # Add debouncing to prevent multiple reload events
                 import time as time_module
                 self.time = time_module
                 self.last_reload_time = {}
@@ -719,7 +718,7 @@ class PromptTemplateRegistry:
             return template
         except Exception as e:
             # Defense-in-depth: Try case-insensitive fallback across ALL loader directories
-            # FIX: Previously only searched self.plugin_dir, now searches all ChoiceLoader directories
+            # Previously only searched self.plugin_dir, now searches all ChoiceLoader directories
             try:
                 # Collect all directories from the ChoiceLoader
                 search_dirs = []
@@ -1253,7 +1252,6 @@ class DocGenPromptAgent:
         """
         Integration test compatibility method - alias for get_doc_prompt.
         """
-        # FIX 2 APPLIED HERE
         return await self.get_doc_prompt(
             # source_code="",  # Will be read internally  <--- REMOVED
             # file_path=file_path,                          <--- REMOVED

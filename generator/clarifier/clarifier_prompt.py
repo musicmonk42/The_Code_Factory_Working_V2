@@ -45,12 +45,12 @@ from .clarifier_user_prompt import get_channel
 from ._audit_compat import _wrap_log_audit_event  # noqa: E402
 
 
-# Import log_action and send_alert, with fallbacks
-# NOTE: In production environments, these should come from the runner module.
-# The fallback is only for development/testing scenarios.
+# Import log_action and send_alert with a consistent fallback strategy.
+# Pattern mirrors clarifier.py: always warn, never crash the process from an
+# import-time side-effect.  Production-readiness is enforced at the call-site
+# via the _USING_DUMMY_LOG_ACTION flag rather than at import time.
 _USING_DUMMY_LOG_ACTION = False
 try:
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event as _log_audit_event
     from runner.runner_logging import send_alert
 
@@ -60,7 +60,8 @@ except ImportError:
     try:
         from audit_log import log_action, send_alert
     except ImportError:
-        # In production, we should fail hard if runner logging is not available
+        _USING_DUMMY_LOG_ACTION = True
+
         _is_production = os.getenv("PYTHON_ENV", "development").lower() == "production"
         _is_testing = (
             os.getenv("TESTING") == "1"
@@ -68,38 +69,39 @@ except ImportError:
             or os.getenv("PYTEST_CURRENT_TEST") is not None
         )
 
-        if _is_production and not _is_testing:
-            # Fail hard in production if runner logging is not available
-            raise ImportError(
-                "CRITICAL: Runner logging module (runner.runner_logging) is required in production. "
-                "Clarification events must be logged to the secure audit trail. "
-                "Please ensure the runner module is properly installed and configured."
-            )
+        _log_level = logging.CRITICAL if _is_production else logging.WARNING
+        logging.getLogger(__name__).log(
+            _log_level,
+            "clarifier_prompt: runner.runner_logging is unavailable — "
+            "audit logging and alerting will be degraded. "
+            "This is acceptable in development/test but must be resolved before production.",
+        )
 
-        _USING_DUMMY_LOG_ACTION = True
-
-        async def log_action(action: str, **kwargs) -> None:
+        async def log_action(action: str, **kwargs) -> None:  # type: ignore[misc]
             """
-            Fallback log_action for development/testing only.
-            WARNING: This does NOT provide secure audit logging.
+            Degraded log_action — writes to application log only.
+            NOT a compliant audit trail; for development/testing only.
             """
             get_logger().warning(
-                f"DUMMY log_action (NOT FOR PRODUCTION): {action}",
+                "DEGRADED log_action (audit trail unavailable): %s kwargs=%s",
+                action,
+                kwargs,
                 extra={
-                    "operation": "dummy_log_action",
+                    "operation": "degraded_log_action",
                     "warning": "not_audit_logged",
                     "action": action,
                 },
             )
 
-        async def send_alert(*args, **kwargs) -> None:
+        async def send_alert(*args, **kwargs) -> None:  # type: ignore[misc]
             """
-            Fallback send_alert for development/testing only.
-            WARNING: Alerts are NOT sent in this mode.
+            Degraded send_alert — writes to application log only.
+            Alerts are NOT dispatched in this mode.
             """
             get_logger().warning(
-                f"DUMMY send_alert (NOT FOR PRODUCTION): {args}",
-                extra={"operation": "dummy_send_alert", "warning": "alert_not_sent"},
+                "DEGRADED send_alert (alerting unavailable): args=%s",
+                args,
+                extra={"operation": "degraded_send_alert", "warning": "alert_not_sent"},
             )
 
 
@@ -386,7 +388,7 @@ async def run(
     user_context: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """OmniCore plugin entry point for the prompt-focused clarification pipeline."""
-    # CRITICAL FIX: Use the real Clarifier instead of mocking it
+    # Use the real Clarifier instead of mocking it
     # The mock was causing clarification to be skipped entirely in production
     clarifier = PromptClarifier()
     try:

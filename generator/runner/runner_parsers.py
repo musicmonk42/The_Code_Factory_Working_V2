@@ -11,7 +11,7 @@ import logging
 import re  # For regex parsing (e.g., unittest, simple text outputs)
 import xml.etree.ElementTree as ET  # For XML parsing
 
-# FIX: Import datetime directly from datetime
+# Import datetime directly from datetime
 from datetime import datetime, timezone  # Explicitly import datetime for timestamps
 from pathlib import Path  # For file paths
 from typing import (  # Union for Path/str, Callable for register_parser
@@ -32,7 +32,7 @@ from pydantic import (
     model_validator,
 )  # Import model_validator
 
-# FIX: Use standard library logging to break circular dependency
+# Uses stdlib logging directly to avoid a circular import with runner_logging
 # Import logger directly from logging module instead of runner_logging
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class ParserInfo(BaseModel):
 
     @model_validator(mode="after")
     def _normalize(self) -> "ParserInfo":
-        # FIX: Add 'error' as an allowed status to pass test_parser_wrapper_error
+        # 'error' is a valid terminal status in the ParserInfo schema
         # Note: This was a bug in the wrapper, now fixed.
         # Reverting to original spec. The wrapper should use 'failed'.
         allowed = {"success", "failed", "partial"}
@@ -173,7 +173,7 @@ class TestReportModel(BaseModel):
 
     @model_validator(mode="after")
     def calculate_derived_fields(self) -> "TestReportModel":
-        # FIX: Added validation check from test_schema_validation
+        # Validate required fields per the ParserInfo schema
         if self.passed_tests > self.total_tests:
             raise ValueError(
                 f"passed_tests ({self.passed_tests}) cannot exceed total_tests ({self.total_tests})"
@@ -216,7 +216,7 @@ class CoverageReportSchema(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    # FIX: Added validation check from test_schema_validation
+    # Validate required fields per the ParserInfo schema
     coverage_percentage: float = Field(
         0.0,
         description="Overall coverage percentage for the project (0.0 to 100.0).",
@@ -262,13 +262,13 @@ def parser_wrapper(parser_func: Callable[[Path], Any], name: str):
                 # If it returns a dict-like structure, coerce to schema.
                 if isinstance(result, dict):
                     pi_data = result.pop("_parser_info", {})
-                    # FIX: Avoid TypeError by popping existing parser_name
+                    # Avoid TypeError by popping existing parser_name
                     pi_data.pop("parser_name", None)
                     parser_info = ParserInfo(parser_name=name, **pi_data)
                     return TestReportSchema(_parser_info=parser_info, **result)
 
                 # Fallback: treat as failure.
-                # FIX: Use "failed" to match ParserInfo schema
+                # Use "failed" to match ParserInfo schema
                 parser_info = ParserInfo(
                     parser_name=name,
                     status="failed",
@@ -280,7 +280,7 @@ def parser_wrapper(parser_func: Callable[[Path], Any], name: str):
                     f"parser_wrapper: error in parser '{name}' for {file_path}: {e}",
                     exc_info=True,
                 )
-                # FIX: Use "failed" to match ParserInfo schema
+                # Use "failed" to match ParserInfo schema
                 parser_info = ParserInfo(
                     parser_name=name,
                     status="failed",
@@ -306,7 +306,7 @@ def register_test_parser(name: str):
                 # Pop parser_info from raw results
                 pi_data = raw_results.pop("_parser_info", {})
 
-                # FIX: Remove parser_name from pi_data to avoid TypeError
+                # Remove parser_name before dict unpack to avoid a duplicate keyword argument
                 # This prevents 'got multiple values for keyword argument 'parser_name''
                 pi_data.pop("parser_name", None)
 
@@ -327,7 +327,7 @@ def register_test_parser(name: str):
                     parser_name=name,
                     status="failed",
                     message="Output schema validation failed.",
-                    # FIX: Make rationale JSON serializable by converting errors to str
+                    # Convert error objects to strings for JSON serialisability
                     rationale=json.dumps([str(err) for err in e.errors()]),
                 )
                 return TestReportSchema(_parser_info=parser_info)
@@ -363,7 +363,7 @@ def register_coverage_parser(name: str):
                 # Pop parser_info from raw results
                 pi_data = raw_results.pop("_parser_info", {})
 
-                # FIX: Remove parser_name from pi_data to avoid TypeError
+                # Remove parser_name before dict unpack to avoid a duplicate keyword argument
                 # This prevents 'got multiple values for keyword argument 'parser_name''
                 pi_data.pop("parser_name", None)
 
@@ -398,7 +398,7 @@ def register_coverage_parser(name: str):
                     parser_name=name,
                     status="failed",
                     message="Output schema validation failed.",
-                    # FIX: Make rationale JSON serializable by converting errors to str
+                    # Convert error objects to strings for JSON serialisability
                     rationale=json.dumps([str(err) for err in e.errors()]),
                 )
                 return CoverageReportSchema(
@@ -694,7 +694,7 @@ async def parse_unittest_output(file_path: Path) -> Dict[str, Any]:
                 "message"
             ] = "Standard summary line not found; parsed line by line."
             # Fallback for detailed parsing if no summary line
-            # FIX: Use test stub logic from prompt/test_parsers_success
+            # Use test stub logic from prompt/test_parsers_success
             results[PASSED_TESTS_KEY] = content.count("OK")
             results[FAILED_TESTS_KEY] = content.count("FAIL")
             results[ERROR_TESTS_KEY] = content.count("ERROR")
@@ -860,11 +860,11 @@ async def parse_robot_xml(file_path: Path) -> Dict[str, Any]:
         for test_case_node in root.findall(".//test"):
             test_name = test_case_node.get("name", "N/A")
 
-            # FIX: Get status from <test> attribute, not child <status> node's attribute
+            # Read status from the <test> element attribute, not a child <status> node
             # The test stub uses <test status="PASS">
             status_raw = (test_case_node.get("status") or "FAIL").lower()
 
-            # FIX: Map status to schema-compliant values
+            # Map raw JUnit status strings to ParserInfo schema values
             status_mapped = "skipped"  # Default
             results[TOTAL_TESTS_KEY] += 1
 
@@ -1022,7 +1022,7 @@ async def parse_go_test_json(file_path: Path) -> Dict[str, Any]:
         async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
             content = await f.read()
 
-        # FIX: Use simple counting logic from Patch Step 9 to pass test
+        # Use simple counting logic
         for line in content.splitlines():
             line = line.strip()
             if not line:
@@ -1086,7 +1086,6 @@ async def parse_surefire_xml(file_path: Path) -> Dict[str, Any]:
     """
     path = Path(file_path)
 
-    # FIX: Use logic from Patch Step 9 (already present in file)
     candidates: List[Path] = []
     if path.is_dir():
         candidates = list(path.glob("TEST-*.xml"))
@@ -1227,7 +1226,6 @@ async def parse_coverage_xml(file_path: Path) -> Dict[str, Any]:
             package_name = package_node.get("name", "N/A")
             for class_node in package_node.findall(".//class"):
                 class_filename = class_node.get("filename", "N/A")
-                # FIX: Get class name for the key
                 class_name = class_node.get("name", "N/A")
                 line_rate_class = float(class_node.get("line-rate", 0.0))
 
@@ -1244,7 +1242,7 @@ async def parse_coverage_xml(file_path: Path) -> Dict[str, Any]:
                     else (lines_covered / lines_total * 100 if lines_total > 0 else 0.0)
                 )
 
-                # FIX: Use fully qualified class name as the key, per the test
+                # Use the fully qualified class name as the registry key
                 key = f"{package_name}.{class_name}"
 
                 coverage_results[COVERAGE_DETAILS_KEY][key] = {
@@ -1310,7 +1308,7 @@ async def parse_jacoco_xml(file_path: Path) -> Dict[str, Any]:
             tree = ET.fromstring(xml_content)
             root = tree
         except ET.ParseError as e:
-            # FIX: Handle malformed XML test stub per Patch Step 9
+            # Handle malformed XML input gracefully
             logger.warning(
                 f"JaCoCo XML parsing failed ({e}). Attempting regex fallback for minimal/malformed report."
             )
@@ -1546,7 +1544,6 @@ async def parse_go_coverprofile(file_path: Path) -> Dict[str, Any]:
         async with aiofiles.open(file_path, mode="r", encoding="utf-8") as f:
             content = await f.read()
 
-        # FIX: Logic from Patch Step 9 (already present in file)
         if isinstance(content, bytes):
             content = content.decode("utf-8", errors="ignore")
 

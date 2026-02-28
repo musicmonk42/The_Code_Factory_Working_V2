@@ -306,13 +306,13 @@ async def test_deploy_stage_passes_files_to_agent(tmp_path, sample_codegen_resul
             # Verify that requirements were captured
             assert captured_requirements, "No requirements were captured - run_deployment was not called"
             
-            # FIX 1: Verify that 'files' key is present and contains file list
+            # Verify that 'files' key is present and contains file list
             assert "files" in captured_requirements, "FIX 1: 'files' key missing from requirements"
             expected_files = list(sample_codegen_result["files"].keys())
             assert sorted(captured_requirements["files"]) == sorted(expected_files), \
                 f"FIX 1: Expected files {expected_files}, got {captured_requirements['files']}"
             
-            # FIX 1: Verify that 'code_path' key is present
+            # Verify that 'code_path' key is present
             assert "code_path" in captured_requirements, "FIX 1: 'code_path' key missing from requirements"
             assert captured_requirements["code_path"] == str(tmp_path), \
                 f"FIX 1: Expected code_path '{tmp_path}', got '{captured_requirements['code_path']}'"

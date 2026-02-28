@@ -176,43 +176,46 @@ except Exception:
 
 
 # Assume runner.utils and runner.config are correctly imported and configured
-# FIXED: Updated imports to use security_utils and feedback_handlers
-# FIX: Removed this import to break circular dependency
-# from runner.runner_security_utils import redact_secrets, encrypt_data, decrypt_data
-# FIX: Removed unused import that caused circular dependency
-# from runner.runner_feedback_handlers import collect_feedback
+# ---------------------------------------------------------------------------
+# Import strategy — circular dependency management
+# ---------------------------------------------------------------------------
+# The runner sub-system has a dependency graph that historically contained
+# several cycles.  The resolution follows two standard Python idioms:
+#
+#   1. **TYPE_CHECKING guard** — ``RunnerConfig`` is only used for type
+#      annotations in this module, so it is imported inside the
+#      ``if TYPE_CHECKING:`` block.  At runtime the name is never resolved,
+#      eliminating the ``runner_logging → runner_config → runner_errors →
+#      runner_security_utils`` chain.
+#
+#   2. **Lazy-import cache** (``_get_metrics()``) — ``runner_metrics`` imports
+#      ``runner_logging`` at the top level, so a top-level import in the other
+#      direction would create a cycle.  Metrics are therefore loaded on first
+#      use via a module-level cache function; this is the standard Python
+#      approach when two modules genuinely need each other.
+#
+#   3. **Leaf module** (``runner_base_types``) — the ``TESTING`` sentinel and
+#      other pure-stdlib constants live in ``runner_base_types`` which has zero
+#      intra-package imports, so any module can import from it safely.
+#
+# ``SecretStr`` is imported directly from pydantic (not via runner_config) to
+# keep this module at the same dependency level as runner_base_types.
+# ---------------------------------------------------------------------------
 
-# --- FIX: SPLIT CIRCULAR IMPORT ---
-# FIX: Import SecretStr directly from pydantic instead of runner.runner_config
-# to break circular import chain: runner_logging -> runner_config -> runner_errors -> runner_security_utils -> runner
-from pydantic import SecretStr  # Import SecretStr for runtime checks
+from pydantic import SecretStr
 
 if TYPE_CHECKING:
-    from runner.runner_config import (
-        RunnerConfig,
-    )  # Import RunnerConfig for type hinting only
+    from runner.runner_config import RunnerConfig  # annotation use only
 
-    # FIX: Moved error imports here to break circular dependency
-# --- END FIX ---
-
-# Gold Standard: Import structured errors for consistent logging
-# FIX: Corrected 'runner.errors' to 'runner.runner_errors'
-# from runner.runner_errors import RunnerError, ConfigurationError, PersistenceError, error_codes # Import relevant error types
-
-# --- FIX: Lazy import of metrics to break circular import ---
-# The metrics are now loaded lazily via _get_metrics() to avoid circular import issues.
-# When runner_logging is imported by runner_core (which is imported by runner/__init__),
-# importing from runner_metrics at module level can cause circular import errors
-# if runner_metrics directly or indirectly imports from runner_logging.
-
-# Module-level cache for metrics (populated on first use)
+# Module-level cache for metrics objects (populated on first use via _get_metrics()).
 _METRICS_CACHE: Dict[str, Any] = {}
 
 
 def _get_metrics():
     """
-    Lazily import and cache metrics from runner_metrics to break circular import.
-    
+    Lazily import and cache metrics from runner_metrics.
+
+
     This function provides access to metrics objects without causing circular imports
     during module initialization. The metrics are cached after first successful import.
     
@@ -2065,7 +2068,7 @@ def log_action(
     """
     Logs a specific action with structured data, ensuring secrets are redacted and data is encrypted.
     """
-    # FIX: Lazy import to break circular dependency
+    # Lazy import to avoid a circular import at module load time
     try:
         from runner.runner_security_utils import encrypt_data, redact_secrets
     except ImportError as e:
@@ -2138,7 +2141,7 @@ def search_logs(
     return results
 
 
-# FIX: Logger is now defined early in the module (after tracer initialization)
+# Logger is now defined early in the module (after tracer initialization)
 # to prevent circular import issues. The following setup configures the audit logger.
 # Allow propagation in testing to enable caplog capture
 if os.getenv("TESTING") != "1":

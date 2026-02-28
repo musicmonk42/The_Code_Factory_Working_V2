@@ -30,7 +30,7 @@ import aiohttp
 import opentelemetry.trace as trace  # Explicitly import trace for consistency
 
 # [CHANGE A] Add direct import for runtime patching
-# FIX: Use relative import to avoid circular import when runner alias isn't set up yet
+# Use relative import to avoid circular import when runner alias isn't set up yet
 from . import runner_parsers
 from opentelemetry.trace import (
     Status,
@@ -59,13 +59,13 @@ from .runner_errors import (
     TimeoutError,
     error_codes,
 )
-# FIX: Import only logger at module level to break circular import
+# Import only logger at module level to break circular import
 # log_audit_event is imported lazily via _get_log_audit_event() when needed
 from .runner_logging import logger
 from .runner_metrics import *  # Ensure all metrics are imported explicitly
 
 
-# FIX: Lazy import helper for log_audit_event to break circular import
+# Lazy import helper for log_audit_event to break circular import
 def _get_log_audit_event():
     """Lazily import log_audit_event to avoid circular import at module load time."""
     from .runner_logging import log_audit_event
@@ -425,7 +425,7 @@ async def run_tests_in_sandbox(
             "pass_count": results.get("pass_count", 0),
             "fail_count": results.get("fail_count", 0),
             "status": "success" if result.status == "completed" else "failed",
-            # FIX Problem 2A: Include stdout/stderr for testgen refinement
+            # Include stdout/stderr for testgen refinement
             "stdout": results.get("stdout", ""),
             "stderr": results.get("stderr", ""),
         }
@@ -1131,7 +1131,6 @@ class Runner(ABC):
                         await asyncio.sleep(self.config.dist_poll_interval_seconds)
                         continue
 
-                    # FIX: Use getattr
                     batch_size: int = getattr(self.config, "dist_batch_size", 5)
 
                     tasks_to_send: List[TaskPayload] = []
@@ -1160,7 +1159,6 @@ class Runner(ABC):
 
                     try:
                         start_dist_latency = time.time()
-                        # FIX: Use getattr
                         timeout_val = getattr(
                             self.config, "dist_send_timeout_seconds", 30
                         )
@@ -1279,7 +1277,6 @@ class Runner(ABC):
                                 ).as_dict(),
                             )
                     except asyncio.TimeoutError:
-                        # FIX: Use getattr
                         timeout_val = getattr(
                             self.config, "dist_send_timeout_seconds", 30
                         )
@@ -1487,7 +1484,6 @@ class Runner(ABC):
         if not self.feedback_model:
             return
 
-        # FIX: Use getattr
         min_feedback_points = getattr(
             self.config, "min_feedback_points_for_strategy_adj", 5
         )
@@ -1522,7 +1518,6 @@ class Runner(ABC):
             )
             self.current_strategy = best_strategy
 
-            # FIX: Use getattr
             strategy_config_map = getattr(self.config, "strategy_configs", {})
             new_strategy_settings = strategy_config_map.get(best_strategy, {})
 
@@ -1570,7 +1565,6 @@ class Runner(ABC):
                     f"No specific settings found for strategy '{best_strategy}'. No config changes applied."
                 )
 
-        # FIX: Use getattr
         anomaly_error_threshold = getattr(self.config, "anomaly_error_threshold", 10)
 
         current_error_count = 0
@@ -2054,14 +2048,14 @@ class TestPlaceholder:
                 )
                 span.add_event("Code and test files saved to temporary directory.")
                 
-                # FIX Issue 1: Create __init__.py files in all code subdirectories BEFORE pytest runs
+                # Create __init__.py files in all code subdirectories BEFORE pytest runs
                 # This must be done before conftest.py is executed because pytest needs these files
                 # during test collection phase
                 self._create_init_files_in_subdirs(code_sub_dir)
                 span.add_event("Created __init__.py files in code subdirectories")
                 
                 # Write conftest.py to the temp root to ensure code/ is importable
-                # FIX Issue 1: Handle nested package structures by adding both code/ and temp root to sys.path
+                # Handle nested package structures by adding both code/ and temp root to sys.path
                 # This fixes ModuleNotFoundError when tests import from nested packages like "from app.main import app"
                 # Also adds parent directories of packages to sys.path for proper import resolution
                 # NOTE: __init__.py files are now created in the setup phase before conftest.py runs
@@ -2079,7 +2073,7 @@ code_path = os.path.join(temp_root, "code")
 if code_path not in sys.path:
     sys.path.insert(0, code_path)
 
-# FIX: Add parent directories of packages to sys.path
+# Add parent directories of packages to sys.path
 # This handles imports like "from app.main import app" when code is nested in code/generated/hello_generator/app/
 # When app/__init__.py exists at code/generated/hello_generator/app/, we add code/generated/hello_generator/
 def add_package_parent_dirs(base_dir):
@@ -2158,7 +2152,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
             cmd_to_execute: Union[str, List[str]] = self.framework_info["cmd"]
             span.add_event(f"Executing test command: {cmd_to_execute}")
             exec_results: Dict[str, Any]
-            exec_error: Optional[RunnerError] = None  # FIX Issue 2: defer raise to allow coverage parsing
+            exec_error: Optional[RunnerError] = None
 
             # --- CRITICAL FIX: REPLACE direct subprocess_wrapper call with backend.execute ---
             try:
@@ -2191,7 +2185,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                 raise
             except RunnerError as e:  # Catch structured errors from backend.execute
                 e.task_id = task_id  # Ensure task_id is propagated
-                # FIX Issue 2: Instead of raising immediately, defer the error so that
+                # Instead of raising immediately, defer the error so that
                 # coverage parsing can still run against cov.xml in the temp directory.
                 # This preserves partial coverage data even when some tests fail (rc=1).
                 exec_error = e
@@ -2251,7 +2245,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                 span.set_attribute("runner.test_cmd_return_code", returncode)
                 span.set_attribute("runner.test_cmd_stderr_snippet", stderr[:500])
                 
-                # FIX Problem 2C: Log test execution failures to audit system
+                # Log test execution failures to audit system
                 try:
                     log_audit_event = _get_log_audit_event()
                     await log_audit_event(
@@ -2476,7 +2470,6 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                 span.add_event("Mutation testing skipped: module unavailable")
 
             # --- Fuzz Testing Phase ---
-            # FIX: Use getattr
             if getattr(self.config, "fuzz", False) and HAS_MUTATION_MODULE:
                 span.add_event("Running fuzz tests")
                 try:
@@ -2742,7 +2735,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
                         span.add_event(f"Output file copied: {file_in_temp.name}")
 
             # Copy generated documentation output
-            # FIX: Gate docs output - only include _build/html if explicitly requested
+            # Gate docs output - only include _build/html if explicitly requested
             # This prevents bloating job artifacts with unnecessary docs by default.
             include_docs_output = os.getenv("INCLUDE_DOCS_OUTPUT", "false").lower() in ("true", "1", "yes")
             if (
@@ -2778,7 +2771,7 @@ if os.path.exists(app_main) and not os.path.exists(os.path.join(code_path, "main
 
             final_results = parsed_results
 
-            # FIX Issue 2: If the backend raised an execution error (e.g. pytest rc=1),
+            # If the backend raised an execution error (e.g. pytest rc=1),
             # return a "failed" TaskResult that still includes coverage data parsed from
             # cov.xml above. This prevents coverage from being silently discarded when
             # some tests fail, while still propagating the failure status.
@@ -2924,7 +2917,6 @@ async def parallel_runs(
         enqueued_task_results.append(await runner.enqueue(task))
 
     start_time = time.time()
-    # FIX: Use getattr
     max_wait_time = getattr(runner.config, "max_parallel_wait_time_seconds", 60)
 
     completed_task_results_ids: set[str] = (
@@ -2962,7 +2954,6 @@ async def parallel_runs(
         logger.debug(
             f"Waiting for parallel tasks to process. Queue size: {len(runner.queue)}. Completed so far: {len(completed_task_results_ids)}"
         )
-        # FIX: Use getattr
         await asyncio.sleep(getattr(runner.config, "dist_poll_interval_seconds", 2))
 
     final_results: List[TaskResult] = []

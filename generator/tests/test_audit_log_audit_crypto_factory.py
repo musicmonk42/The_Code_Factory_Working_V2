@@ -75,7 +75,7 @@ def mock_settings(monkeypatch):
     Mocks the Dynaconf 'settings' object and the validation function.
     Provides a default, valid configuration.
     """
-    # FIX 2.1: Use a plain MagicMock object for simpler patching, avoiding spec issues
+    # Use a plain MagicMock object for simpler patching, avoiding spec issues
     mock_settings_instance = MagicMock()
 
     default_config = {
@@ -104,7 +104,7 @@ def mock_settings(monkeypatch):
     for k, v in default_config.items():
         setattr(mock_settings_instance, k, v)
 
-    # FIX 2.2: Mock the 'get' method explicitly using the lambda to return config values.
+    # Mock the 'get' method explicitly using the lambda to return config values.
     # This resolves the original AttributeError during mock initialization.
     mock_settings_instance.get = MagicMock(
         side_effect=lambda key, default=None: default_config.get(key, default)
@@ -194,7 +194,7 @@ def mock_providers(monkeypatch):
         def __init__(self, *args, **kwargs):
             # Track the call
             data["software_calls"].append((args, kwargs))
-            # FIX: Store the created instance for assertions
+            # Store the created instance for assertions
             if data["software_instance"] is None:
                 data["software_instance"] = self
 
@@ -220,7 +220,7 @@ def mock_providers(monkeypatch):
         def __init__(self, *args, **kwargs):
             # Track the call
             data["hsm_calls"].append((args, kwargs))
-            # FIX: Store the created instance for assertions
+            # Store the created instance for assertions
             if data["hsm_instance"] is None:
                 data["hsm_instance"] = self
 
@@ -252,7 +252,7 @@ def mock_providers(monkeypatch):
         MockHSMProvider,
     )
 
-    # FIX 3: Add class references back to the returned data dict to fix KeyErrors
+    # Add class references back to the returned data dict to fix KeyErrors
     data["software_class"] = MockSoftwareProvider
     data["hsm_class"] = MockHSMProvider
 
@@ -268,7 +268,7 @@ def mock_aiohttp(monkeypatch):
 
     # Create the mock session
     mock_session = MagicMock()
-    # FIX: Make post return an async context manager that yields mock_response
+    # Make post return an async context manager that yields mock_response
     mock_post_cm = AsyncMock()
     mock_post_cm.__aenter__ = AsyncMock(return_value=mock_response)
     mock_post_cm.__aexit__ = AsyncMock(return_value=None)
@@ -457,7 +457,7 @@ class TestHelpers:
 
         with caplog.at_level(logging.INFO, logger="test_filter"):
             logger.info("This is a test PIN and a secret.")
-            # FIX 4: Use logging.LoggerAdapter to force 'extra' to be carried
+            # Use logging.LoggerAdapter to force 'extra' to be carried
             adapter = logging.LoggerAdapter(
                 logger, extra={"user_pin": "1234", "user_secret": "abc"}
             )
@@ -469,7 +469,7 @@ class TestHelpers:
 
         # Check the 'extra' dict redaction (this is the LogRecord that the adapter created)
         assert "user_pin" in caplog.records[1].__dict__
-        # FIX 7: Assert the value is correctly redacted
+        # Assert the value is correctly redacted
         assert caplog.records[1].__dict__["user_pin"] == "***REDACTED***"
         assert "user_secret" in caplog.records[1].__dict__
         assert caplog.records[1].__dict__["user_secret"] == "***REDACTED***"
@@ -485,7 +485,7 @@ class TestConfiguration:
             ConfigurationError,
         )
 
-        # FIX 8: Remove invalid monkeypatch.undo and use patch for flow control
+        # Remove invalid monkeypatch.undo and use patch for flow control
         # The target function is already mocked by the fixture, so we use patch.object to wrap it with the original function's logic.
         monkeypatch.setattr(
             "generator.audit_log.audit_crypto.audit_crypto_factory._is_test_or_dev_mode",
@@ -545,7 +545,7 @@ class TestConfiguration:
 
     def test_prod_config_software_missing_kms_id(self, monkeypatch, mock_settings):
         """Tests that 'software' provider fails in prod without KMS_KEY_ID."""
-        # FIX 2: Change expected exception to ValidationError as post_validation_checks is called directly
+        # Change expected exception to ValidationError as post_validation_checks is called directly
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             ValidationError,
             post_validation_checks,
@@ -566,7 +566,7 @@ class TestConfiguration:
 
     def test_prod_config_hsm_missing_lib_path(self, monkeypatch, mock_settings):
         """Tests that 'hsm' provider fails in prod without HSM_LIBRARY_PATH."""
-        # FIX 3: Change expected exception to ValidationError as post_validation_checks is called directly
+        # Change expected exception to ValidationError as post_validation_checks is called directly
         from generator.audit_log.audit_crypto.audit_crypto_factory import (
             ValidationError,
             post_validation_checks,
@@ -861,7 +861,7 @@ class TestAsyncUtils:
 
         assert result == "success"
         mock_func.assert_called_once()
-        # FIX 5: Assertion uses attempts_taken=1 (0 failures + 1 success)
+        # Assertion uses attempts_taken=1 (0 failures + 1 success)
         mock_log_action.assert_called_with(
             "retry_operation",
             status="success",
@@ -902,7 +902,7 @@ class TestAsyncUtils:
             error="fail1",
         )
         # Check that success was logged
-        # FIX 6: Assertion uses attempts_taken=3 (2 failures + 1 success)
+        # Assertion uses attempts_taken=3 (2 failures + 1 success)
         mock_log_action.assert_called_with(
             "retry_operation",
             status="success",
@@ -1053,7 +1053,7 @@ class TestCryptoProviderFactory:
         provider = crypto_provider_factory.get_provider("software")
 
         # Verify it was instantiated correctly by checking the calls list
-        # FIX 7: Assertions updated to use the saved instance and check call count
+        # Assertions updated to use the saved instance and check call count
         assert len(mock_providers["software_calls"]) >= 1
         args, kwargs = mock_providers["software_calls"][0]
         # Check that the accessor functions were passed
@@ -1094,11 +1094,11 @@ class TestCryptoProviderFactory:
 
         factory = (
             crypto_provider_factory.__class__()
-        )  # FIX 8: Re-initialize the factory
+        )
 
         provider = factory.get_provider("hsm")
 
-        # FIX 8: Assertion uses the correct key
+        # Assertion uses the correct key
         assert provider is mock_providers["hsm_instance"]
         args, kwargs = mock_providers["hsm_calls"][0]
         assert kwargs.get("software_key_master_accessor") == _ensure_software_key_master
@@ -1125,7 +1125,7 @@ class TestCryptoProviderFactory:
 
         factory = (
             crypto_provider_factory.__class__()
-        )  # FIX 9: Re-initialize the factory
+        )
 
         # Make HSM init fail
         # This will fail on the *first* call, which is when the factory calls __init__
@@ -1137,7 +1137,7 @@ class TestCryptoProviderFactory:
         provider = factory.get_provider("hsm")
 
         # It should have returned the *software* instance
-        # FIX 9: Assertion uses the correct key
+        # Assertion uses the correct key
         assert provider is mock_providers["software_instance"]
 
     @pytest.mark.asyncio

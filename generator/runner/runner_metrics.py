@@ -18,8 +18,7 @@ import json
 import logging
 import os
 
-# FIX: Added 'Awaitable' and 'contextlib'
-import typing  # FIX: Added for TYPE_CHECKING
+import typing
 import uuid
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
@@ -58,12 +57,10 @@ except ImportError:
     logging.getLogger(__name__).debug("Boto3 (AWS SDK) not found.")
 
 # Assume runner.config and runner.logging are correctly imported and configured
-# FIX: Move RunnerConfig import into TYPE_CHECKING block
 if typing.TYPE_CHECKING:
     # --- FIX: Use relative imports ---
     from .runner_config import RunnerConfig, SecretStr
 
-    # FIX: Move error imports here to break circular dependency
     from .runner_errors import (
         ERROR_CODE_REGISTRY as _error_codes,
     )  # Import the error code registry
@@ -134,8 +131,8 @@ def start_prometheus_server_once(port: int = METRICS_PORT):
 
 
 # --- Core Prometheus Metrics Initialization (FIXED ORDER) ---
-# FIX: Changed LLM_CALLS_TOTAL to LLM_REQUESTS_TOTAL as per requirement
-# FIX: Wrap metrics creation to avoid duplication errors in test collection
+# Changed LLM_CALLS_TOTAL to LLM_REQUESTS_TOTAL as per requirement
+# Wrap metrics creation to avoid duplication errors in test collection
 def _get_or_create_counter(name, documentation, labelnames):
     """Get existing counter or create new one, avoiding duplication errors."""
     from prometheus_client import REGISTRY
@@ -500,7 +497,6 @@ class MetricsExporter:
             Tuple[Dict[str, Any], str, int, datetime, datetime]
         ] = deque()
 
-        # FIX: Use getattr for config access
         self._max_export_retries = getattr(self.config, "max_metrics_export_retries", 3)
         self._export_retry_base_interval = getattr(
             self.config, "metrics_export_retry_interval_seconds", 5
@@ -518,7 +514,7 @@ class MetricsExporter:
             Path(failover_file) if failover_file else None
         )
 
-        # FIX: Start background task explicitly via start()
+        # Background task started in start() to avoid blocking __init__
         self._retry_task: Optional[asyncio.Task] = None
         self._stop_evt = asyncio.Event()
 
@@ -774,7 +770,6 @@ class MetricsExporter:
 
     def _initialize_datadog_exporter(self):
         """Initializes the Datadog exporter if configured."""
-        # FIX: Use getattr
         datadog_api_key = getattr(self.config, "datadog_api_key", None)
         if isinstance(datadog_api_key, SecretStr):
             datadog_api_key = datadog_api_key.get_secret_value()
@@ -792,7 +787,7 @@ class MetricsExporter:
                         "api_key": datadog_api_key,
                         "app_key": getattr(
                             self.config, "datadog_app_key", ""
-                        ),  # FIX: Use getattr
+                        ),
                         "host_name": self.instance_id,
                     }
                     datadog.initialize(**datadog_options)
@@ -869,7 +864,6 @@ class MetricsExporter:
 
     def _initialize_cloudwatch_exporter(self):
         """Initializes the AWS CloudWatch exporter if configured."""
-        # FIX: Use getattr
         if not getattr(self.config, "aws_region", None):
             logger.debug(
                 "AWS region not configured. CloudWatch exporter will not be initialized."
@@ -880,7 +874,6 @@ class MetricsExporter:
             if not boto3:
                 raise ImportError("boto3 package not installed for CloudWatch export.")
 
-            # FIX: Use getattr
             aws_access_key = getattr(self.config, "aws_access_key_id", None)
             aws_secret_key = getattr(self.config, "aws_secret_access_key", None)
 
@@ -889,7 +882,7 @@ class MetricsExporter:
             if isinstance(aws_secret_key, SecretStr):
                 aws_secret_key = aws_secret_key.get_secret_value()
 
-            # FIX: Ensure region is retrieved correctly
+            # Ensure region is retrieved correctly
             cw_region = getattr(self.config, "aws_region", None)
             if not cw_region:
                 logger.warning(
@@ -1036,7 +1029,6 @@ class MetricsExporter:
 
     def _export_to_custom_json_file_sync(self, metrics: Dict[str, Any]):
         """Synchronous part of JSON file export, meant to be run in a thread."""
-        # FIX: Use getattr
         metrics_file_path = getattr(
             self.config, "custom_metrics_file", "metrics_snapshot.json"
         )
@@ -1080,7 +1072,7 @@ class MetricsExporter:
         Sanitizes metrics before export: ensures numeric values, safe labels,
         and redacts any potentially sensitive string values.
         """
-        # FIX: Lazy import redact_secrets here to break the cycle (runner_logging -> runner_security_utils -> runner_metrics -> runner_logging)
+        # Lazy import redact_secrets here to break the cycle (runner_logging -> runner_security_utils -> runner_metrics -> runner_logging)
         try:
             # --- FIX: Use relative import ---
             from .runner_security_utils import redact_secrets
@@ -1096,7 +1088,6 @@ class MetricsExporter:
         sanitized = {}
         for key, value in metrics.items():
             if isinstance(value, str):
-                # FIX: Use getattr
                 sanitized[key] = redact_secrets(
                     value,
                     patterns=getattr(self.config, "custom_redaction_patterns", []),
@@ -1344,7 +1335,7 @@ class MetricsExporter:
 
 # Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally.
 try:
-    # FIX: Attempt to import from runner.runner_core first, then runner.core
+    # Attempt to import from runner.runner_core first, then runner.core
     try:
         # --- FIX: Use relative import ---
         from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
@@ -1367,7 +1358,6 @@ async def alert_monitor(config: "RunnerConfig"):
     Built-in alerting system: Periodically checks metrics against defined thresholds and logs critical alerts.
     """
     logger.info("Alert monitor started.")
-    # FIX: Use getattr
     alert_interval_seconds = getattr(config, "alert_monitor_interval_seconds", 60)
 
     while True:
@@ -1379,7 +1369,6 @@ async def alert_monitor(config: "RunnerConfig"):
         current_thresholds = ALERT_THRESHOLDS.copy()
         for key in current_thresholds.keys():
             config_key_name = f"alert_threshold_{key}"
-            # FIX: Use getattr
             config_val = getattr(config, config_key_name, None)
             if config_val is not None:
                 current_thresholds[key] = config_val
@@ -1469,7 +1458,6 @@ async def alert_monitor(config: "RunnerConfig"):
                 f"High vulnerability score: {vuln_score:.1f} (>{current_thresholds['vulnerability_score_max']:.1f}). Security risk detected."
             )
 
-        # FIX: Use getattr
         framework_for_latency = getattr(config, "framework", "unknown")
 
         # Histogram metrics appear as separate entries in get_metrics_dict
@@ -1610,7 +1598,7 @@ async def alert_monitor(config: "RunnerConfig"):
 
 # Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally
 try:
-    # FIX: Prioritize runner.runner_core
+    # Prefer generator.runner.runner_core for correct module resolution
     try:
         # --- FIX: Use relative import ---
         from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS

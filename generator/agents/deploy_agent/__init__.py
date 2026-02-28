@@ -49,16 +49,11 @@ try:
     _DEPLOY_PROMPT_AVAILABLE = True
 except (ImportError, OSError):
     # OSError catches DLL initialization failures on Windows
-    # Create a lightweight stub so code that checks DeployPromptAgent is not None
-    # gets a clear error at instantiation time rather than a silent NoneType failure.
-    class DeployPromptAgent:  # type: ignore[no-redef]
-        """Stub raised when heavy ML dependencies (torch/transformers) are unavailable."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "DeployPromptAgent requires 'torch' and 'transformers' which are not installed. "
-                "Install the optional ML dependencies or use template-based deployment generation."
-            )
+    # DeployPromptAgent stays None; _DEPLOY_PROMPT_AVAILABLE remains False.
+    # Callers must check _DEPLOY_PROMPT_AVAILABLE (or `DeployPromptAgent is not None`)
+    # before instantiating.  A stub class is intentionally NOT substituted here
+    # because `is not None` guards throughout the codebase would be silently defeated.
+    pass
 
 # Try to import deploy_agent
 try:
@@ -70,6 +65,8 @@ except (ImportError, OSError):
     pass
 
 __all__ = [
+    # Core agents — may be None if their dependencies are not installed.
+    # Always check the corresponding _*_AVAILABLE flag before instantiating.
     "DeployAgent",
     "DeployPromptAgent",
     "parse_llm_response",
@@ -78,4 +75,9 @@ __all__ = [
     "ValidatorRegistry",
     "DockerValidator",
     "HelmValidator",
+    # Availability sentinels — use these for `is not None` / feature-flag checks.
+    "_DEPLOY_AGENT_AVAILABLE",
+    "_DEPLOY_PROMPT_AVAILABLE",
+    "_DEPLOY_RESPONSE_HANDLER_AVAILABLE",
+    "_DEPLOY_VALIDATOR_AVAILABLE",
 ]

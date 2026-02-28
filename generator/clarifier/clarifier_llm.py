@@ -265,21 +265,65 @@ CLARIFICATION_KEYWORDS: Final[tuple] = (
     "ambiguit", "clarif", "unclear", "requirement", "specify"
 )
 
+# Maximum number of characters from the original prompt embedded in fallback
+# code docstrings and TODO comments.  Keeping this short prevents enormous
+# generated files when prompts are long.
+_MAX_PROMPT_SUMMARY_LENGTH: Final[int] = 200
+
+
+def _make_fallback_code(prompt: str = "") -> str:
+    """Generate a meaningful Python skeleton when the LLM API is unavailable.
+
+    The returned code is valid Python that includes a module docstring, standard
+    library imports (``argparse``, ``logging``), a ``main()`` entry-point with a
+    ``--verbose`` flag, and a ``TODO`` comment containing the original request so
+    that a developer can quickly identify what was requested and implement it.
+
+    Args:
+        prompt: The original generation request.  Up to the first
+            ``_MAX_PROMPT_SUMMARY_LENGTH`` characters are embedded in the
+            docstring and ``TODO`` comment.  Pass an empty string (the default)
+            when no original prompt is available.
+
+    Returns:
+        A string containing syntactically valid Python source code that acts as
+        a ready-to-extend skeleton for the requested functionality.
+    """
+    prompt_summary = (
+        prompt[:_MAX_PROMPT_SUMMARY_LENGTH] + "..."
+        if len(prompt) > _MAX_PROMPT_SUMMARY_LENGTH
+        else prompt
+    )
+    return (
+        '"""Auto-generated fallback module.\n'
+        "\nThis module was generated because the LLM API was unavailable at generation time.\n"
+        f"Original request: {prompt_summary}\n"
+        '"""\n'
+        "import argparse\n"
+        "import logging\n\n"
+        "logging.basicConfig(level=logging.INFO)\n"
+        "logger = logging.getLogger(__name__)\n\n"
+        f"# TODO: Implement the requested functionality: {prompt_summary}\n\n"
+        "def main():\n"
+        "    parser = argparse.ArgumentParser(description='Auto-generated skeleton')\n"
+        "    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')\n"
+        "    args = parser.parse_args()\n"
+        "    if args.verbose:\n"
+        "        logging.getLogger().setLevel(logging.DEBUG)\n"
+        "    logger.info('Starting execution — implement logic here')\n\n\n"
+        "if __name__ == '__main__':\n"
+        "    main()\n"
+    )
+
+
 # Placeholder code template for when LLM API is unavailable
-FALLBACK_PYTHON_CODE: Final[str] = (
-    "# TODO: API unavailable - placeholder code\n"
-    "# Please configure API access or try again later\n\n"
-    "def main():\n"
-    "    print('Hello World')\n"
-    "    pass\n\n"
-    "if __name__ == '__main__':\n"
-    "    main()\n"
-)
+FALLBACK_PYTHON_CODE: Final[str] = _make_fallback_code()
 
 FALLBACK_README: Final[str] = (
-    "# Placeholder\n\n"
-    "This is placeholder code generated because the API was unavailable.\n\n"
-    "Please configure proper API access to generate actual code.\n"
+    "# Auto-generated Fallback Module\n\n"
+    "This code was auto-generated because the LLM API was unavailable.\n\n"
+    "Please configure proper API access and regenerate, or implement the required\n"
+    "functionality by filling in the `TODO` markers in the generated skeleton.\n"
 )
 
 

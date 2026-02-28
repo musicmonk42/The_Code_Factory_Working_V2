@@ -133,7 +133,7 @@ class TestTuiLogHandler:
         # Create a real task for the mock app to "create"
         pending_tasks = []
 
-        def create_task_mock(coro):  # FIX: Must be a regular def, not async def
+        def create_task_mock(coro):  # Must be a regular def, not async def
             task = asyncio.create_task(coro)
             pending_tasks.append(task)
             return task
@@ -195,7 +195,7 @@ class TestMainAppInitialization:
         from generator.main.gui import MainApp
 
         app = MainApp()
-        # FIX: Run the app in the test harness
+        # Run the app in the test harness
         async with app.run_test() as pilot:
             assert len(app.BINDINGS) > 0
 
@@ -211,7 +211,7 @@ class TestMainAppInitialization:
         from generator.main.gui import MainApp
 
         app = MainApp()
-        # FIX: Run the app in the test harness
+        # Run the app in the test harness
         async with app.run_test() as pilot:
             assert app.CSS is not None
             assert len(app.CSS) > 0
@@ -239,14 +239,14 @@ class TestMainAppCompose:
 class TestAPIInteraction:
     """Tests for API interaction methods."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
         from generator.main.gui import MainApp
 
         app = MainApp()
-        # FIX: Run the app in the test harness and yield the app instance
+        # Run the app in the test harness and yield the app instance
         async with app.run_test() as pilot:
             await asyncio.sleep(0.01)  # Allow on_mount to complete
             yield app
@@ -270,7 +270,7 @@ class TestAPIInteraction:
             )  # Session context returns session
             mock_session.__aexit__ = AsyncMock()
 
-            # FIX: session.request must return a context manager, NOT be an AsyncMock itself
+            # session.request must return a context manager, NOT be an AsyncMock itself
             mock_session.request = MagicMock(return_value=mock_request_context)
 
             MockSession.return_value = mock_session  # This is the key
@@ -296,7 +296,7 @@ class TestAPIInteraction:
             mock_session.__aenter__ = AsyncMock(return_value=mock_session)
             mock_session.__aexit__ = AsyncMock()
 
-            # FIX: session.request must be MagicMock
+            # session.request must be MagicMock
             mock_session.request = MagicMock(return_value=mock_request_context)
 
             MockSession.return_value = mock_session
@@ -339,14 +339,14 @@ class TestAPIInteraction:
 class TestRunnerTab:
     """Tests for Runner tab functionality."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
         from generator.main.gui import MainApp
 
         app = MainApp()
-        # FIX: Mock query_one to return widgets with necessary attributes
+        # Mock query_one to return widgets with necessary attributes
         original_query_one = app.query_one
         
         def mock_query_one(selector, *args, **kwargs):
@@ -367,7 +367,7 @@ class TestRunnerTab:
         
         app.query_one = mock_query_one
         
-        # FIX: Run the app in the test harness
+        # Run the app in the test harness
         async with app.run_test() as pilot:
             await asyncio.sleep(0.01)  # Allow on_mount to complete
             yield app
@@ -408,14 +408,14 @@ class TestRunnerTab:
 class TestParserTab:
     """Tests for Intent Parser tab functionality."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
         from generator.main.gui import MainApp
 
         app = MainApp()
-        # FIX: Mock query_one to return widgets with necessary attributes
+        # Mock query_one to return widgets with necessary attributes
         original_query_one = app.query_one
         
         def mock_query_one(selector, *args, **kwargs):
@@ -436,7 +436,7 @@ class TestParserTab:
         
         app.query_one = mock_query_one
         
-        # FIX: Run the app in the test harness
+        # Run the app in the test harness
         async with app.run_test() as pilot:
             await asyncio.sleep(0.01)  # Allow on_mount to complete
             yield app
@@ -516,7 +516,7 @@ class TestParserTab:
 class TestClarifierTab:
     """Tests for Clarifier tab functionality."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -528,7 +528,7 @@ class TestClarifierTab:
 
         app = MainApp()
         
-        # FIX: Mock query_one to return widgets with necessary attributes
+        # Mock query_one to return widgets with necessary attributes
         original_query_one = app.query_one
         
         def mock_query_one(selector, *args, **kwargs):
@@ -596,7 +596,7 @@ class TestClarifierTab:
 class TestMetricsTab:
     """Tests for Metrics tab functionality."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -693,7 +693,7 @@ class TestMetricsTab:
 class TestConfigReload:
     """Tests for configuration reload functionality."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -758,7 +758,7 @@ class TestConfigReload:
 
 @pytest.mark.skipif(not HAS_RUN_TEST, reason="Textual run_test() not available in installed version")
 class TestKeyBindings:
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -848,7 +848,7 @@ class TestHelpScreen:
 class TestErrorHandling:
     """Tests for error handling in GUI."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -887,7 +887,7 @@ class TestErrorHandling:
 class TestConfigWatchers:
     """Tests for configuration watchers."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""
@@ -949,7 +949,7 @@ class TestAsyncFileOperations:
 class TestUIMessageHelpers:
     """Tests for UI message helper methods."""
 
-    # FIX: Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
+    # Removed @pytest.mark.asyncio from fixture - marks on fixtures have no effect
     @pytest.fixture
     async def app_instance(self, mock_dependencies):
         """Create MainApp instance."""

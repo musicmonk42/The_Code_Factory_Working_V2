@@ -50,7 +50,7 @@ from .runner_config import RunnerConfig
 from .runner_contracts import TaskPayload, TaskResult
 
 # Import structured errors for consistent error handling across backends
-# FIX: Corrected module typo from 'runner.errors' to 'runner.runner_errors'
+# Corrected module typo from 'runner.errors' to 'runner.runner_errors'
 # --- FIX: Changed 'TestExecutionError' to 'ExecutionError' ---
 from .runner_errors import (  # Explicitly import used error types
     BackendError,
@@ -62,7 +62,7 @@ from .runner_errors import (  # Explicitly import used error types
 )
 
 # --- REFACTOR FIX: Corrected imports to point to runner foundation ---
-# FIX: Import only logger at module level to break circular import
+# Import only logger at module level to break circular import
 # add_provenance is imported lazily via _get_add_provenance() when needed
 from .runner_logging import logger
 from .runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BREAKERS,; and get_circuit_breaker are no longer used here.; This logic is encapsulated in the imported subprocess_wrapper.
@@ -70,7 +70,7 @@ from .runner_metrics import (  # BACKEND_LATENCY, ERRORS, RECOVERIES, CIRCUIT_BR
 )
 
 
-# FIX: Lazy import helper for add_provenance to break circular import
+# Lazy import helper for add_provenance to break circular import
 def _get_add_provenance():
     """Lazily import add_provenance to avoid circular import at module load time."""
     from .runner_logging import add_provenance

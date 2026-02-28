@@ -7,16 +7,16 @@
 # Created: July 30, 2025.
 
 import asyncio
-import contextlib  # FIX: Added for watcher task cancellation
-import copy  # FIX: Moved import for feedback command
+import contextlib  # Added for watcher task cancellation
+import copy  # Moved import for feedback command
 import datetime
 import importlib  # For dynamic plugin loading
 import json
 import logging  # Explicitly import logging here for use in try/except block
 import os
 import sys
-import time  # FIX: Added missing import for logs command
-import uuid  # FIX: Moved import for feedback command
+import time  # Added missing import for logs command
+import uuid  # Moved import for feedback command
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -49,7 +49,7 @@ try:
         hot_swap_agent,
         register_agent,
     )
-    from generator.runner.alerting import send_alert  # FIX: Standardized import
+    from generator.runner.alerting import send_alert  # Standardized import
     from generator.runner.runner_config import ConfigWatcher, load_config
     from generator.runner.runner_logging import (
         log_action,
@@ -151,7 +151,7 @@ except ImportError as e:
     async def send_alert(message: str, severity: str = "info"):
         logger.warning(f"Dummy send_alert: {message} (Severity: {severity})")
 
-    # FIX: Added dummy log_action with signature matching runner_logging.log_action
+    # Added dummy log_action with signature matching runner_logging.log_action
     def log_action(action: str, data: Dict[str, Any], **kwargs):
         logger.warning(
             f"Dummy log_action: {action} | Data: {data} | Extra: {kwargs}"
@@ -171,7 +171,7 @@ console = Console()
 rich_traceback_install(console=console, show_locals=True)
 
 # Colorful help for Click commands
-# FIX: Removed HelpColorsGroup/HelpColorsCommand assignments to fix compatibility issue
+# Removed HelpColorsGroup/HelpColorsCommand assignments to fix compatibility issue
 # click.Group.cls = HelpColorsGroup
 # click.Command.cls = HelpColorsCommand
 # help_colors = { # Note: These are set on the group/command, not globally
@@ -182,7 +182,7 @@ rich_traceback_install(console=console, show_locals=True)
 # }
 
 
-# FIX: Made --config-file a group option and passed context
+# Made --config-file a group option and passed context
 @click.group()
 @click.option(
     "--config-file",
@@ -247,7 +247,7 @@ def register_cli_command(name: str, help_text: str, group: click.Group = cli):
     type=click.Path(path_type=Path),
     help="Directory to store generated artifacts and logs.",
 )
-# FIX: Removed standalone --config option, will use context
+# Removed standalone --config option, will use context
 @click.option(
     "--parallel",
     type=int,
@@ -269,7 +269,7 @@ def register_cli_command(name: str, help_text: str, group: click.Group = cli):
     default="cli_user",
     help="User ID for audit logging and personalization.",
 )
-@click.pass_context  # FIX: Added context pass
+@click.pass_context  # Added context pass
 def run(
     ctx,
     input_path: Path,
@@ -281,7 +281,7 @@ def run(
     interactive: bool,
     user_id: str,
 ):
-    # FIX: Get config_path from context
+    # Get config_path from context
     config_path = ctx.obj["config_path"]
     config_data = load_config(config_path)
 
@@ -297,7 +297,7 @@ def run(
             1  # Distributed implies external orchestration, not local multiprocessing
         )
 
-    # FIX: Config watcher is now started inside the async task
+    # Config watcher is now started inside the async task
 
     if interactive:
         console.print(
@@ -326,7 +326,7 @@ def run(
     async def single_run_task_async(run_id: int):
         """Asynchronous task for a single workflow run."""
 
-        # FIX: Start config watcher inside the async task
+        # Start config watcher inside the async task
         watcher = ConfigWatcher(
             config_path,
             lambda new, diff: console.print(
@@ -414,7 +414,7 @@ def run(
                     suggest_recovery_cli(e)
                     return {"status": "failed", "run_id": run_id, "error": str(e)}
         finally:
-            # FIX: Ensure watcher is stopped and task is cancelled
+            # Ensure watcher is stopped and task is cancelled
             if watcher:
                 watcher.stop()
             if watcher_task:
@@ -435,7 +435,7 @@ def run(
             # Use ProcessPoolExecutor for better handling of async tasks in multiprocessing
             from concurrent.futures import ProcessPoolExecutor
 
-            # FIX: Use a new event loop for managing the futures
+            # Use a new event loop for managing the futures
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -481,7 +481,7 @@ def status():
     )
 
 
-# FIX: Added missing 'metrics' command
+# Added missing 'metrics' command
 @cli.command(
     name="metrics", help="Display detailed application metrics in JSON format."
 )
@@ -591,7 +591,7 @@ def logs(query, limit, follow):
     default="http://127.0.0.1:8000/api/v1/feedback",
     help="API endpoint for feedback submission.",
 )
-@click.pass_context  # FIX: Added context pass
+@click.pass_context  # Added context pass
 async def feedback(ctx, message, rating, run_id, user_id, api_endpoint):
     """
     Submits feedback to a remote API endpoint, not just local logging.
@@ -632,7 +632,7 @@ async def feedback(ctx, message, rating, run_id, user_id, api_endpoint):
 
         # Simulate local application of feedback (e.g., to WorkflowEngine for tuning)
         if rating is not None:
-            # FIX: Get config_path from context
+            # Get config_path from context
             config_path = ctx.obj["config_path"]
             config_data = load_config(config_path)
             engine = WorkflowEngine(config_data)
@@ -673,7 +673,7 @@ async def feedback(ctx, message, rating, run_id, user_id, api_endpoint):
         )
 
 
-@cli.group()  # FIX: Replaced HelpColorsGroup with standard click.Group
+@cli.group()  # Replaced HelpColorsGroup with standard click.Group
 def config():
     """Manage application configuration (view, edit, reload, audit)."""
     pass
@@ -683,9 +683,9 @@ def config():
 @click.option(
     "--raw", is_flag=True, help="Display raw YAML without syntax highlighting."
 )
-@click.pass_context  # FIX: Added context pass
+@click.pass_context  # Added context pass
 def config_show(ctx, raw):
-    # FIX: Get config_path from context
+    # Get config_path from context
     config_path = ctx.obj["config_path"]
     config_data = load_config(config_path)
     yaml_content = yaml.dump(config_data, indent=2, sort_keys=False)
@@ -709,9 +709,9 @@ def config_show(ctx, raw):
     help="The new value for the configuration key. (Optional, will prompt if not provided).",
 )
 @click.option("--user-id", default="cli_admin", help="User ID for audit logging.")
-@click.pass_context  # FIX: Added context pass
+@click.pass_context  # Added context pass
 def config_edit(ctx, key, value, user_id):
-    # FIX: Get config_path from context
+    # Get config_path from context
     config_path = ctx.obj["config_path"]
 
     # Use a file lock for config editing to prevent race conditions with other processes/threads
@@ -942,9 +942,9 @@ def config_audit(limit, user_id):
 
 
 @cli.command(help="Perform a health check of the workflow engine and its components.")
-@click.pass_context  # FIX: Added context pass
+@click.pass_context  # Added context pass
 async def health(ctx):
-    # FIX: Get config_path from context
+    # Get config_path from context
     config_path = ctx.obj["config_path"]
     config_data = load_config(config_path)
     engine = WorkflowEngine(config_data)
@@ -974,7 +974,7 @@ async def health(ctx):
         sys.exit(1)
 
 
-@cli.group()  # FIX: Replaced HelpColorsGroup with standard click.Group
+@cli.group()  # Replaced HelpColorsGroup with standard click.Group
 def plugin():
     """Manage plugins (list, install, uninstall, enable/disable)."""
     pass
@@ -991,21 +991,33 @@ def plugin_list():
     else:
         console.print("[dim]No agents/plugins currently registered.[/dim]")
 
-    console.print(
-        "\n[bold yellow]Available for Installation (Conceptual from known sources):[/bold yellow]"
-    )
-    console.print("- [dim]example_nlp_plugin[/dim] (Provides advanced NLP extraction)")
-    console.print("- [dim]aws_deploy_plugin[/dim] (Enables deployment to AWS)")
+    plugin_dir = os.getenv("PLUGIN_DIR", str(Path(__file__).parent.parent / "plugins"))
+    console.print(f"\n[bold yellow]Available in plugin directory ({plugin_dir}):[/bold yellow]")
+    try:
+        from generator.agents.deploy_agent.plugins import discover_plugins
+        found = discover_plugins()
+        if found:
+            for pname, manifest in found.items():
+                version = manifest.get("version", "unknown")
+                description = manifest.get("description", "")
+                line = f"- [cyan]{pname}[/cyan] (v{version})"
+                if description:
+                    line += f" — {description}"
+                console.print(line)
+        else:
+            console.print("[dim]No additional plugins found in plugin directory.[/dim]")
+    except Exception as _e:
+        console.print(f"[dim]Could not scan plugin directory: {_e}[/dim]")
 
 
 @plugin.command(name="install", help="Install a new plugin by name or path.")
 @click.argument(
     "plugin_identifier", type=str
-)  # FIX: Removed conflicting 'help' keyword
+)  # Removed conflicting 'help' keyword
 @click.option(
     "--verify-signature",
     is_flag=True,
-    help="Verify digital signature of the plugin package. Not yet implemented; raises an error when used.",
+    help="Verify digital signature of the plugin package using Ed25519 manifest verification.",
 )
 async def plugin_install(plugin_identifier, verify_signature):
     console.print(
@@ -1014,11 +1026,60 @@ async def plugin_install(plugin_identifier, verify_signature):
 
     try:
         if verify_signature:
-            raise NotImplementedError(
-                "Plugin signature verification is not yet implemented. "
-                "This feature is planned for a future release. "
-                "Re-run without --verify-signature to install without verification."
-            )
+            public_key_path = os.getenv("PLUGIN_VERIFY_PUBLIC_KEY")
+            if not public_key_path:
+                console.print(
+                    "[red]Cannot verify plugin signature: PLUGIN_VERIFY_PUBLIC_KEY environment "
+                    "variable is not set. Set it to the path of your Ed25519 public key or "
+                    "re-run without --verify-signature.[/red]"
+                )
+                return
+            manifest_path = None
+            plugin_path = Path(plugin_identifier)
+            candidates = [
+                plugin_path.parent / "plugin_manifest.json",
+                plugin_path.with_suffix(".manifest.json"),
+                Path("plugin_manifest.json"),
+            ]
+            for candidate in candidates:
+                if candidate.exists():
+                    manifest_path = candidate
+                    break
+            if not manifest_path:
+                console.print(
+                    "[red]Cannot verify plugin signature: no plugin_manifest.json found "
+                    "alongside the plugin or in the current directory.[/red]"
+                )
+                return
+            try:
+                try:
+                    from generator.scripts.generate_plugin_manifest import (
+                        verify_signature as _verify_sig,
+                    )
+                except ImportError as _imp_err:
+                    console.print(
+                        f"[red]Signature verification unavailable: {_imp_err}. "
+                        "Ensure the 'cryptography' package is installed: "
+                        "pip install cryptography[/red]"
+                    )
+                    return
+                import json as _json
+                manifest_bytes = manifest_path.read_bytes()
+                doc = _json.loads(manifest_bytes)
+                signature_b64 = doc.get("signature")
+                if not signature_b64:
+                    console.print(
+                        "[red]Plugin manifest does not contain a signature. "
+                        "Re-sign the manifest before installing.[/red]"
+                    )
+                    return
+                _verify_sig(manifest_bytes, signature_b64, public_key_path)
+                console.print("[green]Plugin signature verified successfully.[/green]")
+            except Exception as _sig_err:
+                console.print(
+                    f"[red]Plugin signature verification failed: {_sig_err}[/red]"
+                )
+                return
 
         # Assume plugin_identifier is a Python module name or path to a .py file for hot-loading
         if Path(plugin_identifier).suffix == ".py" and Path(plugin_identifier).exists():
@@ -1094,7 +1155,7 @@ async def plugin_install(plugin_identifier, verify_signature):
 
 
 @plugin.command(name="uninstall", help="Uninstall an existing plugin by name.")
-@click.argument("plugin_name", type=str)  # FIX: Removed conflicting 'help' keyword
+@click.argument("plugin_name", type=str)  # Removed conflicting 'help' keyword
 def plugin_uninstall(plugin_name):
     console.print(f"[yellow]Attempting to uninstall plugin: {plugin_name}...[/yellow]")
     if plugin_name in AGENT_REGISTRY:  # Simple deregistration from AGENT_REGISTRY
@@ -1140,7 +1201,7 @@ def plugin_disable(plugin_name):
     log_action("Plugin Disabled", {"category": "plugin", "plugin_name": plugin_name})
 
 
-@cli.group()  # FIX: Replaced HelpColorsGroup with standard click.Group
+@cli.group()  # Replaced HelpColorsGroup with standard click.Group
 def docs():
     """Commands for generating and managing project documentation."""
     pass
@@ -1256,7 +1317,7 @@ async def docs_generate(
 @docs.command(name="view", help="Open or display generated documentation.")
 @click.argument(
     "path", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path)
-)  # FIX: Removed conflicting 'help' keyword
+)  # Removed conflicting 'help' keyword
 def docs_view(path: Path):
     doc_path = path
     console.print(

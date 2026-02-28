@@ -79,7 +79,6 @@ except (ImportError, OSError, RuntimeError, Exception) as e:
 try:
     from runner.llm_client import count_tokens
     from runner.runner_backends import rag_retrieve as _rag_retrieve_context
-    # FIX: Import from runner_audit to avoid circular dependency
     from runner.runner_audit import log_audit_event
     from runner.runner_audit import log_audit_event as log_action
     from runner.runner_metrics import CRITIQUE_PROMPT_BUILDS, CRITIQUE_PROMPT_LATENCY
@@ -91,13 +90,24 @@ try:
     PROMPT_BUILDS = CRITIQUE_PROMPT_BUILDS
     PROMPT_LATENCY = CRITIQUE_PROMPT_LATENCY
 
-    # Stub for legacy dependency (kept only so calls do not explode)
+    # Stub for LanguageCritiquePlugin — the real implementation lives in a
+    # separate process/container that is not available in this deployment.
+    # Returns (False, …) so callers that check `if success` correctly skip
+    # dependent logic rather than processing a fabricated result.
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            logging.error(
-                "LanguageCritiquePlugin is a dependency bleed and should be refactored."
+            logging.warning(
+                "LanguageCritiquePlugin is not available in this environment. "
+                "Language-specific coverage tooling will be skipped."
             )
-            return True, {"output": "Mock success"}
+            return False, {
+                "output": "",
+                "stderr": (
+                    "LanguageCritiquePlugin is not available. "
+                    "Install the required runner dependencies to enable "
+                    "language-specific critique tooling."
+                ),
+            }
 
     def save_files_to_output(*args, **kwargs):
         # Legacy stub; no-op in this module.
@@ -136,7 +146,17 @@ except ImportError as e:
 
     class LanguageCritiquePlugin:
         async def _run_tool(self, *args, **kwargs):
-            return True, {"output": "Mock success"}
+            logging.warning(
+                "LanguageCritiquePlugin is not available (runner utilities not installed). "
+                "Language-specific coverage tooling will be skipped."
+            )
+            return False, {
+                "output": "",
+                "stderr": (
+                    "LanguageCritiquePlugin unavailable — runner utilities not installed. "
+                    "Install the runner package to enable language-specific critique tooling."
+                ),
+            }
 
     def save_files_to_output(*args, **kwargs):
         return None
@@ -161,7 +181,7 @@ MAX_PROMPT_TOKENS = 16000
 TEMPLATE_DIR = "prompt_templates"
 os.makedirs(TEMPLATE_DIR, exist_ok=True)
 
-# FIX: Define a constant namespace for deterministic UUIDs
+# Define a constant namespace for deterministic UUIDs
 AGENT_NAMESPACE_UUID = uuid.UUID("c4a1b1b0-2b1a-4c8a-9f0a-1a2b3c4d5e6f")
 
 # Default Template (Inline for safety/fallback)

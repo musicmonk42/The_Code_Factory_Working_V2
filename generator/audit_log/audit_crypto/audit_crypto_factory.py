@@ -228,7 +228,7 @@ class SensitiveDataFilter(logging.Filter):
             # It's better to ensure it's never logged in the first place.
 
         # More robustly redact sensitive data from the entire log record's __dict__ (which includes `extra` data).
-        # FIX 1: Iterate over record.__dict__ keys to catch all extra fields merged by LoggerAdapter.
+        # Iterate over record.__dict__ keys to catch all extra fields merged by LoggerAdapter.
         for key in list(record.__dict__.keys()):
             if any(s in key.lower() for s in ["pin", "secret", "password"]):
                 record.__dict__[key] = "***REDACTED***"
@@ -308,11 +308,11 @@ def _is_test_or_dev_mode() -> bool:
     if audit_crypto_mode == "dev":
         return True
     
-    # FIX Issue 3: Treat empty string as NOT dev mode, only explicit "true" enables it
+    # Treat empty string as NOT dev mode, only explicit "true" enables it
     audit_log_dev_mode = os.getenv("AUDIT_LOG_DEV_MODE", "").strip().lower()
     if audit_log_dev_mode in ("true", "1", "yes"):
         return True
-    # FIX: Treat empty string as NOT dev mode, only truthy values trigger dev mode
+    # Treat empty string as NOT dev mode, only truthy values trigger dev mode
     if os.getenv("PYTEST_CURRENT_TEST", "").strip():
         return True
     if os.getenv("RUNNING_TESTS", "").lower() == "true":
@@ -396,7 +396,7 @@ def _validate_production_crypto():
 
 
 # --- Configuration Management ---
-# FIX: Detect testing environment and bypass critical 'must_exist' validation
+# Detect testing environment and bypass critical 'must_exist' validation
 _IS_TESTING = (
     os.getenv("PYTEST_CURRENT_TEST") is not None or os.getenv("RUNNING_TESTS") == "True"
 )
@@ -413,7 +413,7 @@ settings = Dynaconf(
     environments=environments,  # <-- disabled in tests
     envvar_prefix="AUDIT_CRYPTO",
     settings_files=[_config_path],
-    # FIX: Remove conditional validators to prevent RecursionError
+    # Remove conditional validators to prevent RecursionError
     validators=[
         Validator("PROVIDER_TYPE", must_exist=True, is_in=["software", "hsm"]),
         Validator(
@@ -1074,7 +1074,7 @@ async def retry_operation(
     attempt = 0
     while attempt < max_attempts:
         try:
-            # FIX 5 & 6: Log success before returning the result.
+            # Log success before returning the result.
             result = await func()
             await log_action(
                 "retry_operation",

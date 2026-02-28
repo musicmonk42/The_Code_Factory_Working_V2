@@ -90,7 +90,7 @@ def _get_presidio_analyzer():
         return None
     if _presidio_analyzer is None:
         try:
-            # FIX: Specify supported_languages to avoid warnings about non-English recognizers
+            # Limit to English to suppress unsupported-language recognizer warnings
             _presidio_analyzer = AnalyzerEngine(supported_languages=["en"])
             
             # Add custom recognizers (e.g., API_KEY) to this singleton instance
@@ -145,7 +145,6 @@ from runner.llm_client import call_ensemble_api
 from runner.runner_errors import ConfigurationError, LLMError
 
 # --- CENTRAL RUNNER FOUNDATION ---
-# FIX: Import add_provenance from runner_audit to avoid circular dependency
 from runner.runner_audit import log_audit_event as add_provenance
 from runner.runner_logging import logger, tracer
 
@@ -158,7 +157,7 @@ from tenacity import (  # For robust retries
 )
 
 # Test generation specific components: REQUIRED.
-# FIXED: Changed to relative imports
+# Changed to relative imports
 from .testgen_prompt import build_agentic_prompt, initialize_codebase_for_rag
 from .testgen_response_handler import parse_llm_response
 from .testgen_validator import validate_test_quality
@@ -434,7 +433,7 @@ class TestgenAgent:
         if self.arbiter_bridge:
             logger.info("TestgenAgent: Arbiter integration enabled")
 
-        # FIX: Schedule async initialization as a background task instead of blocking
+        # Schedule async initialization as a background task instead of blocking
         # This prevents "asyncio.run() cannot be called from a running event loop" error
         self._init_task = None  # Track initialization task
         try:
@@ -536,7 +535,7 @@ class TestgenAgent:
                     # Return the original relative path as key, not the cleaned one
                     # This maintains compatibility with existing code
                     # 
-                    # FIX: Do NOT scrub source code files that will be parsed by ast.parse()
+                    # Do NOT scrub source code files that will be parsed by ast.parse()
                     # Presidio's PII detection incorrectly flags code entities (imports, class names)
                     # as PERSON/ORGANIZATION/etc., corrupting code with [REDACTED] placeholders.
                     # This causes SyntaxError in ast.parse() and breaks test generation.
@@ -1009,14 +1008,14 @@ Agent --> Dev : Deliver Report
             try:
                 time.time()
 
-                # CRITICAL FIX: Add configurable timeout for LLM calls to prevent indefinite hangs
+                # Add configurable timeout for LLM calls to prevent indefinite hangs
                 # Default is 300s (increased from 120s) to handle heavy test generation workloads
                 # Can be configured via TESTGEN_LLM_TIMEOUT environment variable
                 llm_timeout = int(os.getenv("TESTGEN_LLM_TIMEOUT", "300"))
                 
                 # REFACTORED: Rely entirely on runner.llm_client for retry, metrics, and tracing
                 # Wrap with asyncio.wait_for to enforce timeout
-                # FIX Issue 1: Add provider to model configuration for call_ensemble_api
+                # Add provider to model configuration for call_ensemble_api
                 # Use centralized utility for provider inference (Industry Standard: DRY principle)
                 from generator.utils.llm_provider_utils import create_model_config
                 
@@ -1027,7 +1026,7 @@ Agent --> Dev : Deliver Report
                     response = await asyncio.wait_for(
                         call_ensemble_api(
                             prompt=prompt,
-                            models=[model_config],  # FIX: Use validated model config
+                            models=[model_config],
                             voting_strategy="majority",  # Default strategy
                             stream=stream,
                         ),
@@ -1265,7 +1264,7 @@ Agent --> Dev : Deliver Report
                     # Check if this is a FastAPI app (detect FastAPI patterns)
                     is_fastapi_app = self._detect_fastapi_app(content)
                     
-                    # FIX Issue 2: Improve rule-based fallback to generate FastAPI tests
+                    # Improve rule-based fallback to generate FastAPI tests
                     # for any file containing FastAPI routes, not just specific filenames
                     if is_fastapi_app:
                         # Generate real FastAPI TestClient tests
@@ -1304,7 +1303,7 @@ Agent --> Dev : Deliver Report
                     
                     # Add import for the module being tested
                     # Use explicit imports to avoid namespace pollution (industry best practice)
-                    # FIX Bug 2: Compute correct import path for nested packages
+                    # Compute correct import path for nested packages
                     # Strip "generated/<project>/" prefix to get package-relative path
                     file_path_obj = Path(file_path)
                     
@@ -1435,7 +1434,7 @@ Agent --> Dev : Deliver Report
                         test_lines.append('')
                     
                     # Create test file path
-                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Ensure test files are always placed in tests/ subdirectory
                     # Extract just the filename from the path for consistency
                     file_name = Path(file_path).name
                     file_stem_name = file_name.replace('.py', '')
@@ -1458,7 +1457,6 @@ Agent --> Dev : Deliver Report
                     # structural tests that verify file existence and basic properties.
                     # This ensures the test suite always produces meaningful output.
                     
-                    # FIX: Log actual file content to help debug false positives
                     logger.error(
                         f"[TESTGEN] SyntaxError while parsing {file_path} at line {e.lineno}. "
                         f"Error: {e.msg}. Content preview (first 500 chars): {content[:500] if content else 'EMPTY'}",
@@ -1618,7 +1616,7 @@ def test_{file_stem}_syntax_error_documentation():
 '''
                     
                     # Generate test file path following pytest conventions
-                    # FIX Issue 5: Ensure test files are always placed in tests/ subdirectory
+                    # Ensure test files are always placed in tests/ subdirectory
                     # Extract just the filename from the path
                     file_name = Path(file_path).name
                     # Remove .py extension
@@ -1680,49 +1678,224 @@ def test_{file_stem}_syntax_error_documentation():
                                     f"[TESTGEN] {language} generator failed for {file_path}: {_exc}",
                                     extra={"run_id": run_id},
                                 )
-                    # Fallback minimal stub
-                    basic_tests[test_file_path] = (
-                        f"// Tests for {file_path}\n"
-                        f"describe('{file_stem}', () => {{\n"
-                        f"  it('should be implemented', () => {{\n"
-                        f"    // TODO: Add tests for {file_path}\n"
-                        f"  }});\n"
-                        f"}});\n"
+                    # Fallback: parse exported names and generate real test stubs.
+                    # Compute a proper relative import path from the test file to the source.
+                    _src_path = Path(file_path)
+                    _test_dir = Path(test_file_path).parent  # e.g. "__tests__"
+                    try:
+                        _rel_import = str(
+                            Path(os.path.relpath(str(_src_path), str(_test_dir)))
+                        ).replace("\\", "/")
+                        # Strip the extension for the import statement.
+                        _rel_import = re.sub(r"\.(js|ts|jsx|tsx)$", "", _rel_import)
+                        if not _rel_import.startswith("."):
+                            _rel_import = f"./{_rel_import}"
+                    except ValueError:
+                        # os.path.relpath may fail on Windows with different drives.
+                        _rel_import = f"../{file_path}"
+
+                    _js_exports = re.findall(
+                        r"(?:export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)|"
+                        r"export\s+const\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\())",
+                        code_content,
                     )
+                    _func_names = [g[0] or g[1] for g in _js_exports if g[0] or g[1]]
+                    if _func_names:
+                        _test_lines = [
+                            f"// Auto-generated tests for {file_path}",
+                            f"import {{ {', '.join(_func_names)} }} from '{_rel_import}';",
+                            "",
+                            f"describe('{file_stem}', () => {{",
+                        ]
+                        for fn in _func_names:
+                            _test_lines += [
+                                f"  describe('{fn}', () => {{",
+                                f"    it('should be defined', () => {{",
+                                f"      expect({fn}).toBeDefined();",
+                                f"    }});",
+                                f"    it('should not throw on empty/null input', () => {{",
+                                f"      expect(() => {fn}(null)).not.toThrow();",
+                                f"    }});",
+                                f"  }});",
+                            ]
+                        _test_lines.append("});")
+                        basic_tests[test_file_path] = "\n".join(_test_lines) + "\n"
+                    else:
+                        basic_tests[test_file_path] = (
+                            f"// Auto-generated tests for {file_path}\n"
+                            f"describe('{file_stem}', () => {{\n"
+                            f"  it('module loads without errors', () => {{\n"
+                            f"    // eslint-disable-next-line @typescript-eslint/no-var-requires\n"
+                            f"    const mod = require('{_rel_import}');\n"
+                            f"    expect(mod).toBeDefined();\n"
+                            f"  }});\n"
+                            f"}});\n"
+                        )
 
                 elif language == "java":
                     class_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Unknown"
                     test_file_path = f"src/test/java/{class_name}Test.java"
+                    # Parse public method signatures including parameter lists.
+                    _java_method_re = re.compile(
+                        r"public\s+(?:static\s+)?(?:\w[\w<>\[\],\s]*\s+)?(\w+)\s*\(([^)]*)\)"
+                        r"\s*(?:throws\s+[\w,\s]+)?\s*\{",
+                    )
+                    _excluded = {"class", "interface", "enum", "if", "for", "while", class_name}
+                    _java_methods_parsed = [
+                        (m, p)
+                        for m, p in _java_method_re.findall(code_content)
+                        if m not in _excluded
+                    ]
+                    _test_methods = ""
+                    if not _java_methods_parsed:
+                        # No public methods found — generate a basic instantiation test.
+                        _test_methods = (
+                            f"\n    @Test\n"
+                            f"    void testInstantiation() {{\n"
+                            f"        {class_name} instance = new {class_name}();\n"
+                            f"        assertNotNull(instance);\n"
+                            f"    }}\n"
+                        )
+                    else:
+                        for _method, _params_raw in _java_methods_parsed:
+                            _camel = _method[0].upper() + _method[1:]
+                            _has_params = bool(_params_raw.strip())
+                            if _has_params:
+                                # Method requires arguments — verify it exists and is callable.
+                                _test_methods += (
+                                    f"\n    @Test\n"
+                                    f"    void test{_camel}Exists() throws Exception {{\n"
+                                    f"        {class_name} instance = new {class_name}();\n"
+                                    f"        assertNotNull(instance);\n"
+                                    f"        // Verify method exists via reflection; "
+                                    f"provide representative arguments to call it.\n"
+                                    f"        var methods = java.util.Arrays.stream("
+                                    f"instance.getClass().getMethods())\n"
+                                    f"            .filter(m -> m.getName().equals(\"{_method}\"))\n"
+                                    f"            .findFirst();\n"
+                                    f"        assertTrue(methods.isPresent(), "
+                                    f"\"{_method} must be present on {class_name}\");\n"
+                                    f"    }}\n"
+                                )
+                            else:
+                                _test_methods += (
+                                    f"\n    @Test\n"
+                                    f"    void test{_camel}() {{\n"
+                                    f"        {class_name} instance = new {class_name}();\n"
+                                    f"        assertNotNull(instance);\n"
+                                    f"        assertDoesNotThrow(() -> instance.{_method}());\n"
+                                    f"    }}\n"
+                                )
                     basic_tests[test_file_path] = (
                         f"import org.junit.jupiter.api.Test;\n"
                         f"import static org.junit.jupiter.api.Assertions.*;\n\n"
-                        f"class {class_name}Test {{\n\n"
-                        f"    @Test\n"
-                        f"    void testPlaceholder() {{\n"
-                        f"        // TODO: Add tests for {file_path}\n"
-                        f"        assertTrue(true);\n"
-                        f"    }}\n"
+                        f"class {class_name}Test {{\n"
+                        f"{_test_methods}"
                         f"}}\n"
                     )
 
                 elif language == "go":
-                    # Go convention: same directory, _test.go suffix
+                    # Go convention: test file lives in the same package directory.
                     parent = str(Path(file_path).parent)
                     test_file_path = (
                         f"{parent}/{file_stem}_test.go"
                         if parent and parent != "."
                         else f"{file_stem}_test.go"
                     )
-                    package_name = parent.replace("/", "_").replace("-", "_") if parent and parent != "." else "main"
-                    func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Placeholder"
-                    basic_tests[test_file_path] = (
-                        f"package {package_name}\n\n"
-                        f"import \"testing\"\n\n"
-                        f"func Test{func_name}(t *testing.T) {{\n"
-                        f"\t// TODO: Add tests for {file_path}\n"
-                        f"\tt.Log(\"placeholder test\")\n"
-                        f"}}\n"
+                    # Derive package name from the source (first `package` declaration).
+                    _pkg_match = re.search(r"^package\s+(\w+)", code_content, re.MULTILINE)
+                    package_name = (
+                        _pkg_match.group(1) if _pkg_match
+                        else (
+                            parent.replace("/", "_").replace("-", "_")
+                            if parent and parent != "."
+                            else "main"
+                        )
                     )
+                    # Extract exported functions with their full parameter/return signature.
+                    # Pattern: func Name(params) returns — capture params and returns.
+                    _go_func_re = re.compile(
+                        r"^func\s+([A-Z]\w*)\s*\(([^)]*)\)\s*(.*?)\s*\{",
+                        re.MULTILINE,
+                    )
+                    _go_funcs_parsed = _go_func_re.findall(code_content)
+                    if _go_funcs_parsed:
+                        _go_test_body = ""
+                        for _fn_name, _params_raw, _returns_raw in _go_funcs_parsed:
+                            # Determine whether the function has parameters.
+                            _has_params = bool(_params_raw.strip())
+                            # Determine whether it returns at least one value.
+                            _returns = _returns_raw.strip().lstrip("(").rstrip(")")
+                            _has_returns = bool(_returns)
+                            if _has_params:
+                                # Cannot call without arguments safely; use t.Logf and skip.
+                                _go_test_body += (
+                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                    f"\t// {_fn_name} requires parameters; provide representative values.\n"
+                                    f"\t// Signature: func {_fn_name}({_params_raw}) {_returns_raw}\n"
+                                    f"\tt.Skipf(\"Test{_fn_name}: add test arguments for func {_fn_name}({_params_raw})\")\n"
+                                    f"}}\n"
+                                )
+                            elif _has_returns:
+                                # Determine the correct zero-value comparison.
+                                # In Go, only pointer, interface, map, channel, slice,
+                                # and func types are nil-comparable.  For all other
+                                # types (string, int, bool, struct, …) we log the
+                                # returned value and let the test always pass, giving
+                                # the developer a compile-safe starting point.
+                                _nil_comparable_prefixes = (
+                                    "*", "interface", "map[", "chan ", "[]", "func(",
+                                )
+                                _ret_stripped = _returns.strip()
+                                _is_nil_comparable = (
+                                    _ret_stripped == "error"
+                                    or any(
+                                        _ret_stripped.startswith(p)
+                                        for p in _nil_comparable_prefixes
+                                    )
+                                )
+                                if _is_nil_comparable:
+                                    _go_test_body += (
+                                        f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                        f"\tgot := {_fn_name}()\n"
+                                        f"\tif got == nil {{\n"
+                                        f'\t\tt.Errorf("{_fn_name}() returned nil")\n'
+                                        f"\t}}\n"
+                                        f"}}\n"
+                                    )
+                                else:
+                                    # Non-nil-comparable type: call and log; developer
+                                    # adds assertions for the concrete return value.
+                                    _go_test_body += (
+                                        f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                        f"\tgot := {_fn_name}()\n"
+                                        f'\tt.Logf("{_fn_name}() returned: %v", got)\n'
+                                        f"\t// Add assertions appropriate for the "
+                                        f"return type: {_ret_stripped}\n"
+                                        f"}}\n"
+                                    )
+                            else:
+                                _go_test_body += (
+                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                    f"\t{_fn_name}()\n"
+                                    f'\tt.Logf("{_fn_name}() completed without panic")\n'
+                                    f"}}\n"
+                                )
+                        basic_tests[test_file_path] = (
+                            f"package {package_name}\n\n"
+                            f"import \"testing\"\n"
+                            f"{_go_test_body}"
+                        )
+                    else:
+                        func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Module"
+                        basic_tests[test_file_path] = (
+                            f"package {package_name}\n\n"
+                            f"import \"testing\"\n\n"
+                            f"func Test{func_name}Loads(t *testing.T) {{\n"
+                            f"\t// Verify the package compiles and initialises without panic.\n"
+                            f'\tt.Logf("{file_stem} package loaded")\n'
+                            f"}}\n"
+                        )
 
                 else:
                     logger.warning(
@@ -1930,7 +2103,7 @@ def test_{file_stem}_syntax_error_documentation():
                     })
 
         # Determine the import based on file path
-        # FIX Bug 1: Compute correct import path for nested packages
+        # Compute correct import path for nested packages
         # Strip "generated/<project>/" prefix to get package-relative path
         # If file_path is "generated/hello_generator/app/main.py", strip to "app/main.py"
         # If file_path is "app/main.py", keep as "app/main.py"
@@ -2113,7 +2286,7 @@ def test_{file_stem}_syntax_error_documentation():
                 )
 
                 # Check if we should use rule-based generation instead of LLM
-                # FIX Issue 2: Use LLM by default when credentials are available
+                # Use LLM by default when credentials are available
                 # Only use rule-based mode when explicitly requested via env var
                 force_rule_based = os.getenv("TESTGEN_FORCE_RULE_BASED", "").lower() == "true"
                 
@@ -2303,7 +2476,7 @@ def test_{file_stem}_syntax_error_documentation():
                         last_generated_tests_content = last_step_in_history.get(
                             "generated_tests_content", {}
                         )
-                        # FIX Problem 2B: Extract execution errors from history
+                        # Extract execution errors from history
                         last_execution_errors = last_step_in_history.get(
                             "execution_errors", {}
                         )
@@ -2328,7 +2501,7 @@ def test_{file_stem}_syntax_error_documentation():
                             generated_tests=last_generated_tests_content,
                             validation_feedback=json.dumps(last_validation_report),
                             critique=last_critique_content,
-                            execution_errors=execution_errors_str,  # FIX Problem 2B: Pass execution errors
+                            execution_errors=execution_errors_str,
                             ast_context=ast_context,  # Issue 1: include schema for accurate imports
                         )
                         logger.info(
@@ -2520,7 +2693,7 @@ def test_{file_stem}_syntax_error_documentation():
                     )
                     history[-1]["validation_report"] = validation_report
                     
-                    # FIX Problem 2A: Capture execution errors from validation report
+                    # Capture execution errors from validation report
                     execution_errors = {}
                     for v_type, v_result in validation_report.items():
                         if isinstance(v_result, dict):

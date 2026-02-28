@@ -470,7 +470,7 @@ class TestDocgenAgent:
         actual_file_content = "def hello(): pass"
         scrubbed_content = "scrubbed_content"
 
-        # FIX: Patch the correct import path for scrub_text
+        # Patch the correct import path for scrub_text
         with (
             patch.object(Path, "is_file", return_value=True),
             patch("aiofiles.open") as mock_open,
@@ -989,7 +989,7 @@ class TestPerformanceAndEdgeCases:
         large_file_path = temp_repo / "large_file.py"
         large_file_path.write_text(large_content)
 
-        # FIX: Patch the correct import path for scrub_text
+        # Patch the correct import path for scrub_text
         with patch(
             "agents.docgen_agent.docgen_agent.scrub_text",
             return_value=large_content,

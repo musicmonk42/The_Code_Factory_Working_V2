@@ -50,7 +50,7 @@ for attr, value in MockConfigObject.__dict__.items():
 
 TEST_FERNET_KEY = base64.urlsafe_b64encode(b"\x00" * 32)
 mock_fernet_instance = MagicMock()
-# FIX: Removed the incorrect base64.b64encode and base64.b64decode calls.
+# Removed the incorrect base64.b64encode and base64.b64decode calls.
 # The mock should just prepend bytes to simulate encryption while keeping the content searchable for LIKE.
 mock_fernet_instance.encrypt.side_effect = lambda data: (
     b"ENCRYPTED_" + data if isinstance(data, bytes) else b"ENCRYPTED_" + data.encode()
@@ -296,7 +296,7 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
         mock_config_instance.HISTORY_FILE = self.temp_history.name
         mock_config_instance.CONTEXT_DB_PATH = self.temp_db.name
 
-        # FIX: Create and initialize the context manager instance first
+        # Create and initialize the context manager instance first
         self.context_manager_instance = SQLiteContextManager(
             self.temp_db.name, mock_fernet_instance
         )
@@ -306,7 +306,7 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
         with patch(
             "generator.clarifier.clarifier.setup_logging", return_value=mock_logger
         ):
-            # FIX: Pass mock dependencies directly to the constructor
+            # Pass mock dependencies directly to the constructor
             # Also pass config to ensure we use the correct mock_config_instance
             self.clarifier = Clarifier(
                 llm=mock_llm_instance,
@@ -316,7 +316,7 @@ class TestClarifier(unittest.IsolatedAsyncioTestCase):
             )
 
     async def asyncTearDown(self):
-        # FIX: Close the explicitly created context_manager_instance
+        # Close the explicitly created context_manager_instance
         if hasattr(self, "context_manager_instance") and self.context_manager_instance:
             await self.context_manager_instance.close()
 
@@ -669,7 +669,7 @@ class TestPluginEntrypoint(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self):
         if hasattr(CLARIFIER_CYCLES, "clear"):
-            # FIX: Corrected typo CLARARIFIER_CYCLES -> CLARIFIER_CYCLES
+            # Corrected typo CLARARIFIER_CYCLES -> CLARIFIER_CYCLES
             CLARIFIER_CYCLES.clear()
         if hasattr(CLARIFIER_ERRORS, "clear"):
             CLARIFIER_ERRORS.clear()
@@ -691,14 +691,14 @@ class TestPluginEntrypoint(unittest.IsolatedAsyncioTestCase):
         requirements = {"features": ["feature1"]}
         ambiguities = ["ambiguous term"]
 
-        # FIX: Create a mock instance that we want Clarifier.create() to return
+        # Create a mock instance that we want Clarifier.create() to return
         mock_clarifier_instance = MagicMock(spec=Clarifier)
         mock_clarifier_instance.get_clarifications = AsyncMock(
             return_value={"features": ["feature1"], "clarifications": {}}
         )
         mock_clarifier_instance.graceful_shutdown = AsyncMock()
 
-        # FIX: Patch the 'Clarifier.create' classmethod and make it an AsyncMock
+        # Patch the 'Clarifier.create' classmethod and make it an AsyncMock
         with patch(
             "generator.clarifier.clarifier.Clarifier.create", new_callable=AsyncMock
         ) as MockClarifierCreate:

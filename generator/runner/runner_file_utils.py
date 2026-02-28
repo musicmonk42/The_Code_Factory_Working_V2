@@ -313,7 +313,7 @@ class SecurityException(Exception):
     pass
 
 
-# FIX 4: Deterministic fallback obfuscation function
+# Deterministic fallback obfuscation function
 def _xor_obfuscate(data: bytes) -> bytes:
     """Very small, deterministic obfuscation used only as a fallback in tests."""
     if not data:
@@ -455,7 +455,7 @@ async def load_zip_file(filepath: Path) -> Dict[str, str]:
             for name in zf.namelist():
                 if not name.endswith("/"):  # Skip directories
                     try:
-                        # FIX: zipfile read is synchronous, so zlib.error must be handled
+                        # zipfile read is synchronous, so zlib.error must be handled
                         import zlib
 
                         local_contents[name] = zf.read(name).decode("utf-8")
@@ -717,7 +717,7 @@ async def load_file_content(
         # [FIX] redact_secrets is now synchronous. Remove await/iscoroutine.
         redacted_content = redact_secrets(content)
 
-        # FIX 2: Minimal deterministic fallback for the test scenario:
+        # Minimal deterministic fallback for the test scenario:
         if (
             isinstance(redacted_content, str)
             and "secret123" in content
@@ -886,7 +886,7 @@ async def save_file_content(
     # Ensure directory exists first
     filepath.parent.mkdir(parents=True, exist_ok=True)
 
-    # FIX 5/3: Permission Probe (Cross-platform reliability)
+    # Permission Probe (Cross-platform reliability)
     try:
         test_fd, test_path_str = tempfile.mkstemp(dir=filepath.parent)
         os.close(test_fd)
@@ -1082,7 +1082,7 @@ async def save_files_to_output(
     saved_paths = []
     for filename, content in files.items():
         file_path = output_dir / filename
-        # FIX: Create parent directories for subdirectory paths (e.g., tests/test_main.py)
+        # Create parent directories for subdirectory paths (e.g., tests/test_main.py)
         file_path.parent.mkdir(parents=True, exist_ok=True)
         await save_file_content(file_path, content, encoding=encoding, backup=False)
         saved_paths.append(file_path)
@@ -3559,7 +3559,7 @@ async def delete_compliant_data(
             f"Deletion request {request_id}: File {filepath} not found.",
             extra=delete_log,
         )
-        # FIX: Passes delete_log (which contains no 'action') as data to log_audit_event/add_provenance
+        # Passes delete_log (which contains no 'action') as data to log_audit_event/add_provenance
         await add_provenance("data_delete_skip", delete_log)
         return delete_log
 
@@ -3567,7 +3567,7 @@ async def delete_compliant_data(
         delete_log["status"] = "logged_only"
         # *** FIX: Renamed 'message' to 'details' to avoid logging KeyError ***
         delete_log["details"] = "Deletion logged but not executed (log_only=True)."
-        # FIX: Passes delete_log (which contains no 'action') as data
+        # Passes delete_log (which contains no 'action') as data
         await add_provenance("data_delete_log_only", delete_log)
         logger.info(
             f"Deletion request {request_id} for {filepath} logged.", extra=delete_log
@@ -3595,7 +3595,7 @@ async def delete_compliant_data(
         delete_log["status"] = "success"
         # *** FIX: Renamed 'message' to 'details' to avoid logging KeyError ***
         delete_log["details"] = "File deleted successfully."
-        # FIX: Passes delete_log (which contains no 'action') as data
+        # Passes delete_log (which contains no 'action') as data
         await add_provenance("data_delete_success", delete_log)
         logger.info(
             f"Compliant deletion {request_id} for {filepath} completed.",
@@ -3611,7 +3611,7 @@ async def delete_compliant_data(
             extra=delete_log,
         )
         UTIL_ERRORS.labels("delete_compliant_data", type(e).__name__).inc()
-        # FIX: Passes delete_log (which contains no 'action') as data
+        # Passes delete_log (which contains no 'action') as data
         await add_provenance("data_delete_fail", delete_log)
     # *** END FIX ***
 

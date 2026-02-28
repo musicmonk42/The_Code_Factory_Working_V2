@@ -431,7 +431,7 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
         super().__init__()
         self.plugins: Dict[str, TargetPlugin] = {}
         self.plugin_info: Dict[str, Dict[str, Any]] = {}
-        self.register_callback = register_callback  # FIX: Add callback for plugin registration
+        self.register_callback = register_callback  # Add callback for plugin registration
         
         # Resolve plugin_dir relative to the deploy_agent module directory
         # This ensures plugins are found regardless of working directory
@@ -546,7 +546,7 @@ class PluginRegistry(HotReloadableRegistryMixin, FileSystemEventHandler, BasePlu
             health,
         )
         
-        # FIX: Call the callback if provided to add plugin to target_graph
+        # Call the callback if provided to add plugin to target_graph
         if self.register_callback:
             self.register_callback(target, plugin)
 
@@ -635,7 +635,7 @@ class DeployAgent:
             "java",
         ]
         
-        # FIX: Initialize target_graph BEFORE PluginRegistry so it's available for plugins
+        # Initialize target_graph BEFORE PluginRegistry so it's available for plugins
         # Target dependency graph
         self.target_graph = nx.DiGraph()
         self.target_graph.add_edges_from(
@@ -650,7 +650,7 @@ class DeployAgent:
             "helm",
             "terraform",
             "k8s_manifests",
-            "kubernetes",  # FIX: Add kubernetes as alias/alternate name for k8s_manifests
+            "kubernetes",  # Add kubernetes as alias/alternate name for k8s_manifests
             "cloud_infra",
         ]:
             if t not in self.target_graph:
@@ -1182,7 +1182,7 @@ Respond in plain prose only (no JSON / no code fences).
                                 start_llm = time.time()
                                 try:
                                     if ensemble:
-                                        # FIX Issue 1: Add provider to model configuration
+                                        # Add provider to model configuration
                                         # Use centralized utility for provider inference (Industry Standard: DRY principle)
                                         from generator.utils.llm_provider_utils import create_model_config
                                         
@@ -1191,7 +1191,7 @@ Respond in plain prose only (no JSON / no code fences).
                                         
                                         resp = await call_ensemble_api(
                                             prompt,
-                                            [model_config],  # FIX: Use validated model config
+                                            [model_config],
                                             voting_strategy="majority",
                                             stream=stream,
                                         )
@@ -1220,7 +1220,7 @@ Respond in plain prose only (no JSON / no code fences).
                                 raw = resp if stream else resp.get("content", "")
                                 out_format = t if t != "docs" else "markdown"
                                 # --- FIX: Pass singleton handler_registry ---
-                                # FIX Issue 4: Skip Presidio on deployment configs
+                                # Skip Presidio on deployment configs
                                 # Determine proper to_format: kubernetes/helm should use "yaml"
                                 to_format = "yaml" if out_format in ("kubernetes", "helm") else out_format
                                 handled = await handle_deploy_response(
@@ -1536,7 +1536,7 @@ data:
 """
         
         elif target == "helm":
-            # FIX Bug 3 & 4: Complete Helm chart structure fallback
+            # Complete Helm chart structure fallback
             # Return JSON structure for proper file organization
             return json.dumps({
                 "Chart.yaml": {
@@ -1714,7 +1714,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                 context.setdefault("org_name", "generated")
                 context.setdefault("repo_name", _project_name)
                 
-                # FIX 6: Record context files count
+                # Record context files count
                 files_list = requirements.get("files", [])
                 CONTEXT_FILES_COUNT.labels(target=target).set(len(files_list))
 
@@ -1725,7 +1725,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                 config_content = requirements.get("config", "")
 
                 if "generate" in steps:
-                    # FIX 4: Add retry logic with self-healing prompts
+                    # Add retry logic with self-healing prompts
                     last_error = None
                     last_raw_response = None
                     config_content = ""
@@ -1733,7 +1733,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                     
                     for attempt in range(MAX_LLM_RETRIES):
                         try:
-                            # FIX 6: Record retry attempt
+                            # Record retry attempt
                             if attempt > 0:
                                 LLM_RETRY_COUNT.labels(target=target, attempt=str(attempt + 1)).inc()
                             
@@ -1752,7 +1752,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             # Industry standard: Use original prompt, not accumulated version
                             prompt = original_prompt
                             
-                            # FIX 6: Record prompt token count (approximate)
+                            # Record prompt token count (approximate)
                             if HAS_TIKTOKEN:
                                 try:
                                     encoding = tiktoken.encoding_for_model("gpt-4")
@@ -1762,7 +1762,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                                 except Exception as e:
                                     logger.debug(f"[DEPLOY_AGENT] Could not count tokens: {e}")
                             
-                            # FIX 4: Build retry prompt with error context on subsequent attempts
+                            # Build retry prompt with error context on subsequent attempts
                             if attempt > 0 and last_error:
                                 prompt = self._build_retry_prompt(
                                     original_prompt, last_raw_response, str(last_error), target
@@ -1774,13 +1774,13 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             prompt = scrub_text(prompt)
                             try:
                                 resp = await call_llm_api(prompt, "gpt-4o", stream=False)
-                                # FIX Issue 3: Use correct metric labels (provider, model only)
+                                # Use correct metric labels (provider, model only)
                                 try:
                                     LLM_CALLS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
                                 except Exception as metric_err:
                                     logger.warning(f"Failed to record LLM call metric: {metric_err}")
                             except Exception as le:
-                                # FIX Issue 3: LLM_ERRORS_TOTAL only has [provider, model] labels, not error_type
+                                # LLM_ERRORS_TOTAL only has [provider, model] labels, not error_type
                                 try:
                                     LLM_ERRORS_TOTAL.labels(provider="deploy", model="gpt-4o").inc()
                                 except Exception as metric_err:
@@ -1791,7 +1791,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                             last_raw_response = raw
                             
                             # --- FIX: Pass singleton handler_registry ---
-                            # FIX Issue 4: Skip Presidio on deployment configs
+                            # Skip Presidio on deployment configs
                             # Determine proper to_format: kubernetes/helm should use "yaml"
                             to_format = "yaml" if target in ("kubernetes", "helm") else target
                             handled = await handle_deploy_response(
@@ -1848,7 +1848,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                                 f"[DEPLOY_AGENT] Generation attempt {attempt + 1}/{MAX_LLM_RETRIES} failed: {e}"
                             )
                             if attempt >= MAX_LLM_RETRIES - 1:
-                                # FIX Issue 4: Use fallback template instead of failing
+                                # Use fallback template instead of failing
                                 logger.warning(
                                     f"[DEPLOY_AGENT] All {MAX_LLM_RETRIES} attempts failed for {target}, "
                                     f"using fallback template (LLM output was invalid)"
@@ -1906,7 +1906,7 @@ app.kubernetes.io/instance: {{{{ .Release.Name }}}}
                     build_status = vres.get("build_status", "")
                     lint_status = vres.get("lint_status", "")
                     
-                    # FIX Issue 4: Properly derive is_valid from validation results
+                    # Properly derive is_valid from validation results
                     # If 'valid' key is not in the report, compute it from the check results
                     if "valid" in vres:
                         is_valid = vres["valid"]

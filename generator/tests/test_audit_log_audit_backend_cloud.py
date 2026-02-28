@@ -64,7 +64,7 @@ def stub_module(name: str) -> types.ModuleType:
 
 # Minimal symbols some backends expect
 # botocore.exceptions.ClientError
-# FIX: Ensure all parent modules exist
+# Ensure all parent modules exist
 to_stub = [
     # AWS
     "botocore",
