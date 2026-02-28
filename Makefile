@@ -9,9 +9,9 @@
 	db-migrate db-migrate-create db-migrate-history db-migrate-current db-migrate-downgrade db-migrate-validate \
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
-	test-arbiter-policy test-arbiter-integration \
+	test-arbiter-policy test-arbiter-integration test-codegen-stubs \
 	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
-	test-arbiter-policy test-arbiter-integration test-evolution test-dlt test-plugin-agents
+	test-arbiter-policy test-arbiter-integration test-evolution test-dlt test-plugin-agents test-codegen-stubs
 
 # Default target
 .DEFAULT_GOAL := help
@@ -74,6 +74,11 @@ test-large-spec-fixes: ## Run tests for large-spec pipeline fixes (multi-pass, e
 	@echo "$(BLUE)Running large-spec pipeline fix tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest tests/test_large_spec_pipeline_fixes.py -v --tb=short
 	@echo "$(GREEN)Large-spec fix tests complete!$(NC)"
+
+test-codegen-stubs: ## Run stub-generation tests (classify, render, detection checks for new Jinja2 stub templates)
+	@echo "$(BLUE)Running codegen stub-generation tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && pytest tests/test_local_module_stubs.py -v --tb=short
+	@echo "$(GREEN)Codegen stub-generation tests complete!$(NC)"
 
 test-collect: ## Verify pytest can collect all tests without errors
 	@echo "$(BLUE)Verifying pytest collection...$(NC)"
