@@ -1164,6 +1164,43 @@ async def orchestrate_critique_pipeline(
 
         results: Dict[str, Any] = {"provenance_chain": []}
 
+        # --- Issue 10 fix: static stub detection ---
+        # Run before the LLM/lint steps so the critique report always includes
+        # stub/placeholder issues even when the semantic step is skipped.
+        _STUB_MARKERS = (
+            '"""Stub Pydantic model."""',
+            '"""Stub class."""',
+            '"""Placeholder implementation."""',
+            "Generated module — replace with actual implementation.",
+        )
+        _stub_issues: List[str] = []
+        for _cf_name, _cf_src in code_files.items():
+            if not _cf_name.endswith(".py"):
+                continue
+            for _marker in _STUB_MARKERS:
+                if _marker in _cf_src:
+                    _stub_issues.append(
+                        f"{_cf_name}: contains stub marker '{_marker}'"
+                    )
+                    break
+        # Check for None-returning FastAPI dependency functions (db session returning None).
+        _depends_none_re = re.compile(
+            r"def\s+\w+\s*\(.*?\).*?:\s*\n\s+['\"].*?['\"].*?\n\s+return\s+None",
+            re.DOTALL,
+        )
+        for _cf_name, _cf_src in code_files.items():
+            if _cf_name.endswith(".py") and _depends_none_re.search(_cf_src):
+                _stub_issues.append(
+                    f"{_cf_name}: dependency function returns None (stub/placeholder)"
+                )
+        if _stub_issues:
+            logger.warning(
+                "orchestrate_critique_pipeline: %d stub/placeholder issue(s) detected: %s",
+                len(_stub_issues),
+                _stub_issues[:10],
+            )
+        results["stub_issues"] = _stub_issues
+
         # --- Execution sandbox ---
         with tempfile.TemporaryDirectory() as temp_dir_str:
             temp_dir = Path(temp_dir_str)

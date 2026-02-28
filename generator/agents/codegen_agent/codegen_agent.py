@@ -2898,6 +2898,57 @@ if PLUGIN_AVAILABLE:
                                             "\n\nService stub files that need real implementations:\n"
                                             + "\n".join(f"  - {_sp}" for _sp, _ in _pre_fill_stubs)
                                         ) if _pre_fill_stubs else ""
+                                        # Issue 4 fix: detect missing route groups and prioritize them.
+                                        # A "route group" is a set of endpoints sharing the same first
+                                        # three path segments (e.g. /api/v1/auth/).  When all endpoints
+                                        # in a group are absent from the generated files, the entire
+                                        # group needs a new router file — not just patched additions.
+                                        # We generate those complete router files first, then handle
+                                        # any individually missing endpoints in existing routers.
+                                        _route_groups: Dict[str, List[str]] = {}
+                                        _individual_eps: List[str] = []
+                                        for _ep in sorted(_missing_eps):
+                                            _parts = _ep.split(None, 1)
+                                            _ep_path = _parts[1].rstrip("/") if len(_parts) > 1 else _ep
+                                            _segments = [s for s in _ep_path.split("/") if s]
+                                            if len(_segments) >= 3:
+                                                # e.g. /api/v1/auth/login → group prefix = "api/v1/auth"
+                                                _group_prefix = "/" + "/".join(_segments[:3])
+                                                # A group is "covered" when any already-generated file
+                                                # references that path prefix (as a route decorator arg
+                                                # or router prefix string).
+                                                _group_covered = any(
+                                                    _group_prefix in content
+                                                    for content in _merged_files.values()
+                                                )
+                                                if not _group_covered:
+                                                    # Use the group prefix as the key so all endpoints
+                                                    # in the same router land in the same bucket.
+                                                    _route_groups.setdefault(_group_prefix, []).append(_ep)
+                                                    continue
+                                            _individual_eps.append(_ep)
+                                        _missing_group_section = ""
+                                        if _route_groups:
+                                            _missing_group_section = (
+                                                "\n\n### MISSING ROUTE GROUPS (generate complete router files first)\n"
+                                                "The following complete route groups are ENTIRELY absent from the "
+                                                "generated codebase.  For each group, create a dedicated router file "
+                                                "(e.g. `app/routers/auth.py` for the `/api/v1/auth` group) that "
+                                                "implements ALL endpoints listed for that group:\n"
+                                                + "\n".join(
+                                                    f"  Group '{grp}':\n"
+                                                    + "\n".join(f"    - {ep}" for ep in eps)
+                                                    for grp, eps in sorted(_route_groups.items())
+                                                )
+                                            )
+                                        _individual_section = ""
+                                        if _individual_eps:
+                                            _individual_section = (
+                                                "\n\n### INDIVIDUAL MISSING ENDPOINTS\n"
+                                                "The following individual endpoints are missing from their "
+                                                "existing router files.  Add them to the appropriate file:\n"
+                                                + "\n".join(f"  - {ep}" for ep in sorted(_individual_eps))
+                                            )
                                         _gap_prompt = (
                                             f"{prompt}"
                                             f"\n\nAlready-generated files (DO NOT regenerate): "
@@ -2909,7 +2960,8 @@ if PLUGIN_AVAILABLE:
                                             f"service files needed to implement them. Prioritize "
                                             f"implementing real methods in service classes that are "
                                             f"currently stubs:\n"
-                                            + "\n".join(f"  - {ep}" for ep in sorted(_missing_eps))
+                                            + _missing_group_section
+                                            + _individual_section
                                             + _stub_hint
                                             + "\nYou MUST add proper import statements at the top of each file "
                                             + "for all symbols you reference. Use `from <module> import <symbol>` "

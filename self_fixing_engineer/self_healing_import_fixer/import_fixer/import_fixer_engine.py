@@ -30,7 +30,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, FrozenSet, List, Optional, Tuple
 
 
 # -----------------------------------------------------------------------------
@@ -892,6 +892,18 @@ class ImportFixerEngine:
         'IO', 'TextIO', 'BinaryIO', 'Pattern', 'Match',
     }
 
+    # Circular-import prevention: frozenset of (importer_module_prefix, disallowed_target)
+    # pairs.  In a standard FastAPI application, ``app.main`` is the top-level factory
+    # that registers middleware, routers and services.  Any import FROM ``app.main`` INTO
+    # those sub-layers creates a cycle.  Extend this table when new structural cycles are
+    # discovered in generated projects.
+    CIRCULAR_IMPORT_PATTERNS: FrozenSet[Tuple[str, str]] = frozenset({
+        # sub-layer module prefix      →  disallowed upstream target module
+        ("app.middleware.",              "app.main"),
+        ("app.routers.",                 "app.main"),
+        ("app.services.",                "app.main"),
+    })
+
     # Common stdlib symbols that require 'from X import Y' syntax
     STDLIB_SYMBOLS: Dict[str, tuple] = {
         # uuid module
@@ -1201,8 +1213,11 @@ class ImportFixerEngine:
                 if isinstance(node, ast.Attribute):
                     if isinstance(node.value, ast.Name):
                         used_names.add(node.value.id)
-                # Check for direct name usage (includes type hints)
-                elif isinstance(node, ast.Name):
+                # Check for direct name usage (includes type hints) — but ONLY in
+                # Load context.  Names in Store context are assignment targets
+                # (e.g. `email = Column(...)` or `email: EmailStr`) and must not
+                # be treated as module references (Issue 5 fix).
+                elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
                     used_names.add(node.id)
 
             # Collect currently imported names
@@ -1313,6 +1328,31 @@ class ImportFixerEngine:
                                 f"Skipping self-import: {mod}.{sym_name} in {file_path}"
                             )
                             continue
+                        # Issue 6 fix: prevent circular imports using a declared dependency
+                        # hierarchy.  In a standard FastAPI application, app.main is the
+                        # top-level application factory that registers all sub-layers
+                        # (middleware, routers, services).  Any import FROM app.main INTO
+                        # those sub-layers creates a cycle.  The hierarchy is encoded in
+                        # ``CIRCULAR_IMPORT_PATTERNS`` at the class level so it can be
+                        # patched or extended in tests and subclasses.
+                        if _self_module:
+                            _circular = next(
+                                (
+                                    (pfx, tgt)
+                                    for pfx, tgt in self.CIRCULAR_IMPORT_PATTERNS
+                                    if _self_module.startswith(pfx) and mod == tgt
+                                ),
+                                None,
+                            )
+                            if _circular is not None:
+                                self.logger.warning(
+                                    "Skipping project import to prevent circular dependency: "
+                                    "from %s import %s in %s "
+                                    "(module %s is upstream of %s and already imports from it)",
+                                    mod, sym_name, file_path,
+                                    mod, _self_module,
+                                )
+                                continue
                         # Skip cross-sibling imports for common framework-level variables.
                         # Prevents importing `router` from one router file into another.
                         if _self_module and mod != _self_module:
