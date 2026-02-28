@@ -4016,7 +4016,7 @@ def _remove_symbol_from_import(source: str, module: str, symbol: str) -> str:
     * ``from sqlalchemy.orm import declarative_base`` → line removed entirely.
     * ``from sqlalchemy.orm import Session, declarative_base`` → rewritten as
       ``from sqlalchemy.orm import Session`` (symbol stripped, rest preserved).
-    * Parenthesised multi-line imports are **not** modified; they are rare in
+    * Parenthesized multi-line imports are **not** modified; they are rare in
       LLM-generated code and would require a more complex parser.
 
     Args:
@@ -4029,7 +4029,6 @@ def _remove_symbol_from_import(source: str, module: str, symbol: str) -> str:
         is returned unchanged if no matching import is found.
     """
     escaped_module = re.escape(module)
-    escaped_symbol = re.escape(symbol)
 
     # Pattern for a flat (single-line, no parens) from … import … statement
     # that contains the target symbol.
@@ -4041,8 +4040,8 @@ def _remove_symbol_from_import(source: str, module: str, symbol: str) -> str:
     def _replace(m: re.Match) -> str:
         prefix = m.group(1)   # "from sqlalchemy.orm import "
         names_raw = m.group(2)  # e.g. "Session, declarative_base, relationship"
-        # Split on commas, strip whitespace and trailing backslashes
-        names = [n.strip().rstrip("\\").strip() for n in names_raw.split(",")]
+        # Split on commas; strip surrounding whitespace and line-continuation backslashes.
+        names = [n.strip().rstrip("\\") for n in names_raw.split(",")]
         names = [n for n in names if n and n != symbol]
         if not names:
             # Symbol was the only import — remove the entire line.
@@ -4099,7 +4098,8 @@ def consolidate_base_definitions(code_files: Dict[str, str]) -> Dict[str, str]:
     has_base_in_db = bool(
         _base_declarative_re.search(db_content)
         or _base_class_re.search(db_content)
-        or re.search(r'\bclass\s+Base\s*\(', db_content)
+        # Catch non-stub class Base(DeclarativeBase) bodies (e.g. with extra metadata)
+        or re.search(r'\bclass\s+Base\s*\([^)]*DeclarativeBase', db_content)
     )
     if not has_base_in_db:
         return code_files
