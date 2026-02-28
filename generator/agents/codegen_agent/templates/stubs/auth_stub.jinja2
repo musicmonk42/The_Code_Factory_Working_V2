@@ -95,7 +95,7 @@ def create_access_token(data: dict[str, Any], expires_in_minutes: int | None = N
     payload["exp"] = expire
     if _JWT_BACKEND == "jose":
         return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-    raw = f"{payload}".encode()
+    raw = json.dumps(payload, sort_keys=True, default=str).encode()
     sig = hmac.new(SECRET_KEY.encode(), raw, hashlib.sha256).hexdigest()
     header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).decode().rstrip("=")
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")

@@ -4015,7 +4015,7 @@ def _classify_stub_module(module_path: str, symbols: Set[str]) -> str:
 
 
 # Module-level Jinja2 environment for stub templates (lazy-initialised).
-_STUB_TEMPLATE_ENV: "Any" = None
+_STUB_TEMPLATE_ENV: Any = None
 _STUB_TEMPLATES_DIR = Path(__file__).parent / "templates" / "stubs"
 
 
@@ -4023,7 +4023,7 @@ def _render_stub_template(
     category: str,
     module_path: str,
     symbols: Set[str],
-) -> "Optional[str]":
+) -> Optional[str]:
     """Render a Jinja2 stub template for *category* and return the source string.
 
     Selects the template file ``<category>_stub.jinja2`` from the

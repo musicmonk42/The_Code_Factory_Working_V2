@@ -1095,8 +1095,12 @@ class TestNewStubBehavior:
         stub = result.get("app/auth.py", "")
         assert "class Role" in stub
         assert _valid_python(stub)
-        # Role must have real content (enum members), not just pass
-        assert "pass" not in stub.split("class Role")[1].split("class ")[0] or "Enum" in stub
+        # auth_stub.jinja2 generates Role as a str enum with real members
+        assert "Enum" in stub, "Role must inherit from Enum (real implementation)"
+        # Extract the body of the Role class and verify it has enum members
+        role_section = stub.split("class Role")[1].split("\nclass ")[0]
+        # An enum with real members will have assignments like ADMIN = "admin"
+        assert "=" in role_section, "Role enum must have assigned member values"
 
     def test_auth_stub_is_valid_python_with_multiple_symbols(self, stub_fn):
         """Multi-symbol auth stub must produce valid Python."""

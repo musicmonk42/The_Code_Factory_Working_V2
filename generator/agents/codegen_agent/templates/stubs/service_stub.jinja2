@@ -1,12 +1,21 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from sqlalchemy import select, insert, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+{% if class_names %}
+# Import models from the application models package.
+# Adjust the import path to match your project layout (e.g. from app.models import ...).
+try:
 {% for cls in class_names %}
-from .models import {{ cls }}
+    from app.models import {{ cls }}
 {% endfor %}
+except ImportError:
+{% for cls in class_names %}
+    {{ cls }}: Any = None  # type: ignore[assignment,misc]
+{% endfor %}
+{% endif %}
 
 
 {% for cls in class_names %}
@@ -70,7 +79,7 @@ async def delete_{{ cls | lower }}(session: AsyncSession, record_id: int) -> boo
 async def {{ fn }}(session: AsyncSession, **kwargs) -> dict:
     result = await session.execute(select({{ class_names[0] }}))
     rows = result.scalars().all()
-    return {"items": [r.__dict__ for r in rows], "count": len(rows)}
+    return {"items": [{c.name: getattr(r, c.name) for c in r.__table__.columns} for r in rows], "count": len(rows)}
 {% else %}
 async def {{ fn }}(session: AsyncSession, **kwargs) -> dict:
     return {"function": "{{ fn }}", "kwargs": kwargs}

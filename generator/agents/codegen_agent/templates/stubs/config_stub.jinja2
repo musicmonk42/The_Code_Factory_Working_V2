@@ -8,6 +8,8 @@ try:
     _SETTINGS_BASE = BaseSettings
 except ImportError:
     from pydantic import BaseModel as BaseSettings  # type: ignore[assignment]
+    # pydantic-settings is unavailable; BaseModel provides a compatible API for
+    # basic attribute-access patterns, though env-var loading will not work.
 
 from pydantic import Field
 

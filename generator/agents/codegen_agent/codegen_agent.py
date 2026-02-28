@@ -816,9 +816,17 @@ async def _retry_stub_files(
                     _stub_groups.setdefault(_cat, []).append(_p)
                 _importers_map: Dict[str, List[str]] = {}
                 for _p in sorted(stub_paths):
+                    # Derive the module name from the path for import scanning.
+                    _mod_name = _p.replace("/", ".").removesuffix(".py")
+                    # Strip the leading package prefix (e.g. "app.") for matching.
+                    _mod_base = _mod_name.split(".", 1)[-1] if "." in _mod_name else _mod_name
                     _importers_map[_p] = [
                         f for f, c in result.items()
-                        if f != _p and _p.replace("/", ".").removesuffix(".py").replace("app.", "") in c
+                        if f != _p and (
+                            f"from {_mod_name}" in c
+                            or f"import {_mod_base}" in c
+                            or f"from {_mod_base}" in c
+                        )
                     ]
                 retry_prompt = _env.get_template("retry_stub_files.jinja2").render(
                     retry_hint=retry_hint,
