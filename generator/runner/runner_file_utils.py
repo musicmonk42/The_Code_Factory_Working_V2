@@ -1702,17 +1702,21 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
 def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
     """Detect incompatible mixing of async and sync SQLAlchemy usage across a project.
 
-    Scans every ``*.py`` file under *output_dir* and flags the combination of:
+    Scans every ``*.py`` file under *output_dir* and flags two categories of
+    problem:
 
-    * An async engine/session factory (``create_async_engine``,
-      ``async_sessionmaker``) configured in one file, **and**
-    * Synchronous ORM access patterns (``from sqlalchemy.orm import Session``,
-      a ``session: Session`` type annotation, or a ``session.query(…)`` call)
-      in another file.
+    1. **Async/sync API mismatch**: An async engine/session factory
+       (``create_async_engine``, ``async_sessionmaker``) is configured in one
+       file while synchronous ORM access patterns (``from sqlalchemy.orm import
+       Session``, a ``session: Session`` annotation, or a ``session.query(…)``
+       call) appear in another.  These patterns are fundamentally incompatible
+       and will raise ``MissingGreenlet`` or ``RuntimeError`` at runtime.
 
-    These patterns are fundamentally incompatible: an async engine requires
-    ``AsyncSession`` and ``await session.execute(…)``; mixing the two will
-    cause ``MissingGreenlet`` or ``RuntimeError`` at runtime.
+    2. **Sync database URL with async engine**: ``create_async_engine`` is
+       called with a URL that uses a synchronous driver scheme (e.g.
+       ``postgresql://`` loading ``psycopg2`` instead of
+       ``postgresql+asyncpg://``).  This raises
+       ``sqlalchemy.exc.InvalidRequestError`` at import time.
 
     Args:
         output_dir: Root directory of the generated project to inspect.
@@ -1721,7 +1725,7 @@ def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
         A list of actionable error strings.  Empty list indicates no
         incompatibility was detected.
     """
-    import ast as _ast
+    import ast as _ast  # noqa: F401 – imported for future use; suppresses linter warning
 
     errors: List[str] = []
     python_files = list(output_dir.rglob("*.py"))
@@ -1738,6 +1742,9 @@ def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
     _sync_annotation_re = re.compile(r":\s*Session\b")
     _sync_query_re = re.compile(r"\bsession\.query\s*\(")
 
+    # Cache file contents so the sync-URL check avoids a second filesystem round-trip.
+    _async_file_contents: Dict[str, str] = {}
+
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
@@ -1747,8 +1754,13 @@ def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
 
         rel = str(py_file.relative_to(output_dir))
 
-        if "create_async_engine" in content or "async_sessionmaker" in content:
+        is_async_file = (
+            "create_async_engine" in content
+            or "async_sessionmaker" in content
+        )
+        if is_async_file:
             async_engine_files.append(rel)
+            _async_file_contents[rel] = content
 
         if (
             _sync_session_import_re.search(content)
@@ -1766,6 +1778,29 @@ def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
             "Replace synchronous patterns with AsyncSession and "
             "'await session.execute(select(...))' to avoid MissingGreenlet errors at runtime."
         )
+
+    # Check 2: sync database URL scheme used inside a file that sets up an async engine.
+    # A URL like ``postgresql://`` triggers psycopg2 (sync-only driver) at engine
+    # creation time, immediately raising:
+    #   sqlalchemy.exc.InvalidRequestError:
+    #     The asyncio extension requires an async driver to be used.
+    if _async_file_contents:
+        # Matches sync URL schemes: postgresql://, postgres://, mysql://, sqlite:///
+        # Negative lookbehind (?<!\+) and lookahead (?!\+) together prevent false
+        # positives on already-correct async URLs like ``postgresql+asyncpg://``.
+        _sync_url_re = re.compile(
+            r'(?<!\+)\b(postgresql|postgres|mysql|sqlite)(?!\+)(://|///)',
+            re.IGNORECASE,
+        )
+        for rel, content in _async_file_contents.items():
+            if _sync_url_re.search(content):
+                errors.append(
+                    f"Async engine configured in '{rel}' but a synchronous database URL "
+                    "(e.g. 'postgresql://') was detected. "
+                    "Use an async driver URL such as 'postgresql+asyncpg://', "
+                    "'sqlite+aiosqlite:///', or 'mysql+aiomysql://' to avoid "
+                    "sqlalchemy.exc.InvalidRequestError at startup."
+                )
 
     return errors
 
@@ -2420,7 +2455,7 @@ async def validate_generated_project(
                         "# Example environment variables\n"
                         "# Copy this file to .env and fill in your values\n"
                         "# APP_SECRET_KEY=your-secret-key-here\n"
-                        "# DATABASE_URL=postgresql://user:password@localhost:5432/dbname\n"
+                        "# DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dbname\n"
                         "# DEBUG=false\n"
                     )
                     try:

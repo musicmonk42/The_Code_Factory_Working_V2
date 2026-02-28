@@ -1375,3 +1375,236 @@ class TestKnownHallucinatedPackages:
     def test_asyncstdlib_replacement_is_functools(self):
         """Verify asyncstdlib replacement module is functools."""
         assert crh.KNOWN_HALLUCINATED_PACKAGES["asyncstdlib"]["replacement_module"] == "functools"
+
+
+class TestFixAsyncDatabaseUrl:
+    """Tests for fix_async_database_url."""
+
+    def test_no_async_engine_returns_unchanged(self):
+        """Files without create_async_engine are left unchanged."""
+        files = {
+            "app/database.py": "engine = create_engine('postgresql://localhost/db')\n",
+            "requirements.txt": "sqlalchemy\npsycopg2-binary\n",
+        }
+        result = crh.fix_async_database_url(files)
+        assert result == files
+
+    def test_rewrites_postgresql_to_asyncpg(self):
+        """postgresql:// is rewritten to postgresql+asyncpg:// when async engine is used."""
+        files = {
+            "app/database.py": (
+                "from sqlalchemy.ext.asyncio import create_async_engine\n"
+                "engine = create_async_engine('postgresql://user:pass@localhost/db')\n"
+            ),
+            "requirements.txt": "sqlalchemy\n",
+        }
+        result = crh.fix_async_database_url(files)
+        assert "postgresql+asyncpg://user:pass@localhost/db" in result["app/database.py"]
+        assert "asyncpg" in result.get("requirements.txt", "")
+
+    def test_rewrites_sqlite_to_aiosqlite(self):
+        """sqlite:/// is rewritten to sqlite+aiosqlite:/// when async engine is used."""
+        files = {
+            "app/database.py": (
+                "from sqlalchemy.ext.asyncio import create_async_engine\n"
+                "DATABASE_URL = 'sqlite:///./app.db'\n"
+                "engine = create_async_engine(DATABASE_URL)\n"
+            ),
+            "requirements.txt": "sqlalchemy\n",
+        }
+        result = crh.fix_async_database_url(files)
+        assert "sqlite+aiosqlite:///./app.db" in result["app/database.py"]
+        assert "aiosqlite" in result.get("requirements.txt", "")
+
+    def test_already_async_url_not_double_rewritten(self):
+        """postgresql+asyncpg:// URLs are not modified."""
+        original = (
+            "from sqlalchemy.ext.asyncio import create_async_engine\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+        )
+        files = {"app/database.py": original, "requirements.txt": "asyncpg\n"}
+        result = crh.fix_async_database_url(files)
+        assert result["app/database.py"] == original
+
+    def test_removes_psycopg2_from_requirements(self):
+        """psycopg2-binary is removed when async engine is detected."""
+        files = {
+            "app/database.py": (
+                "from sqlalchemy.ext.asyncio import create_async_engine\n"
+                "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n"
+            ),
+            "requirements.txt": "sqlalchemy\npsycopg2-binary\nuvicorn\n",
+        }
+        result = crh.fix_async_database_url(files)
+        reqs = result.get("requirements.txt", "")
+        assert "psycopg2-binary" not in reqs
+        assert "asyncpg" in reqs
+
+    def test_postgres_alias_rewritten(self):
+        """postgres:// (alias) is also rewritten to postgresql+asyncpg://."""
+        files = {
+            "app/database.py": (
+                "from sqlalchemy.ext.asyncio import async_sessionmaker\n"
+                "engine = create_async_engine('postgres://user:pass@host/db')\n"
+            ),
+            "requirements.txt": "",
+        }
+        result = crh.fix_async_database_url(files)
+        assert "postgresql+asyncpg://" in result["app/database.py"]
+
+
+class TestConsolidateBaseDefinitions:
+    """Tests for consolidate_base_definitions."""
+
+    def test_no_database_py_returns_unchanged(self):
+        """Without app/database.py the files are left unchanged."""
+        files = {
+            "app/models/product.py": "Base = declarative_base()\nclass Product(Base): pass\n",
+        }
+        result = crh.consolidate_base_definitions(files)
+        assert result == files
+
+    def test_database_py_without_base_returns_unchanged(self):
+        """If database.py doesn't define Base, files are left unchanged."""
+        files = {
+            "app/database.py": "# no Base here\n",
+            "app/models/product.py": "Base = declarative_base()\nclass Product(Base): pass\n",
+        }
+        result = crh.consolidate_base_definitions(files)
+        assert result == files
+
+    def test_model_base_replaced_with_import(self):
+        """Inline Base definition in a model file is replaced with an import."""
+        db_content = (
+            "from sqlalchemy.orm import declarative_base\n"
+            "Base = declarative_base()\n"
+        )
+        model_content = (
+            "from sqlalchemy import Column, Integer\n"
+            "from sqlalchemy.orm import declarative_base\n"
+            "Base = declarative_base()\n\n"
+            "class Product(Base):\n"
+            "    __tablename__ = 'products'\n"
+            "    id = Column(Integer, primary_key=True)\n"
+        )
+        files = {
+            "app/database.py": db_content,
+            "app/models/product.py": model_content,
+        }
+        result = crh.consolidate_base_definitions(files)
+        product_py = result["app/models/product.py"]
+        assert "from app.database import Base" in product_py
+        # Local Base definition should be removed
+        assert "Base = declarative_base()" not in product_py
+
+    def test_database_py_not_modified(self):
+        """app/database.py itself is never touched."""
+        db_content = (
+            "from sqlalchemy.orm import declarative_base\n"
+            "Base = declarative_base()\n"
+        )
+        files = {
+            "app/database.py": db_content,
+            "app/models/order.py": (
+                "from sqlalchemy.orm import declarative_base\n"
+                "Base = declarative_base()\n"
+                "class Order(Base): pass\n"
+            ),
+        }
+        result = crh.consolidate_base_definitions(files)
+        assert result["app/database.py"] == db_content
+
+    def test_already_importing_base_not_double_imported(self):
+        """Files that already import Base from app.database are not modified."""
+        db_content = "Base = declarative_base()\n"
+        model_content = (
+            "from app.database import Base\n"
+            "class Product(Base): pass\n"
+        )
+        files = {
+            "app/database.py": db_content,
+            "app/models/product.py": model_content,
+        }
+        result = crh.consolidate_base_definitions(files)
+        assert result["app/models/product.py"] == model_content
+
+
+class TestRemoveSymbolFromImport:
+    """Tests for _remove_symbol_from_import."""
+
+    def test_sole_symbol_removes_entire_line(self):
+        """When the symbol is the only import, the entire line is removed."""
+        src = "from sqlalchemy.orm import declarative_base\n"
+        result = crh._remove_symbol_from_import(src, "sqlalchemy.orm", "declarative_base")
+        assert result == ""
+
+    def test_multi_symbol_preserves_remaining(self):
+        """When other symbols are co-imported, they are retained."""
+        src = "from sqlalchemy.orm import Session, declarative_base\n"
+        result = crh._remove_symbol_from_import(src, "sqlalchemy.orm", "declarative_base")
+        assert "Session" in result
+        assert "declarative_base" not in result
+        assert result.strip() == "from sqlalchemy.orm import Session"
+
+    def test_symbol_not_present_unchanged(self):
+        """Source is returned unchanged when the symbol is not imported."""
+        src = "from sqlalchemy.orm import Session\n"
+        result = crh._remove_symbol_from_import(src, "sqlalchemy.orm", "declarative_base")
+        assert result == src
+
+    def test_three_symbol_import_strips_middle(self):
+        """Removing the middle symbol of three leaves the others intact."""
+        src = "from sqlalchemy.orm import Session, declarative_base, relationship\n"
+        result = crh._remove_symbol_from_import(src, "sqlalchemy.orm", "declarative_base")
+        assert "Session" in result
+        assert "relationship" in result
+        assert "declarative_base" not in result
+
+
+class TestConsolidateBaseDefinitionsMultiSymbol:
+    """Edge-case tests for consolidate_base_definitions with multi-symbol imports."""
+
+    def test_co_imported_symbols_preserved_after_consolidation(self):
+        """Session or other symbols co-imported with declarative_base are kept."""
+        db_content = "from sqlalchemy.orm import declarative_base\nBase = declarative_base()\n"
+        model_content = (
+            "from sqlalchemy import Column, Integer\n"
+            "from sqlalchemy.orm import Session, declarative_base\n"
+            "Base = declarative_base()\n\n"
+            "class Product(Base):\n"
+            "    __tablename__ = 'products'\n"
+            "    id = Column(Integer, primary_key=True)\n"
+        )
+        files = {
+            "app/database.py": db_content,
+            "app/models/product.py": model_content,
+        }
+        result = crh.consolidate_base_definitions(files)
+        product_py = result["app/models/product.py"]
+        assert "from app.database import Base" in product_py
+        assert "Base = declarative_base()" not in product_py
+        assert "declarative_base" not in product_py
+        # Session must not be silently deleted
+        assert "Session" in product_py
+
+    def test_declarativebase_class_style_consolidated(self):
+        """class Base(DeclarativeBase): pass style is also consolidated."""
+        db_content = (
+            "from sqlalchemy.orm import DeclarativeBase\n\n"
+            "class Base(DeclarativeBase):\n    pass\n"
+        )
+        model_content = (
+            "from sqlalchemy import Column, Integer\n"
+            "from sqlalchemy.orm import DeclarativeBase\n\n"
+            "class Base(DeclarativeBase):\n    pass\n\n"
+            "class Order(Base):\n    __tablename__ = 'orders'\n"
+        )
+        files = {
+            "app/database.py": db_content,
+            "app/models/order.py": model_content,
+        }
+        result = crh.consolidate_base_definitions(files)
+        order_py = result["app/models/order.py"]
+        assert "from app.database import Base" in order_py
+        assert "class Base(DeclarativeBase)" not in order_py
+        assert "DeclarativeBase" not in order_py
