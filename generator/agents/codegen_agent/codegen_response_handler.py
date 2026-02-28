@@ -2568,7 +2568,11 @@ def validate_production_ready(code_files: Dict[str, str], strict: bool = False) 
     """
     all_issues = []
     stub_files = []
-    
+    # Issue 14: detect raw SQL strings passed to db.execute() — a SQL-injection
+    # risk and a sign that the ORM is not being used correctly.
+    _RAW_SQL_RE = re.compile(r'\.execute\(\s*["\']SELECT\b', re.IGNORECASE)
+    raw_sql_warnings: List[str] = []
+
     for filename, content in code_files.items():
         # Skip error files
         if filename == ERROR_FILENAME:
@@ -2577,7 +2581,16 @@ def validate_production_ready(code_files: Dict[str, str], strict: bool = False) 
         # Skip __init__.py files — they're legitimately empty or minimal
         if filename.endswith("__init__.py"):
             continue
-            
+
+        # Issue 14: warn on raw SQL strings passed to .execute()
+        if filename.endswith(".py") and _RAW_SQL_RE.search(content):
+            raw_sql_warnings.append(filename)
+            logger.warning(
+                "validate_production_ready: raw SQL string in db.execute() detected in %s "
+                "— use SQLAlchemy ORM instead",
+                filename,
+            )
+
         is_stub, issues = _detect_stub_patterns(content, filename)
         
         if is_stub:
@@ -2598,11 +2611,25 @@ def validate_production_ready(code_files: Dict[str, str], strict: bool = False) 
             "RECOMMENDATION: Regenerate with more specific requirements or examples. "
             "Explicitly request complete implementations without placeholders."
         )
+        if raw_sql_warnings:
+            error_message += (
+                "\n\nWARNING: Raw SQL strings detected in db.execute() calls in: "
+                + ", ".join(raw_sql_warnings)
+                + ". Use SQLAlchemy ORM (select(), insert(), etc.) instead."
+            )
         logger.warning("Production-ready validation failed for %d files", len(stub_files))
         if strict:
             raise ProductionReadyValidationError(error_message)
         return False, error_message
-    
+
+    if raw_sql_warnings:
+        logger.warning(
+            "validate_production_ready: raw SQL strings found in %d file(s): %s — "
+            "use SQLAlchemy ORM instead",
+            len(raw_sql_warnings),
+            raw_sql_warnings,
+        )
+
     logger.info("Production-ready validation passed for %d files", len(code_files))
     return True, ""
 
@@ -3240,6 +3267,68 @@ _PYDANTIC_CLASS_SUFFIXES: tuple = (
     "Params", "Filter", "Detail", "Summary", "List",
 )
 
+# Irregular English plurals used when deriving SQLAlchemy ``__tablename__``
+# from a class name.  Stored at module scope to avoid re-constructing the
+# dictionary on every ``_pluralize_tablename`` call.
+_STUB_TABLENAME_IRREGULARS: Dict[str, str] = {
+    "person": "people",   "man": "men",          "woman": "women",
+    "child": "children",  "tooth": "teeth",       "foot": "feet",
+    "mouse": "mice",      "goose": "geese",        "ox": "oxen",
+    "leaf": "leaves",     "calf": "calves",        "half": "halves",
+    "knife": "knives",    "life": "lives",          "wife": "wives",
+    "wolf": "wolves",     "loaf": "loaves",         "shelf": "shelves",
+    "index": "indices",   "matrix": "matrices",    "vertex": "vertices",
+    "analysis": "analyses", "basis": "bases",      "crisis": "crises",
+    "status": "statuses", "alias": "aliases",
+}
+
+
+def _pluralize_tablename(class_name: str) -> str:
+    """Return a PostgreSQL-compatible plural of *class_name* for ``__tablename__``.
+
+    Rules applied (in priority order):
+
+    1. Exact-match irregular words (case-insensitive lookup against
+       :data:`_STUB_TABLENAME_IRREGULARS`).
+    2. Words ending in *s*, *x*, *z*, *ch*, *sh* → append **es**.
+    3. Words ending in a consonant + *y* → replace *y* with **ies**.
+    4. Words ending in *fe* → replace *fe* with **ves**.
+    5. Words ending in *f* (not *ff*) → replace *f* with **ves**.
+    6. Default: append **s**.
+
+    The result is always lowercase.
+
+    Args:
+        class_name: Python class name (e.g. ``"Product"``, ``"Category"``).
+
+    Returns:
+        Lowercase plural string suitable for a database table name.
+
+    Examples:
+        >>> _pluralize_tablename("Product")
+        'products'
+        >>> _pluralize_tablename("Category")
+        'categories'
+        >>> _pluralize_tablename("Status")
+        'statuses'
+        >>> _pluralize_tablename("Index")
+        'indices'
+        >>> _pluralize_tablename("Leaf")
+        'leaves'
+    """
+    lower = class_name.lower()
+    if lower in _STUB_TABLENAME_IRREGULARS:
+        return _STUB_TABLENAME_IRREGULARS[lower]
+    if lower.endswith(("s", "x", "z", "ch", "sh")):
+        return lower + "es"
+    if lower.endswith("y") and len(lower) > 1 and lower[-2] not in "aeiou":
+        return lower[:-1] + "ies"
+    if lower.endswith("fe"):
+        return lower[:-2] + "ves"
+    if lower.endswith("f") and not lower.endswith("ff"):
+        return lower[:-1] + "ves"
+    return lower + "s"
+
 
 def _is_router_variable(name: str) -> bool:
     """Return ``True`` when *name* is a FastAPI router variable.
@@ -3438,20 +3527,60 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             has_router_in_symbols = any(
                 _is_router_variable(s) for s in symbols if not s[0].isupper()
             )
-            # Determine whether any class stubs need Pydantic BaseModel inheritance.
-            _is_pydantic_module = "schemas" in module_path or "models" in module_path
+            # Issue 1 fix: distinguish ORM model files from Pydantic schema files.
+            # Files under models/ (but not schemas/) should use SQLAlchemy Base,
+            # not pydantic.BaseModel, because service layers use ORM patterns.
+            _is_sqlalchemy_module = "/models/" in module_path and "/schemas/" not in module_path
+            # Pydantic is appropriate only for schemas/ files or suffix-matched names.
+            _is_pydantic_module = (
+                "schemas" in module_path
+                or (not _is_sqlalchemy_module and "models" in module_path)
+            )
             has_pydantic_class = any(
                 sym[0].isupper() and (
                     _is_pydantic_module
                     or any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
                 )
                 for sym in symbols
+            ) and not _is_sqlalchemy_module
+            has_sqlalchemy_class = _is_sqlalchemy_module and any(
+                sym[0].isupper() for sym in symbols
             )
+            # Issue 2 fix: detect database.py stubs that contain async_sessionmaker.
+            _is_database_module = "async_sessionmaker" in symbols
+            if _is_database_module:
+                # Generate a real async session factory instead of a None-returning stub.
+                db_stub = (
+                    '"""Generated module — replace with actual implementation."""\n'
+                    "from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession\n"
+                    "from sqlalchemy.orm import sessionmaker, declarative_base\n\n"
+                    'DATABASE_URL = "sqlite+aiosqlite:///./app.db"\n\n'
+                    "engine = create_async_engine(DATABASE_URL, echo=True)\n"
+                    "Base = declarative_base()\n\n"
+                    "_async_session_factory = sessionmaker(\n"
+                    "    engine, class_=AsyncSession, expire_on_commit=False\n"
+                    ")\n\n\n"
+                    "async def async_sessionmaker():\n"
+                    '    """Yield an async database session."""\n'
+                    "    async with _async_session_factory() as session:\n"
+                    "        yield session\n"
+                )
+                code_files[module_path] = db_stub
+                stub_files_created.add(module_path)
+                logger.info(
+                    "ensure_local_module_stubs: created database stub module %s with symbols %s",
+                    module_path,
+                    sorted(symbols),
+                )
+                continue
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
-            if has_pydantic_class:
+            if has_sqlalchemy_class:
+                stub_lines.append("from sqlalchemy import Column, Integer, String\n")
+                stub_lines.append("from app.database import Base\n")
+            elif has_pydantic_class:
                 stub_lines.append("from pydantic import BaseModel\n")
             if has_router_in_symbols:
                 stub_lines.append("from fastapi import APIRouter\n")
@@ -3461,22 +3590,32 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
-                    _sym_is_pydantic = _is_pydantic_module or any(
-                        sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
-                    )
-                    if _sym_is_pydantic:
+                    if has_sqlalchemy_class and _is_sqlalchemy_module:
+                        # Issue 1: generate a proper SQLAlchemy ORM stub.
+                        tablename = _pluralize_tablename(sym)
                         stub_lines.append(
-                            f"class {sym}(BaseModel):\n"
-                            f'    """Stub Pydantic model."""\n'
-                            f"    pass\n\n\n"
+                            f"class {sym}(Base):\n"
+                            f"    __tablename__ = '{tablename}'\n"
+                            f"    id = Column(Integer, primary_key=True, autoincrement=True)\n"
+                            f"    name = Column(String, nullable=False)\n\n\n"
                         )
                     else:
-                        stub_lines.append(
-                            f"class {sym}:\n"
-                            f'    """Stub class."""\n'
-                            f"    pass\n\n\n"
+                        _sym_is_pydantic = _is_pydantic_module or any(
+                            sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
                         )
-                        _stub_class_names.setdefault(module_path, set()).add(sym)
+                        if _sym_is_pydantic:
+                            stub_lines.append(
+                                f"class {sym}(BaseModel):\n"
+                                f'    """Stub Pydantic model."""\n'
+                                f"    pass\n\n\n"
+                            )
+                        else:
+                            stub_lines.append(
+                                f"class {sym}:\n"
+                                f'    """Stub class."""\n'
+                                f"    pass\n\n\n"
+                            )
+                            _stub_class_names.setdefault(module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
                         f"{sym} = APIRouter()\n\n\n"
@@ -3530,8 +3669,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     for sym in missing
                     if not sym[0].isupper()
                 )
-                _is_pydantic_module = "schemas" in module_path or "models" in module_path
-                has_pydantic_missing = any(
+                # Issue 1 fix: distinguish ORM model files from Pydantic schema files.
+                _is_sqlalchemy_module = "/models/" in module_path and "/schemas/" not in module_path
+                _is_pydantic_module = (
+                    "schemas" in module_path
+                    or (not _is_sqlalchemy_module and "models" in module_path)
+                )
+                has_sqlalchemy_missing = _is_sqlalchemy_module and any(
+                    sym[0].isupper() for sym in missing
+                )
+                has_pydantic_missing = not has_sqlalchemy_missing and any(
                     sym[0].isupper() and (
                         _is_pydantic_module
                         or any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
@@ -3539,28 +3686,40 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     for sym in missing
                 )
                 appended_lines = ["\n\n# Supplemental symbols appended by module-stub pass\n"]
+                if has_sqlalchemy_missing and "from app.database import Base" not in existing_content:
+                    appended_lines.append("from sqlalchemy import Column, Integer, String\n")
+                    appended_lines.append("from app.database import Base\n")
                 if has_pydantic_missing and "from pydantic import BaseModel" not in existing_content:
                     appended_lines.append("from pydantic import BaseModel\n")
                 if has_router_missing and "from fastapi import APIRouter" not in existing_content:
                     appended_lines.append("from fastapi import APIRouter\n")
                 for sym in sorted(missing):
                     if sym[0].isupper():
-                        _sym_is_pydantic = _is_pydantic_module or any(
-                            sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
-                        )
-                        if _sym_is_pydantic:
+                        if has_sqlalchemy_missing and _is_sqlalchemy_module:
+                            tablename = _pluralize_tablename(sym)
                             appended_lines.append(
-                                f"\nclass {sym}(BaseModel):\n"
-                                f'    """Stub Pydantic model."""\n'
-                                f"    pass\n"
+                                f"\nclass {sym}(Base):\n"
+                                f"    __tablename__ = '{tablename}'\n"
+                                f"    id = Column(Integer, primary_key=True, autoincrement=True)\n"
+                                f"    name = Column(String, nullable=False)\n"
                             )
                         else:
-                            appended_lines.append(
-                                f"\nclass {sym}:\n"
-                                f'    """Stub class."""\n'
-                                f"    pass\n"
+                            _sym_is_pydantic = _is_pydantic_module or any(
+                                sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
                             )
-                            _stub_class_names.setdefault(module_path, set()).add(sym)
+                            if _sym_is_pydantic:
+                                appended_lines.append(
+                                    f"\nclass {sym}(BaseModel):\n"
+                                    f'    """Stub Pydantic model."""\n'
+                                    f"    pass\n"
+                                )
+                            else:
+                                appended_lines.append(
+                                    f"\nclass {sym}:\n"
+                                    f'    """Stub class."""\n'
+                                    f"    pass\n"
+                                )
+                                _stub_class_names.setdefault(module_path, set()).add(sym)
                     elif _is_router_variable(sym):
                         appended_lines.append(
                             f"\n{sym} = APIRouter()\n"

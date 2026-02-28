@@ -294,6 +294,10 @@ class SecurityError(Exception):
 MIN_YAML_DOC_LENGTH = 10  # Minimum characters for a valid YAML document
 HELM_FILE_HEADER_CHECK_LENGTH = 50  # Check first N chars for Helm filenames
 
+# Pre-compiled regex for extracting the Kubernetes resource kind from YAML documents.
+# Used in both the primary K8s YAML processing pass and the retry loop.
+_K8S_KIND_RE = re.compile(r'kind:\s*(\w+)', re.IGNORECASE)
+
 # Constants for README generation
 MAX_FILES_IN_README = 10  # Maximum files to list in README
 MAX_DEPENDENCIES_IN_README = 5  # Maximum dependencies to list in README
@@ -4282,8 +4286,11 @@ class OmniCoreService:
                     await agent._async_init()
                 
                 # Set up policy for test generation
+                # Issue 9 fix: quality_threshold is stored in range [0, 100] by TestGenPolicy,
+                # so pass coverage_target directly (e.g. 80.0), NOT divided by 100 (which
+                # would produce 0.8 ≈ 0.8% and make the quality gate effectively disabled).
                 policy = self._testgen_policy_class(
-                    quality_threshold=coverage_target / 100.0,
+                    quality_threshold=coverage_target,
                     max_refinements=2,
                     primary_metric="coverage",
                 )
@@ -4705,7 +4712,7 @@ class OmniCoreService:
                             # Use case-insensitive search for better compatibility
 
                             # Try to extract the kind field more robustly
-                            kind_match = re.search(r'kind:\s*(\w+)', doc, re.IGNORECASE)
+                            kind_match = _K8S_KIND_RE.search(doc)
                             kind = kind_match.group(1) if kind_match else None
                             
                             if kind:
@@ -4761,6 +4768,77 @@ class OmniCoreService:
                         
                         if doc_count == 0:
                             logger.warning(f"[DEPLOY] No valid Kubernetes documents found in content for target {target}")
+                            # Issue 7 fix: retry the deploy agent for kubernetes targets when
+                            # YAML validation produces zero valid documents.  The retry prompt
+                            # includes explicit constraints to prevent the LLM from returning
+                            # prose, JSON, or markdown-fenced content instead of raw YAML.
+                            for _k8s_retry_attempt in range(2):
+                                try:
+                                    _retry_requirements = dict(requirements)
+                                    _retry_requirements["instructions"] = (
+                                        "The previous Kubernetes YAML output was invalid or contained "
+                                        "no parseable documents.  Generate ONLY raw Kubernetes YAML "
+                                        "documents separated by '---'.  Every document MUST begin with "
+                                        "'apiVersion:' and include 'kind:', 'metadata:', and 'spec:' "
+                                        "fields.  Do NOT include prose, explanations, markdown fences, "
+                                        "or JSON — only YAML."
+                                    )
+                                    logger.info(
+                                        f"[DEPLOY] Kubernetes YAML retry {_k8s_retry_attempt + 1}/2 for job {job_id}"
+                                    )
+                                    _retry_result = await agent.run_deployment(
+                                        target=target, requirements=_retry_requirements
+                                    )
+                                    _retry_configs = _retry_result.get("configs", {})
+                                    _retry_content = (
+                                        _retry_configs.get(target)
+                                        or _retry_configs.get("kubernetes")
+                                        or ""
+                                    )
+                                    if _retry_content:
+                                        _retry_doc_count = 0
+                                        for _ridx, _rdoc in enumerate(_retry_content.split("---")):
+                                            _rdoc = _rdoc.strip()
+                                            if not _rdoc or len(_rdoc) < MIN_YAML_DOC_LENGTH:
+                                                continue
+                                            try:
+                                                _parsed = yaml.safe_load(_rdoc)
+                                                if isinstance(_parsed, dict):
+                                                    _kind_match = _K8S_KIND_RE.search(_rdoc)
+                                                    _kind_name = (
+                                                        _kind_match.group(1) if _kind_match else None
+                                                    )
+                                                    _fn = {
+                                                        "Deployment": "deployment.yaml",
+                                                        "Service":    "service.yaml",
+                                                    }.get(_kind_name or "", f"resource-{_ridx}.yaml")
+                                                    _fp = target_dir / _fn
+                                                    async with aiofiles.open(
+                                                        _fp, "w", encoding="utf-8"
+                                                    ) as f:
+                                                        await f.write(_rdoc)
+                                                    _retry_doc_count += 1
+                                                    doc_count += 1
+                                                    logger.info(
+                                                        f"[DEPLOY] K8s retry wrote: {_fp} (kind={_kind_name})"
+                                                    )
+                                            except Exception:
+                                                pass
+                                        if _retry_doc_count > 0:
+                                            logger.info(
+                                                f"[DEPLOY] K8s retry {_k8s_retry_attempt + 1} produced "
+                                                f"{_retry_doc_count} valid document(s)"
+                                            )
+                                            break
+                                except Exception as _k8s_retry_err:
+                                    logger.warning(
+                                        f"[DEPLOY] K8s retry {_k8s_retry_attempt + 1} failed: {_k8s_retry_err}"
+                                    )
+                            if doc_count == 0:
+                                logger.warning(
+                                    "[DEPLOY] All K8s retries exhausted — "
+                                    "falling back to default deployment/service manifests"
+                                )
                         
                         # Ensure service.yaml exists — it is required by the deploy validator.
                         # If the LLM did not include a Service resource, generate a sensible default.
@@ -4874,8 +4952,23 @@ class OmniCoreService:
                                     if "/" in template_name:
                                         template_name = template_name.split("/")[-1]
                                     template_file = templates_dir / template_name
+                                    template_str = str(template_content)
+                                    # Issue 8 fix: validate that Helm template files use Go template
+                                    # syntax ({{ ... }}).  A template without any {{ }} expressions
+                                    # is likely a raw JSON blob or static YAML and won't work with
+                                    # `helm install`.  Log a warning so operators can investigate.
+                                    if (
+                                        template_name.endswith(".yaml")
+                                        and template_name != "_helpers.tpl"
+                                        and "{{" not in template_str
+                                    ):
+                                        logger.warning(
+                                            f"[DEPLOY] Helm template '{template_name}' does not contain "
+                                            "Go template expressions ({{ .Values.* }}). "
+                                            "The LLM may have generated raw JSON/YAML instead of a Helm template."
+                                        )
                                     async with aiofiles.open(template_file, "w", encoding="utf-8") as f:
-                                        await f.write(str(template_content))
+                                        await f.write(template_str)
                                     generated_files.append(str(template_file.relative_to(repo_path)))
                                     logger.info(f"Generated helm template: {template_file}")
                         except (json.JSONDecodeError, ValueError):
@@ -7434,8 +7527,9 @@ class OmniCoreService:
                                             stages_completed.remove("codegen")
                                         continue
 
-                            # Spec fidelity check: if >50% of required endpoints are missing,
-                            # retry codegen with the missing endpoints listed explicitly.
+                            # Issue 3 fix: spec fidelity check triggers codegen retry for ANY
+                            # missing endpoints (not only when >50% are missing).  The previous
+                            # threshold meant that 46% missing (13/28) never triggered a retry.
                             if (
                                 md_content
                                 and _PROVENANCE_AVAILABLE
@@ -7464,14 +7558,21 @@ class OmniCoreService:
 
                                     required_count = len(required_eps)
                                     missing_count = len(missing_eps)
-                                    if (
-                                        required_count > 0
-                                        and missing_count / required_count > SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD
-                                    ):
+                                    # Issue 3: trigger retry for ANY missing endpoints, not just >50%.
+                                    if required_count > 0 and missing_count > 0:
                                         validation_passed = False
+                                        # Normalise each missing endpoint to a human-readable
+                                        # "METHOD /path" string regardless of whether the
+                                        # spec-fidelity validator returned dicts or plain strings.
+                                        def _ep_label(ep: Any) -> str:
+                                            if isinstance(ep, dict):
+                                                return (
+                                                    f"{ep.get('method', '?').upper()} "
+                                                    f"{ep.get('path', ep.get('url', '?'))}"
+                                                )
+                                            return str(ep)
                                         missing_ep_labels = [
-                                            f"{ep.get('method','?')} {ep.get('path','?')}"
-                                            for ep in missing_eps[:20]
+                                            _ep_label(ep) for ep in missing_eps[:20]
                                         ]
                                         extra_note = (
                                             f" (and {missing_count - 20} more)"
@@ -7481,7 +7582,6 @@ class OmniCoreService:
                                         logger.warning(
                                             f"[PIPELINE] Job {job_id} spec fidelity retry triggered "
                                             f"({missing_count}/{required_count} endpoints missing, "
-                                            f">{int(SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD*100)}% threshold, "
                                             f"{attempt_label}). Retrying codegen.",
                                             extra={
                                                 "job_id": job_id,

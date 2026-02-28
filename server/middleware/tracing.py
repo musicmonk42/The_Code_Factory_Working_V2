@@ -122,29 +122,50 @@ def setup_tracing(
                         key, value = header.split("=", 1)
                         headers[key.strip()] = value.strip()
             
-            # Create OTLP exporter
-            otlp_exporter = OTLPSpanExporter(
-                endpoint=otlp_endpoint,
-                headers=headers if headers else None
-            )
-            
-            # Add batch processor for OTLP export
-            processor = BatchSpanProcessor(
-                otlp_exporter,
-                max_queue_size=2048,
-                max_export_batch_size=512,
-                schedule_delay_millis=5000,
-            )
-            provider.add_span_processor(processor)
-            
-            logger.info(
-                "OTLP trace exporter configured",
-                extra={
-                    "endpoint": otlp_endpoint,
-                    "service_name": service_name,
-                    "component": "tracing"
-                }
-            )
+            # Issue 13 fix: probe the OTLP endpoint before attaching the exporter.
+            # If the collector is not reachable, skip the exporter entirely so that
+            # repeated gRPC connection failures don't flood the logs.
+            _otlp_reachable = False
+            try:
+                import socket as _socket
+                from urllib.parse import urlparse as _urlparse
+                _parsed = _urlparse(otlp_endpoint)
+                _host = _parsed.hostname or "localhost"
+                _port = _parsed.port or 4317
+                with _socket.create_connection((_host, _port), timeout=2):
+                    _otlp_reachable = True
+            except Exception:
+                _otlp_reachable = False
+
+            if _otlp_reachable:
+                # Create OTLP exporter
+                otlp_exporter = OTLPSpanExporter(
+                    endpoint=otlp_endpoint,
+                    headers=headers if headers else None
+                )
+                
+                # Add batch processor for OTLP export
+                processor = BatchSpanProcessor(
+                    otlp_exporter,
+                    max_queue_size=2048,
+                    max_export_batch_size=512,
+                    schedule_delay_millis=5000,
+                )
+                provider.add_span_processor(processor)
+                
+                logger.info(
+                    "OTLP trace exporter configured",
+                    extra={
+                        "endpoint": otlp_endpoint,
+                        "service_name": service_name,
+                        "component": "tracing"
+                    }
+                )
+            else:
+                logger.debug(
+                    "OTLP collector not reachable at %s — disabling OTLP exporter to prevent log flooding",
+                    otlp_endpoint,
+                )
         
         # Add console exporter for debugging if requested
         if console_export:
