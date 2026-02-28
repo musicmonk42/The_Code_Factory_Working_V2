@@ -782,6 +782,44 @@ def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
                     if top and top not in stdlib_modules and top not in local_prefixes:
                         third_party.add(top)
 
+    # Scan string literals in Python files for database URL protocols that imply dependencies.
+    # This catches packages that are not explicitly imported but required at runtime via
+    # SQLAlchemy async dialect strings (e.g. ``sqlite+aiosqlite:///``).
+    _DB_PROTOCOL_DEPS: Dict[str, str] = {
+        "aiosqlite": "aiosqlite",
+        "asyncpg": "asyncpg",
+        "aiomysql": "aiomysql",
+        "aiopg": "aiopg",
+    }
+    for filename, content in files.items():
+        if not filename.endswith(".py"):
+            continue
+        for protocol in _DB_PROTOCOL_DEPS:
+            if f"+{protocol}" in content or f"import {protocol}" in content:
+                third_party.add(protocol)
+
+    # Scan Dockerfile for Python package invocations in CMD/ENTRYPOINT lines.
+    # Parses line-by-line to handle both JSON array form (CMD ["uvicorn", ...])
+    # and shell form (CMD uvicorn ...) reliably without cross-element regex issues.
+    dockerfile_content = files.get("Dockerfile", "") or files.get("dockerfile", "")
+    if dockerfile_content:
+        for line in dockerfile_content.splitlines():
+            stripped = line.strip()
+            m = re.match(r'^(?:CMD|ENTRYPOINT)\s+(.+)', stripped, re.IGNORECASE)
+            if not m:
+                continue
+            rest = m.group(1).strip()
+            if rest.startswith("["):
+                # JSON array form: CMD ["executable", "arg1", ...]
+                first = re.search(r'"(\w+)"', rest)
+                cmd = first.group(1) if first else ""
+            else:
+                # Shell form: CMD executable [args...]
+                tokens = rest.split()
+                cmd = tokens[0] if tokens else ""
+            if cmd and cmd not in stdlib_modules and cmd not in local_prefixes:
+                third_party.add(cmd)
+
     if not third_party:
         return files
 
@@ -2448,6 +2486,8 @@ _ORM_BASE_NAMES: frozenset = frozenset({
     "Base",              # Conventional SQLAlchemy base class name
     "AbstractBase",      # Generic abstract base pattern
     "Model",             # Django ORM / Flask-SQLAlchemy base
+    "BaseModel",         # Pydantic base model
+    "BaseSettings",      # Pydantic settings base
 })
 
 # Compiled regex patterns that indicate *real* (non-stub) content.
