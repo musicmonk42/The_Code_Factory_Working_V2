@@ -196,8 +196,38 @@ try:
     try:
         from intent_parser.intent_parser import IntentParser
     except ImportError as e:
-        IntentParser = MagicMock()  # Use the dummy mock
-        logging.critical(f"Failed to import IntentParser (will use dummy): {e}")
+        _intent_parser_import_error = e
+
+        class IntentParser:  # type: ignore[no-redef]
+            """
+            Unavailable stub for IntentParser.
+
+            This class is used when ``intent_parser.intent_parser`` cannot be
+            imported (missing package or PYTHONPATH misconfiguration).  Every
+            method raises :class:`RuntimeError` with a clear, actionable message
+            so that any call in the live pipeline produces a traceable error
+            rather than silently returning a mock object.
+            """
+
+            def __init__(self, *args, **kwargs):
+                raise RuntimeError(
+                    "IntentParser is not available: "
+                    f"{_intent_parser_import_error}. "
+                    "Install the 'intent_parser' package or ensure it is on "
+                    "PYTHONPATH before starting the application."
+                )
+
+            def parse(self, *args, **kwargs):
+                raise RuntimeError(
+                    "IntentParser.parse() called but IntentParser failed to import: "
+                    f"{_intent_parser_import_error}."
+                )
+
+        logging.critical(
+            "IntentParser unavailable — all calls will raise RuntimeError. "
+            "Cause: %s",
+            _intent_parser_import_error,
+        )
     # --- END FIX 1 ---
 
 except ImportError as e:
@@ -288,13 +318,7 @@ except NameError:
     def log_action(*args, **kwargs):
         pass
 
-
-# --- START FIX 1: Expose IntentParser for test patching ---
-try:
-    IntentParser = IntentParser
-except NameError:
-    IntentParser = object
-# --- END FIX 1 ---
+# IntentParser is always bound above (either the real class or the unavailable stub).
 
 # Version
 __version__ = "1.0.0"

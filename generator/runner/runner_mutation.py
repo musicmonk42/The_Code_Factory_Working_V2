@@ -981,49 +981,61 @@ async def mutation_test(
         # FIX: Replaced config.get() with getattr()
         elif parallel and getattr(config, "parallel_workers", 1) > 1:
             if span and span.is_recording():
-                span.add_event("Running mutation test in parallel processes")
-            # FIX: Replaced config.get() with getattr()
+                span.add_event("Running mutation test with async concurrency")
+            _max_workers = max(1, getattr(config, "parallel_workers", 1))
             logger.info(
-                f"Running mutation test in parallel processes (max_workers={getattr(config, 'parallel_workers', 1)})."
+                f"Running mutation test with up to {_max_workers} concurrent async tasks."
             )
-            # NOTE: `mutator_info['run']` must be a function that can be run in a separate process/thread.
-            # Since our run_func is `_run_subprocess_safe` (an async function that needs to be awaited),
-            # using run_in_executor here requires running the *entire* async function within the executor's thread/process,
-            # which is problematic.
-            # For simulation, we assume the mutator_info['run'] is a synchronous function that handles the full mutation run
-            # inside the thread/process.
-
-            # We need to adapt the signature for `run_in_executor` or make a simplified mock for test execution outside of __main__.
-            # For the provided logic, we'll keep the process pool logic but assume the runner function is synchronous
-            # or that a helper wrapper for `asyncio.to_thread` is implemented in a synchronous context.
-            # Since the provided run functions are designed to be AWAITABLE (_run_subprocess_safe is async),
-            # running them in a ProcessPoolExecutor is syntactically incorrect without heavy wrapping/IPC.
-            # We'll stick to the simpler single-process execution for the non-mocked flow as the parallel section is currently broken.
-
-            # FIX: The original code intended to use loop.run_in_executor which requires a synchronous callable.
-            # We must use the simpler path or fix the executor integration. Sticking to single process execution for the run_func
-            # defined by lambda which calls `_run_subprocess_safe` (which is async).
-
-            # Since the provided example logic for parallel execution is non-functional with the async `run_func` definitions,
-            # we skip the broken path and use the single-process method.
-
-            # # Start of broken parallel block from source
-            # loop = asyncio.get_running_loop()
-            # with concurrent.futures.ProcessPoolExecutor(max_workers=config.get('parallel_workers', 1)) as executor:
-            #     future = loop.run_in_executor(
-            #         executor,
-            #         partial(mutator_info['run'], temp_dir, strategy, mutation_run_params)
-            #     )
-            #     raw_result = await future
-            # # End of broken parallel block
-
-            # Fall through to single-process (correct approach for an async run_func):
-            if span and span.is_recording():
-                span.add_event("Running mutation test in single process")
-            logger.info("Running mutation test in single process.")
-            raw_result = await mutator_info["run"](
-                temp_dir, strategy, mutation_run_params
-            )
+            # The run functions are async coroutines; asyncio.gather runs them
+            # concurrently within the same event loop without requiring a process
+            # pool or thread executor, which avoids the pickling/IPC issues that
+            # made the previous ProcessPoolExecutor path non-functional.
+            #
+            # Strategy: partition the code_files across workers, run each
+            # partition as a separate invocation, then merge the result
+            # dictionaries.  If code_files is unavailable (e.g. the mutator
+            # works on a directory directly) we fall back to a single invocation.
+            _code_file_list = list(code_files) if code_files else []
+            if _code_file_list and len(_code_file_list) > 1:
+                _chunk_size = max(1, -(-len(_code_file_list) // _max_workers))  # ceil division
+                _chunks = [
+                    _code_file_list[i: i + _chunk_size]
+                    for i in range(0, len(_code_file_list), _chunk_size)
+                ]
+                _partitioned_params = [
+                    {**mutation_run_params, "code_files": chunk} for chunk in _chunks
+                ]
+                _tasks = [
+                    mutator_info["run"](temp_dir, strategy, p) for p in _partitioned_params
+                ]
+                _results = await asyncio.gather(*_tasks, return_exceptions=True)
+                # Merge numeric fields; propagate the first exception if all failed.
+                _merged: Dict[str, Any] = {}
+                _first_exc = None
+                for _r in _results:
+                    if isinstance(_r, BaseException):
+                        if _first_exc is None:
+                            _first_exc = _r
+                        logger.warning(
+                            "Parallel mutation worker raised an exception: %s",
+                            _r,
+                            exc_info=_r,
+                        )
+                    elif isinstance(_r, dict):
+                        for _k, _v in _r.items():
+                            if isinstance(_v, (int, float)) and _k in _merged:
+                                _merged[_k] = _merged[_k] + _v
+                            else:
+                                _merged.setdefault(_k, _v)
+                if _merged:
+                    raw_result = _merged
+                elif _first_exc is not None:
+                    raise _first_exc
+                else:
+                    raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
+            else:
+                # Single file or no file list — run directly
+                raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
         else:
             if span and span.is_recording():
                 span.add_event("Running mutation test in single process")

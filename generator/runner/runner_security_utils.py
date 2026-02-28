@@ -32,13 +32,14 @@ except Exception:
 # FIX: Define logger at the top, using __name__
 logger = logging.getLogger(__name__)
 
-# FIX: Defer imports that cause circular dependency
-# Import registries from the new 'runner' package's __init__.py
-# (We assume these registries are defined in runner/__init__.py or a similar central location)
-# For this file, we will define them locally if they can't be imported, to ensure startup.
+# Import the TESTING sentinel from the leaf module — no circular risk.
+# Registries (DECRYPTORS, ENCRYPTORS, REDACTORS) are still loaded from
+# runner.__init__ because they are initialised there; fall back to local
+# definitions only if the package __init__ is not yet fully loaded (e.g.
+# during package bootstrapping).
+from .runner_base_types import TESTING  # noqa: E402  (must precede __init__ import)
+
 try:
-    # FIX: Using the requested import structure, assuming success or defined fallback
-    from . import TESTING  # Canonical TESTING flag from runner.__init__
     from . import (
         DECRYPTORS,
         ENCRYPTORS,
@@ -49,17 +50,13 @@ try:
     )
 except ImportError:
     logger.warning(
-        "Could not import registries or global flags from 'runner'. Defining local registries and flags."
+        "runner_security_utils: could not import registries from 'runner.__init__'. "
+        "Defining local fallback registries — register_*() calls will not propagate "
+        "to the global runner registry."
     )
     REDACTORS: Dict[str, Callable[..., Any]] = {}
     ENCRYPTORS: Dict[str, Callable[..., Any]] = {}
     DECRYPTORS: Dict[str, Callable[..., Any]] = {}
-    TESTING: bool = (
-        os.getenv("TESTING") == "1"
-        or "pytest" in sys.modules
-        or os.getenv("PYTEST_CURRENT_TEST") is not None
-        or os.getenv("PYTEST_ADDOPTS") is not None
-    )
 
     def register_redactor(name: str, func: Callable):
         REDACTORS[name] = func
