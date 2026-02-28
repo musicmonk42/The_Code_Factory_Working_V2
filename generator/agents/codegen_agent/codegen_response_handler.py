@@ -2432,6 +2432,32 @@ _NON_CODE_EXTENSIONS: frozenset = frozenset(
     {".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".xml", ".rst", ".ini", ".cfg", ".env"}
 )
 
+# ORM/framework base class names whose body is legitimately just ``pass``.
+# Used by _detect_stub_patterns() and _is_stub_content() to exempt these
+# classes from false-positive stub detection.
+_ORM_BASE_NAMES: frozenset = frozenset({
+    "DeclarativeBase",   # SQLAlchemy 2.x mapped base
+    "Base",              # Conventional SQLAlchemy base class name
+    "AbstractBase",      # Generic abstract base pattern
+    "Model",             # Django ORM / Flask-SQLAlchemy base
+})
+
+# Compiled regex patterns that indicate *real* (non-stub) content.
+# Used by _is_stub_content() to short-circuit detection as soon as any
+# real-content indicator is found.  Module-level to avoid re-compilation.
+_REAL_CONTENT_PATTERNS: List[re.Pattern[str]] = [
+    re.compile(r'\bField\s*\('),           # Pydantic Field(...)
+    re.compile(r'\bColumn\s*\('),          # SQLAlchemy Column(...)
+    re.compile(r'\brelationship\s*\('),    # SQLAlchemy relationship(...)
+    re.compile(r'\bvalidator\s*\('),       # Pydantic @validator
+    re.compile(r'\bfield_validator\s*\('), # Pydantic v2 @field_validator
+    re.compile(r'\bDeclarativeBase\b'),           # SQLAlchemy ORM base
+    re.compile(r'\bcreate_async_engine\s*\('),    # SQLAlchemy async engine
+    re.compile(r'\basync_sessionmaker\s*\('),     # SQLAlchemy async session factory
+    re.compile(r'\bcreate_engine\s*\('),          # SQLAlchemy sync engine
+    re.compile(r'\bsessionmaker\s*\('),           # SQLAlchemy sync session factory
+]
+
 
 def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
     """Detect stub/placeholder patterns in generated source code.
@@ -2503,14 +2529,13 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
             for node in _ast.walk(tree):
                 if isinstance(node, _ast.ClassDef):
                     # Exempt ORM/framework base classes whose body is intentionally empty
-                    _orm_bases = {"DeclarativeBase", "Base", "AbstractBase", "Model"}
                     class_bases = set()
                     for base in node.bases:
                         if isinstance(base, _ast.Name):
                             class_bases.add(base.id)
                         elif isinstance(base, _ast.Attribute):
                             class_bases.add(base.attr)
-                    if class_bases & _orm_bases:
+                    if class_bases & _ORM_BASE_NAMES:
                         continue  # Skip ORM base classes
                     if _ast_body_is_stub(node.body, _ast):
                         issues.append(
@@ -3830,8 +3855,11 @@ def _is_stub_content(content: str) -> bool:
     * Placeholder imports (``from typing import Any``).
     * Empty ``__init__.py`` style files (blank or only comments).
 
-    Returns ``False`` when the file contains real field definitions (Pydantic ``Field(...)``,
-    SQLAlchemy ``Column(...)``) or annotated class attributes or substantive function bodies.
+    Returns ``False`` when the file contains real field definitions (Pydantic
+    ``Field(...)``, SQLAlchemy ``Column(...)``, ``relationship(...)``) or ORM
+    infrastructure (``DeclarativeBase``, ``create_async_engine``,
+    ``async_sessionmaker``, ``create_engine``, ``sessionmaker``) or annotated
+    class attributes or substantive function bodies.
 
     Args:
         content: Python source code string to inspect.
@@ -3843,20 +3871,9 @@ def _is_stub_content(content: str) -> bool:
     if not content or not content.strip():
         return True
     # Definitive "real content" indicators — if any are present the file is not a stub.
-    _real_patterns = [
-        r'\bField\s*\(',          # Pydantic Field(...)
-        r'\bColumn\s*\(',         # SQLAlchemy Column(...)
-        r'\brelationship\s*\(',   # SQLAlchemy relationship(...)
-        r'\bvalidator\s*\(',      # Pydantic @validator
-        r'\bfield_validator\s*\(', # Pydantic v2 @field_validator
-        r'\bDeclarativeBase\b',           # SQLAlchemy ORM base
-        r'\bcreate_async_engine\s*\(',    # SQLAlchemy async engine
-        r'\basync_sessionmaker\s*\(',     # SQLAlchemy async session factory
-        r'\bcreate_engine\s*\(',          # SQLAlchemy sync engine
-        r'\bsessionmaker\s*\(',           # SQLAlchemy sync session factory
-    ]
-    for pattern in _real_patterns:
-        if re.search(pattern, content):
+    # Uses the module-level _REAL_CONTENT_PATTERNS (pre-compiled for performance).
+    for pattern in _REAL_CONTENT_PATTERNS:
+        if pattern.search(content):
             return False
     # Stub marker → immediately a stub
     if _STUB_MARKER in content:

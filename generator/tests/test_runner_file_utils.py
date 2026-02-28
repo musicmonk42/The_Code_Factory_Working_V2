@@ -929,8 +929,40 @@ class TestValidateGeneratedProject:
         assert not any("Stub class" in e and "Base" in e for e in result["errors"]), (
             f"ORM Base class incorrectly flagged as stub: {result['errors']}"
         )
+        assert not any("Stub class" in d and "Base" in d for d in result["stub_detections"]), (
+            f"ORM Base class incorrectly recorded in stub_detections: {result['stub_detections']}"
+        )
 
+    @pytest.mark.asyncio
+    async def test_validate_orm_model_base_subclass_exempt_by_policy(self, project_dir):
+        """class Product(Base): pass is exempt because 'Base' is in _ORM_BASE_NAMES.
 
+        This test documents the current exemption policy.  Any class whose
+        direct base is a known ORM base name (including 'Base') is skipped by
+        the stub detector to avoid false positives in projects that declare
+        their model skeletons separately from their field definitions.
+        """
+        models_dir = project_dir / "app" / "models"
+        models_dir.mkdir(parents=True)
+        (models_dir / "product.py").write_text(
+            "from app.database import Base\n\n"
+            "class Product(Base):\n"
+            "    pass\n"
+        )
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=False)
+
+        # 'Product' inherits from 'Base' which is in _ORM_BASE_NAMES → exempt.
+        assert not any("Stub class" in e and "Product" in e for e in result["errors"]), (
+            f"Product(Base) with pass body should be exempt by ORM policy: {result['errors']}"
+        )
+        assert not any("Stub class" in d and "Product" in d for d in result["stub_detections"]), (
+            f"Product(Base) should not appear in stub_detections: {result['stub_detections']}"
+        )
+
+    @pytest.mark.asyncio
     async def test_validate_detects_auto_generated_stub_marker(self, project_dir):
         """# Auto-generated stub comment in a critical file fails validation."""
         services_dir = project_dir / "app" / "services"
@@ -1452,6 +1484,7 @@ class TestIsStubContent:
         assert self._is_stub_content(content) is True
 
 
+class TestIntegrationNewValidations:
     """Integration tests for new validations wired into validate_generated_project."""
 
     @pytest.fixture
