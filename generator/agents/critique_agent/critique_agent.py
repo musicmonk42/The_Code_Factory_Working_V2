@@ -339,7 +339,7 @@ async def call_llm_for_critique(
     # Fix: Use proper LLM provider instead of target_language
     # target_language is for code generation, not LLM provider selection
     provider = os.getenv("DEFAULT_LLM_PROVIDER", "openai")
-    response = await call_llm_api(prompt=prompt, provider=provider)
+    response = await call_llm_api(prompt=prompt, provider=provider, response_format={"type": "json_object"})
 
     content = response.get("content") if isinstance(response, dict) else str(response)
 
@@ -374,7 +374,7 @@ async def call_llm_for_critique(
                 "Return ONLY a JSON object."
             )
             try:
-                retry_response = await call_llm_api(prompt=retry_prompt, provider=provider)
+                retry_response = await call_llm_api(prompt=retry_prompt, provider=provider, response_format={"type": "json_object"})
                 retry_content = retry_response.get("content") if isinstance(retry_response, dict) else str(retry_response)
                 if retry_content:
                     json_match = re.search(r"```json\s*(.*?)\s*```", retry_content, re.DOTALL | re.IGNORECASE)

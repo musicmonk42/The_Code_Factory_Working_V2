@@ -2291,7 +2291,16 @@ class WorkflowEngine:
                                                 for tpl_name, tpl_content in helm_data["templates"].items():
                                                     # Ensure template name doesn't duplicate "templates/"
                                                     clean_name = tpl_name.replace("templates/", "")
-                                                    deploy_files[f"helm/templates/{clean_name}"] = str(tpl_content)
+                                                    tpl_str = str(tpl_content)
+                                                    # Fix Issue 5: replace JSON blob with proper Helm YAML template
+                                                    if clean_name == "deployment.yaml" and tpl_str.lstrip().startswith("{"):
+                                                        tpl_str = deploy_agent._generate_fallback_config("helm", project_name)
+                                                        try:
+                                                            _helm_fb = json.loads(tpl_str or "{}")
+                                                            tpl_str = _helm_fb.get("templates", {}).get("deployment.yaml", tpl_str)
+                                                        except (json.JSONDecodeError, TypeError, AttributeError):
+                                                            pass
+                                                    deploy_files[f"helm/templates/{clean_name}"] = tpl_str
                                         else:
                                             deploy_files["helm/Chart.yaml"] = config_content
                                     except json.JSONDecodeError:
@@ -2334,7 +2343,16 @@ class WorkflowEngine:
                                             if "templates" in helm_data and isinstance(helm_data["templates"], dict):
                                                 for tpl_name, tpl_content in helm_data["templates"].items():
                                                     clean_name = tpl_name.replace("templates/", "")
-                                                    deploy_files[f"helm/templates/{clean_name}"] = str(tpl_content)
+                                                    tpl_str = str(tpl_content)
+                                                    # Fix Issue 5: replace JSON blob with proper Helm YAML template
+                                                    if clean_name == "deployment.yaml" and tpl_str.lstrip().startswith("{"):
+                                                        tpl_str = deploy_agent._generate_fallback_config("helm", project_name)
+                                                        try:
+                                                            _helm_fb = json.loads(tpl_str or "{}")
+                                                            tpl_str = _helm_fb.get("templates", {}).get("deployment.yaml", tpl_str)
+                                                        except (json.JSONDecodeError, TypeError, AttributeError):
+                                                            pass
+                                                    deploy_files[f"helm/templates/{clean_name}"] = tpl_str
                                     except (json.JSONDecodeError, TypeError):
                                         deploy_files["helm/Chart.yaml"] = fallback if fallback else ""
                         
@@ -2634,6 +2652,46 @@ class WorkflowEngine:
                 "  ports:\n  - protocol: TCP\n    port: 80\n    targetPort: 8000\n"
                 "  type: LoadBalancer\n"
             )
+        if "k8s/ingress.yaml" not in result:
+            result["k8s/ingress.yaml"] = (
+                "---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n"
+                "  name: app-ingress\n  annotations:\n    nginx.ingress.kubernetes.io/rewrite-target: /\n"
+                "spec:\n  rules:\n  - http:\n      paths:\n      - path: /\n"
+                "        pathType: Prefix\n        backend:\n          service:\n"
+                "            name: app-service\n            port:\n              number: 80\n"
+            )
+        if "k8s/hpa.yaml" not in result:
+            result["k8s/hpa.yaml"] = (
+                "---\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n"
+                "  name: app-hpa\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n"
+                "    kind: Deployment\n    name: app\n  minReplicas: 1\n  maxReplicas: 10\n"
+                "  metrics:\n  - type: Resource\n    resource:\n      name: cpu\n"
+                "      target:\n        type: Utilization\n        averageUtilization: 70\n"
+            )
+
+        # Fix misplaced strategy: move spec.template.spec.strategy → spec.strategy
+        if "k8s/deployment.yaml" in result:
+            try:
+                import yaml as _yaml
+                _dep_docs = list(_yaml.safe_load_all(result["k8s/deployment.yaml"]))
+                _changed = False
+                for _dep in _dep_docs:
+                    if not isinstance(_dep, dict) or _dep.get("kind") != "Deployment":
+                        continue
+                    _pod_spec = (
+                        _dep.get("spec", {})
+                        .get("template", {})
+                        .get("spec", {})
+                    )
+                    if isinstance(_pod_spec, dict) and "strategy" in _pod_spec:
+                        _dep.setdefault("spec", {})["strategy"] = _pod_spec.pop("strategy")
+                        _changed = True
+                if _changed:
+                    result["k8s/deployment.yaml"] = _yaml.dump_all(
+                        _dep_docs, default_flow_style=False, allow_unicode=True
+                    )
+            except Exception:
+                pass  # YAML parse failure is non-fatal; leave content as-is
 
         return result
 

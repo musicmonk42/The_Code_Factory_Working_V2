@@ -4050,18 +4050,18 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             if _is_database_module:
                 # Generate a real async session factory instead of a None-returning stub.
                 db_stub = (
-                    '"""Generated module — replace with actual implementation."""\n'
-                    "from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession\n"
-                    "from sqlalchemy.orm import sessionmaker, declarative_base\n\n"
-                    'DATABASE_URL = "sqlite+aiosqlite:///./app.db"\n\n'
-                    "engine = create_async_engine(DATABASE_URL, echo=True)\n"
-                    "Base = declarative_base()\n\n"
-                    "_async_session_factory = sessionmaker(\n"
-                    "    engine, class_=AsyncSession, expire_on_commit=False\n"
-                    ")\n\n\n"
-                    "async def async_sessionmaker():\n"
+                    '"""Database configuration and session management."""\n'
+                    "import os\n\n"
+                    "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession\n"
+                    "from sqlalchemy.orm import DeclarativeBase\n\n"
+                    'DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./app.db")\n\n'
+                    "engine = create_async_engine(DATABASE_URL, echo=False)\n"
+                    "AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)\n\n\n"
+                    "class Base(DeclarativeBase):\n"
+                    "    pass\n\n\n"
+                    "async def get_db():\n"
                     '    """Yield an async database session."""\n'
-                    "    async with _async_session_factory() as session:\n"
+                    "    async with AsyncSessionLocal() as session:\n"
                     "        yield session\n"
                 )
                 code_files[module_path] = db_stub

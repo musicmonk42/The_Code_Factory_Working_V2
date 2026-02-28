@@ -205,10 +205,14 @@ ALEMBIC_STUB_FILES: Dict[str, str] = {
         "from logging.config import fileConfig\n"
         "from sqlalchemy import engine_from_config, pool\n"
         "from alembic import context\n\n"
+        "try:\n"
+        "    from app.database import Base\n"
+        "    target_metadata = Base.metadata\n"
+        "except Exception:\n"
+        "    target_metadata = None\n\n"
         "config = context.config\n"
         "if config.config_file_name is not None:\n"
-        "    fileConfig(config.config_file_name)\n\n"
-        "target_metadata = None\n\n\n"
+        "    fileConfig(config.config_file_name)\n\n\n"
         "def run_migrations_offline() -> None:\n"
         '    """Run migrations in \'offline\' mode."""\n'
         '    url = config.get_main_option("sqlalchemy.url")\n'

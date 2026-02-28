@@ -731,7 +731,7 @@ async def build_semantic_critique_prompt(
     # --- Language handling for requirements (best-effort) ---
     try:
         req_text_for_lang = json.dumps(requirements, ensure_ascii=False)
-        req_lang = await detect_language(req_text_for_lang)
+        req_lang = await _maybe_await(detect_language(req_text_for_lang))
     except Exception:
         req_lang = "en"
 
