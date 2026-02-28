@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 {% for router_var in router_names %}
-{{ router_var }} = APIRouter(prefix="/{{ base_name }}s", tags=["{{ base_name }}"])
+{{ router_var }} = APIRouter()
 {% endfor %}
 {% if not router_names %}
-router = APIRouter(prefix="/{{ base_name }}s", tags=["{{ base_name }}"])
+router = APIRouter()
 {% endif %}
 
 _router = {{ router_names[0] if router_names else "router" }}

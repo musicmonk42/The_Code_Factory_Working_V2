@@ -1,0 +1,53 @@
+The service file "{{ svc_path }}" has {{ pct }}% placeholder stub functions.
+Replace every stub function with a real SQLAlchemy 2.x async ORM implementation.
+
+Requirements:
+- Use `await session.execute(select(Model).where(...))` for queries
+- Use `await session.execute(insert(Model).values(...).returning(Model))` for inserts
+- Use `await session.execute(update(Model).where(...).values(...).returning(Model))` for updates
+- Use `await session.execute(delete(Model).where(...))` for deletes
+- Always `await session.commit()` after mutating operations
+- Handle `scalar_one_or_none()` / `scalars().all()` for result extraction
+- Return typed objects matching the schema, not raw dicts
+
+Return ONLY the repaired service file as a JSON object with key "{{ svc_path }}".
+
+{% if spec_context %}
+{{ spec_context }}
+{% endif %}
+
+=== CURRENT SERVICE FILE (to repair) ===
+{{ context_block }}
+
+{% if related_model %}
+=== RELATED MODEL (use for ORM queries) ===
+{{ related_model }}
+{% endif %}
+
+{% if related_schema %}
+=== RELATED SCHEMA (use for return types) ===
+{{ related_schema }}
+{% endif %}
+
+{% if related_router %}
+=== RELATED ROUTER (shows expected function signatures) ===
+{{ related_router }}
+{% endif %}
+
+Example of a correct SQLAlchemy async service function:
+
+```python
+from sqlalchemy import select, insert, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+async def get_item(session: AsyncSession, item_id: int):
+    result = await session.execute(select(Item).where(Item.id == item_id))
+    return result.scalar_one_or_none()
+
+async def create_item(session: AsyncSession, data: dict):
+    result = await session.execute(
+        insert(Item).values(**data).returning(Item)
+    )
+    await session.commit()
+    return result.scalar_one()
+```

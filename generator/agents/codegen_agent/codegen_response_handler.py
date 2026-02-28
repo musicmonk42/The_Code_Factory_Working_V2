@@ -49,6 +49,14 @@ try:
 except ImportError:
     HAS_YAML = False
 
+try:
+    from jinja2 import Environment, FileSystemLoader
+    HAS_JINJA2 = True
+except ImportError:
+    HAS_JINJA2 = False
+
+from pathlib import Path
+
 from .syntax_auto_repair import SyntaxAutoRepair
 
 logger = logging.getLogger(__name__)
@@ -3919,6 +3927,180 @@ def _is_stub_content(content: str) -> bool:
     return True
 
 
+# ---------------------------------------------------------------------------
+# Stub module classification and Jinja2 template rendering
+# ---------------------------------------------------------------------------
+
+def _classify_stub_module(module_path: str, symbols: Set[str]) -> str:
+    """Classify a missing module into a stub category for template selection.
+
+    Categories (in priority order):
+
+    * ``"database"``  — async SQLAlchemy session factory (has get_db / async_sessionmaker)
+    * ``"service"``   — service layer modules (directory component is services/)
+    * ``"auth"``      — authentication / security (filename or directory named auth/security)
+    * ``"config"``    — configuration / settings modules
+    * ``"model"``     — SQLAlchemy ORM model modules (in models/ directory)
+    * ``"schema"``    — Pydantic schema modules (in schemas/ directory)
+    * ``"router"``    — FastAPI router modules (in routers/ directory)
+    * ``"generic"``   — unclassified modules
+
+    Args:
+        module_path: Relative file path of the module (e.g. ``"app/auth.py"``).
+        symbols:     Set of symbol names imported from the module.
+
+    Returns:
+        One of the category strings listed above.
+    """
+    path_obj = Path(module_path)
+    stem = path_obj.stem.lower()
+    # Directory components only (exclude filename)
+    dir_parts = [p.lower() for p in path_obj.parts[:-1]]
+    sym_lower = {s.lower() for s in symbols}
+
+    # Database: well-known async session factory symbols
+    if "async_sessionmaker" in sym_lower or "get_db" in sym_lower:
+        return "database"
+
+    # Service: directory is named service/services (checked BEFORE auth so that
+    # app/services/auth.py is classified as "service", not "auth")
+    if any(p in ("service", "services") for p in dir_parts):
+        return "service"
+
+    # Auth: filename or a directory component is auth-related
+    _auth_names = frozenset({"auth", "authentication", "security", "jwt", "oauth", "token"})
+    if stem in _auth_names or any(p in _auth_names for p in dir_parts):
+        return "auth"
+    # Auth: well-known auth symbol names
+    _auth_sym_hints = frozenset({
+        "get_current_user", "create_access_token", "decode_token",
+        "verify_token", "oauth2_scheme", "authenticate_user",
+    })
+    if sym_lower & _auth_sym_hints:
+        return "auth"
+
+    # Config: filename or directory is config/settings
+    _config_names = frozenset({"config", "settings", "configuration"})
+    if stem in _config_names or any(p in _config_names for p in dir_parts):
+        return "config"
+
+    # Model: directory named model/models (but NOT schemas/)
+    if any(p in ("model", "models") for p in dir_parts):
+        if not any(p in ("schema", "schemas") for p in dir_parts):
+            return "model"
+
+    # Schema: directory named schema/schemas
+    if any(p in ("schema", "schemas") for p in dir_parts):
+        return "schema"
+
+    # Router: directory named router/routers/route/routes
+    if any(p in ("router", "routers", "route", "routes") for p in dir_parts):
+        return "router"
+
+    # Fallback: stem-level checks for flat module structures
+    if "service" in stem:
+        return "service"
+    if stem in _auth_names or any(kw in stem for kw in ("auth", "security", "jwt", "oauth")):
+        return "auth"
+    if "config" in stem or "setting" in stem:
+        return "config"
+    if "model" in stem and "schema" not in stem:
+        return "model"
+    if "schema" in stem:
+        return "schema"
+    if "router" in stem or stem.startswith("route"):
+        return "router"
+
+    return "generic"
+
+
+# Module-level Jinja2 environment for stub templates (lazy-initialised).
+_STUB_TEMPLATE_ENV: "Any" = None
+_STUB_TEMPLATES_DIR = Path(__file__).parent / "templates" / "stubs"
+
+
+def _render_stub_template(
+    category: str,
+    module_path: str,
+    symbols: Set[str],
+) -> "Optional[str]":
+    """Render a Jinja2 stub template for *category* and return the source string.
+
+    Selects the template file ``<category>_stub.jinja2`` from the
+    ``templates/stubs/`` directory (relative to this file).  Falls back to
+    ``generic_stub.jinja2`` when no specific template exists.
+
+    Returns ``None`` when template rendering is unavailable (jinja2 not
+    installed) or fails for any reason, so callers can fall back gracefully.
+
+    Args:
+        category:    Stub category string (``"auth"``, ``"model"``, etc.).
+        module_path: Relative path of the target module file.
+        symbols:     Set of symbols to render into the template.
+
+    Returns:
+        Rendered Python source string, or ``None`` on failure.
+    """
+    global _STUB_TEMPLATE_ENV  # noqa: PLW0603
+    if not HAS_JINJA2 or not _STUB_TEMPLATES_DIR.is_dir():
+        return None
+    try:
+        if _STUB_TEMPLATE_ENV is None:
+            _STUB_TEMPLATE_ENV = Environment(
+                loader=FileSystemLoader(str(_STUB_TEMPLATES_DIR)),
+                trim_blocks=True,
+                lstrip_blocks=True,
+                autoescape=False,
+            )
+        template_name = f"{category}_stub.jinja2"
+        from jinja2 import TemplateNotFound
+        try:
+            template = _STUB_TEMPLATE_ENV.get_template(template_name)
+        except TemplateNotFound:
+            template = _STUB_TEMPLATE_ENV.get_template("generic_stub.jinja2")
+
+        # Partition symbols by kind for template context variables.
+        class_names: List[str] = sorted(s for s in symbols if s[0].isupper())
+        router_names: List[str] = sorted(
+            s for s in symbols if not s[0].isupper() and _is_router_variable(s)
+        )
+        variable_names: List[str] = sorted(
+            s for s in symbols
+            if not s[0].isupper() and not _is_router_variable(s) and _is_likely_variable(s)
+        )
+        function_names: List[str] = sorted(
+            s for s in symbols
+            if not s[0].isupper() and not _is_router_variable(s) and not _is_likely_variable(s)
+        )
+
+        stem = Path(module_path).stem
+        base_name = re.sub(
+            r"_(service|router|controller|model|schema|view|handler|manager)$",
+            "",
+            stem,
+            flags=re.IGNORECASE,
+        )
+        module_name = module_path.replace("/", ".").removesuffix(".py")
+
+        rendered: str = template.render(
+            class_names=class_names,
+            function_names=function_names,
+            router_names=router_names,
+            variable_names=variable_names,
+            base_name=base_name,
+            module_name=module_name,
+        )
+        return rendered
+    except Exception as _tmpl_err:
+        logger.warning(
+            "_render_stub_template: failed to render %s template for %s: %s",
+            category,
+            module_path,
+            _tmpl_err,
+        )
+        return None
+
+
 def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     """Scan generated Python files for local module imports and generate stubs.
 
@@ -4155,6 +4337,27 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     sorted(symbols),
                 )
                 continue
+
+            # ------------------------------------------------------------------
+            # Target 1: Try Jinja2 template for well-known module categories.
+            # Categories "service" and "generic" keep the legacy inline approach
+            # so that the third-pass method-injection regex continues to work.
+            # ------------------------------------------------------------------
+            _stub_category = _classify_stub_module(module_path, symbols)
+            if _stub_category not in ("service", "generic", "database"):
+                _rendered = _render_stub_template(_stub_category, module_path, symbols)
+                if _rendered is not None:
+                    code_files[module_path] = _rendered
+                    stub_files_created.add(module_path)
+                    logger.info(
+                        "ensure_local_module_stubs: created %s stub module %s"
+                        " with symbols %s (template)",
+                        _stub_category,
+                        module_path,
+                        sorted(symbols),
+                    )
+                    continue
+
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
@@ -4484,6 +4687,10 @@ def build_stub_retry_prompt_hint(code_files: Dict[str, str]) -> str:
     module header) and returns a formatted string suitable for inclusion in a
     retry LLM prompt.  Returns an empty string when no stubs are detected.
 
+    When Jinja2 is available, renders ``stub_retry_hint.jinja2`` which groups
+    stub files by module type and includes per-type instructions.  Falls back
+    to a plain-text list when the template is unavailable.
+
     Args:
         code_files: Mapping of filename → source code.
 
@@ -4495,29 +4702,62 @@ def build_stub_retry_prompt_hint(code_files: Dict[str, str]) -> str:
     if not stub_files:
         return ""
 
+    def _extract_symbols(content: str) -> List[str]:
+        try:
+            tree = ast.parse(content)
+            syms = [
+                node.name
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+            ]
+            for node in ast.iter_child_nodes(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            syms.append(target.id)
+            return sorted(set(syms))
+        except SyntaxError:
+            return []
+
+    # Group stub files by module type
+    grouped: Dict[str, List[Tuple[str, str, str]]] = {}
+    for path in sorted(stub_files):
+        content = code_files[path]
+        syms = _extract_symbols(content)
+        sym_list = ", ".join(syms) if syms else "(unknown symbols)"
+        category = _classify_stub_module(path, set(syms))
+        grouped.setdefault(category, []).append((path, sym_list, content))
+
+    # Try Jinja2 template rendering for richer output
+    if HAS_JINJA2 and _STUB_TEMPLATES_DIR.is_dir():
+        try:
+            if _STUB_TEMPLATE_ENV is not None:
+                env = _STUB_TEMPLATE_ENV
+            else:
+                env = Environment(
+                    loader=FileSystemLoader(str(_STUB_TEMPLATES_DIR)),
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    autoescape=False,
+                )
+            from jinja2 import TemplateNotFound
+            try:
+                template = env.get_template("stub_retry_hint.jinja2")
+                return template.render(grouped_stubs=grouped)
+            except TemplateNotFound:
+                pass
+        except Exception as _tmpl_err:
+            logger.debug("build_stub_retry_prompt_hint: template render failed: %s", _tmpl_err)
+
+    # Fallback: plain-text list
     lines = [
         "IMPORTANT: The following files are placeholder stubs that MUST be replaced "
         "with real implementations:",
     ]
     for path in sorted(stub_files):
         content = code_files[path]
-        # Extract exported symbol names from the stub content
-        try:
-            tree = ast.parse(content)
-            symbols = [
-                node.name
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-            ]
-            # Also include top-level variable assignments
-            for node in ast.iter_child_nodes(tree):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if isinstance(target, ast.Name):
-                            symbols.append(target.id)
-        except SyntaxError:
-            symbols = []
-        sym_list = ", ".join(sorted(set(symbols))) if symbols else "(unknown symbols)"
+        syms = _extract_symbols(content)
+        sym_list = ", ".join(syms) if syms else "(unknown symbols)"
         lines.append(f"  - {path}: must export {sym_list}")
     lines.append(
         "Generate complete, production-ready implementations for each stub file listed above."

@@ -669,15 +669,49 @@ async def _repair_stub_services(
 
         context_block = "\n\n".join(context_parts)
         spec_context = f"\n\nSpec Data Models (implement these exactly):\n{spec_models}\n" if spec_models else ""
-        repair_prompt = (
-            f"The following service file is {pct:.0f}% placeholder stubs "
-            f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
-            f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
-            f"Use the model and schema files provided as context.\n\n"
-            f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
-            f"{spec_context}"
-            f"{context_block}"
-        )
+
+        # Target 3: Use Jinja2 template for the repair prompt when available.
+        repair_prompt: str
+        _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
+        _repair_tmpl = _tmpl_dir / "repair_stub_services.jinja2"
+        if _repair_tmpl.exists():
+            try:
+                from jinja2 import Environment, FileSystemLoader
+                _env = Environment(
+                    loader=FileSystemLoader(str(_tmpl_dir)),
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    autoescape=False,
+                )
+                repair_prompt = _env.get_template("repair_stub_services.jinja2").render(
+                    svc_path=svc_path,
+                    pct=pct,
+                    context_block=context_block,
+                    spec_context=spec_context,
+                    related_model=related_model,
+                    related_schema=related_schema,
+                    related_router=related_router,
+                )
+            except Exception:
+                repair_prompt = (
+                    f"The following service file is {pct:.0f}% placeholder stubs "
+                    f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
+                    f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
+                    f"Use the model and schema files provided as context.\n\n"
+                    f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+                    f"{spec_context}"
+                    f"{context_block}"
+                )
+        else:
+            repair_prompt = (
+                f"The following service file is {pct:.0f}% placeholder stubs "
+                f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
+                f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
+                f"Use the model and schema files provided as context.\n\n"
+                f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+                f"{spec_context}"
+                f"{context_block}"
+            )
 
         try:
             from generator.runner.llm_client import call_llm_api  # local import to avoid circular
@@ -761,12 +795,50 @@ async def _retry_stub_files(
             sorted(stub_paths),
         )
 
-        retry_prompt = (
-            f"{retry_hint}\n\n"
-            "Return ONLY a JSON object whose keys are the file paths listed above "
-            "and whose values are the complete, production-ready file contents. "
-            "Do NOT include any explanatory text outside the JSON object."
-        )
+        retry_prompt: str
+        # Target 4: Use Jinja2 template for the retry prompt when available.
+        _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
+        _retry_tmpl = _tmpl_dir / "retry_stub_files.jinja2"
+        if _retry_tmpl.exists():
+            try:
+                from jinja2 import Environment, FileSystemLoader
+                _env = Environment(
+                    loader=FileSystemLoader(str(_tmpl_dir)),
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    autoescape=False,
+                )
+                # Group stubs by module category and build importer map
+                from .codegen_response_handler import _classify_stub_module
+                _stub_groups: Dict[str, List[str]] = {}
+                for _p in sorted(stub_paths):
+                    _cat = _classify_stub_module(_p, set())
+                    _stub_groups.setdefault(_cat, []).append(_p)
+                _importers_map: Dict[str, List[str]] = {}
+                for _p in sorted(stub_paths):
+                    _importers_map[_p] = [
+                        f for f, c in result.items()
+                        if f != _p and _p.replace("/", ".").removesuffix(".py").replace("app.", "") in c
+                    ]
+                retry_prompt = _env.get_template("retry_stub_files.jinja2").render(
+                    retry_hint=retry_hint,
+                    stub_groups=_stub_groups,
+                    importers_map=_importers_map,
+                )
+            except Exception:
+                retry_prompt = (
+                    f"{retry_hint}\n\n"
+                    "Return ONLY a JSON object whose keys are the file paths listed above "
+                    "and whose values are the complete, production-ready file contents. "
+                    "Do NOT include any explanatory text outside the JSON object."
+                )
+        else:
+            retry_prompt = (
+                f"{retry_hint}\n\n"
+                "Return ONLY a JSON object whose keys are the file paths listed above "
+                "and whose values are the complete, production-ready file contents. "
+                "Do NOT include any explanatory text outside the JSON object."
+            )
 
         try:
             retry_response = await call_llm_api(
