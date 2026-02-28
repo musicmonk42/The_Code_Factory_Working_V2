@@ -4125,17 +4125,19 @@ def _render_stub_template(
             template = _STUB_TEMPLATE_ENV.get_template("generic_stub.jinja2")
 
         # Partition symbols by kind for template context variables.
-        class_names: List[str] = sorted(s for s in symbols if s[0].isupper())
+        # Guard against empty strings with ``s and`` to avoid IndexError on s[0].
+        class_names: List[str] = sorted(s for s in symbols if s and s[0].isupper())
         router_names: List[str] = sorted(
-            s for s in symbols if not s[0].isupper() and _is_router_variable(s)
+            s for s in symbols if s and not s[0].isupper() and _is_router_variable(s)
         )
         variable_names: List[str] = sorted(
             s for s in symbols
-            if not s[0].isupper() and not _is_router_variable(s) and _is_likely_variable(s)
+            if s and not s[0].isupper() and not _is_router_variable(s) and _is_likely_variable(s)
         )
         function_names: List[str] = sorted(
             s for s in symbols
-            if not s[0].isupper() and not _is_router_variable(s) and not _is_likely_variable(s)
+            if s and not s[0].isupper() and not _is_router_variable(s)
+            and not _is_likely_variable(s)
         )
 
         # Derive a human-readable base resource name by stripping well-known
@@ -4305,7 +4307,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Determine up-front whether any router-pattern symbols are present
             # so the APIRouter import can be emitted once at the module header.
             has_router_in_symbols = any(
-                _is_router_variable(s) for s in symbols if not s[0].isupper()
+                _is_router_variable(s) for s in symbols if s and not s[0].isupper()
             )
             # Issue 1 fix: distinguish ORM model files from Pydantic schema files.
             # Files under models/ (but not schemas/) should use SQLAlchemy Base,
