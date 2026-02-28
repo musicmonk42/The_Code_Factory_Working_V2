@@ -786,11 +786,33 @@ async def _retry_stub_files(
                 result[path] = content
                 replaced += 1
 
+        returned_paths = set(new_files.keys())
+        expected_paths = set(stub_paths)
+        if returned_paths and not (returned_paths & expected_paths):
+            logger.warning(
+                "[CODEGEN] _retry_stub_files: attempt %d — LLM returned %d file(s) "
+                "but none matched the %d requested stub files. "
+                "Returned: %s, Expected: %s",
+                attempt + 1,
+                len(returned_paths),
+                len(expected_paths),
+                sorted(returned_paths),
+                sorted(expected_paths),
+            )
+
         logger.info(
             "[CODEGEN] _retry_stub_files: attempt %d replaced %d file(s)",
             attempt + 1,
             replaced,
         )
+
+        if replaced == 0 and attempt == _STUB_RETRY_MAX_ATTEMPTS - 1:
+            logger.warning(
+                "[CODEGEN] _retry_stub_files: no stub files replaced after %d attempt(s); "
+                "remaining stubs: %s",
+                _STUB_RETRY_MAX_ATTEMPTS,
+                sorted(expected_paths),
+            )
 
     return result
 
@@ -3001,6 +3023,7 @@ if PLUGIN_AVAILABLE:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
+                            _skip = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
                             # Extract spec model definitions once to inject into the core pass.
                             _spec_models = _extract_spec_models(requirements)
                             _models_note = (
@@ -3060,6 +3083,7 @@ if PLUGIN_AVAILABLE:
                                          provider=config.backend,
                                          model=config.model.get(config.backend),
                                          response_format={"type": "json_object"},
+                                         skip_cache=_skip,
                                      )
                                      _pass_resp = (
                                          _pass_dict["content"]
@@ -3236,6 +3260,7 @@ if PLUGIN_AVAILABLE:
                                                 provider=config.backend,
                                                 model=config.model.get(config.backend),
                                                 response_format={"type": "json_object"},
+                                                skip_cache=_skip,
                                             )
                                             _gap_resp = (
                                                 _gap_dict["content"]
@@ -3713,6 +3738,7 @@ else:
                             _already_generated = list(requirements.get("already_generated_files", []))
                             _merged_files: Dict[str, str] = {}
                             _symbol_manifest: str = ""
+                            _skip = bool(requirements.get("previous_error") or requirements.get("previous_feedback"))
                             # Extract spec model definitions once to inject into the core pass.
                             _spec_models = _extract_spec_models(requirements)
                             _models_note = (
@@ -3772,6 +3798,7 @@ else:
                                          provider=config.backend,
                                          model=config.model.get(config.backend),
                                          response_format={"type": "json_object"},
+                                         skip_cache=_skip,
                                      )
                                      _pass_resp = (
                                          _pass_dict["content"]

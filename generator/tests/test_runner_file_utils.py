@@ -910,6 +910,27 @@ class TestValidateGeneratedProject:
         assert any("Stub class" in w and "_Base" in w for w in result["warnings"])
 
     @pytest.mark.asyncio
+    async def test_validate_orm_base_class_not_flagged(self, project_dir):
+        """class Base(DeclarativeBase): pass in app/database.py should NOT fail validation."""
+        app_dir = project_dir / "app"
+        app_dir.mkdir()
+        (app_dir / "database.py").write_text(
+            "from sqlalchemy.orm import DeclarativeBase\n"
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n\n"
+            "class Base(DeclarativeBase):\n"
+            "    pass\n"
+        )
+        (project_dir / "main.py").write_text("print('hello')")
+        (project_dir / "requirements.txt").write_text("fastapi\n")
+
+        result = await validate_generated_project(project_dir, check_import_consistency=True)
+
+        assert not any("Stub class" in e and "Base" in e for e in result["errors"]), (
+            f"ORM Base class incorrectly flagged as stub: {result['errors']}"
+        )
+
+
     async def test_validate_detects_auto_generated_stub_marker(self, project_dir):
         """# Auto-generated stub comment in a critical file fails validation."""
         services_dir = project_dir / "app" / "services"
@@ -1370,8 +1391,67 @@ class TestDetectStubPatternsEnhanced:
         is_stub, issues = self._detect_stub_patterns(code, "product_service.py")
         assert is_stub is False
 
+    def test_orm_base_class_exempt_from_stub_detection(self):
+        """class Base(DeclarativeBase): pass should NOT be flagged as a stub."""
+        code = (
+            "from sqlalchemy.orm import DeclarativeBase\n"
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker\n\n"
+            "engine = create_async_engine('postgresql+asyncpg://localhost/db')\n\n"
+            "class Base(DeclarativeBase):\n"
+            "    pass\n"
+        )
+        is_stub, issues = self._detect_stub_patterns(code, "database.py")
+        assert is_stub is False, f"ORM Base class incorrectly flagged as stub: {issues}"
 
-class TestIntegrationNewValidations:
+
+class TestIsStubContent:
+    """Tests for _is_stub_content in codegen_response_handler."""
+
+    @pytest.fixture(autouse=True)
+    def import_handler(self):
+        crh = pytest.importorskip(
+            "agents.codegen_agent.codegen_response_handler",
+            reason="codegen_response_handler required",
+        )
+        self._is_stub_content = crh._is_stub_content
+
+    def test_database_py_with_declarative_base_not_stub(self):
+        """database.py with DeclarativeBase and async engine setup is NOT stub content."""
+        content = (
+            "from sqlalchemy.orm import DeclarativeBase\n"
+            "from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession\n\n"
+            "DATABASE_URL = 'postgresql+asyncpg://user:pass@localhost/db'\n\n"
+            "engine = create_async_engine(DATABASE_URL, echo=True)\n\n"
+            "AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(\n"
+            "    engine, class_=AsyncSession, expire_on_commit=False\n"
+            ")\n\n"
+            "class Base(DeclarativeBase):\n"
+            "    pass\n"
+        )
+        assert self._is_stub_content(content) is False, (
+            "database.py with DeclarativeBase/async_sessionmaker incorrectly classified as stub"
+        )
+
+    def test_real_pydantic_model_not_stub(self):
+        """File with Pydantic Field definitions is not stub content."""
+        content = (
+            "from pydantic import BaseModel, Field\n\n"
+            "class Product(BaseModel):\n"
+            "    name: str = Field(..., description='Product name')\n"
+            "    price: float = Field(..., gt=0)\n"
+        )
+        assert self._is_stub_content(content) is False
+
+    def test_stub_marker_is_stub(self):
+        """File with stub marker is classified as stub."""
+        content = (
+            "# Generated module — replace with actual implementation.\n\n"
+            "def placeholder():\n"
+            "    pass\n"
+        )
+        assert self._is_stub_content(content) is True
+
+
     """Integration tests for new validations wired into validate_generated_project."""
 
     @pytest.fixture

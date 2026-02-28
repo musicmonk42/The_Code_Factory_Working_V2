@@ -2502,6 +2502,16 @@ def _detect_stub_patterns(code: str, filename: str) -> Tuple[bool, List[str]]:
         if tree is not None:
             for node in _ast.walk(tree):
                 if isinstance(node, _ast.ClassDef):
+                    # Exempt ORM/framework base classes whose body is intentionally empty
+                    _orm_bases = {"DeclarativeBase", "Base", "AbstractBase", "Model"}
+                    class_bases = set()
+                    for base in node.bases:
+                        if isinstance(base, _ast.Name):
+                            class_bases.add(base.id)
+                        elif isinstance(base, _ast.Attribute):
+                            class_bases.add(base.attr)
+                    if class_bases & _orm_bases:
+                        continue  # Skip ORM base classes
                     if _ast_body_is_stub(node.body, _ast):
                         issues.append(
                             f"Class '{node.name}' (line {node.lineno}) has no implementation"
@@ -3839,6 +3849,11 @@ def _is_stub_content(content: str) -> bool:
         r'\brelationship\s*\(',   # SQLAlchemy relationship(...)
         r'\bvalidator\s*\(',      # Pydantic @validator
         r'\bfield_validator\s*\(', # Pydantic v2 @field_validator
+        r'\bDeclarativeBase\b',           # SQLAlchemy ORM base
+        r'\bcreate_async_engine\s*\(',    # SQLAlchemy async engine
+        r'\basync_sessionmaker\s*\(',     # SQLAlchemy async session factory
+        r'\bcreate_engine\s*\(',          # SQLAlchemy sync engine
+        r'\bsessionmaker\s*\(',           # SQLAlchemy sync session factory
     ]
     for pattern in _real_patterns:
         if re.search(pattern, content):

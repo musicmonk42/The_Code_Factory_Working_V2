@@ -2540,6 +2540,19 @@ async def validate_generated_project(
                 for node in ast.walk(tree):
                     if isinstance(node, ast.ClassDef):
                         if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                            # Exempt known ORM/framework base classes whose body is legitimately just 'pass'
+                            _ORM_BASE_NAMES = {"DeclarativeBase", "Base", "AbstractBase", "Model", "db.Model"}
+                            base_names = set()
+                            for base in node.bases:
+                                if isinstance(base, ast.Name):
+                                    base_names.add(base.id)
+                                elif isinstance(base, ast.Attribute):
+                                    base_names.add(base.attr)
+                            if base_names & _ORM_BASE_NAMES:
+                                continue  # Skip ORM base classes
+                            # Also skip if the class name itself is 'Base' and it inherits from anything
+                            if node.name == "Base" and node.bases:
+                                continue
                             msg = f"Stub class '{node.name}' in {rel_path} (body is only 'pass')"
                             result["stub_detections"].append(msg)
                             if is_critical and not is_init:
