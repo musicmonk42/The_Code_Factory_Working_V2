@@ -683,6 +683,10 @@ def get_tracer() -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
     return tracer, Status, StatusCode
 
 
+# --- Metrics and Circuit Breaker imports ---
+from generator.agents.metrics_utils import get_or_create_metric  # noqa: E402
+from shared.circuit_breaker import CircuitBreaker  # noqa: E402
+
 # --- Metrics (defined globally for easy access) ---
 CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = get_or_create_metric(
     Histogram,
@@ -690,9 +694,25 @@ CLARIFIER_CONTEXT_RETRIEVAL_LATENCY = get_or_create_metric(
     "Context retrieval latency",
     ["manager_type"],
 )
+CLARIFIER_ERRORS = get_or_create_metric(
+    Counter,
+    "clarifier_errors_total",
+    "Total clarifier errors",
+    ["error_type"],
+)
+CLARIFIER_CYCLES = get_or_create_metric(
+    Counter,
+    "clarifier_cycles_total",
+    "Total clarifier cycles",
+    ["status"],
+)
+CLARIFIER_LATENCY = get_or_create_metric(
+    Histogram,
+    "clarifier_latency_seconds",
+    "Clarifier cycle latency",
+    ["status"],
+)
 # --- Circuit Breaker ---
-from shared.circuit_breaker import CircuitBreaker  # noqa: E402
-from generator.agents.metrics_utils import get_or_create_metric
 
 
 def get_circuit_breaker() -> CircuitBreaker:
