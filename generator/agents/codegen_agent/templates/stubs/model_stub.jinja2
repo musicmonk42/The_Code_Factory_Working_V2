@@ -1,0 +1,55 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+model_stub.jinja2 — SQLAlchemy ORM Model Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready SQLAlchemy 2.x ORM model stub using
+DeclarativeBase, Mapped[T] type annotations, and mapped_column() descriptors.
+Every model includes id, name, description, created_at, and updated_at columns.
+
+Template Variables:
+- class_names: List of ORM model class names to generate
+- function_names: List of helper function names to generate
+#}
+from __future__ import annotations
+
+import datetime
+
+from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+{% for cls in class_names %}
+
+class {{ cls }}(Base):
+    __tablename__ = "{{ cls | lower }}s"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<{{ cls }}(id={self.id}, name={self.name!r})>"
+
+{% endfor %}
+{% for fn in function_names %}
+
+def {{ fn }}(**kwargs) -> dict:
+    """Return a dict representation of the given keyword arguments."""
+    return {key: str(value) for key, value in kwargs.items()}
+
+{% endfor %}

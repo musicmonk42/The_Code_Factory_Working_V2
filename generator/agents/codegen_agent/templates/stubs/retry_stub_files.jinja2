@@ -1,0 +1,48 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+retry_stub_files.jinja2 — Stub Retry Prompt Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Renders a structured LLM retry prompt that requests complete implementations
+for all remaining stub files.  Groups files by module category with per-category
+technology guidance and provides a cross-file importer dependency map so the
+LLM can resolve signature requirements from importing modules.
+
+Template Variables:
+- retry_hint: Pre-rendered stub listing hint string (from stub_retry_hint.jinja2)
+- stub_groups: Dict mapping category name → list of file paths in that category
+- importers_map: Dict mapping stub path → list of files that import from it
+#}
+{{ retry_hint }}
+
+Return ONLY a JSON object whose keys are the file paths listed above and whose values are
+the complete, production-ready file contents. Do NOT include any explanatory text outside
+the JSON object.
+
+File-type-specific requirements:
+{% for category, files in stub_groups.items() %}
+=== {{ category | upper }} FILES ===
+{% if category == "model" %}
+Use SQLAlchemy 2.x: DeclarativeBase, Mapped[T], mapped_column(). Include id, created_at, updated_at.
+{% elif category == "schema" %}
+Use Pydantic v2: BaseModel, Field(...) with validation constraints, ConfigDict(from_attributes=True).
+{% elif category == "service" %}
+Use async SQLAlchemy sessions: await session.execute(select(...)), .scalars().all(), session.commit().
+{% elif category == "router" %}
+Use FastAPI: APIRouter(), typed path/query params, Depends() for DB/auth, proper HTTP status codes.
+{% elif category == "auth" %}
+Use JWT (python-jose or PyJWT): encode/decode tokens, passlib for password hashing, OAuth2PasswordBearer.
+{% elif category == "config" %}
+Use pydantic-settings BaseSettings with Field() for env-var loading and validation.
+{% else %}
+Provide complete, functional implementations — no pass, no return None, no TODO/FIXME.
+{% endif %}
+Files: {{ files | join(", ") }}
+
+{% endfor %}
+Cross-file context (what imports from each stub):
+{% for path, importers in importers_map.items() %}
+  - {{ path }} is imported by: {{ importers | join(", ") }}
+{% endfor %}

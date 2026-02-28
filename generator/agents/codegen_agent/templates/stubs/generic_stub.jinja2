@@ -1,0 +1,82 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+generic_stub.jinja2 — Generic Module Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a generic module stub for modules that do not fit into a specific
+category (auth, config, model, schema, router, service).  Produces typed
+class entities, module-level variable assignments, and callable stubs.
+
+Template Variables:
+- class_names: List of class names to generate
+- function_names: List of function names to generate
+- router_names: List of APIRouter variable names to declare
+- variable_names: List of typed module-level variable names to declare
+#}
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter
+
+{% for router_var in router_names %}
+{{ router_var }} = APIRouter(tags=["general"])
+{% endfor %}
+
+{% for var in variable_names %}
+{% if "url" in var | lower %}
+{{ var }}: str = "http://localhost:8000"
+{% elif "count" in var | lower or "size" in var | lower or "limit" in var | lower %}
+{{ var }}: int = 100
+{% elif "enabled" in var | lower or "flag" in var | lower %}
+{{ var }}: bool = True
+{% elif "names" in var | lower or "items" in var | lower or "list" in var | lower %}
+{{ var }}: list[str] = []
+{% elif "map" in var | lower or "index" in var | lower or "registry" in var | lower %}
+{{ var }}: dict[str, Any] = {}
+{% else %}
+{{ var }}: str = ""
+{% endif %}
+{% endfor %}
+
+{% for cls in class_names %}
+
+class {{ cls }}:
+    """{{ cls }} entity."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._fields: dict[str, Any] = kwargs
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._fields.get(key, default)
+
+    def set(self, key: str, value: Any) -> None:
+        self._fields[key] = value
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(self._fields)
+
+    def __repr__(self) -> str:
+        return f"<{{ cls }}({self._fields!r})>"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, {{ cls }}):
+            return NotImplemented
+        return self._fields == other._fields
+
+{% endfor %}
+
+{% for fn in function_names %}
+
+def {{ fn }}(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """{{ fn | replace('_', ' ') | capitalize }}."""
+    result: dict[str, Any] = {"function": "{{ fn }}"}
+    if args:
+        result["args"] = list(args)
+    if kwargs:
+        result.update(kwargs)
+    return result
+
+{% endfor %}

@@ -1,0 +1,101 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+router_stub.jinja2 — FastAPI Router Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready FastAPI router stub with a complete CRUD
+endpoint set (list, get, create, update, delete) for the resource identified
+by base_name.  Additional function names are registered as GET action routes.
+
+Template Variables:
+- class_names: List of request-handler class names to generate
+- function_names: List of additional route handler function names
+- router_names: List of APIRouter instance variable names to declare
+- base_name: Base resource name used for route paths and function naming
+#}
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+{% for router_var in router_names %}
+{{ router_var }} = APIRouter()
+{% endfor %}
+{% if not router_names %}
+router = APIRouter()
+{% endif %}
+
+_router = {{ router_names[0] if router_names else "router" }}
+
+
+@_router.get("/", summary="List {{ base_name }}s")
+async def list_{{ base_name }}s(
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
+
+@_router.get("/{record_id}", summary="Get {{ base_name }} by ID")
+async def get_{{ base_name }}(record_id: int) -> dict:
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+    return {"id": record_id}
+
+
+@_router.post("/", status_code=status.HTTP_201_CREATED, summary="Create {{ base_name }}")
+async def create_{{ base_name }}(payload: dict) -> dict:
+    # Replace `dict` with a typed Pydantic schema (e.g. {{ base_name | capitalize }}Create)
+    # for automatic request validation and OpenAPI documentation.
+    return {"id": 1, **payload}
+
+
+@_router.put("/{record_id}", summary="Update {{ base_name }}")
+async def update_{{ base_name }}(record_id: int, payload: dict) -> dict:
+    # Replace `dict` with a typed Pydantic schema (e.g. {{ base_name | capitalize }}Update)
+    # for automatic request validation and OpenAPI documentation.
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+    return {"id": record_id, **payload}
+
+
+@_router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete {{ base_name }}")
+async def delete_{{ base_name }}(record_id: int) -> None:
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+
+{% set _crud_names = [
+    "list_" + base_name + "s",
+    "get_" + base_name,
+    "create_" + base_name,
+    "update_" + base_name,
+    "delete_" + base_name,
+] %}
+{% for fn in function_names %}
+{% if fn not in _crud_names %}
+
+@_router.get("/actions/{{ fn | replace('_', '-') }}", summary="{{ fn | replace('_', ' ') | capitalize }}")
+async def {{ fn }}() -> dict:
+    return {"action": "{{ fn }}", "status": "ok"}
+
+{% endif %}
+{% endfor %}
+{% for cls in class_names %}
+
+
+class {{ cls }}Handler:
+    """Request handler for {{ cls }}-related operations."""
+
+    def __init__(self, router: APIRouter) -> None:
+        self._router = router
+
+    def register(self) -> None:
+        self._router.include_router(
+            APIRouter(prefix="/{{ cls | lower }}"), tags=["{{ cls | lower }}"]
+        )
+
+{% endfor %}

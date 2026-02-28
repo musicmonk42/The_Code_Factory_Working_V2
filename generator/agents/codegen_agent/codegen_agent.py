@@ -46,6 +46,7 @@ from .codegen_prompt import build_code_generation_prompt
 from .codegen_response_handler import (
     add_traceability_comments,
     build_stub_retry_prompt_hint,
+    _classify_stub_module,
     _detect_module_package_collisions,
     disambiguate_model_schema_imports,
     fix_response_model_type_mismatches,
@@ -669,15 +670,54 @@ async def _repair_stub_services(
 
         context_block = "\n\n".join(context_parts)
         spec_context = f"\n\nSpec Data Models (implement these exactly):\n{spec_models}\n" if spec_models else ""
-        repair_prompt = (
-            f"The following service file is {pct:.0f}% placeholder stubs "
-            f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
-            f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
-            f"Use the model and schema files provided as context.\n\n"
-            f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
-            f"{spec_context}"
-            f"{context_block}"
-        )
+
+        # Use the Jinja2 repair_stub_services.jinja2 template when available for
+        # richer, per-service context (related model / schema / router included).
+        # Falls back to an inline f-string prompt when Jinja2 is absent or the
+        # template file has been removed.
+        repair_prompt: str
+        _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
+        _repair_tmpl = _tmpl_dir / "repair_stub_services.jinja2"
+        if _repair_tmpl.exists():
+            try:
+                from jinja2 import Environment, FileSystemLoader
+                _env = Environment(
+                    loader=FileSystemLoader(str(_tmpl_dir)),
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    autoescape=False,
+                )
+                repair_prompt = _env.get_template("repair_stub_services.jinja2").render(
+                    svc_path=svc_path,
+                    pct=pct,
+                    context_block=context_block,
+                    spec_context=spec_context,
+                    related_model=related_model,
+                    related_schema=related_schema,
+                    related_router=related_router,
+                )
+            except Exception:
+                # Template render failed — fall back to inline prompt string.
+                repair_prompt = (
+                    f"The following service file is {pct:.0f}% placeholder stubs "
+                    f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
+                    f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
+                    f"Use the model and schema files provided as context.\n\n"
+                    f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+                    f"{spec_context}"
+                    f"{context_block}"
+                )
+        else:
+            # Template file not present — use inline prompt string directly.
+            repair_prompt = (
+                f"The following service file is {pct:.0f}% placeholder stubs "
+                f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
+                f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
+                f"Use the model and schema files provided as context.\n\n"
+                f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+                f"{spec_context}"
+                f"{context_block}"
+            )
 
         try:
             from generator.runner.llm_client import call_llm_api  # local import to avoid circular
@@ -761,12 +801,64 @@ async def _retry_stub_files(
             sorted(stub_paths),
         )
 
-        retry_prompt = (
-            f"{retry_hint}\n\n"
-            "Return ONLY a JSON object whose keys are the file paths listed above "
-            "and whose values are the complete, production-ready file contents. "
-            "Do NOT include any explanatory text outside the JSON object."
-        )
+        retry_prompt: str
+        # Use the Jinja2 retry_stub_files.jinja2 template when available for a
+        # structured, per-category prompt with technology-specific guidance and
+        # an importer dependency map.  Falls back to a plain concatenation of
+        # the hint string when Jinja2 is absent or the template is missing.
+        _tmpl_dir = Path(__file__).parent / "templates" / "stubs"
+        _retry_tmpl = _tmpl_dir / "retry_stub_files.jinja2"
+        if _retry_tmpl.exists():
+            try:
+                from jinja2 import Environment, FileSystemLoader
+                _env = Environment(
+                    loader=FileSystemLoader(str(_tmpl_dir)),
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    autoescape=False,
+                )
+                # Group stubs by module category so the template can emit
+                # per-category technology instructions (SQLAlchemy, Pydantic, etc.).
+                _stub_groups: Dict[str, List[str]] = {}
+                for _p in sorted(stub_paths):
+                    _cat = _classify_stub_module(_p, set())
+                    _stub_groups.setdefault(_cat, []).append(_p)
+                # Build importer map: stub_path → list of files that import it.
+                # This lets the LLM infer expected signatures from the importers.
+                _importers_map: Dict[str, List[str]] = {}
+                for _p in sorted(stub_paths):
+                    _mod_name = _p.replace("/", ".").removesuffix(".py")
+                    # Strip leading package prefix (e.g. "app.") for broader matching.
+                    _mod_base = _mod_name.split(".", 1)[-1] if "." in _mod_name else _mod_name
+                    _importers_map[_p] = [
+                        f for f, c in result.items()
+                        if f != _p and (
+                            f"from {_mod_name}" in c
+                            or f"import {_mod_base}" in c
+                            or f"from {_mod_base}" in c
+                        )
+                    ]
+                retry_prompt = _env.get_template("retry_stub_files.jinja2").render(
+                    retry_hint=retry_hint,
+                    stub_groups=_stub_groups,
+                    importers_map=_importers_map,
+                )
+            except Exception:
+                # Template render failed — fall back to plain hint concatenation.
+                retry_prompt = (
+                    f"{retry_hint}\n\n"
+                    "Return ONLY a JSON object whose keys are the file paths listed above "
+                    "and whose values are the complete, production-ready file contents. "
+                    "Do NOT include any explanatory text outside the JSON object."
+                )
+        else:
+            # Template file not present — use plain prompt fallback directly.
+            retry_prompt = (
+                f"{retry_hint}\n\n"
+                "Return ONLY a JSON object whose keys are the file paths listed above "
+                "and whose values are the complete, production-ready file contents. "
+                "Do NOT include any explanatory text outside the JSON object."
+            )
 
         try:
             retry_response = await call_llm_api(

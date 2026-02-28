@@ -89,6 +89,12 @@ data:
   PIPELINE_CODEGEN_TIMEOUT_SECONDS: "900"
   # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
   ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
+  # Strict-mode flag for the codegen agent (generator/agents/codegen_agent/__init__.py).
+  # When "1", the agent raises RunnerDependencyUnavailableError at startup if the runner
+  # foundation (llm_client, runner_config, etc.) cannot be imported.
+  # "0" (default) falls back to mock implementations with an ERROR-level log warning.
+  # Set to "1" in production after confirming all runner dependencies are available.
+  CODEGEN_STRICT_MODE: "0"
 
   # ============================================
   # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)

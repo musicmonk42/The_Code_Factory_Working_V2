@@ -1,0 +1,70 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+schema_stub.jinja2 — Pydantic v2 Schema Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates production-ready Pydantic v2 schema stubs for each class name,
+producing Base/Create/Update/Read/List variants with Field() constraints
+and ConfigDict(from_attributes=True) for SQLAlchemy ORM compatibility.
+
+Template Variables:
+- class_names: List of schema entity names to generate (e.g. User, Product)
+- function_names: List of validation helper function names to generate
+#}
+from __future__ import annotations
+
+import datetime
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+{% for cls in class_names %}
+
+class {{ cls }}Base(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(..., min_length=1, max_length=255, description="Name of the {{ cls | lower }}")
+    description: str | None = Field(None, max_length=1024, description="Optional description")
+
+
+class {{ cls }}Create({{ cls }}Base):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class {{ cls }}Update(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=1024)
+
+
+class {{ cls }}Read({{ cls }}Base):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="Unique identifier")
+    created_at: datetime.datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime.datetime = Field(..., description="Last update timestamp")
+
+
+class {{ cls }}List(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[{{ cls }}Read] = Field(..., description="List of {{ cls | lower }} records")
+    total: int = Field(..., ge=0, description="Total number of records")
+
+{% endfor %}
+{% for fn in function_names %}
+
+def {{ fn }}(data: dict[str, Any]) -> dict[str, Any]:
+    """Return *data* with ``None``-valued entries removed.
+
+    This utility is a lightweight alternative to full Pydantic model
+    validation — it filters out keys whose value is ``None`` and returns the
+    remaining key/value pairs unchanged.  Replace with a full Pydantic schema
+    parse for production use.
+    """
+    return {k: v for k, v in data.items() if v is not None}
+
+{% endfor %}

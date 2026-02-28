@@ -1,0 +1,125 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+config_stub.jinja2 — Configuration / Settings Module Stub Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Generates a production-ready configuration module stub using pydantic-settings
+BaseSettings for environment-variable loading and validation.  Falls back to
+pydantic BaseModel when pydantic-settings is unavailable.
+
+Template Variables:
+- class_names: List of class names to generate (Settings/Config/Env variants)
+- function_names: List of configuration loader function names to generate
+#}
+from __future__ import annotations
+
+import os
+from typing import Any
+
+try:
+    from pydantic_settings import BaseSettings
+    _SETTINGS_BASE = BaseSettings
+except ImportError:
+    from pydantic import BaseModel as BaseSettings  # type: ignore[assignment]
+    # pydantic-settings is unavailable; BaseModel provides a compatible API for
+    # basic attribute-access patterns, though env-var loading will not work.
+
+from pydantic import Field
+
+{% for cls in class_names %}
+{% if "settings" in cls | lower or "config" in cls | lower or "env" in cls | lower %}
+
+class {{ cls }}(_SETTINGS_BASE):
+    """Application settings loaded from environment variables."""
+
+    app_name: str = Field("MyApp", description="Application display name")
+    debug: bool = Field(False, description="Enable debug mode")
+    host: str = Field("0.0.0.0", description="Bind host")
+    port: int = Field(8000, ge=1, le=65535, description="Bind port")
+    secret_key: str = Field(
+        "",
+        min_length=0,
+        description=(
+            "Secret key for signing tokens.  Must be set explicitly via the "
+            "SECRET_KEY environment variable in all non-development environments."
+        ),
+    )
+    database_url: str = Field(
+        "sqlite+aiosqlite:///./app.db",
+        description="Async database connection URL",
+    )
+    redis_url: str | None = Field(None, description="Optional Redis URL")
+    log_level: str = Field("INFO", description="Logging level (DEBUG/INFO/WARNING/ERROR)")
+    allowed_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000"],
+        description="CORS allowed origins",
+    )
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+{% else %}
+
+class {{ cls }}:
+    """Configuration container for {{ cls }}."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        self._data: dict[str, Any] = {
+            "enabled": True,
+            "timeout": 30,
+            "retries": 3,
+            **kwargs,
+        }
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._data.get(key, default)
+
+    def set(self, key: str, value: Any) -> None:
+        self._data[key] = value
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self._data)
+
+    def __repr__(self) -> str:
+        return f"<{{ cls }}({self._data!r})>"
+
+{% endif %}
+{% endfor %}
+
+{% if not class_names %}
+
+class Settings(_SETTINGS_BASE):
+    """Default application settings."""
+
+    app_name: str = Field("MyApp", description="Application display name")
+    debug: bool = Field(False, description="Enable debug mode")
+    host: str = Field("0.0.0.0", description="Bind host")
+    port: int = Field(8000, ge=1, le=65535, description="Bind port")
+    secret_key: str = Field("change-me-in-production", min_length=16)
+    database_url: str = Field("sqlite+aiosqlite:///./app.db")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+
+{% endif %}
+
+{% for fn in function_names %}
+
+def {{ fn }}(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return configuration values, optionally merged with *overrides*."""
+    base: dict[str, Any] = {
+        "debug": os.environ.get("DEBUG", "false").lower() == "true",
+        "host": os.environ.get("HOST", "0.0.0.0"),
+        "port": int(os.environ.get("PORT", "8000")),
+    }
+    if overrides:
+        base.update(overrides)
+    return base
+
+{% endfor %}

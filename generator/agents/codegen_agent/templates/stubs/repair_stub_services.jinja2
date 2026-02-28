@@ -1,0 +1,74 @@
+{# Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. #}
+
+{#
+repair_stub_services.jinja2 — Service Stub Repair Prompt Template
+SPDX-License-Identifier: Proprietary
+Copyright (c) 2025 Novatrax Labs
+
+Renders a focused LLM repair prompt for a service file that has a high
+percentage of stub/placeholder functions.  Provides related model, schema,
+and router context to guide the LLM toward correct SQLAlchemy 2.x async
+ORM implementations.
+
+Template Variables:
+- svc_path: Relative path to the service file being repaired
+- pct: Percentage of stub functions in the service file (float)
+- context_block: Multi-file context block (service + related files concatenated)
+- spec_context: Optional spec/data-model context string (may be empty)
+- related_model: Content of the related ORM model file (may be empty)
+- related_schema: Content of the related Pydantic schema file (may be empty)
+- related_router: Content of the related FastAPI router file (may be empty)
+#}
+The service file "{{ svc_path }}" has {{ pct }}% placeholder stub functions.
+Replace every stub function with a real SQLAlchemy 2.x async ORM implementation.
+
+Requirements:
+- Use `await session.execute(select(Model).where(...))` for queries
+- Use `await session.execute(insert(Model).values(...).returning(Model))` for inserts
+- Use `await session.execute(update(Model).where(...).values(...).returning(Model))` for updates
+- Use `await session.execute(delete(Model).where(...))` for deletes
+- Always `await session.commit()` after mutating operations
+- Handle `scalar_one_or_none()` / `scalars().all()` for result extraction
+- Return typed objects matching the schema, not raw dicts
+
+Return ONLY the repaired service file as a JSON object with key "{{ svc_path }}".
+
+{% if spec_context %}
+{{ spec_context }}
+{% endif %}
+
+=== CURRENT SERVICE FILE (to repair) ===
+{{ context_block }}
+
+{% if related_model %}
+=== RELATED MODEL (use for ORM queries) ===
+{{ related_model }}
+{% endif %}
+
+{% if related_schema %}
+=== RELATED SCHEMA (use for return types) ===
+{{ related_schema }}
+{% endif %}
+
+{% if related_router %}
+=== RELATED ROUTER (shows expected function signatures) ===
+{{ related_router }}
+{% endif %}
+
+Example of a correct SQLAlchemy async service function:
+
+```python
+from sqlalchemy import select, insert, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+async def get_item(session: AsyncSession, item_id: int):
+    result = await session.execute(select(Item).where(Item.id == item_id))
+    return result.scalar_one_or_none()
+
+async def create_item(session: AsyncSession, data: dict):
+    result = await session.execute(
+        insert(Item).values(**data).returning(Item)
+    )
+    await session.commit()
+    return result.scalar_one()
+```

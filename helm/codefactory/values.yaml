@@ -272,6 +272,13 @@ env:
   # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
   # Override: helm upgrade --set env.ENSEMBLE_PROVIDER_TIMEOUT_SECONDS=360 ...
   ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
+  # Strict-mode flag for the codegen agent (generator/agents/codegen_agent/__init__.py).
+  # When "1", the agent raises RunnerDependencyUnavailableError at startup if the runner
+  # foundation (llm_client, runner_config, etc.) cannot be imported.
+  # "0" (default) falls back to mock implementations with an ERROR-level log warning.
+  # Enable in production after confirming all runner dependencies are available:
+  #   helm upgrade --set env.CODEGEN_STRICT_MODE=1 ...
+  CODEGEN_STRICT_MODE: "0"
 
   # XAI Test-Generation API (XAITestGenerationAPI in gen_plugins.py)
   # Non-secret tuning knobs — the XAI_API_KEY credential lives in codefactory-secrets.

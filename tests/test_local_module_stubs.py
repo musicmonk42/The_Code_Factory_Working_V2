@@ -147,10 +147,22 @@ class TestMissingModule:
         assert _valid_python(result["app/auth.py"]), "generated stub must be valid Python"
 
     def test_function_stub_returns_none(self, stub_fn):
+        """Template-generated auth stubs use real JWT logic, not a bare return None.
+
+        The auth_stub.jinja2 template generates functional ``get_current_user``
+        with JWT decode logic instead of the old ``return None`` placeholder.
+        The stub must be valid Python and must NOT contain the stub marker.
+        """
         files = {"app/routes.py": "from app.auth import get_current_user\n"}
         result = stub_fn(dict(files))
         code = result["app/auth.py"]
-        assert "return None" in code, "function stub must return None (not raise NotImplementedError)"
+        # New template-generated auth stubs have real implementations (not return None)
+        assert "def get_current_user" in code, "get_current_user must be defined"
+        assert _valid_python(code), "generated auth stub must be valid Python"
+        # Must NOT contain the old placeholder stub marker
+        assert "Generated module — replace with actual implementation." not in code, (
+            "template-generated auth stubs must not contain the stub module marker"
+        )
 
     def test_class_stub_generated_for_uppercase_name(self, stub_fn):
         files = {"app/routes.py": "from app.auth import Role\n"}
@@ -594,15 +606,28 @@ class TestIssue1StubTracking:
         assert crh.build_stub_retry_prompt_hint(files) == ""
 
     def test_ensure_local_module_stubs_logs_created_stubs(self, crh):
-        """ensure_local_module_stubs still returns a dict (backward compatible)."""
+        """ensure_local_module_stubs still returns a dict (backward compatible).
+
+        Template-generated stubs (e.g. auth_stub.jinja2) produce functional code
+        that does NOT contain the ``_STUB_MODULE_MARKER``, so ``get_stub_files``
+        correctly does NOT flag them.  Verify the file was created instead.
+        """
         files = {"app/routes.py": "from app.auth import get_current_user\n"}
         result = crh.ensure_local_module_stubs(dict(files))
         # Must return a dict
         assert isinstance(result, dict), "ensure_local_module_stubs must return a dict"
-        # The stub file must be detectable by get_stub_files
-        stubs = crh.get_stub_files(result)
-        assert "app/auth.py" in stubs, (
-            "get_stub_files must find app/auth.py after ensure_local_module_stubs"
+        # The auth stub file must be present in the result
+        assert "app/auth.py" in result, (
+            "ensure_local_module_stubs must create app/auth.py"
+        )
+        # Template-generated auth stubs do NOT contain the stub marker —
+        # they are functional code that does not need to be replaced.
+        assert "Generated module — replace with actual implementation." not in result["app/auth.py"], (
+            "template-generated auth stub must not contain the stub module marker"
+        )
+        # The stub must be valid Python
+        assert _valid_python(result["app/auth.py"]), (
+            "template-generated auth stub must be syntactically valid Python"
         )
 
 
@@ -868,3 +893,217 @@ class TestStubMethodInjection:
         assert "app/services/auth.py" in result, (
             "code_files must be returned intact even when injection finds no match"
         )
+
+
+# =============================================================================
+# TestClassifyStubModule — _classify_stub_module() covers each category
+# =============================================================================
+
+
+class TestClassifyStubModule:
+    """Tests for the _classify_stub_module() helper function."""
+
+    @pytest.fixture(scope="class")
+    def classify(self, crh):
+        return crh._classify_stub_module
+
+    def test_database_by_symbol(self, classify):
+        assert classify("app/db.py", {"get_db"}) == "database"
+        assert classify("app/db.py", {"async_sessionmaker"}) == "database"
+
+    def test_service_by_directory(self, classify):
+        assert classify("app/services/user_service.py", set()) == "service"
+        assert classify("app/services/auth.py", {"AuthService"}) == "service"
+        assert classify("app/api/v1/services/orders.py", set()) == "service"
+
+    def test_auth_by_filename(self, classify):
+        assert classify("app/auth.py", set()) == "auth"
+        assert classify("app/security.py", set()) == "auth"
+        assert classify("app/jwt.py", set()) == "auth"
+
+    def test_auth_by_symbols(self, classify):
+        assert classify("app/utils.py", {"get_current_user"}) == "auth"
+        assert classify("app/helpers.py", {"create_access_token"}) == "auth"
+
+    def test_config_by_filename(self, classify):
+        assert classify("app/config.py", set()) == "config"
+        assert classify("app/settings.py", set()) == "config"
+
+    def test_model_by_directory(self, classify):
+        assert classify("app/models/user.py", set()) == "model"
+        assert classify("app/models/product.py", {"Product"}) == "model"
+
+    def test_schema_by_directory(self, classify):
+        assert classify("app/schemas/user.py", set()) == "schema"
+        assert classify("app/schemas/product.py", {"ProductCreate"}) == "schema"
+
+    def test_router_by_directory(self, classify):
+        assert classify("app/routers/users.py", set()) == "router"
+        assert classify("app/routes/api.py", set()) == "router"
+
+    def test_service_beats_auth_for_services_path(self, classify):
+        """app/services/auth.py must be 'service', not 'auth'."""
+        assert classify("app/services/auth.py", set()) == "service"
+
+    def test_generic_fallback(self, classify):
+        assert classify("app/utils.py", {"helper", "foo"}) == "generic"
+        assert classify("app/main.py", set()) == "generic"
+
+
+# =============================================================================
+# TestTemplateRendering — _render_stub_template() with various symbol lists
+# =============================================================================
+
+
+class TestTemplateRendering:
+    """Tests for _render_stub_template() with various symbol combinations."""
+
+    @pytest.fixture(scope="class")
+    def render(self, crh):
+        return crh._render_stub_template
+
+    def test_auth_template_renders_valid_python(self, render):
+        result = render("auth", "app/auth.py", {"get_current_user"})
+        assert result is not None
+        assert _valid_python(result), "auth stub must be valid Python"
+
+    def test_auth_template_has_get_current_user(self, render):
+        result = render("auth", "app/auth.py", {"get_current_user"})
+        assert result is not None
+        assert "def get_current_user" in result
+
+    def test_auth_template_no_stub_marker(self, render):
+        result = render("auth", "app/auth.py", {"get_current_user"})
+        assert result is not None
+        assert "Generated module — replace with actual implementation." not in result
+
+    def test_model_template_has_declarative_base(self, render):
+        result = render("model", "app/models/user.py", {"User"})
+        assert result is not None
+        assert "DeclarativeBase" in result
+
+    def test_model_template_has_mapped_column(self, render):
+        result = render("model", "app/models/user.py", {"User"})
+        assert result is not None
+        assert "mapped_column" in result
+
+    def test_model_template_valid_python(self, render):
+        result = render("model", "app/models/user.py", {"User", "Product"})
+        assert result is not None
+        assert _valid_python(result)
+
+    def test_schema_template_has_field(self, render):
+        result = render("schema", "app/schemas/user.py", {"UserCreate"})
+        assert result is not None
+        assert "Field(" in result
+
+    def test_schema_template_has_config_dict(self, render):
+        result = render("schema", "app/schemas/user.py", {"UserCreate"})
+        assert result is not None
+        assert "ConfigDict" in result
+
+    def test_router_template_has_apirouter(self, render):
+        result = render("router", "app/routers/users.py", {"router"})
+        assert result is not None
+        assert "APIRouter" in result
+
+    def test_router_template_valid_python(self, render):
+        result = render("router", "app/routers/users.py", {"router"})
+        assert result is not None
+        assert _valid_python(result)
+
+    def test_generic_template_renders(self, render):
+        result = render("generic", "app/utils.py", {"helper", "Util"})
+        assert result is not None
+        assert _valid_python(result)
+
+    def test_unknown_category_falls_back_to_generic(self, render):
+        result = render("nonexistent_category", "app/foo.py", {"bar"})
+        assert result is not None, "unknown category must fall back to generic_stub.jinja2"
+        assert _valid_python(result)
+
+
+# =============================================================================
+# TestNewStubBehavior — template-generated stubs pass detection checks
+# =============================================================================
+
+
+class TestNewStubBehavior:
+    """Verify that template-generated stubs pass stub-detection checks."""
+
+    def test_auth_stub_passes_is_stub_content_false(self, crh, stub_fn):
+        """Template-generated auth stub must NOT be flagged as a stub by _is_stub_content."""
+        files = {"app/routes.py": "from app.auth import get_current_user\n"}
+        result = stub_fn(dict(files))
+        auth_content = result.get("app/auth.py", "")
+        assert auth_content, "app/auth.py must be created"
+        assert not crh._is_stub_content(auth_content), (
+            "template-generated auth stub must pass _is_stub_content() check (return False)"
+        )
+
+    def test_auth_stub_passes_detect_stub_patterns_false(self, crh, stub_fn):
+        """Template-generated auth stub must not trigger _detect_stub_patterns."""
+        files = {"app/routes.py": "from app.auth import get_current_user\n"}
+        result = stub_fn(dict(files))
+        auth_content = result.get("app/auth.py", "")
+        is_stub, issues = crh._detect_stub_patterns(auth_content, "app/auth.py")
+        assert not is_stub, (
+            f"template-generated auth stub must not be flagged by _detect_stub_patterns; "
+            f"issues: {issues}"
+        )
+
+    def test_auth_stub_no_stub_marker(self, stub_fn):
+        """Template-generated auth stubs must not contain the old stub marker."""
+        files = {"app/routes.py": "from app.auth import get_current_user\n"}
+        result = stub_fn(dict(files))
+        auth_content = result.get("app/auth.py", "")
+        assert "Generated module — replace with actual implementation." not in auth_content
+
+    def test_model_stub_passes_is_stub_content_false(self, crh, stub_fn):
+        """Template-generated model stub must NOT be flagged as a stub."""
+        files = {"app/services/user.py": "from app.models.user import User\n"}
+        result = stub_fn(dict(files))
+        model_content = result.get("app/models/user.py", "")
+        if model_content:
+            assert not crh._is_stub_content(model_content), (
+                "template-generated model stub must pass _is_stub_content() check"
+            )
+
+    def test_schema_stub_passes_is_stub_content_false(self, crh, stub_fn):
+        """Template-generated schema stub must NOT be flagged as a stub."""
+        files = {"app/routes.py": "from app.schemas.user import UserCreate\n"}
+        result = stub_fn(dict(files))
+        schema_content = result.get("app/schemas/user.py", "")
+        if schema_content:
+            assert not crh._is_stub_content(schema_content), (
+                "template-generated schema stub must pass _is_stub_content() check"
+            )
+
+    def test_validate_production_ready_passes_for_auth_stub(self, crh, stub_fn):
+        """validate_production_ready must pass for a set of template-generated stubs."""
+        files = {"app/routes.py": "from app.auth import get_current_user\n"}
+        result = stub_fn(dict(files))
+        valid, msg = crh.validate_production_ready(result)
+        assert valid, (
+            f"validate_production_ready must pass for template-generated auth stub; msg={msg!r}"
+        )
+
+    def test_auth_stub_role_class_is_real(self, stub_fn):
+        """Role class in auth_stub must be a real enum, not a bare pass stub."""
+        files = {"app/routes.py": "from app.auth import Role\n"}
+        result = stub_fn(dict(files))
+        stub = result.get("app/auth.py", "")
+        assert "class Role" in stub
+        assert _valid_python(stub)
+        # auth_stub.jinja2 generates Role as a str enum with real members
+        assert "Enum" in stub, "Role must inherit from Enum (real implementation)"
+        # Extract the body of the Role class and verify it has enum members
+        role_section = stub.split("class Role")[1].split("\nclass ")[0]
+        # An enum with real members will have assignments like ADMIN = "admin"
+        assert "=" in role_section, "Role enum must have assigned member values"
+
+    def test_auth_stub_is_valid_python_with_multiple_symbols(self, stub_fn):
+        """Multi-symbol auth stub must produce valid Python."""
+        files = {"app/routes.py": "from app.auth import get_current_user, Role, create_access_token\n"}
+        result = stub_fn(dict(files))
+        assert _valid_python(result.get("app/auth.py", "")), "multi-symbol auth stub must be valid Python"

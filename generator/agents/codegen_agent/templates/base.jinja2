@@ -110,6 +110,20 @@ Your generated code MUST be complete and production-ready. This means:
 - **Configuration** - Externalize magic numbers and strings
 - **Documentation** - Docstrings explaining what code does and why
 
+{% block stub_examples %}
+### Anti-Stub Examples
+
+Study the patterns below. The ❌ BAD column shows what you must NEVER generate.
+The ✅ GOOD column shows the expected production-ready equivalent.
+
+| ❌ BAD (stub) | ✅ GOOD (real implementation) |
+|---|---|
+| `def get_user(): return None` | `async def get_user(user_id: int, db: AsyncSession = Depends(get_db)): result = await db.execute(select(User).where(User.id == user_id)); return result.scalar_one_or_none()` |
+| `class User: pass` | `class User(Base): __tablename__ = "users"; id: Mapped[int] = mapped_column(primary_key=True)` |
+| `def create(...): raise NotImplementedError` | `async def create(data: dict, db: AsyncSession): result = await db.execute(insert(Model).values(**data).returning(Model)); await db.commit(); return result.scalar_one()` |
+
+{% endblock stub_examples %}
+
 {{ macros.render_spec_checklist(target_language) }}
 
 {{ macros.render_required_endpoints(required_endpoints) }}
