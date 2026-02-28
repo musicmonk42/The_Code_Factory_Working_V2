@@ -58,7 +58,13 @@ class {{ cls }}List(BaseModel):
 {% for fn in function_names %}
 
 def {{ fn }}(data: dict[str, Any]) -> dict[str, Any]:
-    """Validate and return the data dict with string-coerced values."""
+    """Return *data* with ``None``-valued entries removed.
+
+    This utility is a lightweight alternative to full Pydantic model
+    validation — it filters out keys whose value is ``None`` and returns the
+    remaining key/value pairs unchanged.  Replace with a full Pydantic schema
+    parse for production use.
+    """
     return {k: v for k, v in data.items() if v is not None}
 
 {% endfor %}

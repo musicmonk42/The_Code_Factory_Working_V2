@@ -4125,7 +4125,8 @@ def _render_stub_template(
             template = _STUB_TEMPLATE_ENV.get_template("generic_stub.jinja2")
 
         # Partition symbols by kind for template context variables.
-        # Guard against empty strings with ``s and`` to avoid IndexError on s[0].
+        # Empty-string guard (``s and``) prevents IndexError on ``s[0]``
+        # in the unlikely event that an empty token slips through the parser.
         class_names: List[str] = sorted(s for s in symbols if s and s[0].isupper())
         router_names: List[str] = sorted(
             s for s in symbols if s and not s[0].isupper() and _is_router_variable(s)

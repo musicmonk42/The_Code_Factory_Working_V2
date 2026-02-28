@@ -49,11 +49,15 @@ async def get_{{ base_name }}(record_id: int) -> dict:
 
 @_router.post("/", status_code=status.HTTP_201_CREATED, summary="Create {{ base_name }}")
 async def create_{{ base_name }}(payload: dict) -> dict:
+    # Replace `dict` with a typed Pydantic schema (e.g. {{ base_name | capitalize }}Create)
+    # for automatic request validation and OpenAPI documentation.
     return {"id": 1, **payload}
 
 
 @_router.put("/{record_id}", summary="Update {{ base_name }}")
 async def update_{{ base_name }}(record_id: int, payload: dict) -> dict:
+    # Replace `dict` with a typed Pydantic schema (e.g. {{ base_name | capitalize }}Update)
+    # for automatic request validation and OpenAPI documentation.
     if record_id < 1:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
     return {"id": record_id, **payload}

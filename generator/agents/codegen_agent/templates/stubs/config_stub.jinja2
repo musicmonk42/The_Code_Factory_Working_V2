@@ -39,9 +39,12 @@ class {{ cls }}(_SETTINGS_BASE):
     host: str = Field("0.0.0.0", description="Bind host")
     port: int = Field(8000, ge=1, le=65535, description="Bind port")
     secret_key: str = Field(
-        "change-me-in-production",
-        min_length=16,
-        description="Secret key for signing tokens",
+        "",
+        min_length=0,
+        description=(
+            "Secret key for signing tokens.  Must be set explicitly via the "
+            "SECRET_KEY environment variable in all non-development environments."
+        ),
     )
     database_url: str = Field(
         "sqlite+aiosqlite:///./app.db",

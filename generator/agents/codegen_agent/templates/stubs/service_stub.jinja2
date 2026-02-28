@@ -52,8 +52,21 @@ async def list_{{ cls | lower }}s(
 
 
 async def create_{{ cls | lower }}(session: AsyncSession, data: dict) -> {{ cls }}:
+    """Insert a new {{ cls }} row.
+
+    Args:
+        session: The async SQLAlchemy session.
+        data: Column key/value pairs.  Callers should validate and sanitize
+              input (e.g. with a Pydantic schema) before passing to this
+              function.  Protected columns such as ``id``, ``created_at``, and
+              ``updated_at`` are silently filtered out to prevent unintended
+              overrides.
+    """
+    # Strip server-managed / immutable columns before the insert.
+    _protected = frozenset({"id", "created_at", "updated_at"})
+    safe_data = {k: v for k, v in data.items() if k not in _protected}
     result = await session.execute(
-        insert({{ cls }}).values(**data).returning({{ cls }})
+        insert({{ cls }}).values(**safe_data).returning({{ cls }})
     )
     await session.commit()
     return result.scalar_one()
@@ -62,10 +75,22 @@ async def create_{{ cls | lower }}(session: AsyncSession, data: dict) -> {{ cls 
 async def update_{{ cls | lower }}(
     session: AsyncSession, record_id: int, data: dict
 ) -> {{ cls }} | None:
+    """Update an existing {{ cls }} row identified by *record_id*.
+
+    Args:
+        session: The async SQLAlchemy session.
+        record_id: Primary-key value of the row to update.
+        data: Column key/value pairs to apply.  Callers should validate input
+              with a Pydantic schema before calling this function.  Immutable
+              columns (``id``, ``created_at``) are filtered out automatically.
+    """
+    # Prevent accidental overwrites of immutable columns.
+    _protected = frozenset({"id", "created_at"})
+    safe_data = {k: v for k, v in data.items() if k not in _protected}
     result = await session.execute(
         update({{ cls }})
         .where({{ cls }}.id == record_id)
-        .values(**data)
+        .values(**safe_data)
         .returning({{ cls }})
     )
     await session.commit()
