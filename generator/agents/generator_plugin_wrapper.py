@@ -24,6 +24,7 @@ Author: Code Factory Team
 """
 
 import logging
+import importlib
 import os
 import re
 import threading
@@ -293,10 +294,34 @@ def validate_required_agents(registry: object) -> dict:
         else:
             agents[agent_name] = agent
 
+    # Mapping from plugin registry name to (module_path, class_name) for fallback imports
+    _soft_agent_fallbacks = {
+        "testgen_agent": ("generator.agents.testgen_agent.testgen_agent", "TestgenAgent"),
+        "deploy_agent": ("generator.agents.deploy_agent.deploy_agent", "DeployAgent"),
+        "docgen_agent": ("generator.agents.docgen_agent.docgen_agent", "DocgenAgent"),
+        "critique_agent": ("generator.agents.critique_agent.critique_agent", "CritiqueAgent"),
+    }
+
     for agent_name in SOFT_REQUIRED_AGENTS:
         agent = registry.get(agent_name)
         if agent is None:
-            soft_missing.append(agent_name)
+            # Attempt a direct import as a fallback when the plugin registry doesn't have the agent
+            fallback = _soft_agent_fallbacks.get(agent_name)
+            if fallback:
+                try:
+                    _mod = importlib.import_module(fallback[0])
+                    _cls = getattr(_mod, fallback[1], None)
+                    if _cls is not None:
+                        agent = _cls
+                        logger.info(
+                            f"Agent '{agent_name}' not in plugin registry; loaded via direct import fallback."
+                        )
+                except Exception as _fb_err:
+                    logger.debug(f"Fallback import for '{agent_name}' failed: {_fb_err}")
+            if agent is None:
+                soft_missing.append(agent_name)
+            else:
+                agents[agent_name] = agent
         else:
             agents[agent_name] = agent
 
