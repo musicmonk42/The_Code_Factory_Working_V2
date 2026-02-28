@@ -570,6 +570,10 @@ async def test_snapshot_interval(
             "rate_limit_refill_rate": 100,
             "rate_limit_timeout": 30.0,
             "self_fixing_engineer.arbiter.snapshot_interval_events": 100,
+            "global.schema_version": 1.0,
+            "self_fixing_engineer.arbiter.max_pending_operations": 1000,
+            "security.idempotency_salt": "test_salt",
+            "anomaly_threshold": 0.95,
         }.get(key, default)
     )
 
