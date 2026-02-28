@@ -4440,8 +4440,9 @@ def _render_stub_template(
                 lstrip_blocks=True,
                 autoescape=False,
             )
-        template_name = f"{category}_stub.jinja2"
         from jinja2 import TemplateNotFound
+
+        template_name = f"{category}_stub.jinja2"
         try:
             template = _STUB_TEMPLATE_ENV.get_template(template_name)
         except TemplateNotFound:
@@ -4480,7 +4481,81 @@ def _render_stub_template(
         )
         module_name = module_path.replace("/", ".").removesuffix(".py")
 
-        rendered: str = template.render(
+        # -----------------------------------------------------------------------
+        # Complete-implementation template routing
+        # -----------------------------------------------------------------------
+        # When a ``{category}_template.jinja2`` exists it provides a complete,
+        # production-ready Python module for that category and takes precedence
+        # over the parametric ``{category}_stub.jinja2`` *provided* no class
+        # symbols are being requested.  When class_names is non-empty (e.g.
+        # "Role" or "Token") the parametric stub template is used so it can
+        # dynamically generate enum/dataclass definitions for those names.
+        #
+        # Currently registered complete-implementation templates:
+        #   auth_template.jinja2 — full JWT login / logout / refresh endpoints
+        #     (service_template.jinja2 is a macro library imported by
+        #      service_stub.jinja2, not rendered standalone)
+        # -----------------------------------------------------------------------
+        _COMPLETE_TEMPLATE_OVERRIDES: Dict[str, str] = {
+            "auth": "auth_template.jinja2",
+        }
+
+        # Symbols that auth_template.jinja2 already provides concrete implementations
+        # for.  Only route to the complete template when every requested symbol is
+        # in this set — that way, requests for custom/unknown function names (e.g.
+        # ``helper``, ``my_func``) still fall through to auth_stub.jinja2 which
+        # can generate properly-typed generic stubs for them.
+        _AUTH_TEMPLATE_SYMBOLS: frozenset = frozenset({
+            "hash_password", "verify_password",
+            "create_access_token", "create_refresh_token",
+            "decode_token", "get_current_user",
+            "login", "logout", "refresh_token",
+            "router", "oauth2_scheme",
+        })
+        _CATEGORY_TEMPLATE_SYMBOLS: Dict[str, frozenset] = {
+            "auth": _AUTH_TEMPLATE_SYMBOLS,
+        }
+
+        override_name = _COMPLETE_TEMPLATE_OVERRIDES.get(category)
+        known_symbols = _CATEGORY_TEMPLATE_SYMBOLS.get(category, frozenset())
+        # Use the complete-implementation template only when:
+        #   1. An override template exists for this category.
+        #   2. No class-typed symbols are requested (class_names is empty) —
+        #      class names require parametric generation in the stub template.
+        #   3. Every requested symbol is within the known-symbol set, meaning
+        #      the complete template already provides a real implementation for
+        #      it.  Unknown symbols must fall through to the parametric stub.
+        symbols_all_known = not symbols or symbols.issubset(known_symbols)
+        if override_name and not class_names and symbols_all_known:
+            try:
+                complete_template = _STUB_TEMPLATE_ENV.get_template(override_name)
+                # Derive router_prefix from the module stem (e.g. "auth" → "/auth").
+                _auth_prefix = f"/{base_name}" if base_name else "/auth"
+                rendered = complete_template.render(
+                    class_names=class_names,
+                    function_names=function_names,
+                    router_names=router_names,
+                    variable_names=variable_names,
+                    base_name=base_name,
+                    module_name=module_name,
+                    router_prefix=_auth_prefix,
+                    token_url=f"{_auth_prefix}/token",
+                )
+                logger.debug(
+                    "_render_stub_template: used complete-implementation template '%s' for %s",
+                    override_name,
+                    module_path,
+                )
+                return rendered
+            except TemplateNotFound:
+                logger.debug(
+                    "_render_stub_template: complete template '%s' not found; "
+                    "falling back to '%s'",
+                    override_name,
+                    template_name,
+                )
+
+        render_context: Dict[str, object] = dict(
             class_names=class_names,
             function_names=function_names,
             router_names=router_names,
@@ -4488,6 +4563,7 @@ def _render_stub_template(
             base_name=base_name,
             module_name=module_name,
         )
+        rendered: str = template.render(**render_context)
         return rendered
     except Exception as _tmpl_err:
         logger.warning(

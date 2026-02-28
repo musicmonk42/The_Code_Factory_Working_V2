@@ -5,50 +5,69 @@ service_template.jinja2 — Complete Service Layer Implementation Template
 SPDX-License-Identifier: Proprietary
 Copyright (c) 2025 Novatrax Labs
 
-Provides Jinja2 macros that render COMPLETE, production-ready async service
-methods for SQLAlchemy 2.x ORM.  Unlike service_stub.jinja2, which generates
-placeholder stubs, this template enforces full implementations with real ORM
-queries, error handling, and type hints.
+Provides a Jinja2 macro that renders a COMPLETE, production-ready async
+service method for SQLAlchemy 2.x ORM.  Imported by service_stub.jinja2
+and usable from any other stub/repair template via:
 
-Macro parameters for service_method:
-- method_name: Name of the async method to generate
+    {% from 'service_template.jinja2' import service_method %}
+
+Macro parameters:
+- method_name: Name of the async function to emit
 - model_name:  SQLAlchemy model class name (e.g. "Product", "Order")
 - operation:   One of "create" | "get" | "list" | "update" | "delete"
+- data_type:   (optional) Override the input-data parameter type.
+               When None (default) the Pydantic schema name is used
+               (ModelCreate / ModelUpdate).  Pass 'dict' for safe
+               usage inside stub templates where schemas may not exist.
 #}
 
-{% macro service_method(method_name, model_name, operation) %}
+{% macro service_method(method_name, model_name, operation, data_type=None) %}
+{% set _dt = data_type if data_type is not none else (model_name + (operation | capitalize)) %}
 async def {{ method_name }}(
     db: AsyncSession,
-    {% if operation not in ['list'] %}{{ model_name | lower }}_id: UUID,{% endif %}
-    {% if operation in ['create', 'update'] %}data: {{ model_name }}{{ operation | capitalize }},{% endif %}
+{% if operation in ['get', 'update', 'delete'] %}
+    {{ model_name | lower }}_id: UUID,
+{% endif %}
+{% if operation in ['create', 'update'] %}
+    data: {{ _dt }},
+{% endif %}
 ) -> {% if operation == 'list' %}List[{{ model_name }}]{% elif operation == 'delete' %}bool{% else %}{{ model_name }}{% endif %}:
     """{{ operation | capitalize }} {{ model_name | lower }} with full implementation."""
-    {% if operation == 'create' %}
+{% if operation == 'create' %}
+{% if data_type == 'dict' %}
+    db_obj = {{ model_name }}(**data)
+{% else %}
     db_obj = {{ model_name }}(**data.model_dump())
+{% endif %}
     db.add(db_obj)
     await db.commit()
     await db.refresh(db_obj)
     return db_obj
-    {% elif operation == 'get' %}
+{% elif operation == 'get' %}
     result = await db.execute(select({{ model_name }}).where({{ model_name }}.id == {{ model_name | lower }}_id))
     obj = result.scalar_one_or_none()
     if obj is None:
         raise HTTPException(status_code=404, detail="{{ model_name }} not found")
     return obj
-    {% elif operation == 'list' %}
+{% elif operation == 'list' %}
     result = await db.execute(select({{ model_name }}))
     return list(result.scalars().all())
-    {% elif operation == 'update' %}
+{% elif operation == 'update' %}
     result = await db.execute(select({{ model_name }}).where({{ model_name }}.id == {{ model_name | lower }}_id))
     db_obj = result.scalar_one_or_none()
     if db_obj is None:
         raise HTTPException(status_code=404, detail="{{ model_name }} not found")
+{% if data_type == 'dict' %}
+    for field, value in data.items():
+        setattr(db_obj, field, value)
+{% else %}
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(db_obj, field, value)
+{% endif %}
     await db.commit()
     await db.refresh(db_obj)
     return db_obj
-    {% elif operation == 'delete' %}
+{% elif operation == 'delete' %}
     result = await db.execute(select({{ model_name }}).where({{ model_name }}.id == {{ model_name | lower }}_id))
     db_obj = result.scalar_one_or_none()
     if db_obj is None:
@@ -56,5 +75,5 @@ async def {{ method_name }}(
     db.delete(db_obj)
     await db.commit()
     return True
-    {% endif %}
+{% endif %}
 {% endmacro %}
