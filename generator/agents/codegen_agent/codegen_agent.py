@@ -45,11 +45,14 @@ except ImportError:
 from .codegen_prompt import build_code_generation_prompt
 from .codegen_response_handler import (
     add_traceability_comments,
+    build_detailed_stub_feedback,
     build_stub_retry_prompt_hint,
     _classify_stub_module,
     _detect_module_package_collisions,
+    _detect_stub_patterns,
     disambiguate_model_schema_imports,
     ERROR_FILENAME,
+    extract_function_name,
     fix_response_model_type_mismatches,
     get_stub_files,
     parse_llm_response,
@@ -202,6 +205,23 @@ _MULTIPASS_GROUPS = [
             "MUST include /healthz endpoint for Kubernetes liveness probes (returns HTTP 200 with {'status': 'ok'}). "
             "MUST include /readyz endpoint for Kubernetes readiness probes (returns HTTP 200 when app is ready, 503 otherwise). "
             "Do NOT generate models, schemas, test, or infrastructure files in this pass."
+        ),
+    },
+    {
+        "name": "service_implementations",
+        "focus": (
+            "Generate COMPLETE service layer implementations for ALL service modules in app/services/. "
+            "This pass MUST replace every stub or placeholder service with fully working code. "
+            "Every service function MUST include: real SQLAlchemy ORM queries (select/insert/update/delete), "
+            "proper error handling with HTTPException (404 for not-found, 409 for conflicts, 422 for validation), "
+            "async/await patterns with AsyncSession, and complete business logic matching the spec. "
+            "Authentication service MUST implement: real JWT token creation using python-jose or PyJWT, "
+            "password hashing with passlib/bcrypt, login/logout/refresh_token with actual token logic. "
+            "NEVER use `pass`, `...`, or placeholder comments in any function body. "
+            "NEVER return empty dicts/lists as the sole implementation. "
+            "Use the SQLAlchemy models and schemas from the core pass. "
+            "Reference the symbol manifest to import from the correct modules. "
+            "Do NOT regenerate models, routers, schemas, or infrastructure files in this pass."
         ),
     },
     {
@@ -874,6 +894,29 @@ async def _retry_stub_files(
     syntax_error_streak = 0
     for attempt in range(_STUB_RETRY_MAX_ATTEMPTS):
         retry_hint = build_stub_retry_prompt_hint(result)
+
+        # Also detect function-level stubs (pass/... bodies) via AST analysis.
+        # These are NOT caught by get_stub_files (which only checks for the
+        # auto-generated stub marker) but are still invalid LLM output.
+        _func_stub_issues: Dict[str, List[str]] = {}
+        for _path, _content in result.items():
+            if not _path.endswith(".py"):
+                continue
+            _is_stub, _issues = _detect_stub_patterns(_content, _path)
+            if _is_stub and _issues:
+                _func_stub_issues[_path] = _issues
+
+        _detailed_feedback = build_detailed_stub_feedback(_func_stub_issues)
+        if _detailed_feedback:
+            retry_hint = (
+                (retry_hint + "\n\n" if retry_hint else "")
+                + "The following functions were detected as stubs and MUST be "
+                "implemented with complete business logic:\n"
+                + _detailed_feedback
+                + "\n\nGenerate ONLY the files that contain stubs, with complete "
+                "implementations. Do not use `pass`, `...`, or TODO comments."
+            )
+
         if not retry_hint:
             # No stubs remaining — exit early.
             logger.info(
@@ -883,6 +926,8 @@ async def _retry_stub_files(
             break
 
         stub_paths = get_stub_files(result)
+        # Also add files with function-level stubs to the retry set.
+        stub_paths.update(_func_stub_issues.keys())
         # Never ask the LLM to regenerate main.py — it's auto-wired by _reconcile_app_wiring
         stub_paths.discard("app/main.py")
         stub_paths.discard("main.py")

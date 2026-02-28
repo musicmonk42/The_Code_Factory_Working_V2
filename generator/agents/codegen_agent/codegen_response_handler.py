@@ -5080,6 +5080,25 @@ def get_stub_files(code_files: Dict[str, str]) -> Set[str]:
     }
 
 
+def extract_function_name(issue_description: str) -> Optional[str]:
+    """Extract a function or method name from a stub-detection issue description.
+
+    Parses strings produced by the AST-based stub detector, which emit messages
+    like ``"Function/method 'logout' (line 33) has no implementation…"`` and
+    returns just the bare name (``"logout"`` in that example).
+
+    Args:
+        issue_description: Human-readable issue string from :func:`_detect_stub_patterns`.
+
+    Returns:
+        The function/method name, or ``None`` if it cannot be parsed.
+    """
+    match = re.search(r"Function/method\s+'([^']+)'", issue_description)
+    if match:
+        return match.group(1)
+    return None
+
+
 def build_stub_retry_prompt_hint(code_files: Dict[str, str]) -> str:
     """Build a prompt hint listing stub files that need real implementations.
 
@@ -5184,7 +5203,52 @@ def build_stub_retry_prompt_hint(code_files: Dict[str, str]) -> str:
         syms = _extract_symbols(content)
         sym_list = ", ".join(syms) if syms else "(unknown symbols)"
         lines.append(f"  - {path}: must export {sym_list}")
+        # Add per-function hints using extract_function_name for functions detected as stubs
+        _, issues = _detect_stub_patterns(content, path)
+        for issue in issues:
+            func_name = extract_function_name(issue)
+            if func_name:
+                lines.append(
+                    f"    MUST implement {func_name} in {path} with complete business logic"
+                )
     lines.append(
         "Generate complete, production-ready implementations for each stub file listed above."
     )
+    lines.append(
+        "Do not use `pass`, `...`, or TODO comments. Every function MUST have real logic."
+    )
     return "\n".join(lines)
+
+
+def build_detailed_stub_feedback(stub_issues: Dict[str, List[str]]) -> str:
+    """Build detailed, per-function stub feedback for LLM retry prompts.
+
+    Unlike :func:`build_stub_retry_prompt_hint` (which operates on complete
+    code-file mappings), this function accepts a pre-computed mapping of
+    *filename → list of issue strings* produced by :func:`validate_production_ready`
+    or :func:`_detect_stub_patterns` and returns a targeted retry instruction
+    listing exactly which functions need full implementations.
+
+    Args:
+        stub_issues: Mapping of filename to list of issue description strings.
+            Issue strings that match ``"Function/method '<name>' …"`` are
+            parsed with :func:`extract_function_name` to produce per-function
+            instructions.
+
+    Returns:
+        A formatted string enumerating each stub function that must be
+        implemented, suitable for direct inclusion in a retry LLM prompt.
+    """
+    hints: List[str] = []
+    for filename, issues in sorted(stub_issues.items()):
+        for issue in issues:
+            func_name = extract_function_name(issue)
+            if func_name:
+                hints.append(
+                    f"MUST implement {func_name} in {filename} with complete business logic"
+                )
+            else:
+                hints.append(f"MUST fix in {filename}: {issue}")
+    if not hints:
+        return ""
+    return "\n".join(hints)
