@@ -179,6 +179,24 @@ handler_calls = get_or_create_metric(
     "Total handler calls",
     ["format", "operation"],
 )
+scan_total_findings = get_or_create_metric(
+    Counter,
+    "deploy_handler_scan_findings_total",
+    "Total scan findings by format and finding type",
+    ["format", "finding_type"],
+)
+llm_output_format_counter = get_or_create_metric(
+    Counter,
+    "deploy_handler_llm_output_format_total",
+    "Total LLM output formats observed",
+    ["target", "format_type"],
+)
+handler_errors = get_or_create_metric(
+    Counter,
+    "deploy_handler_errors_total",
+    "Total handler errors by format, operation and error type",
+    ["format", "operation", "error_type"],
+)
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"
 

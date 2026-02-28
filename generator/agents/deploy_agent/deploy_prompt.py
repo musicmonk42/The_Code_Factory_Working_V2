@@ -236,6 +236,12 @@ prompt_feedback_score = get_or_create_metric(
     "Latest feedback score for generated prompts",
     ["target", "variant"],
 )
+FEW_SHOT_USAGE = get_or_create_metric(
+    Counter,
+    "deploy_prompt_few_shot_usage_total",
+    "Total few-shot examples used in prompts",
+    ["target", "variant"],
+)
 # --- Security: Sensitive Data Scrubbing ---
 # Define common sensitive patterns for regex fallback if Presidio is not available or fails.
 COMMON_SECRET_PATTERNS = [

@@ -129,6 +129,24 @@ process_calls_total = get_or_create_metric(
     "Total validation calls by format and operation",
     ["format", "operation"],
 )
+docgen_security_findings_total = get_or_create_metric(
+    Counter,
+    "docgen_security_findings_total",
+    "Total security findings detected in documentation",
+    ["format", "finding_category"],
+)
+process_errors_total = get_or_create_metric(
+    Counter,
+    "docgen_validator_process_errors_total",
+    "Total validation process errors by format, operation and error type",
+    ["format", "operation", "error_type"],
+)
+section_status_gauge = get_or_create_metric(
+    Gauge,
+    "docgen_validator_section_status",
+    "Presence status of required documentation sections",
+    ["output_format", "section_name"],
+)
 # --- NLTK Data Download (Strictly required data for NLP features) ---
 # Use a helper function to avoid polluting global scope
 def setup_nltk_data():
