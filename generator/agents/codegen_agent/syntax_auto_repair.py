@@ -557,7 +557,7 @@ class SyntaxAutoRepair:
                                 io.StringIO(repaired_code).readline
                             )
                         )
-                    except _tokenize.TokenError as _te:
+                    except (IndentationError, _tokenize.TokenError) as _te:
                         # TokenError message is e.g. "('EOF in multi-line string', (7, 0))"
                         if "multi-line string" in str(_te):
                             # Determine which quote style opened the string by
@@ -586,16 +586,45 @@ class SyntaxAutoRepair:
                             _closing_quote = "'''"
 
                     if _closing_quote:
-                        repaired_code = repaired_code.rstrip() + f"\n{_closing_quote}\n"
-                        fixes.append(
-                            f"Appended missing closing triple-quoted string delimiter "
-                            f"({_closing_quote!r}) to close unterminated multiline string"
-                        )
-                        logger.info(
-                            "repair_unterminated_strings: appended %r to close "
-                            "unterminated multi-line string",
-                            _closing_quote,
-                        )
+                        _pre_closure = repaired_code
+                        _candidate = repaired_code.rstrip() + f"\n{_closing_quote}\n"
+                        # Validate that the closure doesn't introduce new errors
+                        # before committing to it.
+                        try:
+                            _ast.parse(_candidate)
+                            repaired_code = _candidate
+                            fixes.append(
+                                f"Appended missing closing triple-quoted string delimiter "
+                                f"({_closing_quote!r}) to close unterminated multiline string"
+                            )
+                            logger.info(
+                                "repair_unterminated_strings: appended %r to close "
+                                "unterminated multi-line string",
+                                _closing_quote,
+                            )
+                        except SyntaxError:
+                            # Closure introduced new errors; keep pre-closure state.
+                            repaired_code = _pre_closure
+                            logger.warning(
+                                "repair_unterminated_strings: triple-quote closure "
+                                "with %r introduced new syntax errors; reverting",
+                                _closing_quote,
+                            )
+                else:
+                    # The first-pass line-by-line repair introduced a new syntax
+                    # error (e.g. IndentationError, which is a SyntaxError subclass)
+                    # rather than resolving the original issue.  Propagating this
+                    # broken intermediate state would make the pipeline worse, so we
+                    # revert to the unmodified original code.
+                    logger.warning(
+                        "repair_unterminated_strings: first-pass repair introduced "
+                        "%s (%s); discarding %d fix(es) and reverting to original code",
+                        type(_se).__name__,
+                        _se,
+                        len(fixes),
+                    )
+                    repaired_code = code
+                    fixes = []
 
             return repaired_code, fixes
 

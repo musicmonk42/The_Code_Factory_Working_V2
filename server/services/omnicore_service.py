@@ -7435,6 +7435,22 @@ class OmniCoreService:
                                             "\n".join(stub_detail_lines) + "\n"
                                             "Replace every raise NotImplementedError / pass stub with real business logic."
                                         )
+                                    elif error_type == "ImportError":
+                                        # Include the specific file paths and error messages so the
+                                        # LLM can fix the exact import problems rather than regenerating
+                                        # blindly (which caused errors to grow from 1 to 6 across retries).
+                                        _import_detail_lines = [
+                                            "The previous code generation had import errors. "
+                                            "Fix EACH of the following specific issues:"
+                                        ]
+                                        for _ie in import_errors[:10]:
+                                            _import_detail_lines.append(f"- {_ie}")
+                                        instruction = (
+                                            "\n".join(_import_detail_lines)
+                                            + "\n\nFor each error, add the missing import statement "
+                                            "at the top of the affected file using "
+                                            "`from <module> import <symbol>`."
+                                        )
                                     else:
                                         instruction = (
                                             "The previous code generation had validation errors. "
@@ -7487,11 +7503,11 @@ class OmniCoreService:
                                     "error_type": "ImportError",
                                     "details": "\n".join(_pme_passed[:3]),
                                     "instruction": (
-                                        "The previous code generation had unresolvable project-local imports. "
-                                        "Please fix these errors:\n"
-                                        + "\n".join(f"- {e}" for e in _pme_passed[:5])
-                                        + "\nEnsure all symbols are imported from the correct project modules "
-                                        + "using `from <module> import <symbol>`."
+                                        "The previous code generation had import errors in the following files:\n"
+                                        + "\n".join(f"- {e}" for e in _pme_passed[:10])
+                                        + "\n\nFor each error, add the missing import statement "
+                                        "at the top of the affected file using "
+                                        "`from <module> import <symbol>`."
                                     ),
                                 }
                                 logger.warning(
