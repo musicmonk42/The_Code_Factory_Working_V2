@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+{% for router_var in router_names %}
+{{ router_var }} = APIRouter(prefix="/{{ base_name }}s", tags=["{{ base_name }}"])
+{% endfor %}
+{% if not router_names %}
+router = APIRouter(prefix="/{{ base_name }}s", tags=["{{ base_name }}"])
+{% endif %}
+
+_router = {{ router_names[0] if router_names else "router" }}
+
+
+@_router.get("/", summary="List {{ base_name }}s")
+async def list_{{ base_name }}s(
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict:
+    return {"items": [], "total": 0, "limit": limit, "offset": offset}
+
+
+@_router.get("/{record_id}", summary="Get {{ base_name }} by ID")
+async def get_{{ base_name }}(record_id: int) -> dict:
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+    return {"id": record_id}
+
+
+@_router.post("/", status_code=status.HTTP_201_CREATED, summary="Create {{ base_name }}")
+async def create_{{ base_name }}(payload: dict) -> dict:
+    return {"id": 1, **payload}
+
+
+@_router.put("/{record_id}", summary="Update {{ base_name }}")
+async def update_{{ base_name }}(record_id: int, payload: dict) -> dict:
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+    return {"id": record_id, **payload}
+
+
+@_router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete {{ base_name }}")
+async def delete_{{ base_name }}(record_id: int) -> None:
+    if record_id < 1:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="{{ base_name | capitalize }} not found")
+
+{% for fn in function_names %}
+{% if fn not in ["list_" + base_name + "s", "get_" + base_name, "create_" + base_name, "update_" + base_name, "delete_" + base_name] %}
+
+@_router.get("/actions/{{ fn | replace('_', '-') }}", summary="{{ fn | replace('_', ' ') | capitalize }}")
+async def {{ fn }}() -> dict:
+    return {"action": "{{ fn }}", "status": "ok"}
+
+{% endif %}
+{% endfor %}
+{% for cls in class_names %}
+
+
+class {{ cls }}Handler:
+    """Request handler for {{ cls }}-related operations."""
+
+    def __init__(self, router: APIRouter) -> None:
+        self._router = router
+
+    def register(self) -> None:
+        self._router.include_router(
+            APIRouter(prefix="/{{ cls | lower }}"), tags=["{{ cls | lower }}"]
+        )
+
+{% endfor %}

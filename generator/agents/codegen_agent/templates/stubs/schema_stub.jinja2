@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+import datetime
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+{% for cls in class_names %}
+
+class {{ cls }}Base(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str = Field(..., min_length=1, max_length=255, description="Name of the {{ cls | lower }}")
+    description: str | None = Field(None, max_length=1024, description="Optional description")
+
+
+class {{ cls }}Create({{ cls }}Base):
+    model_config = ConfigDict(from_attributes=True)
+
+
+class {{ cls }}Update(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=1024)
+
+
+class {{ cls }}Read({{ cls }}Base):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="Unique identifier")
+    created_at: datetime.datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime.datetime = Field(..., description="Last update timestamp")
+
+
+class {{ cls }}List(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    items: list[{{ cls }}Read] = Field(..., description="List of {{ cls | lower }} records")
+    total: int = Field(..., ge=0, description="Total number of records")
+
+{% endfor %}
+{% for fn in function_names %}
+
+def {{ fn }}(data: dict[str, Any]) -> dict[str, Any]:
+    """Validate and return the data dict with string-coerced values."""
+    return {k: v for k, v in data.items() if v is not None}
+
+{% endfor %}

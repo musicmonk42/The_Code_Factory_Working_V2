@@ -1,0 +1,154 @@
+from __future__ import annotations
+
+import enum
+import hashlib
+import hmac
+import os
+import time
+from typing import Any
+
+try:
+    from jose import JWTError, jwt
+    _JWT_BACKEND = "jose"
+except ImportError:
+    jwt = None  # type: ignore[assignment]
+    _JWT_BACKEND = "hmac"
+
+try:
+    from passlib.context import CryptContext
+    _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    _PASSLIB_AVAILABLE = True
+except ImportError:
+    _PASSLIB_AVAILABLE = False
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+
+SECRET_KEY: str = os.environ.get("SECRET_KEY", "change-me-in-production-at-least-32-chars!!")
+ALGORITHM: str = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+{% for cls in class_names %}
+{% if cls | lower == "role" %}
+
+class {{ cls }}(str, enum.Enum):
+    ADMIN = "admin"
+    USER = "user"
+    MODERATOR = "moderator"
+    GUEST = "guest"
+
+{% elif cls | lower == "token" %}
+
+class {{ cls }}:
+    __slots__ = ("access_token", "token_type", "expires_in")
+
+    def __init__(self, access_token: str, token_type: str = "bearer", expires_in: int = ACCESS_TOKEN_EXPIRE_MINUTES * 60) -> None:
+        self.access_token = access_token
+        self.token_type = token_type
+        self.expires_in = expires_in
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"access_token": self.access_token, "token_type": self.token_type, "expires_in": self.expires_in}
+
+{% else %}
+
+class {{ cls }}:
+    """Auth entity: {{ cls }}."""
+
+    def __init__(self, **kwargs: Any) -> None:
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    def __repr__(self) -> str:
+        return f"<{{ cls }}({', '.join(f'{k}={v!r}' for k, v in self.__dict__.items())})>"
+
+{% endif %}
+{% endfor %}
+
+
+def hash_password(plain: str) -> str:
+    if _PASSLIB_AVAILABLE:
+        return _pwd_context.hash(plain)
+    salt = os.urandom(16).hex()
+    digest = hashlib.sha256(f"{salt}{plain}".encode()).hexdigest()
+    return f"{salt}${digest}"
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    if _PASSLIB_AVAILABLE:
+        return _pwd_context.verify(plain, hashed)
+    parts = hashed.split("$", 1)
+    if len(parts) != 2:
+        return False
+    salt, digest = parts
+    expected = hashlib.sha256(f"{salt}{plain}".encode()).hexdigest()
+    return hmac.compare_digest(expected, digest)
+
+
+def create_access_token(data: dict[str, Any], expires_in_minutes: int | None = None) -> str:
+    payload = data.copy()
+    expire = int(time.time()) + (expires_in_minutes or ACCESS_TOKEN_EXPIRE_MINUTES) * 60
+    payload["exp"] = expire
+    if _JWT_BACKEND == "jose":
+        return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    raw = f"{payload}".encode()
+    sig = hmac.new(SECRET_KEY.encode(), raw, hashlib.sha256).hexdigest()
+    import base64, json
+    header = base64.urlsafe_b64encode(json.dumps({"alg": "HS256"}).encode()).decode().rstrip("=")
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
+    return f"{header}.{body}.{sig}"
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    if _JWT_BACKEND == "jose":
+        try:
+            return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        except JWTError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            ) from exc
+    import base64, json
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token format")
+    payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=="))
+    if payload.get("exp", 0) < int(time.time()):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
+    return payload
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
+    payload = decode_access_token(token)
+    sub = payload.get("sub")
+    if sub is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"sub": sub, **payload}
+
+{% for router_var in router_names %}
+from fastapi import APIRouter as _APIRouter
+{{ router_var }} = _APIRouter(prefix="/auth", tags=["auth"])
+
+
+@{{ router_var }}.post("/token", summary="Obtain access token")
+async def login_for_access_token(username: str, password: str) -> dict:
+    token = create_access_token({"sub": username})
+    return {"access_token": token, "token_type": "bearer"}
+
+{% endfor %}
+{% for fn in function_names %}
+{% if fn not in ["get_current_user", "create_access_token", "decode_access_token", "hash_password", "verify_password"] %}
+
+def {{ fn }}(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """{{ fn | replace('_', ' ') | capitalize }}."""
+    return {"function": "{{ fn }}", "args": list(args), "kwargs": kwargs}
+
+{% endif %}
+{% endfor %}

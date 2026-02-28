@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+from typing import Sequence
+
+from sqlalchemy import select, insert, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+{% for cls in class_names %}
+from .models import {{ cls }}
+{% endfor %}
+
+
+{% for cls in class_names %}
+async def get_{{ cls | lower }}(session: AsyncSession, record_id: int) -> {{ cls }} | None:
+    result = await session.execute(select({{ cls }}).where({{ cls }}.id == record_id))
+    return result.scalar_one_or_none()
+
+
+async def list_{{ cls | lower }}s(
+    session: AsyncSession,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+) -> Sequence[{{ cls }}]:
+    result = await session.execute(
+        select({{ cls }}).order_by({{ cls }}.id).limit(limit).offset(offset)
+    )
+    return result.scalars().all()
+
+
+async def create_{{ cls | lower }}(session: AsyncSession, data: dict) -> {{ cls }}:
+    result = await session.execute(
+        insert({{ cls }}).values(**data).returning({{ cls }})
+    )
+    await session.commit()
+    return result.scalar_one()
+
+
+async def update_{{ cls | lower }}(
+    session: AsyncSession, record_id: int, data: dict
+) -> {{ cls }} | None:
+    result = await session.execute(
+        update({{ cls }})
+        .where({{ cls }}.id == record_id)
+        .values(**data)
+        .returning({{ cls }})
+    )
+    await session.commit()
+    return result.scalar_one_or_none()
+
+
+async def delete_{{ cls | lower }}(session: AsyncSession, record_id: int) -> bool:
+    result = await session.execute(
+        delete({{ cls }}).where({{ cls }}.id == record_id)
+    )
+    await session.commit()
+    return result.rowcount > 0
+
+{% endfor %}
+{% for fn in function_names %}
+{% if fn not in ["get_" + (class_names[0] | lower if class_names else ""), "list_" + (class_names[0] | lower if class_names else "") + "s", "create_" + (class_names[0] | lower if class_names else ""), "update_" + (class_names[0] | lower if class_names else ""), "delete_" + (class_names[0] | lower if class_names else "")] %}
+async def {{ fn }}(session: AsyncSession, **kwargs) -> dict:
+    result = await session.execute(select({{ class_names[0] if class_names else "object" }}))
+    rows = result.scalars().all()
+    return {"items": [r.__dict__ for r in rows], "count": len(rows)}
+
+{% endif %}
+{% endfor %}
