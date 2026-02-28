@@ -1109,39 +1109,42 @@ class WorkflowEngine:
                             extra={"workflow_id": workflow_id}
                         )
                     
-                    # Build OmniCore workflow input with full configuration
-                    workflow_input = {
-                        "job_id": workflow_id,
-                        "readme_content": md_content,
-                        "output_dir": output_path,
-                        "include_tests": True,
-                        "include_deployment": True,
-                        "include_docs": True,
-                        "run_critique": True,
-                        "user_id": user_id,
-                        "timeout_seconds": timeout_seconds,
-                    }
-                    
                     # Route through OmniCore with timeout protection
                     logger.debug(
                         f"Invoking OmniCore workflow for {workflow_id}",
-                        extra={"workflow_id": workflow_id, "payload_keys": list(workflow_input.keys())}
+                        extra={"workflow_id": workflow_id, "input_file": input_file}
                     )
-                    omnicore_result = await run_generator_workflow(workflow_input)
+                    omnicore_result = await run_generator_workflow(
+                        requirements={"readme_content": md_content, "job_id": workflow_id},
+                        config={
+                            "output_dir": output_path,
+                            "include_tests": True,
+                            "include_deployment": True,
+                            "include_docs": True,
+                            "run_critique": True,
+                            "user_id": user_id,
+                            "timeout_seconds": timeout_seconds,
+                        },
+                        repo_path=output_path or ".",
+                        ambiguities=[],
+                    )
                     
-                    # Map OmniCore result to engine result format
+                    # Map OmniCore result to engine result format.
+                    # WorkflowOutput uses 'final_results' (not 'results') for agent data.
+                    final_results = omnicore_result.get("final_results", {})
+                    stages_completed = list(final_results.keys()) if final_results else []
                     result = {
                         "workflow_id": workflow_id,
                         "status": omnicore_result.get("status", "completed"),
                         "input_file": input_file,
                         "iterations": 1,
-                        "output_path": omnicore_result.get("output_path", output_path),
+                        "output_path": output_path,  # Use the caller-supplied path
                         "started_at": started_at,
                         "finished_at": datetime.now(timezone.utc).isoformat(),
                         "duration_seconds": time.monotonic() - start_time,
                         "errors": omnicore_result.get("errors", []),
-                        "agent_results": omnicore_result.get("results", {}),
-                        "stages_completed": omnicore_result.get("stages_completed", []),
+                        "agent_results": final_results,
+                        "stages_completed": stages_completed,
                         "omnicore_routed": True,
                     }
                     
@@ -1854,6 +1857,35 @@ class WorkflowEngine:
                                         "files_generated": deploy_result.get("files_written", [])
                                     }
                                 )
+                        
+                        # [STAGE:DOCGEN] Generate documentation (runs after testgen and deploy)
+                        if "docgen" in _agent_registry:
+                            docgen_result = await self._execute_agent(
+                                "docgen",
+                                {
+                                    "codegen_output": codegen_result,
+                                    "iteration": iteration_num,
+                                    "md_content": md_content,
+                                },
+                                workflow_id
+                            )
+                            result["agent_results"]["docgen"] = docgen_result
+                            if docgen_result.get("status") not in [AgentStatus.FAILED.value, AgentStatus.SKIPPED.value]:
+                                result["stages_completed"].append("docgen")
+                                logger.debug(f"[Pipeline] Stage 'docgen' completed for workflow {workflow_id}")
+                            # [ARBITER] Publish docgen completion event
+                            if self.arbiter_bridge:
+                                try:
+                                    await self.arbiter_bridge.publish_event(
+                                        "docgen_completed",
+                                        {
+                                            "workflow_id": workflow_id,
+                                            "iteration": iteration_num,
+                                            "status": docgen_result.get("status", "unknown"),
+                                        }
+                                    )
+                                except Exception as e:
+                                    logger.warning(f"Failed to publish docgen event to Arbiter: {e}")
                         
                         # Small delay between iterations
                         await asyncio.sleep(DEFAULT_ITERATION_DELAY_SECONDS)

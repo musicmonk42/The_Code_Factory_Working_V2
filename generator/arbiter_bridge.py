@@ -290,6 +290,14 @@ class ArbiterBridge:
                         timeout=5.0,
                     )
 
+                # If the facade has no engine configured for this domain, treat as
+                # unconfigured rather than a real policy denial (fail-open).
+                if not allowed and "No policy engine configured" in reason:
+                    logger.debug(
+                        f"No policy engine for Generator domain, allowing '{action}' by default (fail-open)"
+                    )
+                    allowed, reason = True, "No policy engine for Generator domain (fail-open)"
+
                 BRIDGE_POLICY_CHECKS.labels(
                     action=action,
                     allowed=str(allowed)
